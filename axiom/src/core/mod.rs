@@ -191,6 +191,36 @@ impl ApiError {
             value: None,
         }
     }
+
+    /// Format error as MCP-compatible JSON string
+    pub fn to_mcp_json(&self) -> String {
+        let (code, message) = match self {
+            ApiError::NotFound { resource, resource_id: _ } => 
+                ("NOT_FOUND", format!("Resource not found: {}", resource)),
+            ApiError::InvalidInput { message, field: _, value: _ } => 
+                ("INVALID_INPUT", message.clone()),
+            ApiError::AuthenticationFailed { reason } => 
+                ("AUTHENTICATION_FAILED", format!("Authentication failed: {}", reason)),
+            ApiError::AccessDenied { permission, user_id: _ } => 
+                ("ACCESS_DENIED", format!("Access denied: {}", permission)),
+            ApiError::RateLimitExceeded { limit: _, window_seconds: _ } => 
+                ("RATE_LIMIT_EXCEEDED", "Rate limit exceeded".to_string()),
+            ApiError::Internal { message, error_id: _ } => 
+                ("INTERNAL_ERROR", message.clone()),
+            ApiError::ServiceUnavailable { service, retry_after: _ } => 
+                ("SERVICE_UNAVAILABLE", format!("Service unavailable: {}", service)),
+            ApiError::ValidationError { field, constraint } => 
+                ("VALIDATION_ERROR", format!("Validation failed for {}: {}", field, constraint)),
+        };
+
+        serde_json::to_string(&serde_json::json!({
+            "success": false,
+            "error": {
+                "code": code,
+                "message": message
+            }
+        })).unwrap_or_else(|_| format!(r#"{{"success":false,"error":{{"code":"{code}","message":"Internal error"}}}}"#))
+    }
 }
 
 impl From<ApiError> for ServiceError {
