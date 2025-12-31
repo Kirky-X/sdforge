@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup default stable
+      - name: Check formatting
+        run: cargo fmt --check --all
+      - name: Check clippy
+        run: cargo clippy --all-features --all-targets -- -D warnings
+      - name: Check doc
+        run: cargo doc --no-deps --all-features
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features:
+          - "http"
+          - "mcp"
+          - "http,mcp"
+          - "full"
+          - ""
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup default stable
+      - name: Build with features
+        run: |
+          if [ -z "${{ matrix.features }}" ]; then
+            cargo build
+          else
+            cargo build --features "${{ matrix.features }}"
+          fi
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features:
+          - "http"
+          - "mcp"
+          - "http,mcp"
+          - "full"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup default stable
+      - name: Run tests
+        run: cargo test --features "${{ matrix.features }}" -- --test-threads=4
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup default stable
+      - name: Install tarpaulin
+        run: cargo install cargo-tarpaulin
+      - name: Run coverage
+        run: cargo tarpaulin --features http --out Html
+
+  wasm:
+    name: WASM Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup default stable
+        with:
+          target: wasm32-unknown-unknown
+      - name: Build WASM
+        run: cargo build --features http --target wasm32-unknown-unknown
+
+  benches:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup default stable
+      - name: Run benchmarks
+        run: cargo bench --features http
+        timeout-minutes: 30
