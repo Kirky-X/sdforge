@@ -1,0 +1,75 @@
+[package]
+name = "axiom"
+version = "0.1.0"
+edition = "2021"
+description = "Multi-protocol SDK framework with unified macro configuration"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/axiom-rs/axiom"
+keywords = ["api", "http", "mcp", "macro", "framework"]
+categories = ["web-programming", "development-tools"]
+authors = ["Axiom Team"]
+
+[dependencies]
+# Core dependencies
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+inventory = { version = "0.3", optional = true }
+
+# HTTP dependencies (optional)
+axum = { version = "0.8.8", optional = true }
+tower = { version = "0.5", optional = true }
+tower-http = { version = "0.6.2", features = ["cors"], optional = true }
+
+# MCP dependencies (optional)
+mcp-sdk = { version = "0.0.3", optional = true }
+anyhow = { version = "1.0", optional = true }
+
+# Streaming dependencies (optional)
+tokio-stream = { version = "0.1", optional = true }
+tokio = { version = "1.41", optional = true, features = ["sync"] }
+futures-util = { version = "0.3", optional = true }
+
+# Feature dependencies (optional)
+chrono = { version = "0.4", optional = true, features = ["serde"] }
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", optional = true }
+tracing-appender = { version = "0.2", optional = true }
+
+# Validation dependencies (optional)
+validator = { version = "0.18", features = ["derive"], optional = true }
+regex = { version = "1.5", optional = true }
+
+# Security dependencies (optional)
+dashmap = { version = "5.5", optional = true }
+uuid = { version = "1.0", features = ["v4"], optional = true }
+
+# Configuration dependencies (optional)
+toml = { version = "0.8", optional = true }
+
+[dev-dependencies]
+tokio = { version = "1.41", features = ["rt", "rt-multi-thread", "macros"] }
+
+[features]
+default = ["http"]
+http = [
+    "dep:axum",
+    "dep:tower",
+    "dep:tower-http",
+    "dep:inventory",
+    "dep:chrono",
+    "dep:validator",
+    "dep:regex",
+    "dep:dashmap",
+    "dep:uuid",
+    "dep:toml",
+]
+mcp = ["dep:mcp-sdk", "dep:inventory", "dep:anyhow"]
+streaming = ["http", "dep:tokio-stream", "dep:tokio", "dep:futures-util"]
+timestamp = ["dep:chrono"]
+logging = ["dep:tracing", "dep:tracing-subscriber", "dep:tracing-appender", "tracing-subscriber/env-filter"]
+security = ["http", "dep:dashmap", "dep:uuid"]
+full = ["http", "mcp", "streaming", "timestamp", "logging", "security"]
+
+[package.metadata.docs.rs]
+all-features = true
