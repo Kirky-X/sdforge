@@ -19,8 +19,7 @@ pub struct HttpRoute {
     pub handler: MethodRouter,
     /// API metadata
     pub metadata: ApiMetadata,
-    /// Module prefix (if any)
-    #[allow(dead_code)]
+    /// Module prefix (if any) - used for route grouping
     pub module_prefix: Option<&'static str>,
 }
 

@@ -15,6 +15,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
 inventory = { version = "0.3", optional = true }
+axiom-macros = { path = "../axiom-macros" }
 
 # HTTP dependencies (optional)
 axum = { version = "0.8.8", optional = true }
@@ -49,6 +50,8 @@ toml = { version = "0.8", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1.41", features = ["rt", "rt-multi-thread", "macros"] }
+once_cell = "1.20"
+axiom-macros = { path = "../axiom-macros" }
 
 [features]
 default = ["http"]

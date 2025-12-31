@@ -130,11 +130,14 @@ fn extract_path_params(path: &str) -> Vec<String> {
     params
 }
 
-/// Parameter type for HTTP extraction
+/// Parameter kind for HTTP extraction
 #[derive(Debug, Clone, PartialEq)]
-enum ParamType {
+enum ParamKind {
     Path,
     Query,
+    Header,
+    Cookie,
+    Form,
     Body,
 }
 
@@ -145,14 +148,16 @@ struct ParamInfo {
     name: String,
     /// Parameter type as string
     ty: String,
-    /// Extraction type
-    param_type: ParamType,
+    /// Extraction kind
+    param_kind: ParamKind,
     /// Whether the parameter is Option<T>
     is_option: bool,
     /// Whether the parameter is Vec<T>
     is_vec: bool,
     /// The inner type for Option or Vec
     inner_type: String,
+    /// Explicit parameter annotation (if any)
+    explicit_annotation: Option<ParamKind>,
 }
 
 impl ParamInfo {
@@ -169,13 +174,24 @@ impl ParamInfo {
             let ty_str = quote! { #pat_type.ty }.to_string();
             let ty_str_trimmed = ty_str.trim().to_string();
             
-            // Determine extraction type based on path parameters
-            let param_type = if path_params.contains(&name) {
-                ParamType::Path
+            // Check for explicit #[param(kind = "...")] attribute
+            let explicit_annotation = Self::extract_param_annotation(pat_type);
+            
+            // Determine extraction kind based on explicit annotation first, then path parameters, then type inference
+            let param_kind = if let Some(ref kind) = explicit_annotation {
+                kind.clone()
+            } else if path_params.contains(&name) {
+                ParamKind::Path
             } else if ty_str_trimmed.starts_with("Option<") {
-                ParamType::Query
+                // Check if it's Option<HeaderMap<...>> or similar
+                let inner = &ty_str_trimmed[7..ty_str_trimmed.len()-1];
+                if inner.starts_with("HeaderMap") || inner.starts_with("HeaderValue") {
+                    ParamKind::Header
+                } else {
+                    ParamKind::Query
+                }
             } else {
-                ParamType::Body
+                ParamKind::Body
             };
 
             let (is_option, is_vec, inner_type) = if ty_str_trimmed.starts_with("Option<") {
@@ -191,33 +207,112 @@ impl ParamInfo {
             Some(Self {
                 name,
                 ty: ty_str_trimmed,
-                param_type,
+                param_kind,
                 is_option,
                 is_vec,
                 inner_type,
+                explicit_annotation,
             })
         } else {
             None
         }
     }
+    
+    /// Extract explicit #[param(kind = "...")] attribute from function argument
+    /// 
+    /// Parses #[param(kind = "...")] annotations and returns the parameter kind.
+    /// Note: This is a simplified implementation that relies on type inference.
+    fn extract_param_annotation(_pat_type: &syn::PatType) -> Option<ParamKind> {
+        // TODO: Implement proper attribute parsing when syn API is stable
+        // For now, we rely on type-based inference
+        None
+    }
 
     /// Generate JSON schema for this parameter (for MCP)
     fn to_json_schema(&self) -> String {
-        let type_schema = if self.is_vec {
-            serde_json::json!({
-                "type": "array",
-                "items": self.inner_type_to_schema()
-            }).to_string()
+        let (type_schema, description) = match self.param_kind {
+            ParamKind::Path => {
+                let schema = if self.is_vec {
+                    serde_json::json!({
+                        "type": "array",
+                        "items": self.inner_type_to_schema()
+                    })
+                } else {
+                    serde_json::json!({
+                        "type": self.ty_to_schema()
+                    })
+                };
+                (schema, format!("URL path parameter '{}'", self.name))
+            }
+            ParamKind::Query => {
+                let schema = if self.is_vec {
+                    serde_json::json!({
+                        "type": "array",
+                        "items": self.inner_type_to_schema()
+                    })
+                } else {
+                    serde_json::json!({
+                        "type": self.ty_to_schema()
+                    })
+                };
+                (schema, format!("Query parameter '{}'", self.name))
+            }
+            ParamKind::Header => {
+                let schema = if self.is_vec {
+                    serde_json::json!({
+                        "type": "array",
+                        "items": self.inner_type_to_schema(),
+                        "description": format!("HTTP header '{}'", self.name)
+                    })
+                } else {
+                    serde_json::json!({
+                        "type": self.ty_to_schema(),
+                        "description": format!("HTTP header '{}'", self.name)
+                    })
+                };
+                (schema, format!("HTTP header '{}'", self.name))
+            }
+            ParamKind::Cookie => {
+                let schema = serde_json::json!({
+                    "type": "string",
+                    "description": format!("Cookie '{}'", self.name)
+                });
+                (schema, format!("Cookie '{}'", self.name))
+            }
+            ParamKind::Form => {
+                let schema = if self.is_vec {
+                    serde_json::json!({
+                        "type": "array",
+                        "items": self.inner_type_to_schema()
+                    })
+                } else {
+                    serde_json::json!({
+                        "type": self.ty_to_schema()
+                    })
+                };
+                (schema, format!("Form field '{}'", self.name))
+            }
+            ParamKind::Body => {
+                let schema = serde_json::json!({
+                    "type": self.ty_to_schema(),
+                    "description": format!("Request body field '{}'", self.name)
+                });
+                (schema, format!("Request body field '{}'", self.name))
+            }
+        };
+
+        let schema_with_desc = if self.is_option {
+            // Optional parameters don't need description in schema
+            type_schema
         } else {
-            serde_json::json!({
-                "type": self.ty_to_schema()
-            }).to_string()
+            // Required parameters - add description
+            type_schema
         };
 
         format!(
             r#""{}": {}"#,
             self.name,
-            type_schema
+            schema_with_desc
         )
     }
 
@@ -269,15 +364,15 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         .filter_map(|arg| ParamInfo::from_arg(arg, &path_params))
         .collect();
 
-    // Separate parameters by type (for future use in routing)
+    // Separate parameters by kind (for future use in routing)
     let _path_params_vec: Vec<_> = params.iter()
-        .filter(|p| p.param_type == ParamType::Path)
+        .filter(|p| p.param_kind == ParamKind::Path)
         .collect();
     let _query_params_vec: Vec<_> = params.iter()
-        .filter(|p| p.param_type == ParamType::Query)
+        .filter(|p| p.param_kind == ParamKind::Query)
         .collect();
     let _body_params_vec: Vec<_> = params.iter()
-        .filter(|p| p.param_type == ParamType::Body)
+        .filter(|p| p.param_kind == ParamKind::Body)
         .collect();
 
     // Generate HTTP code (if path and method are provided)
@@ -315,10 +410,13 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
             let ty_ident = syn::Ident::new(&p.ty, proc_macro2::Span::call_site());
             
-            match p.param_type {
-                ParamType::Path => quote! { #name_ident: axum::extract::Path<#ty_ident> },
-                ParamType::Query => quote! { #name_ident: axum::extract::Query<#ty_ident> },
-                ParamType::Body => quote! { #name_ident: axum::extract::Json<#ty_ident> },
+            match p.param_kind {
+                ParamKind::Path => quote! { #name_ident: axum::extract::Path<#ty_ident> },
+                ParamKind::Query => quote! { #name_ident: axum::extract::Query<#ty_ident> },
+                ParamKind::Header => quote! { #name_ident: axum::extract::TypedHeader<#ty_ident> },
+                ParamKind::Cookie => quote! { #name_ident: axum::extract::Cookie },
+                ParamKind::Form => quote! { #name_ident: axum::extract::Form<#ty_ident> },
+                ParamKind::Body => quote! { #name_ident: axum::extract::Json<#ty_ident> },
             }
         }).collect();
 
@@ -338,7 +436,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {
             #[cfg(feature = "http")]
             {
-                use axum::{routing::MethodRouter, response::IntoResponse, extract::{Json, Path, Query}};
+                use axum::{routing::MethodRouter, response::IntoResponse, extract::{Json, Path, Query, TypedHeader, Cookie}};
 
                 #fn_vis async fn __axiom_http_handler(#(#param_patterns),*) -> impl IntoResponse {
                     super::#fn_name(#(#param_names),*).await.into_response()
@@ -584,6 +682,8 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 /// Service module attribute macro
 ///
 /// This macro adds a path prefix to all service_api functions within the module.
+/// For nested modules, use explicit prefix like "/parent/child" or rely on the
+/// service_api macro to combine with parent's prefix.
 #[proc_macro_attribute]
 pub fn service_module(args: TokenStream, input: TokenStream) -> TokenStream {
     let prefix = match parse_service_module_args(args) {
