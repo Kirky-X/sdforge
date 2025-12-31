@@ -4,7 +4,7 @@
 
 **版本**: v1.2 (修复版)  
 **日期**: 2025-01-01  
-**状态**: ⚠️ 部分实现 (~75%)
+**状态**: ✅ 基本完成 (~90%)
 
 ---
 
@@ -197,7 +197,7 @@ pub mod __mcp_search_docs {
 
 ---
 
-#### F4: 自动服务构建 ⚠️ 部分实现
+#### F4: 自动服务构建 ✅ 已实现
 
 **用户故事**:  
 作为开发者，我希望框架自动收集所有标注的函数并构建服务，无需手动注册。
@@ -206,8 +206,18 @@ pub mod __mcp_search_docs {
 
 - [x] 提供 `axiom::http::build()` 自动构建 HTTP 服务
 - [x] 提供 `axiom::mcp::build()` 自动构建 MCP 服务
-- [ ] 自动收集所有 `#[service_api]` 标注的函数
-- [ ] 自动应用模块前缀
+- [x] 自动收集所有 `#[service_api]` 标注的函数
+- [x] 自动应用模块前缀
+
+**实现文件**：`/home/project/sdforge/axiom/src/http/mod.rs`、`/home/project/sdforge/axiom/src/mcp/mod.rs`
+
+**检查结果**：
+- ✅ HTTP 模块完整实现了 `build()` 和 `build_with_redirect()` 函数
+- ✅ 支持模块前缀分组和路径解析
+- ✅ MCP 模块完整实现了 `build()` 函数
+- ✅ 使用 inventory 自动收集注册的路由和工具
+- ✅ 支持版本重定向中间件
+- ✅ 包含完整的工具包装和服务器构建逻辑
 
 **使用示例**:
 
@@ -370,7 +380,7 @@ async fn stream_logs(service: String) -> Result<impl Stream<Item = LogEntry>, Ap
 
 ---
 
-#### F8: 增强特性系统 ⚠️ 部分实现
+#### F8: 增强特性系统 ✅ 已实现
 
 **用户故事**:  
 作为开发者，我希望通过 features 为响应添加额外字段（如时间戳）。
@@ -378,14 +388,18 @@ async fn stream_logs(service: String) -> Result<impl Stream<Item = LogEntry>, Ap
 **验收标准**:
 
 - [x] 支持 `timestamp` 特性自动添加时间戳
-- [ ] 支持 `logging` 特性自动记录日志
+- [x] 支持 `logging` 特性自动记录日志
 - [x] 特性在编译期生效，零运行时开销
 - [x] 特性可组合使用
+
+**实现文件**：`/home/project/sdforge/axiom/src/core/mod.rs`、`/home/project/sdforge/axiom/src/config.rs`
 
 **检查结果**：
 - ✅ timestamp 特性已在 ServiceResponse 中实现
 - ✅ 使用条件编译 `#[cfg(feature = "timestamp")]`
-- ❌ logging 特性缺少自动日志记录实现
+- ✅ logging 特性完整实现，包含 `init_logging()` 和 `init_logging_default()`
+- ✅ 支持文件和控制台输出
+- ✅ 支持多种日志级别和格式
 
 **Timestamp 特性**:
 
@@ -522,38 +536,6 @@ async fn get_user_v2(id: u64) -> Result<UserV2, ApiError> {}
 )]
 async fn get_secure_data(user_id: u64) -> Result<Data, ApiError> {
     // 只有认证用户且有权限才能访问
-}
-```
-
----
-
-#### F12: 输入验证与防护 ✅ 已实现
-
-**用户故事**:  
-作为开发者，我希望框架自动防护常见的攻击。
-
-**验收标准**:
-
-- [x] 自动 SQL 注入防护
-- [x] 自动 XSS 防护
-- [x] 请求速率限制（可配置）
-- [x] 请求大小限制
-- [x] 输入参数类型验证
-- [x] 恶意请求检测
-
-**实现文件**：`/home/project/sdforge/axiom/src/core/validation.rs`、`/home/project/sdforge/axiom/src/security.rs`
-
-**检查结果**：
-- ✅ 完整实现了输入清理模块（sanitizer），包含 SQL 注入和 XSS 防护
-- ✅ 实现了路径遍历攻击防护
-- ✅ 实现了文件名安全验证
-- ✅ 实现了完整的速率限制系统
-- ✅ 实现了请求大小控制
-- ✅ 实现了认证失败检测
-- ✅ 实现了参数类型验证和范围检查
-
-**防护配置**:
-
 ```rust
 #[service_api(
     name = "submit_data",
