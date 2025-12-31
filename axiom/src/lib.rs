@@ -5,6 +5,9 @@
 #![doc(html_root_url = "https://docs.rs/axiom/0.1.0")]
 #![warn(missing_docs)]
 
+/// Re-export macros from axiom-macros for convenient use
+pub use axiom_macros::{service_api, service_module};
+
 /// Commonly used types
 pub mod prelude {
     #[cfg(feature = "http")]
