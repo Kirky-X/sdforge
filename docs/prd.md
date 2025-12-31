@@ -4,7 +4,7 @@
 
 **版本**: v1.2 (修复版)  
 **日期**: 2025-01-01  
-**状态**: ⚠️ 部分实现 (~60%)
+**状态**: ⚠️ 部分实现 (~75%)
 
 ---
 
@@ -234,28 +234,28 @@ async fn main() {
 
 ---
 
-#### F5: 输入验证与安全 ⚠️ 部分实现
+#### F5: 输入验证与安全 ✅ 已实现
 
 **用户故事**:  
 作为开发者，我希望框架自动验证输入参数，确保安全性和数据完整性。
 
 **验收标准**:
 
-- [ ] 支持参数范围验证（如 ID 在 1-1000000 之间）
-- [ ] 支持字符串格式验证（如非空、长度限制）
+- [x] 支持参数范围验证（如 ID 在 1-1000000 之间）
+- [x] 支持字符串格式验证（如非空、长度限制）
 - [x] 自动添加 Body 大小限制（默认 2MB）
-- [ ] 支持自定义验证规则
+- [x] 支持自定义验证规则
 - [x] 验证失败返回友好错误信息
 
-**实现文件**：`/home/project/sdforge/axiom/src/security.rs`
+**实现文件**：`/home/project/sdforge/axiom/src/core/validation.rs`、`/home/project/sdforge/axiom/src/security.rs`
 
 **检查结果**：
+- ✅ 完整实现了参数验证系统，支持范围、长度、邮箱格式等验证
 - ✅ 实现了完整的认证系统（API Key、Bearer Token）
 - ✅ 实现了速率限制中间件
 - ✅ 实现了审计日志系统
 - ✅ 实现了权限控制框架
-- ⚠️ 但缺少输入参数验证逻辑
-- ⚠️ 缺少 SQL 注入、XSS 防护
+- ✅ 实现了输入清理和防护（SQL注入、XSS、路径遍历）
 
 **验证示例**:
 
@@ -305,7 +305,7 @@ async fn create_user(
 
 ---
 
-#### F6: 参数类型转换 ❌ 未实现
+#### F6: 参数类型转换 ⚠️ 部分实现
 
 **用户故事**:  
 作为开发者，我希望框架自动处理复杂嵌套结构的序列化，支持原生函数参数。
@@ -313,10 +313,19 @@ async fn create_user(
 **验收标准**:
 
 - [ ] 支持嵌套 Struct/Enum
-- [ ] 支持泛型参数（`Option<T>`、`Vec<T>`、`HashMap<K,V>`）
-- [ ] 支持自定义 Serde 序列化逻辑
+- [x] 支持泛型参数（`Option<T>`、`Vec<T>`、`HashMap<K,V>`）
+- [x] 支持自定义 Serde 序列化逻辑
 - [ ] HTTP 自动从路径/查询/Body 提取参数
-- [ ] MCP 自动从 JSON 提取参数
+- [x] MCP 自动从 JSON 提取参数
+
+**实现文件**：`/home/project/sdforge/axiom/src/core/validation.rs`
+
+**检查结果**：
+- ✅ 实现了 `ValidatedParam` trait 和 `ValidationResult` 类型
+- ✅ 支持从 JSON 提取和验证参数
+- ✅ 集成了 validator 库进行自动验证
+- ⚠️ 缺少 HTTP 路径/查询参数提取逻辑
+- ⚠️ 缺少嵌套结构的特殊处理
 
 ---
 
@@ -398,16 +407,26 @@ INFO request{method=GET uri=/api/v1/users/123}: completed in 5ms
 
 ---
 
-#### F9: 版本管理 ❌ 未实现
+#### F9: 版本管理 ✅ 已实现
 
 **用户故事**:  
 作为 API 维护者，我希望支持多版本 API 共存。
 
 **验收标准**:
 
-- [ ] 版本号自动加入 HTTP 路径（`/api/{version}/...`）
-- [ ] 支持同一接口的多版本实现
-- [ ] MCP 工具名包含版本信息（可选）
+- [x] 版本号自动加入 HTTP 路径（`/api/{version}/...`）
+- [x] 支持同一接口的多版本实现
+- [x] MCP 工具名包含版本信息（可选）
+
+**实现文件**：`/home/project/sdforge/axiom/src/http/version_routing.rs`
+
+**检查结果**：
+- ✅ 完整实现了 `VersionedRoute` 和 `VersionRouterConfig` 结构
+- ✅ 实现了 `build_version_router()` 函数
+- ✅ 实现了 `version_redirect_middleware` 中间件
+- ✅ 提供了 `define_versioned_route!` 宏
+- ✅ 支持默认版本和版本验证
+- ✅ 包含完整的测试用例
 
 **示例**:
 
@@ -508,26 +527,30 @@ async fn get_secure_data(user_id: u64) -> Result<Data, ApiError> {
 
 ---
 
-#### F12: 输入验证与防护 ⚠️ 部分实现
+#### F12: 输入验证与防护 ✅ 已实现
 
 **用户故事**:  
 作为开发者，我希望框架自动防护常见的攻击。
 
 **验收标准**:
 
-- [ ] 自动 SQL 注入防护
-- [ ] 自动 XSS 防护
+- [x] 自动 SQL 注入防护
+- [x] 自动 XSS 防护
 - [x] 请求速率限制（可配置）
 - [x] 请求大小限制
-- [ ] 输入参数类型验证
+- [x] 输入参数类型验证
 - [x] 恶意请求检测
 
+**实现文件**：`/home/project/sdforge/axiom/src/core/validation.rs`、`/home/project/sdforge/axiom/src/security.rs`
+
 **检查结果**：
+- ✅ 完整实现了输入清理模块（sanitizer），包含 SQL 注入和 XSS 防护
+- ✅ 实现了路径遍历攻击防护
+- ✅ 实现了文件名安全验证
 - ✅ 实现了完整的速率限制系统
 - ✅ 实现了请求大小控制
 - ✅ 实现了认证失败检测
-- ❌ 缺少 SQL 注入和 XSS 防护
-- ❌ 缺少输入参数类型验证
+- ✅ 实现了参数类型验证和范围检查
 
 **防护配置**:
 
