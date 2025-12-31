@@ -2,6 +2,9 @@
 
 pub mod validation;
 
+#[cfg(feature = "http")]
+pub use validation::sanitizer;
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 #[cfg(feature = "http")]
@@ -177,6 +180,17 @@ pub enum ApiError {
         /// The constraint that was not satisfied
         constraint: String,
     },
+}
+
+impl ApiError {
+    /// Create a validation error
+    pub fn validation_error(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::InvalidInput {
+            message: message.into(),
+            field: None,
+            value: None,
+        }
+    }
 }
 
 impl From<ApiError> for ServiceError {
