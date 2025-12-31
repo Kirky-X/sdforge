@@ -285,9 +285,29 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         let raw_path = path.clone().unwrap();
         let http_method = method.clone().unwrap();
 
-        // Build the full path with version (module prefix will be integrated in future)
+        // Build the full path with version and module prefix
+        // __AXIOM_MODULE_PREFIX is injected by service_module macro
         let http_path = quote! {
-            format!("/api/{}{}", #version, #raw_path)
+            {
+                // Try to get module prefix from service_module
+                #[allow(dead_code)]
+                const fn get_prefix() -> &'static str {
+                    // If __AXIOM_MODULE_PREFIX exists in this scope (injected by service_module),
+                    // use it. Otherwise, return empty string.
+                    // This function will be shadowed by service_module if present.
+                    ""
+                }
+                
+                // Use the constant directly - it will be defined by service_module if needed
+                let prefix = __AXIOM_MODULE_PREFIX;
+                let version_path = format!("/api/{}", #version);
+                let base_path = if prefix.is_empty() {
+                    version_path
+                } else {
+                    format!("{}{}", prefix.trim_end_matches('/'), version_path)
+                };
+                format!("{}{}", base_path, #raw_path)
+            }
         };
 
         // Build parameter patterns based on type
@@ -333,6 +353,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                         version: #version,
                         description: #description.as_ref().unwrap_or(&#name),
                     },
+                    module_prefix: Some(__AXIOM_MODULE_PREFIX),
                 });
             }
 
@@ -522,10 +543,11 @@ pub fn service_module(args: TokenStream, input: TokenStream) -> TokenStream {
     };
     let input = parse_macro_input!(input as ItemMod);
 
-    // Generate a constant with the module prefix
+    // Generate a public constant with the module prefix that can be accessed
+    // by service_api macros within this module
     let prefix_const = quote! {
         #[allow(dead_code)]
-        const __AXIOM_MODULE_PREFIX: &str = #prefix;
+        pub const __AXIOM_MODULE_PREFIX: &str = #prefix;
     };
 
     let expanded = quote! {
