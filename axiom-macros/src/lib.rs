@@ -404,13 +404,38 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                                 is_error: Some(false),
                                 meta: None,
                             }),
-                            Err(e) => Ok(mcp_sdk::types::CallToolResponse {
-                                content: vec![mcp_sdk::types::ToolResponseContent::Text {
-                                    text: e.to_string(),
-                                }],
-                                is_error: Some(true),
-                                meta: None,
-                            }),
+                            Err(e) => {
+                                // Extract error code and message from ApiError
+                                let error_text = e.to_string();
+                                let error_json: serde_json::Value = serde_json::from_str(&error_text).unwrap_or_else(|_| {
+                                    // If not JSON, wrap as text
+                                    serde_json::json!({
+                                        "code": "TOOL_ERROR",
+                                        "message": error_text
+                                    })
+                                });
+                                
+                                let error_code = error_json.get("code")
+                                    .and_then(|c| c.as_str())
+                                    .unwrap_or("TOOL_ERROR");
+                                let error_message = error_json.get("message")
+                                    .and_then(|m| m.as_str())
+                                    .unwrap_or(&error_text);
+                                
+                                Ok(mcp_sdk::types::CallToolResponse {
+                                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                                        text: serde_json::to_string(&serde_json::json!({
+                                            "success": false,
+                                            "error": {
+                                                "code": error_code,
+                                                "message": error_message
+                                            }
+                                        }))?,
+                                    }],
+                                    is_error: Some(true),
+                                    meta: None,
+                                })
+                            }
                         }
                     }
                 }
@@ -495,13 +520,37 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                                     is_error: Some(false),
                                     meta: None,
                                 }),
-                                Err(e) => Ok(mcp_sdk::types::CallToolResponse {
-                                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
-                                        text: e.to_string(),
-                                    }],
-                                    is_error: Some(true),
-                                    meta: None,
-                                }),
+                                Err(e) => {
+                                    // Extract error code and message from ApiError
+                                    let error_text = e.to_string();
+                                    let error_json: serde_json::Value = serde_json::from_str(&error_text).unwrap_or_else(|_| {
+                                        serde_json::json!({
+                                            "code": "TOOL_ERROR",
+                                            "message": error_text
+                                        })
+                                    });
+                                    
+                                    let error_code = error_json.get("code")
+                                        .and_then(|c| c.as_str())
+                                        .unwrap_or("TOOL_ERROR");
+                                    let error_message = error_json.get("message")
+                                        .and_then(|m| m.as_str())
+                                        .unwrap_or(&error_text);
+                                    
+                                    Ok(mcp_sdk::types::CallToolResponse {
+                                        content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                                            text: serde_json::to_string(&serde_json::json!({
+                                                "success": false,
+                                                "error": {
+                                                    "code": error_code,
+                                                    "message": error_message
+                                                }
+                                            }))?,
+                                        }],
+                                        is_error: Some(true),
+                                        meta: None,
+                                    })
+                                }
                             }
                         }
                     }
