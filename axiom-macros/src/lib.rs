@@ -6,7 +6,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, ItemFn, ItemMod, PatType, Pat, FnArg};
+use syn::{parse_macro_input, ItemFn, ItemMod, Pat, FnArg};
 
 /// Parse key=value pairs from token stream
 fn parse_kv_pairs(args: TokenStream) -> Result<Vec<(String, String)>, syn::Error> {
@@ -119,6 +119,25 @@ fn parse_service_module_args(args: TokenStream) -> Result<String, syn::Error> {
     Ok(prefix)
 }
 
+/// Extract path parameters from path string (e.g., ":id" from "/users/:id")
+fn extract_path_params(path: &str) -> Vec<String> {
+    let mut params = Vec::new();
+    for segment in path.split('/') {
+        if segment.starts_with(':') {
+            params.push(segment[1..].to_string());
+        }
+    }
+    params
+}
+
+/// Parameter type for HTTP extraction
+#[derive(Debug, Clone, PartialEq)]
+enum ParamType {
+    Path,
+    Query,
+    Body,
+}
+
 /// Extract parameter info from function arguments
 #[derive(Debug, Clone)]
 struct ParamInfo {
@@ -126,6 +145,8 @@ struct ParamInfo {
     name: String,
     /// Parameter type as string
     ty: String,
+    /// Extraction type
+    param_type: ParamType,
     /// Whether the parameter is Option<T>
     is_option: bool,
     /// Whether the parameter is Vec<T>
@@ -135,9 +156,7 @@ struct ParamInfo {
 }
 
 impl ParamInfo {
-    fn from_arg(arg: &FnArg) -> Option<Self> {
-        // FnArg can be Receiver, Pat(PatType), or invalid
-        // We only care about Pat(PatType) which contains typed patterns
+    fn from_arg(arg: &FnArg, path_params: &[String]) -> Option<Self> {
         let pat_type = match arg {
             FnArg::Receiver(_) => return None,
             FnArg::Typed(pat_type) => pat_type,
@@ -147,18 +166,22 @@ impl ParamInfo {
         if let Pat::Ident(pat_ident) = pat {
             let name = pat_ident.ident.to_string();
             
-            // Get the type as a string
             let ty_str = quote! { #pat_type.ty }.to_string();
-            
-            // Parse the type to detect Option/Vec
             let ty_str_trimmed = ty_str.trim().to_string();
             
+            // Determine extraction type based on path parameters
+            let param_type = if path_params.contains(&name) {
+                ParamType::Path
+            } else if ty_str_trimmed.starts_with("Option<") {
+                ParamType::Query
+            } else {
+                ParamType::Body
+            };
+
             let (is_option, is_vec, inner_type) = if ty_str_trimmed.starts_with("Option<") {
-                // Extract inner type from Option<T>
                 let inner = &ty_str_trimmed[7..ty_str_trimmed.len()-1];
                 (true, false, inner.to_string())
             } else if ty_str_trimmed.starts_with("Vec<") {
-                // Extract inner type from Vec<T>
                 let inner = &ty_str_trimmed[4..ty_str_trimmed.len()-1];
                 (false, true, inner.to_string())
             } else {
@@ -168,12 +191,55 @@ impl ParamInfo {
             Some(Self {
                 name,
                 ty: ty_str_trimmed,
+                param_type,
                 is_option,
                 is_vec,
                 inner_type,
             })
         } else {
             None
+        }
+    }
+
+    /// Generate JSON schema for this parameter (for MCP)
+    fn to_json_schema(&self) -> String {
+        let type_schema = if self.is_vec {
+            serde_json::json!({
+                "type": "array",
+                "items": self.inner_type_to_schema()
+            }).to_string()
+        } else {
+            serde_json::json!({
+                "type": self.ty_to_schema()
+            }).to_string()
+        };
+
+        format!(
+            r#""{}": {}"#,
+            self.name,
+            type_schema
+        )
+    }
+
+    fn ty_to_schema(&self) -> &str {
+        match self.ty.as_str() {
+            "String" | "&str" => "string",
+            "u8" | "u16" | "u32" | "u64" | "u128" | "usize" => "integer",
+            "i8" | "i16" | "i32" | "i64" | "i128" | "isize" => "integer",
+            "f32" | "f64" => "number",
+            "bool" => "boolean",
+            _ => "object",
+        }
+    }
+
+    fn inner_type_to_schema(&self) -> serde_json::Value {
+        match self.inner_type.as_str() {
+            "String" | "&str" => serde_json::json!({"type": "string"}),
+            "u8" | "u16" | "u32" | "u64" | "u128" | "usize" => serde_json::json!({"type": "integer"}),
+            "i8" | "i16" | "i32" | "i64" | "i128" | "isize" => serde_json::json!({"type": "integer"}),
+            "f32" | "f64" => serde_json::json!({"type": "number"}),
+            "bool" => serde_json::json!({"type": "boolean"}),
+            _ => serde_json::json!({"type": "object"}),
         }
     }
 }
@@ -193,36 +259,69 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     let fn_name = &input.sig.ident;
     let fn_vis = &input.vis;
 
+    // Extract path parameters from path string
+    let path_params = path.as_ref()
+        .map(|p| extract_path_params(p))
+        .unwrap_or_default();
+
     // Extract function parameters
     let params: Vec<ParamInfo> = input.sig.inputs.iter()
-        .filter_map(ParamInfo::from_arg)
+        .filter_map(|arg| ParamInfo::from_arg(arg, &path_params))
+        .collect();
+
+    // Separate parameters by type (for future use in routing)
+    let _path_params_vec: Vec<_> = params.iter()
+        .filter(|p| p.param_type == ParamType::Path)
+        .collect();
+    let _query_params_vec: Vec<_> = params.iter()
+        .filter(|p| p.param_type == ParamType::Query)
+        .collect();
+    let _body_params_vec: Vec<_> = params.iter()
+        .filter(|p| p.param_type == ParamType::Body)
         .collect();
 
     // Generate HTTP code (if path and method are provided)
     let http_code = if path.is_some() && method.is_some() {
-        let http_path = format!("/api/{}{}", version, path.clone().unwrap());
+        let raw_path = path.clone().unwrap();
         let http_method = method.clone().unwrap();
 
-        // Build parameter patterns and names
-        let param_patterns: Vec<_> = params.iter()
-            .map(|p| {
-                let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
-                let ty_ident = syn::Ident::new(&p.ty, proc_macro2::Span::call_site());
-                quote! { #name_ident: axum::extract::Json::<#ty_ident> }
-            })
-            .collect();
+        // Build the full path with version (module prefix will be integrated in future)
+        let http_path = quote! {
+            format!("/api/{}{}", #version, #raw_path)
+        };
+
+        // Build parameter patterns based on type
+        let param_patterns: Vec<_> = params.iter().map(|p| {
+            let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+            let ty_ident = syn::Ident::new(&p.ty, proc_macro2::Span::call_site());
+            
+            match p.param_type {
+                ParamType::Path => quote! { #name_ident: axum::extract::Path<#ty_ident> },
+                ParamType::Query => quote! { #name_ident: axum::extract::Query<#ty_ident> },
+                ParamType::Body => quote! { #name_ident: axum::extract::Json<#ty_ident> },
+            }
+        }).collect();
 
         let param_names: Vec<_> = params.iter()
             .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
             .collect();
 
+        // Build MCP input schema
+        let mcp_schema_props: Vec<String> = params.iter()
+            .map(|p| p.to_json_schema())
+            .collect();
+        let mcp_schema_required: Vec<String> = params.iter()
+            .filter(|p| !p.is_option)
+            .map(|p| format!(r#""{}""#, p.name))
+            .collect();
+
         quote! {
             #[cfg(feature = "http")]
             {
-                use axum::{routing::MethodRouter, response::IntoResponse, extract::Json};
+                use axum::{routing::MethodRouter, response::IntoResponse, extract::{Json, Path, Query}};
 
                 #fn_vis async fn __axiom_http_handler(#(#param_patterns),*) -> impl IntoResponse {
-                    super::#fn_name(#(#param_names.0),*).await.into_response()
+                    super::#fn_name(#(#param_names),*).await.into_response()
                 }
 
                 axiom::inventory::submit!(axiom::http::HttpRoute {
@@ -236,48 +335,45 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                     },
                 });
             }
-        }
-    } else {
-        quote! {}
-    };
 
-    // Generate MCP code (if tool_name is provided)
-    let mcp_code = if let Some(tool_name) = tool_name {
-        let tool_name_str = tool_name.clone();
-        let description_str = description.clone().unwrap_or_else(|| name.clone());
-        let mcp_struct_name = syn::Ident::new(
-            &format!("AxiomMcpTool{}", fn_name.to_string().chars().next().map(|c| c.to_uppercase().collect::<String>()).unwrap_or_default()),
-            proc_macro2::Span::call_site()
-        );
-
-        quote! {
             #[cfg(feature = "mcp")]
             {
                 use mcp_sdk::tools::Tool;
                 use serde_json::Value;
 
-                struct #mcp_struct_name;
+                struct AxiomMcpTool;
 
-                impl Tool for #mcp_struct_name {
+                impl Tool for AxiomMcpTool {
                     fn name(&self) -> String {
-                        #tool_name_str.to_string()
+                        #tool_name.as_ref().unwrap_or(&#name).to_string()
                     }
 
                     fn description(&self) -> String {
-                        #description_str.to_string()
+                        #description.clone().unwrap_or_else(|| #name.clone()).to_string()
                     }
 
                     fn input_schema(&self) -> serde_json::Value {
                         serde_json::json!({
                             "type": "object",
-                            "properties": {},
-                            "required": []
+                            "properties": { #(#mcp_schema_props),* },
+                            "required": [#(#mcp_schema_required),*]
                         })
                     }
 
                     fn call(&self, input: Option<Value>) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
-                        let _params = input.unwrap_or_default();
-                        let result = super::#fn_name().await;
+                        use serde::Deserialize;
+                        
+                        #[derive(serde::Deserialize)]
+                        struct Params {
+                            #(#(pub #param_names: #param_names),)*
+                        }
+                        
+                        let params: Params = match input {
+                            Some(v) => serde_json::from_value(v)?,
+                            None => Params { #(#param_names: Default::default()),* },
+                        };
+                        
+                        let result = super::#fn_name(#(params.#param_names),*).await;
                         
                         match result {
                             Ok(value) => Ok(mcp_sdk::types::CallToolResponse {
@@ -299,26 +395,117 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
 
                 axiom::inventory::submit!(axiom::mcp::McpToolRegistration {
-                    name: #tool_name_str,
-                    description: #description_str,
-                    input_schema: #mcp_struct_name.input_schema(),
+                    name: #tool_name.clone().unwrap_or_else(|| #name.clone()),
+                    description: #description.clone().unwrap_or_else(|| #name.clone()),
+                    input_schema: AxiomMcpTool.input_schema(),
                     metadata: axiom::core::ApiMetadata {
                         name: #name,
                         version: #version,
-                        description: #description_str,
+                        description: #description.clone().unwrap_or_else(|| #name.clone()),
                     },
                 });
             }
         }
     } else {
-        quote! {}
+        // Even without HTTP path, we may need to generate MCP code
+        if tool_name.is_some() {
+            let tool_name = tool_name.unwrap();
+            let tool_name_str = tool_name.clone();
+            let description_str = description.clone().unwrap_or_else(|| name.clone());
+
+            // Build MCP input schema
+            let mcp_schema_props: Vec<String> = params.iter()
+                .map(|p| p.to_json_schema())
+                .collect();
+            let mcp_schema_required: Vec<String> = params.iter()
+                .filter(|p| !p.is_option)
+                .map(|p| format!(r#""{}""#, p.name))
+                .collect();
+
+            let param_names: Vec<_> = params.iter()
+                .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
+                .collect();
+
+            quote! {
+                #[cfg(feature = "mcp")]
+                {
+                    use mcp_sdk::tools::Tool;
+                    use serde_json::Value;
+
+                    struct AxiomMcpTool;
+
+                    impl Tool for AxiomMcpTool {
+                        fn name(&self) -> String {
+                            #tool_name_str.to_string()
+                        }
+
+                        fn description(&self) -> String {
+                            #description_str.to_string()
+                        }
+
+                        fn input_schema(&self) -> serde_json::Value {
+                            serde_json::json!({
+                                "type": "object",
+                                "properties": { #(#mcp_schema_props),* },
+                                "required": [#(#mcp_schema_required),*]
+                            })
+                        }
+
+                        fn call(&self, input: Option<Value>) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                            use serde::Deserialize;
+                            
+                            #[derive(serde::Deserialize)]
+                            struct Params {
+                                #(#(pub #param_names: #param_names),)*
+                            }
+                            
+                            let params: Params = match input {
+                                Some(v) => serde_json::from_value(v)?,
+                                None => Params { #(#param_names: Default::default()),* },
+                            };
+                            
+                            let result = super::#fn_name(#(params.#param_names),*).await;
+                            
+                            match result {
+                                Ok(value) => Ok(mcp_sdk::types::CallToolResponse {
+                                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                                        text: serde_json::to_string(&value)?,
+                                    }],
+                                    is_error: Some(false),
+                                    meta: None,
+                                }),
+                                Err(e) => Ok(mcp_sdk::types::CallToolResponse {
+                                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                                        text: e.to_string(),
+                                    }],
+                                    is_error: Some(true),
+                                    meta: None,
+                                }),
+                            }
+                        }
+                    }
+
+                    axiom::inventory::submit!(axiom::mcp::McpToolRegistration {
+                        name: #tool_name,
+                        description: #description_str,
+                        input_schema: AxiomMcpTool.input_schema(),
+                        metadata: axiom::core::ApiMetadata {
+                            name: #name,
+                            version: #version,
+                            description: #description_str,
+                        },
+                    });
+                }
+            }
+        } else {
+            quote! {}
+        }
     };
 
     let expanded = quote! {
         #input
 
         #http_code
-        #mcp_code
     };
 
     expanded.into()
