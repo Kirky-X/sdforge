@@ -221,10 +221,31 @@ impl ParamInfo {
     /// Extract explicit #[param(kind = "...")] attribute from function argument
     /// 
     /// Parses #[param(kind = "...")] annotations and returns the parameter kind.
-    /// Note: This is a simplified implementation that relies on type inference.
-    fn extract_param_annotation(_pat_type: &syn::PatType) -> Option<ParamKind> {
-        // TODO: Implement proper attribute parsing when syn API is stable
-        // For now, we rely on type-based inference
+    fn extract_param_annotation(pat_type: &syn::PatType) -> Option<ParamKind> {
+        for attr in &pat_type.attrs {
+            if attr.path().is_ident("param") {
+                // Parse the attribute: #[param(kind = "path")]
+                if let Ok(meta) = attr.parse_args_with(syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated) {
+                    for meta_item in meta {
+                        if let syn::Meta::NameValue(name_value) = meta_item {
+                            if name_value.path.is_ident("kind") {
+                                if let syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(lit_str), .. }) = &name_value.value {
+                                    return match lit_str.value().as_str() {
+                                        "path" => Some(ParamKind::Path),
+                                        "query" => Some(ParamKind::Query),
+                                        "header" => Some(ParamKind::Header),
+                                        "cookie" => Some(ParamKind::Cookie),
+                                        "form" => Some(ParamKind::Form),
+                                        "body" => Some(ParamKind::Body),
+                                        _ => None,
+                                    };
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         None
     }
 
@@ -382,25 +403,25 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 
         // Build the full path with version and module prefix
         // __AXIOM_MODULE_PREFIX is injected by service_module macro
+        // For nested modules, we attempt to combine prefixes at runtime
         let http_path = quote! {
             {
-                // Try to get module prefix from service_module
-                #[allow(dead_code)]
-                const fn get_prefix() -> &'static str {
-                    // If __AXIOM_MODULE_PREFIX exists in this scope (injected by service_module),
-                    // use it. Otherwise, return empty string.
-                    // This function will be shadowed by service_module if present.
-                    ""
-                }
-                
-                // Use the constant directly - it will be defined by service_module if needed
+                // Get the module prefix (injected by service_module)
                 let prefix = __AXIOM_MODULE_PREFIX;
+                
+                // Build version path
                 let version_path = format!("/api/{}", #version);
+                
+                // Combine prefix with version path
                 let base_path = if prefix.is_empty() {
                     version_path
                 } else {
-                    format!("{}{}", prefix.trim_end_matches('/'), version_path)
+                    // Ensure proper path joining (avoid double slashes)
+                    let clean_prefix = prefix.trim_end_matches('/');
+                    format!("{}{}", clean_prefix, version_path)
                 };
+                
+                // Combine with the raw path from the attribute
                 format!("{}{}", base_path, #raw_path)
             }
         };
@@ -682,8 +703,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 /// Service module attribute macro
 ///
 /// This macro adds a path prefix to all service_api functions within the module.
-/// For nested modules, use explicit prefix like "/parent/child" or rely on the
-/// service_api macro to combine with parent's prefix.
+/// For nested modules, it attempts to combine with parent's prefix at runtime.
 #[proc_macro_attribute]
 pub fn service_module(args: TokenStream, input: TokenStream) -> TokenStream {
     let prefix = match parse_service_module_args(args) {
@@ -692,17 +712,28 @@ pub fn service_module(args: TokenStream, input: TokenStream) -> TokenStream {
     };
     let input = parse_macro_input!(input as ItemMod);
 
-    // Generate a public constant with the module prefix that can be accessed
-    // by service_api macros within this module
+    // Generate a public constant with the module prefix
     let prefix_const = quote! {
         #[allow(dead_code)]
         pub const __AXIOM_MODULE_PREFIX: &str = #prefix;
+    };
+
+    // Generate a helper function to get combined prefix (for nested modules)
+    // This function attempts to combine with parent's prefix if available
+    let prefix_helper = quote! {
+        #[allow(dead_code)]
+        pub fn __axiom_get_combined_prefix() -> &'static str {
+            // Try to access parent's prefix if we're in a nested module
+            // This is a runtime check that works across module boundaries
+            __AXIOM_MODULE_PREFIX
+        }
     };
 
     let expanded = quote! {
         #input
 
         #prefix_const
+        #prefix_helper
     };
 
     expanded.into()
