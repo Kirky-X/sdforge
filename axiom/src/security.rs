@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use axum::{
     body::Body,
-    http::{Request, StatusCode},
+    http::{HeaderValue, Request, StatusCode},
     response::Response,
     middleware::Next,
 };
@@ -21,12 +21,15 @@ use uuid::Uuid;
 /// Authentication errors
 #[derive(Debug, Error, Clone)]
 pub enum AuthError {
+    /// Missing or invalid authorization header
     #[error("Missing or invalid authorization header")]
     MissingAuth,
 
+    /// Invalid or expired token
     #[error("Invalid or expired token")]
     InvalidToken,
 
+    /// Insufficient permissions for the requested operation
     #[error("Insufficient permissions: {required}")]
     InsufficientPermissions {
         /// Required permission
@@ -101,6 +104,7 @@ impl Default for ApiKeyAuth {
 
 /// Bearer token authentication
 #[derive(Clone)]
+#[allow(dead_code)] // secret field is reserved for future JWT implementation
 pub struct BearerAuth {
     /// JWT secret (simplified for demo - use proper JWT in production)
     secret: String,
@@ -189,7 +193,7 @@ impl RateLimiter {
             return Err(RateLimitError {
                 limit: self.config.max_requests,
                 remaining: 0,
-                retry_after: retry_after as u64,
+                retry_after,
             });
         }
 
@@ -265,13 +269,21 @@ pub enum AuditResult {
 pub struct AuditLogger {
     /// Logs storage
     logs: Arc<DashMap<String, Vec<AuditLog>>>,
+    /// Maximum logs per user (DoS protection)
+    max_logs_per_user: usize,
 }
 
 impl AuditLogger {
-    /// Create new audit logger
+    /// Create new audit logger with default limit
     pub fn new() -> Self {
+        Self::with_limit(1000)
+    }
+
+    /// Create new audit logger with custom limit
+    pub fn with_limit(max_logs: usize) -> Self {
         Self {
             logs: Arc::new(DashMap::new()),
+            max_logs_per_user: max_logs,
         }
     }
 
@@ -297,9 +309,9 @@ impl AuditLogger {
         let mut entry = self.logs.entry(key).or_default();
         entry.push(log);
 
-        // Keep only last 1000 logs per user
-        if entry.len() > 1000 {
-            entry.truncate(1000);
+        // Keep only last N logs per user (DoS protection)
+        if entry.len() > self.max_logs_per_user {
+            entry.truncate(self.max_logs_per_user);
         }
     }
 
@@ -345,13 +357,7 @@ pub fn rate_limit_middleware(
     move |req: Request<Body>, next: Next| {
         let limiter = limiter.clone();
         Box::pin(async move {
-            let client_ip = req
-                .headers()
-                .get("X-Forwarded-For")
-                .and_then(|h| h.to_str().ok())
-                .or(req.headers().get("X-Real-IP").and_then(|h| h.to_str().ok()))
-                .unwrap_or("unknown")
-                .to_string();
+            let client_ip = extract_client_ip(&req);
 
             match limiter.check(&client_ip) {
                 Ok(remaining) => {
@@ -359,11 +365,11 @@ pub fn rate_limit_middleware(
                     if limiter.config.include_headers {
                         response.headers_mut().insert(
                             "X-RateLimit-Limit",
-                            limiter.config.max_requests.to_string().parse().unwrap(),
+                            HeaderValue::from(limiter.config.max_requests),
                         );
                         response.headers_mut().insert(
                             "X-RateLimit-Remaining",
-                            remaining.to_string().parse().unwrap(),
+                            HeaderValue::from(remaining),
                         );
                     }
                     response
@@ -373,21 +379,142 @@ pub fn rate_limit_middleware(
                     *response.status_mut() = StatusCode::TOO_MANY_REQUESTS;
                     response.headers_mut().insert(
                         "X-RateLimit-Limit",
-                        e.limit.to_string().parse().unwrap(),
+                        HeaderValue::from(e.limit),
                     );
                     response.headers_mut().insert(
                         "X-RateLimit-Remaining",
-                        "0".parse().unwrap(),
+                        HeaderValue::from(0),
                     );
                     response.headers_mut().insert(
                         "Retry-After",
-                        e.retry_after.to_string().parse().unwrap(),
+                        HeaderValue::from(e.retry_after),
                     );
                     response
                 }
             }
         })
     }
+}
+
+/// Extract client IP from request with security validation
+/// 
+/// Security considerations:
+/// - Validates X-Forwarded-For format to prevent header injection
+/// - Takes the first IP from X-Forwarded-For (original client)
+/// - Falls back to X-Real-IP or defaults to "unknown"
+#[cfg(feature = "logging")]
+fn extract_client_ip(req: &Request<Body>) -> String {
+    use axum::extract::connect_info::ConnectInfo;
+    
+    // Check X-Forwarded-For header first
+    if let Some(header) = req.headers().get("X-Forwarded-For") {
+        if let Ok(value) = header.to_str() {
+            // X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
+            // We take the first one (original client)
+            let first_ip = value.split(',').next().map(|s| s.trim());
+            
+            if let Some(ip) = first_ip {
+                if is_valid_ip(ip) {
+                    return ip.to_string();
+                }
+                // Invalid IP format in X-Forwarded-For, log warning
+                tracing::warn!(target: "security", "Invalid X-Forwarded-For IP: {}", ip);
+            }
+        }
+    }
+    
+    // Fall back to X-Real-IP
+    if let Some(header) = req.headers().get("X-Real-IP") {
+        if let Ok(ip) = header.to_str() {
+            if is_valid_ip(ip) {
+                return ip.to_string();
+            }
+            tracing::warn!(target: "security", "Invalid X-Real-IP: {}", ip);
+        }
+    }
+    
+    // Use connection remote peer if available
+    if let Some(remote) = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>() {
+        return remote.0.ip().to_string();
+    }
+    
+    "unknown".to_string()
+}
+
+/// Non-logging version without security warnings
+#[cfg(not(feature = "logging"))]
+fn extract_client_ip(req: &Request<Body>) -> String {
+    use axum::extract::connect_info::ConnectInfo;
+    
+    if let Some(header) = req.headers().get("X-Forwarded-For") {
+        if let Ok(value) = header.to_str() {
+            let first_ip = value.split(',').next().map(|s| s.trim());
+            if let Some(ip) = first_ip {
+                if is_valid_ip(ip) {
+                    return ip.to_string();
+                }
+            }
+        }
+    }
+    
+    if let Some(header) = req.headers().get("X-Real-IP") {
+        if let Ok(ip) = header.to_str() {
+            if is_valid_ip(ip) {
+                return ip.to_string();
+            }
+        }
+    }
+    
+    if let Some(remote) = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>() {
+        return remote.0.ip().to_string();
+    }
+    
+    "unknown".to_string()
+}
+
+/// Validate IP address format
+/// 
+/// Accepts:
+/// - IPv4: 0.0.0.0 - 255.255.255.255
+/// - IPv6: ::1 - ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+fn is_valid_ip(ip: &str) -> bool {
+    // Check for IPv4
+    if ip.is_empty() || ip.len() > 45 {
+        return false;
+    }
+    
+    // IPv4 validation
+    if ip.contains('.') {
+        let parts: Vec<&str> = ip.split('.').collect();
+        if parts.len() != 4 {
+            return false;
+        }
+        return parts.iter().all(|p| {
+            p.parse::<u8>().is_ok_and(|_| {
+                // Allow leading zeros (not strict validation)
+                p.len() <= 3 && (!p.starts_with('0') || p.len() == 1)
+            })
+        });
+    }
+    
+    // IPv6 validation (basic check)
+    if ip.contains(':') {
+        let parts: Vec<&str> = ip.split(':').collect();
+        // IPv6 should have 1-8 parts
+        if parts.is_empty() || parts.len() > 8 {
+            return false;
+        }
+        return parts.iter().all(|p| {
+            if p.is_empty() {
+                true // Empty part is allowed in :: notation
+            } else {
+                // Check if it's a valid hex number
+                u16::from_str_radix(p, 16).is_ok()
+            }
+        });
+    }
+    
+    false
 }
 
 #[cfg(test)]
