@@ -40,6 +40,7 @@ tracing-appender = { version = "0.2", optional = true }
 # Validation dependencies (optional)
 validator = { version = "0.18", features = ["derive"], optional = true }
 regex = { version = "1.5", optional = true }
+once_cell = { version = "1.20", optional = true }
 
 # Security dependencies (optional)
 dashmap = { version = "5.5", optional = true }
@@ -52,6 +53,14 @@ toml = { version = "0.8", optional = true }
 tokio = { version = "1.41", features = ["rt", "rt-multi-thread", "macros"] }
 once_cell = "1.20"
 axiom-macros = { path = "../axiom-macros" }
+http = "1.0"
+
+# UAT 测试依赖
+axum-test = "16.0"
+reqwest = { version = "0.12", features = ["json"] }
+criterion = "0.5"
+trybuild = "1.0"
+proptest = "1.4"
 
 [features]
 default = ["http"]
@@ -66,6 +75,7 @@ http = [
     "dep:dashmap",
     "dep:uuid",
     "dep:toml",
+    "dep:once_cell",
 ]
 mcp = ["dep:mcp-sdk", "dep:inventory", "dep:anyhow"]
 streaming = ["http", "dep:tokio-stream", "dep:tokio", "dep:futures-util"]
@@ -76,3 +86,7 @@ full = ["http", "mcp", "streaming", "timestamp", "logging", "security"]
 
 [package.metadata.docs.rs]
 all-features = true
+
+[[bench]]
+name = "axiom_bench"
+harness = false
