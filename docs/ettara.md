@@ -10,11 +10,12 @@
 
 ## 🔴 严重问题修正
 
-### E-001: MCP 库选型错误 ⏳ 待修正
+### E-001: MCP 库选型错误 ✅ 已修正
 
 **受影响文档**: PRD.md, TDD.md, Task.md
  **严重程度**: 🔴 严重
  **发现时间**: 2025-01-01
+ **修正时间**: 2026-01-01
 
 **问题描述**:
 
@@ -22,23 +23,12 @@
 - `rmcp` 不是官方 Rust SDK，可能存在兼容性和维护问题
 - 官方实现为 `modelcontextprotocol/rust-sdk`
 
-**错误内容**:
-
-```toml
-# ❌ 错误
-[dependencies]
-rmcp = "latest"
-
-[features]
-mcp = ["dep:rmcp"]
-```
-
 **修正方案**:
 
 ```toml
 # ✅ 正确
 [dependencies]
-mcp-sdk = { version = "0.1", optional = true }
+mcp-sdk = { version = "0.0.3", optional = true }
 
 [features]
 mcp = ["dep:mcp-sdk"]
@@ -47,29 +37,18 @@ mcp = ["dep:mcp-sdk"]
 **代码修改**:
 
 ```rust
-// ❌ 错误
-use rmcp::{McpServer, McpTool, McpError};
-
 // ✅ 正确
 use mcp_sdk::{Server as McpServer, Tool as McpTool, Error as McpError};
 ```
 
-**影响范围**:
+**验证结果**:
 
--  TDD.md 第 67-69 行
--  PRD.md 第 509 行
--  Task.md TASK-020, TASK-021, TASK-022
--  所有 MCP 相关代码示例
+- ✅ 代码已正确使用 `mcp-sdk` (version = "0.0.3")
+- ✅ axiom/Cargo.toml 中已正确配置依赖
+- ✅ axiom-macros/Cargo.toml 中已正确配置 features
+- ✅ 所有 MCP 相关代码示例已更新
 
-**验证方式**:
-
-```bash
-# 检查官方 SDK
-cargo search mcp-sdk
-# 或访问: https://github.com/modelcontextprotocol/rust-sdk
-```
-
-**状态**: ⏳ 待修正
+**状态**: ✅ 已修正
 
 ------
 

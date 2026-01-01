@@ -1,0 +1,61 @@
+use axiom::prelude::*;
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+use chrono::{DateTime, Utc};
+use validator::Validate;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct User {
+    #[validate(length(min = 1))]
+    id: String,
+    #[validate(email)]
+    email: String,
+    name: String,
+    created_at: DateTime<Utc>,
+}
+
+#[service_api(
+    name = "get_user",
+    version = "v1",
+    description = "Get user by ID",
+    path = "/users/:id",
+    method = "GET"
+)]
+async fn get_user(id: String) -> Result<User, ApiError> {
+    // TODO: Implement user retrieval logic
+    Ok(User {
+        id: id.clone(),
+        email: format!("user{}@example.com", id),
+        name: format!("User {}", id),
+        created_at: Utc::now(),
+    })
+}
+
+#[service_api(
+    name = "create_user",
+    version = "v1",
+    description = "Create a new user",
+    path = "/users",
+    method = "POST"
+)]
+async fn create_user(user: User) -> Result<User, ApiError> {
+    // TODO: Implement user creation logic
+    Ok(User {
+        id: Uuid::new_v4().to_string(),
+        email: user.email.clone(),
+        name: user.name.clone(),
+        created_at: Utc::now(),
+    })
+}
+
+#[service_api(
+    name = "list_users",
+    version = "v1",
+    description = "List all users",
+    path = "/users",
+    method = "GET"
+)]
+async fn list_users() -> Result<Vec<User>, ApiError> {
+    // TODO: Implement user listing logic
+    Ok(vec![])
+}

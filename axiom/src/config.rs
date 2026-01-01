@@ -3,10 +3,13 @@
 //! This module provides configuration loading and management capabilities.
 //! Requires the `http` feature.
 
+#[cfg(feature = "hot-reload")]
+pub mod hot_reload;
+
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use thiserror::Error;
 
 #[cfg(feature = "http")]
 use crate::security::RateLimitConfig;
@@ -262,8 +265,7 @@ impl ConfigLoader {
             .map_err(|e| ConfigError::LoadError(self.path.clone(), e))?;
 
         // Parse TOML
-        let mut config: AppConfig = toml::from_str(&config_str)
-            .map_err(ConfigError::ParseError)?;
+        let mut config: AppConfig = toml::from_str(&config_str).map_err(ConfigError::ParseError)?;
 
         // Apply environment overrides
         self.apply_env_overrides(&mut config);
@@ -290,7 +292,10 @@ impl ConfigLoader {
 
         // Database overrides
         if let Ok(conn_str) = std::env::var(format!("{}_DATABASE_URL", self.env_prefix)) {
-            if let Some(DatabaseConfig::Postgresql { connection_string, .. }) = &mut config.database {
+            if let Some(DatabaseConfig::Postgresql {
+                connection_string, ..
+            }) = &mut config.database
+            {
                 *connection_string = conn_str;
             }
         }
@@ -368,16 +373,15 @@ impl EnvHelper {
 /// ```
 #[cfg(feature = "logging")]
 pub fn init_logging(config: &LoggingConfig) {
-    use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter};
     use tracing_appender::non_blocking::NonBlocking;
+    use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter};
 
     // Set RUST_LOG from config level
     std::env::set_var("RUST_LOG", &config.level);
 
     // Create output (file or stdout)
     let non_blocking: NonBlocking = if let Some(ref output_file) = config.output_file {
-        let file = std::fs::File::create(output_file)
-            .expect("Failed to create log file");
+        let file = std::fs::File::create(output_file).expect("Failed to create log file");
         tracing_appender::non_blocking(file).0
     } else {
         tracing_appender::non_blocking(std::io::stdout()).0
@@ -394,8 +398,7 @@ pub fn init_logging(config: &LoggingConfig) {
     let env_filter = EnvFilter::from_default_env();
     let subscriber = subscriber.with(env_filter);
 
-    tracing::subscriber::set_global_default(subscriber)
-        .expect("Failed to set tracing subscriber");
+    tracing::subscriber::set_global_default(subscriber).expect("Failed to set tracing subscriber");
 
     // Log initialization message
     tracing::info!(
@@ -427,50 +430,53 @@ pub fn init_logging_default() {
 /// # Returns
 /// A configured CORS layer that can be applied to Axum router
 pub fn build_cors_layer(config: &CorsConfig) -> Result<tower_http::cors::CorsLayer, ConfigError> {
+    use axum::http::{HeaderName, Method};
     use tower_http::cors::CorsLayer;
-    use axum::http::{Method, HeaderName};
-    
+
     // Parse and set allowed origins
-    let origins: Result<Vec<_>, _> = config.allowed_origins.iter()
+    let origins: Result<Vec<_>, _> = config
+        .allowed_origins
+        .iter()
         .map(|s| s.parse::<HeaderValue>())
         .collect();
-    let origins = origins.map_err(|e| ConfigError::ValidationError(format!("Invalid CORS origin: {}", e)))?;
-    
+    let origins =
+        origins.map_err(|e| ConfigError::ValidationError(format!("Invalid CORS origin: {}", e)))?;
+
     // Parse and set allowed methods
-    let methods: Result<Vec<Method>, _> = config.allowed_methods.iter()
-        .map(|s| s.parse())
-        .collect();
-    let methods = methods.map_err(|e| ConfigError::ValidationError(format!("Invalid CORS method: {}", e)))?;
-    
+    let methods: Result<Vec<Method>, _> =
+        config.allowed_methods.iter().map(|s| s.parse()).collect();
+    let methods =
+        methods.map_err(|e| ConfigError::ValidationError(format!("Invalid CORS method: {}", e)))?;
+
     // Parse and set allowed headers
-    let headers: Result<Vec<HeaderName>, _> = config.allowed_headers.iter()
-        .map(|s| s.parse())
-        .collect();
-    let headers = headers.map_err(|e| ConfigError::ValidationError(format!("Invalid CORS header: {}", e)))?;
-    
+    let headers: Result<Vec<HeaderName>, _> =
+        config.allowed_headers.iter().map(|s| s.parse()).collect();
+    let headers =
+        headers.map_err(|e| ConfigError::ValidationError(format!("Invalid CORS header: {}", e)))?;
+
     // Build CORS layer
     let mut cors = CorsLayer::new()
         .allow_origin(origins)
         .allow_methods(methods)
         .allow_headers(headers);
-    
+
     // Set credentials
     if config.allow_credentials {
         cors = cors.allow_credentials(true);
     }
-    
+
     // Set max age
     if let Some(max_age) = config.max_age {
         cors = cors.max_age(std::time::Duration::from_secs(max_age));
     }
-    
+
     Ok(cors)
 }
 
 /// Implement TryFrom for RateLimitConfigFile to RateLimitConfig conversion
 impl TryFrom<RateLimitConfigFile> for RateLimitConfig {
     type Error = ConfigError;
-    
+
     fn try_from(file_config: RateLimitConfigFile) -> Result<Self, Self::Error> {
         Ok(RateLimitConfig {
             max_requests: file_config.max_requests,

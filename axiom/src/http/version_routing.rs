@@ -3,13 +3,7 @@
 //! This module provides version-based routing for the HTTP server.
 //! Routes requests based on the API version in the URL path.
 
-use axum::{
-    body::Body,
-    extract::Request,
-    response::Response,
-    routing::MethodRouter,
-    Router,
-};
+use axum::{body::Body, extract::Request, response::Response, routing::MethodRouter, Router};
 
 /// Versioned route configuration
 #[derive(Debug, Clone)]
@@ -61,7 +55,10 @@ pub fn build_version_router() -> Router {
 }
 
 /// Version redirect middleware
-pub async fn version_redirect_middleware(req: Request<Body>, next: axum::middleware::Next) -> Response {
+pub async fn version_redirect_middleware(
+    req: Request<Body>,
+    next: axum::middleware::Next,
+) -> Response {
     let uri = req.uri().path().to_string();
 
     // Check if path starts with /api/ and has a version
@@ -72,8 +69,13 @@ pub async fn version_redirect_middleware(req: Request<Body>, next: axum::middlew
             let version_part = &path_after_api[..end_of_version];
 
             // Check if version is valid (starts with v followed by digits)
-            if version_part.chars().next().map(|c| c == 'v').unwrap_or(false)
-                && version_part[1..].chars().all(|c| c.is_ascii_digit()) {
+            if version_part
+                .chars()
+                .next()
+                .map(|c| c == 'v')
+                .unwrap_or(false)
+                && version_part[1..].chars().all(|c| c.is_ascii_digit())
+            {
                 // Valid version, proceed with request
                 return next.run(req).await;
             }
@@ -93,7 +95,7 @@ pub async fn version_redirect_middleware(req: Request<Body>, next: axum::middlew
         *response.status_mut() = axum::http::StatusCode::MOVED_PERMANENTLY;
         response.headers_mut().insert(
             axum::http::header::LOCATION,
-            axum::http::HeaderValue::from_str(&new_uri).unwrap(),
+            axum::http::HeaderValue::from_str(&new_uri).expect("Invalid URI for redirect"),
         );
         return response;
     }
@@ -118,10 +120,10 @@ macro_rules! define_versioned_route {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::routing::get;
-    use axum::http::{Request, StatusCode};
-    use tower::ServiceExt;
     use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use axum::routing::get;
+    use tower::ServiceExt;
 
     async fn test_handler() -> &'static str {
         "test response"
@@ -140,14 +142,17 @@ mod tests {
                 Request::builder()
                     .uri("/api/test")
                     .body(Body::empty())
-                    .unwrap(),
+                    .expect("Failed to build request"),
             )
             .await
-            .unwrap();
+            .expect("Failed to handle request");
 
         assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
         assert_eq!(
-            response.headers().get("location").unwrap(),
+            response
+                .headers()
+                .get("location")
+                .expect("Location header not found"),
             "/api/v1/test"
         );
     }

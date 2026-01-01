@@ -2,12 +2,12 @@
 
 pub mod validation;
 
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
-#[cfg(feature = "http")]
-use axum::response::IntoResponse;
 #[cfg(feature = "http")]
 use axum::body::Body;
+#[cfg(feature = "http")]
+use axum::response::IntoResponse;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 /// API metadata (protocol-agnostic)
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -23,7 +23,11 @@ pub struct ApiMetadata {
 impl ApiMetadata {
     /// Create new API metadata
     pub fn new(name: &'static str, version: &'static str, description: &'static str) -> Self {
-        Self { name, version, description }
+        Self {
+            name,
+            version,
+            description,
+        }
     }
 }
 
@@ -91,7 +95,12 @@ pub struct ServiceError {
 impl ServiceError {
     /// Create a new service error
     pub fn new(code: impl Into<String>, message: impl Into<String>, http_status: u16) -> Self {
-        Self { code: code.into(), message: message.into(), details: None, http_status }
+        Self {
+            code: code.into(),
+            message: message.into(),
+            details: None,
+            http_status,
+        }
     }
 
     /// Create a service error with details
@@ -101,7 +110,12 @@ impl ServiceError {
         details: serde_json::Value,
         http_status: u16,
     ) -> Self {
-        Self { code: code.into(), message: message.into(), details: Some(details), http_status }
+        Self {
+            code: code.into(),
+            message: message.into(),
+            details: Some(details),
+            http_status,
+        }
     }
 }
 
@@ -195,22 +209,42 @@ impl ApiError {
     /// Format error as MCP-compatible JSON string
     pub fn to_mcp_json(&self) -> String {
         let (code, message) = match self {
-            ApiError::NotFound { resource, resource_id: _ } => 
-                ("NOT_FOUND", format!("Resource not found: {}", resource)),
-            ApiError::InvalidInput { message, field: _, value: _ } => 
-                ("INVALID_INPUT", message.clone()),
-            ApiError::AuthenticationFailed { reason } => 
-                ("AUTHENTICATION_FAILED", format!("Authentication failed: {}", reason)),
-            ApiError::AccessDenied { permission, user_id: _ } => 
-                ("ACCESS_DENIED", format!("Access denied: {}", permission)),
-            ApiError::RateLimitExceeded { limit: _, window_seconds: _ } => 
-                ("RATE_LIMIT_EXCEEDED", "Rate limit exceeded".to_string()),
-            ApiError::Internal { message, error_id: _ } => 
-                ("INTERNAL_ERROR", message.clone()),
-            ApiError::ServiceUnavailable { service, retry_after: _ } => 
-                ("SERVICE_UNAVAILABLE", format!("Service unavailable: {}", service)),
-            ApiError::ValidationError { field, constraint } => 
-                ("VALIDATION_ERROR", format!("Validation failed for {}: {}", field, constraint)),
+            ApiError::NotFound {
+                resource,
+                resource_id: _,
+            } => ("NOT_FOUND", format!("Resource not found: {}", resource)),
+            ApiError::InvalidInput {
+                message,
+                field: _,
+                value: _,
+            } => ("INVALID_INPUT", message.clone()),
+            ApiError::AuthenticationFailed { reason } => (
+                "AUTHENTICATION_FAILED",
+                format!("Authentication failed: {}", reason),
+            ),
+            ApiError::AccessDenied {
+                permission,
+                user_id: _,
+            } => ("ACCESS_DENIED", format!("Access denied: {}", permission)),
+            ApiError::RateLimitExceeded {
+                limit: _,
+                window_seconds: _,
+            } => ("RATE_LIMIT_EXCEEDED", "Rate limit exceeded".to_string()),
+            ApiError::Internal {
+                message,
+                error_id: _,
+            } => ("INTERNAL_ERROR", message.clone()),
+            ApiError::ServiceUnavailable {
+                service,
+                retry_after: _,
+            } => (
+                "SERVICE_UNAVAILABLE",
+                format!("Service unavailable: {}", service),
+            ),
+            ApiError::ValidationError { field, constraint } => (
+                "VALIDATION_ERROR",
+                format!("Validation failed for {}: {}", field, constraint),
+            ),
         };
 
         serde_json::to_string(&serde_json::json!({
@@ -219,20 +253,30 @@ impl ApiError {
                 "code": code,
                 "message": message
             }
-        })).unwrap_or_else(|_| format!(r#"{{"success":false,"error":{{"code":"{code}","message":"{message}"}}}}"#))
+        }))
+        .unwrap_or_else(|_| {
+            format!(r#"{{"success":false,"error":{{"code":"{code}","message":"{message}"}}}}"#)
+        })
     }
 }
 
 impl From<ApiError> for ServiceError {
     fn from(err: ApiError) -> Self {
         match err {
-            ApiError::NotFound { resource, resource_id } => ServiceError::with_details(
+            ApiError::NotFound {
+                resource,
+                resource_id,
+            } => ServiceError::with_details(
                 "NOT_FOUND",
                 format!("Resource not found: {}", resource),
                 serde_json::json!({ "resource": resource, "resource_id": resource_id }),
                 404,
             ),
-            ApiError::InvalidInput { message, field, value } => ServiceError::with_details(
+            ApiError::InvalidInput {
+                message,
+                field,
+                value,
+            } => ServiceError::with_details(
                 "INVALID_INPUT",
                 message,
                 serde_json::json!({ "field": field, "value": value }),
@@ -244,13 +288,19 @@ impl From<ApiError> for ServiceError {
                 serde_json::json!({ "reason": reason }),
                 401,
             ),
-            ApiError::AccessDenied { permission, user_id } => ServiceError::with_details(
+            ApiError::AccessDenied {
+                permission,
+                user_id,
+            } => ServiceError::with_details(
                 "ACCESS_DENIED",
                 format!("Access denied: {}", permission),
                 serde_json::json!({ "permission": permission, "user_id": user_id }),
                 403,
             ),
-            ApiError::RateLimitExceeded { limit, window_seconds } => ServiceError::with_details(
+            ApiError::RateLimitExceeded {
+                limit,
+                window_seconds,
+            } => ServiceError::with_details(
                 "RATE_LIMIT_EXCEEDED",
                 "Rate limit exceeded".to_string(),
                 serde_json::json!({ "limit": limit, "window_seconds": window_seconds }),
@@ -262,7 +312,10 @@ impl From<ApiError> for ServiceError {
                 serde_json::json!({ "error_id": error_id, "timestamp": chrono::Utc::now().timestamp() }),
                 500,
             ),
-            ApiError::ServiceUnavailable { service, retry_after } => ServiceError::with_details(
+            ApiError::ServiceUnavailable {
+                service,
+                retry_after,
+            } => ServiceError::with_details(
                 "SERVICE_UNAVAILABLE",
                 format!("Service unavailable: {}", service),
                 serde_json::json!({ "service": service, "retry_after": retry_after }),
