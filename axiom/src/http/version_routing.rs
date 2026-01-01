@@ -65,9 +65,7 @@ pub async fn version_redirect_middleware(req: Request<Body>, next: axum::middlew
     let uri = req.uri().path().to_string();
 
     // Check if path starts with /api/ and has a version
-    if uri.starts_with("/api/") {
-        let path_after_api = &uri[5..]; // Remove /api/
-
+    if let Some(path_after_api) = uri.strip_prefix("/api/") {
         // Check if it has a version (v1, v2, etc.)
         if path_after_api.starts_with("v") {
             let end_of_version = path_after_api.find('/').unwrap_or(path_after_api.len());

@@ -3,6 +3,7 @@
 use crate::core::ApiMetadata;
 use axum::routing::MethodRouter;
 use axum::Router;
+use axum::body::Body;
 
 pub mod version_routing;
 
@@ -82,4 +83,102 @@ pub fn build() -> Router {
 pub fn build_with_redirect() -> Router {
     let router = build();
     router.layer(axum::middleware::from_fn(version_redirect_middleware))
+}
+
+/// Build HTTP router with configuration
+///
+/// This function builds a router with configuration-driven middleware and settings.
+/// Applies CORS, authentication, rate limiting, and logging based on the provided config.
+///
+/// # Arguments
+/// * `config` - The application configuration
+///
+/// # Returns
+/// A configured Axum router with all middleware applied
+#[allow(dead_code)]
+pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, crate::config::ConfigError> {
+    use crate::security::{RateLimiter, RateLimitConfig, rate_limit_middleware};
+    use std::sync::Arc;
+    use std::convert::TryFrom;
+    
+    let mut router = build();
+    
+    // Apply CORS
+    if let Some(cors) = &config.server.cors {
+        let cors_layer = crate::config::build_cors_layer(cors)?;
+        router = router.layer(cors_layer);
+    }
+    
+    // Apply rate limiting middleware
+    if let Some(rate_limit) = &config.rate_limit {
+        let rate_config = RateLimitConfig::try_from(rate_limit.clone())?;
+        let limiter = Arc::new(RateLimiter::new(Some(rate_config)));
+        let middleware = rate_limit_middleware(limiter);
+        router = router.layer(axum::middleware::from_fn(middleware));
+    }
+    
+    // Apply authentication middleware
+    if let Some(auth_config) = &config.authentication {
+        use crate::security::{ApiKeyAuth, BearerAuth, AuthContext, AuthError, auth_middleware};
+        use axum::http::HeaderValue;
+        
+        if let crate::config::AuthConfig::ApiKey { header_name, prefix } = auth_config {
+            let auth = Arc::new(ApiKeyAuth::new());
+            let auth_clone = auth.clone();
+            let header_name = header_name.clone();
+            let prefix = prefix.clone();
+            let extract_auth = move |req: &axum::http::Request<Body>| -> Result<AuthContext, AuthError> {
+                let header_value = req.headers().get(&header_name)
+                    .and_then(|v: &HeaderValue| v.to_str().ok())
+                    .unwrap_or("");
+                
+                if header_value.starts_with(&prefix) {
+                    let key = &header_value[prefix.len()..];
+                    if let Some(permissions) = auth.validate_key(key) {
+                        Ok(AuthContext {
+                            user_id: Some(key.to_string()),
+                            permissions,
+                            metadata: crate::security::AuthMetadata::default(),
+                        })
+                    } else {
+                        Err(AuthError::MissingAuth)
+                    }
+                } else {
+                    Err(AuthError::MissingAuth)
+                }
+            };
+            let middleware = auth_middleware(auth_clone, extract_auth);
+            router = router.layer(axum::middleware::from_fn(middleware));
+        } else if let crate::config::AuthConfig::Jwt { secret, .. } = auth_config {
+            let auth = Arc::new(BearerAuth::new(secret));
+            let auth_clone = auth.clone();
+            let extract_auth = move |req: &axum::http::Request<Body>| -> Result<AuthContext, AuthError> {
+                let header_value = req.headers().get("authorization")
+                    .and_then(|v: &HeaderValue| v.to_str().ok())
+                    .unwrap_or("");
+                
+                if let Some(token) = header_value.strip_prefix("Bearer ") {
+                    if let Some(context) = auth.validate_token(token) {
+                        Ok(context)
+                    } else {
+                        Err(AuthError::InvalidToken)
+                    }
+                } else {
+                    Err(AuthError::MissingAuth)
+                }
+            };
+            let middleware = auth_middleware(auth_clone, extract_auth);
+            router = router.layer(axum::middleware::from_fn(middleware));
+        } else {
+            return Err(crate::config::ConfigError::ValidationError("OAuth2 not yet implemented".into()));
+        }
+    }
+    
+    // Initialize logging
+    #[cfg(feature = "logging")]
+    if let Some(logging) = &config.logging {
+        crate::config::init_logging(logging);
+    }
+    
+    Ok(router)
 }
