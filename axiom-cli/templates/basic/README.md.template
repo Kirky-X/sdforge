@@ -1,0 +1,27 @@
+# {{ project_name }}
+
+Axiom project created with basic template.
+
+## Features
+- Protocol: {{ protocol }}
+- Features: {{ features }}
+
+## Getting Started
+
+1. Build the project:
+```bash
+cargo build
+```
+
+2. Run the server:
+```bash
+cargo run
+```
+
+## Documentation
+
+For more information, visit: https://docs.rs/axiom
+
+## License
+
+This project is licensed under MIT OR Apache-2.0.

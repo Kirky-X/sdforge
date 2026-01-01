@@ -33,10 +33,7 @@ impl ValidationErrorsWrapper {
             .into_iter()
             .map(|(field, errors)| FieldValidationError {
                 field: field.to_string(),
-                constraints: errors
-                    .iter()
-                    .map(|e| e.code.to_string())
-                    .collect(),
+                constraints: errors.iter().map(|e| e.code.to_string()).collect(),
             })
             .collect();
 
@@ -73,7 +70,11 @@ impl From<ValidationErrorsWrapper> for super::ApiError {
     fn from(err: ValidationErrorsWrapper) -> Self {
         let first_error = err.errors.first();
         if let Some(error) = first_error {
-            let constraint = error.constraints.first().cloned().unwrap_or_else(|| "invalid".to_string());
+            let constraint = error
+                .constraints
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "invalid".to_string());
             Self::ValidationError {
                 field: error.field.clone(),
                 constraint,
@@ -93,13 +94,13 @@ impl From<ValidationErrorsWrapper> for super::ApiError {
 /// Common validation helpers
 pub mod validators {
     use super::*;
-    use validator::ValidationError;
     use once_cell::sync::Lazy;
     use std::collections::HashMap;
     use std::sync::Mutex;
+    use validator::ValidationError;
 
     /// Regex pattern cache (thread-safe)
-    static REGEX_CACHE: Lazy<Mutex<HashMap<String, regex::Regex>>> = 
+    static REGEX_CACHE: Lazy<Mutex<HashMap<String, regex::Regex>>> =
         Lazy::new(|| Mutex::new(HashMap::new()));
 
     /// Validate that a string is a valid email
@@ -117,13 +118,13 @@ pub mod validators {
             if let Some(cached) = cache.get(pattern) {
                 cached.clone()
             } else {
-                let new_regex = regex::Regex::new(pattern)
-                    .map_err(|_| ValidationError::new("regex"))?;
+                let new_regex =
+                    regex::Regex::new(pattern).map_err(|_| ValidationError::new("regex"))?;
                 cache.insert(pattern.to_string(), new_regex.clone());
                 new_regex
             }
         };
-        
+
         if !regex.is_match(value) {
             return Err(ValidationError::new("regex"));
         }
@@ -131,7 +132,11 @@ pub mod validators {
     }
 
     /// Validate that a number is within a range
-    pub fn validate_range<T: PartialOrd + Copy>(value: T, min: T, max: T) -> Result<(), ValidationError> {
+    pub fn validate_range<T: PartialOrd + Copy>(
+        value: T,
+        min: T,
+        max: T,
+    ) -> Result<(), ValidationError> {
         if value < min || value > max {
             return Err(ValidationError::new("range"));
         }
@@ -148,10 +153,7 @@ pub mod validators {
     }
 
     /// Custom validation that returns ApiError on failure
-    pub fn validate_or_error<F, E>(
-        validate_fn: F,
-        _error_map: impl FnOnce() -> E,
-    ) -> Result<(), E>
+    pub fn validate_or_error<F, E>(validate_fn: F, _error_map: impl FnOnce() -> E) -> Result<(), E>
     where
         F: FnOnce() -> Result<(), ValidationError>,
         E: From<ValidationErrorsWrapper>,
@@ -177,7 +179,7 @@ pub mod sanitizer {
     use std::path::PathBuf;
 
     /// Sanitize a string to prevent SQL injection
-    /// 
+    ///
     /// This is a basic sanitizer - in production, use parameterized queries instead.
     pub fn sanitize_sql(input: &str) -> String {
         let mut result = String::with_capacity(input.len());
@@ -209,18 +211,18 @@ pub mod sanitizer {
     pub fn sanitize_path(input: &str) -> Result<String, ApiError> {
         // Remove null bytes
         let cleaned = input.replace('\0', "");
-        
+
         // Check for path traversal attempts
         if cleaned.contains("..") || cleaned.contains("//") {
             return Err(ApiError::validation_error(
                 "INVALID_PATH",
-                "Path contains invalid characters or traversal attempts"
+                "Path contains invalid characters or traversal attempts",
             ));
         }
 
         // Normalize path
         let _path = PathBuf::from(&cleaned);
-        
+
         // Ensure the path doesn't escape the intended directory
         // This is a basic check - in production, use proper path canonicalization
         Ok(cleaned)
@@ -231,7 +233,7 @@ pub mod sanitizer {
         if input.is_empty() {
             return Err(ApiError::validation_error(
                 "INVALID_FILENAME",
-                "Filename cannot be empty"
+                "Filename cannot be empty",
             ));
         }
 
@@ -244,7 +246,7 @@ pub mod sanitizer {
         if sanitized.is_empty() {
             return Err(ApiError::validation_error(
                 "INVALID_FILENAME",
-                "Filename contains only invalid characters"
+                "Filename contains only invalid characters",
             ));
         }
 
@@ -252,7 +254,7 @@ pub mod sanitizer {
         if sanitized.contains('/') || sanitized.contains('\\') {
             return Err(ApiError::validation_error(
                 "INVALID_FILENAME",
-                "Filename cannot contain path separators"
+                "Filename cannot contain path separators",
             ));
         }
 
@@ -264,7 +266,7 @@ pub mod sanitizer {
         if id <= 0 {
             Err(ApiError::validation_error(
                 "INVALID_ID",
-                "User ID must be a positive integer"
+                "User ID must be a positive integer",
             ))
         } else {
             Ok(id)
@@ -277,7 +279,7 @@ pub mod sanitizer {
         if trimmed.is_empty() {
             Err(ApiError::validation_error(
                 "EMPTY_FIELD",
-                format!("{} cannot be empty", field_name)
+                format!("{} cannot be empty", field_name),
             ))
         } else {
             Ok(trimmed)
@@ -285,17 +287,22 @@ pub mod sanitizer {
     }
 
     /// Validate string length
-    pub fn validate_length(input: &str, min: usize, max: usize, field_name: &str) -> Result<String, ApiError> {
+    pub fn validate_length(
+        input: &str,
+        min: usize,
+        max: usize,
+        field_name: &str,
+    ) -> Result<String, ApiError> {
         let len = input.len();
         if len < min {
             Err(ApiError::validation_error(
                 "TOO_SHORT",
-                format!("{} must be at least {} characters", field_name, min)
+                format!("{} must be at least {} characters", field_name, min),
             ))
         } else if len > max {
             Err(ApiError::validation_error(
                 "TOO_LONG",
-                format!("{} must be at most {} characters", field_name, max)
+                format!("{} must be at most {} characters", field_name, max),
             ))
         } else {
             Ok(input.to_string())
@@ -305,19 +312,19 @@ pub mod sanitizer {
     /// Validate an email address format
     pub fn validate_email_format(email: &str) -> Result<String, ApiError> {
         let trimmed = email.trim().to_string();
-        
+
         // Basic email validation
         if !trimmed.contains('@') {
             return Err(ApiError::validation_error(
                 "INVALID_EMAIL",
-                "Email must contain @ symbol"
+                "Email must contain @ symbol",
             ));
         }
 
         if !trimmed.contains('.') {
             return Err(ApiError::validation_error(
                 "INVALID_EMAIL",
-                "Email must contain a domain"
+                "Email must contain a domain",
             ));
         }
 
@@ -325,7 +332,7 @@ pub mod sanitizer {
         if trimmed.starts_with('@') || trimmed.ends_with('@') {
             return Err(ApiError::validation_error(
                 "INVALID_EMAIL",
-                "Invalid email format"
+                "Invalid email format",
             ));
         }
 
@@ -340,8 +347,11 @@ pub async fn extract_validated<T>(json: &serde_json::Value) -> ValidationResult<
 where
     T: ValidatedParam + Send,
 {
-    let params: T = serde_json::from_value(json.clone()).map_err(|_| ValidationErrorsWrapper::new(vec![]))?;
-    params.validate().map_err(|e| ValidationErrorsWrapper::from_validation_errors(&e))?;
+    let params: T =
+        serde_json::from_value(json.clone()).map_err(|_| ValidationErrorsWrapper::new(vec![]))?;
+    params
+        .validate()
+        .map_err(|e| ValidationErrorsWrapper::from_validation_errors(&e))?;
     Ok(params)
 }
 

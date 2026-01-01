@@ -1,0 +1,56 @@
+# cargo-deny 配置文件
+# 文档: https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+# 数据库 URL
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# 漏洞严重性级别
+vulnerability = "deny"
+unmaintained = "warn"
+yanked = "warn"
+notice = "warn"
+ignore = [
+    # 在此添加需要忽略的 advisory ID
+    # 例如: "RUSTSEC-2020-0001",
+]
+
+[licenses]
+# 许可证检查
+unlicensed = "deny"
+# 允许的许可证列表（根据你的项目需求调整）
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-DFS-2016",
+]
+# 拒绝的许可证
+deny = [
+    "GPL-3.0",
+    "AGPL-3.0",
+]
+copyleft = "warn"
+allow-osi-fsf-free = "both"
+default = "deny"
+confidence-threshold = 0.8
+
+[bans]
+# 禁止多个版本的同一依赖
+multiple-versions = "warn"
+wildcards = "allow"
+# 高亮显示
+highlight = "all"
+# 跳过树状依赖的包
+skip = []
+# 跳过树状依赖的版本
+skip-tree = []
+
+[sources]
+# 检查依赖来源
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

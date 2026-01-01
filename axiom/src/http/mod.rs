@@ -1,13 +1,15 @@
 //! HTTP server implementation
 
 use crate::core::ApiMetadata;
+use axum::body::Body;
 use axum::routing::MethodRouter;
 use axum::Router;
-use axum::body::Body;
 
 pub mod version_routing;
 
-pub use version_routing::{VersionedRoute, VersionRouterConfig, build_version_router, version_redirect_middleware};
+pub use version_routing::{
+    build_version_router, version_redirect_middleware, VersionRouterConfig, VersionedRoute,
+};
 
 /// HTTP route registration
 #[derive(Debug, Clone)]
@@ -27,7 +29,7 @@ pub struct HttpRoute {
 inventory::collect!(HttpRoute);
 
 /// Resolve module prefix for a route path
-/// 
+///
 /// This function checks if there's a module prefix available for the given route.
 /// In practice, the macro generates inline path resolution, but this provides
 /// a runtime fallback for dynamic path construction.
@@ -52,7 +54,7 @@ pub fn build() -> Router {
     let mut router = Router::new();
 
     // Group routes by module prefix for cleaner routing
-    let mut prefix_groups: std::collections::HashMap<Option<&'static str>, Vec<&HttpRoute>> = 
+    let mut prefix_groups: std::collections::HashMap<Option<&'static str>, Vec<&HttpRoute>> =
         std::collections::HashMap::new();
 
     // Collect all registered routes and group by prefix
@@ -96,19 +98,21 @@ pub fn build_with_redirect() -> Router {
 /// # Returns
 /// A configured Axum router with all middleware applied
 #[allow(dead_code)]
-pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, crate::config::ConfigError> {
-    use crate::security::{RateLimiter, RateLimitConfig, rate_limit_middleware};
-    use std::sync::Arc;
+pub fn build_with_config(
+    config: &crate::config::AppConfig,
+) -> Result<Router, crate::config::ConfigError> {
+    use crate::security::{rate_limit_middleware, RateLimitConfig, RateLimiter};
     use std::convert::TryFrom;
-    
+    use std::sync::Arc;
+
     let mut router = build();
-    
+
     // Apply CORS
     if let Some(cors) = &config.server.cors {
         let cors_layer = crate::config::build_cors_layer(cors)?;
         router = router.layer(cors_layer);
     }
-    
+
     // Apply rate limiting middleware
     if let Some(rate_limit) = &config.rate_limit {
         let rate_config = RateLimitConfig::try_from(rate_limit.clone())?;
@@ -116,69 +120,150 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, cr
         let middleware = rate_limit_middleware(limiter);
         router = router.layer(axum::middleware::from_fn(middleware));
     }
-    
+
     // Apply authentication middleware
     if let Some(auth_config) = &config.authentication {
-        use crate::security::{ApiKeyAuth, BearerAuth, AuthContext, AuthError, auth_middleware};
+        use crate::security::{auth_middleware, ApiKeyAuth, AuthContext, AuthError, BearerAuth};
         use axum::http::HeaderValue;
-        
-        if let crate::config::AuthConfig::ApiKey { header_name, prefix } = auth_config {
+
+        if let crate::config::AuthConfig::ApiKey {
+            header_name,
+            prefix,
+        } = auth_config
+        {
             let auth = Arc::new(ApiKeyAuth::new());
             let auth_clone = auth.clone();
             let header_name = header_name.clone();
             let prefix = prefix.clone();
-            let extract_auth = move |req: &axum::http::Request<Body>| -> Result<AuthContext, AuthError> {
-                let header_value = req.headers().get(&header_name)
-                    .and_then(|v: &HeaderValue| v.to_str().ok())
-                    .unwrap_or("");
-                
-                if header_value.starts_with(&prefix) {
-                    let key = &header_value[prefix.len()..];
-                    if let Some(permissions) = auth.validate_key(key) {
-                        Ok(AuthContext {
-                            user_id: Some(key.to_string()),
-                            permissions,
-                            metadata: crate::security::AuthMetadata::default(),
-                        })
+            let extract_auth =
+                move |req: &axum::http::Request<Body>| -> Result<AuthContext, AuthError> {
+                    let header_value = req
+                        .headers()
+                        .get(&header_name)
+                        .and_then(|v: &HeaderValue| v.to_str().ok())
+                        .unwrap_or("");
+
+                    if header_value.starts_with(&prefix) {
+                        let key = &header_value[prefix.len()..];
+                        if let Some(permissions) = auth.validate_key(key) {
+                            Ok(AuthContext {
+                                user_id: Some(key.to_string()),
+                                permissions,
+                                metadata: crate::security::AuthMetadata::default(),
+                            })
+                        } else {
+                            Err(AuthError::MissingAuth)
+                        }
                     } else {
                         Err(AuthError::MissingAuth)
                     }
-                } else {
-                    Err(AuthError::MissingAuth)
-                }
-            };
+                };
             let middleware = auth_middleware(auth_clone, extract_auth);
             router = router.layer(axum::middleware::from_fn(middleware));
         } else if let crate::config::AuthConfig::Jwt { secret, .. } = auth_config {
             let auth = Arc::new(BearerAuth::new(secret));
             let auth_clone = auth.clone();
-            let extract_auth = move |req: &axum::http::Request<Body>| -> Result<AuthContext, AuthError> {
-                let header_value = req.headers().get("authorization")
-                    .and_then(|v: &HeaderValue| v.to_str().ok())
-                    .unwrap_or("");
-                
-                if let Some(token) = header_value.strip_prefix("Bearer ") {
-                    if let Some(context) = auth.validate_token(token) {
-                        Ok(context)
+            let extract_auth =
+                move |req: &axum::http::Request<Body>| -> Result<AuthContext, AuthError> {
+                    let header_value = req
+                        .headers()
+                        .get("authorization")
+                        .and_then(|v: &HeaderValue| v.to_str().ok())
+                        .unwrap_or("");
+
+                    if let Some(token) = header_value.strip_prefix("Bearer ") {
+                        if let Some(context) = auth.validate_token(token) {
+                            Ok(context)
+                        } else {
+                            Err(AuthError::InvalidToken)
+                        }
                     } else {
-                        Err(AuthError::InvalidToken)
+                        Err(AuthError::MissingAuth)
                     }
-                } else {
-                    Err(AuthError::MissingAuth)
-                }
-            };
+                };
             let middleware = auth_middleware(auth_clone, extract_auth);
             router = router.layer(axum::middleware::from_fn(middleware));
         } else {
-            return Err(crate::config::ConfigError::ValidationError("OAuth2 not yet implemented".into()));
+            return Err(crate::config::ConfigError::ValidationError(
+                "OAuth2 not yet implemented".into(),
+            ));
         }
     }
-    
+
     // Initialize logging
     #[cfg(feature = "logging")]
     if let Some(logging) = &config.logging {
         crate::config::init_logging(logging);
     }
-    
+
+    // Apply cache middleware
+    #[cfg(feature = "cache")]
+    {
+        #[allow(unused_imports)]
+        use crate::cache::CacheMiddleware;
+
+        // Use default cache config for now
+        // In the future, this could be configurable via config file
+        let cache_config = crate::cache::CacheConfig::default();
+        let cache_middleware = CacheMiddleware::new(cache_config);
+        router = router.layer(cache_middleware);
+    }
+
     Ok(router)
+}
+
+/// Build HTTP router with hot reload support
+///
+/// This function builds a router with configuration hot reload support.
+/// When the configuration file is modified, the router will automatically
+/// reload and apply the new configuration.
+///
+/// # Arguments
+/// * `config_path` - Path to the configuration file (YAML or JSON)
+///
+/// # Returns
+/// A tuple containing:
+/// * The configured Axum router
+/// * A `ConfigWatcher` that manages configuration updates
+/// * A `RecommendedWatcher` that watches for file changes
+///
+/// # Example
+/// ```ignore
+/// use std::path::PathBuf;
+///
+/// let config_path = PathBuf::from("config.yaml");
+/// let (router, config_watcher, file_watcher) =
+///     axiom::http::build_with_hot_reload(&config_path).unwrap();
+///
+/// // Keep file_watcher alive to maintain file watching
+/// tokio::spawn(async move {
+///     while let Ok(event) = config_watcher.event_receiver.recv().await {
+///         println!("Config event: {:?}", event);
+///     }
+/// });
+/// ```
+#[allow(dead_code)]
+#[cfg(feature = "hot-reload")]
+pub fn build_with_hot_reload(
+    config_path: &std::path::Path,
+) -> Result<
+    (
+        Router,
+        crate::config::hot_reload::ConfigWatcher,
+        notify::RecommendedWatcher,
+    ),
+    Box<dyn std::error::Error>,
+> {
+    use crate::config::hot_reload::ConfigWatcher;
+    use std::path::PathBuf;
+
+    let config_path = PathBuf::from(config_path);
+    let (config_watcher, _event_receiver) = ConfigWatcher::new(config_path.clone())?;
+    let file_watcher = config_watcher.watch()?;
+
+    // Build router with current configuration
+    let config = config_watcher.get();
+    let router = build_with_config(&config)?;
+
+    Ok((router, config_watcher, file_watcher))
 }

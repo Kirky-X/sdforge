@@ -3,18 +3,18 @@
 //! This module provides utilities for securing API endpoints.
 //! Requires the `http` feature.
 
+use axum::{
+    body::Body,
+    http::{HeaderValue, Request, StatusCode},
+    middleware::Next,
+    response::Response,
+};
+use dashmap::DashMap;
+use serde::{Deserialize, Serialize};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use axum::{
-    body::Body,
-    http::{HeaderValue, Request, StatusCode},
-    response::Response,
-    middleware::Next,
-};
-use dashmap::DashMap;
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -185,10 +185,13 @@ impl RateLimiter {
 
         // Check rate limit
         if times.len() >= self.config.max_requests as usize {
-            let retry_after = times.first().map(|t| {
-                let elapsed = now - *t;
-                (self.config.window - elapsed).as_secs()
-            }).unwrap_or(1);
+            let retry_after = times
+                .first()
+                .map(|t| {
+                    let elapsed = now - *t;
+                    (self.config.window - elapsed).as_secs()
+                })
+                .unwrap_or(1);
 
             return Err(RateLimitError {
                 limit: self.config.max_requests,
@@ -288,7 +291,14 @@ impl AuditLogger {
     }
 
     /// Log an action
-    pub fn log(&self, context: &AuthContext, action: impl Into<String>, resource: impl Into<String>, success: bool, message: Option<String>) {
+    pub fn log(
+        &self,
+        context: &AuthContext,
+        action: impl Into<String>,
+        resource: impl Into<String>,
+        success: bool,
+        message: Option<String>,
+    ) {
         let log = AuditLog {
             id: Uuid::new_v4().to_string(),
             timestamp: chrono::Utc::now().timestamp(),
@@ -305,7 +315,10 @@ impl AuditLogger {
             metadata: context.metadata.clone(),
         };
 
-        let key = context.user_id.clone().unwrap_or_else(|| "anonymous".to_string());
+        let key = context
+            .user_id
+            .clone()
+            .unwrap_or_else(|| "anonymous".to_string());
         let mut entry = self.logs.entry(key).or_default();
         entry.push(log);
 
@@ -317,7 +330,10 @@ impl AuditLogger {
 
     /// Get logs for a user
     pub fn get_logs(&self, user_id: &str) -> Vec<AuditLog> {
-        self.logs.get(user_id).map(|e| e.clone()).unwrap_or_default()
+        self.logs
+            .get(user_id)
+            .map(|e| e.clone())
+            .unwrap_or_default()
     }
 }
 
@@ -367,28 +383,24 @@ pub fn rate_limit_middleware(
                             "X-RateLimit-Limit",
                             HeaderValue::from(limiter.config.max_requests),
                         );
-                        response.headers_mut().insert(
-                            "X-RateLimit-Remaining",
-                            HeaderValue::from(remaining),
-                        );
+                        response
+                            .headers_mut()
+                            .insert("X-RateLimit-Remaining", HeaderValue::from(remaining));
                     }
                     response
                 }
                 Err(e) => {
                     let mut response = Response::new(Body::from("Rate limit exceeded"));
                     *response.status_mut() = StatusCode::TOO_MANY_REQUESTS;
-                    response.headers_mut().insert(
-                        "X-RateLimit-Limit",
-                        HeaderValue::from(e.limit),
-                    );
-                    response.headers_mut().insert(
-                        "X-RateLimit-Remaining",
-                        HeaderValue::from(0),
-                    );
-                    response.headers_mut().insert(
-                        "Retry-After",
-                        HeaderValue::from(e.retry_after),
-                    );
+                    response
+                        .headers_mut()
+                        .insert("X-RateLimit-Limit", HeaderValue::from(e.limit));
+                    response
+                        .headers_mut()
+                        .insert("X-RateLimit-Remaining", HeaderValue::from(0));
+                    response
+                        .headers_mut()
+                        .insert("Retry-After", HeaderValue::from(e.retry_after));
                     response
                 }
             }
@@ -397,7 +409,7 @@ pub fn rate_limit_middleware(
 }
 
 /// Extract client IP from request with security validation
-/// 
+///
 /// Security considerations:
 /// - Validates X-Forwarded-For format to prevent header injection
 /// - Takes the first IP from X-Forwarded-For (original client)
@@ -405,14 +417,14 @@ pub fn rate_limit_middleware(
 #[cfg(feature = "logging")]
 fn extract_client_ip(req: &Request<Body>) -> String {
     use axum::extract::connect_info::ConnectInfo;
-    
+
     // Check X-Forwarded-For header first
     if let Some(header) = req.headers().get("X-Forwarded-For") {
         if let Ok(value) = header.to_str() {
             // X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
             // We take the first one (original client)
             let first_ip = value.split(',').next().map(|s| s.trim());
-            
+
             if let Some(ip) = first_ip {
                 if is_valid_ip(ip) {
                     return ip.to_string();
@@ -422,7 +434,7 @@ fn extract_client_ip(req: &Request<Body>) -> String {
             }
         }
     }
-    
+
     // Fall back to X-Real-IP
     if let Some(header) = req.headers().get("X-Real-IP") {
         if let Ok(ip) = header.to_str() {
@@ -432,12 +444,12 @@ fn extract_client_ip(req: &Request<Body>) -> String {
             tracing::warn!(target: "security", "Invalid X-Real-IP: {}", ip);
         }
     }
-    
+
     // Use connection remote peer if available
     if let Some(remote) = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>() {
         return remote.0.ip().to_string();
     }
-    
+
     "unknown".to_string()
 }
 
@@ -445,7 +457,7 @@ fn extract_client_ip(req: &Request<Body>) -> String {
 #[cfg(not(feature = "logging"))]
 fn extract_client_ip(req: &Request<Body>) -> String {
     use axum::extract::connect_info::ConnectInfo;
-    
+
     if let Some(header) = req.headers().get("X-Forwarded-For") {
         if let Ok(value) = header.to_str() {
             let first_ip = value.split(',').next().map(|s| s.trim());
@@ -456,7 +468,7 @@ fn extract_client_ip(req: &Request<Body>) -> String {
             }
         }
     }
-    
+
     if let Some(header) = req.headers().get("X-Real-IP") {
         if let Ok(ip) = header.to_str() {
             if is_valid_ip(ip) {
@@ -464,16 +476,16 @@ fn extract_client_ip(req: &Request<Body>) -> String {
             }
         }
     }
-    
+
     if let Some(remote) = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>() {
         return remote.0.ip().to_string();
     }
-    
+
     "unknown".to_string()
 }
 
 /// Validate IP address format
-/// 
+///
 /// Accepts:
 /// - IPv4: 0.0.0.0 - 255.255.255.255
 /// - IPv6: ::1 - ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
@@ -482,7 +494,7 @@ fn is_valid_ip(ip: &str) -> bool {
     if ip.is_empty() || ip.len() > 45 {
         return false;
     }
-    
+
     // IPv4 validation
     if ip.contains('.') {
         let parts: Vec<&str> = ip.split('.').collect();
@@ -496,7 +508,7 @@ fn is_valid_ip(ip: &str) -> bool {
             })
         });
     }
-    
+
     // IPv6 validation (basic check)
     if ip.contains(':') {
         let parts: Vec<&str> = ip.split(':').collect();
@@ -513,7 +525,7 @@ fn is_valid_ip(ip: &str) -> bool {
             }
         });
     }
-    
+
     false
 }
 
@@ -527,7 +539,10 @@ mod tests {
         auth.add_key("test-key", vec!["read".to_string(), "write".to_string()]);
 
         let permissions = auth.validate_key("test-key");
-        assert_eq!(permissions, Some(vec!["read".to_string(), "write".to_string()]));
+        assert_eq!(
+            permissions,
+            Some(vec!["read".to_string(), "write".to_string()])
+        );
 
         let permissions = auth.validate_key("invalid-key");
         assert_eq!(permissions, None);

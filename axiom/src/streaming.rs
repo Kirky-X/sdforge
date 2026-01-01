@@ -4,11 +4,11 @@
 //! Requires the `streaming` feature.
 
 use futures_util::{Stream, StreamExt};
-use tokio_stream::wrappers::ReceiverStream;
 use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 
 #[cfg(feature = "http")]
-use axum::{response::IntoResponse, http::Response, body::Body};
+use axum::{body::Body, http::Response, response::IntoResponse};
 
 /// Stream response wrapper
 #[derive(Debug)]
@@ -22,7 +22,10 @@ pub struct StreamResponse<T> {
 impl<T: Send + 'static> StreamResponse<T> {
     /// Create a new stream response
     pub fn new(stream: ReceiverStream<Result<T, String>>) -> Self {
-        Self { stream, is_final: false }
+        Self {
+            stream,
+            is_final: false,
+        }
     }
 
     /// Create a single-item stream response
@@ -41,7 +44,10 @@ impl<T: Send + 'static> StreamResponse<T> {
     /// Create a final stream response marker
     pub fn final_marker() -> Self {
         let (_tx, rx) = mpsc::channel(1);
-        Self { stream: ReceiverStream::new(rx), is_final: true }
+        Self {
+            stream: ReceiverStream::new(rx),
+            is_final: true,
+        }
     }
 }
 
@@ -113,7 +119,10 @@ impl<T> StreamEvent<T> {
 }
 
 /// Convert a stream to SSE format
-pub fn stream_to_sse<S, T, F>(stream: S, mapper: F) -> impl Stream<Item = Result<String, std::convert::Infallible>> + Send + 'static
+pub fn stream_to_sse<S, T, F>(
+    stream: S,
+    mapper: F,
+) -> impl Stream<Item = Result<String, std::convert::Infallible>> + Send + 'static
 where
     S: Stream<Item = T> + Send + 'static,
     F: Fn(T) -> StreamEvent + Send + 'static,
@@ -137,7 +146,9 @@ where
         }
 
         // Send completion event
-        let _ = tx.send(Ok("event: complete\ndata: {}\n\n".to_string())).await;
+        let _ = tx
+            .send(Ok("event: complete\ndata: {}\n\n".to_string()))
+            .await;
     });
 
     ReceiverStream::new(rx)
@@ -150,25 +161,24 @@ where
     T: serde::Serialize + Send + 'static,
 {
     fn into_response(self) -> Response<Body> {
-        use axum::http::header::{CONTENT_TYPE, CACHE_CONTROL};
         use axum::body::Body;
-        
+        use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
+
         // Convert stream to SSE format
-        let sse_stream = stream_to_sse(
-            self.stream,
-            |item| match item {
-                Ok(data) => StreamEvent::data(serde_json::to_value(data).unwrap_or(serde_json::Value::Null)),
-                Err(err) => StreamEvent::error(err),
+        let sse_stream = stream_to_sse(self.stream, |item| match item {
+            Ok(data) => {
+                StreamEvent::data(serde_json::to_value(data).unwrap_or(serde_json::Value::Null))
             }
-        );
-        
+            Err(err) => StreamEvent::error(err),
+        });
+
         // Build SSE response with proper headers
         Response::builder()
             .status(200)
             .header(CONTENT_TYPE, "text/event-stream")
             .header(CACHE_CONTROL, "no-cache")
             .header("Connection", "keep-alive")
-            .header("X-Accel-Buffering", "no")  // Disable Nginx buffering
+            .header("X-Accel-Buffering", "no") // Disable Nginx buffering
             .body(Body::from_stream(sse_stream))
             .unwrap()
     }
@@ -196,7 +206,11 @@ mod tests {
     async fn test_stream_event_data() {
         let event = StreamEvent::data(serde_json::json!({"key": "value"}));
         match event {
-            StreamEvent::Data { id, event_name: _, data } => {
+            StreamEvent::Data {
+                id,
+                event_name: _,
+                data,
+            } => {
                 assert!(id.is_none());
                 assert_eq!(data, serde_json::json!({"key": "value"}));
             }

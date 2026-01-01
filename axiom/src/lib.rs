@@ -11,12 +11,12 @@ pub use axiom_macros::{service_api, service_module};
 /// Commonly used types
 pub mod prelude {
     #[cfg(feature = "http")]
+    pub use crate::core::validation::validators::{validate_email, validate_length};
+    pub use crate::core::{ApiError, ApiMetadata, ServiceError, ServiceResponse};
+    #[cfg(feature = "http")]
     pub use crate::http::HttpRoute;
     #[cfg(feature = "mcp")]
     pub use crate::mcp::McpToolInstance;
-    pub use crate::core::{ApiError, ApiMetadata, ServiceResponse, ServiceError};
-    #[cfg(feature = "http")]
-    pub use crate::core::validation::validators::{validate_email, validate_length};
 }
 
 mod core;
@@ -34,17 +34,16 @@ pub mod mcp;
 pub mod streaming;
 
 #[cfg(feature = "streaming")]
-pub use streaming::{StreamResponse, StreamEvent, create_stream_channel, stream_to_sse};
+pub use streaming::{create_stream_channel, stream_to_sse, StreamEvent, StreamResponse};
 
 #[cfg(feature = "http")]
 pub mod security;
 
 #[cfg(feature = "http")]
 pub use security::{
-    ApiKeyAuth, BearerAuth, AuthContext, AuthError, AuthExtractor, AuthMetadata, AuthResult,
-    RateLimiter, RateLimitConfig, RateLimitError,
-    AuditLogger, AuditLog, AuditResult,
-    auth_middleware, rate_limit_middleware,
+    auth_middleware, rate_limit_middleware, ApiKeyAuth, AuditLog, AuditLogger, AuditResult,
+    AuthContext, AuthError, AuthExtractor, AuthMetadata, AuthResult, BearerAuth, RateLimitConfig,
+    RateLimitError, RateLimiter,
 };
 
 #[cfg(feature = "http")]
@@ -52,13 +51,44 @@ pub mod config;
 
 #[cfg(feature = "http")]
 pub use config::{
-    AppConfig, ServerConfig, ApiConfig, DatabaseConfig, TlsConfig, CorsConfig,
-    RateLimitConfigFile, RateLimitEndpointConfig, AuthConfig, LoggingConfig, TracingConfig,
-    ConfigLoader, ConfigError, EnvHelper,
+    ApiConfig, AppConfig, AuthConfig, ConfigError, ConfigLoader, CorsConfig, DatabaseConfig,
+    EnvHelper, LoggingConfig, RateLimitConfigFile, RateLimitEndpointConfig, ServerConfig,
+    TlsConfig, TracingConfig,
+};
+
+#[cfg(feature = "hot-reload")]
+pub use config::hot_reload::{ConfigEvent, ConfigWatcher};
+
+#[cfg(feature = "cache")]
+pub mod cache;
+
+#[cfg(feature = "cache")]
+pub use cache::{CacheConfig, CacheMiddleware, CacheService};
+
+#[cfg(feature = "websocket")]
+pub mod websocket;
+
+#[cfg(feature = "websocket")]
+pub use websocket::{
+    build, build_with_manager, websocket_upgrade, BoxFuture, ConnectionManager,
+    WebSocketConnection, WebSocketHandler, WebSocketMessage, WebSocketRoute,
+};
+
+#[cfg(feature = "grpc")]
+pub mod grpc;
+
+#[cfg(feature = "grpc")]
+pub use grpc::{
+    build_server, build_server_with_config, AxiomGrpcService, GrpcRoute, GrpcServerConfig,
+};
+
+#[cfg(feature = "grpc")]
+pub use grpc::axiom_v1::{
+    axiom_service_server::AxiomServiceServer, CallRequest, CallResponse, InfoRequest, InfoResponse,
 };
 
 #[cfg(feature = "http")]
-pub use http::version_routing::{VersionedRoute, VersionRouterConfig, build_version_router};
+pub use http::version_routing::{build_version_router, VersionRouterConfig, VersionedRoute};
 
 #[cfg(feature = "logging")]
 pub use config::{init_logging, init_logging_default};
