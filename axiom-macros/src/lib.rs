@@ -5,18 +5,23 @@
 #![doc(html_root_url = "https://docs.rs/axiom-macros/0.1.0")]
 
 use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_macro_input, ItemFn, ItemMod, Pat, FnArg};
 
+/// Type alias for service_api arguments parsing result
+type ServiceApiArgs = Result<(String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<bool>), syn::Error>;
+
 /// Parse key=value pairs from token stream
-fn parse_kv_pairs(args: TokenStream) -> Result<Vec<(String, String)>, syn::Error> {
+fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Error> {
     let mut pairs = Vec::new();
     let args_str = args.to_string();
 
     // Parse key="value" pattern
     let mut chars = args_str.chars().peekable();
-    while let Some(c) = chars.next() {
+    while let Some(&c) = chars.peek() {
         if c.is_whitespace() || c == ',' {
+            chars.next();
             continue;
         }
 
@@ -31,10 +36,12 @@ fn parse_kv_pairs(args: TokenStream) -> Result<Vec<(String, String)>, syn::Error
         }
 
         // Skip to =
-        while let Some(c) = chars.next() {
+        while let Some(&c) = chars.peek() {
             if c == '=' {
+                chars.next();
                 break;
             }
+            chars.next();
         }
 
         // Skip whitespace
@@ -48,9 +55,9 @@ fn parse_kv_pairs(args: TokenStream) -> Result<Vec<(String, String)>, syn::Error
 
         // Read value (quoted string)
         let mut value = String::new();
-        if let Some('"') = chars.peek() {
+        if let Some(&'"') = chars.peek() {
             chars.next(); // skip opening quote
-            while let Some(c) = chars.next() {
+            for c in chars.by_ref() {
                 if c == '"' {
                     break;
                 }
@@ -71,7 +78,7 @@ fn parse_kv_pairs(args: TokenStream) -> Result<Vec<(String, String)>, syn::Error
 }
 
 /// Parse service_api attributes
-fn parse_service_api_args(args: TokenStream) -> Result<(String, String, Option<String>, Option<String>, Option<String>, Option<String>, Option<bool>), syn::Error> {
+fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
     let pairs = parse_kv_pairs(args)?;
 
     let mut name = None;
@@ -102,7 +109,7 @@ fn parse_service_api_args(args: TokenStream) -> Result<(String, String, Option<S
 }
 
 /// Parse service_module attributes
-fn parse_service_module_args(args: TokenStream) -> Result<String, syn::Error> {
+fn parse_service_module_args(args: TokenStream2) -> Result<String, syn::Error> {
     let pairs = parse_kv_pairs(args)?;
 
     let mut prefix = None;
@@ -123,8 +130,8 @@ fn parse_service_module_args(args: TokenStream) -> Result<String, syn::Error> {
 fn extract_path_params(path: &str) -> Vec<String> {
     let mut params = Vec::new();
     for segment in path.split('/') {
-        if segment.starts_with(':') {
-            params.push(segment[1..].to_string());
+        if let Some(param) = segment.strip_prefix(':') {
+            params.push(param.to_string());
         }
     }
     params
@@ -143,6 +150,7 @@ enum ParamKind {
 
 /// Extract parameter info from function arguments
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // explicit_annotation is used but cargo linter doesn't detect it
 struct ParamInfo {
     /// Parameter name (identifier)
     name: String,
@@ -251,7 +259,7 @@ impl ParamInfo {
 
     /// Generate JSON schema for this parameter (for MCP)
     fn to_json_schema(&self) -> String {
-        let (type_schema, description) = match self.param_kind {
+        let (type_schema, _description) = match self.param_kind {
             ParamKind::Path => {
                 let schema = if self.is_vec {
                     serde_json::json!({
@@ -365,15 +373,20 @@ impl ParamInfo {
 /// This macro automatically generates HTTP and MCP adapters from a single function definition.
 #[proc_macro_attribute]
 pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = match parse_service_api_args(args) {
+    let args = match parse_service_api_args(args.into()) {
         Ok(args) => args,
         Err(e) => return e.into_compile_error().into(),
     };
     let input = parse_macro_input!(input as ItemFn);
 
-    let (name, version, description, path, method, tool_name, _stream) = args;
+    let (name, version, description, path, method, tool_name, stream) = args;
     let fn_name = &input.sig.ident;
     let fn_vis = &input.vis;
+
+    // Detect return type to determine if streaming is needed
+    let return_type_str = quote! { #input.sig.output }.to_string();
+    let is_streaming_response = return_type_str.contains("StreamResponse");
+    let should_stream = stream.unwrap_or(is_streaming_response);
 
     // Extract path parameters from path string
     let path_params = path.as_ref()
@@ -403,21 +416,49 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 
         // Build the full path with version and module prefix
         // __AXIOM_MODULE_PREFIX is injected by service_module macro
-        // For nested modules, we attempt to combine prefixes at runtime
+        // For nested modules, we try to combine with parent's prefix
         let http_path = quote! {
             {
                 // Get the module prefix (injected by service_module)
-                let prefix = __AXIOM_MODULE_PREFIX;
+                let current_prefix = __AXIOM_MODULE_PREFIX;
+                
+                // Try to get parent module prefix if available (for nested modules)
+                // This is a compile-time check using super:: if it exists
+                let parent_prefix = {
+                    #[cfg(feature = "http")]
+                    {
+                        // Try to access parent's __AXIOM_MODULE_PREFIX
+                        // This will fail at compile time if parent doesn't have it,
+                        // but we use a closure to avoid compile errors
+                        (|| {
+                            #[allow(unused_imports)]
+                            use super::__AXIOM_MODULE_PREFIX as PARENT_PREFIX;
+                            Some(PARENT_PREFIX)
+                        })().unwrap_or("")
+                    }
+                    #[cfg(not(feature = "http"))]
+                    { "" }
+                };
+                
+                // Combine parent and current prefixes
+                let combined_prefix = if parent_prefix.is_empty() {
+                    current_prefix
+                } else {
+                    // Ensure proper path joining (avoid double slashes)
+                    let clean_parent = parent_prefix.trim_end_matches('/');
+                    let clean_current = current_prefix.trim_start_matches('/');
+                    format!("{}/{}", clean_parent, clean_current)
+                };
                 
                 // Build version path
                 let version_path = format!("/api/{}", #version);
                 
                 // Combine prefix with version path
-                let base_path = if prefix.is_empty() {
+                let base_path = if combined_prefix.is_empty() {
                     version_path
                 } else {
                     // Ensure proper path joining (avoid double slashes)
-                    let clean_prefix = prefix.trim_end_matches('/');
+                    let clean_prefix = combined_prefix.trim_end_matches('/');
                     format!("{}{}", clean_prefix, version_path)
                 };
                 
@@ -429,15 +470,29 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         // Build parameter patterns based on type
         let param_patterns: Vec<_> = params.iter().map(|p| {
             let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
-            let ty_ident = syn::Ident::new(&p.ty, proc_macro2::Span::call_site());
+            let ty: syn::Type = syn::parse_str(&p.ty).expect("Failed to parse type");
             
             match p.param_kind {
-                ParamKind::Path => quote! { #name_ident: axum::extract::Path<#ty_ident> },
-                ParamKind::Query => quote! { #name_ident: axum::extract::Query<#ty_ident> },
-                ParamKind::Header => quote! { #name_ident: axum::extract::TypedHeader<#ty_ident> },
+                ParamKind::Path => quote! { #name_ident: axum::extract::Path<#ty> },
+                ParamKind::Query => quote! { #name_ident: axum::extract::Query<#ty> },
+                ParamKind::Header => quote! { #name_ident: axum::extract::TypedHeader<#ty> },
                 ParamKind::Cookie => quote! { #name_ident: axum::extract::Cookie },
-                ParamKind::Form => quote! { #name_ident: axum::extract::Form<#ty_ident> },
-                ParamKind::Body => quote! { #name_ident: axum::extract::Json<#ty_ident> },
+                ParamKind::Form => quote! { #name_ident: axum::extract::Form<#ty> },
+                ParamKind::Body => quote! { #name_ident: axum::extract::Json<#ty> },
+            }
+        }).collect();
+
+        // Build parameter unwrapping logic to extract values from extractors
+        let param_unwraps: Vec<_> = params.iter().map(|p| {
+            let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+            
+            match p.param_kind {
+                ParamKind::Path => quote! { let #name_ident = #name_ident.0; },
+                ParamKind::Query => quote! { let #name_ident = #name_ident.0; },
+                ParamKind::Header => quote! { let #name_ident = #name_ident.0; },
+                ParamKind::Cookie => quote! { let #name_ident = #name_ident.0; },
+                ParamKind::Form => quote! { let #name_ident = #name_ident.0; },
+                ParamKind::Body => quote! { let #name_ident = #name_ident.0; },
             }
         }).collect();
 
@@ -454,28 +509,182 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             .map(|p| format!(r#""{}""#, p.name))
             .collect();
 
+        // Generate HTTP code with conditional streaming support
+    let http_handler = if should_stream {
         quote! {
-            #[cfg(feature = "http")]
-            {
-                use axum::{routing::MethodRouter, response::IntoResponse, extract::{Json, Path, Query, TypedHeader, Cookie}};
+            #fn_vis async fn __axiom_http_handler(#(#param_patterns),*) -> impl IntoResponse {
+                // Unwrap extractors to get actual values
+                #(#param_unwraps)*
+                
+                let stream_response = super::#fn_name(#(#param_names),*).await;
+                
+                // Convert to SSE format
+                let sse_stream = axiom::streaming::stream_to_sse(
+                    stream_response.stream,
+                    |item| match item {
+                        Ok(data) => StreamEvent::data(data),
+                        Err(err) => StreamEvent::error(err),
+                    }
+                );
+                
+                // Set SSE response headers
+                Response::builder()
+                    .status(200)
+                    .header(CONTENT_TYPE, "text/event-stream")
+                    .header(CACHE_CONTROL, "no-cache")
+                    .header("Connection", "keep-alive")
+                    .header("X-Accel-Buffering", "no")
+                    .body(axum::body::Body::from_stream(sse_stream))
+                    .unwrap()
+            }
+        }
+    } else {
+        quote! {
+            #fn_vis async fn __axiom_http_handler(#(#param_patterns),*) -> impl IntoResponse {
+                // Unwrap extractors to get actual values
+                #(#param_unwraps)*
+                
+                super::#fn_name(#(#param_names),*).await.into_response()
+            }
+        }
+    };
 
-                #fn_vis async fn __axiom_http_handler(#(#param_patterns),*) -> impl IntoResponse {
-                    super::#fn_name(#(#param_names),*).await.into_response()
+    quote! {
+        #[cfg(feature = "http")]
+        {
+            use axum::{routing::MethodRouter, response::{IntoResponse, Response}, extract::{Json, Path, Query, TypedHeader, Cookie}};
+            use axum::http::header::{CONTENT_TYPE, CACHE_CONTROL};
+            use futures_util::StreamExt;
+            use axiom::streaming::StreamEvent;
+
+            #http_handler
+
+            axiom::inventory::submit!(axiom::http::HttpRoute {
+                path: #http_path,
+                method: axum::http::Method::#http_method,
+                handler: MethodRouter::new().#http_method(__axiom_http_handler),
+                metadata: axiom::core::ApiMetadata {
+                    name: #name,
+                    version: #version,
+                    description: #description.as_ref().unwrap_or(&#name),
+                },
+                module_prefix: Some(__AXIOM_MODULE_PREFIX),
+            });
+        }
+
+        #[cfg(feature = "mcp")]
+        {
+            use mcp_sdk::tools::Tool;
+            use serde_json::Value;
+
+            struct AxiomMcpTool;
+
+            impl Tool for AxiomMcpTool {
+                fn name(&self) -> String {
+                    #tool_name.as_ref().unwrap_or(&#name).to_string()
                 }
 
-                axiom::inventory::submit!(axiom::http::HttpRoute {
-                    path: #http_path,
-                    method: axum::http::Method::#http_method,
-                    handler: MethodRouter::new().#http_method(__axiom_http_handler),
+                fn description(&self) -> String {
+                    #description.clone().unwrap_or_else(|| #name.clone()).to_string()
+                }
+
+                fn input_schema(&self) -> serde_json::Value {
+                    serde_json::json!({
+                        "type": "object",
+                        "properties": { #(#mcp_schema_props),* },
+                        "required": [#(#mcp_schema_required),*]
+                    })
+                }
+
+                fn call(&self, input: Option<Value>) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                    use serde::Deserialize;
+                    
+                    #[derive(serde::Deserialize)]
+                    struct Params {
+                        #(#(pub #param_names: #param_names),)*
+                    }
+                    
+                    let params: Params = match input {
+                        Some(v) => serde_json::from_value(v)?,
+                        None => Params { #(#param_names: Default::default()),* },
+                    };
+                    
+                    let result = super::#fn_name(#(params.#param_names),*).await;
+                    
+                    match result {
+                        Ok(value) => Ok(mcp_sdk::types::CallToolResponse {
+                            content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                                text: serde_json::to_string(&value)?,
+                            }],
+                            is_error: Some(false),
+                            meta: None,
+                        }),
+                        Err(e) => {
+                            // Extract error code and message from ApiError
+                            let error_text = e.to_string();
+                            let error_json: serde_json::Value = serde_json::from_str(&error_text).unwrap_or_else(|_| {
+                                // If not JSON, wrap as text
+                                serde_json::json!({
+                                    "code": "TOOL_ERROR",
+                                    "message": error_text
+                                })
+                            });
+                            
+                            let error_code = error_json.get("code")
+                                .and_then(|c| c.as_str())
+                                .unwrap_or("TOOL_ERROR");
+                            let error_message = error_json.get("message")
+                                .and_then(|m| m.as_str())
+                                .unwrap_or(&error_text);
+                            
+                            Ok(mcp_sdk::types::CallToolResponse {
+                                content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                                    text: serde_json::to_string(&serde_json::json!({
+                                        "success": false,
+                                        "error": {
+                                            "code": error_code,
+                                            "message": error_message
+                                        }
+                                    }))?,
+                                }],
+                                is_error: Some(true),
+                                meta: None,
+                            })
+                        }
+                    }
+                }
+            }
+
+            axiom::inventory::submit!(axiom::mcp::McpToolInstance {
+                    tool: std::sync::Arc::new(AxiomMcpTool),
                     metadata: axiom::core::ApiMetadata {
                         name: #name,
                         version: #version,
-                        description: #description.as_ref().unwrap_or(&#name),
+                        description: #description.clone().unwrap_or_else(|| #name.clone()),
                     },
-                    module_prefix: Some(__AXIOM_MODULE_PREFIX),
                 });
-            }
+        }
+    }
+} else {
+    // Even without HTTP path, we may need to generate MCP code
+    if let Some(tool_name) = tool_name {
+        let tool_name_str = tool_name.clone();
+        let description_str = description.clone().unwrap_or_else(|| name.clone());
 
+        // Build MCP input schema
+        let mcp_schema_props: Vec<String> = params.iter()
+            .map(|p| p.to_json_schema())
+            .collect();
+        let mcp_schema_required: Vec<String> = params.iter()
+            .filter(|p| !p.is_option)
+            .map(|p| format!(r#""{}""#, p.name))
+            .collect();
+
+        let param_names: Vec<_> = params.iter()
+            .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
+            .collect();
+
+        quote! {
             #[cfg(feature = "mcp")]
             {
                 use mcp_sdk::tools::Tool;
@@ -485,11 +694,11 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 impl Tool for AxiomMcpTool {
                     fn name(&self) -> String {
-                        #tool_name.as_ref().unwrap_or(&#name).to_string()
+                        #tool_name_str.to_string()
                     }
 
                     fn description(&self) -> String {
-                        #description.clone().unwrap_or_else(|| #name.clone()).to_string()
+                        #description_str.to_string()
                     }
 
                     fn input_schema(&self) -> serde_json::Value {
@@ -527,7 +736,6 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                                 // Extract error code and message from ApiError
                                 let error_text = e.to_string();
                                 let error_json: serde_json::Value = serde_json::from_str(&error_text).unwrap_or_else(|_| {
-                                    // If not JSON, wrap as text
                                     serde_json::json!({
                                         "code": "TOOL_ERROR",
                                         "message": error_text
@@ -559,137 +767,20 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 }
 
-                axiom::inventory::submit!(axiom::mcp::McpToolRegistration {
-                    name: #tool_name.clone().unwrap_or_else(|| #name.clone()),
-                    description: #description.clone().unwrap_or_else(|| #name.clone()),
-                    input_schema: AxiomMcpTool.input_schema(),
-                    metadata: axiom::core::ApiMetadata {
-                        name: #name,
-                        version: #version,
-                        description: #description.clone().unwrap_or_else(|| #name.clone()),
-                    },
-                });
-            }
-        }
-    } else {
-        // Even without HTTP path, we may need to generate MCP code
-        if tool_name.is_some() {
-            let tool_name = tool_name.unwrap();
-            let tool_name_str = tool_name.clone();
-            let description_str = description.clone().unwrap_or_else(|| name.clone());
-
-            // Build MCP input schema
-            let mcp_schema_props: Vec<String> = params.iter()
-                .map(|p| p.to_json_schema())
-                .collect();
-            let mcp_schema_required: Vec<String> = params.iter()
-                .filter(|p| !p.is_option)
-                .map(|p| format!(r#""{}""#, p.name))
-                .collect();
-
-            let param_names: Vec<_> = params.iter()
-                .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
-                .collect();
-
-            quote! {
-                #[cfg(feature = "mcp")]
-                {
-                    use mcp_sdk::tools::Tool;
-                    use serde_json::Value;
-
-                    struct AxiomMcpTool;
-
-                    impl Tool for AxiomMcpTool {
-                        fn name(&self) -> String {
-                            #tool_name_str.to_string()
-                        }
-
-                        fn description(&self) -> String {
-                            #description_str.to_string()
-                        }
-
-                        fn input_schema(&self) -> serde_json::Value {
-                            serde_json::json!({
-                                "type": "object",
-                                "properties": { #(#mcp_schema_props),* },
-                                "required": [#(#mcp_schema_required),*]
-                            })
-                        }
-
-                        fn call(&self, input: Option<Value>) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
-                            use serde::Deserialize;
-                            
-                            #[derive(serde::Deserialize)]
-                            struct Params {
-                                #(#(pub #param_names: #param_names),)*
-                            }
-                            
-                            let params: Params = match input {
-                                Some(v) => serde_json::from_value(v)?,
-                                None => Params { #(#param_names: Default::default()),* },
-                            };
-                            
-                            let result = super::#fn_name(#(params.#param_names),*).await;
-                            
-                            match result {
-                                Ok(value) => Ok(mcp_sdk::types::CallToolResponse {
-                                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
-                                        text: serde_json::to_string(&value)?,
-                                    }],
-                                    is_error: Some(false),
-                                    meta: None,
-                                }),
-                                Err(e) => {
-                                    // Extract error code and message from ApiError
-                                    let error_text = e.to_string();
-                                    let error_json: serde_json::Value = serde_json::from_str(&error_text).unwrap_or_else(|_| {
-                                        serde_json::json!({
-                                            "code": "TOOL_ERROR",
-                                            "message": error_text
-                                        })
-                                    });
-                                    
-                                    let error_code = error_json.get("code")
-                                        .and_then(|c| c.as_str())
-                                        .unwrap_or("TOOL_ERROR");
-                                    let error_message = error_json.get("message")
-                                        .and_then(|m| m.as_str())
-                                        .unwrap_or(&error_text);
-                                    
-                                    Ok(mcp_sdk::types::CallToolResponse {
-                                        content: vec![mcp_sdk::types::ToolResponseContent::Text {
-                                            text: serde_json::to_string(&serde_json::json!({
-                                                "success": false,
-                                                "error": {
-                                                    "code": error_code,
-                                                    "message": error_message
-                                                }
-                                            }))?,
-                                        }],
-                                        is_error: Some(true),
-                                        meta: None,
-                                    })
-                                }
-                            }
-                        }
-                    }
-
-                    axiom::inventory::submit!(axiom::mcp::McpToolRegistration {
-                        name: #tool_name,
-                        description: #description_str,
-                        input_schema: AxiomMcpTool.input_schema(),
+                axiom::inventory::submit!(axiom::mcp::McpToolInstance {
+                        tool: std::sync::Arc::new(AxiomMcpTool),
                         metadata: axiom::core::ApiMetadata {
                             name: #name,
                             version: #version,
                             description: #description_str,
                         },
                     });
-                }
             }
-        } else {
-            quote! {}
         }
-    };
+    } else {
+        quote! {}
+    }
+};
 
     let expanded = quote! {
         #input
@@ -706,7 +797,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 /// For nested modules, it attempts to combine with parent's prefix at runtime.
 #[proc_macro_attribute]
 pub fn service_module(args: TokenStream, input: TokenStream) -> TokenStream {
-    let prefix = match parse_service_module_args(args) {
+    let prefix = match parse_service_module_args(args.into()) {
         Ok(prefix) => prefix,
         Err(e) => return e.into_compile_error().into(),
     };
@@ -737,4 +828,229 @@ pub fn service_module(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     expanded.into()
+}
+
+#[cfg(test)]
+mod macro_parsing_tests {
+    use super::*;
+    use proc_macro2::TokenStream;
+
+    /// Test parse_kv_pairs with simple key-value pairs
+    #[test]
+    fn test_parse_kv_pairs_simple() {
+        let input: TokenStream = r#"name = "test_api""#.parse().unwrap();
+        let result = parse_kv_pairs(input);
+        assert!(result.is_ok());
+        let pairs = result.unwrap();
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0], ("name".to_string(), "test_api".to_string()));
+    }
+
+    /// Test parse_kv_pairs with multiple key-value pairs
+    #[test]
+    fn test_parse_kv_pairs_multiple() {
+        let input: TokenStream = r#"name = "test_api", version = "v1", description = "Test API""#.parse().unwrap();
+        let result = parse_kv_pairs(input);
+        assert!(result.is_ok());
+        let pairs = result.unwrap();
+        assert_eq!(pairs.len(), 3);
+        
+        let pairs_map: std::collections::HashMap<String, String> = pairs.into_iter().collect();
+        assert_eq!(pairs_map.get("name"), Some(&"test_api".to_string()));
+        assert_eq!(pairs_map.get("version"), Some(&"v1".to_string()));
+        assert_eq!(pairs_map.get("description"), Some(&"Test API".to_string()));
+    }
+
+    /// Test parse_kv_pairs with path and method
+    #[test]
+    fn test_parse_kv_pairs_path_method() {
+        let input: TokenStream = r#"path = "/users/:id", method = "GET""#.parse().unwrap();
+        let result = parse_kv_pairs(input);
+        assert!(result.is_ok());
+        let pairs = result.unwrap();
+        assert_eq!(pairs.len(), 2);
+        
+        let pairs_map: std::collections::HashMap<String, String> = pairs.into_iter().collect();
+        assert_eq!(pairs_map.get("path"), Some(&"/users/:id".to_string()));
+        assert_eq!(pairs_map.get("method"), Some(&"GET".to_string()));
+    }
+
+    /// Test parse_kv_pairs with tool_name and stream
+    #[test]
+    fn test_parse_kv_pairs_tool_stream() {
+        let input: TokenStream = r#"tool_name = "get_user", stream = "true""#.parse().unwrap();
+        let result = parse_kv_pairs(input);
+        assert!(result.is_ok());
+        let pairs = result.unwrap();
+        assert_eq!(pairs.len(), 2);
+        
+        let pairs_map: std::collections::HashMap<String, String> = pairs.into_iter().collect();
+        assert_eq!(pairs_map.get("tool_name"), Some(&"get_user".to_string()));
+        assert_eq!(pairs_map.get("stream"), Some(&"true".to_string()));
+    }
+
+    /// Test parse_kv_pairs with empty input
+    #[test]
+    fn test_parse_kv_pairs_empty() {
+        let input: TokenStream = "".parse().unwrap();
+        let result = parse_kv_pairs(input);
+        assert!(result.is_ok());
+        let pairs = result.unwrap();
+        assert!(pairs.is_empty());
+    }
+
+    /// Test parse_service_api_args with all required attributes
+    #[test]
+    fn test_parse_service_api_args_required() {
+        let input: TokenStream = r#"name = "get_user", version = "v1""#.parse().unwrap();
+        let result = parse_service_api_args(input);
+        assert!(result.is_ok());
+        let (name, version, description, path, method, tool_name, stream) = result.unwrap();
+        
+        assert_eq!(name, "get_user");
+        assert_eq!(version, "v1");
+        assert!(description.is_none());
+        assert!(path.is_none());
+        assert!(method.is_none());
+        assert!(tool_name.is_none());
+        assert!(stream.is_none());
+    }
+
+    /// Test parse_service_api_args with all attributes
+    #[test]
+    fn test_parse_service_api_args_full() {
+        let input: TokenStream = r#"
+            name = "create_user",
+            version = "v1",
+            description = "Create a new user",
+            path = "/users",
+            method = "POST",
+            tool_name = "create_user",
+            stream = "false"
+        "#.parse().unwrap();
+        let result = parse_service_api_args(input);
+        assert!(result.is_ok());
+        let (name, version, description, path, method, tool_name, stream) = result.unwrap();
+        
+        assert_eq!(name, "create_user");
+        assert_eq!(version, "v1");
+        assert_eq!(description, Some("Create a new user".to_string()));
+        assert_eq!(path, Some("/users".to_string()));
+        assert_eq!(method, Some("POST".to_string()));
+        assert_eq!(tool_name, Some("create_user".to_string()));
+        assert_eq!(stream, Some(false));
+    }
+
+    /// Test parse_service_api_args missing name
+    #[test]
+    fn test_parse_service_api_args_missing_name() {
+        let input: TokenStream = r#"version = "v1""#.parse().unwrap();
+        let result = parse_service_api_args(input);
+        assert!(result.is_err());
+        let error_message = result.unwrap_err().to_string();
+        assert!(error_message.contains("Missing required attribute: name"));
+    }
+
+    /// Test parse_service_api_args missing version
+    #[test]
+    fn test_parse_service_api_args_missing_version() {
+        let input: TokenStream = r#"name = "get_user""#.parse().unwrap();
+        let result = parse_service_api_args(input);
+        assert!(result.is_err());
+        let error_message = result.unwrap_err().to_string();
+        assert!(error_message.contains("Missing required attribute: version"));
+    }
+
+    /// Test parse_service_api_args with unknown attribute
+    #[test]
+    fn test_parse_service_api_args_unknown_attribute() {
+        let input: TokenStream = r#"name = "get_user", version = "v1", unknown = "value""#.parse().unwrap();
+        let result = parse_service_api_args(input);
+        assert!(result.is_err());
+        let error_message = result.unwrap_err().to_string();
+        assert!(error_message.contains("Unknown attribute: unknown"));
+    }
+
+    /// Test parse_service_module_args with valid prefix
+    #[test]
+    fn test_parse_service_module_args_valid() {
+        let input: TokenStream = r#"prefix = "/auth""#.parse().unwrap();
+        let result = parse_service_module_args(input);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "/auth");
+    }
+
+    /// Test parse_service_module_args with nested prefix
+    #[test]
+    fn test_parse_service_module_args_nested() {
+        let input: TokenStream = r#"prefix = "/admin/users""#.parse().unwrap();
+        let result = parse_service_module_args(input);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "/admin/users");
+    }
+
+    /// Test parse_service_module_args missing prefix
+    #[test]
+    fn test_parse_service_module_args_missing() {
+        let input: TokenStream = "".parse().unwrap();
+        let result = parse_service_module_args(input);
+        assert!(result.is_err());
+        let error_message = result.unwrap_err().to_string();
+        assert!(error_message.contains("Missing required attribute: prefix"));
+    }
+
+    /// Test parse_service_module_args with unknown attribute
+    #[test]
+    fn test_parse_service_module_args_unknown() {
+        let input: TokenStream = r#"prefix = "/auth", unknown = "value""#.parse().unwrap();
+        let result = parse_service_module_args(input);
+        assert!(result.is_err());
+        let error_message = result.unwrap_err().to_string();
+        assert!(error_message.contains("Unknown attribute: unknown"));
+    }
+
+    /// Test extract_path_params with single parameter
+    #[test]
+    fn test_extract_path_params_single() {
+        let path = "/users/:id";
+        let params = extract_path_params(path);
+        assert_eq!(params.len(), 1);
+        assert_eq!(params[0], "id");
+    }
+
+    /// Test extract_path_params with multiple parameters
+    #[test]
+    fn test_extract_path_params_multiple() {
+        let path = "/users/:user_id/posts/:post_id";
+        let params = extract_path_params(path);
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0], "user_id");
+        assert_eq!(params[1], "post_id");
+    }
+
+    /// Test extract_path_params with no parameters
+    #[test]
+    fn test_extract_path_params_none() {
+        let path = "/users";
+        let params = extract_path_params(path);
+        assert!(params.is_empty());
+    }
+
+    /// Test extract_path_params with complex path
+    #[test]
+    fn test_extract_path_params_complex() {
+        let path = "/api/v1/users/:user_id/comments/:comment_id";
+        let params = extract_path_params(path);
+        assert_eq!(params.len(), 2);
+        assert_eq!(params[0], "user_id");
+        assert_eq!(params[1], "comment_id");
+    }
+
+    /// Test extract_path_params with empty string
+    #[test]
+    fn test_extract_path_params_empty() {
+        let path = "";
+        let params = extract_path_params(path);
+        assert!(params.is_empty());
+    }
 }
