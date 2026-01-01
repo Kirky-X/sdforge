@@ -8,6 +8,12 @@ use thiserror::Error;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+#[cfg(feature = "http")]
+use crate::security::RateLimitConfig;
+
+#[cfg(feature = "http")]
+use axum::http::HeaderValue;
+
 /// Server configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
@@ -268,29 +274,24 @@ impl ConfigLoader {
     /// Apply environment variable overrides
     fn apply_env_overrides(&self, config: &mut AppConfig) {
         // Server overrides
-        if let Ok(host) = std::env::var(&format!("{}_SERVER_HOST", self.env_prefix)) {
+        if let Ok(host) = std::env::var(format!("{}_SERVER_HOST", self.env_prefix)) {
             config.server.host = host;
         }
-        if let Ok(port) = std::env::var(&format!("{}_SERVER_PORT", self.env_prefix)) {
+        if let Ok(port) = std::env::var(format!("{}_SERVER_PORT", self.env_prefix)) {
             if let Ok(port_num) = port.parse() {
                 config.server.port = port_num;
             }
         }
 
         // API overrides
-        if let Ok(version) = std::env::var(&format!("{}_API_VERSION", self.env_prefix)) {
+        if let Ok(version) = std::env::var(format!("{}_API_VERSION", self.env_prefix)) {
             config.api.version = version;
         }
 
         // Database overrides
-        if let Ok(conn_str) = std::env::var(&format!("{}_DATABASE_URL", self.env_prefix)) {
-            if let Some(db) = &mut config.database {
-                match db {
-                    DatabaseConfig::Postgresql { connection_string, .. } => {
-                        *connection_string = conn_str;
-                    }
-                    _ => {}
-                }
+        if let Ok(conn_str) = std::env::var(format!("{}_DATABASE_URL", self.env_prefix)) {
+            if let Some(DatabaseConfig::Postgresql { connection_string, .. }) = &mut config.database {
+                *connection_string = conn_str;
             }
         }
     }
@@ -304,12 +305,15 @@ impl ConfigLoader {
 /// Configuration errors
 #[derive(Debug, Error)]
 pub enum ConfigError {
+    /// Failed to load configuration from the specified path
     #[error("Failed to load configuration from {0}: {1}")]
     LoadError(PathBuf, std::io::Error),
 
+    /// Failed to parse configuration file (TOML format error)
     #[error("Failed to parse configuration: {0}")]
     ParseError(toml::de::Error),
 
+    /// Configuration validation failed
     #[error("Configuration validation failed: {0}")]
     ValidationError(String),
 }
@@ -331,7 +335,7 @@ impl EnvHelper {
 
     /// Get a string environment variable
     pub fn get(&self, key: &str) -> Option<String> {
-        std::env::var(&format!("{}_{}", self.prefix, key)).ok()
+        std::env::var(format!("{}_{}", self.prefix, key)).ok()
     }
 
     /// Get a u16 environment variable
@@ -413,6 +417,67 @@ pub fn init_logging_default() {
         output_file: None,
     };
     init_logging(&config);
+}
+
+/// Build CORS layer from configuration
+///
+/// # Arguments
+/// * `config` - The CORS configuration
+///
+/// # Returns
+/// A configured CORS layer that can be applied to Axum router
+pub fn build_cors_layer(config: &CorsConfig) -> Result<tower_http::cors::CorsLayer, ConfigError> {
+    use tower_http::cors::CorsLayer;
+    use axum::http::{Method, HeaderName};
+    
+    // Parse and set allowed origins
+    let origins: Result<Vec<_>, _> = config.allowed_origins.iter()
+        .map(|s| s.parse::<HeaderValue>())
+        .collect();
+    let origins = origins.map_err(|e| ConfigError::ValidationError(format!("Invalid CORS origin: {}", e)))?;
+    
+    // Parse and set allowed methods
+    let methods: Result<Vec<Method>, _> = config.allowed_methods.iter()
+        .map(|s| s.parse())
+        .collect();
+    let methods = methods.map_err(|e| ConfigError::ValidationError(format!("Invalid CORS method: {}", e)))?;
+    
+    // Parse and set allowed headers
+    let headers: Result<Vec<HeaderName>, _> = config.allowed_headers.iter()
+        .map(|s| s.parse())
+        .collect();
+    let headers = headers.map_err(|e| ConfigError::ValidationError(format!("Invalid CORS header: {}", e)))?;
+    
+    // Build CORS layer
+    let mut cors = CorsLayer::new()
+        .allow_origin(origins)
+        .allow_methods(methods)
+        .allow_headers(headers);
+    
+    // Set credentials
+    if config.allow_credentials {
+        cors = cors.allow_credentials(true);
+    }
+    
+    // Set max age
+    if let Some(max_age) = config.max_age {
+        cors = cors.max_age(std::time::Duration::from_secs(max_age));
+    }
+    
+    Ok(cors)
+}
+
+/// Implement TryFrom for RateLimitConfigFile to RateLimitConfig conversion
+impl TryFrom<RateLimitConfigFile> for RateLimitConfig {
+    type Error = ConfigError;
+    
+    fn try_from(file_config: RateLimitConfigFile) -> Result<Self, Self::Error> {
+        Ok(RateLimitConfig {
+            max_requests: file_config.max_requests,
+            window: std::time::Duration::from_secs(file_config.window_seconds.into()),
+            include_headers: true,
+        })
+    }
 }
 
 #[cfg(test)]
