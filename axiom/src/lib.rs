@@ -13,26 +13,31 @@ pub mod prelude {
     #[cfg(feature = "http")]
     pub use crate::http::HttpRoute;
     #[cfg(feature = "mcp")]
-    pub use crate::mcp::McpToolRegistration;
+    pub use crate::mcp::McpToolInstance;
     pub use crate::core::{ApiError, ApiMetadata, ServiceResponse, ServiceError};
+    #[cfg(feature = "http")]
+    pub use crate::core::validation::validators::{validate_email, validate_length};
 }
 
 mod core;
 
 #[cfg(feature = "http")]
+pub use core::validation::validators;
+
+#[cfg(feature = "http")]
 pub mod http;
 
 #[cfg(feature = "mcp")]
-mod mcp;
+pub mod mcp;
 
 #[cfg(feature = "streaming")]
-mod streaming;
+pub mod streaming;
 
 #[cfg(feature = "streaming")]
 pub use streaming::{StreamResponse, StreamEvent, create_stream_channel, stream_to_sse};
 
 #[cfg(feature = "http")]
-mod security;
+pub mod security;
 
 #[cfg(feature = "http")]
 pub use security::{
@@ -43,7 +48,7 @@ pub use security::{
 };
 
 #[cfg(feature = "http")]
-mod config;
+pub mod config;
 
 #[cfg(feature = "http")]
 pub use config::{
