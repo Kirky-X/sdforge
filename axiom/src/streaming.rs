@@ -7,6 +7,9 @@ use futures_util::{Stream, StreamExt};
 use tokio_stream::wrappers::ReceiverStream;
 use tokio::sync::mpsc;
 
+#[cfg(feature = "http")]
+use axum::{response::IntoResponse, http::Response, body::Body};
+
 /// Stream response wrapper
 #[derive(Debug)]
 pub struct StreamResponse<T> {
@@ -37,7 +40,7 @@ impl<T: Send + 'static> StreamResponse<T> {
 
     /// Create a final stream response marker
     pub fn final_marker() -> Self {
-        let (tx, rx) = mpsc::channel(1);
+        let (_tx, rx) = mpsc::channel(1);
         Self { stream: ReceiverStream::new(rx), is_final: true }
     }
 }
@@ -110,7 +113,7 @@ impl<T> StreamEvent<T> {
 }
 
 /// Convert a stream to SSE format
-pub fn stream_to_sse<S, T, F>(stream: S, mapper: F) -> impl Stream<Item = String> + Send + 'static
+pub fn stream_to_sse<S, T, F>(stream: S, mapper: F) -> impl Stream<Item = Result<String, std::convert::Infallible>> + Send + 'static
 where
     S: Stream<Item = T> + Send + 'static,
     F: Fn(T) -> StreamEvent + Send + 'static,
@@ -119,27 +122,56 @@ where
     let (tx, rx) = mpsc::channel(32);
     tokio::spawn(async move {
         let mut stream = Box::pin(stream);
-        let mut counter = 0u64;
 
         while let Some(item) = tokio::select! {
             _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => None,
             next = stream.next() => next,
         } {
-            counter += 1;
             let event = mapper(item);
             let data = serde_json::to_string(&event).unwrap_or_default();
             let sse = format!("data: {}\n\n", data);
 
-            if tx.send(sse).await.is_err() {
+            if tx.send(Ok(sse)).await.is_err() {
                 break;
             }
         }
 
         // Send completion event
-        let _ = tx.send("event: complete\ndata: {}\n\n".to_string()).await;
+        let _ = tx.send(Ok("event: complete\ndata: {}\n\n".to_string())).await;
     });
 
     ReceiverStream::new(rx)
+}
+
+/// Implement IntoResponse for StreamResponse to enable SSE streaming in HTTP handlers
+#[cfg(feature = "http")]
+impl<T> IntoResponse for StreamResponse<T>
+where
+    T: serde::Serialize + Send + 'static,
+{
+    fn into_response(self) -> Response<Body> {
+        use axum::http::header::{CONTENT_TYPE, CACHE_CONTROL};
+        use axum::body::Body;
+        
+        // Convert stream to SSE format
+        let sse_stream = stream_to_sse(
+            self.stream,
+            |item| match item {
+                Ok(data) => StreamEvent::data(serde_json::to_value(data).unwrap_or(serde_json::Value::Null)),
+                Err(err) => StreamEvent::error(err),
+            }
+        );
+        
+        // Build SSE response with proper headers
+        Response::builder()
+            .status(200)
+            .header(CONTENT_TYPE, "text/event-stream")
+            .header(CACHE_CONTROL, "no-cache")
+            .header("Connection", "keep-alive")
+            .header("X-Accel-Buffering", "no")  // Disable Nginx buffering
+            .body(Body::from_stream(sse_stream))
+            .unwrap()
+    }
 }
 
 #[cfg(test)]
