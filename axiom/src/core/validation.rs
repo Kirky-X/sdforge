@@ -54,14 +54,17 @@ pub struct FieldValidationError {
 }
 
 #[cfg(feature = "http")]
+#[allow(dead_code)] // Reserved for future use
 /// Type for validated parameters
 pub trait ValidatedParam: for<'de> Deserialize<'de> + Validate {}
 
 #[cfg(feature = "http")]
+#[allow(dead_code)] // Reserved for future use
 impl<T: for<'de> Deserialize<'de> + Validate> ValidatedParam for T {}
 
 /// Validation result type
 #[cfg(feature = "http")]
+#[allow(dead_code)] // Reserved for future use
 pub type ValidationResult<T> = Result<T, ValidationErrorsWrapper>;
 
 #[cfg(feature = "http")]
@@ -86,10 +89,18 @@ impl From<ValidationErrorsWrapper> for super::ApiError {
 }
 
 #[cfg(feature = "http")]
+#[allow(dead_code)] // Validators are reserved for future use
 /// Common validation helpers
 pub mod validators {
     use super::*;
     use validator::ValidationError;
+    use once_cell::sync::Lazy;
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    /// Regex pattern cache (thread-safe)
+    static REGEX_CACHE: Lazy<Mutex<HashMap<String, regex::Regex>>> = 
+        Lazy::new(|| Mutex::new(HashMap::new()));
 
     /// Validate that a string is a valid email
     pub fn validate_email(email: &str) -> Result<(), ValidationError> {
@@ -99,9 +110,20 @@ pub mod validators {
         Ok(())
     }
 
-    /// Validate that a string matches a regex pattern
+    /// Validate that a string matches a regex pattern (with caching)
     pub fn validate_regex(value: &str, pattern: &str) -> Result<(), ValidationError> {
-        let regex = regex::Regex::new(pattern).map_err(|_| ValidationError::new("regex"))?;
+        let regex = {
+            let mut cache = REGEX_CACHE.lock().unwrap();
+            if let Some(cached) = cache.get(pattern) {
+                cached.clone()
+            } else {
+                let new_regex = regex::Regex::new(pattern)
+                    .map_err(|_| ValidationError::new("regex"))?;
+                cache.insert(pattern.to_string(), new_regex.clone());
+                new_regex
+            }
+        };
+        
         if !regex.is_match(value) {
             return Err(ValidationError::new("regex"));
         }
@@ -149,6 +171,7 @@ pub mod validators {
 /// - Path traversal
 /// - Command injection
 #[cfg(feature = "http")]
+#[allow(dead_code)] // Reserved for future use
 pub mod sanitizer {
     use crate::core::ApiError;
     use std::path::PathBuf;
@@ -162,7 +185,7 @@ pub mod sanitizer {
             match c {
                 '\'' => result.push_str("''"),
                 ';' => result.push(' '),
-                '-' => result.push_str(" "),
+                '-' => result.push(' '),
                 '*' => result.push(' '),
                 '%' => result.push(' '),
                 '_' => result.push(' '),
@@ -196,7 +219,7 @@ pub mod sanitizer {
         }
 
         // Normalize path
-        let path = PathBuf::from(&cleaned);
+        let _path = PathBuf::from(&cleaned);
         
         // Ensure the path doesn't escape the intended directory
         // This is a basic check - in production, use proper path canonicalization
@@ -311,6 +334,7 @@ pub mod sanitizer {
 }
 
 #[cfg(feature = "http")]
+#[allow(dead_code)] // Reserved for future use
 /// Extract validated parameters from JSON
 pub async fn extract_validated<T>(json: &serde_json::Value) -> ValidationResult<T>
 where

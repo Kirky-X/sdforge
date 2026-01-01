@@ -2,9 +2,6 @@
 
 pub mod validation;
 
-#[cfg(feature = "http")]
-pub use validation::sanitizer;
-
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 #[cfg(feature = "http")]
@@ -63,6 +60,9 @@ where
     }
 
     /// Create an error response
+    /// Note: The generic parameter T is required by the struct definition but is not used
+    /// for error responses (data is always None). Error responses typically use the default
+    /// T = serde_json::Value.
     pub fn error(error: ServiceError) -> Self {
         Self {
             success: false,
@@ -184,7 +184,7 @@ pub enum ApiError {
 
 impl ApiError {
     /// Create a validation error
-    pub fn validation_error(code: impl Into<String>, message: impl Into<String>) -> Self {
+    pub fn validation_error(_code: impl Into<String>, message: impl Into<String>) -> Self {
         Self::InvalidInput {
             message: message.into(),
             field: None,
@@ -219,7 +219,7 @@ impl ApiError {
                 "code": code,
                 "message": message
             }
-        })).unwrap_or_else(|_| format!(r#"{{"success":false,"error":{{"code":"{code}","message":"Internal error"}}}}"#))
+        })).unwrap_or_else(|_| format!(r#"{{"success":false,"error":{{"code":"{code}","message":"{message}"}}}}"#))
     }
 }
 
@@ -286,10 +286,9 @@ where
     fn into_response(self) -> axum::response::Response {
         let status = self.error.as_ref().map(|e| e.http_status).unwrap_or(200);
         let body = serde_json::to_vec(&self).unwrap_or_default();
-        let response = axum::response::Response::builder()
+        axum::response::Response::builder()
             .status(status)
             .body(Body::from(body))
-            .unwrap();
-        response
+            .unwrap()
     }
 }
