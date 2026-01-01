@@ -99,3 +99,42 @@ jobs:
       - name: Run benchmarks
         run: cargo bench --features http
         timeout-minutes: 30
+
+  uat-p0:
+    name: UAT P0 Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup default stable
+      - name: Run P0 tests
+        run: |
+          cargo test --features http --test http_integration
+          cargo test --features mcp --test mcp_integration
+          cargo test --features "http,mcp" --test dual_protocol_integration
+
+  uat-p1-p2:
+    name: UAT P1-P2 Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup default stable
+      - name: Run P1-P2 tests
+        run: |
+          cargo test --features http --test dual_protocol_integration
+          cargo test --features "http,streaming" --test streaming_integration
+          cargo test --features http --test config_integration
+
+  uat-p3-p4:
+    name: UAT P3-P4 Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup default stable
+      - name: Run P3-P4 tests
+        run: |
+          cargo test --features http --test error_handling_integration
+          cargo test --features http,security --test uat_integration
+          cargo bench --features "http,security" --bench axiom_bench
