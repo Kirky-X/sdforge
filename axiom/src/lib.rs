@@ -23,20 +23,8 @@ pub mod prelude {
 
 pub mod core;
 
-/// Re-export core types at crate root for convenience
-pub use crate::core::{ApiError, ApiMetadata, ServiceError, ServiceResponse};
-
-#[cfg(feature = "http")]
-pub use core::validation::validators;
-
-#[cfg(feature = "http")]
-pub use inventory;
-
 #[cfg(feature = "http")]
 pub mod http;
-
-#[cfg(feature = "http")]
-pub use axum;
 
 #[cfg(feature = "mcp")]
 pub mod mcp;

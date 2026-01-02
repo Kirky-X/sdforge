@@ -13,15 +13,15 @@ use thiserror::Error;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApiMetadata {
     /// API name
-    pub name: String,
+    pub(crate) name: String,
     /// API version
-    pub version: String,
+    pub(crate) version: String,
     /// API description
-    pub description: String,
+    pub(crate) description: String,
     /// Cache TTL in seconds (None means no caching)
-    pub cache_ttl: Option<u64>,
+    pub(crate) cache_ttl: Option<u64>,
     /// Whether this is a streaming endpoint
-    pub is_streaming: bool,
+    pub(crate) is_streaming: bool,
 }
 
 impl ApiMetadata {
@@ -41,23 +41,48 @@ impl ApiMetadata {
             is_streaming,
         }
     }
+
+    /// Get API name
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Get API version
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    /// Get API description
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    /// Get cache TTL
+    pub fn cache_ttl(&self) -> Option<u64> {
+        self.cache_ttl
+    }
+
+    /// Check if this is a streaming endpoint
+    pub fn is_streaming(&self) -> bool {
+        self.is_streaming
+    }
 }
 
 /// Unified response wrapper
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ServiceResponse<T = serde_json::Value> {
     /// Whether the request was successful
-    pub success: bool,
+    pub(crate) success: bool,
     /// Response data
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<T>,
+    pub(crate) data: Option<T>,
     /// Error details
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<ServiceError>,
+    pub(crate) error: Option<ServiceError>,
     /// Response timestamp
     #[cfg(feature = "timestamp")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub timestamp: Option<i64>,
+    pub(crate) timestamp: Option<i64>,
 }
 
 impl<T> ServiceResponse<T>
@@ -88,20 +113,41 @@ where
             timestamp: Some(chrono::Utc::now().timestamp()),
         }
     }
+
+    /// Check if the response is successful
+    pub fn is_success(&self) -> bool {
+        self.success
+    }
+
+    /// Get reference to response data
+    pub fn data(&self) -> Option<&T> {
+        self.data.as_ref()
+    }
+
+    /// Get reference to error details
+    pub fn error_ref(&self) -> Option<&ServiceError> {
+        self.error.as_ref()
+    }
+
+    /// Get timestamp if available
+    #[cfg(feature = "timestamp")]
+    pub fn timestamp(&self) -> Option<i64> {
+        self.timestamp
+    }
 }
 
 /// Service error representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceError {
     /// Error code
-    pub code: String,
+    pub(crate) code: String,
     /// Error message
-    pub message: String,
+    pub(crate) message: String,
     /// Additional error details
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<serde_json::Value>,
+    pub(crate) details: Option<serde_json::Value>,
     /// HTTP status code
-    pub http_status: u16,
+    pub(crate) http_status: u16,
 }
 
 impl ServiceError {
@@ -128,6 +174,26 @@ impl ServiceError {
             details: Some(details),
             http_status,
         }
+    }
+
+    /// Get error code
+    pub fn code(&self) -> &str {
+        &self.code
+    }
+
+    /// Get error message
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// Get error details
+    pub fn details(&self) -> Option<&serde_json::Value> {
+        self.details.as_ref()
+    }
+
+    /// Get HTTP status code
+    pub fn http_status(&self) -> u16 {
+        self.http_status
     }
 }
 

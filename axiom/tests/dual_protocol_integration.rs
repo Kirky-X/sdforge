@@ -38,14 +38,14 @@ mod dual_protocol_tests {
             id: 1,
             name: "Test User".to_string(),
         });
-        assert!(response.success);
-        assert!(response.data.is_some());
+        assert!(response.is_success());
+        assert!(response.data().is_some());
 
         // Error response
         let error = axiom::prelude::ServiceError::new("VALIDATION_ERROR", "Invalid input", 400);
         let error_response: ServiceResponse<()> = ServiceResponse::error(error);
-        assert!(!error_response.success);
-        assert!(error_response.error.is_some());
+        assert!(!error_response.is_success());
+        assert!(error_response.error_ref().is_some());
     }
 
     #[tokio::test]
@@ -78,11 +78,11 @@ mod dual_protocol_tests {
         use axiom::prelude::ServiceError;
 
         let error = ServiceError::new("ERR_CODE", "Error message", 500);
-        assert_eq!(error.http_status, 500);
+        assert_eq!(error.http_status(), 500);
 
         let error_with_details =
             ServiceError::with_details("ERR_CODE", "Error message", json!({"field": "value"}), 400);
-        assert!(error_with_details.details.is_some());
+        assert!(error_with_details.details().is_some());
     }
 
     #[tokio::test]
@@ -98,11 +98,14 @@ mod dual_protocol_tests {
             false,
         );
 
-        assert_eq!(metadata.name, "test-api");
-        assert_eq!(metadata.version, "v1");
-        assert_eq!(metadata.description, "A test API for dual protocol testing");
-        assert_eq!(metadata.cache_ttl, None);
-        assert_eq!(metadata.is_streaming, false);
+        assert_eq!(metadata.name(), "test-api");
+        assert_eq!(metadata.version(), "v1");
+        assert_eq!(
+            metadata.description(),
+            "A test API for dual protocol testing"
+        );
+        assert_eq!(metadata.cache_ttl(), None);
+        assert_eq!(metadata.is_streaming(), false);
     }
 
     #[tokio::test]
@@ -267,8 +270,8 @@ mod timestamp_feature_tests {
         let response = ServiceResponse::success("test data");
         // With timestamp feature, the response should include a timestamp
         // The actual timestamp field is only serialized when the feature is enabled
-        assert!(response.success);
-        assert!(response.data.is_some());
+        assert!(response.is_success());
+        assert!(response.data().is_some());
     }
 }
 

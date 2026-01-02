@@ -69,8 +69,8 @@ pub async fn build() -> mcp_sdk::server::Server<mcp_sdk::transport::ServerStdioT
 
         // Use the first tool's metadata for server info
         if server_name == "axiom-mcp" {
-            server_name = instance.metadata.name.to_string();
-            server_version = instance.metadata.version.to_string();
+            server_name = instance.metadata.name().to_string();
+            server_version = instance.metadata.version().to_string();
         }
     }
 
