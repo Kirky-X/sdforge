@@ -67,9 +67,9 @@ mod http_integration_tests {
         use axiom::prelude::ApiMetadata;
 
         let metadata = ApiMetadata {
-            name: "test-api",
-            version: "v1",
-            description: "Test API",
+            name: "test-api".to_string(),
+            version: "v1".to_string(),
+            description: "Test API".to_string(),
             cache_ttl: Some(300),
             is_streaming: false,
         };

@@ -333,9 +333,9 @@ mod edge_case_tests {
     #[tokio::test]
     async fn test_api_metadata_empty_strings() {
         let metadata = ApiMetadata {
-            name: "",
-            version: "",
-            description: "",
+            name: "".to_string(),
+            version: "".to_string(),
+            description: "".to_string(),
             cache_ttl: None,
             is_streaming: false,
         };
@@ -348,9 +348,9 @@ mod edge_case_tests {
     #[tokio::test]
     async fn test_api_metadata_special_characters() {
         let metadata = ApiMetadata {
-            name: "API-With-Special_Chars.123",
-            version: "v1.0.0-alpha+build.123",
-            description: "A test API with special characters: @#$%^&*()",
+            name: "API-With-Special_Chars.123".to_string(),
+            version: "v1.0.0-alpha+build.123".to_string(),
+            description: "A test API with special characters: @#$%^&*()".to_string(),
             cache_ttl: None,
             is_streaming: false,
         };
@@ -363,9 +363,9 @@ mod edge_case_tests {
     #[tokio::test]
     async fn test_api_metadata_unicode() {
         let metadata = ApiMetadata {
-            name: "中文API",
-            version: "v1",
-            description: "Тест API",
+            name: "中文API".to_string(),
+            version: "v1".to_string(),
+            description: "Тест API".to_string(),
             cache_ttl: None,
             is_streaming: false,
         };
