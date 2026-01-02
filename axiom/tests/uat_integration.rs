@@ -88,13 +88,13 @@ mod uat_tests {
     async fn test_uat_service_response_types() {
         // User creates various response types
         let success = ServiceResponse::success(json!({"id": 1, "name": "Test"}));
-        assert!(success.success);
-        assert!(success.data.is_some());
+        assert!(success.is_success());
+        assert!(success.data().is_some());
 
         let error_response: ServiceResponse<()> =
             ServiceResponse::error(ServiceError::new("ERR", "Error occurred", 500));
-        assert!(!error_response.success);
-        assert!(error_response.error.is_some());
+        assert!(!error_response.is_success());
+        assert!(error_response.error_ref().is_some());
     }
 
     /// UAT-006: CORS Configuration
@@ -121,16 +121,16 @@ mod uat_tests {
     #[tokio::test]
     async fn test_uat_api_metadata() {
         // User defines API metadata
-        let metadata = ApiMetadata {
-            name: "User Management API".to_string(),
-            version: "v1.0.0".to_string(),
-            description: "API for managing users".to_string(),
-            cache_ttl: Some(300),
-            is_streaming: false,
-        };
+        let metadata = ApiMetadata::new(
+            "User Management API".to_string(),
+            "v1.0.0".to_string(),
+            "API for managing users".to_string(),
+            Some(300),
+            false,
+        );
 
-        assert_eq!(metadata.name, "User Management API");
-        assert_eq!(metadata.version, "v1.0.0");
+        assert_eq!(metadata.name(), "User Management API");
+        assert_eq!(metadata.version(), "v1.0.0");
     }
 
     /// UAT-008: JSON Serialization
@@ -206,9 +206,9 @@ mod uat_tests {
             422,
         );
 
-        assert_eq!(error.code, "VALIDATION_FAILED");
-        assert_eq!(error.http_status, 422);
-        assert!(error.details.is_some());
+        assert_eq!(error.code(), "VALIDATION_FAILED");
+        assert_eq!(error.http_status(), 422);
+        assert!(error.details().is_some());
     }
 
     /// UAT-012: API Error Variants
@@ -289,15 +289,10 @@ mod uat_tests {
     #[tokio::test]
     async fn test_uat_empty_configurations() {
         // User tests with minimal/empty configurations
-        let empty_metadata = ApiMetadata {
-            name: "".to_string(),
-            version: "".to_string(),
-            description: "".to_string(),
-            cache_ttl: None,
-            is_streaming: false,
-        };
+        let empty_metadata =
+            ApiMetadata::new("".to_string(), "".to_string(), "".to_string(), None, false);
 
-        assert!(empty_metadata.name.is_empty());
+        assert!(empty_metadata.name().is_empty());
 
         let no_cors = CorsConfig {
             allowed_origins: vec![],
@@ -320,8 +315,8 @@ mod uat_tests {
         let json = serde_json::to_string(&original).unwrap();
         let deserialized: ServiceResponse<serde_json::Value> = serde_json::from_str(&json).unwrap();
 
-        assert!(deserialized.success);
-        assert!(deserialized.data.is_some());
+        assert!(deserialized.is_success());
+        assert!(deserialized.data().is_some());
     }
 
     /// UAT-015: Multiple Rate Limiters Independent

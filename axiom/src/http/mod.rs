@@ -15,13 +15,35 @@ pub use version_routing::{
 #[derive(Debug, Clone)]
 pub struct HttpRoute {
     /// Route path (may contain module prefix placeholders)
-    pub path: String,
+    path: String,
     /// Handler function (includes method routing)
-    pub handler: MethodRouter,
+    handler: MethodRouter,
     /// API metadata
-    pub metadata: ApiMetadata,
+    metadata: ApiMetadata,
     /// Module prefix (if any) - used for route grouping
-    pub module_prefix: Option<String>,
+    module_prefix: Option<String>,
+}
+
+impl HttpRoute {
+    /// Get route path
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    /// Get handler
+    pub fn handler(&self) -> &MethodRouter {
+        &self.handler
+    }
+
+    /// Get metadata
+    pub fn metadata(&self) -> &ApiMetadata {
+        &self.metadata
+    }
+
+    /// Get module prefix
+    pub fn module_prefix(&self) -> Option<&str> {
+        self.module_prefix.as_deref()
+    }
 }
 
 /// Route registration for runtime initialization

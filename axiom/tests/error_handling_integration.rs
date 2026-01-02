@@ -120,10 +120,10 @@ mod error_handling_tests {
     #[tokio::test]
     async fn test_service_error_creation() {
         let error = ServiceError::new("CUSTOM_CODE", "Custom message", 418);
-        assert_eq!(error.code, "CUSTOM_CODE");
-        assert_eq!(error.message, "Custom message");
-        assert_eq!(error.http_status, 418);
-        assert!(error.details.is_none());
+        assert_eq!(error.code(), "CUSTOM_CODE");
+        assert_eq!(error.message(), "Custom message");
+        assert_eq!(error.http_status(), 418);
+        assert!(error.details().is_none());
     }
 
     #[tokio::test]
@@ -135,26 +135,26 @@ mod error_handling_tests {
 
         let error = ServiceError::with_details("CONFLICT", "Resource already exists", details, 409);
 
-        assert_eq!(error.code, "CONFLICT");
-        assert_eq!(error.http_status, 409);
-        assert!(error.details.is_some());
+        assert_eq!(error.code(), "CONFLICT");
+        assert_eq!(error.http_status(), 409);
+        assert!(error.details().is_some());
     }
 
     #[tokio::test]
     async fn test_service_response_success() {
         let response = ServiceResponse::success("test data");
-        assert!(response.success);
-        assert_eq!(response.data, Some("test data"));
-        assert!(response.error.is_none());
+        assert!(response.is_success());
+        assert_eq!(response.data(), Some(&"test data"));
+        assert!(response.error_ref().is_none());
     }
 
     #[tokio::test]
     async fn test_service_response_error() {
         let error = ServiceError::new("ERR", "Error", 500);
         let response: ServiceResponse<()> = ServiceResponse::error(error);
-        assert!(!response.success);
-        assert!(response.data.is_none());
-        assert!(response.error.is_some());
+        assert!(!response.is_success());
+        assert!(response.data().is_none());
+        assert!(response.error_ref().is_some());
     }
 
     #[tokio::test]
@@ -332,46 +332,41 @@ mod edge_case_tests {
 
     #[tokio::test]
     async fn test_api_metadata_empty_strings() {
-        let metadata = ApiMetadata {
-            name: "".to_string(),
-            version: "".to_string(),
-            description: "".to_string(),
-            cache_ttl: None,
-            is_streaming: false,
-        };
+        let metadata =
+            ApiMetadata::new("".to_string(), "".to_string(), "".to_string(), None, false);
 
-        assert!(metadata.name.is_empty());
-        assert!(metadata.version.is_empty());
-        assert!(metadata.description.is_empty());
+        assert!(metadata.name().is_empty());
+        assert!(metadata.version().is_empty());
+        assert!(metadata.description().is_empty());
     }
 
     #[tokio::test]
     async fn test_api_metadata_special_characters() {
-        let metadata = ApiMetadata {
-            name: "API-With-Special_Chars.123".to_string(),
-            version: "v1.0.0-alpha+build.123".to_string(),
-            description: "A test API with special characters: @#$%^&*()".to_string(),
-            cache_ttl: None,
-            is_streaming: false,
-        };
+        let metadata = ApiMetadata::new(
+            "API-With-Special_Chars.123".to_string(),
+            "v1.0.0-alpha+build.123".to_string(),
+            "A test API with special characters: @#$%^&*()".to_string(),
+            None,
+            false,
+        );
 
-        assert!(metadata.name.contains("."));
-        assert!(metadata.version.contains("+"));
-        assert!(metadata.description.contains("@"));
+        assert!(metadata.name().contains("."));
+        assert!(metadata.version().contains("+"));
+        assert!(metadata.description().contains("@"));
     }
 
     #[tokio::test]
     async fn test_api_metadata_unicode() {
-        let metadata = ApiMetadata {
-            name: "中文API".to_string(),
-            version: "v1".to_string(),
-            description: "Тест API".to_string(),
-            cache_ttl: None,
-            is_streaming: false,
-        };
+        let metadata = ApiMetadata::new(
+            "中文API".to_string(),
+            "v1".to_string(),
+            "Тест API".to_string(),
+            None,
+            false,
+        );
 
-        assert!(metadata.name.contains("中"));
-        assert!(metadata.description.contains("Т"));
+        assert!(metadata.name().contains("中"));
+        assert!(metadata.description().contains("Т"));
     }
 
     #[tokio::test]
@@ -437,8 +432,8 @@ mod serialization_tests {
         let json = serde_json::to_string(&original).unwrap();
         let deserialized: ServiceResponse<serde_json::Value> = serde_json::from_str(&json).unwrap();
 
-        assert!(deserialized.success);
-        assert!(deserialized.data.is_some());
+        assert!(deserialized.is_success());
+        assert!(deserialized.data().is_some());
     }
 
     #[tokio::test]
@@ -448,15 +443,15 @@ mod serialization_tests {
         let json = serde_json::to_string(&original).unwrap();
         let deserialized: ServiceError = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(deserialized.code, "CODE");
-        assert_eq!(deserialized.message, "message");
-        assert_eq!(deserialized.http_status, 400);
+        assert_eq!(deserialized.code(), "CODE");
+        assert_eq!(deserialized.message(), "message");
+        assert_eq!(deserialized.http_status(), 400);
     }
 
     #[tokio::test]
     async fn test_error_with_null_details() {
         let error = ServiceError::new("CODE", "message", 500);
-        assert!(error.details.is_none());
+        assert!(error.details().is_none());
 
         let json = serde_json::to_string(&error).unwrap();
         // Verify the JSON contains expected fields

@@ -66,17 +66,17 @@ mod http_integration_tests {
     async fn test_api_metadata() {
         use axiom::prelude::ApiMetadata;
 
-        let metadata = ApiMetadata {
-            name: "test-api".to_string(),
-            version: "v1".to_string(),
-            description: "Test API".to_string(),
-            cache_ttl: Some(300),
-            is_streaming: false,
-        };
+        let metadata = ApiMetadata::new(
+            "test-api".to_string(),
+            "v1".to_string(),
+            "Test API".to_string(),
+            Some(300),
+            false,
+        );
 
-        assert_eq!(metadata.name, "test-api");
-        assert_eq!(metadata.version, "v1");
-        assert_eq!(metadata.description, "Test API");
+        assert_eq!(metadata.name(), "test-api");
+        assert_eq!(metadata.version(), "v1");
+        assert_eq!(metadata.description(), "Test API");
     }
 
     #[tokio::test]
@@ -155,13 +155,13 @@ mod http_integration_tests {
         use axiom::prelude::ServiceResponse;
 
         let response = ServiceResponse::success("test data");
-        assert!(response.success);
-        assert_eq!(response.data, Some("test data"));
+        assert!(response.is_success());
+        assert_eq!(response.data(), Some(&"test data"));
 
         let error = axiom::prelude::ServiceError::new("ERROR", "error message", 400);
         let response: ServiceResponse<()> = ServiceResponse::error(error);
-        assert!(!response.success);
-        assert!(response.error.is_some());
+        assert!(!response.is_success());
+        assert!(response.error_ref().is_some());
     }
 
     #[tokio::test]
@@ -169,8 +169,8 @@ mod http_integration_tests {
         use axiom::prelude::ServiceResponse;
 
         let response = ServiceResponse::success("data");
-        assert!(response.success);
-        assert_eq!(response.data, Some("data"));
+        assert!(response.is_success());
+        assert_eq!(response.data(), Some(&"data"));
     }
 
     #[tokio::test]
@@ -355,9 +355,9 @@ mod http_integration_tests {
         use axiom::prelude::ServiceError;
 
         let error = ServiceError::new("ERR_CODE", "Error message", 500);
-        assert_eq!(error.code, "ERR_CODE");
-        assert_eq!(error.message, "Error message");
-        assert_eq!(error.http_status, 500);
+        assert_eq!(error.code(), "ERR_CODE");
+        assert_eq!(error.message(), "Error message");
+        assert_eq!(error.http_status(), 500);
     }
 
     #[tokio::test]
@@ -367,8 +367,8 @@ mod http_integration_tests {
         let error =
             ServiceError::with_details("ERR_CODE", "Error message", json!({"field": "value"}), 400);
 
-        assert_eq!(error.code, "ERR_CODE");
-        assert!(error.details.is_some());
+        assert_eq!(error.code(), "ERR_CODE");
+        assert!(error.details().is_some());
     }
 
     #[tokio::test]
