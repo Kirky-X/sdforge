@@ -433,6 +433,19 @@ pub fn build_cors_layer(config: &CorsConfig) -> Result<tower_http::cors::CorsLay
     use axum::http::{HeaderName, Method};
     use tower_http::cors::CorsLayer;
 
+    // Validate: wildcard origin ("*") is incompatible with allow_credentials(true)
+    // This is a browser security requirement - credentials cannot be sent with wildcard origins
+    if config.allow_credentials {
+        let has_wildcard = config.allowed_origins.iter().any(|origin| origin == "*");
+        if has_wildcard {
+            return Err(ConfigError::ValidationError(
+                "CORS configuration error: wildcard origin \"*\" cannot be used with allow_credentials(true). \
+                Either remove the wildcard origin, set allow_credentials to false, or specify specific origins."
+                    .to_string(),
+            ));
+        }
+    }
+
     // Parse and set allowed origins
     let origins: Result<Vec<_>, _> = config
         .allowed_origins

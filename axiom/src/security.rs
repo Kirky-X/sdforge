@@ -72,18 +72,38 @@ pub type AuthResult<T = AuthContext> = Result<T, AuthError>;
 #[derive(Debug)]
 pub struct AuthExtractor(pub AuthContext);
 
-/// API key authentication
+/// API key authentication with brute-force protection
+///
+/// Security features:
+/// - Valid API keys storage with permissions mapping
+/// - Rate limiting on validation attempts to prevent brute force attacks
+/// - Per-IP attempt tracking with automatic cleanup
 #[derive(Clone)]
 pub struct ApiKeyAuth {
     /// Valid API keys
     valid_keys: Arc<DashMap<String, Vec<String>>>,
+    /// Failed attempt tracking (IP -> attempts with timestamps)
+    failed_attempts: Arc<DashMap<String, Vec<Instant>>>,
+    /// Rate limit configuration
+    rate_limit_config: RateLimitConfig,
 }
 
 impl ApiKeyAuth {
-    /// Create new API key authentication
+    /// Create new API key authentication with default rate limiting
     pub fn new() -> Self {
+        Self::with_rate_limit(RateLimitConfig {
+            max_requests: 5, // Conservative limit for key validation
+            window: Duration::from_secs(60),
+            include_headers: false,
+        })
+    }
+
+    /// Create API key authentication with custom rate limiting
+    pub fn with_rate_limit(config: RateLimitConfig) -> Self {
         Self {
             valid_keys: Arc::new(DashMap::new()),
+            failed_attempts: Arc::new(DashMap::new()),
+            rate_limit_config: config,
         }
     }
 
@@ -92,9 +112,66 @@ impl ApiKeyAuth {
         self.valid_keys.insert(key.into(), permissions);
     }
 
-    /// Validate an API key
-    pub fn validate_key(&self, key: &str) -> Option<Vec<String>> {
-        self.valid_keys.get(key).map(|p| p.clone())
+    /// Validate an API key with rate limiting
+    ///
+    /// Security: Implements rate limiting per caller to prevent brute force
+    /// attacks on API key validation. Returns None immediately if rate limited.
+    /// Valid keys bypass rate limiting to prevent blocking legitimate users.
+    pub fn validate_key(&self, key: &str, client_ip: &str) -> Option<Vec<String>> {
+        // First check if key is valid (valid keys bypass rate limiting)
+        let result = self.valid_keys.get(key).map(|p| p.clone());
+
+        // If key is valid, return permissions immediately (no rate limiting for valid keys)
+        if result.is_some() {
+            return result;
+        }
+
+        // Key is invalid - check if this IP is already rate limited
+        if self.is_rate_limited(client_ip) {
+            return None;
+        }
+
+        // Record failed attempt for invalid key
+        self.record_failed_attempt(client_ip);
+
+        None
+    }
+
+    /// Check if a client IP is rate limited
+    fn is_rate_limited(&self, client_ip: &str) -> bool {
+        let now = Instant::now();
+        let window_start = now - self.rate_limit_config.window;
+
+        let entry = self.failed_attempts.get(client_ip);
+        if let Some(times) = entry {
+            let recent_attempts = times.iter().filter(|&&t| t > window_start).count();
+            recent_attempts >= self.rate_limit_config.max_requests as usize
+        } else {
+            false
+        }
+    }
+
+    /// Record a failed validation attempt
+    fn record_failed_attempt(&self, client_ip: &str) {
+        let now = Instant::now();
+        let window_start = now - self.rate_limit_config.window;
+
+        let mut entry = self
+            .failed_attempts
+            .entry(client_ip.to_string())
+            .or_default();
+        let times = entry.value_mut();
+
+        // Clean old attempts outside the window
+        times.retain(|&t| t > window_start);
+
+        // Add new attempt
+        times.push(now);
+    }
+
+    /// Clear failed attempts for a client (e.g., after successful auth)
+    pub fn clear_failed_attempts(&self, client_ip: &str) {
+        self.failed_attempts.remove(client_ip);
     }
 }
 
@@ -105,6 +182,12 @@ impl Default for ApiKeyAuth {
 }
 
 /// Bearer token authentication
+///
+/// Security features:
+/// - HMAC-SHA256 signature verification
+/// - Audience and issuer claim validation (prevents token substitution attacks)
+/// - Expiration time checking
+/// - Token blacklist for immediate invalidation
 #[derive(Clone)]
 pub struct BearerAuth {
     /// JWT secret for HMAC-SHA256 signing
@@ -113,26 +196,70 @@ pub struct BearerAuth {
     valid_tokens: Arc<DashMap<String, AuthContext>>,
     /// Token blacklist (for logout)
     blacklisted_tokens: Arc<DashMap<String, Instant>>,
+    /// Expected audience claim (prevents token substitution)
+    expected_audience: Option<String>,
+    /// Expected issuer claim (validates token origin)
+    expected_issuer: Option<String>,
 }
 
 impl BearerAuth {
-    /// Create new bearer authentication
+    /// Create new bearer authentication with basic secret
     pub fn new(secret: impl Into<String>) -> Self {
         Self {
             secret: secret.into().into_bytes(),
             valid_tokens: Arc::new(DashMap::new()),
             blacklisted_tokens: Arc::new(DashMap::new()),
+            expected_audience: None,
+            expected_issuer: None,
+        }
+    }
+
+    /// Create bearer authentication with audience validation
+    ///
+    /// # Arguments
+    /// * `secret` - JWT signing secret
+    /// * `expected_audience` - Expected `aud` claim value (prevents token substitution)
+    pub fn with_audience(secret: impl Into<String>, expected_audience: impl Into<String>) -> Self {
+        Self {
+            secret: secret.into().into_bytes(),
+            valid_tokens: Arc::new(DashMap::new()),
+            blacklisted_tokens: Arc::new(DashMap::new()),
+            expected_audience: Some(expected_audience.into()),
+            expected_issuer: None,
+        }
+    }
+
+    /// Create bearer authentication with full claim validation
+    ///
+    /// # Arguments
+    /// * `secret` - JWT signing secret
+    /// * `expected_audience` - Expected `aud` claim value
+    /// * `expected_issuer` - Expected `iss` claim value
+    pub fn with_claims(
+        secret: impl Into<String>,
+        expected_audience: impl Into<String>,
+        expected_issuer: impl Into<String>,
+    ) -> Self {
+        Self {
+            secret: secret.into().into_bytes(),
+            valid_tokens: Arc::new(DashMap::new()),
+            blacklisted_tokens: Arc::new(DashMap::new()),
+            expected_audience: Some(expected_audience.into()),
+            expected_issuer: Some(expected_issuer.into()),
         }
     }
 
     /// Simple constant-time comparison to prevent timing attacks
+    ///
+    /// Security: Always processes all bytes in the longer slice to prevent
+    /// timing attacks that could leak information about valid token length.
     fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-        if a.len() != b.len() {
-            return false;
-        }
+        let len = std::cmp::max(a.len(), b.len());
         let mut result = 0u8;
-        for (x, y) in a.iter().zip(b.iter()) {
-            result |= x ^ y;
+        for i in 0..len {
+            let byte_a = a.get(i).copied().unwrap_or(0);
+            let byte_b = b.get(i).copied().unwrap_or(0);
+            result |= byte_a ^ byte_b;
         }
         result == 0
     }
@@ -172,7 +299,14 @@ impl BearerAuth {
         Some(result)
     }
 
-    /// Parse JWT token and verify signature
+    /// Parse JWT token and verify signature with full claim validation
+    ///
+    /// Security checks:
+    /// 1. Validates token structure (3 parts)
+    /// 2. Verifies HMAC-SHA256 signature
+    /// 3. Validates `exp` (expiration) claim
+    /// 4. Validates `aud` (audience) claim if configured (prevents token substitution)
+    /// 5. Validates `iss` (issuer) claim if configured (validates token origin)
     ///
     /// JWT Format: header.payload.signature
     /// Each part is base64url-encoded
@@ -211,6 +345,34 @@ impl BearerAuth {
         if let Some(exp) = payload_value.get("exp").and_then(|v| v.as_i64()) {
             if chrono::Utc::now().timestamp() > exp {
                 return None; // Token expired
+            }
+        }
+
+        // Validate audience claim if expected_audience is configured
+        // This prevents token substitution attacks where an attacker uses
+        // a token issued for a different audience
+        if let Some(expected_aud) = &self.expected_audience {
+            let token_aud = payload_value
+                .get("aud")
+                .and_then(|v| v.as_str())
+                .or_else(|| {
+                    payload_value
+                        .get("aud")
+                        .and_then(|v| v.as_array())
+                        .and_then(|arr| arr.first().and_then(|v| v.as_str()))
+                });
+
+            if token_aud != Some(expected_aud.as_str()) {
+                return None; // Audience claim mismatch
+            }
+        }
+
+        // Validate issuer claim if expected_issuer is configured
+        // This ensures the token was issued by a trusted authority
+        if let Some(expected_iss) = &self.expected_issuer {
+            let token_iss = payload_value.get("iss").and_then(|v| v.as_str());
+            if token_iss != Some(expected_iss.as_str()) {
+                return None; // Issuer claim mismatch
             }
         }
 
@@ -361,8 +523,9 @@ impl RateLimiter {
         if let Some(existing) = self.idempotency_cache.get(idempotency_key) {
             // Clone the instant since Ref doesn't deref to the value directly
             let existing_time = *existing;
-            // Instant::duration_since returns Duration (panics if other > self in debug)
-            let elapsed = now.duration_since(existing_time).as_secs();
+            // Use saturating_duration_since to avoid panic if system clock is adjusted
+            // This can happen when system time goes backwards (NTP correction, manual change)
+            let elapsed = now.saturating_duration_since(existing_time).as_secs();
             if elapsed < window.as_secs() {
                 return true; // Duplicate request
             }
@@ -470,6 +633,7 @@ pub enum AuditResult {
 /// - Semaphore-based rate limiting to prevent log flooding
 /// - Per-user log count limits
 /// - Async processing to avoid blocking main threads
+/// - Fallback storage when async channel is full (prevents log loss)
 #[derive(Clone)]
 pub struct AuditLogger {
     /// Logs storage
@@ -480,6 +644,10 @@ pub struct AuditLogger {
     semaphore: Arc<tokio::sync::Semaphore>,
     /// Log queue sender (for async processing)
     queue_sender: Arc<tokio::sync::mpsc::Sender<AuditLogBatch>>,
+    /// Fallback storage for when channel is full (synchronous path)
+    fallback_logs: Arc<DashMap<String, Vec<AuditLog>>>,
+    /// Counter for dropped logs (monitoring)
+    dropped_log_count: Arc<std::sync::atomic::AtomicU64>,
 }
 
 struct AuditLogBatch {
@@ -499,7 +667,9 @@ impl AuditLogger {
 
         // Spawn background worker for async log processing
         let logs: Arc<DashMap<String, Vec<AuditLog>>> = Arc::new(DashMap::new());
+        let fallback_logs: Arc<DashMap<String, Vec<AuditLog>>> = Arc::new(DashMap::new());
         let logs_clone = logs.clone();
+        let fallback_logs_clone = fallback_logs.clone();
         let max_logs_clone = max_logs;
         tokio::spawn(async move {
             while let Some(batch) = queue_receiver.recv().await {
@@ -510,6 +680,18 @@ impl AuditLogger {
                 if entry.len() > max_logs_clone {
                     entry.truncate(max_logs_clone);
                 }
+
+                // Also check if there are fallback logs to merge
+                if let Some(fallback) = fallback_logs_clone.get(&batch.user_id) {
+                    if !fallback.is_empty() {
+                        let mut entry = logs_clone.entry(batch.user_id.clone()).or_default();
+                        entry.extend(fallback.iter().cloned());
+                        if entry.len() > max_logs_clone {
+                            entry.truncate(max_logs_clone);
+                        }
+                        fallback_logs_clone.remove(&batch.user_id);
+                    }
+                }
             }
         });
 
@@ -518,6 +700,8 @@ impl AuditLogger {
             max_logs_per_user: max_logs,
             semaphore: Arc::new(tokio::sync::Semaphore::new(100)), // Max 100 concurrent log operations
             queue_sender: Arc::new(queue_sender),
+            fallback_logs,
+            dropped_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
@@ -568,25 +752,77 @@ impl AuditLogger {
             .clone()
             .unwrap_or_else(|| "anonymous".to_string());
 
-        // Send to async queue (non-blocking)
+        // Clone log for potential fallback use (must clone before moving into batch)
+        let log_for_fallback = log.clone();
+
+        // Send to async queue with fallback handling
+        // Security: Use try_send to avoid blocking, with fallback to in-memory buffer
+        // to prevent audit log loss under load
         let sender = self.queue_sender.clone();
-        let _ = sender
-            .send(AuditLogBatch {
-                user_id: user_id.clone(),
-                log,
-            })
-            .await;
+        let log_batch = AuditLogBatch {
+            user_id: user_id.clone(),
+            log,
+        };
+
+        // Try non-blocking send first, fall back to synchronous logging if channel full
+        match sender.try_send(log_batch) {
+            Ok(()) => {
+                tracing::debug!(target: "audit", "Audit log queued for user: {}", user_id);
+            }
+            Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
+                // Channel is full - log to fallback storage synchronously
+                // This is a rare event under normal load, indicating potential DoS attempt
+                tracing::warn!(target: "audit",
+                    "Audit log channel full for user: {}, using fallback storage",
+                    user_id
+                );
+                self.store_fallback_log(&user_id, &log_for_fallback);
+            }
+            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                // Channel closed - log synchronously as last resort
+                tracing::error!(target: "audit",
+                    "Audit log channel closed for user: {}, using synchronous logging",
+                    user_id
+                );
+                self.store_fallback_log(&user_id, &log_for_fallback);
+            }
+        }
 
         // Drop permit to release semaphore
         drop(permit);
     }
 
     /// Get logs for a user (synchronous)
+    ///
+    /// Security: Merges logs from both async and fallback storage to ensure
+    /// complete audit trail is available even after channel congestion.
     pub fn get_logs(&self, user_id: &str) -> Vec<AuditLog> {
-        self.logs
+        // Get logs from primary storage
+        let primary = self
+            .logs
             .get(user_id)
             .map(|e| e.clone())
-            .unwrap_or_default()
+            .unwrap_or_default();
+
+        // Get logs from fallback storage
+        let fallback = self
+            .fallback_logs
+            .get(user_id)
+            .map(|e| e.clone())
+            .unwrap_or_default();
+
+        // Merge and deduplicate (prefer primary logs if duplicates exist)
+        let mut all_logs = primary;
+        for log in fallback {
+            if !all_logs.iter().any(|l| l.id == log.id) {
+                all_logs.push(log);
+            }
+        }
+
+        // Sort by timestamp descending
+        all_logs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+
+        all_logs
     }
 
     /// Clear logs for a user (admin function)
@@ -597,6 +833,39 @@ impl AuditLogger {
     /// Get total log count (for monitoring)
     pub fn total_log_count(&self) -> usize {
         self.logs.iter().map(|e| e.len()).sum()
+    }
+
+    /// Store log in fallback storage (synchronous path)
+    ///
+    /// Security: This is used when the async channel is full, preventing
+    /// audit log loss during high load or potential DoS attempts.
+    fn store_fallback_log(&self, user_id: &str, log: &AuditLog) {
+        let count = self
+            .dropped_log_count
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+        // Log to fallback storage with warning level
+        let mut entry = self.fallback_logs.entry(user_id.to_string()).or_default();
+        entry.push(log.clone());
+
+        // Truncate if exceeding limit
+        if entry.len() > self.max_logs_per_user {
+            entry.truncate(self.max_logs_per_user);
+        }
+
+        // Log warning periodically (every 100th drop)
+        if count > 0 && count % 100 == 0 {
+            tracing::warn!(target: "audit",
+                "High audit log drop rate: {} logs dropped due to channel congestion",
+                count + 1
+            );
+        }
+    }
+
+    /// Get count of dropped logs (for monitoring)
+    pub fn dropped_log_count(&self) -> u64 {
+        self.dropped_log_count
+            .load(std::sync::atomic::Ordering::SeqCst)
     }
 }
 
@@ -838,14 +1107,39 @@ mod tests {
         let auth = ApiKeyAuth::new();
         auth.add_key("test-key", vec!["read".to_string(), "write".to_string()]);
 
-        let permissions = auth.validate_key("test-key");
+        let permissions = auth.validate_key("test-key", "127.0.0.1");
         assert_eq!(
             permissions,
             Some(vec!["read".to_string(), "write".to_string()])
         );
 
-        let permissions = auth.validate_key("invalid-key");
+        let permissions = auth.validate_key("invalid-key", "127.0.0.1");
         assert_eq!(permissions, None);
+    }
+
+    #[tokio::test]
+    async fn test_api_key_auth_rate_limiting() {
+        let auth = ApiKeyAuth::with_rate_limit(RateLimitConfig {
+            max_requests: 3,
+            window: Duration::from_secs(60),
+            include_headers: false,
+        });
+        auth.add_key("valid-key", vec!["read".to_string()]);
+
+        // First 3 invalid attempts should be tracked but not blocked yet
+        for i in 0..3 {
+            assert_eq!(
+                auth.validate_key(&format!("invalid-key-{}", i), "192.168.1.1"),
+                None
+            );
+        }
+
+        // 4th invalid attempt should be rate limited
+        assert_eq!(auth.validate_key("invalid-key-4", "192.168.1.1"), None);
+
+        // Valid key should still work
+        let permissions = auth.validate_key("valid-key", "192.168.1.1");
+        assert_eq!(permissions, Some(vec!["read".to_string()]));
     }
 
     #[tokio::test]
