@@ -125,6 +125,8 @@ mod uat_tests {
             name: "User Management API",
             version: "v1.0.0",
             description: "API for managing users",
+            cache_ttl: Some(300),
+            is_streaming: false,
         };
 
         assert_eq!(metadata.name, "User Management API");
@@ -291,6 +293,8 @@ mod uat_tests {
             name: "",
             version: "",
             description: "",
+            cache_ttl: None,
+            is_streaming: false,
         };
 
         assert!(empty_metadata.name.is_empty());

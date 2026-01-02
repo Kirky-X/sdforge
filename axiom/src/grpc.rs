@@ -65,10 +65,15 @@ impl AxiomService for AxiomGrpcService {
 }
 
 #[cfg(feature = "grpc")]
+use crate::core::ApiMetadata;
+
+#[cfg(feature = "grpc")]
 /// gRPC route registration
 pub struct GrpcRoute {
     /// The gRPC service name
     pub service_name: String,
+    /// API metadata
+    pub metadata: ApiMetadata,
 }
 
 #[cfg(feature = "grpc")]

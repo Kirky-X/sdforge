@@ -90,11 +90,19 @@ mod dual_protocol_tests {
         // API metadata should be protocol-agnostic
         use axiom::prelude::ApiMetadata;
 
-        let metadata = ApiMetadata::new("test-api", "v1", "A test API for dual protocol testing");
+        let metadata = ApiMetadata::new(
+            "test-api",
+            "v1",
+            "A test API for dual protocol testing",
+            None,
+            false,
+        );
 
         assert_eq!(metadata.name, "test-api");
         assert_eq!(metadata.version, "v1");
         assert_eq!(metadata.description, "A test API for dual protocol testing");
+        assert_eq!(metadata.cache_ttl, None);
+        assert_eq!(metadata.is_streaming, false);
     }
 
     #[tokio::test]
@@ -313,7 +321,11 @@ mod security_feature_tests {
             metadata: Default::default(),
         };
 
-        logger.log(&context, "test_action", "/api/test", true, None);
+        logger
+            .log(&context, "test_action", "/api/test", true, None)
+            .await;
+        // Give the background worker time to process the log
+        tokio::task::yield_now().await;
         let logs = logger.get_logs("user-1");
         assert!(!logs.is_empty());
     }

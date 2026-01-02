@@ -18,15 +18,27 @@ pub struct ApiMetadata {
     pub version: &'static str,
     /// API description
     pub description: &'static str,
+    /// Cache TTL in seconds (None means no caching)
+    pub cache_ttl: Option<u64>,
+    /// Whether this is a streaming endpoint
+    pub is_streaming: bool,
 }
 
 impl ApiMetadata {
     /// Create new API metadata
-    pub fn new(name: &'static str, version: &'static str, description: &'static str) -> Self {
+    pub fn new(
+        name: &'static str,
+        version: &'static str,
+        description: &'static str,
+        cache_ttl: Option<u64>,
+        is_streaming: bool,
+    ) -> Self {
         Self {
             name,
             version,
             description,
+            cache_ttl,
+            is_streaming,
         }
     }
 }
@@ -278,14 +290,14 @@ impl From<ApiError> for ServiceError {
                 value,
             } => ServiceError::with_details(
                 "INVALID_INPUT",
-                message,
+                message.clone(),
                 serde_json::json!({ "field": field, "value": value }),
                 400,
             ),
             ApiError::AuthenticationFailed { reason } => ServiceError::with_details(
                 "AUTHENTICATION_FAILED",
-                format!("Authentication failed: {}", reason),
-                serde_json::json!({ "reason": reason }),
+                "Authentication failed".to_string(), // Don't expose reason to user
+                serde_json::json!({ "reason": "authentication_failed" }),
                 401,
             ),
             ApiError::AccessDenied {
@@ -293,8 +305,8 @@ impl From<ApiError> for ServiceError {
                 user_id,
             } => ServiceError::with_details(
                 "ACCESS_DENIED",
-                format!("Access denied: {}", permission),
-                serde_json::json!({ "permission": permission, "user_id": user_id }),
+                "Access denied".to_string(), // Don't expose permission details
+                serde_json::json!({ "permission": "denied", "user_id": user_id }),
                 403,
             ),
             ApiError::RateLimitExceeded {
@@ -306,9 +318,12 @@ impl From<ApiError> for ServiceError {
                 serde_json::json!({ "limit": limit, "window_seconds": window_seconds }),
                 429,
             ),
-            ApiError::Internal { message, error_id } => ServiceError::with_details(
+            ApiError::Internal {
+                message: _,
+                error_id,
+            } => ServiceError::with_details(
                 "INTERNAL_ERROR",
-                message,
+                "An internal error occurred".to_string(), // Sanitized - don't expose internal message
                 serde_json::json!({ "error_id": error_id, "timestamp": chrono::Utc::now().timestamp() }),
                 500,
             ),

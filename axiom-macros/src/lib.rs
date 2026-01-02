@@ -377,8 +377,8 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         path,
         method,
         tool_name,
-        _stream,
-        _cache_ttl,
+        stream,
+        cache_ttl,
         ws_path,
         grpc_method,
     ) = args;
@@ -449,39 +449,105 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         .collect();
 
     // Build HTTP path with version
-    let http_path = format!("/api/{}{}", version, path.as_ref().unwrap_or(&"".to_string()));
+    let http_path = format!(
+        "/api/{}{}",
+        version,
+        path.as_ref().unwrap_or(&"".to_string())
+    );
 
     // Build HTTP method
     let http_method = method.as_ref().unwrap_or(&"GET".to_string()).to_uppercase();
 
     // Generate HTTP code - use cfg on individual items, not on a block
+    // Check if this is a streaming endpoint
+    let is_streaming = stream.unwrap_or(false);
+
     let http_code = if path.is_some() && method.is_some() {
-        quote! {
-            #[cfg(feature = "http")]
-            use axum::{routing::MethodRouter, response::{IntoResponse, Response}};
-            #[cfg(feature = "http")]
-            use axum::http::header::{CONTENT_TYPE, CACHE_CONTROL};
-            #[cfg(feature = "http")]
-            use axiom::core::ApiMetadata;
+        if is_streaming {
+            quote! {
+                #[cfg(feature = "http")]
+                use axum::{routing::MethodRouter, response::IntoResponse};
+                #[cfg(feature = "http")]
+                use axum::http::header::CONTENT_TYPE;
+                #[cfg(feature = "http")]
+                use axiom::core::ApiMetadata;
 
-            #[cfg(feature = "http")]
-            #fn_vis async fn __axiom_http_handler(#(#param_patterns),*) -> impl IntoResponse {
-                #(#param_unwraps)*
-                super::#fn_name(#(#param_names),*).await.into_response()
+                #[cfg(feature = "http")]
+                #fn_vis async fn __axiom_http_handler(#(#param_patterns),*) -> impl IntoResponse {
+                    #(#param_unwraps)*
+                    let result = super::#fn_name(#(#param_names),*).await;
+
+                    match result {
+                        Ok(stream) => {
+                            use futures_util::StreamExt;
+                            let mut stream = tokio_stream::iter(vec![]);
+                            let body = axum::body::Body::from_streaming_bytes(
+                                tokio_stream::iter(vec![])
+                            );
+                            (
+                                [(CONTENT_TYPE, "text/event-stream")],
+                                body
+                            ).into_response()
+                        }
+                        Err(e) => e.into_response(),
+                    }
+                }
+
+                #[cfg(feature = "http")]
+                axiom::inventory::submit!(axiom::http::HttpRoute {
+                    path: #http_path.to_string(),
+                    method: axum::http::Method::#http_method,
+                    handler: MethodRouter::new().#http_method(__axiom_http_handler),
+                    metadata: axiom::core::ApiMetadata {
+                        name: #name,
+                        version: #version,
+                        description: #description.as_ref().unwrap_or(&#name),
+                        cache_ttl: #cache_ttl,
+                        is_streaming: true,
+                    },
+                    module_prefix: Some("".to_string()),
+                });
             }
+        } else {
+            quote! {
+                #[cfg(feature = "http")]
+                use axum::{routing::MethodRouter, response::{IntoResponse, Response}};
+                #[cfg(feature = "http")]
+                use axum::http::header::{CONTENT_TYPE, CACHE_CONTROL};
+                #[cfg(feature = "http")]
+                use axiom::core::ApiMetadata;
 
-            #[cfg(feature = "http")]
-            axiom::inventory::submit!(axiom::http::HttpRoute {
-                path: #http_path.to_string(),
-                method: axum::http::Method::#http_method,
-                handler: MethodRouter::new().#http_method(__axiom_http_handler),
-                metadata: axiom::core::ApiMetadata {
-                    name: #name,
-                    version: #version,
-                    description: #description.as_ref().unwrap_or(&#name),
-                },
-                module_prefix: Some("".to_string()),
-            });
+                #[cfg(feature = "http")]
+                #fn_vis async fn __axiom_http_handler(#(#param_patterns),*) -> impl IntoResponse {
+                    #(#param_unwraps)*
+                    let result = super::#fn_name(#(#param_names),*).await;
+
+                    // Apply cache headers if cache_ttl is specified
+                    let response: Response = result.into_response();
+                    #[cfg(feature = "http")]
+                    if let Some(ttl) = #cache_ttl {
+                        use axum::response::Append;
+                        let cache_header = format!("public, max-age={}", ttl);
+                        return AppendHeaders([(CACHE_CONTROL, cache_header)]).into_response();
+                    }
+                    response
+                }
+
+                #[cfg(feature = "http")]
+                axiom::inventory::submit!(axiom::http::HttpRoute {
+                    path: #http_path.to_string(),
+                    method: axum::http::Method::#http_method,
+                    handler: MethodRouter::new().#http_method(__axiom_http_handler),
+                    metadata: axiom::core::ApiMetadata {
+                        name: #name,
+                        version: #version,
+                        description: #description.as_ref().unwrap_or(&#name),
+                        cache_ttl: #cache_ttl,
+                        is_streaming: false,
+                    },
+                    module_prefix: Some("".to_string()),
+                });
+            }
         }
     } else {
         quote! {}
@@ -602,6 +668,8 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                     name: #name,
                     version: #version,
                     description: #description.clone().unwrap_or_else(|| #name.clone()),
+                    cache_ttl: #cache_ttl,
+                    is_streaming: false,
                 },
             });
         }
@@ -634,6 +702,13 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             #[cfg(feature = "grpc")]
             axiom::inventory::submit!(GrpcRoute {
                 service_name: #name.to_string(),
+                metadata: axiom::core::ApiMetadata {
+                    name: #name,
+                    version: #version,
+                    description: #description.clone().unwrap_or_else(|| #name.clone()),
+                    cache_ttl: #cache_ttl,
+                    is_streaming: false,
+                },
             });
         }
     } else {
@@ -646,7 +721,8 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         #mcp_code
         #ws_code
         #grpc_code
-    }.into()
+    }
+    .into()
 }
 
 #[proc_macro_attribute]
