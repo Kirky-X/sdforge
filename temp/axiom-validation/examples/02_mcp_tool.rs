@@ -199,13 +199,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  6. analyze_text - 文本分析");
     println!();
     println!("📝 工具调用示例 (JSON 格式):");
-    println!("  {");
+    println!("  {{");
     println!("    \"tool\": \"add\",");
-    println!("    \"arguments\": {");
+    println!("    \"arguments\": {{");
     println!("      \"a\": 10,");
     println!("      \"b\": 5");
-    println!("    }");
-    println!("  }");
+    println!("    }}");
+    println!("  }}");
     println!();
     println!("按 Ctrl+C 停止服务");
     println!("========================================");

@@ -6,10 +6,13 @@ publish = false
 
 [workspace]
 
+[features]
+mcp = ["axiom/mcp"]
+
 [dependencies]
-# Axiom framework - 使用本地 git 仓库
-axiom = { git = "file:///home/mirror/rust", features = ["full"] }
-axiom-macros = { git = "file:///home/mirror/rust" }
+# 使用 path 依赖（当前可用方案）
+axiom = { path = "../../axiom", features = ["full"] }
+axiom-macros = { path = "../../axiom-macros" }
 
 # 其他依赖从 crates.io
 tokio = { version = "1.41", features = ["full"] }

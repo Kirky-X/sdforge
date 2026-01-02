@@ -24,7 +24,7 @@ struct StreamData {
     stream = true
 )]
 async fn stream_events() -> Result<axiom::streaming::StreamResponse<StreamData>, ApiError> {
-    let (tx, rx) = create_stream_channel(32);
+    let (tx, response) = create_stream_channel(32);
 
     tokio::spawn(async move {
         for i in 1..=10 {
@@ -39,7 +39,7 @@ async fn stream_events() -> Result<axiom::streaming::StreamResponse<StreamData>,
         }
     });
 
-    Ok(axiom::streaming::StreamResponse::new(rx))
+    Ok(response)
 }
 
 #[tokio::main]
@@ -68,8 +68,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     let router = axiom::http::build();
-    let addr: SocketAddr = "0.0.0.0:8080".parse()?;
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let addr: SocketAddr = "0.0.0.0:8080".parse::<SocketAddr>()?;
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     axum::serve(listener, router).await?;
 
