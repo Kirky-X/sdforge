@@ -1,35 +1,35 @@
 <div align="center">
 
-# 🏗️ Architecture Design
+# 🏗️ 架构设计
 
-### Technical Architecture & Design Decisions
+### Axiom 多协议 SDK 框架技术架构与设计决策
 
-[🏠 Home](../README.md) • [📖 User Guide](USER_GUIDE.md) • [🔧 API Docs](https://docs.rs/project-name)
+[🏠 首页](../README.md) • [📖 用户指南](USER_GUIDE.md) • [📚 API 参考](API_REFERENCE.md)
 
 ---
 
 </div>
 
-## 📋 Table of Contents
+## 📋 目录
 
-- [Overview](#overview)
-- [System Architecture](#system-architecture)
-- [Component Design](#component-design)
-- [Data Flow](#data-flow)
-- [Design Decisions](#design-decisions)
-- [Technology Stack](#technology-stack)
-- [Performance Considerations](#performance-considerations)
-- [Security Architecture](#security-architecture)
-- [Scalability](#scalability)
-- [Future Improvements](#future-improvements)
+- [概述](#概述)
+- [系统架构](#系统架构)
+- [组件设计](#组件设计)
+- [数据流](#数据流)
+- [设计决策](#设计决策)
+- [技术栈](#技术栈)
+- [性能优化](#性能优化)
+- [安全架构](#安全架构)
+- [扩展性](#扩展性)
+- [未来改进](#未来改进)
 
 ---
 
-## Overview
+## 概述
 
 <div align="center">
 
-### 🎯 Architecture Goals
+### 🎯 架构目标
 
 </div>
 
@@ -37,435 +37,285 @@
 <tr>
 <td width="25%" align="center">
 <img src="https://img.icons8.com/fluency/96/000000/speed.png" width="64"><br>
-<b>Performance</b><br>
-Low latency, high throughput
+<b>高性能</b><br>
+低延迟，高吞吐量
 </td>
 <td width="25%" align="center">
 <img src="https://img.icons8.com/fluency/96/000000/security-checked.png" width="64"><br>
-<b>Security</b><br>
-Defense in depth
+<b>安全</b><br>
+深度防御
 </td>
 <td width="25%" align="center">
 <img src="https://img.icons8.com/fluency/96/000000/module.png" width="64"><br>
-<b>Modularity</b><br>
-Loose coupling
+<b>模块化</b><br>
+松耦合设计
 </td>
 <td width="25%" align="center">
 <img src="https://img.icons8.com/fluency/96/000000/maintenance.png" width="64"><br>
-<b>Maintainability</b><br>
-Clean, documented code
+<b>可维护性</b><br>
+清晰文档化代码
 </td>
 </tr>
 </table>
 
-### Design Principles
+### 设计原则
 
-> 🎯 **Simplicity First**: Keep the API simple and intuitive
+> 🎯 **简单优先**：保持 API 简洁直观
 > 
-> 🔒 **Security by Design**: Build security into every layer
+> 🔒 **安全设计**：在每一层构建安全性
 > 
-> ⚡ **Performance by Default**: Optimize for the common case
+> ⚡ **默认优化**：为常见情况优化性能
 > 
-> 🧩 **Modularity**: Components should be independent and composable
+> 🧩 **模块化**：组件应独立且可组合
 
 ---
 
-## System Architecture
+## 系统架构
 
 <div align="center">
 
-### 🏛️ High-Level Architecture
+### 🏛️ 整体架构
 
 </div>
 
 ```mermaid
 graph TB
-    subgraph "Application Layer"
-        A[User Application]
+    subgraph "应用层"
+        A[用户应用]
     end
     
-    subgraph "API Layer"
-        B[Public API]
-        C[Builder API]
-        D[FFI Layer]
+    subgraph "API 层"
+        B[过程宏]
+        C[服务注册]
+        D[协议分发]
     end
     
-    subgraph "Core Layer"
-        E[Core Engine]
-        F[Algorithm Manager]
-        G[Key Manager]
-        H[Policy Engine]
+    subgraph "运行时层"
+        E[HTTP 适配器]
+        F[MCP 适配器]
+        G[安全模块]
+        H[缓存模块]
     end
     
-    subgraph "Provider Layer"
-        I[Crypto Provider]
-        J[Storage Provider]
-        K[Audit Provider]
-    end
-    
-    subgraph "Infrastructure"
-        L[(Database)]
-        M[File System]
-        N[Audit Log]
+    subgraph "协议层"
+        I[Axum 路由]
+        J[MCP 工具]
     end
     
     A --> B
-    A --> C
-    A --> D
+    B --> C
+    C --> D
     
-    B --> E
-    C --> E
     D --> E
+    D --> F
     
-    E --> F
+    E --> I
+    F --> J
+    
     E --> G
+    F --> G
     E --> H
-    
-    F --> I
-    G --> J
-    H --> K
-    
-    I --> L
-    J --> M
-    K --> N
     
     style A fill:#e1f5ff
     style B fill:#b3e5fc
     style C fill:#b3e5fc
-    style D fill:#b3e5fc
-    style E fill:#81d4fa
+    style D fill:#81d4fa
+    style E fill:#4fc3f7
     style F fill:#4fc3f7
-    style G fill:#4fc3f7
-    style H fill:#4fc3f7
-    style I fill:#29b6f6
-    style J fill:#29b6f6
-    style K fill:#29b6f6
+    style G fill:#29b6f6
+    style H fill:#29b6f6
+    style I fill:#0288d1
+    style J fill:#0288d1
 ```
 
-### Layer Responsibilities
+### 层级职责
 
 <table>
 <tr>
-<th>Layer</th>
-<th>Purpose</th>
-<th>Key Components</th>
-<th>Dependencies</th>
+<th>层级</th>
+<th>职责</th>
+<th>关键组件</th>
 </tr>
 <tr>
-<td><b>Application</b></td>
-<td>User-facing code</td>
-<td>Business logic, workflows</td>
-<td>API Layer</td>
+<td><b>应用层</b></td>
+<td>用户代码</td>
+<td>业务逻辑、API 定义</td>
 </tr>
 <tr>
-<td><b>API</b></td>
-<td>Public interface</td>
-<td>API handlers, validators</td>
-<td>Core Layer</td>
+<td><b>API 层</b></td>
+<td>代码生成</td>
+<td>过程宏、服务注册</td>
 </tr>
 <tr>
-<td><b>Core</b></td>
-<td>Business logic</td>
-<td>Engine, managers, policies</td>
-<td>Provider Layer</td>
+<td><b>运行时层</b></td>
+<td>协议适配</td>
+<td>HTTP/MCP 适配器、安全模块</td>
 </tr>
 <tr>
-<td><b>Provider</b></td>
-<td>Implementation adapters</td>
-<td>Crypto, storage, audit</td>
-<td>Infrastructure</td>
-</tr>
-<tr>
-<td><b>Infrastructure</b></td>
-<td>Low-level resources</td>
-<td>DB, filesystem, logs</td>
-<td>None</td>
+<td><b>协议层</b></td>
+<td>网络通信</td>
+<td>Axum 路由、MCP 工具</td>
 </tr>
 </table>
 
 ---
 
-## Component Design
+## 组件设计
 
-### 1️⃣ Core Engine
+### 1️⃣ 宏系统
 
 <details open>
-<summary><b>🔧 Component Overview</b></summary>
+<summary><b>🔧 组件概述</b></summary>
 
-The Core Engine is the heart of the system, coordinating all operations.
-
-```rust
-pub struct CoreEngine {
-    algorithm_manager: Arc<AlgorithmManager>,
-    key_manager: Arc<KeyManager>,
-    policy_engine: Arc<PolicyEngine>,
-    config: Config,
-}
-
-impl CoreEngine {
-    pub fn new(config: Config) -> Result<Self> {
-        // Initialize managers
-        let algorithm_manager = Arc::new(AlgorithmManager::new()?);
-        let key_manager = Arc::new(KeyManager::new()?);
-        let policy_engine = Arc::new(PolicyEngine::new()?);
-        
-        Ok(Self {
-            algorithm_manager,
-            key_manager,
-            policy_engine,
-            config,
-        })
-    }
-    
-    pub fn process(&self, request: Request) -> Result<Response> {
-        // 1. Validate request
-        self.policy_engine.validate(&request)?;
-        
-        // 2. Get algorithm
-        let algorithm = self.algorithm_manager.get(request.algorithm())?;
-        
-        // 3. Get key
-        let key = self.key_manager.get(request.key_id())?;
-        
-        // 4. Execute operation
-        let result = algorithm.execute(&key, request.data())?;
-        
-        Ok(Response::new(result))
-    }
-}
-```
+宏系统负责在编译期解析 `#[service_api]` 和 `#[service_module]` 宏，生成 HTTP 和 MCP 协议适配代码。
 
 </details>
 
-**Responsibilities:**
-- 📌 Request orchestration
-- 📌 Component coordination
-- 📌 Error handling
-- 📌 Resource management
+**职责：**
+- 📌 解析宏属性参数
+- 📌 验证 API 配置正确性
+- 📌 生成服务注册代码
+- 📌 生成路由处理函数
 
-**Design Patterns:**
-- 🎨 **Facade Pattern**: Simplified interface to complex subsystems
-- 🎨 **Strategy Pattern**: Pluggable algorithms
-- 🎨 **Builder Pattern**: Flexible configuration
+**设计模式：**
+- 🎨 **代码生成模式**：编译期生成协议适配代码
+- 🎨 **声明式配置**：使用属性宏简化 API 定义
 
-### 2️⃣ Algorithm Manager
+### 2️⃣ 服务注册
+
+使用 `inventory` crate 实现静态服务注册：
+
+```rust
+use inventory::collect;
+
+#[derive(Debug)]
+pub struct ServiceRegistry {
+    pub name: &'static str,
+    pub version: &'static str,
+    pub path: &'static str,
+    pub method: HttpMethod,
+    pub handler: fn() -> /* handler type */,
+}
+
+collect!(ServiceRegistry);
+```
+
+### 3️⃣ HTTP 适配器
 
 ```mermaid
 classDiagram
-    class AlgorithmManager {
-        -HashMap algorithms
-        +register(Algorithm)
-        +get(AlgorithmType) Algorithm
-        +list() Vec~AlgorithmType~
+    class HttpAdapter {
+        +build() Router
+        +register(ServiceRegistry)
     }
     
-    class Algorithm {
-        <<interface>>
-        +execute(key, data) Result
-        +verify() bool
+    class Router {
+        +route(path, handler)
     }
     
-    class AesGcm {
-        +execute(key, data) Result
-        +verify() bool
+    class Handler {
+        +handle(Request) Response
     }
     
-    class RsaOaep {
-        +execute(key, data) Result
-        +verify() bool
-    }
-    
-    AlgorithmManager --> Algorithm
-    Algorithm <|-- AesGcm
-    Algorithm <|-- RsaOaep
+    HttpAdapter --> Router
+    Router --> Handler
 ```
 
-<details>
-<summary><b>🔍 Implementation Details</b></summary>
-
-```rust
-pub trait Algorithm: Send + Sync {
-    fn execute(&self, key: &Key, data: &[u8]) -> Result<Vec<u8>>;
-    fn verify(&self) -> bool;
-    fn metadata(&self) -> AlgorithmMetadata;
-}
-
-pub struct AlgorithmManager {
-    algorithms: RwLock<HashMap<AlgorithmType, Box<dyn Algorithm>>>,
-}
-
-impl AlgorithmManager {
-    pub fn register<A: Algorithm + 'static>(&self, algo: A) -> Result<()> {
-        let metadata = algo.metadata();
-        let mut algorithms = self.algorithms.write().unwrap();
-        algorithms.insert(metadata.algorithm_type, Box::new(algo));
-        Ok(())
-    }
-    
-    pub fn get(&self, algo_type: AlgorithmType) -> Result<&dyn Algorithm> {
-        self.algorithms
-            .read()
-            .unwrap()
-            .get(&algo_type)
-            .ok_or(Error::AlgorithmNotFound)
-    }
-}
-```
-
-</details>
-
-### 3️⃣ Key Manager
-
-<div align="center">
-
-#### 🔐 Key Lifecycle Management
-
-</div>
+### 4️⃣ MCP 适配器
 
 ```mermaid
-stateDiagram-v2
-    [*] --> PreActive: Generate
-    PreActive --> Active: Activate
-    Active --> Deactivated: Deactivate
-    Active --> Compromised: Compromise Detected
-    Deactivated --> Destroyed: Destroy
-    Compromised --> Destroyed: Destroy
-    Destroyed --> [*]
+classDiagram
+    class McpAdapter {
+        +build() Server
+        +register(ServiceRegistry)
+    }
     
-    Active --> Active: Use
+    class Server {
+        +run()
+        +add_tool(name, handler)
+    }
+    
+    class Tool {
+        +name: String
+        +description: String
+        +handler: Handler
+    }
+    
+    McpAdapter --> Server
+    Server --> Tool
 ```
-
-<table>
-<tr>
-<th>State</th>
-<th>Operations Allowed</th>
-<th>Transitions</th>
-</tr>
-<tr>
-<td><b>PreActive</b></td>
-<td>None</td>
-<td>→ Active</td>
-</tr>
-<tr>
-<td><b>Active</b></td>
-<td>Encrypt, Decrypt, Sign, Verify</td>
-<td>→ Deactivated, → Compromised</td>
-</tr>
-<tr>
-<td><b>Deactivated</b></td>
-<td>Decrypt, Verify (read-only)</td>
-<td>→ Destroyed</td>
-</tr>
-<tr>
-<td><b>Compromised</b></td>
-<td>None</td>
-<td>→ Destroyed</td>
-</tr>
-<tr>
-<td><b>Destroyed</b></td>
-<td>None</td>
-<td>(Terminal state)</td>
-</tr>
-</table>
 
 ---
 
-## Data Flow
+## 数据流
 
 <div align="center">
 
-### 🔄 Request Processing Flow
+### 🔄 请求处理流程
 
 </div>
 
 ```mermaid
 sequenceDiagram
-    participant App as Application
-    participant API as API Layer
-    participant Core as Core Engine
-    participant Algo as Algorithm
-    participant Key as Key Manager
-    participant Audit as Audit Logger
+    participant Client as 客户端
+    participant Router as HTTP 路由
+    participant Handler as 处理器
+    participant Registry as 服务注册
+    participant Business as 业务逻辑
     
-    App->>API: Request (encrypt, data)
-    API->>API: Validate input
-    API->>Core: Process request
-    
-    Core->>Key: Get key
-    Key-->>Core: Key material
-    
-    Core->>Algo: Execute algorithm
-    Algo->>Algo: Encrypt data
-    Algo-->>Core: Ciphertext
-    
-    Core->>Audit: Log operation
-    Core-->>API: Response
-    API-->>App: Result
+    Client->>Router: HTTP 请求
+    Router->>Registry: 查找服务
+    Registry-->>Router: 服务信息
+    Router->>Handler: 调用处理器
+    Handler->>Business:执行业务逻辑
+    Business-->>Handler: 返回结果
+    Handler-->>Client: JSON 响应
 ```
 
-### Encryption Flow
+### HTTP 请求处理
 
 <table>
 <tr>
 <td width="50%">
 
-**Step-by-Step**
+**步骤**
 
-1. 📥 **Input Validation**
-   - Check data format
-   - Validate algorithm type
-   - Verify key ID exists
+1. 📥 **请求接收**
+   - 解析 HTTP 请求
+   - 提取路径参数
 
-2. 🔐 **Key Retrieval**
-   - Load key from storage
-   - Verify key state (Active)
-   - Check permissions
+2. 🔍 **路由匹配**
+   - 查找对应的服务注册
+   - 验证 HTTP 方法
 
-3. ⚙️ **Algorithm Execution**
-   - Initialize algorithm
-   - Generate nonce/IV
-   - Encrypt data
+3. ⚙️ **参数解析**
+   - 解析查询参数
+   - 解析请求体
 
-4. 📤 **Output Construction**
-   - Package ciphertext
-   - Add metadata
-   - Return result
-
-5. 📝 **Audit Logging**
-   - Record operation
-   - Log timestamp
-   - Store metadata
+4. 📤 **响应返回**
+   - 序列化响应
+   - 设置状态码
 
 </td>
 <td width="50%">
 
-**Code Flow**
+**代码流程**
 
 ```rust
-// 1. Validate
-request.validate()?;
+// 1. 请求接收
+let request = parse_http_request()?;
 
-// 2. Get key
-let key = key_manager
-    .get(request.key_id)?;
+// 2. 路由匹配
+let service = registry.find(&request.path, request.method)?;
 
-// 3. Execute
-let ciphertext = algorithm
-    .encrypt(&key, request.data)?;
+// 3. 参数解析
+let params = parse_params(&request)?;
 
-// 4. Package
-let response = Response {
-    data: ciphertext,
-    metadata: Metadata {
-        algorithm: algo_type,
-        key_id: key.id(),
-        timestamp: now(),
-    },
-};
+// 4. 调用业务逻辑
+let result = (service.handler)(params).await;
 
-// 5. Audit
-audit_logger.log(&response)?;
-
+// 5. 返回响应
+let response = serialize_response(result)?;
 Ok(response)
 ```
 
@@ -475,437 +325,338 @@ Ok(response)
 
 ---
 
-## Design Decisions
+## 设计决策
 
 <div align="center">
 
-### 🤔 Why We Made These Choices
+### 🤔 关键设计决策
 
 </div>
 
-### Decision 1: Pure Rust Implementation
+### 决策 1：编译期协议选择
 
 <table>
 <tr>
 <td width="50%">
 
-**✅ Pros**
-- Memory safety guarantees
-- Zero-cost abstractions
-- Excellent performance
-- No C dependencies
-- Modern tooling
-
-</td>
-<td width="50%">
-
-**❌ Cons**
-- Steeper learning curve
-- Fewer libraries initially
-- Compilation time
-
-</td>
-</tr>
-</table>
-
-**Verdict:** ✅ **Chosen** - Safety and performance benefits outweigh cons
-
----
-
-### Decision 2: Pluggable Algorithm Architecture
-
+**方案 A：运行时特征**
 ```rust
-// Before: Hardcoded algorithms
-match algo_type {
-    AlgorithmType::AES => aes_encrypt(data),
-    AlgorithmType::RSA => rsa_encrypt(data),
-    // Must modify code for new algorithms
+trait ProtocolAdapter {
+    fn handle(&self, request: Request) -> Response;
 }
 
-// After: Plugin system
-let algorithm = algorithm_manager.get(algo_type)?;
-algorithm.execute(key, data)?;
-// New algorithms can be added without code changes
+struct HttpAdapter;
+struct McpAdapter;
 ```
 
-**Rationale:**
-- 🎯 Extensibility: Easy to add new algorithms
-- 🎯 Testability: Mock algorithms for testing
-- 🎯 Maintainability: Algorithms are independent
-
----
-
-### Decision 3: Arc + RwLock for Concurrency
-
-<table>
-<tr>
-<td width="33%" align="center">
-
-**Option 1: Mutex**
-```rust
-Arc<Mutex<Data>>
-```
-Simple but locks readers
+**问题：** 所有协议代码都会编译到二进制中
 
 </td>
-<td width="33%" align="center">
+<td width="50%">
 
-**Option 2: RwLock** ✅
+**方案 B：编译期选择 ✅**
 ```rust
-Arc<RwLock<Data>>
-```
-Multiple readers, one writer
+#[cfg(feature = "http")]
+fn build_http() -> Router { /* ... */ }
 
-</td>
-<td width="33%" align="center">
-
-**Option 3: Channels**
-```rust
-mpsc::channel()
+#[cfg(feature = "mcp")]
+fn build_mcp() -> Server { /* ... */ }
 ```
-Complex for simple cases
+
+**优势：** 未使用的协议不会产生任何代码
 
 </td>
 </tr>
 </table>
 
-**Chosen:** RwLock - Optimized for read-heavy workloads
+**决策：** 使用 `#[cfg(feature = "...")]` 实现零开销的协议选择
 
 ---
 
-### Decision 4: Builder Pattern for Configuration
+### 决策 2：静态注册 vs 动态注册
 
 <table>
 <tr>
 <td width="50%">
 
-**❌ Direct Construction**
+**动态注册**
 ```rust
-let config = Config {
-    option_a: value_a,
-    option_b: value_b,
-    option_c: value_c,
-    // Many fields...
-};
+let mut registry = Registry::new();
+registry.register(name, handler)?;
 ```
+- ✅ 灵活
+- ❌ 运行时开销
 
 </td>
 <td width="50%">
 
-**✅ Builder Pattern**
+**静态注册 ✅**
 ```rust
-let config = Config::builder()
-    .option_a(value_a)
-    .option_b(value_b)
-    .build()?;
+inventory::collect!(ServiceEntry);
 ```
+- ✅ 无运行时开销
+- ✅ 编译期验证
 
 </td>
 </tr>
 </table>
 
-**Benefits:**
-- 📌 Fluent API
-- 📌 Optional parameters
-- 📌 Validation on build
-- 📌 Better error messages
+**决策：** 使用 `inventory` 实现静态服务注册
 
 ---
 
-## Technology Stack
+## 技术栈
 
 <div align="center">
 
-### 🛠️ Core Technologies
+### 🛠️ 核心技术
 
 </div>
 
 <table>
 <tr>
-<th>Category</th>
-<th>Technology</th>
-<th>Version</th>
-<th>Purpose</th>
+<th>类别</th>
+<th>技术</th>
+<th>版本</th>
+<th>用途</th>
 </tr>
 <tr>
-<td rowspan="2"><b>Language</b></td>
+<td rowspan="2"><b>语言</b></td>
 <td>Rust</td>
 <td>1.75+</td>
-<td>Primary language</td>
+<td>主要开发语言</td>
 </tr>
 <tr>
-<td>C (FFI)</td>
-<td>C11</td>
-<td>Foreign function interface</td>
+<td>Tock</td>
+<td>1.41+</td>
+<td>异步运行时</td>
 </tr>
 <tr>
-<td rowspan="3"><b>Cryptography</b></td>
-<td>ring</td>
-<td>0.17</td>
-<td>Modern crypto primitives</td>
+<td rowspan="2"><b>Web 框架</b></td>
+<td>Axum</td>
+<td>0.8.8</td>
+<td>HTTP 服务器</td>
 </tr>
 <tr>
-<td>libsm</td>
-<td>0.6</td>
-<td>Chinese national standards</td>
+<td>mcp-sdk</td>
+<td>0.0.3</td>
+<td>MCP 协议实现</td>
 </tr>
 <tr>
-<td>aes-gcm</td>
-<td>0.10</td>
-<td>AES-GCM implementation</td>
+<td rowspan="3"><b>宏系统</b></td>
+<td>syn</td>
+<td>2.0</td>
+<td>AST 解析</td>
 </tr>
 <tr>
-<td rowspan="2"><b>Security</b></td>
-<td>zeroize</td>
-<td>1.7</td>
-<td>Secure memory cleanup</td>
+<td>quote</td>
+<td>3.0</td>
+<td>代码生成</td>
 </tr>
 <tr>
-<td>argon2</td>
-<td>0.5</td>
-<td>Password hashing</td>
+<td>darling</td>
+<td>0.20</td>
+<td>属性宏解析</td>
 </tr>
 <tr>
-<td><b>Serialization</b></td>
+<td><b>序列化</b></td>
 <td>serde</td>
 <td>1.0</td>
-<td>Data serialization</td>
+<td>数据序列化</td>
 </tr>
 <tr>
-<td><b>Error Handling</b></td>
+<td><b>错误处理</b></td>
 <td>thiserror</td>
 <td>1.0</td>
-<td>Error types</td>
-</tr>
-<tr>
-<td><b>Testing</b></td>
-<td>criterion</td>
-<td>0.5</td>
-<td>Benchmarking</td>
+<td>错误类型定义</td>
 </tr>
 </table>
 
-### Dependency Graph
+### 依赖关系
 
 ```mermaid
 graph LR
-    A[project-name] --> B[ring]
-    A --> C[libsm]
-    A --> D[aes-gcm]
-    A --> E[zeroize]
-    A --> F[serde]
+    A[axiom] --> B[axum]
+    A --> C[mcp-sdk]
+    A --> D[tokio]
+    A --> E[serde]
+    A --> F[inventory]
     
-    D --> G[aes]
-    D --> H[ghash]
+    B --> D
+    C --> D
     
     style A fill:#81d4fa
     style B fill:#4fc3f7
     style C fill:#4fc3f7
     style D fill:#4fc3f7
-    style E fill:#4fc3f7
-    style F fill:#4fc3f7
+    style E fill:#29b6f6
+    style F fill:#29b6f6
 ```
 
 ---
 
-## Performance Considerations
+## 性能优化
 
 <div align="center">
 
-### ⚡ Performance Optimizations
+### ⚡ 性能优化策略
 
 </div>
 
-### 1️⃣ Zero-Copy Design
+### 1️⃣ 零成本抽象
 
 ```rust
-// ❌ Copying data
-pub fn process(data: Vec<u8>) -> Vec<u8> {
-    let copied = data.clone();  // Unnecessary copy
-    transform(copied)
+// 宏生成的代码与手写代码性能相同
+#[service_api(path = "/users", method = "GET")]
+async fn get_users() -> Result<Vec<User>, ApiError> {
+    // 业务逻辑
 }
 
-// ✅ Zero-copy with slices
-pub fn process(data: &[u8]) -> Vec<u8> {
-    transform(data)  // No copy needed
+// 生成的代码等效于手写路由
+async fn get_users_handler() -> Json<Vec<User>> {
+    // 相同逻辑
 }
 ```
 
-### 2️⃣ Memory Pooling
+### 2️⃣ 最小化二进制大小
+
+**Release 构建优化：**
+```toml
+[profile.release]
+opt-level = "z"      # 最小化大小
+lto = true           # 链接时优化
+codegen-units = 1    # 优化代码生成
+```
+
+### 3️⃣ 延迟编译
+
+```rust
+#[cfg(feature = "http")]
+mod http_adapter {
+    // HTTP 适配器代码
+    // 仅在启用 http feature 时编译
+}
+
+#[cfg(feature = "mcp")]
+mod mcp_adapter {
+    // MCP 适配器代码
+    // 仅在启用 mcp feature 时编译
+}
+```
+
+### 性能指标
 
 <table>
 <tr>
-<td width="50%">
-
-**Without Pooling**
-```rust
-// Allocate for every operation
-let buffer = vec![0u8; size];
-process(&buffer);
-// Buffer dropped
-```
-
-</td>
-<td width="50%">
-
-**With Pooling**
-```rust
-// Reuse buffers
-let buffer = pool.acquire();
-process(&buffer);
-pool.release(buffer);
-```
-
-</td>
-</tr>
-</table>
-
-### 3️⃣ Caching Strategy
-
-```mermaid
-graph LR
-    A[Request] --> B{Cache Hit?}
-    B -->|Yes| C[Return Cached]
-    B -->|No| D[Compute]
-    D --> E[Store in Cache]
-    E --> F[Return Result]
-    
-    style C fill:#4caf50
-    style D fill:#ff9800
-```
-
-### Performance Metrics
-
-<table>
-<tr>
-<th>Operation</th>
-<th>Throughput</th>
-<th>Latency (P50)</th>
-<th>Latency (P99)</th>
+<th>操作</th>
+<th>吞吐量</th>
+<th>延迟 (P50)</th>
+<th>延迟 (P99)</th>
 </tr>
 <tr>
-<td>AES-256-GCM Encrypt</td>
-<td>500 MB/s</td>
-<td>0.5 ms</td>
-<td>2 ms</td>
+<td>HTTP 请求处理</td>
+<td>10,000+ req/s</td>
+<td>0.1ms</td>
+<td>0.5ms</td>
 </tr>
 <tr>
-<td>ECDSA-P256 Sign</td>
-<td>10K ops/s</td>
-<td>0.1 ms</td>
-<td>0.5 ms</td>
-</tr>
-<tr>
-<td>SHA-256 Hash</td>
-<td>1 GB/s</td>
-<td>0.05 ms</td>
-<td>0.2 ms</td>
+<td>MCP 工具调用</td>
+<td>5,000+ ops/s</td>
+<td>0.2ms</td>
+<td>1.0ms</td>
 </tr>
 </table>
 
 ---
 
-## Security Architecture
+## 安全架构
 
 <div align="center">
 
-### 🔒 Defense in Depth
+### 🔒 深度防御
 
 </div>
 
 ```mermaid
 graph TB
-    A[Application Layer] --> B[Input Validation]
-    B --> C[Authentication]
-    C --> D[Authorization]
-    D --> E[Encryption]
-    E --> F[Audit Logging]
-    F --> G[Secure Storage]
+    A[应用层] --> B[输入验证]
+    B --> C[认证]
+    C --> D[授权]
+    D --> E[日志审计]
+    E --> F[错误脱敏]
     
     style A fill:#e1f5ff
     style B fill:#b3e5fc
     style C fill:#81d4fa
     style D fill:#4fc3f7
     style E fill:#29b6f6
-    style F fill:#0288d1
-    style G fill:#01579b
+    style F fill:#01579b
 ```
 
-### Security Layers
+### 安全层
 
 <table>
 <tr>
-<th>Layer</th>
-<th>Controls</th>
-<th>Purpose</th>
+<th>层级</th>
+<th>控制</th>
+<th>目的</th>
 </tr>
 <tr>
-<td><b>1. Input Validation</b></td>
-<td>Type checking, sanitization</td>
-<td>Prevent injection attacks</td>
+<td><b>1. 输入验证</b></td>
+<td>类型检查、参数验证</td>
+<td>防止注入攻击</td>
 </tr>
 <tr>
-<td><b>2. Authentication</b></td>
-<td>Identity verification</td>
-<td>Verify user identity</td>
+<td><b>2. 认证</b></td>
+<td>JWT Bearer Token</td>
+<td>验证用户身份</td>
 </tr>
 <tr>
-<td><b>3. Authorization</b></td>
-<td>Permission checks</td>
-<td>Control access to resources</td>
+<td><b>3. 授权</b></td>
+<td>IP 白名单、限流</td>
+<td>控制资源访问</td>
 </tr>
 <tr>
-<td><b>4. Encryption</b></td>
-<td>Data encryption, TLS</td>
-<td>Protect data confidentiality</td>
+<td><b>4. 日志审计</b></td>
+<td>安全审计日志</td>
+<td>检测和取证</td>
 </tr>
 <tr>
-<td><b>5. Audit Logging</b></td>
-<td>Activity logging</td>
-<td>Detection and forensics</td>
-</tr>
-<tr>
-<td><b>6. Secure Storage</b></td>
-<td>Encryption at rest</td>
-<td>Protect stored data</td>
+<td><b>5. 错误脱敏</b></td>
+<td>错误消息过滤</td>
+<td>防止信息泄露</td>
 </tr>
 </table>
 
-### Threat Model
+### 安全特性
 
-<details>
-<summary><b>🎯 Threats and Mitigations</b></summary>
-
-| Threat | Impact | Mitigation | Status |
-|--------|--------|------------|--------|
-| Memory disclosure | High | Zeroize on drop | ✅ |
-| Timing attacks | Medium | Constant-time ops | ✅ |
-| Key extraction | High | Memory locking | ✅ |
-| Algorithm substitution | Medium | Algorithm validation | ✅ |
-| Unauthorized access | High | RBAC + audit | ✅ |
-
-</details>
+| 特性 | 实现 | 状态 |
+|------|------|------|
+| JWT 认证 | HMAC-SHA256 | ✅ |
+| IP 验证 | 拒绝私有地址 | ✅ |
+| 限流器 | 滑动窗口 + 幂等性 | ✅ |
+| 审计日志 | 异步队列 + DoS 保护 | ✅ |
 
 ---
 
-## Scalability
+## 扩展性
 
 <div align="center">
 
-### 📈 Scaling Strategies
+### 📈 扩展策略
 
 </div>
 
-### Horizontal Scaling
+### 水平扩展
 
 ```mermaid
 graph TB
-    LB[Load Balancer]
-    LB --> A[Instance 1]
-    LB --> B[Instance 2]
-    LB --> C[Instance 3]
+    LB[负载均衡器]
+    LB --> A[实例 1]
+    LB --> B[实例 2]
+    LB --> C[实例 3]
     
-    A --> DB[(Shared Database)]
+    A --> DB[(共享数据库)]
     B --> DB
     C --> DB
     
@@ -916,94 +667,67 @@ graph TB
     style DB fill:#29b6f6
 ```
 
-**Key Points:**
-- 🔹 Stateless design enables easy scaling
-- 🔹 Shared key storage for consistency
-- 🔹 No session affinity required
+**关键点：**
+- 🔹 无状态设计支持轻松扩展
+- 🔹 共享服务注册表保持一致性
+- 🔹 不需要会话亲和性
 
-### Vertical Scaling
+### 垂直扩展
 
 <table>
 <tr>
-<th>Resource</th>
-<th>Scaling Strategy</th>
-<th>Impact</th>
+<th>资源</th>
+<th>扩展策略</th>
+<th>影响</th>
 </tr>
 <tr>
 <td>CPU</td>
-<td>Increase cores, use parallelism</td>
-<td>⬆️ Throughput</td>
+<td>增加核心，使用并行</td>
+<td>⬆️ 吞吐量</td>
 </tr>
 <tr>
-<td>Memory</td>
-<td>Increase RAM, larger caches</td>
-<td>⬆️ Performance</td>
-</tr>
-<tr>
-<td>Storage</td>
-<td>Use SSD, increase IOPS</td>
-<td>⬇️ Latency</td>
+<td>内存</td>
+<td>增加 RAM，更大缓存</td>
+<td>⬆️ 性能</td>
 </tr>
 </table>
 
-### Capacity Planning
-
-```rust
-// Calculate capacity requirements
-pub fn calculate_capacity(requirements: Requirements) -> Capacity {
-    let ops_per_second = requirements.expected_load;
-    let latency_budget = requirements.max_latency;
-    
-    let instances = (ops_per_second * latency_budget / 1000.0).ceil() as usize;
-    let memory_per_instance = requirements.cache_size + OVERHEAD;
-    
-    Capacity {
-        instances,
-        memory_per_instance,
-        total_memory: instances * memory_per_instance,
-    }
-}
-```
-
 ---
 
-## Future Improvements
+## 未来改进
 
 <div align="center">
 
-### 🚀 Planned Enhancements
+### 🚀 计划增强
 
 </div>
 
-### Short Term (3-6 months)
+### 短期（1-3 个月）
 
-- [ ] **SIMD Optimization** - Vectorized crypto operations
-- [ ] **Hardware Acceleration** - AES-NI, SHA extensions
-- [ ] **Async Runtime** - Tokio integration for async operations
-- [ ] **Metrics System** - Prometheus-compatible metrics
+- [ ] **WebSocket 支持** - 添加 WebSocket 协议适配器
+- [ ] **配置热重载** - 无重启更新配置
+- [ ] **更丰富的验证** - 支持自定义验证规则
 
-### Medium Term (6-12 months)
+### 中期（3-6 个月）
 
-- [ ] **HSM Integration** - PKCS#11 support
-- [ ] **Key Rotation** - Automatic key lifecycle management
-- [ ] **Multi-region Support** - Geographic distribution
-- [ ] **Plugin Marketplace** - Third-party algorithm plugins
+- [ ] **gRPC 支持** - 添加 gRPC 协议适配器
+- [ ] **Redis 缓存** - 分布式缓存后端
+- [ ] **指标导出** - Prometheus 指标支持
 
-### Long Term (12+ months)
+### 长期（6+ 个月）
 
-- [ ] **Post-Quantum Crypto** - PQC algorithm support
-- [ ] **TEE Support** - SGX/TrustZone integration
-- [ ] **Formal Verification** - Mathematical proof of security properties
-- [ ] **Cloud-Native Features** - Kubernetes operators, service mesh
+- [ ] **插件系统** - 第三方扩展支持
+- [ ] **云原生集成** - Kubernetes Operator
+- [ ] **多区域支持** - 地理分布式部署
 
 ---
 
 <div align="center">
 
-**[📖 User Guide](USER_GUIDE.md)** • **[🔧 API Docs](https://docs.rs/project-name)** • **[🏠 Home](../README.md)**
+**[📖 用户指南](USER_GUIDE.md)** • **[📚 API 参考](API_REFERENCE.md)** • **[🏠 首页](../README.md)**
 
-Made with ❤️ by the Architecture Team
+由 Axiom 团队用 ❤️ 制作
 
-[⬆ Back to Top](#️-architecture-design)
+[⬆ 返回顶部](#-架构设计)
 
 </div>

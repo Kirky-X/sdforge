@@ -1,35 +1,35 @@
 <div align="center">
 
-# 📘 API Reference
+# 📘 API 参考文档
 
-### Complete API Documentation
+### Axiom 多协议 SDK 框架完整 API 文档
 
-[🏠 Home](../README.md) • [📖 User Guide](USER_GUIDE.md) • [🏗️ Architecture](ARCHITECTURE.md)
+[🏠 首页](../README.md) • [📖 用户指南](USER_GUIDE.md) • [🏗️ 架构](ARCHITECTURE.md)
 
 ---
 
 </div>
 
-## 📋 Table of Contents
+## 📋 目录
 
-- [Overview](#overview)
-- [Core API](#core-api)
-  - [Initialization](#initialization)
-  - [Configuration](#configuration)
-  - [Cipher Operations](#cipher-operations)
-  - [Key Management](#key-management)
-- [Algorithms](#algorithms)
-- [Error Handling](#error-handling)
-- [Type Definitions](#type-definitions)
-- [Examples](#examples)
+- [概述](#概述)
+- [核心 API](#核心-api)
+  - [初始化](#初始化)
+  - [配置](#配置)
+  - [服务构建](#服务构建)
+  - [错误处理](#错误处理)
+- [宏 API](#宏-api)
+- [协议支持](#协议支持)
+- [类型定义](#类型定义)
+- [示例](#示例)
 
 ---
 
-## Overview
+## 概述
 
 <div align="center">
 
-### 🎯 API Design Principles
+### 🎯 API 设计原则
 
 </div>
 
@@ -37,904 +37,468 @@
 <tr>
 <td width="25%" align="center">
 <img src="https://img.icons8.com/fluency/96/000000/easy.png" width="64"><br>
-<b>Simple</b><br>
-Intuitive and easy to use
+<b>简单</b><br>
+直观易用
 </td>
 <td width="25%" align="center">
 <img src="https://img.icons8.com/fluency/96/000000/security-checked.png" width="64"><br>
-<b>Safe</b><br>
-Type-safe and secure by default
+<b>安全</b><br>
+类型安全，默认安全
 </td>
 <td width="25%" align="center">
 <img src="https://img.icons8.com/fluency/96/000000/module.png" width="64"><br>
-<b>Composable</b><br>
-Build complex workflows easily
+<b>可组合</b><br>
+轻松构建复杂工作流
 </td>
 <td width="25%" align="center">
 <img src="https://img.icons8.com/fluency/96/000000/documentation.png" width="64"><br>
-<b>Well-documented</b><br>
-Comprehensive documentation
+<b>文档完善</b><br>
+全面文档支持
 </td>
 </tr>
 </table>
 
 ---
 
-## Core API
+## 核心 API
 
-### Initialization
+### 初始化
 
 <div align="center">
 
-#### 🚀 Getting Started
+#### 🚀 快速开始
 
 </div>
 
 ---
 
-#### `init()`
+#### `axiom::http::build()`
 
-Initialize the library with default configuration.
+构建 HTTP 服务。
 
 <table>
 <tr>
-<td width="30%"><b>Signature</b></td>
+<td width="30%"><b>签名</b></td>
 <td width="70%">
 
 ```rust
-pub fn init() -> Result<(), Error>
+pub fn build() -> Result<Router, Infallible>
 ```
 
 </td>
 </tr>
 <tr>
-<td><b>Description</b></td>
-<td>Initializes the library with default settings. Must be called before using any other API.</td>
+<td><b>描述</b></td>
+<td>构建 HTTP 路由器，自动注册所有使用 `#[service_api]` 宏定义的端点。</td>
 </tr>
 <tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;(), Error&gt;</code> - Ok on success, Error on failure</td>
-</tr>
-<tr>
-<td><b>Errors</b></td>
-<td>
-
-- `Error::AlreadyInitialized` - Library already initialized
-- `Error::InitializationFailed` - Initialization failed
-
-</td>
+<td><b>返回</b></td>
+<td><code>Result&lt;Router, Infallible&gt;</code> - 始终返回 Ok</td>
 </tr>
 </table>
 
-**Example:**
+**示例：**
 
 ```rust
-use project_name::init;
+use axiom::prelude::*;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize the library
-    init()?;
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let app = axiom::http::build()?;
     
-    println!("✅ Library initialized successfully");
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    println!("🚀 Server running on http://localhost:3000");
+    
+    axum::serve(listener, app).await?;
     Ok(())
 }
 ```
 
 ---
 
-#### `init_with_config()`
+#### `axiom::mcp::build()`
 
-Initialize the library with custom configuration.
+构建 MCP 服务。
 
 <table>
 <tr>
-<td width="30%"><b>Signature</b></td>
+<td width="30%"><b>签名</b></td>
 <td width="70%">
 
 ```rust
-pub fn init_with_config(config: Config) -> Result<(), Error>
+pub async fn build() -> Result<Server, Box<dyn std::error::Error>>
 ```
 
 </td>
 </tr>
 <tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `config: Config` - Configuration options
-
-</td>
+<td><b>描述</b></td>
+<td>构建 MCP 服务器，自动注册所有使用 `#[service_api]` 宏定义的工具。</td>
 </tr>
 <tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;(), Error&gt;</code></td>
+<td><b>返回</b></td>
+<td><code>Result&lt;Server, Box&lt;dyn Error&gt;&gt;</code></td>
 </tr>
 </table>
 
-**Example:**
+**示例：**
 
 ```rust
-use project_name::{init_with_config, Config};
+use axiom::prelude::*;
 
-let config = Config::builder()
-    .thread_pool_size(8)
-    .cache_size(2048)
-    .build()?;
-
-init_with_config(config)?;
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let server = axiom::mcp::build().await?;
+    
+    // MCP 服务通常通过 stdio 运行
+    server.run().await?;
+    Ok(())
+}
 ```
 
 ---
 
-### Configuration
+### 配置
 
 <div align="center">
 
-#### ⚙️ Configuration Builder
+#### ⚙️ 配置选项
 
 </div>
 
 ---
 
-#### `Config`
-
-Configuration struct for customizing library behavior.
+#### Feature 配置
 
 <table>
 <tr>
-<td width="30%"><b>Type</b></td>
-<td width="70%">
-
-```rust
-pub struct Config {
-    pub thread_pool_size: usize,
-    pub cache_size: usize,
-    pub log_level: LogLevel,
-    pub enable_metrics: bool,
-    // ... more fields
-}
-```
-
-</td>
+<th>Feature</th>
+<th>说明</th>
+<th>默认值</th>
+</tr>
+<tr>
+<td><code>http</code></td>
+<td>启用 HTTP 服务器支持</td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>mcp</code></td>
+<td>启用 MCP 协议支持</td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>streaming</code></td>
+<td>启用 SSE 流式响应</td>
+<td>禁用</td>
+</tr>
+<tr>
+<td><code>timestamp</code></td>
+<td>启用响应时间戳</td>
+<td>禁用</td>
+</tr>
+<tr>
+<td><code>logging</code></td>
+<td>启用请求日志</td>
+<td>禁用</td>
+</tr>
+<tr>
+<td><code>security</code></td>
+<td>启用安全认证模块</td>
+<td>禁用</td>
+</tr>
+<tr>
+<td><code>cache</code></td>
+<td>启用响应缓存</td>
+<td>禁用</td>
 </tr>
 </table>
 
 ---
 
-#### `Config::builder()`
-
-Create a new configuration builder.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-pub fn builder() -> ConfigBuilder
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>ConfigBuilder</code> - Configuration builder instance</td>
-</tr>
-</table>
-
-**Builder Methods:**
-
-<details>
-<summary><b>View All Methods</b></summary>
-
-| Method | Type | Default | Description |
-|--------|------|---------|-------------|
-| `thread_pool_size(usize)` | usize | 4 | Number of worker threads |
-| `cache_size(usize)` | usize | 1024 | Cache size in MB |
-| `log_level(LogLevel)` | LogLevel | Info | Logging verbosity |
-| `enable_metrics(bool)` | bool | false | Enable metrics collection |
-| `enable_audit(bool)` | bool | true | Enable audit logging |
-| `build()` | - | - | Build the configuration |
-
-</details>
-
-**Example:**
-
-```rust
-use project_name::{Config, LogLevel};
-
-let config = Config::builder()
-    .thread_pool_size(8)
-    .cache_size(2048)
-    .log_level(LogLevel::Debug)
-    .enable_metrics(true)
-    .build()?;
-```
-
----
-
-### Cipher Operations
+### 服务构建
 
 <div align="center">
 
-#### 🔐 Encryption and Decryption
+#### 🏗️ 构建服务
 
 </div>
 
 ---
 
-#### `Cipher`
+#### `#[service_api]` 宏
 
-Main cipher struct for encryption/decryption operations.
+定义 API 端点的核心宏。
 
 <table>
 <tr>
-<td width="30%"><b>Type</b></td>
+<td width="30%"><b>属性参数</b></td>
 <td width="70%">
 
 ```rust
-pub struct Cipher {
-    algorithm: Algorithm,
-    // internal fields
+#[service_api(
+    name = "api_name",
+    version = "v1",
+    path = "/path/:param",
+    method = "GET",
+    tool_name = "tool_name",
+    description = "API 描述"
+)]
+```
+
+</td>
+</tr>
+</table>
+
+**必需参数：**
+- `name` - API 名称（唯一标识符）
+- `version` - API 版本（如 "v1"）
+
+**HTTP 参数（启用 http feature）：**
+- `path` - 路由路径
+- `method` - HTTP 方法（GET, POST, PUT, DELETE）
+
+**MCP 参数（启用 mcp feature）：**
+- `tool_name` - MCP 工具名称
+- `description` - 工具描述
+
+**示例：**
+
+```rust
+use axiom::prelude::*;
+
+#[derive(serde::Deserialize)]
+struct UserId {
+    id: u64,
+}
+
+#[service_api(
+    name = "get_user",
+    version = "v1",
+    path = "/users/:id",
+    method = "GET",
+    tool_name = "get_user",
+    description = "根据 ID 获取用户信息"
+)]
+async fn get_user(id: UserId) -> Result<serde_json::Value, ApiError> {
+    Ok(serde_json::json!({
+        "id": id.id,
+        "name": format!("User {}", id.id)
+    }))
 }
 ```
 
-</td>
-</tr>
-</table>
-
 ---
 
-#### `Cipher::new()`
+#### `#[service_module]` 宏
 
-Create a new cipher instance.
+为相关 API 设置路径前缀。
 
 <table>
 <tr>
-<td width="30%"><b>Signature</b></td>
+<td width="30%"><b>属性参数</b></td>
 <td width="70%">
 
 ```rust
-pub fn new(algorithm: Algorithm) -> Result<Self, Error>
+#[service_module(prefix = "/api_prefix")]
 ```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `algorithm: Algorithm` - Cryptographic algorithm to use
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;Cipher, Error&gt;</code></td>
-</tr>
-<tr>
-<td><b>Errors</b></td>
-<td>
-
-- `Error::AlgorithmNotSupported` - Algorithm not available
-- `Error::InitializationFailed` - Failed to initialize cipher
 
 </td>
 </tr>
 </table>
 
-**Example:**
+**示例：**
 
 ```rust
-use project_name::{Cipher, Algorithm};
+use axiom::prelude::*;
 
-let cipher = Cipher::new(Algorithm::AES256GCM)?;
+#[service_module(prefix = "/auth")]
+mod auth_api {
+    use axiom::prelude::*;
+    
+    #[service_api(
+        name = "login",
+        version = "v1",
+        path = "/login",
+        method = "POST",
+        tool_name = "login"
+    )]
+    async fn login(req: LoginRequest) -> Result<Token, ApiError> {
+        // 实现登录逻辑
+    }
+}
 ```
 
 ---
 
-#### `Cipher::encrypt()`
-
-Encrypt data using the specified key.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-pub fn encrypt(
-    &self,
-    key_manager: &KeyManager,
-    key_id: &str,
-    plaintext: &[u8]
-) -> Result<Vec<u8>, Error>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `key_manager: &KeyManager` - Key manager instance
-- `key_id: &str` - ID of the encryption key
-- `plaintext: &[u8]` - Data to encrypt
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;Vec&lt;u8&gt;, Error&gt;</code> - Encrypted ciphertext</td>
-</tr>
-<tr>
-<td><b>Errors</b></td>
-<td>
-
-- `Error::KeyNotFound` - Key ID not found
-- `Error::InvalidKeyState` - Key not in active state
-- `Error::EncryptionFailed` - Encryption operation failed
-
-</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-use project_name::{Cipher, KeyManager, Algorithm};
-
-let km = KeyManager::new()?;
-let key_id = km.generate_key(Algorithm::AES256GCM)?;
-let cipher = Cipher::new(Algorithm::AES256GCM)?;
-
-let plaintext = b"Secret message";
-let ciphertext = cipher.encrypt(&km, &key_id, plaintext)?;
-```
-
-<details>
-<summary><b>📝 Notes</b></summary>
-
-- The returned ciphertext includes authentication tag
-- A random nonce/IV is generated for each encryption
-- The same plaintext will produce different ciphertexts (IND-CPA security)
-
-</details>
-
----
-
-#### `Cipher::decrypt()`
-
-Decrypt data using the specified key.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-pub fn decrypt(
-    &self,
-    key_manager: &KeyManager,
-    key_id: &str,
-    ciphertext: &[u8]
-) -> Result<Vec<u8>, Error>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `key_manager: &KeyManager` - Key manager instance
-- `key_id: &str` - ID of the decryption key
-- `ciphertext: &[u8]` - Data to decrypt
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;Vec&lt;u8&gt;, Error&gt;</code> - Decrypted plaintext</td>
-</tr>
-<tr>
-<td><b>Errors</b></td>
-<td>
-
-- `Error::KeyNotFound` - Key ID not found
-- `Error::DecryptionFailed` - Decryption or authentication failed
-- `Error::InvalidCiphertext` - Malformed ciphertext
-
-</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-let plaintext = cipher.decrypt(&km, &key_id, &ciphertext)?;
-assert_eq!(plaintext, b"Secret message");
-```
-
----
-
-#### `Cipher::sign()`
-
-Create a digital signature.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-pub fn sign(
-    &self,
-    key_manager: &KeyManager,
-    key_id: &str,
-    message: &[u8]
-) -> Result<Vec<u8>, Error>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `key_manager: &KeyManager` - Key manager instance
-- `key_id: &str` - ID of the signing key
-- `message: &[u8]` - Data to sign
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;Vec&lt;u8&gt;, Error&gt;</code> - Digital signature</td>
-</tr>
-<tr>
-<td><b>Applicable Algorithms</b></td>
-<td>ECDSA, RSA, Ed25519, SM2</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-use project_name::{Cipher, KeyManager, Algorithm};
-
-let km = KeyManager::new()?;
-let key_id = km.generate_key(Algorithm::ECDSAP256)?;
-let signer = Cipher::new(Algorithm::ECDSAP256)?;
-
-let message = b"Important message";
-let signature = signer.sign(&km, &key_id, message)?;
-```
-
----
-
-#### `Cipher::verify()`
-
-Verify a digital signature.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-pub fn verify(
-    &self,
-    key_manager: &KeyManager,
-    key_id: &str,
-    message: &[u8],
-    signature: &[u8]
-) -> Result<bool, Error>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `key_manager: &KeyManager` - Key manager instance
-- `key_id: &str` - ID of the verification key
-- `message: &[u8]` - Original message
-- `signature: &[u8]` - Signature to verify
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;bool, Error&gt;</code> - true if valid, false otherwise</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-let is_valid = signer.verify(&km, &key_id, message, &signature)?;
-assert!(is_valid);
-```
-
----
-
-### Key Management
+### 错误处理
 
 <div align="center">
 
-#### 🔑 Key Lifecycle Operations
+#### 🚨 错误类型
 
 </div>
 
----
-
-#### `KeyManager`
-
-Manages cryptographic keys throughout their lifecycle.
-
-<table>
-<tr>
-<td width="30%"><b>Type</b></td>
-<td width="70%">
+#### `ApiError` 枚举
 
 ```rust
-pub struct KeyManager {
-    // internal fields
+use axiom::prelude::*;
+
+#[derive(Debug, thiserror::Error)]
+pub enum ApiError {
+    #[error("Not found: {resource}")]
+    NotFound { resource: String },
+    
+    #[error("Invalid input: {message}")]
+    InvalidInput { 
+        message: String,
+        field: Option<String>,
+        value: Option<serde_json::Value>,
+    },
+    
+    #[error("Unauthorized")]
+    Unauthorized,
+    
+    #[error("Internal error: {message}")]
+    Internal { message: String },
+    
+    #[error("Rate limited")]
+    RateLimited,
 }
 ```
 
-</td>
-</tr>
-</table>
+**常用错误变体：**
 
----
+| 变体 | HTTP 状态码 | 使用场景 |
+|------|-------------|----------|
+| `ApiError::NotFound` | 404 | 资源不存在 |
+| `ApiError::InvalidInput` | 400 | 输入验证失败 |
+| `ApiError::Unauthorized` | 401 | 未认证 |
+| `ApiError::Internal` | 500 | 服务器内部错误 |
+| `ApiError::RateLimited` | 429 | 请求频率超限 |
 
-#### `KeyManager::new()`
-
-Create a new key manager instance.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
+**错误处理示例：**
 
 ```rust
-pub fn new() -> Result<Self, Error>
-```
+use axiom::prelude::*;
 
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;KeyManager, Error&gt;</code></td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-use project_name::KeyManager;
-
-let km = KeyManager::new()?;
-```
-
----
-
-#### `KeyManager::generate_key()`
-
-Generate a new cryptographic key.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-pub fn generate_key(&self, algorithm: Algorithm) -> Result<String, Error>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `algorithm: Algorithm` - Algorithm for the key
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;String, Error&gt;</code> - Unique key ID</td>
-</tr>
-<tr>
-<td><b>Errors</b></td>
-<td>
-
-- `Error::AlgorithmNotSupported` - Algorithm not available
-- `Error::KeyGenerationFailed` - Failed to generate key
-
-</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-use project_name::{KeyManager, Algorithm};
-
-let km = KeyManager::new()?;
-let key_id = km.generate_key(Algorithm::AES256GCM)?;
-println!("Generated key: {}", key_id);
+#[service_api(
+    name = "create_user",
+    version = "v1",
+    path = "/users",
+    method = "POST",
+    tool_name = "create_user"
+)]
+async fn create_user(req: CreateUserRequest) -> Result<User, ApiError> {
+    // 验证输入
+    if req.username.is_empty() {
+        return Err(ApiError::InvalidInput {
+            message: "用户名不能为空".to_string(),
+            field: Some("username".to_string()),
+            value: None,
+        });
+    }
+    
+    // 业务逻辑
+    let user = save_user(req).await?;
+    Ok(user)
+}
 ```
 
 ---
 
-#### `KeyManager::generate_key_with_alias()`
-
-Generate a key with a human-readable alias.
-
-<table>
-<tr>
-<td width="30%"><b>Signature</b></td>
-<td width="70%">
-
-```rust
-pub fn generate_key_with_alias(
-    &self,
-    algorithm: Algorithm,
-    alias: &str
-) -> Result<String, Error>
-```
-
-</td>
-</tr>
-<tr>
-<td><b>Parameters</b></td>
-<td>
-
-- `algorithm: Algorithm` - Algorithm for the key
-- `alias: &str` - Human-readable name
-
-</td>
-</tr>
-<tr>
-<td><b>Returns</b></td>
-<td><code>Result&lt;String, Error&gt;</code> - Key ID</td>
-</tr>
-</table>
-
-**Example:**
-
-```rust
-let key_id = km.generate_key_with_alias(
-    Algorithm::AES256GCM,
-    "database-encryption-key"
-)?;
-```
-
----
-
-## Algorithms
+## 宏 API
 
 <div align="center">
 
-#### 🔐 Supported Cryptographic Algorithms
+#### 🔧 宏参考
 
 </div>
 
-### `Algorithm` Enum
-
-<table>
-<tr>
-<td width="30%"><b>Definition</b></td>
-<td width="70%">
+### `#[service_api]`
 
 ```rust
-pub enum Algorithm {
-    // Symmetric Encryption
-    AES128GCM,
-    AES192GCM,
-    AES256GCM,
-    SM4GCM,
-    
-    // Asymmetric Signatures
-    ECDSAP256,
-    ECDSAP384,
-    ECDSAP521,
-    RSA2048,
-    RSA3072,
-    RSA4096,
-    Ed25519,
-    SM2,
-}
+#[service_api(
+    name = str,           // 必需：API 名称
+    version = str,        // 必需：版本号
+    path = str,           // HTTP：路由路径
+    method = str,         // HTTP：HTTP 方法
+    tool_name = str,      // MCP：工具名称
+    description = str,    // MCP：描述
+)]
 ```
 
-</td>
-</tr>
-</table>
+### `#[service_module]`
 
-### Algorithm Details
-
-<details open>
-<summary><b>🔐 Symmetric Encryption</b></summary>
-
-<table>
-<tr>
-<th>Algorithm</th>
-<th>Key Size</th>
-<th>Security Level</th>
-<th>Performance</th>
-<th>Use Case</th>
-</tr>
-<tr>
-<td><b>AES-128-GCM</b></td>
-<td>128-bit</td>
-<td>🟢 High</td>
-<td>⚡⚡⚡ Very Fast</td>
-<td>General purpose</td>
-</tr>
-<tr>
-<td><b>AES-192-GCM</b></td>
-<td>192-bit</td>
-<td>🟢 High</td>
-<td>⚡⚡ Fast</td>
-<td>Extra security</td>
-</tr>
-<tr>
-<td><b>AES-256-GCM</b></td>
-<td>256-bit</td>
-<td>🟢 Very High</td>
-<td>⚡⚡ Fast</td>
-<td>Maximum security</td>
-</tr>
-<tr>
-<td><b>SM4-GCM</b></td>
-<td>128-bit</td>
-<td>🟢 High</td>
-<td>⚡ Moderate</td>
-<td>Chinese standards</td>
-</tr>
-</table>
-
-</details>
-
-<details>
-<summary><b>✍️ Digital Signatures</b></summary>
-
-<table>
-<tr>
-<th>Algorithm</th>
-<th>Key Size</th>
-<th>Security Level</th>
-<th>Signature Size</th>
-<th>Use Case</th>
-</tr>
-<tr>
-<td><b>ECDSA-P256</b></td>
-<td>256-bit</td>
-<td>🟢 High</td>
-<td>~64 bytes</td>
-<td>Modern standard</td>
-</tr>
-<tr>
-<td><b>ECDSA-P384</b></td>
-<td>384-bit</td>
-<td>🟢 Very High</td>
-<td>~96 bytes</td>
-<td>High security</td>
-</tr>
-<tr>
-<td><b>RSA-2048</b></td>
-<td>2048-bit</td>
-<td>🟢 High</td>
-<td>256 bytes</td>
-<td>Legacy support</td>
-</tr>
-<tr>
-<td><b>Ed25519</b></td>
-<td>256-bit</td>
-<td>🟢 High</td>
-<td>64 bytes</td>
-<td>Fast verification</td>
-</tr>
-<tr>
-<td><b>SM2</b></td>
-<td>256-bit</td>
-<td>🟢 High</td>
-<td>~64 bytes</td>
-<td>Chinese standards</td>
-</tr>
-</table>
-
-</details>
+```rust
+#[service_module(prefix = str)]  // 必需：路径前缀
+```
 
 ---
 
-## Error Handling
+## 协议支持
+
+### HTTP 协议
 
 <div align="center">
 
-#### 🚨 Error Types and Handling
+#### 🌐 HTTP 端点格式
 
 </div>
 
-### `Error` Enum
+**路径规则：**
+- 基础路径：`/api/{version}{path}`
+- 带模块：`{module_prefix}/api/{version}{path}`
 
-```rust
-pub enum Error {
-    // Initialization Errors
-    AlreadyInitialized,
-    NotInitialized,
-    InitializationFailed,
-    
-    // Key Errors
-    KeyNotFound,
-    KeyGenerationFailed,
-    InvalidKeyState,
-    
-    // Cryptographic Errors
-    EncryptionFailed,
-    DecryptionFailed,
-    SignatureFailed,
-    VerificationFailed,
-    
-    // Algorithm Errors
-    AlgorithmNotSupported,
-    AlgorithmNotFound,
-    
-    // I/O Errors
-    IoError(std::io::Error),
-    
-    // Custom errors
-    Custom(String),
-}
-```
+**示例：**
 
-### Error Handling Pattern
+| 定义 | HTTP 端点 |
+|------|----------|
+| `#[service_api(path = "/hello")]` | GET /api/v1/hello |
+| `#[service_module(prefix = "/auth")]` + path = "/login" | POST /auth/api/v1/login |
+
+### MCP 协议
+
+<div align="center">
+
+#### 🤖 MCP 工具注册
+
+</div>
+
+**自动注册：**
+- 函数名 → 工具名称
+- 参数类型 → 工具输入模式
+- 返回类型 → 工具输出模式
+
+---
+
+## 类型定义
+
+### 核心类型
 
 <table>
 <tr>
 <td width="50%">
 
-**Pattern Matching**
+**ServiceResponse**
 ```rust
-match operation() {
-    Ok(result) => {
-        println!("Success: {:?}", result);
-    }
-    Err(Error::KeyNotFound) => {
-        eprintln!("Key not found");
-    }
-    Err(Error::EncryptionFailed) => {
-        eprintln!("Encryption failed");
-    }
-    Err(e) => {
-        eprintln!("Error: {:?}", e);
-    }
+pub struct ServiceResponse<T> {
+    pub success: bool,
+    pub data: Option<T>,
+    pub error: Option<String>,
+    pub timestamp: Option<i64>,
 }
 ```
 
 </td>
 <td width="50%">
 
-**? Operator**
+**ApiMetadata**
 ```rust
-fn process_data() -> Result<(), Error> {
-    init()?;
-    
-    let km = KeyManager::new()?;
-    let key = km.generate_key(
-        Algorithm::AES256GCM
-    )?;
-    
-    let cipher = Cipher::new(
-        Algorithm::AES256GCM
-    )?;
-    
-    Ok(())
+pub struct ApiMetadata {
+    pub name: &'static str,
+    pub version: &'static str,
+    pub path: &'static str,
+    pub method: HttpMethod,
 }
 ```
 
@@ -944,130 +508,79 @@ fn process_data() -> Result<(), Error> {
 
 ---
 
-## Type Definitions
-
-### Common Types
-
-<table>
-<tr>
-<td width="50%">
-
-**Key ID**
-```rust
-pub type KeyId = String;
-```
-
-**Algorithm Type**
-```rust
-pub enum Algorithm { /* ... */ }
-```
-
-</td>
-<td width="50%">
-
-**Result Type**
-```rust
-pub type Result<T> = 
-    std::result::Result<T, Error>;
-```
-
-**Log Level**
-```rust
-pub enum LogLevel {
-    Debug,
-    Info,
-    Warn,
-    Error,
-}
-```
-
-</td>
-</tr>
-</table>
-
----
-
-## Examples
+## 示例
 
 <div align="center">
 
-### 💡 Common Usage Patterns
+### 💡 常用示例
 
 </div>
 
-### Example 1: Basic Encryption
+### 示例 1: 基础 HTTP API
 
 ```rust
-use project_name::{init, Cipher, KeyManager, Algorithm};
+use axiom::prelude::*;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize
-    init()?;
-    
-    // Setup
-    let km = KeyManager::new()?;
-    let key_id = km.generate_key(Algorithm::AES256GCM)?;
-    let cipher = Cipher::new(Algorithm::AES256GCM)?;
-    
-    // Encrypt
-    let plaintext = b"Hello, World!";
-    let ciphertext = cipher.encrypt(&km, &key_id, plaintext)?;
-    
-    // Decrypt
-    let decrypted = cipher.decrypt(&km, &key_id, &ciphertext)?;
-    
-    assert_eq!(plaintext, &decrypted[..]);
-    println!("✅ Success!");
-    
-    Ok(())
+#[service_api(
+    name = "hello",
+    version = "v1",
+    path = "/hello",
+    method = "GET",
+    tool_name = "hello"
+)]
+async fn hello() -> Result<String, ApiError> {
+    Ok("Hello, Axiom!".to_string())
 }
 ```
 
-### Example 2: Digital Signatures
+### 示例 2: 带参数的 API
 
 ```rust
-use project_name::{init, Cipher, KeyManager, Algorithm};
+use axiom::prelude::*;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    init()?;
-    
-    let km = KeyManager::new()?;
-    let key_id = km.generate_key(Algorithm::ECDSAP256)?;
-    let signer = Cipher::new(Algorithm::ECDSAP256)?;
-    
-    // Sign
-    let message = b"Important document";
-    let signature = signer.sign(&km, &key_id, message)?;
-    
-    // Verify
-    let is_valid = signer.verify(&km, &key_id, message, &signature)?;
-    assert!(is_valid);
-    
-    println!("✅ Signature verified!");
-    
-    Ok(())
+#[derive(serde::Deserialize)]
+struct UserRequest {
+    id: u64,
+}
+
+#[service_api(
+    name = "get_user",
+    version = "v1",
+    path = "/users/:id",
+    method = "GET",
+    tool_name = "get_user"
+)]
+async fn get_user(req: UserRequest) -> Result<serde_json::Value, ApiError> {
+    Ok(serde_json::json!({
+        "id": req.id,
+        "name": format!("User {}", req.id)
+    }))
 }
 ```
 
-### Example 3: Advanced Configuration
+### 示例 3: POST 请求
 
 ```rust
-use project_name::{init_with_config, Config, LogLevel};
+use axiom::prelude::*;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let config = Config::builder()
-        .thread_pool_size(8)
-        .cache_size(2048)
-        .log_level(LogLevel::Debug)
-        .enable_metrics(true)
-        .enable_audit(true)
-        .build()?;
-    
-    init_with_config(config)?;
-    
-    // Use the library...
-    
-    Ok(())
+#[derive(serde::Deserialize)]
+struct CreatePostRequest {
+    title: String,
+    content: String,
+}
+
+#[service_api(
+    name = "create_post",
+    version = "v1",
+    path = "/posts",
+    method = "POST",
+    tool_name = "create_post"
+)]
+async fn create_post(req: CreatePostRequest) -> Result<serde_json::Value, ApiError> {
+    Ok(serde_json::json!({
+        "title": req.title,
+        "content": req.content
+    }))
 }
 ```
 
@@ -1075,10 +588,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 <div align="center">
 
-**[📖 User Guide](USER_GUIDE.md)** • **[🏗️ Architecture](ARCHITECTURE.md)** • **[🏠 Home](../README.md)**
+**[📖 用户指南](USER_GUIDE.md)** • **[🏗️ 架构](ARCHITECTURE.md)** • **[🏠 首页](../README.md)**
 
-Made with ❤️ by the Documentation Team
+由 Axiom 团队用 ❤️ 制作
 
-[⬆ Back to Top](#-api-reference)
+[⬆ 返回顶部](#-api-参考文档)
 
 </div>
