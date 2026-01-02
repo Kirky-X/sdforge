@@ -11,5 +11,23 @@ publish = false
 axiom = { git = "file:///home/mirror/rust", features = ["full"] }
 axiom-macros = { git = "file:///home/mirror/rust" }
 
+# 其他依赖从 crates.io
+tokio = { version = "1.41", features = ["full"] }
+axum = { version = "0.8.8", features = ["ws"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tonic = "0.12"
+prost = "0.13"
+tokio-tungstenite = "0.24"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2.0"
+anyhow = "1.0"
+reqwest = { version = "0.12", features = ["json"] }
+
 [profile.dev.package."*"]
 opt-level = 0
