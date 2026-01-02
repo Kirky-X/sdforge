@@ -15,10 +15,10 @@ pub mod prelude {
     pub use crate::core::{ApiError, ApiMetadata, ServiceError, ServiceResponse};
     #[cfg(feature = "http")]
     pub use crate::http::{HttpRoute, RouteRegistration};
-    #[cfg(feature = "http")]
-    pub use axum::response::IntoResponse;
     #[cfg(feature = "mcp")]
     pub use crate::mcp::McpToolInstance;
+    #[cfg(feature = "http")]
+    pub use axum::response::IntoResponse;
 }
 
 pub mod core;
@@ -30,7 +30,7 @@ pub use crate::core::{ApiError, ApiMetadata, ServiceError, ServiceResponse};
 pub use core::validation::validators;
 
 #[cfg(feature = "http")]
-pub use inventory as inventory;
+pub use inventory;
 
 #[cfg(feature = "http")]
 pub mod http;

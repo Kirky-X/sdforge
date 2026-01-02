@@ -91,9 +91,9 @@ mod dual_protocol_tests {
         use axiom::prelude::ApiMetadata;
 
         let metadata = ApiMetadata::new(
-            "test-api",
-            "v1",
-            "A test API for dual protocol testing",
+            "test-api".to_string(),
+            "v1".to_string(),
+            "A test API for dual protocol testing".to_string(),
             None,
             false,
         );

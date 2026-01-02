@@ -122,9 +122,9 @@ mod uat_tests {
     async fn test_uat_api_metadata() {
         // User defines API metadata
         let metadata = ApiMetadata {
-            name: "User Management API",
-            version: "v1.0.0",
-            description: "API for managing users",
+            name: "User Management API".to_string(),
+            version: "v1.0.0".to_string(),
+            description: "API for managing users".to_string(),
             cache_ttl: Some(300),
             is_streaming: false,
         };
@@ -290,9 +290,9 @@ mod uat_tests {
     async fn test_uat_empty_configurations() {
         // User tests with minimal/empty configurations
         let empty_metadata = ApiMetadata {
-            name: "",
-            version: "",
-            description: "",
+            name: "".to_string(),
+            version: "".to_string(),
+            description: "".to_string(),
             cache_ttl: None,
             is_streaming: false,
         };

@@ -321,7 +321,10 @@ impl ParamInfo {
     /// Convert parameter to JSON schema property
     fn to_json_schema(&self) -> String {
         let param_type = if self.is_option {
-            format!("{{\"type\":[\"null\",{}]}}", self.inner_type_to_json_schema())
+            format!(
+                "{{\"type\":[\"null\",{}]}}",
+                self.inner_type_to_json_schema()
+            )
         } else if self.is_vec {
             format!(
                 "{{\"type\":\"array\",\"items\":{}}}",
@@ -335,8 +338,8 @@ impl ParamInfo {
 
     fn inner_type_to_json_schema(&self) -> String {
         match self.inner_type.as_str() {
-            "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16" | "u32" | "u64" | "u128" | "f32"
-            | "f64" => "\"number\"".to_string(),
+            "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16" | "u32" | "u64" | "u128"
+            | "f32" | "f64" => "\"number\"".to_string(),
             "bool" => "\"boolean\"".to_string(),
             "String" | "&str" => "\"string\"".to_string(),
             _ => "\"object\"".to_string(),
