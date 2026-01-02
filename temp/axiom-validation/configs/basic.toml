@@ -1,0 +1,9 @@
+# Axiom 基础配置文件
+
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[api]
+name = "axiom-example"
+version = "0.1.0"

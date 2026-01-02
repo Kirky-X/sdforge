@@ -6,7 +6,7 @@
 #![warn(missing_docs)]
 
 /// Re-export macros from axiom-macros for convenient use
-pub use axiom_macros::{service_api, service_module};
+pub use axiom_macros::{service_api, service_module, test_macro};
 
 /// Commonly used types
 pub mod prelude {
