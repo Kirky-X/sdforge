@@ -16,8 +16,7 @@ type UserDatabase = Arc<Mutex<HashMap<u64, User>>>;
     name = "get_user",
     version = "v1",
     path = "/users/:id",
-    method = "GET",
-    tool_name = "get_user"
+    method = "GET"
 )]
 async fn get_user(id: u64, db: UserDatabase) -> Result<Option<User>, ApiError> {
     let guard = db.lock().unwrap();

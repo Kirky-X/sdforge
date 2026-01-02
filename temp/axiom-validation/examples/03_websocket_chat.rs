@@ -210,13 +210,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  history  - 获取聊天历史");
     println!();
     println!("💡 消息格式:");
-    println!("  {");
+    println!("  {{");
     println!("    \"id\": \"request-id\",");
     println!("    \"method\": \"send\",");
-    println!("    \"params\": {");
+    println!("    \"params\": {{");
     println!("      \"content\": \"Hello, World!\"");
-    println!("    }");
-    println!("  }");
+    println!("    }}");
+    println!("  }}");
     println!();
     println!("按 Ctrl+C 停止服务");
     println!("========================================");

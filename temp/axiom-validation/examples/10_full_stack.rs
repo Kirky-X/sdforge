@@ -74,7 +74,7 @@ async fn create_task(req: CreateTaskRequest, db: TaskDatabase) -> Result<Task, A
     stream = true
 )]
 async fn stream_tasks(db: TaskDatabase) -> Result<axiom::streaming::StreamResponse<Task>, ApiError> {
-    let (tx, rx) = create_stream_channel(32);
+    let (tx, response) = create_stream_channel(32);
     let tasks = db.lock().unwrap().clone();
 
     tokio::spawn(async move {
@@ -84,7 +84,7 @@ async fn stream_tasks(db: TaskDatabase) -> Result<axiom::streaming::StreamRespon
         }
     });
 
-    Ok(axiom::streaming::StreamResponse::new(rx))
+    Ok(response)
 }
 
 #[tokio::main]
@@ -167,7 +167,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  curl -X POST http://localhost:8080/api/v1/tasks \\");
     println!("    -H \"Content-Type: application/json\" \\");
     println!("    -H \"X-API-Key: demo-api-key\" \\");
-    println!("    -d '{\"title\":\"New Task\",\"description\":\"Test task\"}'");
+    println!("    -d '{{\"title\":\"New Task\",\"description\":\"Test task\"}}'");
     println!();
     println!("  # 流式获取任务");
     println!("  curl -N http://localhost:8080/api/v1/tasks/stream");
@@ -176,8 +176,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================");
     println!();
 
-    let addr: SocketAddr = "0.0.0.0:8080".parse()?;
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let addr: SocketAddr = "0.0.0.0:8080".parse::<SocketAddr>()?;
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     axum::serve(listener, router).await?;
 

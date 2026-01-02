@@ -283,8 +283,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // 启动 HTTP 服务器
-    let addr = "0.0.0.0:8080".parse()?;
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let addr = "0.0.0.0:8080".parse::<std::net::SocketAddr>()?;
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     axum::serve(listener, router).await?;
 
