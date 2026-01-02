@@ -78,9 +78,9 @@ mod uat_tests {
         auth.add_key("key-123", vec!["read".to_string(), "write".to_string()]);
         auth.add_key("key-456", vec!["read".to_string()]);
 
-        assert!(auth.validate_key("key-123").is_some());
-        assert!(auth.validate_key("key-456").is_some());
-        assert!(auth.validate_key("key-789").is_none());
+        assert!(auth.validate_key("key-123", "127.0.0.1").is_some());
+        assert!(auth.validate_key("key-456", "127.0.0.1").is_some());
+        assert!(auth.validate_key("key-789", "127.0.0.1").is_none());
     }
 
     /// UAT-005: Service Response Types

@@ -266,8 +266,8 @@ mod http_integration_tests {
             vec!["read".to_string(), "write".to_string()],
         );
 
-        assert!(auth.validate_key("test-key-123").is_some());
-        assert!(auth.validate_key("invalid-key").is_none());
+        assert!(auth.validate_key("test-key-123", "127.0.0.1").is_some());
+        assert!(auth.validate_key("invalid-key", "127.0.0.1").is_none());
     }
 
     #[tokio::test]

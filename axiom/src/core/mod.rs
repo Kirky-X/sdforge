@@ -5,6 +5,8 @@ pub mod validation;
 #[cfg(feature = "http")]
 use axum::body::Body;
 #[cfg(feature = "http")]
+use axum::http;
+#[cfg(feature = "http")]
 use axum::response::IntoResponse;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -426,11 +428,29 @@ impl IntoResponse for ApiError {
             ApiError::ServiceUnavailable { .. } => 503,
             ApiError::ValidationError { .. } => 422,
         };
-        let body = serde_json::to_vec(&self).unwrap_or_default();
-        axum::response::Response::builder()
-            .status(status)
-            .body(axum::body::Body::from(body))
-            .unwrap()
+
+        // Try to serialize the error, with fallback to plain text on failure
+        match serde_json::to_vec(&self) {
+            Ok(body) => axum::response::Response::builder()
+                .status(status)
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .body(axum::body::Body::from(body))
+                .unwrap(),
+            Err(e) => {
+                #[cfg(feature = "logging")]
+                tracing::error!(error = %e, "Failed to serialize ApiError response");
+
+                // Fallback to plain text error response
+                let fallback_body = format!(
+                    r#"{{"success":false,"error":{{"code":"SERIALIZATION_ERROR","message":"Internal server error"}}}}"#
+                );
+                axum::response::Response::builder()
+                    .status(status)
+                    .header(http::header::CONTENT_TYPE, "application/json")
+                    .body(axum::body::Body::from(fallback_body))
+                    .unwrap()
+            }
+        }
     }
 }
 
@@ -441,10 +461,39 @@ where
 {
     fn into_response(self) -> axum::response::Response {
         let status = self.error.as_ref().map(|e| e.http_status).unwrap_or(200);
-        let body = serde_json::to_vec(&self).unwrap_or_default();
-        axum::response::Response::builder()
-            .status(status)
-            .body(Body::from(body))
-            .unwrap()
+
+        // Try to serialize the response, with fallback on failure
+        match serde_json::to_vec(&self) {
+            Ok(body) => axum::response::Response::builder()
+                .status(status)
+                .header(http::header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+            Err(e) => {
+                #[cfg(feature = "logging")]
+                tracing::error!(error = %e, "Failed to serialize ServiceResponse");
+
+                // Fallback error response if serialization fails
+                let fallback = ServiceResponse::<T>::error(ServiceError::new(
+                    "SERIALIZATION_ERROR",
+                    "Failed to serialize response",
+                    500,
+                ));
+                match serde_json::to_vec(&fallback) {
+                    Ok(fallback_body) => axum::response::Response::builder()
+                        .status(500)
+                        .header(http::header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(fallback_body))
+                        .unwrap(),
+                    Err(_) => {
+                        // Ultimate fallback - should never happen
+                        axum::response::Response::builder()
+                            .status(500)
+                            .body(Body::from("Internal server error"))
+                            .unwrap()
+                    }
+                }
+            }
+        }
     }
 }

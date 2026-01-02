@@ -222,6 +222,37 @@ pub async fn websocket_upgrade(
 /// Maximum message size in bytes (1MB)
 const MAX_MESSAGE_SIZE: usize = 1_048_576;
 
+/// Maximum nesting depth for JSON parsing (prevents stack overflow from deeply nested JSON)
+const MAX_JSON_DEPTH: usize = 32;
+
+/// Maximum length for string fields in WebSocket messages
+const MAX_STRING_LENGTH: usize = 64 * 1024; // 64KB
+
+#[cfg(feature = "websocket")]
+fn parse_websocket_message(text: &str) -> Result<WebSocketMessage, String> {
+    // First, check basic size limit
+    if text.len() > MAX_MESSAGE_SIZE {
+        return Err(format!(
+            "Message too large: {} bytes (max: {} bytes)",
+            text.len(),
+            MAX_MESSAGE_SIZE
+        ));
+    }
+
+    // Check for obviously malformed JSON that could cause excessive parsing
+    let depth_estimate = text.bytes().filter(|&b| b == b'{' || b == b'[').count();
+    if depth_estimate > MAX_JSON_DEPTH {
+        return Err(format!(
+            "JSON nesting too deep: estimated depth {} (max: {})",
+            depth_estimate, MAX_JSON_DEPTH
+        ));
+    }
+
+    // Use serde_json with custom limit to prevent DoS from deeply nested structures
+    // The depth_estimate check above already limits nesting, so we just parse normally
+    serde_json::from_str::<WebSocketMessage>(text).map_err(|e| format!("Invalid JSON: {}", e))
+}
+
 #[cfg(feature = "websocket")]
 async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
     let conn_id = uuid::Uuid::new_v4().to_string();
@@ -233,7 +264,7 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
         match result {
             Ok(msg) => {
                 if let Ok(text) = msg.to_text() {
-                    // Check message size
+                    // Check message size early
                     if text.len() > MAX_MESSAGE_SIZE {
                         let error_msg = WebSocketMessage::Error {
                             id: String::new(),
@@ -251,15 +282,28 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
                         continue;
                     }
 
-                    if let Ok(ws_msg) = serde_json::from_str::<WebSocketMessage>(text) {
-                        // Handle message with default handler
-                        let handler = DefaultWebSocketHandler;
-                        let response = handler.handle(ws_msg).await;
-                        let response_json =
-                            serde_json::to_string(&response).expect("Failed to serialize response");
-                        let _ = socket
-                            .send(axum::extract::ws::Message::Text(response_json.into()))
-                            .await;
+                    match parse_websocket_message(text) {
+                        Ok(ws_msg) => {
+                            // Handle message with default handler
+                            let handler = DefaultWebSocketHandler;
+                            let response = handler.handle(ws_msg).await;
+                            let response_json = serde_json::to_string(&response)
+                                .expect("Failed to serialize response");
+                            let _ = socket
+                                .send(axum::extract::ws::Message::Text(response_json.into()))
+                                .await;
+                        }
+                        Err(e) => {
+                            let error_msg = WebSocketMessage::Error {
+                                id: String::new(),
+                                error: e,
+                            };
+                            let response_json = serde_json::to_string(&error_msg)
+                                .expect("Failed to serialize error message");
+                            let _ = socket
+                                .send(axum::extract::ws::Message::Text(response_json.into()))
+                                .await;
+                        }
                     }
                 }
             }

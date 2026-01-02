@@ -184,9 +184,17 @@ pub fn build_with_config(
                         .and_then(|v: &HeaderValue| v.to_str().ok())
                         .unwrap_or("");
 
+                    let client_ip = req
+                        .headers()
+                        .get("x-forwarded-for")
+                        .or_else(|| req.headers().get("x-real-ip"))
+                        .and_then(|v: &HeaderValue| v.to_str().ok())
+                        .unwrap_or("unknown")
+                        .to_string();
+
                     if header_value.starts_with(&prefix) {
                         let key = &header_value[prefix.len()..];
-                        if let Some(permissions) = auth.validate_key(key) {
+                        if let Some(permissions) = auth.validate_key(key, &client_ip) {
                             Ok(AuthContext {
                                 user_id: Some(key.to_string()),
                                 permissions,

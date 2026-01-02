@@ -294,8 +294,8 @@ mod security_feature_tests {
         let auth = ApiKeyAuth::new();
         auth.add_key("test-key", vec!["read".to_string()]);
 
-        assert!(auth.validate_key("test-key").is_some());
-        assert!(auth.validate_key("invalid").is_none());
+        assert!(auth.validate_key("test-key", "127.0.0.1").is_some());
+        assert!(auth.validate_key("invalid", "127.0.0.1").is_none());
     }
 
     #[tokio::test]

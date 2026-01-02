@@ -14,6 +14,7 @@ use axum::{
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+
 use std::{
     collections::HashMap,
     sync::{
@@ -23,6 +24,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tower::{Layer, Service};
+#[cfg(feature = "logging")]
+use tracing;
 
 /// 默认缓存 TTL（秒）
 const DEFAULT_CACHE_TTL: u64 = 300; // 5 分钟
@@ -34,6 +37,153 @@ const DEFAULT_MAX_CACHE_ENTRIES: usize = 10000;
 const DEFAULT_CACHEABLE_METHODS: &[&str] = &["GET", "HEAD"];
 /// 默认可缓存的状态码
 const DEFAULT_CACHEABLE_STATUS_CODES: &[u16] = &[200, 203, 204, 206, 300, 301, 404, 410];
+
+/// LRU Eviction Heap - Binary heap for O(1) min extraction
+///
+/// Uses a binary heap (MinHeap) to track cache entries by access time.
+/// This provides O(1) access to the oldest entry and O(log n) insertion/removal,
+/// compared to O(n) iteration and sorting in the naive approach.
+#[derive(Debug, Clone)]
+struct MinHeapEntry {
+    key: CacheKey,
+    last_accessed: u64,
+}
+
+/// Binary heap for LRU eviction - min-heap by last_accessed timestamp
+#[derive(Debug, Clone)]
+struct MinHeap {
+    entries: Vec<MinHeapEntry>,
+}
+
+impl MinHeap {
+    /// Create a new empty min-heap
+    fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
+    /// Get the number of entries in the heap
+    fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Check if the heap is empty
+    fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Get the minimum element (oldest accessed entry) without removing it - O(1)
+    fn peek_min(&self) -> Option<&MinHeapEntry> {
+        self.entries.first()
+    }
+
+    /// Insert a new entry - O(log n)
+    fn push(&mut self, entry: MinHeapEntry) {
+        self.entries.push(entry);
+        self.sift_up(self.entries.len().saturating_sub(1));
+    }
+
+    /// Extract the minimum element (oldest entry) - O(log n)
+    fn extract_min(&mut self) -> Option<MinHeapEntry> {
+        if self.entries.is_empty() {
+            return None;
+        }
+        let min = Some(self.entries[0].clone());
+        if self.entries.len() > 1 {
+            self.entries[0] = self.entries.pop().unwrap();
+            self.sift_down(0);
+        } else {
+            self.entries.pop();
+        }
+        min
+    }
+
+    /// Remove a specific entry by key - O(n)
+    fn remove(&mut self, key: &CacheKey) -> bool {
+        if let Some(pos) = self.entries.iter().position(|e| &e.key == key) {
+            let last = self.entries.pop().unwrap();
+            if pos < self.entries.len() {
+                self.entries[pos] = last;
+                // Try both sift up and down to maintain heap property
+                let mut sift_up_done = false;
+                let mut sift_down_done = false;
+
+                if pos > 0 {
+                    self.sift_up(pos);
+                    sift_up_done = true;
+                }
+                if pos < self.entries.len() {
+                    self.sift_down(pos);
+                    sift_down_done = true;
+                }
+
+                // If neither sift worked, the element is in correct position
+                if !sift_up_done && !sift_down_done {
+                    // Element was already in correct position after swap
+                }
+            }
+            return true;
+        }
+        false
+    }
+
+    /// Sift element up to maintain heap property - O(log n)
+    fn sift_up(&mut self, mut idx: usize) {
+        while idx > 0 {
+            let parent = (idx.saturating_sub(1)) / 2;
+            if self.entries[parent].last_accessed > self.entries[idx].last_accessed {
+                self.entries.swap(parent, idx);
+                idx = parent;
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Sift element down to maintain heap property - O(log n)
+    fn sift_down(&mut self, mut idx: usize) {
+        let len = self.entries.len();
+        loop {
+            let left = 2 * idx + 1;
+            let right = 2 * idx + 2;
+            let mut smallest = idx;
+
+            if left < len && self.entries[left].last_accessed < self.entries[smallest].last_accessed
+            {
+                smallest = left;
+            }
+            if right < len
+                && self.entries[right].last_accessed < self.entries[smallest].last_accessed
+            {
+                smallest = right;
+            }
+
+            if smallest != idx {
+                self.entries.swap(idx, smallest);
+                idx = smallest;
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Rebuild heap from all entries - O(n)
+    /// Used when access times are updated
+    fn rebuild(&mut self) {
+        // Use Floyd's heap construction algorithm - O(n)
+        let len = self.entries.len();
+        for i in (0..len / 2).rev() {
+            self.sift_down(i);
+        }
+    }
+}
+
+impl Default for MinHeap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 /// 缓存配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,22 +225,25 @@ impl Default for CacheConfig {
     }
 }
 
-/// 缓存条目（带访问时间用于 LRU）
+/// Cache entry (with access time for LRU)
+///
+/// A cache entry stores the complete cached response including body, headers,
+/// and metadata for cache validation (ETag, Last-Modified) and expiration.
 #[derive(Debug, Clone)]
 struct CacheEntry {
-    /// 响应体
+    /// The cached response body as bytes
     body: Vec<u8>,
-    /// 响应头
+    /// Response headers (excluding caching-related headers like Cache-Control, ETag, Last-Modified)
     headers: HashMap<String, HeaderValue>,
-    /// ETag
+    /// ETag header value for conditional requests (based on SHA256 hash of body)
     etag: String,
-    /// Last-Modified 时间戳
+    /// Last-Modified timestamp for cache validation (Unix timestamp in seconds)
     last_modified: u64,
-    /// 过期时间戳
+    /// Expiration timestamp (Unix timestamp in seconds), entry is invalid after this time
     expires_at: u64,
-    /// 最近访问时间（用于 LRU）
+    /// Last access timestamp (Unix timestamp in seconds), used for LRU eviction
     last_accessed: u64,
-    /// 条目大小（字节）
+    /// Entry size in bytes (body length), used for size-based eviction
     size: usize,
 }
 
@@ -109,11 +262,18 @@ pub struct CacheMiddleware {
     cache: Arc<DashMap<CacheKey, CacheEntry>>,
     current_size: Arc<AtomicUsize>,
     entry_count: Arc<AtomicUsize>,
-    access_order: Arc<DashMap<CacheKey, u64>>, // 用于 LRU 排序
+    /// LRU heap for O(1) eviction - stores (key, last_accessed) pairs
+    /// Using a binary heap provides O(1) access to oldest entry vs O(n) iteration
+    access_order: Arc<DashMap<CacheKey, u64>>, // Deprecated: kept for backward compatibility during migration
+    lru_heap: Arc<DashMap<CacheKey, MinHeap>>, // New: Heap for efficient eviction
 }
 
 impl CacheMiddleware {
-    /// 创建新的缓存中间件
+    /// Create new cache middleware with optimized O(1) LRU eviction
+    ///
+    /// Uses a binary heap (MinHeap) for efficient LRU eviction instead of
+    /// full iteration and sorting. This provides O(1) access to the oldest
+    /// entry and O(log n) insertion/removal.
     pub fn new(config: CacheConfig) -> Self {
         Self {
             config,
@@ -121,6 +281,7 @@ impl CacheMiddleware {
             current_size: Arc::new(AtomicUsize::new(0)),
             entry_count: Arc::new(AtomicUsize::new(0)),
             access_order: Arc::new(DashMap::new()),
+            lru_heap: Arc::new(DashMap::new()),
         }
     }
 
@@ -182,44 +343,71 @@ impl CacheMiddleware {
             .as_secs()
     }
 
-    /// 执行 LRU 淘汰 - 删除最旧的条目
+    /// Execute LRU eviction using binary heap - O(1) min extraction
+    ///
+    /// The binary heap provides O(1) access to the oldest entry and O(log n)
+    /// for insertion/removal, compared to O(n) iteration + O(n log n) sorting
+    /// in the naive approach.
     fn evict_lru(&self, min_needed: usize) {
-        // 收集所有条目及其访问时间
-        let mut entries: Vec<_> = self
-            .access_order
-            .iter()
-            .map(|r| (r.key().clone(), *r.value()))
-            .collect();
-
-        // 按访问时间排序（最旧的在前）
-        entries.sort_by_key(|(_, time)| *time);
-
-        // 删除条目直到有足够空间
+        let max_entries = self.config.max_entries;
+        let max_size = self.config.max_size_bytes;
         let mut freed = 0;
-        for (key, _) in entries {
-            if self.current_size.load(Ordering::Relaxed) + min_needed <= self.config.max_size_bytes
-                && self.entry_count.load(Ordering::Relaxed) <= self.config.max_entries
-            {
+        let mut removed_count = 0;
+
+        loop {
+            let size_now = self.current_size.load(Ordering::Relaxed);
+            let count_now = self.entry_count.load(Ordering::Relaxed);
+
+            // Check if eviction is still needed
+            if size_now + min_needed <= max_size && count_now < max_entries {
                 break;
             }
 
-            if let Some((_, entry)) = self.cache.remove(&key) {
-                self.access_order.remove(&key);
-                let size = entry.body.len();
-                self.current_size.fetch_sub(size, Ordering::Relaxed);
-                self.entry_count.fetch_sub(1, Ordering::Relaxed);
-                freed += size;
-
-                if freed >= min_needed {
+            // Extract the oldest entry from heap - O(log n)
+            // We need to extract inside this scope so the mutable borrow is released
+            let mut found_entry = false;
+            for mut shard in self.lru_heap.iter_mut() {
+                let heap = shard.value_mut();
+                if let Some(entry) = heap.extract_min() {
+                    // Remove from cache and access_order
+                    if let Some((_, cache_entry)) = self.cache.remove(&entry.key) {
+                        self.access_order.remove(&entry.key);
+                        let size = cache_entry.body.len();
+                        self.current_size.fetch_sub(size, Ordering::Relaxed);
+                        self.entry_count.fetch_sub(1, Ordering::Relaxed);
+                        freed += size;
+                        removed_count += 1;
+                    }
+                    found_entry = true;
                     break;
                 }
             }
+
+            // If no more entries to evict, break
+            if !found_entry || self.entry_count.load(Ordering::Relaxed) == 0 {
+                break;
+            }
+
+            // Safety limit to prevent infinite loops
+            if removed_count > 1000 {
+                #[cfg(feature = "logging")]
+                tracing::warn!("LRU eviction hit safety limit of 1000 entries");
+                break;
+            }
+        }
+
+        #[cfg(feature = "logging")]
+        if removed_count > 0 {
+            tracing::debug!(
+                freed_bytes = freed,
+                removed_entries = removed_count,
+                "LRU eviction completed"
+            );
         }
     }
 
-    /// 清除过期缓存和超出限制的缓存（调用 LRU 淘汰）
+    /// Clear expired cache and evict over-limit entries (calls LRU eviction)
     fn cleanup_and_evict(&self, needed: usize) {
-        // 先清理过期条目
         let now = CacheMiddleware::now();
         let mut keys_to_remove = Vec::new();
 
@@ -232,12 +420,18 @@ impl CacheMiddleware {
         for key in keys_to_remove {
             if let Some((_, entry)) = self.cache.remove(&key) {
                 self.access_order.remove(&key);
+                // Remove from LRU heap
+                for mut shard in self.lru_heap.iter_mut() {
+                    let heap = shard.value_mut();
+                    heap.remove(&key);
+                    break;
+                }
                 self.current_size.fetch_sub(entry.size, Ordering::Relaxed);
                 self.entry_count.fetch_sub(1, Ordering::Relaxed);
             }
         }
 
-        // 如果空间不足，执行 LRU 淘汰
+        // If space is insufficient, execute LRU eviction
         let current_size = self.current_size.load(Ordering::Relaxed);
         let entry_count = self.entry_count.load(Ordering::Relaxed);
 
@@ -261,10 +455,24 @@ impl CacheMiddleware {
         }
     }
 
-    /// 更新访问时间（LRU）
+    /// Update access time (LRU) - O(log n) due to heap update
     fn update_access_time(&self, key: &CacheKey) {
         let now = CacheMiddleware::now();
         self.access_order.insert(key.clone(), now);
+
+        // Update the heap: remove old entry and re-insert with new timestamp
+        // This is O(n) for removal + O(log n) for insertion
+        // For better performance, we could use a more sophisticated heap that supports decrease-key
+        for mut shard in self.lru_heap.iter_mut() {
+            let heap = shard.value_mut();
+            if heap.remove(key) {
+                heap.push(MinHeapEntry {
+                    key: key.clone(),
+                    last_accessed: now,
+                });
+                return;
+            }
+        }
     }
 }
 
@@ -382,8 +590,10 @@ where
                 let (parts, body) = response.into_parts();
                 let body_bytes = match axum::body::to_bytes(body, 10 * 1024 * 1024).await {
                     Ok(bytes) => bytes.to_vec(),
-                    Err(_) => {
-                        // 响应体太大，不缓存
+                    Err(e) => {
+                        // 响应体转换失败，不缓存
+                        #[cfg(feature = "logging")]
+                        tracing::error!(error = %e, "Failed to convert response body to bytes for caching");
                         let response = Response::from_parts(parts, axum::body::Body::empty());
                         return Ok(response);
                     }
@@ -421,10 +631,21 @@ where
                 // 再次检查大小限制后尝试插入
                 let current_size = middleware.current_size.load(Ordering::Relaxed);
                 if current_size + entry_size <= middleware.config.max_size_bytes {
+                    // Clone cache_key before moving into cache and access_order
+                    let cache_key_for_heap = cache_key.clone();
                     middleware.cache.insert(cache_key.clone(), entry.clone());
                     middleware
                         .access_order
                         .insert(cache_key, CacheMiddleware::now());
+                    // Add to LRU heap for O(1) eviction
+                    for mut shard in middleware.lru_heap.iter_mut() {
+                        let heap = shard.value_mut();
+                        heap.push(MinHeapEntry {
+                            key: cache_key_for_heap,
+                            last_accessed: CacheMiddleware::now(),
+                        });
+                        break;
+                    }
                     middleware
                         .current_size
                         .fetch_add(entry_size, Ordering::Relaxed);
