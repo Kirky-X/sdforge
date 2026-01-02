@@ -13,11 +13,11 @@ use thiserror::Error;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ApiMetadata {
     /// API name
-    pub name: &'static str,
+    pub name: String,
     /// API version
-    pub version: &'static str,
+    pub version: String,
     /// API description
-    pub description: &'static str,
+    pub description: String,
     /// Cache TTL in seconds (None means no caching)
     pub cache_ttl: Option<u64>,
     /// Whether this is a streaming endpoint
@@ -27,9 +27,9 @@ pub struct ApiMetadata {
 impl ApiMetadata {
     /// Create new API metadata
     pub fn new(
-        name: &'static str,
-        version: &'static str,
-        description: &'static str,
+        name: String,
+        version: String,
+        description: String,
         cache_ttl: Option<u64>,
         is_streaming: bool,
     ) -> Self {
@@ -343,6 +343,28 @@ impl From<ApiError> for ServiceError {
                 422,
             ),
         }
+    }
+}
+
+/// Implement IntoResponse for ApiError to enable direct return in HTTP handlers
+#[cfg(feature = "http")]
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        let status = match self {
+            ApiError::NotFound { .. } => 404,
+            ApiError::InvalidInput { .. } => 400,
+            ApiError::AuthenticationFailed { .. } => 401,
+            ApiError::AccessDenied { .. } => 403,
+            ApiError::RateLimitExceeded { .. } => 429,
+            ApiError::Internal { .. } => 500,
+            ApiError::ServiceUnavailable { .. } => 503,
+            ApiError::ValidationError { .. } => 422,
+        };
+        let body = serde_json::to_vec(&self).unwrap_or_default();
+        axum::response::Response::builder()
+            .status(status)
+            .body(axum::body::Body::from(body))
+            .unwrap()
     }
 }
 
