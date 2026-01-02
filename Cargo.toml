@@ -2,4 +2,42 @@
 members = [
     "axiom-macros",
     "axiom",
+    "axiom-cli",
 ]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Axiom Team"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/axiom-rs/axiom"
+keywords = ["api", "http", "mcp", "macro", "framework"]
+categories = ["web-programming", "development-tools"]
+
+[workspace.dependencies]
+# Core dependencies
+syn = "2.0"
+quote = "1.0"
+darling = "0.20"
+proc-macro-error = "1.0"
+inventory = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+async-trait = "0.1"
+
+# Async dependencies
+tokio = { version = "1.41", features = ["rt", "rt-multi-thread", "macros"] }
+futures = "0.3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
+
+[profile.dev]
+debug = true
+
+[profile.dev.package."*"]
+opt-level = 0
