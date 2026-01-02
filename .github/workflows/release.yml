@@ -124,7 +124,15 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-      
+          merge-multiple: true
+
+      - name: Debug artifacts
+        run: |
+          echo "=== artifacts directory ==="
+          ls -la artifacts/
+          echo "=== recursive listing ==="
+          find artifacts -type f
+
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
@@ -161,7 +169,7 @@ jobs:
           cat changelog.md
       
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: release-assets/*
           body_path: changelog.md
