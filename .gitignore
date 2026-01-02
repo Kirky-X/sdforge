@@ -34,8 +34,8 @@ Thumbs.db
 *.o
 
 # Project specific
-/temp/
-/CLAUDE.md
-/IFLOW.md
-/.local-registry/
-/.claude/
+temp/
+CLAUDE.md
+IFLOW.md
+.local-registry/
+.claude/
