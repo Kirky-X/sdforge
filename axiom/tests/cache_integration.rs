@@ -19,6 +19,7 @@ mod cache_integration_tests {
         let config = CacheConfig::default();
         assert_eq!(config.ttl_seconds, 300);
         assert_eq!(config.max_size_bytes, 100 * 1024 * 1024);
+        assert_eq!(config.max_entries, 10000);
         assert!(config.cacheable_methods.contains(&"GET".to_string()));
         assert!(config.cacheable_methods.contains(&"HEAD".to_string()));
         assert!(!config.cacheable_methods.contains(&"POST".to_string()));
@@ -29,11 +30,13 @@ mod cache_integration_tests {
         let config = CacheConfig {
             ttl_seconds: 600,
             max_size_bytes: 50 * 1024 * 1024,
+            max_entries: 5000,
             cacheable_methods: vec!["GET".to_string(), "POST".to_string()],
             cacheable_status_codes: vec![200, 201],
         };
         assert_eq!(config.ttl_seconds, 600);
         assert_eq!(config.max_size_bytes, 50 * 1024 * 1024);
+        assert_eq!(config.max_entries, 5000);
         assert!(config.cacheable_methods.contains(&"POST".to_string()));
     }
 

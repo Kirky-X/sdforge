@@ -70,6 +70,8 @@ mod http_integration_tests {
             name: "test-api",
             version: "v1",
             description: "Test API",
+            cache_ttl: Some(300),
+            is_streaming: false,
         };
 
         assert_eq!(metadata.name, "test-api");
@@ -279,7 +281,11 @@ mod http_integration_tests {
             metadata: Default::default(),
         };
 
-        logger.log(&context, "test_action", "/api/test", true, None);
+        logger
+            .log(&context, "test_action", "/api/test", true, None)
+            .await;
+        // Give the background worker time to process the log
+        tokio::task::yield_now().await;
         let logs = logger.get_logs("user-123");
         assert!(logs.len() >= 1);
     }

@@ -1,7 +1,7 @@
 //! HTTP 响应缓存中间件
 //!
 //! 提供基于内存的 HTTP 响应缓存，支持 ETag 和 Last-Modified 头实现条件请求。
-//! 使用 DashMap 实现高并发缓存，减少锁竞争。
+//! 使用 DashMap 实现高并发缓存，结合 LRU 淘汰策略。
 
 use axum::{
     extract::Request,
@@ -16,7 +16,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 use tower::{Layer, Service};
@@ -25,6 +28,8 @@ use tower::{Layer, Service};
 const DEFAULT_CACHE_TTL: u64 = 300; // 5 分钟
 /// 默认最大缓存大小（字节）
 const DEFAULT_MAX_CACHE_SIZE: usize = 100 * 1024 * 1024; // 100 MB
+/// 默认最大条目数量
+const DEFAULT_MAX_CACHE_ENTRIES: usize = 10000;
 /// 默认可缓存的 HTTP 方法
 const DEFAULT_CACHEABLE_METHODS: &[&str] = &["GET", "HEAD"];
 /// 默认可缓存的状态码
@@ -37,6 +42,8 @@ pub struct CacheConfig {
     pub ttl_seconds: u64,
     /// 最大缓存大小（字节）
     pub max_size_bytes: usize,
+    /// 最大缓存条目数量
+    pub max_entries: usize,
     /// 可缓存的 HTTP 方法
     #[serde(default = "default_cacheable_methods")]
     pub cacheable_methods: Vec<String>,
@@ -61,13 +68,14 @@ impl Default for CacheConfig {
         Self {
             ttl_seconds: DEFAULT_CACHE_TTL,
             max_size_bytes: DEFAULT_MAX_CACHE_SIZE,
+            max_entries: DEFAULT_MAX_CACHE_ENTRIES,
             cacheable_methods: default_cacheable_methods(),
             cacheable_status_codes: default_cacheable_status_codes(),
         }
     }
 }
 
-/// 缓存条目
+/// 缓存条目（带访问时间用于 LRU）
 #[derive(Debug, Clone)]
 struct CacheEntry {
     /// 响应体
@@ -80,6 +88,10 @@ struct CacheEntry {
     last_modified: u64,
     /// 过期时间戳
     expires_at: u64,
+    /// 最近访问时间（用于 LRU）
+    last_accessed: u64,
+    /// 条目大小（字节）
+    size: usize,
 }
 
 /// 缓存键
@@ -95,7 +107,9 @@ pub struct CacheKey {
 pub struct CacheMiddleware {
     config: CacheConfig,
     cache: Arc<DashMap<CacheKey, CacheEntry>>,
-    current_size: Arc<std::sync::atomic::AtomicUsize>,
+    current_size: Arc<AtomicUsize>,
+    entry_count: Arc<AtomicUsize>,
+    access_order: Arc<DashMap<CacheKey, u64>>, // 用于 LRU 排序
 }
 
 impl CacheMiddleware {
@@ -104,11 +118,14 @@ impl CacheMiddleware {
         Self {
             config,
             cache: Arc::new(DashMap::new()),
-            current_size: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            current_size: Arc::new(AtomicUsize::new(0)),
+            entry_count: Arc::new(AtomicUsize::new(0)),
+            access_order: Arc::new(DashMap::new()),
         }
     }
 
     /// 生成 ETag（基于响应内容的 SHA256）
+    #[inline]
     pub fn generate_etag(body: &[u8]) -> String {
         let mut hasher = Sha256::new();
         hasher.update(body);
@@ -117,6 +134,7 @@ impl CacheMiddleware {
     }
 
     /// 生成 Last-Modified 时间戳
+    #[inline]
     pub fn generate_last_modified() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -125,6 +143,7 @@ impl CacheMiddleware {
     }
 
     /// 生成缓存键
+    #[inline]
     pub fn generate_cache_key(method: &str, uri: &str, body: &[u8]) -> CacheKey {
         let mut hasher = Sha256::new();
         hasher.update(body);
@@ -138,12 +157,14 @@ impl CacheMiddleware {
     }
 
     /// 检查是否应该缓存响应
+    #[inline]
     pub fn should_cache(&self, method: &str, status: u16) -> bool {
         self.config.cacheable_methods.contains(&method.to_string())
             && self.config.cacheable_status_codes.contains(&status)
     }
 
     /// 检查缓存是否过期
+    #[inline]
     fn is_expired(&self, expires_at: u64) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -152,62 +173,98 @@ impl CacheMiddleware {
         now > expires_at
     }
 
-    /// 清除过期缓存和超出大小限制的缓存
-    fn cleanup_expired(&self) {
-        let now = SystemTime::now()
+    /// 获取当前时间戳（用于访问时间）
+    #[inline]
+    fn now() -> u64 {
+        SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("System time is before Unix epoch")
-            .as_secs();
+            .as_secs()
+    }
 
-        // 收集需要删除的键
-        let mut keys_to_remove = Vec::new();
-        let mut total_size = 0;
+    /// 执行 LRU 淘汰 - 删除最旧的条目
+    fn evict_lru(&self, min_needed: usize) {
+        // 收集所有条目及其访问时间
+        let mut entries: Vec<_> = self
+            .access_order
+            .iter()
+            .map(|r| (r.key().clone(), *r.value()))
+            .collect();
 
-        for entry in self.cache.iter() {
-            let (key, value) = entry.pair();
-            let entry_size = value.body.len();
-            total_size += entry_size;
+        // 按访问时间排序（最旧的在前）
+        entries.sort_by_key(|(_, time)| *time);
 
-            // 检查是否过期
-            if now > value.expires_at {
-                keys_to_remove.push(key.clone());
-            }
-        }
-
-        // 删除过期条目
-        for key in keys_to_remove {
-            if let Some((_, entry)) = self.cache.remove(&key) {
-                let _ = self
-                    .current_size
-                    .fetch_sub(entry.body.len(), std::sync::atomic::Ordering::Relaxed);
-            }
-        }
-
-        // 如果超出大小限制，删除最旧的条目（LRU 策略）
-        // DashMap 本身不提供 LRU，这里我们简单地删除一些条目
-        while total_size > self.config.max_size_bytes && !self.cache.is_empty() {
-            // 删除第一个找到的条目（简单策略）
-            if let Some(entry) = self.cache.iter().next() {
-                let key = entry.key().clone();
-                if let Some((_, removed_entry)) = self.cache.remove(&key) {
-                    let size = removed_entry.body.len();
-                    total_size -= size;
-                    let _ = self
-                        .current_size
-                        .fetch_sub(size, std::sync::atomic::Ordering::Relaxed);
-                }
-            } else {
+        // 删除条目直到有足够空间
+        let mut freed = 0;
+        for (key, _) in entries {
+            if self.current_size.load(Ordering::Relaxed) + min_needed <= self.config.max_size_bytes
+                && self.entry_count.load(Ordering::Relaxed) <= self.config.max_entries
+            {
                 break;
+            }
+
+            if let Some((_, entry)) = self.cache.remove(&key) {
+                self.access_order.remove(&key);
+                let size = entry.body.len();
+                self.current_size.fetch_sub(size, Ordering::Relaxed);
+                self.entry_count.fetch_sub(1, Ordering::Relaxed);
+                freed += size;
+
+                if freed >= min_needed {
+                    break;
+                }
             }
         }
     }
 
-    /// 检查并强制执行大小限制
-    fn enforce_size_limit(&self) {
-        let current_size = self.current_size.load(std::sync::atomic::Ordering::Relaxed);
-        if current_size > self.config.max_size_bytes {
-            self.cleanup_expired();
+    /// 清除过期缓存和超出限制的缓存（调用 LRU 淘汰）
+    fn cleanup_and_evict(&self, needed: usize) {
+        // 先清理过期条目
+        let now = CacheMiddleware::now();
+        let mut keys_to_remove = Vec::new();
+
+        for entry in self.cache.iter() {
+            if now > entry.expires_at {
+                keys_to_remove.push(entry.key().clone());
+            }
         }
+
+        for key in keys_to_remove {
+            if let Some((_, entry)) = self.cache.remove(&key) {
+                self.access_order.remove(&key);
+                self.current_size.fetch_sub(entry.size, Ordering::Relaxed);
+                self.entry_count.fetch_sub(1, Ordering::Relaxed);
+            }
+        }
+
+        // 如果空间不足，执行 LRU 淘汰
+        let current_size = self.current_size.load(Ordering::Relaxed);
+        let entry_count = self.entry_count.load(Ordering::Relaxed);
+
+        if current_size + needed > self.config.max_size_bytes
+            || entry_count >= self.config.max_entries
+        {
+            self.evict_lru(needed);
+        }
+    }
+
+    /// 检查并强制执行大小限制
+    #[inline]
+    fn enforce_size_limit(&self, needed: usize) {
+        let current_size = self.current_size.load(Ordering::Relaxed);
+        let entry_count = self.entry_count.load(Ordering::Relaxed);
+
+        if current_size + needed > self.config.max_size_bytes
+            || entry_count >= self.config.max_entries
+        {
+            self.cleanup_and_evict(needed);
+        }
+    }
+
+    /// 更新访问时间（LRU）
+    fn update_access_time(&self, key: &CacheKey) {
+        let now = CacheMiddleware::now();
+        self.access_order.insert(key.clone(), now);
     }
 }
 
@@ -283,6 +340,9 @@ where
         if let Some(entry) = middleware.cache.get(&cache_key) {
             // 检查是否过期
             if !middleware.is_expired(entry.expires_at) {
+                // 更新访问时间（LRU）
+                middleware.update_access_time(&cache_key);
+
                 // 缓存命中，返回缓存的响应
                 let mut response = Response::new(axum::body::Body::from(entry.body.clone()));
 
@@ -348,34 +408,27 @@ where
                     etag: etag.clone(),
                     last_modified,
                     expires_at,
+                    last_accessed: CacheMiddleware::now(),
+                    size: body_bytes.len(),
                 };
 
                 // 存储到缓存
                 let entry_size = body_bytes.len();
 
-                // 检查大小限制
-                let current_size = middleware
-                    .current_size
-                    .load(std::sync::atomic::Ordering::Relaxed);
+                // 检查大小限制（使用新的 LRU 机制）
+                middleware.enforce_size_limit(entry_size);
+
+                // 再次检查大小限制后尝试插入
+                let current_size = middleware.current_size.load(Ordering::Relaxed);
                 if current_size + entry_size <= middleware.config.max_size_bytes {
-                    middleware.cache.insert(cache_key, entry.clone());
-                    let _ = middleware
+                    middleware.cache.insert(cache_key.clone(), entry.clone());
+                    middleware
+                        .access_order
+                        .insert(cache_key, CacheMiddleware::now());
+                    middleware
                         .current_size
-                        .fetch_add(entry_size, std::sync::atomic::Ordering::Relaxed);
-                    middleware.cleanup_expired();
-                } else {
-                    // 缓存已满，执行清理
-                    middleware.enforce_size_limit();
-                    // 再次尝试插入
-                    let current_size = middleware
-                        .current_size
-                        .load(std::sync::atomic::Ordering::Relaxed);
-                    if current_size + entry_size <= middleware.config.max_size_bytes {
-                        middleware.cache.insert(cache_key, entry.clone());
-                        let _ = middleware
-                            .current_size
-                            .fetch_add(entry_size, std::sync::atomic::Ordering::Relaxed);
-                    }
+                        .fetch_add(entry_size, Ordering::Relaxed);
+                    middleware.entry_count.fetch_add(1, Ordering::Relaxed);
                 }
 
                 // 构建响应

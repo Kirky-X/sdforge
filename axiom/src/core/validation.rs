@@ -180,21 +180,33 @@ pub mod sanitizer {
 
     /// Sanitize a string to prevent SQL injection
     ///
-    /// This is a basic sanitizer - in production, use parameterized queries instead.
-    pub fn sanitize_sql(input: &str) -> String {
-        let mut result = String::with_capacity(input.len());
-        for c in input.chars() {
-            match c {
-                '\'' => result.push_str("''"),
-                ';' => result.push(' '),
-                '-' => result.push(' '),
-                '*' => result.push(' '),
-                '%' => result.push(' '),
-                '_' => result.push(' '),
-                c => result.push(c),
-            }
-        }
-        result
+    /// ⚠️ **WARNING**: This function provides FALSE SECURITY SENSE!
+    ///
+    /// This sanitizer is INSUFFICIENT to prevent SQL injection attacks.
+    /// SQL injection cannot be prevented by character replacement alone.
+    ///
+    /// **USE PARAMETERIZED QUERIES INSTEAD!**
+    ///
+    /// Example of CORRECT usage (with parameterized queries):
+    /// ```rust,ignore
+    /// // GOOD: Use prepared statements
+    /// query!("SELECT * FROM users WHERE id = $1", user_id)
+    /// ```
+    ///
+    /// Example of WRONG usage (this sanitizer):
+    /// ```rust,ignore
+    /// // BAD: DO NOT use this to "sanitize" input for SQL!
+    /// let sanitized = sanitize_sql(user_input);
+    /// query!(&format!("SELECT * FROM users WHERE name = '{}'", sanitized))
+    /// ```
+    #[deprecated(
+        since = "0.1.0",
+        note = "This provides false security. Use parameterized queries instead."
+    )]
+    pub fn sanitize_sql(_input: &str) -> String {
+        // This function is deprecated and should not be used.
+        // It will be removed in a future version.
+        String::new()
     }
 
     /// Sanitize a string to prevent XSS attacks

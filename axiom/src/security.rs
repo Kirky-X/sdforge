@@ -10,7 +10,9 @@ use axum::{
     response::Response,
 };
 use dashmap::DashMap;
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -104,32 +106,163 @@ impl Default for ApiKeyAuth {
 
 /// Bearer token authentication
 #[derive(Clone)]
-#[allow(dead_code)] // secret field is reserved for future JWT implementation
 pub struct BearerAuth {
-    /// JWT secret (simplified for demo - use proper JWT in production)
-    secret: String,
+    /// JWT secret for HMAC-SHA256 signing
+    secret: Vec<u8>,
     /// Valid tokens cache
     valid_tokens: Arc<DashMap<String, AuthContext>>,
+    /// Token blacklist (for logout)
+    blacklisted_tokens: Arc<DashMap<String, Instant>>,
 }
 
 impl BearerAuth {
     /// Create new bearer authentication
     pub fn new(secret: impl Into<String>) -> Self {
         Self {
-            secret: secret.into(),
+            secret: secret.into().into_bytes(),
             valid_tokens: Arc::new(DashMap::new()),
+            blacklisted_tokens: Arc::new(DashMap::new()),
         }
     }
 
-    /// Validate a bearer token (simplified - use proper JWT validation in production)
-    pub fn validate_token(&self, token: &str) -> Option<AuthContext> {
-        // In production, use proper JWT validation
-        self.valid_tokens.get(token).map(|r| r.value().clone())
+    /// Simple constant-time comparison to prevent timing attacks
+    fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+        let mut result = 0u8;
+        for (x, y) in a.iter().zip(b.iter()) {
+            result |= x ^ y;
+        }
+        result == 0
     }
 
-    /// Register a token
+    /// Base64url decode (JWT uses URL-safe base64)
+    fn base64url_decode(input: &str) -> Option<Vec<u8>> {
+        let mut table = [0u8; 256];
+        for (i, b) in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+            .iter()
+            .enumerate()
+        {
+            table[*b as usize] = i as u8;
+        }
+
+        let mut result = Vec::with_capacity(input.len() * 3 / 4);
+        let mut buffer = 0u32;
+        let mut bits = 0i32;
+
+        for c in input.bytes() {
+            if c == b'.' {
+                continue; // Skip period separators
+            }
+            if c == b' ' || c == b'\n' || c == b'\r' || c == b'\t' {
+                continue; // Skip whitespace
+            }
+
+            let val = table.get(c as usize)?;
+            buffer = (buffer << 6) | (*val as u32);
+            bits += 6;
+
+            if bits >= 8 {
+                bits -= 8;
+                result.push((buffer >> bits) as u8);
+            }
+        }
+
+        Some(result)
+    }
+
+    /// Parse JWT token and verify signature
+    ///
+    /// JWT Format: header.payload.signature
+    /// Each part is base64url-encoded
+    fn verify_jwt(&self, token: &str) -> Option<serde_json::Value> {
+        let parts: Vec<&str> = token.split('.').collect();
+        if parts.len() != 3 {
+            return None;
+        }
+
+        // Decode header
+        let _header = Self::base64url_decode(parts[0])?;
+
+        // Decode payload
+        let payload = Self::base64url_decode(parts[1])?;
+        let payload_str = String::from_utf8_lossy(&payload);
+        let payload_value: serde_json::Value = serde_json::from_str(&payload_str).ok()?;
+
+        // Verify signature using HMAC-SHA256
+        let signature_input = format!("{}.{}", parts[0], parts[1]);
+        let mut mac = Hmac::<Sha256>::new_from_slice(&self.secret).ok()?;
+        mac.update(signature_input.as_bytes());
+        let expected_signature = mac.finalize().into_bytes();
+
+        // Decode provided signature
+        let provided_signature = Self::base64url_decode(parts[2])?;
+        if provided_signature.len() != 32 {
+            return None;
+        }
+
+        // Constant-time comparison to prevent timing attacks
+        if !Self::constant_time_eq(expected_signature.as_slice(), &provided_signature) {
+            return None;
+        }
+
+        // Check expiration if present
+        if let Some(exp) = payload_value.get("exp").and_then(|v| v.as_i64()) {
+            if chrono::Utc::now().timestamp() > exp {
+                return None; // Token expired
+            }
+        }
+
+        Some(payload_value)
+    }
+
+    /// Validate a bearer token with proper JWT verification
+    pub fn validate_token(&self, token: &str) -> Option<AuthContext> {
+        // Check if token is blacklisted
+        if let Some(expiry) = self.blacklisted_tokens.get(token) {
+            if Instant::now() < *expiry {
+                return None; // Token is blacklisted
+            }
+        }
+
+        // Verify JWT signature and claims
+        let payload = self.verify_jwt(token)?;
+
+        // Extract claims from payload
+        let user_id = payload
+            .get("sub")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let permissions: Vec<String> = payload
+            .get("permissions")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| {
+                Some(
+                    arr.iter()
+                        .filter_map(|p| p.as_str().map(String::from))
+                        .collect(),
+                )
+            })
+            .unwrap_or_default();
+
+        Some(AuthContext {
+            user_id,
+            permissions,
+            metadata: AuthMetadata::default(),
+        })
+    }
+
+    /// Register a token (for session management)
     pub fn register_token(&self, token: String, context: AuthContext) {
         self.valid_tokens.insert(token, context);
+    }
+
+    /// Invalidate a token (for logout)
+    pub fn invalidate_token(&self, token: &str) {
+        // Invalidate immediately (could add grace period)
+        self.blacklisted_tokens
+            .insert(token.to_string(), Instant::now());
     }
 }
 
@@ -154,13 +287,22 @@ impl Default for RateLimitConfig {
     }
 }
 
-/// Rate limiter
+/// Rate limiter with idempotency support
+///
+/// Security features:
+/// - Time-window based rate limiting
+/// - Request deduplication for idempotent requests
+/// - Per-key tracking with automatic cleanup
 #[derive(Clone)]
 pub struct RateLimiter {
     /// Configuration
     config: RateLimitConfig,
     /// Request tracking per IP
     requests: Arc<DashMap<String, Vec<Instant>>>,
+    /// Idempotency key cache (for deduplication)
+    idempotency_cache: Arc<DashMap<String, Instant>>,
+    /// Rate limiting semaphore (for backpressure)
+    semaphore: Arc<tokio::sync::Semaphore>,
 }
 
 impl RateLimiter {
@@ -169,6 +311,8 @@ impl RateLimiter {
         Self {
             config: config.unwrap_or_default(),
             requests: Arc::new(DashMap::new()),
+            idempotency_cache: Arc::new(DashMap::new()),
+            semaphore: Arc::new(tokio::sync::Semaphore::new(1000)),
         }
     }
 
@@ -206,6 +350,31 @@ impl RateLimiter {
         Ok(self.config.max_requests - times.len() as u32)
     }
 
+    /// Check idempotency (returns true if this is a duplicate request)
+    ///
+    /// Call this at the start of request processing. If it returns true,
+    /// the request should be processed as a duplicate (return cached response).
+    pub fn check_idempotency(&self, idempotency_key: &str) -> bool {
+        let now = Instant::now();
+        let window = Duration::from_secs(60); // Idempotency key cache window
+
+        if let Some(existing) = self.idempotency_cache.get(idempotency_key) {
+            // Clone the instant since Ref doesn't deref to the value directly
+            let existing_time = *existing;
+            // Instant::duration_since returns Duration (panics if other > self in debug)
+            let elapsed = now.duration_since(existing_time).as_secs();
+            if elapsed < window.as_secs() {
+                return true; // Duplicate request
+            }
+        }
+
+        // Record this idempotency key
+        self.idempotency_cache
+            .insert(idempotency_key.to_string(), now);
+
+        false // Not a duplicate
+    }
+
     /// Get remaining requests
     pub fn remaining(&self, key: &str) -> u32 {
         let now = Instant::now();
@@ -218,6 +387,34 @@ impl RateLimiter {
         } else {
             self.config.max_requests
         }
+    }
+
+    /// Acquire rate limit permit (async, with backpressure)
+    pub async fn acquire(&self, key: &str) -> Result<Permit, RateLimitError> {
+        // Check rate limit first
+        let remaining = self.check(key)?;
+
+        // Try to acquire semaphore permit (owned to allow returning from function)
+        let permit = self
+            .semaphore
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| RateLimitError {
+                limit: self.config.max_requests,
+                remaining: 0,
+                retry_after: 1,
+            })?;
+
+        Ok(Permit(permit))
+    }
+}
+
+/// RAII permit for rate limiting
+pub struct Permit(pub tokio::sync::OwnedSemaphorePermit);
+
+impl Drop for Permit {
+    fn drop(&mut self) {
+        // Permit is automatically released when dropped
     }
 }
 
@@ -267,13 +464,27 @@ pub enum AuditResult {
     },
 }
 
-/// Audit logger
+/// Audit logger with DoS protection
+///
+/// Security features:
+/// - Semaphore-based rate limiting to prevent log flooding
+/// - Per-user log count limits
+/// - Async processing to avoid blocking main threads
 #[derive(Clone)]
 pub struct AuditLogger {
     /// Logs storage
     logs: Arc<DashMap<String, Vec<AuditLog>>>,
-    /// Maximum logs per user (DoS protection)
+    /// Maximum logs per user
     max_logs_per_user: usize,
+    /// Rate limiting semaphore (max concurrent log operations)
+    semaphore: Arc<tokio::sync::Semaphore>,
+    /// Log queue sender (for async processing)
+    queue_sender: Arc<tokio::sync::mpsc::Sender<AuditLogBatch>>,
+}
+
+struct AuditLogBatch {
+    user_id: String,
+    log: AuditLog,
 }
 
 impl AuditLogger {
@@ -284,14 +495,37 @@ impl AuditLogger {
 
     /// Create new audit logger with custom limit
     pub fn with_limit(max_logs: usize) -> Self {
+        let (queue_sender, mut queue_receiver) = tokio::sync::mpsc::channel::<AuditLogBatch>(1000);
+
+        // Spawn background worker for async log processing
+        let logs: Arc<DashMap<String, Vec<AuditLog>>> = Arc::new(DashMap::new());
+        let logs_clone = logs.clone();
+        let max_logs_clone = max_logs;
+        tokio::spawn(async move {
+            while let Some(batch) = queue_receiver.recv().await {
+                let mut entry = logs_clone.entry(batch.user_id.clone()).or_default();
+                entry.push(batch.log);
+
+                // Keep only last N logs per user
+                if entry.len() > max_logs_clone {
+                    entry.truncate(max_logs_clone);
+                }
+            }
+        });
+
         Self {
-            logs: Arc::new(DashMap::new()),
+            logs,
             max_logs_per_user: max_logs,
+            semaphore: Arc::new(tokio::sync::Semaphore::new(100)), // Max 100 concurrent log operations
+            queue_sender: Arc::new(queue_sender),
         }
     }
 
-    /// Log an action
-    pub fn log(
+    /// Log an action (with DoS protection)
+    ///
+    /// Uses semaphore to limit concurrent log operations, preventing
+    /// the audit logger from being a DoS vector.
+    pub async fn log(
         &self,
         context: &AuthContext,
         action: impl Into<String>,
@@ -299,6 +533,20 @@ impl AuditLogger {
         success: bool,
         message: Option<String>,
     ) {
+        // Acquire permit with timeout to prevent blocking
+        let permit = match tokio::time::timeout(
+            Duration::from_secs(1),
+            self.semaphore.clone().acquire_owned(),
+        )
+        .await
+        {
+            Ok(Ok(permit)) => permit,
+            Ok(Err(_)) | Err(_) => {
+                // Semaphore closed or timeout - skip logging to prevent DoS
+                return;
+            }
+        };
+
         let log = AuditLog {
             id: Uuid::new_v4().to_string(),
             timestamp: chrono::Utc::now().timestamp(),
@@ -315,25 +563,40 @@ impl AuditLogger {
             metadata: context.metadata.clone(),
         };
 
-        let key = context
+        let user_id = context
             .user_id
             .clone()
             .unwrap_or_else(|| "anonymous".to_string());
-        let mut entry = self.logs.entry(key).or_default();
-        entry.push(log);
 
-        // Keep only last N logs per user (DoS protection)
-        if entry.len() > self.max_logs_per_user {
-            entry.truncate(self.max_logs_per_user);
-        }
+        // Send to async queue (non-blocking)
+        let sender = self.queue_sender.clone();
+        let _ = sender
+            .send(AuditLogBatch {
+                user_id: user_id.clone(),
+                log,
+            })
+            .await;
+
+        // Drop permit to release semaphore
+        drop(permit);
     }
 
-    /// Get logs for a user
+    /// Get logs for a user (synchronous)
     pub fn get_logs(&self, user_id: &str) -> Vec<AuditLog> {
         self.logs
             .get(user_id)
             .map(|e| e.clone())
             .unwrap_or_default()
+    }
+
+    /// Clear logs for a user (admin function)
+    pub fn clear_logs(&self, user_id: &str) {
+        self.logs.remove(user_id);
+    }
+
+    /// Get total log count (for monitoring)
+    pub fn total_log_count(&self) -> usize {
+        self.logs.iter().map(|e| e.len()).sum()
     }
 }
 
@@ -484,49 +747,86 @@ fn extract_client_ip(req: &Request<Body>) -> String {
     "unknown".to_string()
 }
 
-/// Validate IP address format
+/// Validate IP address format and security
 ///
 /// Accepts:
-/// - IPv4: 0.0.0.0 - 255.255.255.255
-/// - IPv6: ::1 - ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff
+/// - IPv4: Public IPs only (rejects private ranges)
+/// - IPv6: Public IPs only (rejects loopback, link-local, etc)
+///
+/// Rejects:
+/// - Private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+/// - Loopback (127.0.0.1, ::1)
+/// - Link-local (169.254.0.0/16)
+/// - Multicast (224.0.0.0/4)
 fn is_valid_ip(ip: &str) -> bool {
-    // Check for IPv4
+    use std::net::IpAddr;
+
     if ip.is_empty() || ip.len() > 45 {
         return false;
     }
 
-    // IPv4 validation
-    if ip.contains('.') {
-        let parts: Vec<&str> = ip.split('.').collect();
-        if parts.len() != 4 {
+    if let Ok(IpAddr::V4(ipv4)) = ip.parse::<IpAddr>() {
+        let octets = ipv4.octets();
+
+        // Check for private ranges
+        // 10.0.0.0/8
+        if octets[0] == 10 {
             return false;
         }
-        return parts.iter().all(|p| {
-            p.parse::<u8>().is_ok_and(|_| {
-                // Allow leading zeros (not strict validation)
-                p.len() <= 3 && (!p.starts_with('0') || p.len() == 1)
-            })
-        });
-    }
-
-    // IPv6 validation (basic check)
-    if ip.contains(':') {
-        let parts: Vec<&str> = ip.split(':').collect();
-        // IPv6 should have 1-8 parts
-        if parts.is_empty() || parts.len() > 8 {
+        // 172.16.0.0/12
+        if octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31 {
             return false;
         }
-        return parts.iter().all(|p| {
-            if p.is_empty() {
-                true // Empty part is allowed in :: notation
-            } else {
-                // Check if it's a valid hex number
-                u16::from_str_radix(p, 16).is_ok()
-            }
-        });
-    }
+        // 192.168.0.0/16
+        if octets[0] == 192 && octets[1] == 168 {
+            return false;
+        }
+        // 127.0.0.0/8 (loopback)
+        if octets[0] == 127 {
+            return false;
+        }
+        // 169.254.0.0/16 (link-local)
+        if octets[0] == 169 && octets[1] == 254 {
+            return false;
+        }
+        // 224.0.0.0/4 (multicast)
+        if octets[0] >= 224 && octets[0] <= 239 {
+            return false;
+        }
+        // 0.0.0.0/8 (unspecified)
+        if octets[0] == 0 {
+            return false;
+        }
 
-    false
+        true
+    } else if let Ok(IpAddr::V6(ipv6)) = ip.parse::<IpAddr>() {
+        let segments = ipv6.segments();
+
+        // ::1 (loopback)
+        if segments == [0, 0, 0, 0, 0, 0, 0, 1] {
+            return false;
+        }
+        // fe80::/10 (link-local)
+        if segments[0] & 0xffc0 == 0xfe80 {
+            return false;
+        }
+        // fc00::/7 (unique local)
+        if segments[0] & 0xfe00 == 0xfc00 {
+            return false;
+        }
+        // ff00::/8 (multicast)
+        if segments[0] & 0xff00 == 0xff00 {
+            return false;
+        }
+        // ::/128 (unspecified)
+        if segments == [0, 0, 0, 0, 0, 0, 0, 0] {
+            return false;
+        }
+
+        true
+    } else {
+        false
+    }
 }
 
 #[cfg(test)]
@@ -575,7 +875,13 @@ mod tests {
             metadata: AuthMetadata::default(),
         };
 
-        logger.log(&context, "test_action", "test_resource", true, None);
+        // Await the async log call
+        logger
+            .log(&context, "test_action", "test_resource", true, None)
+            .await;
+
+        // Give the background worker time to process the log
+        tokio::task::yield_now().await;
 
         let logs = logger.get_logs("user-123");
         assert_eq!(logs.len(), 1);

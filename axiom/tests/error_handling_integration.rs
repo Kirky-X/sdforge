@@ -336,6 +336,8 @@ mod edge_case_tests {
             name: "",
             version: "",
             description: "",
+            cache_ttl: None,
+            is_streaming: false,
         };
 
         assert!(metadata.name.is_empty());
@@ -349,6 +351,8 @@ mod edge_case_tests {
             name: "API-With-Special_Chars.123",
             version: "v1.0.0-alpha+build.123",
             description: "A test API with special characters: @#$%^&*()",
+            cache_ttl: None,
+            is_streaming: false,
         };
 
         assert!(metadata.name.contains("."));
@@ -362,6 +366,8 @@ mod edge_case_tests {
             name: "中文API",
             version: "v1",
             description: "Тест API",
+            cache_ttl: None,
+            is_streaming: false,
         };
 
         assert!(metadata.name.contains("中"));
