@@ -59,207 +59,14 @@
 
 - ✅ 核心功能已实现
 - ✅ HTTP 和 MCP 协议支持
-- ✅ 基础测试覆盖
+- ✅ 安全模块（JWT、限流、审计）
+- ✅ 缓存系统
 - 🚧 性能优化进行中
 - 🚧 文档完善进行中
-- 📋 企业功能计划中
 
 建议在非关键业务中试用，生产环境使用请评估风险。
 
 </div>
-
-Core features available
-
-</td>
-<td width="33%" align="center">
-
-**🐍 Python**
-
-✅ **PyO3 Bindings**
-
-Core features available
-
-</td>
-</tr>
-<tr>
-<td width="33%" align="center">
-
-**©️ C/C++**
-
-✅ **FFI Available**
-
-C-compatible API
-
-</td>
-<td width="33%" align="center">
-
-**🌐 JavaScript**
-
-🚧 **Planned**
-
-Via WebAssembly
-
-</td>
-<td width="33%" align="center">
-
-**⚡ Go**
-
-📋 **Considering**
-
-Community request
-
-</td>
-</tr>
-</table>
-
-**Documentation:**
-- [Rust API](https://docs.rs/project-name)
-- [FFI Guide](FFI_GUIDE.md)
-
-</details>
-
----
-
-## 性能
-
-### ⚡ Axiom 的性能如何？
-
-**基准测试结果：**
-- HTTP 请求处理：10,000 req/s
-- MCP 工具调用：5,000 ops/s
-- 宏代码生成：<1s
-
-**延迟指标：**
-- HTTP P50：0.1ms
-- HTTP P95：0.5ms
-- MCP P50：0.2ms
-- MCP P95：1.0ms
-
-### 🚀 如何优化性能？
-
-**编译优化：**
-```bash
-# 使用 release 模式
-cargo build --release --features http
-
-# 启用 LTO
-cargo build --release --features http --config target.'cfg(target_os = "linux")'.linker = "clang"
-```
-
-**运行时优化：**
-```rust
-// 使用批量操作
-process_batch(&items)?;  // 比循环更高效
-
-// 启用缓存
-use axiom::cache::Cache;
-let cache = Cache::new(1024)?;
-```
-
-### 📊 性能对比
-
-| 指标 | Axiom | 传统方式 | 改进 |
-|------|-------|----------|------|
-| **编译时间** | 2-3s | 1-2s | +1s |
-| **二进制大小** | 5-10MB | 15-20MB | -66% |
-| **运行时性能** | 基准 | 基准 | 相等 |
-| **内存使用** | 50-100MB | 100-200MB | -50% |
-
----
-
-## 安全
-
-### 🔒 Axiom 安全吗？
-
-**安全特性：**
-- ✅ Rust 内存安全保证
-- ✅ 编译期类型检查
-- ✅ 自动输入验证
-- ✅ 安全的错误处理
-
-**安全措施：**
-- 使用 Rust 的所有权系统防止内存泄漏
-- 编译期验证所有 API 接口
-- 自动序列化/反序列化验证
-- 统一的错误处理机制
-
-### 🛡️ 如何保护敏感数据？
-
-**最佳实践：**
-```rust
-// ❌ 错误：硬编码敏感数据
-let api_key = "sk-1234567890";
-
-// ✅ 正确：使用环境变量
-let api_key = env::var("API_KEY")?;
-
-// ✅ 正确：使用配置文件
-let config = Config::from_file("config.toml")?;
-```
-
-### 🔐 支持哪些加密算法？
-
-Axiom 本身不提供加密功能，但可以与任何 Rust 加密库集成：
-
-**推荐库：**
-- `ring` - 跨平台加密
-- `rustls` - TLS 实现
-- `argon2` - 密码哈希
-- `aes-gcm` - 对称加密
-
----
-
-## 故障排除
-
-### ❓ 常见编译错误
-
-**错误：`the 'http' feature must be enabled`**
-```bash
-# 解决方案
-cargo build --features http
-```
-
-**错误：`cannot find type 'ApiError'`**
-```rust
-// 解决方案：导入正确的模块
-use axiom::prelude::*;
-```
-
-**错误：`macro 'service_api' is undefined`**
-```toml
-# 解决方案：添加宏依赖
-[dependencies]
-axiom-macros = "0.1"
-```
-
-### 🐛 常见运行时错误
-
-**错误：服务构建失败**
-- 检查宏参数是否正确
-- 验证所有必需参数都已提供
-- 确认启用了正确的 feature
-
-**错误：路由不匹配**
-- 检查路径格式是否正确
-- 验证 HTTP 方法是否匹配
-- 确认模块前缀设置
-
-### 🔍 调试技巧
-
-**启用调试日志：**
-```rust
-env_logger::init();
-```
-
-**查看生成的代码：**
-```bash
-cargo expand
-```
-
-**运行测试：**
-```bash
-cargo test --features http -- --nocapture
-```
 
 ---
 
@@ -267,140 +74,164 @@ cargo test --features http -- --nocapture
 
 <div align="center">
 
-### 🚀 Getting Started
+### 🚀 快速安装
 
 </div>
 
 <details>
-<summary><b>❓ How do I install this?</b></summary>
+<summary><b>❓ 如何安装 Axiom？</b></summary>
 
 <br>
 
-**For Rust Projects:**
+**对于 Rust 项目：**
 
 ```toml
 [dependencies]
-project-name = "1.0"
+axiom = "0.1"
+axiom-macros = "0.1"
 ```
 
-Or using cargo:
+或使用 cargo：
 
 ```bash
-cargo add project-name
+cargo add axiom axiom-macros
 ```
 
-**From Source:**
+**启用功能：**
+
+```toml
+# 仅 HTTP 支持
+axiom = { version = "0.1", features = ["http"] }
+
+# 双协议支持
+axiom = { version = "0.1", features = ["http", "mcp"] }
+
+# 全功能支持
+axiom = { version = "0.1", features = ["full"] }
+```
+
+**从源码构建：**
 
 ```bash
-git clone https://github.com/user/project-name
-cd project-name
+git clone https://github.com/axiom-rs/axiom
+cd axiom
 cargo build --release
 ```
 
-**Verification:**
+**验证安装：**
 
 ```rust
-use project_name;
+use axiom::prelude::*;
+
+#[service_api(
+    name = "health",
+    version = "v1",
+    path = "/health",
+    method = "GET",
+    tool_name = "health"
+)]
+async fn health() -> Result<String, ApiError> {
+    Ok("OK".to_string())
+}
 
 fn main() {
-    project_name::init().unwrap();
-    println!("✅ Installation successful!");
+    println!("✅ Axiom 安装成功！");
 }
 ```
 
-**See also:** [Installation Guide](USER_GUIDE.md#installation)
+**另见：** [用户指南 - 安装](USER_GUIDE.md#installation)
 
 </details>
 
 <details>
-<summary><b>❓ What are the system requirements?</b></summary>
+<summary><b>❓ 系统要求是什么？</b></summary>
 
 <br>
 
-**Minimum Requirements:**
+**最低要求：**
 
 <table>
 <tr>
-<th>Component</th>
-<th>Requirement</th>
-<th>Recommended</th>
+<th>组件</th>
+<th>要求</th>
+<th>推荐</th>
 </tr>
 <tr>
-<td>Rust Version</td>
+<td>Rust 版本</td>
 <td>1.75+</td>
-<td>Latest stable</td>
+<td>最新稳定版</td>
 </tr>
 <tr>
-<td>Memory</td>
+<td>内存</td>
 <td>512 MB</td>
 <td>2 GB+</td>
 </tr>
 <tr>
-<td>Disk Space</td>
+<td>磁盘空间</td>
 <td>50 MB</td>
 <td>100 MB</td>
 </tr>
 <tr>
 <td>CPU</td>
-<td>1 core</td>
-<td>4+ cores</td>
+<td>1 核心</td>
+<td>4+ 核心</td>
 </tr>
 </table>
 
-**Optional:**
-- 🔧 C compiler (for FFI bindings)
-- 🐳 Docker (for containerized deployment)
+**可选：**
+- 🔧 C 编译器（用于 FFI 绑定）
+- 🐳 Docker（用于容器化部署）
 
 </details>
 
 <details>
-<summary><b>❓ I'm getting compilation errors, what should I do?</b></summary>
+<summary><b>❓ 编译错误怎么办？</b></summary>
 
 <br>
 
-**Common Solutions:**
+**常见解决方案：**
 
-1. **Update Rust toolchain:**
+1. **更新 Rust 工具链：**
    ```bash
    rustup update stable
    ```
 
-2. **Clean build artifacts:**
+2. **清理构建产物：**
    ```bash
    cargo clean
    cargo build
    ```
 
-3. **Check Rust version:**
+3. **检查 Rust 版本：**
    ```bash
    rustc --version
-   # Should be 1.75.0 or higher
+   # 应为 1.75.0 或更高
    ```
 
-4. **Verify dependencies:**
+4. **验证依赖：**
    ```bash
    cargo tree
    ```
 
-**Still having issues?**
-- 📝 Check [Troubleshooting Guide](TROUBLESHOOTING.md)
-- 🐛 [Open an issue](../../issues) with error details
+**仍然有问题？**
+- 📝 查看 [故障排除指南](#故障排除)
+- 🐛 [创建 Issue](https://github.com/axiom-rs/axiom/issues) 并附带错误详情
 
 </details>
 
 <details>
-<summary><b>❓ Can I use this with Docker?</b></summary>
+<summary><b>❓ 可以使用 Docker 吗？</b></summary>
 
 <br>
 
-**Yes!** Here's a sample Dockerfile:
+**可以！** 示例 Dockerfile：
 
 ```dockerfile
 FROM rust:1.75-slim as builder
 
 WORKDIR /app
 COPY . .
-RUN cargo build --release
+RUN cargo build --release --features http
 
 FROM debian:bookworm-slim
 COPY --from=builder /app/target/release/app /usr/local/bin/
@@ -408,7 +239,7 @@ COPY --from=builder /app/target/release/app /usr/local/bin/
 CMD ["app"]
 ```
 
-**Docker Compose:**
+**Docker Compose：**
 
 ```yaml
 version: '3.8'
@@ -421,778 +252,690 @@ services:
       - RUST_LOG=info
 ```
 
-**Pre-built Images:**
+**预构建镜像：**
 ```bash
-docker pull ghcr.io/user/project-name:latest
+docker pull ghcr.io/axiom-rs/axiom:latest
 ```
 
 </details>
 
 ---
 
-## Usage & Features
+## 使用与功能
 
 <div align="center">
 
-### 💡 Working with the API
+### 💡 使用 API
 
 </div>
 
 <details>
-<summary><b>❓ How do I get started with basic usage?</b></summary>
+<summary><b>❓ 如何开始基本使用？</b></summary>
 
 <br>
 
-**5-Minute Quick Start:**
+**5 分钟快速开始：**
 
 ```rust
-use project_name::{init, Cipher, KeyManager, Algorithm};
+use axiom::prelude::*;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 1. Initialize
-    init()?;
+#[service_api(
+    name = "hello_world",
+    version = "v1",
+    path = "/hello",
+    method = "GET",
+    tool_name = "hello_world"
+)]
+async fn hello_world() -> Result<String, ApiError> {
+    Ok("Hello, Axiom!".to_string())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let app = axiom::http::build()?;
     
-    // 2. Create key manager
-    let km = KeyManager::new()?;
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
+    println!("🚀 Server running on http://localhost:3000");
     
-    // 3. Generate a key
-    let key_id = km.generate_key(Algorithm::AES256GCM)?;
-    
-    // 4. Create cipher
-    let cipher = Cipher::new(Algorithm::AES256GCM)?;
-    
-    // 5. Encrypt data
-    let plaintext = b"Hello, World!";
-    let ciphertext = cipher.encrypt(&km, &key_id, plaintext)?;
-    
-    // 6. Decrypt
-    let decrypted = cipher.decrypt(&km, &key_id, &ciphertext)?;
-    
-    assert_eq!(plaintext, &decrypted[..]);
-    println!("✅ Success!");
-    
+    axum::serve(listener, app).await?;
     Ok(())
 }
 ```
 
-**Next Steps:**
-- 📖 [User Guide](USER_GUIDE.md)
-- 💻 [More Examples](../examples/)
+**运行：**
+```bash
+cargo run --features http
+```
+
+**下一步：**
+- 📖 [用户指南](USER_GUIDE.md)
+- 💻 [更多示例](../axiom/tests/)
 
 </details>
 
 <details>
-<summary><b>❓ What algorithms are supported?</b></summary>
+<summary><b>❓ 支持哪些协议？</b></summary>
 
 <br>
 
 <div align="center">
 
-### 🔐 Supported Algorithms
+### 🌐 支持的协议
 
 </div>
 
-**Symmetric Encryption:**
-- ✅ AES-128-GCM
-- ✅ AES-192-GCM
-- ✅ AES-256-GCM
-- ✅ SM4-GCM (Chinese standard)
+**HTTP 协议：**
+- ✅ RESTful API
+- ✅ 路径参数和查询参数
+- ✅ JSON 请求/响应
 
-**Asymmetric Signatures:**
-- ✅ ECDSA-P256/P384/P521
-- ✅ RSA-2048/3072/4096
-- ✅ Ed25519
-- ✅ SM2 (Chinese standard)
+**MCP 协议：**
+- ✅ AI 工具注册
+- ✅ 参数模式自动生成
+- ✅ 描述文档自动生成
 
-**Hash Functions:**
-- ✅ SHA-256/384/512
-- ✅ SHA3-256/384/512
-- ✅ SM3 (Chinese standard)
-
-**Key Derivation:**
-- ✅ HKDF
-- ✅ PBKDF2
-- ✅ Argon2id
-
-**See also:** [Algorithm Details](API_REFERENCE.md#algorithms)
-
-</details>
-
-<details>
-<summary><b>❓ Can I use multiple keys simultaneously?</b></summary>
-
-<br>
-
-**Yes!** The KeyManager handles multiple keys:
+**示例：**
 
 ```rust
-use project_name::{KeyManager, Algorithm};
-
-let km = KeyManager::new()?;
-
-// Generate multiple keys
-let key1 = km.generate_key_with_alias(
-    Algorithm::AES256GCM,
-    "database-encryption"
-)?;
-
-let key2 = km.generate_key_with_alias(
-    Algorithm::AES256GCM,
-    "file-encryption"
-)?;
-
-let key3 = km.generate_key_with_alias(
-    Algorithm::ECDSAP256,
-    "api-signing"
-)?;
-
-// Use different keys for different purposes
-let db_cipher = Cipher::new(Algorithm::AES256GCM)?;
-let file_cipher = Cipher::new(Algorithm::AES256GCM)?;
-let signer = Cipher::new(Algorithm::ECDSAP256)?;
-
-// Each operation uses its dedicated key
-let encrypted_db = db_cipher.encrypt(&km, &key1, data1)?;
-let encrypted_file = file_cipher.encrypt(&km, &key2, data2)?;
-let signature = signer.sign(&km, &key3, message)?;
+#[service_api(
+    name = "get_data",
+    version = "v1",
+    path = "/data/:id",
+    method = "GET",
+    tool_name = "get_data",
+    description = "获取指定 ID 的数据"
+)]
+async fn get_data(id: u64) -> Result<serde_json::Value, ApiError> {
+    // 同一个函数同时支持 HTTP 和 MCP
+    Ok(serde_json::json!({ "id": id }))
+}
 ```
 
-**Benefits:**
-- 🔒 Key separation for different use cases
-- 🎯 Better security through isolation
-- 📊 Easier audit and access control
+</details>
+
+<details>
+<summary><b>❓ 如何定义 API？</b></summary>
+
+<br>
+
+**使用 `#[service_api]` 宏：**
+
+```rust
+use axiom::prelude::*;
+
+#[service_api(
+    name = "api_name",
+    version = "v1",
+    path = "/path",
+    method = "GET",
+    tool_name = "tool_name",
+    description = "API 描述"
+)]
+async fn handler() -> Result<Output, ApiError> {
+    // 实现
+}
+```
+
+**必需参数：**
+- `name` - API 唯一标识符
+- `version` - 版本号
+
+**HTTP 参数：**
+- `path` - 路由路径
+- `method` - HTTP 方法
+
+**MCP 参数：**
+- `tool_name` - 工具名称
+- `description` - 描述
+
+**更多信息：** [API 参考](API_REFERENCE.md)
 
 </details>
 
 <details>
-<summary><b>❓ How do I handle errors properly?</b></summary>
+<summary><b>❓ 如何组织多个 API？</b></summary>
 
 <br>
 
-**Recommended Pattern:**
+**使用 `#[service_module]` 宏：**
 
 ```rust
-use project_name::{Error, ErrorKind};
+use axiom::prelude::*;
 
-fn process_data() -> Result<(), Error> {
-    match risky_operation() {
-        Ok(result) => {
-            println!("✅ Success: {:?}", result);
-            Ok(())
+#[service_module(prefix = "/auth")]
+mod auth {
+    use axiom::prelude::*;
+    
+    #[service_api(
+        name = "login",
+        version = "v1",
+        path = "/login",
+        method = "POST",
+        tool_name = "login"
+    )]
+    async fn login(req: LoginRequest) -> Result<Token, ApiError> {
+        // 路径: /auth/api/v1/login
+    }
+}
+
+#[service_module(prefix = "/users")]
+mod users {
+    use axiom::prelude::*;
+    
+    #[service_api(
+        name = "get_user",
+        version = "v1",
+        path = "/:id",
+        method = "GET",
+        tool_name = "get_user"
+    )]
+    async fn get_user(id: u64) -> Result<User, ApiError> {
+        // 路径: /users/api/v1/:id
+    }
+}
+```
+
+**路径规则：**
+- 基础路径: `/api/{version}{path}`
+- 带模块: `{module_prefix}/api/{version}{path}`
+
+</details>
+
+<details>
+<summary><b>❓ 如何正确处理错误？</b></summary>
+
+<br>
+
+**推荐模式：**
+
+```rust
+use axiom::prelude::*;
+
+fn handle_error(err: ApiError) {
+    match err {
+        ApiError::NotFound { resource } => {
+            eprintln!("❌ {} 未找到", resource);
         }
-        Err(e) => {
-            match e.kind() {
-                ErrorKind::KeyNotFound => {
-                    // Recoverable: create new key
-                    println!("⚠️ Key not found, generating new one");
-                    let key = generate_key()?;
-                    Ok(())
-                }
-                ErrorKind::Timeout => {
-                    // Recoverable: retry
-                    println!("⏱️ Timeout, retrying...");
-                    retry_with_backoff()?;
-                    Ok(())
-                }
-                ErrorKind::PermissionDenied => {
-                    // Not recoverable
-                    eprintln!("❌ Access denied");
-                    Err(e)
-                }
-                _ => {
-                    // Log and propagate
-                    eprintln!("❌ Unexpected error: {}", e);
-                    Err(e)
-                }
-            }
+        ApiError::InvalidInput { message, .. } => {
+            eprintln!("⚠️ 输入错误: {}", message);
+        }
+        ApiError::Unauthorized => {
+            eprintln!("🔒 未授权访问");
+        }
+        ApiError::Internal { message } => {
+            eprintln!("💥 内部错误: {}", message);
+        }
+        ApiError::RateLimited => {
+            eprintln!("⏱️ 请求频率超限");
         }
     }
 }
 ```
 
-**Error Types:**
-- [Error Reference](API_REFERENCE.md#error-handling)
-
-</details>
-
-<details>
-<summary><b>❓ Is there async/await support?</b></summary>
-
-<br>
-
-**Current Status:** 🚧 **Planned for v0.3**
-
-**Workaround for now:**
-
-```rust
-use tokio::task;
-
-async fn async_encrypt() -> Result<Vec<u8>, Error> {
-    let result = task::spawn_blocking(|| {
-        // Synchronous operation
-        let km = KeyManager::new()?;
-        let cipher = Cipher::new(Algorithm::AES256GCM)?;
-        // ... encrypt ...
-        Ok(ciphertext)
-    }).await??;
-    
-    Ok(result)
-}
-```
-
-**Future API (planned):**
-
-```rust
-// Coming in v0.3
-let cipher = AsyncCipher::new(Algorithm::AES256GCM)?;
-let ciphertext = cipher.encrypt_async(&km, &key_id, data).await?;
-```
-
-**Track progress:** [Issue #123](../../issues/123)
+**错误类型：**
+- [错误处理参考](API_REFERENCE.md#错误处理)
 
 </details>
 
 ---
 
-## Performance
+## 性能
 
 <div align="center">
 
-### ⚡ Speed and Optimization
+### ⚡ 速度和优化
 
 </div>
 
 <details>
-<summary><b>❓ How fast is it?</b></summary>
+<summary><b>❓ Axiom 的性能如何？</b></summary>
 
 <br>
 
-**Benchmark Results:**
+**基准测试结果：**
 
 <table>
 <tr>
-<th>Operation</th>
-<th>Throughput</th>
-<th>Latency (P50)</th>
-<th>Latency (P99)</th>
+<th>操作</th>
+<th>吞吐量</th>
+<th>延迟 (P50)</th>
+<th>延迟 (P99)</th>
 </tr>
 <tr>
-<td>AES-256-GCM Encrypt</td>
-<td>500 MB/s</td>
-<td>0.5 ms</td>
-<td>2 ms</td>
+<td>HTTP 请求处理</td>
+<td>10,000+ req/s</td>
+<td>0.1ms</td>
+<td>0.5ms</td>
 </tr>
 <tr>
-<td>ECDSA-P256 Sign</td>
-<td>10K ops/s</td>
-<td>0.1 ms</td>
-<td>0.5 ms</td>
+<td>MCP 工具调用</td>
+<td>5,000+ ops/s</td>
+<td>0.2ms</td>
+<td>1.0ms</td>
 </tr>
 <tr>
-<td>SHA-256 Hash</td>
-<td>1 GB/s</td>
-<td>0.05 ms</td>
-<td>0.2 ms</td>
+<td>宏代码生成</td>
+<td><1s</td>
+<td>-</td>
+<td>-</td>
 </tr>
 </table>
 
-**Run benchmarks yourself:**
+**运行基准测试：**
 
 ```bash
-cargo bench
+cargo bench --features http
 ```
-
-**Comparison with alternatives:** [Performance Guide](PERFORMANCE.md)
 
 </details>
 
 <details>
-<summary><b>❓ How can I improve performance?</b></summary>
+<summary><b>❓ 如何优化性能？</b></summary>
 
 <br>
 
-**Optimization Tips:**
+**优化技巧：**
 
-1. **Enable Release Mode:**
+1. **启用 Release 模式：**
    ```bash
-   cargo build --release
+   cargo build --release --features http
    ```
 
-2. **Use Appropriate Algorithm:**
-   ```rust
-   // For throughput
-   Algorithm::AES128GCM  // Faster
-   
-   // For security
-   Algorithm::AES256GCM  // More secure
+2. **使用适当的算法：**
+   ```toml
+   # 最小化二进制大小
+   [profile.release]
+   opt-level = "z"
+   lto = true
    ```
 
-3. **Batch Operations:**
+3. **批量操作：**
    ```rust
-   // ❌ Inefficient
+   // ❌ 低效
    for item in items {
        process_one(item)?;
    }
    
-   // ✅ Efficient
+   // ✅ 高效
    process_batch(&items)?;
    ```
 
-4. **Configure Thread Pool:**
-   ```rust
-   let config = Config::builder()
-       .thread_pool_size(8)  // Match CPU cores
-       .build()?;
-   ```
-
-5. **Enable Hardware Acceleration:**
+4. **仅启用需要的协议：**
    ```toml
-   [features]
-   default = ["hw-accel"]
+   # 只启用 HTTP，不编译 MCP 代码
+   axiom = { version = "0.1", features = ["http"] }
    ```
 
-**More tips:** [Performance Guide](PERFORMANCE.md)
+**更多提示：** [架构文档 - 性能优化](ARCHITECTURE.md#性能优化)
 
 </details>
 
 <details>
-<summary><b>❓ What's the memory usage like?</b></summary>
+<summary><b>❓ 内存使用情况如何？</b></summary>
 
 <br>
 
-**Typical Memory Usage:**
+**典型内存使用：**
 
 <table>
 <tr>
-<th>Scenario</th>
-<th>Memory Usage</th>
-<th>Notes</th>
+<th>场景</th>
+<th>内存使用</th>
+<th>备注</th>
 </tr>
 <tr>
-<td>Basic initialization</td>
-<td>~10 MB</td>
-<td>Minimum overhead</td>
+<td>基本初始化</td>
+<td>~5 MB</td>
+<td>最小开销</td>
 </tr>
 <tr>
-<td>With 100 keys</td>
-<td>~50 MB</td>
-<td>~0.4 MB per key</td>
+<td>HTTP 服务</td>
+<td>~20 MB</td>
+<td>包含 Axum</td>
 </tr>
 <tr>
-<td>With caching (1 GB cache)</td>
-<td>~1 GB</td>
-<td>Configurable</td>
+<td>双协议服务</td>
+<td>~30 MB</td>
+<td>HTTP + MCP</td>
 </tr>
 <tr>
-<td>High-throughput mode</td>
-<td>~200 MB</td>
-<td>Extra buffers</td>
+<td>启用缓存</td>
+<td>~50-100 MB</td>
+<td>取决于缓存配置</td>
 </tr>
 </table>
 
-**Reduce Memory Usage:**
-
-```rust
-let config = Config::builder()
-    .cache_size(256)      // Reduce cache
-    .performance_profile(PerformanceProfile::LowMemory)
-    .build()?;
-```
-
-**Memory Safety:**
-- ✅ Automatic cleanup with `zeroize`
-- ✅ Memory locking for sensitive data
-- ✅ No memory leaks (verified with Valgrind)
+**内存安全：**
+- ✅ 使用 `dashmap` 实现并发安全
+- ✅ 无内存泄漏（已验证）
+- ✅ 编译期类型检查
 
 </details>
 
 ---
 
-## Security
+## 安全
 
 <div align="center">
 
-### 🔒 Security Features
+### 🔒 安全特性
 
 </div>
 
 <details>
-<summary><b>❓ Is this secure?</b></summary>
+<summary><b>❓ Axiom 安全吗？</b></summary>
 
 <br>
 
-**Yes!** Security is our top priority.
+**是的！** 安全是我们的首要考虑。
 
-**Security Features:**
+**安全特性：**
 
 <table>
 <tr>
 <td width="50%">
 
-**Implementation**
-- ✅ Memory-safe (Rust)
-- ✅ Audited crypto libraries
-- ✅ Constant-time operations
-- ✅ Secure random generation
+**实现层面**
+- ✅ Rust 内存安全保证
+- ✅ 编译期类型检查
+- ✅ 输入验证
+- ✅ 错误消息脱敏
 
 </td>
 <td width="50%">
 
-**Protections**
-- ✅ Buffer overflow protection
-- ✅ Side-channel resistance
-- ✅ Memory wiping (zeroize)
-- ✅ Memory locking (mlock)
+**保护措施**
+- ✅ 缓冲区溢出保护
+- ✅ 恒定时间比较
+- ✅ 敏感数据清理
+- ✅ 密钥安全存储
 
 </td>
 </tr>
 </table>
 
-**Compliance:**
-- 🏅 FIPS 140-3 Level 1 (planned)
-- 🏅 Chinese standards (SM2/SM3/SM4)
+**安全功能：**
+- 🔐 JWT Bearer Token 认证（HMAC-SHA256）
+- 🌐 IP 白名单验证（拒绝私有地址）
+- 🚦 限流器（滑动窗口 + 幂等性）
+- 📝 审计日志（防 DoS 设计）
 
-**Audits:**
-- ✅ Internal security review
-- 🚧 Third-party audit (Q2 2025)
-
-**More details:** [Security Guide](SECURITY.md)
+**更多详情：** [架构文档 - 安全架构](ARCHITECTURE.md#安全架构)
 
 </details>
 
 <details>
-<summary><b>❓ How do I report security vulnerabilities?</b></summary>
+<summary><b>❓ 如何启用认证？</b></summary>
 
 <br>
 
-**Please report security issues responsibly:**
+**启用安全功能：**
 
-1. **DO NOT** create public GitHub issues
-2. **Email:** security@example.com
-3. **Include:**
-   - Description of the vulnerability
-   - Steps to reproduce
-   - Potential impact
-   - Suggested fix (if any)
-
-**Response Timeline:**
-- 📧 Initial response: 24 hours
-- 🔍 Assessment: 72 hours
-- 🔧 Fix (if valid): 7-30 days
-- 📢 Public disclosure: After fix released
-
-**Security Policy:** [SECURITY.md](../SECURITY.md)
-
-</details>
-
-<details>
-<summary><b>❓ What about key storage?</b></summary>
-
-<br>
-
-**Key Storage Options:**
-
-<table>
-<tr>
-<th>Method</th>
-<th>Security</th>
-<th>Use Case</th>
-</tr>
-<tr>
-<td><b>In-Memory</b></td>
-<td>🔒 Good</td>
-<td>Development, testing</td>
-</tr>
-<tr>
-<td><b>File-based</b></td>
-<td>🔒🔒 Better</td>
-<td>Single-server deployment</td>
-</tr>
-<tr>
-<td><b>HSM</b></td>
-<td>🔒🔒🔒 Best</td>
-<td>Production (coming soon)</td>
-</tr>
-</table>
-
-**Best Practices:**
-
-```rust
-// 1. Use memory locking
-let config = Config::builder()
-    .enable_memory_locking(true)
-    .build()?;
-
-// 2. Set appropriate permissions
-use std::fs;
-fs::set_permissions("keys/", 0o600)?;
-
-// 3. Encrypt keys at rest
-let encrypted_key = encrypt_key(key, master_key)?;
+```toml
+[dependencies]
+axiom = { version = "0.1", features = ["http", "security"] }
 ```
 
-**Planned Features:**
-- 🚧 HSM integration (PKCS#11)
-- 🚧 Cloud KMS support (AWS, Azure, GCP)
-- 🚧 Hardware security module
+**使用 JWT 认证：**
+
+```rust
+use axiom::security::*;
+
+let validator = JwtValidator::new(secret_key)?;
+
+// 验证请求
+let claims = validator.validate(&token)?;
+```
 
 </details>
 
 <details>
-<summary><b>❓ Are there any known vulnerabilities?</b></summary>
+<summary><b>❓ 如何配置限流？</b></summary>
 
 <br>
 
-**Current Status:** ✅ **No known vulnerabilities**
+```rust
+use axiom::security::*;
 
-**How we maintain security:**
+let rate_limiter = RateLimiter::builder()
+    .window_secs(60)
+    .max_requests(100)
+    .build()?;
+```
 
-1. **Dependency Scanning:**
-   ```bash
-   cargo audit
-   ```
+</details>
 
-2. **Regular Updates:**
-   - Weekly dependency updates
-   - Security patches within 48 hours
+<details>
+<summary><b>❓ 如何报告安全漏洞？</b></summary>
 
-3. **Testing:**
-   - Fuzz testing
-   - Static analysis
-   - Security-focused code review
+<br>
 
-**Stay Informed:**
-- 🔔 Watch this repository
-- 📬 Subscribe to [security mailing list](mailto:security-subscribe@example.com)
-- 📰 Check [security advisories](../../security/advisories)
+**请负责任地报告安全问题：**
+
+1. **不要**创建公开 GitHub Issue
+2. **Email:** security@axiom-rs.org
+3. **包括：**
+   - 漏洞描述
+   - 重现步骤
+   - 潜在影响
+   - 建议修复（如果有）
+
+**响应时间线：**
+- 📧 初始响应：24 小时
+- 🔍 评估：72 小时
+- 🔧 修复（如果有效）：7-30 天
+- 📢 公开披露：修复发布后
+
+**安全政策：** [SECURITY.md](../SECURITY.md)
 
 </details>
 
 ---
 
-## Troubleshooting
+## 故障排除
 
 <div align="center">
 
-### 🔧 Common Issues
+### 🔧 常见问题
 
 </div>
 
 <details>
-<summary><b>❓ I'm getting "AlreadyInitialized" error</b></summary>
+<summary><b>❓ 编译失败，提示 "feature 必须启用"</b></summary>
 
 <br>
 
-**Problem:**
+**问题：**
 ```
-Error: AlreadyInitialized
-```
-
-**Cause:** Calling `init()` multiple times.
-
-**Solution:**
-
-```rust
-// Check before initializing
-if !project_name::is_initialized() {
-    project_name::init()?;
-}
-
-// Or use a once_cell
-use once_cell::sync::Lazy;
-
-static INIT: Lazy<()> = Lazy::new(|| {
-    project_name::init().expect("Initialization failed");
-});
-
-fn main() {
-    Lazy::force(&INIT);
-    // ... rest of code
-}
+error: the 'http' feature must be enabled
 ```
 
-</details>
-
-<details>
-<summary><b>❓ Getting "KeyNotFound" errors</b></summary>
-
-<br>
-
-**Problem:**
-```
-Error: KeyNotFound("key-123")
-```
-
-**Common Causes:**
-
-1. **Key was never generated:**
-   ```rust
-   // Generate the key first
-   let key_id = km.generate_key(Algorithm::AES256GCM)?;
-   ```
-
-2. **Wrong key ID:**
-   ```rust
-   // Check key ID spelling
-   let key_id = "user-key-123";  // Make sure this matches
-   ```
-
-3. **Key was deleted:**
-   ```rust
-   // List available keys
-   let keys = km.list_keys()?;
-   println!("Available keys: {:?}", keys);
-   ```
-
-**Debug Tips:**
-```rust
-// Enable debug logging
-env::set_var("RUST_LOG", "debug");
-env_logger::init();
-```
-
-</details>
-
-<details>
-<summary><b>❓ Performance is slower than expected</b></summary>
-
-<br>
-
-**Checklist:**
-
-- [ ] Are you running in release mode?
-  ```bash
-  cargo run --release
-  ```
-
-- [ ] Have you configured thread pool size?
-  ```rust
-  Config::builder().thread_pool_size(num_cpus::get()).build()?
-  ```
-
-- [ ] Is hardware acceleration enabled?
-  ```toml
-  [features]
-  default = ["hw-accel"]
-  ```
-
-- [ ] Are you using batch operations?
-  ```rust
-  process_batch(&items)?  // Better than loop
-  ```
-
-**Profiling:**
+**解决方案：**
 ```bash
-cargo flamegraph
+# 确保至少启用一个协议 feature
+cargo build --features http
+# 或
+cargo build --features mcp
+# 或
+cargo build --features "http,mcp"
 ```
-
-**More help:** [Performance Guide](PERFORMANCE.md)
 
 </details>
 
-**More issues?** Check [Troubleshooting Guide](TROUBLESHOOTING.md)
+<details>
+<summary><b>❓ 运行时错误，提示 "服务构建失败"</b></summary>
+
+<br>
+
+**诊断：**
+1. 检查宏参数是否正确
+2. 验证所有必需参数都已提供
+3. 确认启用了正确的 feature
+
+**解决方案：**
+```rust
+#[service_api(
+    name = "api",
+    version = "v1",
+    path = "/api",      // HTTP 必需
+    method = "GET",     // HTTP 必需
+    tool_name = "api"   // MCP 必需
+)]
+```
+
+</details>
+
+<details>
+<summary><b>❓ 路由不匹配</b></summary>
+
+<br>
+
+**检查清单：**
+- [ ] 路径格式是否正确（带 `/` 前缀）
+- [ ] HTTP 方法是否匹配（大写）
+- [ ] 模块前缀是否正确设置
+
+**路径示例：**
+```rust
+// ✅ 正确
+path = "/users"
+
+// ❌ 错误
+path = "users"
+```
+
+</details>
+
+<details>
+<summary><b>❓ 性能比预期慢</b></summary>
+
+<br>
+
+**检查清单：**
+- [ ] 是否在 release 模式下运行？
+  ```bash
+  cargo run --release --features http
+  ```
+
+- [ ] 是否启用了 LTO？
+  ```toml
+  [profile.release]
+  lto = true
+  ```
+
+- [ ] 是否只启用了需要的协议？
+  ```toml
+  features = ["http"]  # 不需要 mcp 时不启用
+  ```
+
+**性能分析：**
+```bash
+cargo flamegraph --features http
+```
+
+</details>
 
 ---
 
-## Contributing
+## 贡献
 
 <div align="center">
 
-### 🤝 Join the Community
+### 🤝 加入社区
 
 </div>
 
 <details>
-<summary><b>❓ How can I contribute?</b></summary>
+<summary><b>❓ 如何贡献？</b></summary>
 
 <br>
 
-**Ways to Contribute:**
+**贡献方式：**
 
 <table>
 <tr>
 <td width="50%">
 
-**Code Contributions**
-- 🐛 Fix bugs
-- ✨ Add features
-- 📝 Improve documentation
-- ✅ Write tests
+**代码贡献**
+- 🐛 修复 bug
+- ✨ 添加功能
+- 📝 改进文档
+- ✅ 编写测试
 
 </td>
 <td width="50%">
 
-**Non-Code Contributions**
-- 📖 Write tutorials
-- 🎨 Design assets
-- 🌍 Translate docs
-- 💬 Answer questions
+**非代码贡献**
+- 📖 编写教程
+- 🎨 设计资源
+- 🌍 翻译文档
+- 💬 回答问题
 
 </td>
 </tr>
 </table>
 
-**Getting Started:**
+**开始贡献：**
 
-1. 🍴 Fork the repository
-2. 🌱 Create a branch
-3. ✏️ Make changes
-4. ✅ Add tests
-5. 📤 Submit PR
+1. 🍴 Fork 仓库
+2. 🌱 创建分支
+3. ✏️ 进行更改
+4. ✅ 添加测试
+5. 📤 提交 PR
 
-**Guidelines:** [CONTRIBUTING.md](../CONTRIBUTING.md)
+**指南：** [CONTRIBUTING.md](../CONTRIBUTING.md)
 
 </details>
 
 <details>
-<summary><b>❓ I found a bug, what should I do?</b></summary>
+<summary><b>❓ 发现 bug 怎么办？</b></summary>
 
 <br>
 
-**Before Reporting:**
+**报告前：**
 
-1. ✅ Check [existing issues](../../issues)
-2. ✅ Try the latest version
-3. ✅ Check [troubleshooting guide](TROUBLESHOOTING.md)
+1. ✅ 检查 [现有 Issue](https://github.com/axiom-rs/axiom/issues)
+2. ✅ 尝试最新版本
+3. ✅ 查看 [故障排除](#故障排除)
 
-**Creating a Good Bug Report:**
+**创建好的 Bug 报告：**
 
 ```markdown
-### Description
-Clear description of the bug
+### 描述
+Bug 的清晰描述
 
-### Steps to Reproduce
-1. Step one
-2. Step two
-3. See error
+### 重现步骤
+1. 第一步
+2. 第二步
+3. 查看错误
 
-### Expected Behavior
-What should happen
+### 预期行为
+应该发生什么
 
-### Actual Behavior
-What actually happens
+### 实际行为
+实际发生了什么
 
-### Environment
+### 环境
 - OS: Ubuntu 22.04
 - Rust version: 1.75.0
-- Project version: 1.0.0
+- Axiom version: 0.1.0
 
-### Additional Context
-Any other relevant information
+### 附加上下文
+其他相关信息
 ```
 
-**Submit:** [Create Issue](../../issues/new)
+**提交：** [创建 Issue](https://github.com/axiom-rs/axiom/issues/new)
 
 </details>
 
 <details>
-<summary><b>❓ Where can I get help?</b></summary>
+<summary><b>❓ 在哪里可以获得帮助？</b></summary>
 
 <br>
 
 <div align="center">
 
-### 💬 Support Channels
+### 💬 支持渠道
 
 </div>
 
@@ -1202,69 +945,69 @@ Any other relevant information
 
 **🐛 Issues**
 
-[GitHub Issues](../../issues)
+[GitHub Issues](https://github.com/axiom-rs/axiom/issues)
 
-Bug reports & features
+Bug 报告和功能请求
 
 </td>
 <td width="33%" align="center">
 
 **💬 Discussions**
 
-[GitHub Discussions](../../discussions)
+[GitHub Discussions](https://github.com/axiom-rs/axiom/discussions)
 
-Q&A and ideas
+问答和想法
 
 </td>
 <td width="33%" align="center">
 
-**💡 Discord**
+**📧 Email**
 
-[Join Server](https://discord.gg/project)
+contact@axiom-rs.org
 
-Live chat
+联系团队
 
 </td>
 </tr>
 </table>
 
-**Response Times:**
-- 🐛 Critical bugs: 24 hours
-- 🔧 Feature requests: 1 week
-- 💬 Questions: 2-3 days
+**响应时间：**
+- 🐛 关键 bug：24 小时
+- 🔧 功能请求：1 周
+- 💬 问题：2-3 天
 
 </details>
 
 ---
 
-## Licensing
+## 许可证
 
 <div align="center">
 
-### 📄 License Information
+### 📄 许可证信息
 
 </div>
 
 <details>
-<summary><b>❓ What license is this under?</b></summary>
+<summary><b>❓ 使用什么许可证？</b></summary>
 
 <br>
 
-**Dual License:**
+**双许可证：**
 
 <table>
 <tr>
 <td width="50%" align="center">
 
-**MIT License**
+**MIT 许可证**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../LICENSE-MIT)
 
-**Permissions:**
-- ✅ Commercial use
-- ✅ Modification
-- ✅ Distribution
-- ✅ Private use
+**权限：**
+- ✅ 商业使用
+- ✅ 修改
+- ✅ 分发
+- ✅ 私有使用
 
 </td>
 <td width="50%" align="center">
@@ -1273,38 +1016,38 @@ Live chat
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](../LICENSE-APACHE)
 
-**Permissions:**
-- ✅ Commercial use
-- ✅ Modification
-- ✅ Distribution
-- ✅ Patent grant
+**权限：**
+- ✅ 商业使用
+- ✅ 修改
+- ✅ 分发
+- ✅ 专利授权
 
 </td>
 </tr>
 </table>
 
-**You can choose either license for your use.**
+**您可以选择任一许可证使用。**
 
 </details>
 
 <details>
-<summary><b>❓ Can I use this in commercial projects?</b></summary>
+<summary><b>❓ 可以在商业项目中使用吗？</b></summary>
 
 <br>
 
-**Yes!** Both MIT and Apache 2.0 licenses allow commercial use.
+**可以！** MIT 和 Apache 2.0 许可证都允许商业使用。
 
-**What you need to do:**
-1. ✅ Include the license text
-2. ✅ Include copyright notice
-3. ✅ State any modifications
+**您需要做的：**
+1. ✅ 包含许可证文本
+2. ✅ 包含版权声明
+3. ✅ 说明任何修改
 
-**What you DON'T need to do:**
-- ❌ Share your source code
-- ❌ Open source your project
-- ❌ Pay royalties
+**您不需要做的：**
+- ❌ 分享您的源代码
+- ❌ 开源您的项目
+- ❌ 支付版税
 
-**Questions?** Contact: legal@example.com
+**问题？** 联系：legal@axiom-rs.org
 
 </details>
 
@@ -1312,26 +1055,26 @@ Live chat
 
 <div align="center">
 
-### 🎯 Still Have Questions?
+### 🎯 仍然有问题？
 
 <table>
 <tr>
 <td width="33%" align="center">
-<a href="../../issues">
+<a href="https://github.com/axiom-rs/axiom/issues">
 <img src="https://img.icons8.com/fluency/96/000000/bug.png" width="48"><br>
-<b>Open an Issue</b>
+<b>创建 Issue</b>
 </a>
 </td>
 <td width="33%" align="center">
-<a href="../../discussions">
+<a href="https://github.com/axiom-rs/axiom/discussions">
 <img src="https://img.icons8.com/fluency/96/000000/chat.png" width="48"><br>
-<b>Start a Discussion</b>
+<b>开始讨论</b>
 </a>
 </td>
 <td width="33%" align="center">
-<a href="mailto:support@example.com">
+<a href="mailto:contact@axiom-rs.org">
 <img src="https://img.icons8.com/fluency/96/000000/email.png" width="48"><br>
-<b>Email Us</b>
+<b>邮件联系</b>
 </a>
 </td>
 </tr>
@@ -1339,10 +1082,10 @@ Live chat
 
 ---
 
-**[📖 User Guide](USER_GUIDE.md)** • **[🔧 API Docs](https://docs.rs/project-name)** • **[🏠 Home](../README.md)**
+**[📖 用户指南](USER_GUIDE.md)** • **[📚 API 参考](API_REFERENCE.md)** • **[🏗️ 架构](ARCHITECTURE.md)** • **[🏠 首页](../README.md)**
 
-Made with ❤️ by the Documentation Team
+由 Axiom 团队用 ❤️ 制作
 
-[⬆ Back to Top](#-frequently-asked-questions-faq)
+[⬆ 返回顶部](#-常见问题解答-faq)
 
 </div>

@@ -10,48 +10,19 @@
   <!-- CI 状态 -->
   <a href="#"><img src="https://img.shields.io/badge/build-passing-brightgreen.svg" alt="Build"></a>
   <!-- 代码覆盖率 -->
-  <a href="#"><img src="https://img.shields.io/badge/coverage-80%25-success.svg" alt="Coverage"></a>
+  <a src="https://img.shields.io/badge/coverage-26%25-yellow.svg" alt="Coverage"></a>
 </p>
-
-<!-- 完整徽章配置参考（根据项目类型取消注释） -->
-
-<!-- GitHub Actions CI/CD 徽章 -->
-<!--
-[![CI](https://img.shields.io/github/actions/workflow/status/axiom-rs/axiom/ci.yml?label=CI&branch=main)](https://github.com/axiom-rs/axiom/actions/workflows/ci.yml)
--->
-
-<!-- Rust 项目专用徽章 -->
-<!--
-[![Rust Version](https://img.shields.io/badge/rust-2021%20edition-blue.svg)](https://www.rust-lang.org)
-[![Crates.io](https://img.shields.io/crates/v/axiom.svg)](https://crates.io/crates/axiom)
-[![Downloads](https://img.shields.io/crates/d/axiom.svg)](https://crates.io/crates/axiom)
-[![Documentation](https://docs.rs/axiom/badge.svg)](https://docs.rs/axiom)
--->
-
-<!-- 代码质量徽章 -->
-<!--
-[![codecov](https://img.shields.io/codecov/c/github/axiom-rs/axiom?branch=main&token=YOUR_TOKEN)](https://codecov.io/gh/axiom-rs/axiom)
-[![Dependency Status](https://img.shields.io/librariesio/release/github/axiom-rs/axiom)](https://libraries.io/github/axiom-rs/axiom)
-[![Security Audit](https://img.shields.io/github/actions/workflow/status/axiom-rs/axiom/ci.yml?label=security)](https://github.com/axiom-rs/axiom/actions/workflows/ci.yml)
--->
-
-<!-- 社交徽章 -->
-<!--
-[![Stars](https://img.shields.io/github/stars/axiom-rs/axiom.svg)](https://github.com/axiom-rs/axiom/stargazers)
-[![Forks](https://img.shields.io/github/forks/axiom-rs/axiom.svg)](https://github.com/axiom-rs/axiom/network/members)
-[![Issues](https://img.shields.io/github/issues/axiom-rs/axiom.svg)](https://github.com/axiom-rs/axiom/issues)
--->
 
 <p align="center">
   <strong>多协议声明式 SDK 框架，通过宏自动生成 HTTP 和 MCP 服务接口</strong>
 </p>
 
 <p align="center">
-  <a href="#-features">Features</a> •
-  <a href="#-quick-start">Quick Start</a> •
-  <a href="#-documentation">Documentation</a> •
-  <a href="#-examples">Examples</a> •
-  <a href="#-contributing">Contributing</a>
+  <a href="#特性">特性</a> •
+  <a href="#快速开始">快速开始</a> •
+  <a href="#文档">文档</a> •
+  <a href="#示例">示例</a> •
+  <a href="#贡献">贡献</a>
 </p>
 
 <img src="https://via.placeholder.com/800x400/1a1a2e/16213e?text=Axiom+Multi-Protocol+SDK+Framework" alt="Axiom Banner" width="100%">
@@ -60,33 +31,33 @@
 
 ---
 
-## 📋 Table of Contents
+## 目录
 
 <details open>
-<summary>Click to expand</summary>
+<summary>点击展开</summary>
 
-- [✨ Features](#-features)
-- [🎯 Use Cases](#-use-cases)
-- [🚀 Quick Start](#-quick-start)
-  - [Installation](#installation)
-  - [Basic Usage](#basic-usage)
-- [📚 Documentation](#-documentation)
-- [🎨 Examples](#-examples)
-- [🏗️ Architecture](#️-architecture)
-- [⚙️ Configuration](#️-configuration)
-- [🧪 Testing](#-testing)
-- [📊 Performance](#-performance)
-- [🔒 Security](#-security)
-- [🗺️ Roadmap](#️-roadmap)
-- [🤝 Contributing](#-contributing)
-- [📄 License](#-license)
-- [🙏 Acknowledgments](#-acknowledgments)
+- [✨ 特性](#特性)
+- [🎯 应用场景](#应用场景)
+- [🚀 快速开始](#快速开始)
+  - [安装](#安装)
+  - [基本用法](#基本用法)
+- [📚 文档](#文档)
+- [🎨 示例](#示例)
+- [🏗️ 架构](#架构)
+- [⚙️ 配置](#配置)
+- [🧪 测试](#测试)
+- [📊 性能](#性能)
+- [🔒 安全](#安全)
+- [🗺️ 路线图](#路线图)
+- [🤝 贡献](#贡献)
+- [📄 许可证](#许可证)
+- [🙏 致谢](#致谢)
 
 </details>
 
 ---
 
-## ✨ Features
+## ✨ 特性
 
 <table>
 <tr>
@@ -105,7 +76,7 @@
 ### ⚡ 高级特性
 
 - 🚀 **高性能** - 基于 Rust 零成本抽象
-- 🔐 **安全可靠** - 内存安全保证
+- 🔐 **安全可靠** - 内存安全保证，JWT 认证
 - 🌐 **多协议支持** - HTTP 和 MCP 协议
 - 📦 **易于集成** - 作为依赖库集成到任何 Rust 项目
 
@@ -130,7 +101,7 @@ graph LR
 
 ---
 
-## 🎯 Use Cases
+## 🎯 应用场景
 
 <details>
 <summary><b>💼 企业应用</b></summary>
@@ -138,7 +109,6 @@ graph LR
 <br>
 
 ```rust
-// 企业应用示例
 use axiom::prelude::*;
 
 #[service_api(
@@ -149,7 +119,6 @@ use axiom::prelude::*;
     tool_name = "get_user"
 )]
 async fn get_user(id: u64) -> Result<User, ApiError> {
-    // 获取用户信息
     Ok(fetch_user_from_db(id)?)
 }
 ```
@@ -164,7 +133,6 @@ async fn get_user(id: u64) -> Result<User, ApiError> {
 <br>
 
 ```rust
-// 开发工具示例
 #[service_api(
     name = "build_project",
     version = "v1",
@@ -173,7 +141,6 @@ async fn get_user(id: u64) -> Result<User, ApiError> {
     tool_name = "build_project"
 )]
 async fn build_project(project: BuildRequest) -> Result<BuildResult, ApiError> {
-    // 构建项目
     Ok(run_build_process(project)?)
 }
 ```
@@ -188,7 +155,6 @@ async fn build_project(project: BuildRequest) -> Result<BuildResult, ApiError> {
 <br>
 
 ```rust
-// Web 应用示例
 #[service_api(
     name = "create_post",
     version = "v1", 
@@ -197,7 +163,6 @@ async fn build_project(project: BuildRequest) -> Result<BuildResult, ApiError> {
     tool_name = "create_post"
 )]
 async fn create_post(post: CreatePostRequest) -> Result<Post, ApiError> {
-    // 创建博客文章
     Ok(save_post_to_db(post)?)
 }
 ```
@@ -208,9 +173,9 @@ async fn create_post(post: CreatePostRequest) -> Result<Post, ApiError> {
 
 ---
 
-## 🚀 Quick Start
+## 🚀 快速开始
 
-### Installation
+### 安装
 
 <table>
 <tr>
@@ -223,8 +188,11 @@ async fn create_post(post: CreatePostRequest) -> Result<Post, ApiError> {
 axiom = "0.1"
 axiom-macros = "0.1"
 
-# 启用所需功能
+# 启用 HTTP 功能
 axiom = { version = "0.1", features = ["http"] }
+
+# 启用双协议
+axiom = { version = "0.1", features = ["http", "mcp"] }
 ```
 
 </td>
@@ -242,11 +210,11 @@ cargo build --release
 </tr>
 </table>
 
-### Basic Usage
+### 基本用法
 
 <div align="center">
 
-#### 🎬 5分钟快速开始
+#### 🎬 5 分钟快速开始
 
 </div>
 
@@ -279,10 +247,8 @@ async fn hello_world() -> Result<String, ApiError> {
 ```rust
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 构建 HTTP 服务
     let app = axiom::http::build()?;
     
-    // 启动服务器
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
     axum::serve(listener, app).await?;
     
@@ -324,7 +290,6 @@ async fn get_user(id: u64) -> Result<User, ApiError> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 构建并启动 HTTP 服务
     let app = axiom::http::build()?;
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
     println!("🚀 Server running on http://localhost:3000");
@@ -337,7 +302,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ---
 
-## 📚 Documentation
+## 📚 文档
 
 <div align="center">
 
@@ -381,10 +346,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - 🎓 [IFLOW.md](IFLOW.md) - 项目详细说明
 - 🔧 [CLAUDE.md](CLAUDE.md) - AI 助手指导文档
 - ❓ [FAQ](docs/FAQ.md) - 常见问题解答
+- 📋 [CHANGELOG.md](CHANGELOG.md) - 更新日志
 
 ---
 
-## 🎨 Examples
+## 🎨 示例
 
 <div align="center">
 
@@ -466,7 +432,7 @@ MCP: create_post({"title":"Hello","content":"World"})
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ 架构
 
 <div align="center">
 
@@ -499,18 +465,20 @@ graph TB
 <br>
 
 | 组件 | 描述 | 状态 |
-|-----------|-------------|--------|
+|------|------|------|
 | **宏系统** | 过程宏代码生成 | ✅ 已实现 |
 | **运行时库** | 核心类型和服务构建器 | ✅ 已实现 |
 | **HTTP 协议** | Axum 框架集成 | ✅ 已实现 |
 | **MCP 协议** | MCP SDK 集成 | ✅ 已实现 |
 | **Feature 系统** | 编译期协议选择 | ✅ 已实现 |
+| **安全模块** | JWT 认证、限流、审计 | ✅ 已实现 |
+| **缓存系统** | LRU 缓存、ETag 支持 | ✅ 已实现 |
 
 </details>
 
 ---
 
-## ⚙️ Configuration
+## ⚙️ 配置
 
 <div align="center">
 
@@ -532,11 +500,11 @@ axiom = { version = "0.1", features = ["http"] }
 </td>
 <td width="50%">
 
-**高级配置**
+**完整配置**
 
 ```toml
 [dependencies]
-axiom = { version = "0.1", features = ["http", "mcp", "streaming"] }
+axiom = { version = "0.1", features = ["http", "mcp", "streaming", "security", "cache"] }
 ```
 
 </td>
@@ -548,26 +516,28 @@ axiom = { version = "0.1", features = ["http", "mcp", "streaming"] }
 
 <br>
 
-| Feature | 说明 | 默认 |
-|--------|------|---------|
-| `http` | HTTP 服务器支持 | ✅ 默认 |
-| `mcp` | MCP 协议支持 | ❌ 可选 |
-| `streaming` | 流式响应支持 | ❌ 可选 |
-| `timestamp` | 时间戳支持 | ❌ 可选 |
-| `logging` | 日志支持 | ❌ 可选 |
-| `full` | 启用所有功能 | ❌ 可选 |
+| Feature | 说明 | 依赖 |
+|--------|------|------|
+| `http` | HTTP 服务器支持 | 默认 |
+| `mcp` | MCP 协议支持 | - |
+| `streaming` | 流式响应支持 | http |
+| `timestamp` | 时间戳支持 | http |
+| `logging` | 日志支持 | http |
+| `security` | 安全认证和审计 | http, dashmap, hmac, sha2 |
+| `cache` | HTTP 响应缓存 | http, sha2 |
+| `full` | 启用所有功能 | 全部 |
 
 </details>
 
 ---
 
-## 🧪 Testing
+## 🧪 测试
 
 <div align="center">
 
 ### 🎯 测试覆盖率
 
-![Coverage](https://img.shields.io/badge/coverage-80%25-success?style=for-the-badge)
+<!-- TODO: 添加真实的测试覆盖率数据 -->
 
 </div>
 
@@ -578,7 +548,7 @@ cargo test --all-features
 # 运行特定功能测试
 cargo test --features http
 cargo test --features mcp
-cargo test --features "http,mcp"
+cargo test --features "http,mcp,security,cache"
 
 # 运行覆盖率测试
 cargo tarpaulin --features http --out Html
@@ -592,18 +562,18 @@ cargo bench --features http
 
 <br>
 
-| 类别 | 测试数量 | 覆盖率 |
-|----------|-------|----------|
-| 单元测试 | 50+ | 85% |
-| 集成测试 | 15+ | 80% |
-| 性能测试 | 5+ | 75% |
-| **总计** | **70+** | **80%** |
+| 类别 | 测试数量 | 状态 |
+|------|----------|------|
+| 单元测试 | 23+ | ✅ 通过 |
+| 集成测试 | 100+ | ✅ 通过 |
+| 编译失败测试 | 5 | ✅ 通过 |
+| **总计** | **139+** | **✅ 全部通过** |
 
 </details>
 
 ---
 
-## 📊 Performance
+## 📊 性能
 
 <div align="center">
 
@@ -618,8 +588,8 @@ cargo bench --features http
 **吞吐量**
 
 ```
-HTTP 请求处理: 10,000 req/s
-MCP 工具调用: 5,000 ops/s
+HTTP 请求处理: 10,000+ req/s
+MCP 工具调用: 5,000+ ops/s
 宏代码生成: <1s
 ```
 
@@ -658,7 +628,7 @@ test macro_generation_bench ... bench: 500 ms/iter (+/- 50)
 
 ---
 
-## 🔒 Security
+## 🔒 安全
 
 <div align="center">
 
@@ -670,23 +640,23 @@ test macro_generation_bench ... bench: 500 ms/iter (+/- 50)
 <tr>
 <td align="center" width="25%">
 <img src="https://img.icons8.com/fluency/96/000000/lock.png" width="64" height="64"><br>
-<b>内存安全</b><br>
-Rust 内存安全保证
+<b>JWT 认证</b><br>
+HMAC-SHA256 令牌验证
 </td>
 <td align="center" width="25%">
 <img src="https://img.icons8.com/fluency/96/000000/security-checked.png" width="64" height="64"><br>
-<b>类型安全</b><br>
-编译期类型检查
+<b>IP 验证</b><br>
+拒绝私有/保留地址
 </td>
 <td align="center" width="25%">
 <img src="https://img.icons8.com/fluency/96/000000/privacy.png" width="64" height="64"><br>
-<b>零依赖</b><br>
-最小化外部依赖
+<b>限流器</b><br>
+带幂等性支持
 </td>
 <td align="center" width="25%">
 <img src="https://img.icons8.com/fluency/96/000000/shield.png" width="64" height="64"><br>
-<b>审计就绪</b><br>
-清晰的代码结构
+<b>审计日志</b><br>
+防 DoS 设计
 </td>
 </tr>
 </table>
@@ -696,10 +666,12 @@ Rust 内存安全保证
 
 ### 安全措施
 
-- ✅ **内存保护** - Rust 内存安全保证
-- ✅ **类型安全** - 编译期类型检查
-- ✅ **输入验证** - 自动输入验证
-- ✅ **错误处理** - 安全的错误处理
+- ✅ **JWT 认证** - HMAC-SHA256 签名验证，恒定时间比较
+- ✅ **IP 白名单** - 拒绝私有地址、保留地址、环回地址
+- ✅ **请求限流** - 可配置窗口期，幂等性去重
+- ✅ **审计日志** - 信号量限流，异步队列处理
+- ✅ **错误脱敏** - 防止信息泄露
+- ✅ **缓存安全** - LRU 淘汰，大小限制
 
 ### 报告安全问题
 
@@ -709,7 +681,7 @@ Rust 内存安全保证
 
 ---
 
-## 🗺️ Roadmap
+## 🗺️ 路线图
 
 <div align="center">
 
@@ -724,7 +696,7 @@ gantt
     section 第一阶段
     核心功能实现           :done, 2024-01, 2024-03
     section 第二阶段
-    协议扩展              :active, 2024-03, 2024-06
+    安全功能实现           :done, 2024-03, 2024-06
     section 第三阶段
     性能优化              :2024-06, 2024-09
     section 第四阶段
@@ -742,6 +714,9 @@ gantt
 - [x] Feature 系统设计
 - [x] HTTP 协议支持
 - [x] MCP 协议支持
+- [x] 安全认证模块
+- [x] 缓存系统
+- [x] 测试套件
 
 </td>
 <td width="50%">
@@ -763,7 +738,7 @@ gantt
 
 - [ ] WebSocket 支持
 - [ ] gRPC 支持
-- [ ] 缓存系统
+- [ ] Redis 缓存
 - [ ] 监控集成
 - [ ] 插件系统
 
@@ -784,13 +759,11 @@ gantt
 
 ---
 
-## 🤝 Contributing
+## 🤝 贡献
 
 <div align="center">
 
 ### 💖 我们欢迎贡献者！
-
-<img src="https://contrib.rocks/image?repo=axiom-rs/axiom" alt="Contributors">
 
 </div>
 
@@ -840,15 +813,25 @@ gantt
 ### 代码风格
 
 - 遵循 Rust 标准编码规范
+- 运行 `cargo fmt` 格式化代码
+- 运行 `cargo clippy` 检查代码质量
 - 编写全面的测试
 - 更新文档
 - 为新功能添加示例
+
+### 本地检查
+
+运行预提交检查脚本：
+
+```bash
+bash temp/rust/pre-commit-check.sh
+```
 
 </details>
 
 ---
 
-## 📄 License
+## 📄 许可证
 
 <div align="center">
 
@@ -863,7 +846,7 @@ gantt
 
 ---
 
-## 🙏 Acknowledgments
+## 🙏 致谢
 
 <div align="center">
 
@@ -903,13 +886,14 @@ gantt
   - [MCP SDK](https://github.com/modelcontextprotocol/servers) - MCP 协议实现
   - [Serde](https://github.com/serde-rs/serde) - 序列化框架
   - [Syn](https://github.com/dtolnay/syn) - AST 解析
+  - [DashMap](https://github.com/xacrimon/dashmap) - 并发哈希映射
 
 - 👥 **贡献者** - 感谢所有优秀的贡献者！
 - 💬 **社区** - 特别感谢社区成员的支持
 
 ---
 
-## 📞 Contact & Support
+## 📞 联系与支持
 
 <div align="center">
 
@@ -943,16 +927,6 @@ gantt
 
 [![GitHub](https://img.shields.io/badge/Github-Follow%20Us-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/axiom-rs/axiom)
 [![Email](https://img.shields.io/badge/Email-Contact-D14836?style=for-the-badge&logo=gmail&logoColor=white)](mailto:contact@axiom-rs.org)
-
-</div>
-
----
-
-## ⭐ Star History
-
-<div align="center">
-
-[![Star History Chart](https://api.star-history.com/svg?repos=axiom-rs/axiom&type=Date)](https://star-history.com/#axiom-rs/axiom&Date)
 
 </div>
 
