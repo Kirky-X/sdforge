@@ -2,7 +2,7 @@
 members = [
     "axiom-macros",
     "axiom",
-    "axiom-cli",
+    "axiom-cli", "temp/axiom-validation",
 ]
 resolver = "2"
 

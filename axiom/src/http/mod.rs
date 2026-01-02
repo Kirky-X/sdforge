@@ -15,7 +15,7 @@ pub use version_routing::{
 #[derive(Debug, Clone)]
 pub struct HttpRoute {
     /// Route path (may contain module prefix placeholders)
-    pub path: &'static str,
+    pub path: String,
     /// HTTP method
     pub method: axum::http::Method,
     /// Handler function
@@ -23,7 +23,7 @@ pub struct HttpRoute {
     /// API metadata
     pub metadata: ApiMetadata,
     /// Module prefix (if any) - used for route grouping
-    pub module_prefix: Option<&'static str>,
+    pub module_prefix: Option<String>,
 }
 
 inventory::collect!(HttpRoute);
@@ -33,7 +33,7 @@ inventory::collect!(HttpRoute);
 /// This function checks if there's a module prefix available for the given route.
 /// In practice, the macro generates inline path resolution, but this provides
 /// a runtime fallback for dynamic path construction.
-fn resolve_route_path(base_path: &'static str, module_prefix: Option<&'static str>) -> String {
+fn resolve_route_path(base_path: &str, module_prefix: Option<&str>) -> String {
     match module_prefix {
         Some(prefix) if !prefix.is_empty() => {
             // Remove leading slash from prefix if present
@@ -60,7 +60,7 @@ pub fn build() -> Router {
     // Collect all registered routes and group by prefix
     for route in inventory::iter::<HttpRoute> {
         prefix_groups
-            .entry(route.module_prefix)
+            .entry(route.module_prefix.as_deref())
             .or_default()
             .push(route);
     }
@@ -69,7 +69,7 @@ pub fn build() -> Router {
     for (prefix, routes) in prefix_groups {
         for route in routes {
             // Resolve the full path with module prefix
-            let full_path = resolve_route_path(route.path, prefix);
+            let full_path = resolve_route_path(&route.path, prefix);
             router = router.route(&full_path, route.handler.clone());
         }
     }

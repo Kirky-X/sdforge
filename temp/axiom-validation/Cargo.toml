@@ -1,0 +1,79 @@
+[package]
+name = "axiom-validation"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# Axiom framework - 使用本地路径依赖
+axiom = { path = "../../axiom", features = ["full"] }
+axiom-macros = { path = "../../axiom-macros" }
+
+# Async runtime
+tokio = { version = "1.41", features = ["full"] }
+
+# HTTP server
+axum = { version = "0.8.8", features = ["ws"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# gRPC
+tonic = "0.12"
+prost = "0.13"
+
+# WebSocket
+tokio-tungstenite = "0.24"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utilities
+uuid = { version = "1.11", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# HTTP client for testing
+reqwest = { version = "0.12", features = ["json"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[[bin]]
+name = "01_simple_http"
+path = "examples/01_simple_http.rs"
+
+[[bin]]
+name = "02_core_validation"
+path = "examples/02_core_validation.rs"
+
+[[bin]]
+name = "test_type_alias"
+path = "examples/test_type_alias.rs"
+
+[[bin]]
+name = "test_minimal"
+path = "examples/test_minimal.rs"
+
+[[bin]]
+name = "test_no_params"
+path = "examples/test_no_params.rs"
+
+[[bin]]
+name = "test_macro"
+path = "examples/test_macro.rs"
+
+[[bin]]
+name = "test_simple"
+path = "examples/test_simple.rs"
+
+[[bin]]
+name = "test_complex_generics"
+path = "examples/test_complex_generics.rs"
