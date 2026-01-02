@@ -16,9 +16,7 @@ pub use version_routing::{
 pub struct HttpRoute {
     /// Route path (may contain module prefix placeholders)
     pub path: String,
-    /// HTTP method
-    pub method: axum::http::Method,
-    /// Handler function
+    /// Handler function (includes method routing)
     pub handler: MethodRouter,
     /// API metadata
     pub metadata: ApiMetadata,
@@ -26,7 +24,22 @@ pub struct HttpRoute {
     pub module_prefix: Option<String>,
 }
 
+/// Route registration for runtime initialization
+///
+/// This struct stores a function pointer that creates an HttpRoute at runtime.
+/// This allows routes to be registered without requiring const-compatible types.
+#[derive(Debug, Clone)]
+pub struct RouteRegistration {
+    /// API name
+    pub name: &'static str,
+    /// API version
+    pub version: &'static str,
+    /// Function that creates the HttpRoute at runtime
+    pub register_fn: fn() -> HttpRoute,
+}
+
 inventory::collect!(HttpRoute);
+inventory::collect!(RouteRegistration);
 
 /// Resolve module prefix for a route path
 ///
@@ -53,25 +66,28 @@ fn resolve_route_path(base_path: &str, module_prefix: Option<&str>) -> String {
 pub fn build() -> Router {
     let mut router = Router::new();
 
-    // Group routes by module prefix for cleaner routing
-    let mut prefix_groups: std::collections::HashMap<Option<&'static str>, Vec<&HttpRoute>> =
-        std::collections::HashMap::new();
+    // First, collect registrations with function pointers
+    let registrations: Vec<_> = inventory::iter::<RouteRegistration>().collect();
 
-    // Collect all registered routes and group by prefix
-    for route in inventory::iter::<HttpRoute> {
-        prefix_groups
-            .entry(route.module_prefix.as_deref())
-            .or_default()
-            .push(route);
+    // Sort by name and version for deterministic order
+    let mut routes: Vec<_> = registrations
+        .iter()
+        .map(|registration| (registration.register_fn)())
+        .collect();
+
+    // Also collect direct HttpRoute registrations
+    for route in inventory::iter::<HttpRoute>() {
+        routes.push(route.clone());
     }
 
-    // Build router with route groups
-    for (prefix, routes) in prefix_groups {
-        for route in routes {
-            // Resolve the full path with module prefix
-            let full_path = resolve_route_path(&route.path, prefix);
-            router = router.route(&full_path, route.handler.clone());
-        }
+    // Sort routes by path for deterministic order
+    routes.sort_by_key(|r| r.path.clone());
+
+    // Build router with routes
+    for route in routes {
+        let prefix = route.module_prefix.as_deref();
+        let full_path = resolve_route_path(&route.path, prefix);
+        router = router.route(&full_path, route.handler);
     }
 
     router
@@ -101,6 +117,7 @@ pub fn build_with_redirect() -> Router {
 pub fn build_with_config(
     config: &crate::config::AppConfig,
 ) -> Result<Router, crate::config::ConfigError> {
+    #[cfg(feature = "security")]
     use crate::security::{rate_limit_middleware, RateLimitConfig, RateLimiter};
     use std::convert::TryFrom;
     use std::sync::Arc;
@@ -114,6 +131,7 @@ pub fn build_with_config(
     }
 
     // Apply rate limiting middleware
+    #[cfg(feature = "security")]
     if let Some(rate_limit) = &config.rate_limit {
         let rate_config = RateLimitConfig::try_from(rate_limit.clone())?;
         let limiter = Arc::new(RateLimiter::new(Some(rate_config)));
@@ -122,6 +140,7 @@ pub fn build_with_config(
     }
 
     // Apply authentication middleware
+    #[cfg(feature = "security")]
     if let Some(auth_config) = &config.authentication {
         use crate::security::{auth_middleware, ApiKeyAuth, AuthContext, AuthError, BearerAuth};
         use axum::http::HeaderValue;

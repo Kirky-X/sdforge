@@ -14,18 +14,29 @@ pub mod prelude {
     pub use crate::core::validation::validators::{validate_email, validate_length};
     pub use crate::core::{ApiError, ApiMetadata, ServiceError, ServiceResponse};
     #[cfg(feature = "http")]
-    pub use crate::http::HttpRoute;
+    pub use crate::http::{HttpRoute, RouteRegistration};
+    #[cfg(feature = "http")]
+    pub use axum::response::IntoResponse;
     #[cfg(feature = "mcp")]
     pub use crate::mcp::McpToolInstance;
 }
 
-mod core;
+pub mod core;
+
+/// Re-export core types at crate root for convenience
+pub use crate::core::{ApiError, ApiMetadata, ServiceError, ServiceResponse};
 
 #[cfg(feature = "http")]
 pub use core::validation::validators;
 
 #[cfg(feature = "http")]
+pub use inventory as inventory;
+
+#[cfg(feature = "http")]
 pub mod http;
+
+#[cfg(feature = "http")]
+pub use axum;
 
 #[cfg(feature = "mcp")]
 pub mod mcp;
@@ -36,10 +47,10 @@ pub mod streaming;
 #[cfg(feature = "streaming")]
 pub use streaming::{create_stream_channel, stream_to_sse, StreamEvent, StreamResponse};
 
-#[cfg(feature = "http")]
+#[cfg(feature = "security")]
 pub mod security;
 
-#[cfg(feature = "http")]
+#[cfg(feature = "security")]
 pub use security::{
     auth_middleware, rate_limit_middleware, ApiKeyAuth, AuditLog, AuditLogger, AuditResult,
     AuthContext, AuthError, AuthExtractor, AuthMetadata, AuthResult, BearerAuth, RateLimitConfig,

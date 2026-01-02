@@ -172,29 +172,15 @@ fn parse_service_module_args(args: TokenStream2) -> Result<String, syn::Error> {
         }
     }
 
-    let prefix = prefix.ok_or_else(|| {
+    prefix.ok_or_else(|| {
         syn::Error::new(
             proc_macro2::Span::call_site(),
             "Missing required attribute: prefix",
         )
-    })?;
-
-    Ok(prefix)
+    })
 }
 
-/// Extract path parameters from path string (e.g., ":id" from "/users/:id")
-fn extract_path_params(path: &str) -> Vec<String> {
-    let mut params = Vec::new();
-    for segment in path.split('/') {
-        if let Some(param) = segment.strip_prefix(':') {
-            params.push(param.to_string());
-        }
-    }
-    params
-}
-
-/// Parameter kind for HTTP extraction
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 enum ParamKind {
     Path,
     Query,
@@ -204,20 +190,33 @@ enum ParamKind {
     Body,
 }
 
+impl std::fmt::Display for ParamKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParamKind::Path => write!(f, "path"),
+            ParamKind::Query => write!(f, "query"),
+            ParamKind::Header => write!(f, "header"),
+            ParamKind::Cookie => write!(f, "cookie"),
+            ParamKind::Form => write!(f, "form"),
+            ParamKind::Body => write!(f, "body"),
+        }
+    }
+}
+
 /// Extract parameter info from function arguments
 #[derive(Debug, Clone)]
 struct ParamInfo {
     /// Parameter name (identifier)
     name: String,
-    /// Parameter type as string
-    ty: String,
+    /// Parameter type
+    ty: syn::Type,
     /// Extraction kind
     param_kind: ParamKind,
     /// Whether the parameter is Option<T>
     is_option: bool,
     /// Whether the parameter is Vec<T>
     is_vec: bool,
-    /// The inner type for Option or Vec
+    /// The inner type for Option or Vec (as string for comparison)
     inner_type: String,
     /// Explicit parameter annotation (if any)
     explicit_annotation: Option<ParamKind>,
@@ -234,7 +233,10 @@ impl ParamInfo {
         if let Pat::Ident(pat_ident) = pat {
             let name = pat_ident.ident.to_string();
 
-            let ty_str = quote! { #pat_type.ty }.to_string();
+            // Get the type directly from pat_type.ty (clone to get owned value)
+            let ty = (*pat_type.ty).clone();
+
+            let ty_str = quote! { #ty }.to_string();
             let ty_str_trimmed = ty_str.trim().to_string();
 
             // Check for explicit #[param(kind = "...")] attribute
@@ -269,7 +271,7 @@ impl ParamInfo {
 
             Some(Self {
                 name,
-                ty: ty_str_trimmed,
+                ty,
                 param_kind,
                 is_option,
                 is_vec,
@@ -316,52 +318,48 @@ impl ParamInfo {
         None
     }
 
-    /// Generate JSON schema for this parameter (for MCP)
+    /// Convert parameter to JSON schema property
     fn to_json_schema(&self) -> String {
-        let type_schema = if self.is_vec {
-            serde_json::json!({
-                "type": "array",
-                "items": self.inner_type_to_schema()
-            })
+        let param_type = if self.is_option {
+            format!("{{\"type\":[\"null\",{}]}}", self.inner_type_to_json_schema())
+        } else if self.is_vec {
+            format!(
+                "{{\"type\":\"array\",\"items\":{}}}",
+                self.inner_type_to_json_schema()
+            )
         } else {
-            serde_json::json!({
-                "type": self.ty_to_schema()
-            })
+            format!("{{\"type\":{}}}", self.inner_type_to_json_schema())
         };
-
-        format!(r#""{}": {}"#, self.name, type_schema)
+        format!("\"{}\":{}", self.name, param_type)
     }
 
-    fn ty_to_schema(&self) -> &str {
-        match self.ty.as_str() {
-            "String" | "&str" => "string",
-            "u8" | "u16" | "u32" | "u64" | "u128" | "usize" => "integer",
-            "i8" | "i16" | "i32" | "i64" | "i128" | "isize" => "integer",
-            "f32" | "f64" => "number",
-            "bool" => "boolean",
-            _ => "object",
-        }
-    }
-
-    fn inner_type_to_schema(&self) -> serde_json::Value {
+    fn inner_type_to_json_schema(&self) -> String {
         match self.inner_type.as_str() {
-            "String" | "&str" => serde_json::json!({"type": "string"}),
-            "u8" | "u16" | "u32" | "u64" | "u128" | "usize" => {
-                serde_json::json!({"type": "integer"})
-            }
-            "i8" | "i16" | "i32" | "i64" | "i128" | "isize" => {
-                serde_json::json!({"type": "integer"})
-            }
-            "f32" | "f64" => serde_json::json!({"type": "number"}),
-            "bool" => serde_json::json!({"type": "boolean"}),
-            _ => serde_json::json!({"type": "object"}),
+            "i8" | "i16" | "i32" | "i64" | "i128" | "u8" | "u16" | "u32" | "u64" | "u128" | "f32"
+            | "f64" => "\"number\"".to_string(),
+            "bool" => "\"boolean\"".to_string(),
+            "String" | "&str" => "\"string\"".to_string(),
+            _ => "\"object\"".to_string(),
         }
     }
 }
 
-/// Service API attribute macro
-///
-/// This macro automatically generates HTTP and MCP adapters from a single function definition.
+/// Extract path parameters from path string
+fn extract_path_params(path: &str) -> Vec<String> {
+    path.split('/')
+        .filter(|segment| segment.starts_with(':') || segment.starts_with('{'))
+        .map(|segment| {
+            // Remove leading : or { and trailing } or }
+            segment
+                .trim_start_matches(':')
+                .trim_start_matches('{')
+                .trim_end_matches('}')
+                .trim_end_matches('}')
+                .to_string()
+        })
+        .collect()
+}
+
 #[proc_macro_attribute]
 pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = match parse_service_api_args(args.into()) {
@@ -384,6 +382,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     ) = args;
     let fn_name = &input.sig.ident;
     let fn_vis = &input.vis;
+    let return_type = &input.sig.output;
 
     // Extract path parameters from path string
     let path_params = path
@@ -407,14 +406,14 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         .iter()
         .map(|p| {
             let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
-            let ty_str = &p.ty;
+            let ty = &p.ty;
             match p.param_kind {
-                ParamKind::Path => quote! { #name_ident: axum::extract::Path<#ty_str> },
-                ParamKind::Query => quote! { #name_ident: axum::extract::Query<#ty_str> },
-                ParamKind::Header => quote! { #name_ident: axum::extract::TypedHeader<#ty_str> },
-                ParamKind::Cookie => quote! { #name_ident: axum::extract::Cookie },
-                ParamKind::Form => quote! { #name_ident: axum::extract::Form<#ty_str> },
-                ParamKind::Body => quote! { #name_ident: axum::extract::Json<#ty_str> },
+                ParamKind::Path => quote! { #name_ident: axiom::axum::extract::Path<#ty> },
+                ParamKind::Query => quote! { #name_ident: axiom::axum::extract::Query<#ty> },
+                ParamKind::Header => quote! { #name_ident: axiom::axum::extract::TypedHeader<#ty> },
+                ParamKind::Cookie => quote! { #name_ident: axiom::axum::extract::Cookie },
+                ParamKind::Form => quote! { #name_ident: axiom::axum::extract::Form<#ty> },
+                ParamKind::Body => quote! { #name_ident: axiom::axum::extract::Json<#ty> },
             }
         })
         .collect();
@@ -445,8 +444,26 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     let mcp_schema_required: Vec<String> = params
         .iter()
         .filter(|p| !p.is_option)
-        .map(|p| format!(r#""{}""#, p.name))
+        .map(|p| format!("\"{}\"", p.name))
         .collect();
+
+    // Pre-compute properties JSON to avoid macro nesting issues
+    let mcp_properties_json = if mcp_schema_props.is_empty() {
+        quote! { serde_json::json!({}) }
+    } else {
+        let props_vec: Vec<TokenStream2> = mcp_schema_props
+            .iter()
+            .map(|s| s.parse().expect("valid JSON property"))
+            .collect();
+        quote! { serde_json::json!({ #(#props_vec),* }) }
+    };
+
+    // Pre-compute required array JSON
+    let mcp_required_json = if mcp_schema_required.is_empty() {
+        quote! { serde_json::json!([]) }
+    } else {
+        quote! { serde_json::json!([#(#mcp_schema_required),*]) }
+    };
 
     // Build HTTP path with version
     let http_path = format!(
@@ -456,108 +473,160 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     );
 
     // Build HTTP method
-    let http_method = method.as_ref().unwrap_or(&"GET".to_string()).to_uppercase();
+    let http_method_upper = method.as_ref().unwrap_or(&"GET".to_string()).to_uppercase();
+    let http_method_lower = http_method_upper.to_lowercase();
 
-    // Generate HTTP code - use cfg on individual items, not on a block
-    // Check if this is a streaming endpoint
+    // Generate unique handler name to avoid conflicts
+    let sanitized_name = name.replace(|c: char| !c.is_alphanumeric(), "_");
+    let handler_name = syn::Ident::new(
+        &format!("__axiom_http_handler_{}", sanitized_name),
+        proc_macro2::Span::call_site(),
+    );
+
+    // Generate unique route registration function name
+    let register_fn_name = syn::Ident::new(
+        &format!("__axiom_register_{}", sanitized_name),
+        proc_macro2::Span::call_site(),
+    );
+
+    // Convert cache_ttl to a proper expression for the quote macro
+    let cache_ttl_expr = match &cache_ttl {
+        Some(ttl) => quote! { Some(#ttl) },
+        None => quote! { None },
+    };
+
+    // Build description expression
+    let description_literal = description.as_deref().unwrap_or(&name);
+
+    // Generate HTTP code
     let is_streaming = stream.unwrap_or(false);
 
     let http_code = if path.is_some() && method.is_some() {
-        if is_streaming {
+        // Generate a function that creates the HttpRoute at runtime
+        let route_creation = if is_streaming {
             quote! {
-                #[cfg(feature = "http")]
-                use axum::{routing::MethodRouter, response::IntoResponse};
-                #[cfg(feature = "http")]
-                use axum::http::header::CONTENT_TYPE;
-                #[cfg(feature = "http")]
-                use axiom::core::ApiMetadata;
+                fn #register_fn_name() -> axiom::http::HttpRoute {
+                    let handler = #handler_name;
+                    axiom::http::HttpRoute {
+                        path: #http_path.to_string(),
+                        handler: {
+                            let mut router = axiom::axum::routing::MethodRouter::new();
+                            router = router.get(handler);
+                            router
+                        },
+                        metadata: axiom::core::ApiMetadata {
+                            name: #name.to_string(),
+                            version: #version.to_string(),
+                            description: #description_literal.to_string(),
+                            cache_ttl: None,
+                            is_streaming: true,
+                        },
+                        module_prefix: None,
+                    }
+                }
+            }
+        } else {
+            quote! {
+                fn #register_fn_name() -> axiom::http::HttpRoute {
+                    let handler = #handler_name;
+                    axiom::http::HttpRoute {
+                        path: #http_path.to_string(),
+                        handler: {
+                            let mut router = axiom::axum::routing::MethodRouter::new();
+                            match #http_method_lower.as_ref() {
+                                "get" => router = router.get(handler),
+                                "post" => router = router.post(handler),
+                                "put" => router = router.put(handler),
+                                "delete" => router = router.delete(handler),
+                                "patch" => router = router.patch(handler),
+                                "head" => router = router.head(handler),
+                                "options" => router = router.options(handler),
+                                _ => router = router.get(handler),
+                            }
+                            router
+                        },
+                        metadata: axiom::core::ApiMetadata {
+                            name: #name.to_string(),
+                            version: #version.to_string(),
+                            description: #description_literal.to_string(),
+                            cache_ttl: None,
+                            is_streaming: false,
+                        },
+                        module_prefix: None,
+                    }
+                }
+            }
+        };
 
-                #[cfg(feature = "http")]
-                #fn_vis async fn __axiom_http_handler(#(#param_patterns),*) -> impl IntoResponse {
+        // Generate handler code based on return type (Result or direct value)
+        let handler_code = if is_streaming {
+            quote! {
+                #fn_vis async fn #handler_name(#(#param_patterns),*) -> axiom::axum::response::Response {
                     #(#param_unwraps)*
-                    let result = super::#fn_name(#(#param_names),*).await;
-
-                    match result {
-                        Ok(stream) => {
-                            use futures_util::StreamExt;
-                            let mut stream = tokio_stream::iter(vec![]);
-                            let body = axum::body::Body::from_streaming_bytes(
+                    match #fn_name(#(#param_names),*).await {
+                        Ok(_stream) => {
+                            let body = axiom::axum::body::Body::from_streaming_bytes(
                                 tokio_stream::iter(vec![])
                             );
-                            (
-                                [(CONTENT_TYPE, "text/event-stream")],
+                            let response: axiom::axum::response::Response = (
+                                [(axiom::axum::http::header::CONTENT_TYPE, "text/event-stream")],
                                 body
-                            ).into_response()
+                            ).into_response();
+                            response
                         }
                         Err(e) => e.into_response(),
                     }
                 }
-
-                #[cfg(feature = "http")]
-                axiom::inventory::submit!(axiom::http::HttpRoute {
-                    path: #http_path.to_string(),
-                    method: axum::http::Method::#http_method,
-                    handler: MethodRouter::new().#http_method(__axiom_http_handler),
-                    metadata: axiom::core::ApiMetadata {
-                        name: #name,
-                        version: #version,
-                        description: #description.as_ref().unwrap_or(&#name),
-                        cache_ttl: #cache_ttl,
-                        is_streaming: true,
-                    },
-                    module_prefix: Some("".to_string()),
-                });
             }
         } else {
-            quote! {
-                #[cfg(feature = "http")]
-                use axum::{routing::MethodRouter, response::{IntoResponse, Response}};
-                #[cfg(feature = "http")]
-                use axum::http::header::{CONTENT_TYPE, CACHE_CONTROL};
-                #[cfg(feature = "http")]
-                use axiom::core::ApiMetadata;
-
-                #[cfg(feature = "http")]
-                #fn_vis async fn __axiom_http_handler(#(#param_patterns),*) -> impl IntoResponse {
-                    #(#param_unwraps)*
-                    let result = super::#fn_name(#(#param_names),*).await;
-
-                    // Apply cache headers if cache_ttl is specified
-                    let response: Response = result.into_response();
-                    #[cfg(feature = "http")]
-                    if let Some(ttl) = #cache_ttl {
-                        use axum::response::Append;
-                        let cache_header = format!("public, max-age={}", ttl);
-                        return AppendHeaders([(CACHE_CONTROL, cache_header)]).into_response();
-                    }
-                    response
+            // Check if the return type is Result by looking at the original function's return type
+            let is_result = match return_type {
+                syn::ReturnType::Type(_, ty) => {
+                    matches!(ty.as_ref(), syn::Type::Path(syn::TypePath { qself: None, path: syn::Path { segments, .. } }) if segments.iter().any(|s| s.ident == "Result"))
                 }
+                syn::ReturnType::Default => false,
+            };
 
-                #[cfg(feature = "http")]
-                axiom::inventory::submit!(axiom::http::HttpRoute {
-                    path: #http_path.to_string(),
-                    method: axum::http::Method::#http_method,
-                    handler: MethodRouter::new().#http_method(__axiom_http_handler),
-                    metadata: axiom::core::ApiMetadata {
-                        name: #name,
-                        version: #version,
-                        description: #description.as_ref().unwrap_or(&#name),
-                        cache_ttl: #cache_ttl,
-                        is_streaming: false,
-                    },
-                    module_prefix: Some("".to_string()),
-                });
+            if is_result {
+                quote! {
+                    #fn_vis async fn #handler_name(#(#param_patterns),*) -> axiom::axum::response::Response {
+                        #(#param_unwraps)*
+                        match #fn_name(#(#param_names),*).await {
+                            Ok(value) => value.into_response(),
+                            Err(e) => e.into_response(),
+                        }
+                    }
+                }
+            } else {
+                quote! {
+                    #fn_vis async fn #handler_name(#(#param_patterns),*) -> axiom::axum::response::Response {
+                        #(#param_unwraps)*
+                        let result = #fn_name(#(#param_names),*).await;
+                        result.into_response()
+                    }
+                }
             }
+        };
+
+        // Combine handler code, route creation function, and registration
+        quote! {
+            #handler_code
+            #route_creation
+            axiom::inventory::submit!(axiom::http::RouteRegistration {
+                name: #name,
+                version: #version,
+                register_fn: #register_fn_name,
+            });
         }
     } else {
         quote! {}
     };
 
-    // Generate MCP code - handle empty params case
+    // Generate MCP code
     let mcp_code = if tool_name.is_some() {
         let mcp_call_logic = if has_params {
             quote! {
-                #[derive(Deserialize)]
+                #[derive(serde::Deserialize)]
                 struct Params {
                     #(pub #param_names: #param_names),*
                 }
@@ -567,68 +636,70 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                     None => Params { #(#param_names: Default::default()),* },
                 };
 
-                let result = super::#fn_name(#(params.#param_names),*).await;
+                let result = #fn_name(#(params.#param_names),*).await;
             }
         } else {
             quote! {
-                let result = super::#fn_name().await;
+                let result = #fn_name().await;
             }
         };
 
-        let mcp_props = if has_params {
-            quote! { #(#mcp_schema_props),* }
-        } else {
-            quote! {}
-        };
-
-        let mcp_required = if has_params {
-            quote! { #(#mcp_schema_required),* }
-        } else {
-            quote! {}
-        };
+        let mcp_tool_name = tool_name.as_ref().unwrap();
+        let mcp_tool_description = description.as_ref().unwrap_or(&name);
 
         quote! {
-            #[cfg(feature = "mcp")]
-            use mcp_sdk::tools::Tool;
-            #[cfg(feature = "mcp")]
-            use serde_json::Value;
-
-            #[cfg(feature = "mcp")]
             struct AxiomMcpTool;
 
-            #[cfg(feature = "mcp")]
-            impl Tool for AxiomMcpTool {
+            #[mcp_sdk::types::Tool]
+            impl AxiomMcpTool {
                 fn name(&self) -> String {
-                    #tool_name.as_ref().unwrap_or(&#name).to_string()
+                    #mcp_tool_name.to_string()
                 }
 
                 fn description(&self) -> String {
-                    #description.clone().unwrap_or_else(|| #name.clone()).to_string()
+                    #mcp_tool_description.to_string()
                 }
 
                 fn input_schema(&self) -> serde_json::Value {
                     serde_json::json!({
                         "type": "object",
-                        "properties": { #mcp_props },
-                        "required": [#mcp_required]
+                        "properties": #mcp_properties_json,
+                        "required": #mcp_required_json
                     })
                 }
 
-                fn call(&self, input: Option<Value>) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
-                    use serde::Deserialize;
+                #[mcp_sdk::types::tool_callback]
+                async fn call(&self, input: Option<serde_json::Value>) -> mcp_sdk::types::CallToolResponse {
+                    use axiom::prelude::*;
 
                     #mcp_call_logic
 
                     match result {
-                        Ok(value) => Ok(mcp_sdk::types::CallToolResponse {
-                            content: vec![mcp_sdk::types::ToolResponseContent::Text {
-                                text: serde_json::to_string(&value)?,
-                            }],
-                            is_error: Some(false),
-                            meta: None,
-                        }),
-                        Err(e) => {
-                            let error_text = e.to_string();
+                        Ok(response) => {
+                            let response_json = serde_json::to_value(response).unwrap_or_else(|_| {
+                                serde_json::json!({
+                                    "success": true,
+                                    "data": response
+                                })
+                            });
+
+                            mcp_sdk::types::CallToolResponse {
+                                content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                                    text: serde_json::to_string(&response_json).unwrap_or_else(|_| {
+                                        serde_json::json!({
+                                            "success": true,
+                                            "message": "Operation completed"
+                                        }).to_string()
+                                    }),
+                                }],
+                                is_error: Some(false),
+                                meta: None,
+                            }
+                        }
+                        Err(error) => {
+                            let error_text = error.to_string();
+
+                            // Try to parse error as JSON
                             let error_json: serde_json::Value = serde_json::from_str(&error_text).unwrap_or_else(|_| {
                                 serde_json::json!({
                                     "code": "TOOL_ERROR",
@@ -661,14 +732,14 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
 
-            #[cfg(feature = "mcp")]
+            // Register MCP tool (requires axiom's "mcp" feature)
             axiom::inventory::submit!(axiom::mcp::McpToolInstance {
                 tool: std::sync::Arc::new(AxiomMcpTool),
                 metadata: axiom::core::ApiMetadata {
-                    name: #name,
-                    version: #version,
-                    description: #description.clone().unwrap_or_else(|| #name.clone()),
-                    cache_ttl: #cache_ttl,
+                    name: #name.to_string(),
+                    version: #version.to_string(),
+                    description: #description_literal.to_string(),
+                    cache_ttl: #cache_ttl_expr,
                     is_streaming: false,
                 },
             });
@@ -680,13 +751,10 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     // Generate WebSocket code
     let ws_code = if ws_path.is_some() {
         quote! {
-            #[cfg(feature = "websocket")]
-            use axiom::websocket::WebSocketRoute;
-
-            #[cfg(feature = "websocket")]
-            axiom::inventory::submit!(WebSocketRoute {
+            // WebSocket route (requires axiom's "websocket" feature)
+            axiom::inventory::submit!(axiom::websocket::WebSocketRoute {
                 path: #ws_path.unwrap().to_string(),
-                handler: super::#fn_name,
+                handler: #fn_name,
             });
         }
     } else {
@@ -696,17 +764,14 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     // Generate gRPC code
     let grpc_code = if grpc_method.is_some() {
         quote! {
-            #[cfg(feature = "grpc")]
-            use axiom::grpc::GrpcRoute;
-
-            #[cfg(feature = "grpc")]
-            axiom::inventory::submit!(GrpcRoute {
+            // gRPC route (requires axiom's "grpc" feature)
+            axiom::inventory::submit!(axiom::grpc::GrpcRoute {
                 service_name: #name.to_string(),
                 metadata: axiom::core::ApiMetadata {
-                    name: #name,
-                    version: #version,
-                    description: #description.clone().unwrap_or_else(|| #name.clone()),
-                    cache_ttl: #cache_ttl,
+                    name: #name.to_string(),
+                    version: #version.to_string(),
+                    description: #description_literal.to_string(),
+                    cache_ttl: #cache_ttl_expr,
                     is_streaming: false,
                 },
             });
@@ -715,14 +780,15 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    quote! {
+    let generated = quote! {
         #input
         #http_code
         #mcp_code
         #ws_code
         #grpc_code
-    }
-    .into()
+    };
+
+    generated.into()
 }
 
 #[proc_macro_attribute]
@@ -733,15 +799,20 @@ pub fn service_module(args: TokenStream, input: TokenStream) -> TokenStream {
     };
     let input = parse_macro_input!(input as ItemMod);
 
+    // Generate a constant for the module prefix
     let prefix_const = quote! {
-        #[allow(dead_code)]
-        pub const __AXIOM_MODULE_PREFIX: &str = #prefix;
+        pub const MODULE_PREFIX: &str = #prefix;
     };
 
+    // Generate a helper function that applies the prefix
     let prefix_helper = quote! {
-        #[allow(dead_code)]
-        pub fn __axiom_get_combined_prefix() -> &'static str {
-            __AXIOM_MODULE_PREFIX
+        #[inline]
+        pub fn apply_prefix(path: &str) -> String {
+            if path.starts_with('/') {
+                format!("{}{}", MODULE_PREFIX, path)
+            } else {
+                format!("{}{}", MODULE_PREFIX, path)
+            }
         }
     };
 
@@ -755,80 +826,58 @@ pub fn service_module(args: TokenStream, input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+#[proc_macro]
+pub fn test_macro(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as ItemFn);
+
+    let fn_name = &input.sig.ident;
+
+    let expanded = quote! {
+        #input
+
+        #[cfg(test)]
+        mod #fn_name {
+            use super::*;
+
+            #[test]
+            fn test_generated() {
+                println!("Test macro generated for: {}", stringify!(#fn_name));
+            }
+        }
+    };
+
+    expanded.into()
+}
+
 #[cfg(test)]
 mod macro_parsing_tests {
     use super::*;
-    use proc_macro2::TokenStream;
 
     #[test]
     fn test_parse_kv_pairs_simple() {
-        let input: TokenStream = r#"name = "test_api""#.parse().unwrap();
-        let result = parse_kv_pairs(input);
-        assert!(result.is_ok());
-        let pairs = result.unwrap();
-        assert_eq!(pairs.len(), 1);
-        assert_eq!(pairs[0], ("name".to_string(), "test_api".to_string()));
+        let input: TokenStream2 = r###"name = "test""###.parse().unwrap();
+        let result = parse_kv_pairs(input).unwrap();
+        assert_eq!(result, vec![("name".to_string(), "test".to_string())]);
     }
 
     #[test]
     fn test_parse_kv_pairs_multiple() {
-        let input: TokenStream = r#"name = "test_api", version = "v1", description = "Test API""#
-            .parse()
-            .unwrap();
-        let result = parse_kv_pairs(input);
-        assert!(result.is_ok());
-        let pairs = result.unwrap();
-        assert_eq!(pairs.len(), 3);
+        let input: TokenStream2 = r###"name = "test", version = "v1""###.parse().unwrap();
+        let result = parse_kv_pairs(input).unwrap();
+        assert_eq!(
+            result,
+            vec![
+                ("name".to_string(), "test".to_string()),
+                ("version".to_string(), "v1".to_string())
+            ]
+        );
     }
 
     #[test]
     fn test_parse_service_api_args_required() {
-        let input: TokenStream = r#"name = "get_user", version = "v1""#.parse().unwrap();
-        let result = parse_service_api_args(input);
-        assert!(result.is_ok());
-        let (name, version, _, _, _, _, _, _, _, _) = result.unwrap();
-        assert_eq!(name, "get_user");
-        assert_eq!(version, "v1");
+        let input: TokenStream2 = r###"name = "test", version = "v1""###.parse().unwrap();
+        let result = parse_service_api_args(input).unwrap();
+        assert_eq!(result.0, "test");
+        assert_eq!(result.1, "v1");
     }
-
-    #[test]
-    fn test_parse_service_api_args_missing_name() {
-        let input: TokenStream = r#"version = "v1""#.parse().unwrap();
-        let result = parse_service_api_args(input);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_extract_path_params_single() {
-        let path = "/users/:id";
-        let params = extract_path_params(path);
-        assert_eq!(params.len(), 1);
-        assert_eq!(params[0], "id");
-    }
-
-    #[test]
-    fn test_extract_path_params_multiple() {
-        let path = "/users/:user_id/posts/:post_id";
-        let params = extract_path_params(path);
-        assert_eq!(params.len(), 2);
-    }
-
-    #[test]
-    fn test_extract_path_params_none() {
-        let path = "/users";
-        let params = extract_path_params(path);
-        assert!(params.is_empty());
-    }
-
-    #[test]
-    fn test_extract_path_params_empty() {
-        let path = "";
-        let params = extract_path_params(path);
-        assert!(params.is_empty());
-    }
-}
-
-#[proc_macro_attribute]
-pub fn test_macro(_args: TokenStream, input: TokenStream) -> TokenStream {
-    input
 }

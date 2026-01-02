@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use thiserror::Error;
 
-#[cfg(feature = "http")]
+#[cfg(feature = "security")]
 use crate::security::RateLimitConfig;
 
 #[cfg(feature = "http")]
@@ -473,12 +473,12 @@ pub fn build_cors_layer(config: &CorsConfig) -> Result<tower_http::cors::CorsLay
     Ok(cors)
 }
 
-/// Implement TryFrom for RateLimitConfigFile to RateLimitConfig conversion
-impl TryFrom<RateLimitConfigFile> for RateLimitConfig {
+#[cfg(feature = "security")]
+impl TryFrom<RateLimitConfigFile> for crate::security::RateLimitConfig {
     type Error = ConfigError;
 
     fn try_from(file_config: RateLimitConfigFile) -> Result<Self, Self::Error> {
-        Ok(RateLimitConfig {
+        Ok(crate::security::RateLimitConfig {
             max_requests: file_config.max_requests,
             window: std::time::Duration::from_secs(file_config.window_seconds.into()),
             include_headers: true,
