@@ -11,9 +11,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use thiserror::Error;
 
-#[cfg(feature = "security")]
-use crate::security::RateLimitConfig;
-
 #[cfg(feature = "http")]
 use axum::http::HeaderValue;
 
@@ -275,7 +272,6 @@ impl ConfigLoader {
 
     /// Apply environment variable overrides
     fn apply_env_overrides(&self, config: &mut AppConfig) {
-        // Server overrides
         if let Ok(host) = std::env::var(format!("{}_SERVER_HOST", self.env_prefix)) {
             config.server.host = host;
         }
@@ -285,20 +281,41 @@ impl ConfigLoader {
             }
         }
 
-        // API overrides
         if let Ok(version) = std::env::var(format!("{}_API_VERSION", self.env_prefix)) {
             config.api.version = version;
         }
 
-        // Database overrides
         if let Ok(conn_str) = std::env::var(format!("{}_DATABASE_URL", self.env_prefix)) {
             if let Some(DatabaseConfig::Postgresql {
                 connection_string, ..
             }) = &mut config.database
             {
-                *connection_string = conn_str;
+                if Self::validate_connection_string(&conn_str) {
+                    *connection_string = conn_str;
+                } else {
+                    #[cfg(feature = "logging")]
+                    tracing::warn!(target: "config", "Invalid database connection string format");
+                }
             }
         }
+    }
+
+    /// Validate database connection string format
+    fn validate_connection_string(conn_str: &str) -> bool {
+        if conn_str.is_empty() || conn_str.len() > 2048 {
+            return false;
+        }
+
+        let forbidden_chars = [';', '\'', '"', '\n', '\r', '\0'];
+        if conn_str.chars().any(|c| forbidden_chars.contains(&c)) {
+            return false;
+        }
+
+        if !conn_str.starts_with("postgresql://") && !conn_str.starts_with("postgres://") {
+            return false;
+        }
+
+        true
     }
 
     /// Get configuration path
@@ -531,5 +548,21 @@ mod tests {
             max_age: None,
         };
         assert!(config.allowed_origins.contains(&"*".to_string()));
+    }
+
+    #[test]
+    fn test_connection_string_validation() {
+        assert!(ConfigLoader::validate_connection_string(
+            "postgresql://user:pass@localhost/db"
+        ));
+        assert!(ConfigLoader::validate_connection_string(
+            "postgres://localhost:5432/db"
+        ));
+
+        assert!(!ConfigLoader::validate_connection_string(""));
+        assert!(!ConfigLoader::validate_connection_string(
+            "; DROP TABLE users;"
+        ));
+        assert!(!ConfigLoader::validate_connection_string("not-a-url"));
     }
 }

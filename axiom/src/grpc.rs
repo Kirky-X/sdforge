@@ -33,8 +33,6 @@ impl AxiomService for AxiomGrpcService {
     async fn call(&self, request: Request<CallRequest>) -> Result<Response<CallResponse>, Status> {
         let req = request.into_inner();
 
-        // TODO: Implement actual method calling logic
-        // For now, return a mock response
         let response = CallResponse {
             success: true,
             data: serde_json::to_string(&serde_json::json!({

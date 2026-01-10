@@ -362,14 +362,14 @@ impl From<ApiError> for ServiceError {
                 serde_json::json!({ "field": field, "value": value }),
                 400,
             ),
-            ApiError::AuthenticationFailed { reason } => ServiceError::with_details(
+            ApiError::AuthenticationFailed { reason: _ } => ServiceError::with_details(
                 "AUTHENTICATION_FAILED",
                 "Authentication failed".to_string(), // Don't expose reason to user
                 serde_json::json!({ "reason": "authentication_failed" }),
                 401,
             ),
             ApiError::AccessDenied {
-                permission,
+                permission: _,
                 user_id,
             } => ServiceError::with_details(
                 "ACCESS_DENIED",
@@ -441,9 +441,7 @@ impl IntoResponse for ApiError {
                 tracing::error!(error = %e, "Failed to serialize ApiError response");
 
                 // Fallback to plain text error response
-                let fallback_body = format!(
-                    r#"{{"success":false,"error":{{"code":"SERIALIZATION_ERROR","message":"Internal server error"}}}}"#
-                );
+                let fallback_body = r#"{"success":false,"error":{"code":"SERIALIZATION_ERROR","message":"Internal server error"}}"#.to_string();
                 axum::response::Response::builder()
                     .status(status)
                     .header(http::header::CONTENT_TYPE, "application/json")

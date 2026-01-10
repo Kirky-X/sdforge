@@ -56,6 +56,7 @@ struct MinHeap {
 }
 
 impl MinHeap {
+    #[allow(dead_code)]
     /// Create a new empty min-heap
     fn new() -> Self {
         Self {
@@ -63,16 +64,19 @@ impl MinHeap {
         }
     }
 
+    #[allow(dead_code)]
     /// Get the number of entries in the heap
     fn len(&self) -> usize {
         self.entries.len()
     }
 
+    #[allow(dead_code)]
     /// Check if the heap is empty
     fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
 
+    #[allow(dead_code)]
     /// Get the minimum element (oldest accessed entry) without removing it - O(1)
     fn peek_min(&self) -> Option<&MinHeapEntry> {
         self.entries.first()
@@ -170,6 +174,7 @@ impl MinHeap {
 
     /// Rebuild heap from all entries - O(n)
     /// Used when access times are updated
+    #[allow(dead_code)]
     fn rebuild(&mut self) {
         // Use Floyd's heap construction algorithm - O(n)
         let len = self.entries.len();
@@ -242,17 +247,33 @@ struct CacheEntry {
     /// Expiration timestamp (Unix timestamp in seconds), entry is invalid after this time
     expires_at: u64,
     /// Last access timestamp (Unix timestamp in seconds), used for LRU eviction
+    #[allow(dead_code)]
     last_accessed: u64,
     /// Entry size in bytes (body length), used for size-based eviction
     size: usize,
 }
 
-/// 缓存键
+/// Cache key with full request information
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct CacheKey {
     method: String,
     uri: String,
     body_hash: String,
+}
+
+impl CacheKey {
+    /// Create cache key with optional body
+    pub fn new(method: &str, uri: &str, body: &[u8]) -> Self {
+        let mut hasher = Sha256::new();
+        hasher.update(body);
+        let body_hash = format!("{:x}", hasher.finalize());
+
+        Self {
+            method: method.to_string(),
+            uri: uri.to_string(),
+            body_hash,
+        }
+    }
 }
 
 /// 缓存中间件
@@ -263,9 +284,9 @@ pub struct CacheMiddleware {
     current_size: Arc<AtomicUsize>,
     entry_count: Arc<AtomicUsize>,
     /// LRU heap for O(1) eviction - stores (key, last_accessed) pairs
-    /// Using a binary heap provides O(1) access to oldest entry vs O(n) iteration
-    access_order: Arc<DashMap<CacheKey, u64>>, // Deprecated: kept for backward compatibility during migration
-    lru_heap: Arc<DashMap<CacheKey, MinHeap>>, // New: Heap for efficient eviction
+    lru_heap: Arc<DashMap<CacheKey, MinHeap>>,
+    /// Expiration index for O(1) expired entry lookup
+    expiration_index: Arc<DashMap<u64, Vec<CacheKey>>>,
 }
 
 impl CacheMiddleware {
@@ -280,8 +301,8 @@ impl CacheMiddleware {
             cache: Arc::new(DashMap::new()),
             current_size: Arc::new(AtomicUsize::new(0)),
             entry_count: Arc::new(AtomicUsize::new(0)),
-            access_order: Arc::new(DashMap::new()),
             lru_heap: Arc::new(DashMap::new()),
+            expiration_index: Arc::new(DashMap::new()),
         }
     }
 
@@ -306,15 +327,7 @@ impl CacheMiddleware {
     /// 生成缓存键
     #[inline]
     pub fn generate_cache_key(method: &str, uri: &str, body: &[u8]) -> CacheKey {
-        let mut hasher = Sha256::new();
-        hasher.update(body);
-        let body_hash = format!("{:x}", hasher.finalize());
-
-        CacheKey {
-            method: method.to_string(),
-            uri: uri.to_string(),
-            body_hash,
-        }
+        CacheKey::new(method, uri, body)
     }
 
     /// 检查是否应该缓存响应
@@ -358,20 +371,16 @@ impl CacheMiddleware {
             let size_now = self.current_size.load(Ordering::Relaxed);
             let count_now = self.entry_count.load(Ordering::Relaxed);
 
-            // Check if eviction is still needed
             if size_now + min_needed <= max_size && count_now < max_entries {
                 break;
             }
 
-            // Extract the oldest entry from heap - O(log n)
-            // We need to extract inside this scope so the mutable borrow is released
             let mut found_entry = false;
             for mut shard in self.lru_heap.iter_mut() {
                 let heap = shard.value_mut();
                 if let Some(entry) = heap.extract_min() {
-                    // Remove from cache and access_order
                     if let Some((_, cache_entry)) = self.cache.remove(&entry.key) {
-                        self.access_order.remove(&entry.key);
+                        self.remove_from_expiration_index(&entry.key, cache_entry.expires_at);
                         let size = cache_entry.body.len();
                         self.current_size.fetch_sub(size, Ordering::Relaxed);
                         self.entry_count.fetch_sub(1, Ordering::Relaxed);
@@ -383,12 +392,10 @@ impl CacheMiddleware {
                 }
             }
 
-            // If no more entries to evict, break
             if !found_entry || self.entry_count.load(Ordering::Relaxed) == 0 {
                 break;
             }
 
-            // Safety limit to prevent infinite loops
             if removed_count > 1000 {
                 #[cfg(feature = "logging")]
                 tracing::warn!("LRU eviction hit safety limit of 1000 entries");
@@ -406,32 +413,50 @@ impl CacheMiddleware {
         }
     }
 
-    /// Clear expired cache and evict over-limit entries (calls LRU eviction)
-    fn cleanup_and_evict(&self, needed: usize) {
+    /// Add entry to expiration index
+    fn add_to_expiration_index(&self, key: &CacheKey, expires_at: u64) {
+        let mut shard = self.expiration_index.entry(expires_at).or_default();
+        shard.push(key.clone());
+    }
+
+    /// Remove entry from expiration index
+    fn remove_from_expiration_index(&self, key: &CacheKey, expires_at: u64) {
+        if let Some(mut shard) = self.expiration_index.get_mut(&expires_at) {
+            shard.retain(|k| k != key);
+        }
+    }
+
+    /// Clear expired cache using expiration index - O(1) lookup
+    fn clear_expired_entries(&self) -> usize {
         let now = CacheMiddleware::now();
-        let mut keys_to_remove = Vec::new();
+        let mut removed = 0;
 
-        for entry in self.cache.iter() {
-            if now > entry.expires_at {
-                keys_to_remove.push(entry.key().clone());
-            }
-        }
+        let mut expired_times: Vec<u64> = self
+            .expiration_index
+            .iter()
+            .filter(|shard| shard.key() <= &now)
+            .map(|shard| *shard.key())
+            .collect();
 
-        for key in keys_to_remove {
-            if let Some((_, entry)) = self.cache.remove(&key) {
-                self.access_order.remove(&key);
-                // Remove from LRU heap
-                for mut shard in self.lru_heap.iter_mut() {
-                    let heap = shard.value_mut();
-                    heap.remove(&key);
-                    break;
+        for expires_at in expired_times {
+            if let Some((_, keys)) = self.expiration_index.remove(&expires_at) {
+                for key in keys {
+                    if let Some((_, entry)) = self.cache.remove(&key) {
+                        self.entry_count.fetch_sub(1, Ordering::Relaxed);
+                        self.current_size.fetch_sub(entry.size, Ordering::Relaxed);
+                        removed += 1;
+                    }
                 }
-                self.current_size.fetch_sub(entry.size, Ordering::Relaxed);
-                self.entry_count.fetch_sub(1, Ordering::Relaxed);
             }
         }
 
-        // If space is insufficient, execute LRU eviction
+        removed
+    }
+
+    /// Clear expired cache and evict over-limit entries (uses expiration index for O(1) lookup)
+    fn cleanup_and_evict(&self, needed: usize) {
+        let _ = self.clear_expired_entries();
+
         let current_size = self.current_size.load(Ordering::Relaxed);
         let entry_count = self.entry_count.load(Ordering::Relaxed);
 
@@ -458,11 +483,7 @@ impl CacheMiddleware {
     /// Update access time (LRU) - O(log n) due to heap update
     fn update_access_time(&self, key: &CacheKey) {
         let now = CacheMiddleware::now();
-        self.access_order.insert(key.clone(), now);
 
-        // Update the heap: remove old entry and re-insert with new timestamp
-        // This is O(n) for removal + O(log n) for insertion
-        // For better performance, we could use a more sophisticated heap that supports decrease-key
         for mut shard in self.lru_heap.iter_mut() {
             let heap = shard.value_mut();
             if heap.remove(key) {
@@ -631,21 +652,20 @@ where
                 // 再次检查大小限制后尝试插入
                 let current_size = middleware.current_size.load(Ordering::Relaxed);
                 if current_size + entry_size <= middleware.config.max_size_bytes {
-                    // Clone cache_key before moving into cache and access_order
+                    // Clone cache_key before moving into cache and expiration_index
                     let cache_key_for_heap = cache_key.clone();
+                    let cache_key_for_expiry = cache_key.clone();
                     middleware.cache.insert(cache_key.clone(), entry.clone());
-                    middleware
-                        .access_order
-                        .insert(cache_key, CacheMiddleware::now());
                     // Add to LRU heap for O(1) eviction
-                    for mut shard in middleware.lru_heap.iter_mut() {
+                    if let Some(mut shard) = middleware.lru_heap.iter_mut().next() {
                         let heap = shard.value_mut();
                         heap.push(MinHeapEntry {
                             key: cache_key_for_heap,
                             last_accessed: CacheMiddleware::now(),
                         });
-                        break;
                     }
+                    // Add to expiration index for O(1) expired entry lookup
+                    middleware.add_to_expiration_index(&cache_key_for_expiry, expires_at);
                     middleware
                         .current_size
                         .fetch_add(entry_size, Ordering::Relaxed);
@@ -720,5 +740,42 @@ mod tests {
         assert!(middleware.should_cache("GET", 404));
         assert!(!middleware.should_cache("POST", 200));
         assert!(!middleware.should_cache("GET", 500));
+    }
+
+    #[test]
+    fn test_cache_key_with_body() {
+        let key1 = CacheMiddleware::generate_cache_key("GET", "/api/users", b"");
+        let key2 = CacheMiddleware::generate_cache_key("GET", "/api/users", b"");
+        assert_eq!(key1, key2);
+
+        let key3 = CacheMiddleware::generate_cache_key("POST", "/api/users", b"body");
+        assert_ne!(key1, key3);
+
+        let key4 = CacheMiddleware::generate_cache_key("GET", "/api/users", b"different body");
+        assert_ne!(key1, key4);
+    }
+
+    #[test]
+    fn test_min_heap_operations() {
+        let mut heap = MinHeap::new();
+        assert!(heap.is_empty());
+
+        heap.push(MinHeapEntry {
+            key: CacheKey::new("GET", "/a", b""),
+            last_accessed: 1,
+        });
+        heap.push(MinHeapEntry {
+            key: CacheKey::new("GET", "/b", b""),
+            last_accessed: 3,
+        });
+        heap.push(MinHeapEntry {
+            key: CacheKey::new("GET", "/c", b""),
+            last_accessed: 2,
+        });
+
+        assert_eq!(heap.len(), 3);
+
+        let min = heap.extract_min().unwrap();
+        assert_eq!(min.last_accessed, 1);
     }
 }
