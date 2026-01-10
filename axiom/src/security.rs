@@ -75,12 +75,12 @@ pub struct AuthExtractor(pub AuthContext);
 /// API key authentication with brute-force protection
 ///
 /// Security features:
-/// - Valid API keys storage with permissions mapping
+/// - Valid API keys storage with permissions mapping (hashed for security)
 /// - Rate limiting on validation attempts to prevent brute force attacks
 /// - Per-IP attempt tracking with automatic cleanup
 #[derive(Clone)]
 pub struct ApiKeyAuth {
-    /// Valid API keys
+    /// Valid API keys (stored as SHA256 hash -> permissions)
     valid_keys: Arc<DashMap<String, Vec<String>>>,
     /// Failed attempt tracking (IP -> attempts with timestamps)
     failed_attempts: Arc<DashMap<String, Vec<Instant>>>,
@@ -92,7 +92,7 @@ impl ApiKeyAuth {
     /// Create new API key authentication with default rate limiting
     pub fn new() -> Self {
         Self::with_rate_limit(RateLimitConfig {
-            max_requests: 5, // Conservative limit for key validation
+            max_requests: 5,
             window: Duration::from_secs(60),
             include_headers: false,
         })
@@ -107,9 +107,18 @@ impl ApiKeyAuth {
         }
     }
 
-    /// Add a valid API key
+    /// Hash API key using SHA256 for secure storage
+    fn hash_key(key: &str) -> String {
+        use sha2::Digest;
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(key.as_bytes());
+        format!("{:x}", hasher.finalize())
+    }
+
+    /// Add a valid API key (stored as hash)
     pub fn add_key(&self, key: impl Into<String>, permissions: Vec<String>) {
-        self.valid_keys.insert(key.into(), permissions);
+        let key_hash = Self::hash_key(&key.into());
+        self.valid_keys.insert(key_hash, permissions);
     }
 
     /// Validate an API key with rate limiting
@@ -118,20 +127,17 @@ impl ApiKeyAuth {
     /// attacks on API key validation. Returns None immediately if rate limited.
     /// Valid keys bypass rate limiting to prevent blocking legitimate users.
     pub fn validate_key(&self, key: &str, client_ip: &str) -> Option<Vec<String>> {
-        // First check if key is valid (valid keys bypass rate limiting)
-        let result = self.valid_keys.get(key).map(|p| p.clone());
+        let key_hash = Self::hash_key(key);
+        let result = self.valid_keys.get(&key_hash).map(|p| p.clone());
 
-        // If key is valid, return permissions immediately (no rate limiting for valid keys)
         if result.is_some() {
             return result;
         }
 
-        // Key is invalid - check if this IP is already rate limited
         if self.is_rate_limited(client_ip) {
             return None;
         }
 
-        // Record failed attempt for invalid key
         self.record_failed_attempt(client_ip);
 
         None
@@ -205,12 +211,38 @@ pub struct BearerAuth {
 impl BearerAuth {
     /// Create new bearer authentication with basic secret
     pub fn new(secret: impl Into<String>) -> Self {
+        let secret_str = secret.into();
+        Self::validate_secret(&secret_str);
         Self {
-            secret: secret.into().into_bytes(),
+            secret: secret_str.into_bytes(),
             valid_tokens: Arc::new(DashMap::new()),
             blacklisted_tokens: Arc::new(DashMap::new()),
             expected_audience: None,
             expected_issuer: None,
+        }
+    }
+
+    /// Validate JWT secret meets minimum security requirements
+    fn validate_secret(secret: &str) {
+        if secret.len() < 32 {
+            #[cfg(feature = "logging")]
+            tracing::warn!(
+                target: "security",
+                "JWT secret is shorter than 32 characters, consider using a longer secret"
+            );
+        }
+
+        let has_uppercase = secret.chars().any(|c| c.is_uppercase());
+        let has_lowercase = secret.chars().any(|c| c.is_lowercase());
+        let has_digit = secret.chars().any(|c| c.is_digit(10));
+        let has_special = secret.chars().any(|c| !c.is_alphanumeric());
+
+        if !has_uppercase || !has_lowercase || !has_digit || !has_special {
+            #[cfg(feature = "logging")]
+            tracing::warn!(
+                target: "security",
+                "JWT secret should contain uppercase, lowercase, digits, and special characters"
+            );
         }
     }
 
@@ -399,12 +431,10 @@ impl BearerAuth {
         let permissions: Vec<String> = payload
             .get("permissions")
             .and_then(|v| v.as_array())
-            .and_then(|arr| {
-                Some(
-                    arr.iter()
-                        .filter_map(|p| p.as_str().map(String::from))
-                        .collect(),
-                )
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|p| p.as_str().map(String::from))
+                    .collect()
             })
             .unwrap_or_default();
 
@@ -554,8 +584,8 @@ impl RateLimiter {
 
     /// Acquire rate limit permit (async, with backpressure)
     pub async fn acquire(&self, key: &str) -> Result<Permit, RateLimitError> {
-        // Check rate limit first
-        let remaining = self.check(key)?;
+        // Check rate limit first (check returns info but we only care about side effects)
+        let _remaining = self.check(key)?;
 
         // Try to acquire semaphore permit (owned to allow returning from function)
         let permit = self
@@ -767,11 +797,13 @@ impl AuditLogger {
         // Try non-blocking send first, fall back to synchronous logging if channel full
         match sender.try_send(log_batch) {
             Ok(()) => {
+                #[cfg(feature = "logging")]
                 tracing::debug!(target: "audit", "Audit log queued for user: {}", user_id);
             }
             Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
                 // Channel is full - log to fallback storage synchronously
                 // This is a rare event under normal load, indicating potential DoS attempt
+                #[cfg(feature = "logging")]
                 tracing::warn!(target: "audit",
                     "Audit log channel full for user: {}, using fallback storage",
                     user_id
@@ -780,6 +812,7 @@ impl AuditLogger {
             }
             Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
                 // Channel closed - log synchronously as last resort
+                #[cfg(feature = "logging")]
                 tracing::error!(target: "audit",
                     "Audit log channel closed for user: {}, using synchronous logging",
                     user_id
@@ -854,7 +887,8 @@ impl AuditLogger {
         }
 
         // Log warning periodically (every 100th drop)
-        if count > 0 && count % 100 == 0 {
+        if count > 0 && count.is_multiple_of(100) {
+            #[cfg(feature = "logging")]
             tracing::warn!(target: "audit",
                 "High audit log drop rate: {} logs dropped due to channel congestion",
                 count + 1
@@ -946,38 +980,45 @@ pub fn rate_limit_middleware(
 /// - Validates X-Forwarded-For format to prevent header injection
 /// - Takes the first IP from X-Forwarded-For (original client)
 /// - Falls back to X-Real-IP or defaults to "unknown"
+/// - Only trusts IPs from X-Forwarded-For if they come from known proxy addresses
 #[cfg(feature = "logging")]
 fn extract_client_ip(req: &Request<Body>) -> String {
     use axum::extract::connect_info::ConnectInfo;
 
-    // Check X-Forwarded-For header first
+    let trusted_proxies = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.1"];
+
     if let Some(header) = req.headers().get("X-Forwarded-For") {
         if let Ok(value) = header.to_str() {
-            // X-Forwarded-For can contain multiple IPs: "client, proxy1, proxy2"
-            // We take the first one (original client)
             let first_ip = value.split(',').next().map(|s| s.trim());
 
             if let Some(ip) = first_ip {
                 if is_valid_ip(ip) {
-                    return ip.to_string();
+                    if trusted_proxies
+                        .iter()
+                        .any(|range| is_ip_in_range(ip, range))
+                    {
+                        return ip.to_string();
+                    }
+                    #[cfg(feature = "logging")]
+                    tracing::warn!(target: "security", "X-Forwarded-For IP not from trusted proxy: {}", ip);
+                } else {
+                    #[cfg(feature = "logging")]
+                    tracing::warn!(target: "security", "Invalid X-Forwarded-For IP: {}", ip);
                 }
-                // Invalid IP format in X-Forwarded-For, log warning
-                tracing::warn!(target: "security", "Invalid X-Forwarded-For IP: {}", ip);
             }
         }
     }
 
-    // Fall back to X-Real-IP
     if let Some(header) = req.headers().get("X-Real-IP") {
         if let Ok(ip) = header.to_str() {
             if is_valid_ip(ip) {
                 return ip.to_string();
             }
+            #[cfg(feature = "logging")]
             tracing::warn!(target: "security", "Invalid X-Real-IP: {}", ip);
         }
     }
 
-    // Use connection remote peer if available
     if let Some(remote) = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>() {
         return remote.0.ip().to_string();
     }
@@ -985,16 +1026,56 @@ fn extract_client_ip(req: &Request<Body>) -> String {
     "unknown".to_string()
 }
 
+/// Check if an IP is within a CIDR range
+fn is_ip_in_range(ip: &str, cidr: &str) -> bool {
+    let parts: Vec<&str> = cidr.split('/').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+
+    let network = parts[0];
+    let mask_bits: u32 = parts[1].parse().unwrap_or(0);
+
+    let ip_bytes: Vec<u8> = ip.split('.').filter_map(|s| s.parse().ok()).collect();
+    let net_bytes: Vec<u8> = network.split('.').filter_map(|s| s.parse().ok()).collect();
+
+    if ip_bytes.len() != 4 || net_bytes.len() != 4 {
+        return false;
+    }
+
+    let ip_val = (ip_bytes[0] as u32) << 24
+        | (ip_bytes[1] as u32) << 16
+        | (ip_bytes[2] as u32) << 8
+        | ip_bytes[3] as u32;
+    let net_val = (net_bytes[0] as u32) << 24
+        | (net_bytes[1] as u32) << 16
+        | (net_bytes[2] as u32) << 8
+        | net_bytes[3] as u32;
+    let mask_val = if mask_bits == 0 {
+        0
+    } else {
+        !0u32 << (32 - mask_bits)
+    };
+
+    (ip_val & mask_val) == (net_val & mask_val)
+}
+
 /// Non-logging version without security warnings
 #[cfg(not(feature = "logging"))]
 fn extract_client_ip(req: &Request<Body>) -> String {
     use axum::extract::connect_info::ConnectInfo;
 
+    let trusted_proxies = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.1"];
+
     if let Some(header) = req.headers().get("X-Forwarded-For") {
         if let Ok(value) = header.to_str() {
             let first_ip = value.split(',').next().map(|s| s.trim());
             if let Some(ip) = first_ip {
-                if is_valid_ip(ip) {
+                if is_valid_ip(ip)
+                    && trusted_proxies
+                        .iter()
+                        .any(|range| is_ip_in_range(ip, range))
+                {
                     return ip.to_string();
                 }
             }
@@ -1126,7 +1207,6 @@ mod tests {
         });
         auth.add_key("valid-key", vec!["read".to_string()]);
 
-        // First 3 invalid attempts should be tracked but not blocked yet
         for i in 0..3 {
             assert_eq!(
                 auth.validate_key(&format!("invalid-key-{}", i), "192.168.1.1"),
@@ -1134,12 +1214,19 @@ mod tests {
             );
         }
 
-        // 4th invalid attempt should be rate limited
         assert_eq!(auth.validate_key("invalid-key-4", "192.168.1.1"), None);
 
-        // Valid key should still work
         let permissions = auth.validate_key("valid-key", "192.168.1.1");
         assert_eq!(permissions, Some(vec!["read".to_string()]));
+    }
+
+    #[tokio::test]
+    async fn test_api_key_hashing() {
+        let auth = ApiKeyAuth::new();
+        auth.add_key("test-key", vec!["admin".to_string()]);
+
+        assert!(auth.validate_key("test-key", "127.0.0.1").is_some());
+        assert!(auth.validate_key("TEST-KEY", "127.0.0.1").is_none());
     }
 
     #[tokio::test]
@@ -1151,12 +1238,10 @@ mod tests {
         };
         let limiter = RateLimiter::new(Some(config));
 
-        // First 3 requests should succeed
         for _ in 0..3 {
             assert!(limiter.check("test-ip").is_ok());
         }
 
-        // 4th request should fail
         assert!(limiter.check("test-ip").is_err());
     }
 
@@ -1169,16 +1254,26 @@ mod tests {
             metadata: AuthMetadata::default(),
         };
 
-        // Await the async log call
         logger
             .log(&context, "test_action", "test_resource", true, None)
             .await;
 
-        // Give the background worker time to process the log
         tokio::task::yield_now().await;
 
         let logs = logger.get_logs("user-123");
         assert_eq!(logs.len(), 1);
         assert_eq!(logs[0].action, "test_action");
+    }
+
+    #[test]
+    fn test_ip_range_validation() {
+        assert!(is_ip_in_range("10.0.0.1", "10.0.0.0/8"));
+        assert!(is_ip_in_range("192.168.1.100", "192.168.0.0/16"));
+        assert!(is_ip_in_range("172.16.5.5", "172.16.0.0/12"));
+        assert!(is_ip_in_range("172.31.255.255", "172.16.0.0/12"));
+
+        assert!(!is_ip_in_range("8.8.8.8", "10.0.0.0/8"));
+        assert!(!is_ip_in_range("172.32.0.1", "172.16.0.0/12"));
+        assert!(!is_ip_in_range("8.8.8.8", "192.168.0.0/16"));
     }
 }

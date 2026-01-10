@@ -7,7 +7,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_macro_input, FnArg, ItemFn, ItemMod, Pat};
+use syn::{parse_macro_input, FnArg, ItemFn, ItemMod, LitStr, Pat};
 
 /// Type alias for service_api arguments parsing result
 type ServiceApiArgs = Result<
@@ -28,10 +28,9 @@ type ServiceApiArgs = Result<
 
 /// Parse key=value pairs from token stream
 fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Error> {
-    let mut pairs = Vec::new();
     let args_str = args.to_string();
+    let mut pairs = Vec::new();
 
-    // Parse key="value" pattern
     let mut chars = args_str.chars().peekable();
     while let Some(&c) = chars.peek() {
         if c.is_whitespace() || c == ',' {
@@ -39,7 +38,6 @@ fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Erro
             continue;
         }
 
-        // Read key
         let mut key = String::new();
         while let Some(&c) = chars.peek() {
             if c == '=' || c.is_whitespace() {
@@ -49,7 +47,6 @@ fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Erro
             chars.next();
         }
 
-        // Skip to =
         while let Some(&c) = chars.peek() {
             if c == '=' {
                 chars.next();
@@ -58,7 +55,6 @@ fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Erro
             chars.next();
         }
 
-        // Skip whitespace
         while let Some(&c) = chars.peek() {
             if c.is_whitespace() {
                 chars.next();
@@ -67,10 +63,9 @@ fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Erro
             }
         }
 
-        // Read value (quoted string)
         let mut value = String::new();
         if let Some(&'"') = chars.peek() {
-            chars.next(); // skip opening quote
+            chars.next();
             for c in chars.by_ref() {
                 if c == '"' {
                     break;
@@ -205,6 +200,7 @@ impl std::fmt::Display for ParamKind {
 
 /// Extract parameter info from function arguments
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ParamInfo {
     /// Parameter name (identifier)
     name: String,
@@ -647,7 +643,10 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        let mcp_tool_name = tool_name.as_ref().unwrap();
+        let mcp_tool_name = tool_name.as_ref().cloned().unwrap_or_else(|| {
+            // This should not happen as we checked is_some() above
+            panic!("tool_name is None after is_some() check")
+        });
         let mcp_tool_description = description.as_ref().unwrap_or(&name);
 
         quote! {
@@ -858,14 +857,14 @@ mod macro_parsing_tests {
 
     #[test]
     fn test_parse_kv_pairs_simple() {
-        let input: TokenStream2 = r###"name = "test""###.parse().unwrap();
+        let input: TokenStream2 = quote! { name = "test" };
         let result = parse_kv_pairs(input).unwrap();
         assert_eq!(result, vec![("name".to_string(), "test".to_string())]);
     }
 
     #[test]
     fn test_parse_kv_pairs_multiple() {
-        let input: TokenStream2 = r###"name = "test", version = "v1""###.parse().unwrap();
+        let input: TokenStream2 = quote! { name = "test", version = "v1" };
         let result = parse_kv_pairs(input).unwrap();
         assert_eq!(
             result,
@@ -878,9 +877,16 @@ mod macro_parsing_tests {
 
     #[test]
     fn test_parse_service_api_args_required() {
-        let input: TokenStream2 = r###"name = "test", version = "v1""###.parse().unwrap();
+        let input: TokenStream2 = quote! { name = "test", version = "v1" };
         let result = parse_service_api_args(input).unwrap();
         assert_eq!(result.0, "test");
         assert_eq!(result.1, "v1");
+    }
+
+    #[test]
+    fn test_parse_service_module_args() {
+        let input: TokenStream2 = quote! { prefix = "/api/v1" };
+        let result = parse_service_module_args(input).unwrap();
+        assert_eq!(result, "/api/v1");
     }
 }

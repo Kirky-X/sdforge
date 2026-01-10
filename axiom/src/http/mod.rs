@@ -144,7 +144,17 @@ pub fn build_with_config(
     use std::convert::TryFrom;
     use std::sync::Arc;
 
+    const DEFAULT_BODY_LIMIT: usize = 10 * 1024 * 1024;
+
     let mut router = build();
+
+    router = router.layer(tower_http::limit::RequestBodyLimitLayer::new(
+        DEFAULT_BODY_LIMIT,
+    ));
+
+    router = router.layer(tower_http::timeout::TimeoutLayer::new(
+        std::time::Duration::from_secs(30),
+    ));
 
     // Apply CORS
     if let Some(cors) = &config.server.cors {

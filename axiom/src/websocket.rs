@@ -226,6 +226,7 @@ const MAX_MESSAGE_SIZE: usize = 1_048_576;
 const MAX_JSON_DEPTH: usize = 32;
 
 /// Maximum length for string fields in WebSocket messages
+#[allow(dead_code)]
 const MAX_STRING_LENGTH: usize = 64 * 1024; // 64KB
 
 #[cfg(feature = "websocket")]
