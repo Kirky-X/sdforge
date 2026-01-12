@@ -298,6 +298,20 @@ impl ConfigLoader {
                 }
             }
         }
+
+        // OAuth2 secret from environment (security: never store secrets in config files)
+        if let Ok(secret) = std::env::var(format!("{}_OAUTH2_CLIENT_SECRET", self.env_prefix)) {
+            if let Some(AuthConfig::OAuth2 { client_secret, .. }) = &mut config.authentication {
+                *client_secret = secret;
+            }
+        }
+
+        // JWT secret from environment (security: prefer env var over config file)
+        if let Ok(jwt_secret) = std::env::var(format!("{}_JWT_SECRET", self.env_prefix)) {
+            if let Some(AuthConfig::Jwt { secret, .. }) = &mut config.authentication {
+                *secret = jwt_secret;
+            }
+        }
     }
 
     /// Validate database connection string format
@@ -398,7 +412,9 @@ pub fn init_logging(config: &LoggingConfig) {
 
     // Create output (file or stdout)
     let non_blocking: NonBlocking = if let Some(ref output_file) = config.output_file {
-        let file = std::fs::File::create(output_file).expect("Failed to create log file");
+        let file = std::fs::File::create(output_file).map_err(|e| {
+            ConfigError::ValidationError(format!("Failed to create log file: {}", e))
+        })?;
         tracing_appender::non_blocking(file).0
     } else {
         tracing_appender::non_blocking(std::io::stdout()).0
@@ -415,7 +431,9 @@ pub fn init_logging(config: &LoggingConfig) {
     let env_filter = EnvFilter::from_default_env();
     let subscriber = subscriber.with(env_filter);
 
-    tracing::subscriber::set_global_default(subscriber).expect("Failed to set tracing subscriber");
+    tracing::subscriber::set_global_default(subscriber).map_err(|e| {
+        ConfigError::ValidationError(format!("Failed to set tracing subscriber: {}", e))
+    })?;
 
     // Log initialization message
     tracing::info!(

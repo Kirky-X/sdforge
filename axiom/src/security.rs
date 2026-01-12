@@ -210,39 +210,38 @@ pub struct BearerAuth {
 
 impl BearerAuth {
     /// Create new bearer authentication with basic secret
+    ///
+    /// # Panics
+    /// Panics if the secret is too short or doesn't meet complexity requirements
     pub fn new(secret: impl Into<String>) -> Self {
         let secret_str = secret.into();
-        Self::validate_secret(&secret_str);
+
+        if secret_str.len() < 32 {
+            panic!(
+                "JWT secret too short ({} chars). Minimum 32 characters required for security.",
+                secret_str.len()
+            );
+        }
+
+        if !secret_str.chars().any(|c| c.is_uppercase()) {
+            panic!("JWT secret must contain at least one uppercase letter");
+        }
+        if !secret_str.chars().any(|c| c.is_lowercase()) {
+            panic!("JWT secret must contain at least one lowercase letter");
+        }
+        if !secret_str.chars().any(|c| c.is_digit(10)) {
+            panic!("JWT secret must contain at least one digit");
+        }
+        if !secret_str.chars().any(|c| !c.is_alphanumeric()) {
+            panic!("JWT secret must contain at least one special character");
+        }
+
         Self {
             secret: secret_str.into_bytes(),
             valid_tokens: Arc::new(DashMap::new()),
             blacklisted_tokens: Arc::new(DashMap::new()),
             expected_audience: None,
             expected_issuer: None,
-        }
-    }
-
-    /// Validate JWT secret meets minimum security requirements
-    fn validate_secret(secret: &str) {
-        if secret.len() < 32 {
-            #[cfg(feature = "logging")]
-            tracing::warn!(
-                target: "security",
-                "JWT secret is shorter than 32 characters, consider using a longer secret"
-            );
-        }
-
-        let has_uppercase = secret.chars().any(|c| c.is_uppercase());
-        let has_lowercase = secret.chars().any(|c| c.is_lowercase());
-        let has_digit = secret.chars().any(|c| c.is_digit(10));
-        let has_special = secret.chars().any(|c| !c.is_alphanumeric());
-
-        if !has_uppercase || !has_lowercase || !has_digit || !has_special {
-            #[cfg(feature = "logging")]
-            tracing::warn!(
-                target: "security",
-                "JWT secret should contain uppercase, lowercase, digits, and special characters"
-            );
         }
     }
 

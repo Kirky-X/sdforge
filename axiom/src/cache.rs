@@ -320,8 +320,8 @@ impl CacheMiddleware {
     pub fn generate_last_modified() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("System time is before Unix epoch")
-            .as_secs()
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
     }
 
     /// 生成缓存键
@@ -333,7 +333,12 @@ impl CacheMiddleware {
     /// 检查是否应该缓存响应
     #[inline]
     pub fn should_cache(&self, method: &str, status: u16) -> bool {
-        self.config.cacheable_methods.contains(&method.to_string())
+        // 将方法转换为大写以进行匹配，避免每次创建新的 String 对象
+        let method_upper = method.to_uppercase();
+        self.config
+            .cacheable_methods
+            .iter()
+            .any(|m| m == &method_upper)
             && self.config.cacheable_status_codes.contains(&status)
     }
 
@@ -342,8 +347,8 @@ impl CacheMiddleware {
     fn is_expired(&self, expires_at: u64) -> bool {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("System time is before Unix epoch")
-            .as_secs();
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
         now > expires_at
     }
 
@@ -352,8 +357,8 @@ impl CacheMiddleware {
     fn now() -> u64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("System time is before Unix epoch")
-            .as_secs()
+            .map(|d| d.as_secs())
+            .unwrap_or(0)
     }
 
     /// Execute LRU eviction using binary heap - O(1) min extraction

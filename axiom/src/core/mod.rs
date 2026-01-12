@@ -435,7 +435,16 @@ impl IntoResponse for ApiError {
                 .status(status)
                 .header(http::header::CONTENT_TYPE, "application/json")
                 .body(axum::body::Body::from(body))
-                .unwrap(),
+                .unwrap_or_else(|_| {
+                    // Fallback if body construction fails
+                    axum::response::Response::builder()
+                        .status(status)
+                        .header(http::header::CONTENT_TYPE, "text/plain")
+                        .body(axum::body::Body::from("Internal server error"))
+                        .unwrap_or_else(
+                            |_| axum::response::Response::new(axum::body::Body::empty()),
+                        )
+                }),
             Err(e) => {
                 #[cfg(feature = "logging")]
                 tracing::error!(error = %e, "Failed to serialize ApiError response");
@@ -446,7 +455,15 @@ impl IntoResponse for ApiError {
                     .status(status)
                     .header(http::header::CONTENT_TYPE, "application/json")
                     .body(axum::body::Body::from(fallback_body))
-                    .unwrap()
+                    .unwrap_or_else(|_| {
+                        axum::response::Response::builder()
+                            .status(status)
+                            .header(http::header::CONTENT_TYPE, "text/plain")
+                            .body(axum::body::Body::from("Internal server error"))
+                            .unwrap_or_else(|_| {
+                                axum::response::Response::new(axum::body::Body::empty())
+                            })
+                    })
             }
         }
     }
@@ -466,7 +483,14 @@ where
                 .status(status)
                 .header(http::header::CONTENT_TYPE, "application/json")
                 .body(Body::from(body))
-                .unwrap(),
+                .unwrap_or_else(|_| {
+                    // Fallback if body construction fails
+                    axum::response::Response::builder()
+                        .status(status)
+                        .header(http::header::CONTENT_TYPE, "text/plain")
+                        .body(Body::from("Internal server error"))
+                        .unwrap_or_else(|_| axum::response::Response::new(Body::empty()))
+                }),
             Err(e) => {
                 #[cfg(feature = "logging")]
                 tracing::error!(error = %e, "Failed to serialize ServiceResponse");
@@ -482,13 +506,20 @@ where
                         .status(500)
                         .header(http::header::CONTENT_TYPE, "application/json")
                         .body(Body::from(fallback_body))
-                        .unwrap(),
+                        .unwrap_or_else(|_| {
+                            axum::response::Response::builder()
+                                .status(500)
+                                .header(http::header::CONTENT_TYPE, "text/plain")
+                                .body(Body::from("Internal server error"))
+                                .unwrap_or_else(|_| axum::response::Response::new(Body::empty()))
+                        }),
                     Err(_) => {
                         // Ultimate fallback - should never happen
                         axum::response::Response::builder()
                             .status(500)
+                            .header(http::header::CONTENT_TYPE, "text/plain")
                             .body(Body::from("Internal server error"))
-                            .unwrap()
+                            .unwrap_or_else(|_| axum::response::Response::new(Body::empty()))
                     }
                 }
             }
