@@ -95,7 +95,8 @@ pub async fn version_redirect_middleware(
         *response.status_mut() = axum::http::StatusCode::MOVED_PERMANENTLY;
         response.headers_mut().insert(
             axum::http::header::LOCATION,
-            axum::http::HeaderValue::from_str(&new_uri).expect("Invalid URI for redirect"),
+            axum::http::HeaderValue::from_str(&new_uri)
+                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("/")),
         );
         return response;
     }

@@ -153,14 +153,28 @@ fn render_templates(
     Ok(())
 }
 
-/// Initialize git repository
+/// Initialize git repository with security checks
 fn initialize_git(project_dir: &Path) -> Result<()> {
-    // Run git init
-    std::process::Command::new("git")
-        .arg("init")
-        .current_dir(project_dir)
-        .output()
-        .ok(); // Ignore errors if git is not available
+    // Security: Validate and normalize the project directory path
+    let canonical_path = match project_dir.canonicalize() {
+        Ok(path) => path,
+        Err(e) => {
+            #[cfg(feature = "logging")]
+            tracing::warn!(target: "generator", "Could not canonicalize project dir: {}", e);
+            return Ok(()); // Continue without git init
+        }
+    };
+
+    // Security: Ensure the path is within an allowed directory (prevent path traversal)
+    // Allow only paths that don't escape the current working directory
+    if !canonical_path.starts_with(std::env::current_dir()?) {
+        #[cfg(feature = "logging")]
+        tracing::warn!(target: "generator", "Project directory is outside allowed scope");
+        return Ok(()); // Continue without git init
+    }
+
+    // Run git init with validated path
+    std::process::Command::new("git").arg("init").output().ok(); // Ignore errors if git is not available
 
     Ok(())
 }

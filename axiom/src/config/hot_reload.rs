@@ -99,14 +99,18 @@ impl ConfigWatcher {
     pub fn get(&self) -> AppConfig {
         self.current_config
             .read()
-            .expect("Config lock poisoned")
+            .map_err(|_| ConfigError::ValidationError("Config lock poisoned".to_string()))?
             .clone()
     }
 
     /// Reload configuration
     pub async fn reload(&self) -> Result<(), Box<dyn std::error::Error>> {
         let config = crate::config::ConfigLoader::new(self.config_path.clone(), "AXIOM").load()?;
-        *self.current_config.write().expect("Config lock poisoned") = config.clone();
+        *self
+            .current_config
+            .write()
+            .map_err(|_| ConfigError::ValidationError("Config lock poisoned".to_string()))? =
+            config.clone();
         let _ = self
             .event_sender
             .send(ConfigEvent::Reloaded(Box::new(config)));
@@ -146,7 +150,14 @@ impl ConfigWatcher {
                             {
                                 Ok(new_config) => {
                                     // Update current configuration
-                                    *current_config_clone.write().expect("Config lock poisoned") =
+                                    *current_config_clone
+                                        .write()
+                                        .map_err(|_| {
+                                            ConfigError::ValidationError(
+                                                "Config lock poisoned".to_string(),
+                                            )
+                                        })
+                                        .unwrap_or_else(|_| AppConfig::default()) =
                                         new_config.clone();
 
                                     // Send reload event

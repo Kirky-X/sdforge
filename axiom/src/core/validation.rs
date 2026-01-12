@@ -114,12 +114,15 @@ pub mod validators {
     /// Validate that a string matches a regex pattern (with caching)
     pub fn validate_regex(value: &str, pattern: &str) -> Result<(), ValidationError> {
         let regex = {
-            let mut cache = REGEX_CACHE.lock().unwrap();
+            let cache = REGEX_CACHE
+                .lock()
+                .map_err(|_| ValidationError::new("regex"))?;
             if let Some(cached) = cache.get(pattern) {
                 cached.clone()
             } else {
                 let new_regex =
                     regex::Regex::new(pattern).map_err(|_| ValidationError::new("regex"))?;
+                let mut cache = cache;
                 cache.insert(pattern.to_string(), new_regex.clone());
                 new_regex
             }
@@ -165,58 +168,33 @@ pub mod validators {
     }
 }
 
-/// Input sanitization utilities for F12: Input Validation and Protection
+/// Input sanitization utilities for security protection
 ///
-/// Provides functions to sanitize user input and prevent common attacks:
-/// - SQL injection
+/// Provides functions to sanitize user input:
 /// - XSS (Cross-Site Scripting)
 /// - Path traversal
 /// - Command injection
+///
+/// # Security Note
+/// For SQL operations, always use parameterized queries.
+/// String sanitization alone cannot prevent SQL injection.
 #[cfg(feature = "http")]
 #[allow(dead_code)] // Reserved for future use
 pub mod sanitizer {
     use crate::core::ApiError;
     use std::path::PathBuf;
 
-    /// Sanitize a string to prevent SQL injection
-    ///
-    /// ⚠️ **WARNING**: This function provides FALSE SECURITY SENSE!
-    ///
-    /// This sanitizer is INSUFFICIENT to prevent SQL injection attacks.
-    /// SQL injection cannot be prevented by character replacement alone.
-    ///
-    /// **USE PARAMETERIZED QUERIES INSTEAD!**
-    ///
-    /// Example of CORRECT usage (with parameterized queries):
-    /// ```rust,ignore
-    /// // GOOD: Use prepared statements
-    /// query!("SELECT * FROM users WHERE id = $1", user_id)
-    /// ```
-    ///
-    /// Example of WRONG usage (this sanitizer):
-    /// ```rust,ignore
-    /// // BAD: DO NOT use this to "sanitize" input for SQL!
-    /// let sanitized = sanitize_sql(user_input);
-    /// query!(&format!("SELECT * FROM users WHERE name = '{}'", sanitized))
-    /// ```
-    #[deprecated(
-        since = "0.1.0",
-        note = "This provides false security. Use parameterized queries instead."
-    )]
-    pub fn sanitize_sql(_input: &str) -> String {
-        // This function is deprecated and should not be used.
-        // It will be removed in a future version.
-        String::new()
-    }
-
     /// Sanitize a string to prevent XSS attacks
+    ///
+    /// Converts HTML special characters to their entity equivalents.
+    /// For production HTML sanitization, consider using the `ammonia` crate.
     pub fn sanitize_xss(input: &str) -> String {
         input
             .replace('<', "&lt;")
             .replace('>', "&gt;")
             .replace('"', "&quot;")
             .replace('\'', "&#x27;")
-            .replace("/", "&#x2F;")
+            .replace('/', "&#x2F;")
     }
 
     /// Sanitize a string to prevent path traversal attacks
