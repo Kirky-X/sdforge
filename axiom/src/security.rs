@@ -280,16 +280,22 @@ impl BearerAuth {
         }
     }
 
-    /// Simple constant-time comparison to prevent timing attacks
-    ///
-    /// Security: Always processes all bytes in the longer slice to prevent
-    /// timing attacks that could leak information about valid token length.
+    /// Constant-time comparison to prevent timing attacks
+    /// Uses the subtle crate for secure constant-time comparison
+    #[cfg(feature = "security")]
     fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-        let len = std::cmp::max(a.len(), b.len());
+        use subtle::ConstantTimeEq;
+        a.ct_eq(b).into()
+    }
+
+    /// Fallback constant-time comparison when subtle is not available
+    #[cfg(not(feature = "security"))]
+    fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
         let mut result = 0u8;
-        for i in 0..len {
-            let byte_a = a.get(i).copied().unwrap_or(0);
-            let byte_b = b.get(i).copied().unwrap_or(0);
+        for (byte_a, byte_b) in a.iter().zip(b.iter()) {
             result |= byte_a ^ byte_b;
         }
         result == 0
@@ -973,58 +979,6 @@ pub fn rate_limit_middleware(
     }
 }
 
-/// Extract client IP from request with security validation
-///
-/// Security considerations:
-/// - Validates X-Forwarded-For format to prevent header injection
-/// - Takes the first IP from X-Forwarded-For (original client)
-/// - Falls back to X-Real-IP or defaults to "unknown"
-/// - Only trusts IPs from X-Forwarded-For if they come from known proxy addresses
-#[cfg(feature = "logging")]
-fn extract_client_ip(req: &Request<Body>) -> String {
-    use axum::extract::connect_info::ConnectInfo;
-
-    let trusted_proxies = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.1"];
-
-    if let Some(header) = req.headers().get("X-Forwarded-For") {
-        if let Ok(value) = header.to_str() {
-            let first_ip = value.split(',').next().map(|s| s.trim());
-
-            if let Some(ip) = first_ip {
-                if is_valid_ip(ip) {
-                    if trusted_proxies
-                        .iter()
-                        .any(|range| is_ip_in_range(ip, range))
-                    {
-                        return ip.to_string();
-                    }
-                    #[cfg(feature = "logging")]
-                    tracing::warn!(target: "security", "X-Forwarded-For IP not from trusted proxy: {}", ip);
-                } else {
-                    #[cfg(feature = "logging")]
-                    tracing::warn!(target: "security", "Invalid X-Forwarded-For IP: {}", ip);
-                }
-            }
-        }
-    }
-
-    if let Some(header) = req.headers().get("X-Real-IP") {
-        if let Ok(ip) = header.to_str() {
-            if is_valid_ip(ip) {
-                return ip.to_string();
-            }
-            #[cfg(feature = "logging")]
-            tracing::warn!(target: "security", "Invalid X-Real-IP: {}", ip);
-        }
-    }
-
-    if let Some(remote) = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>() {
-        return remote.0.ip().to_string();
-    }
-
-    "unknown".to_string()
-}
-
 /// Check if an IP is within a CIDR range
 fn is_ip_in_range(ip: &str, cidr: &str) -> bool {
     let parts: Vec<&str> = cidr.split('/').collect();
@@ -1059,23 +1013,22 @@ fn is_ip_in_range(ip: &str, cidr: &str) -> bool {
     (ip_val & mask_val) == (net_val & mask_val)
 }
 
-/// Non-logging version without security warnings
-#[cfg(not(feature = "logging"))]
-fn extract_client_ip(req: &Request<Body>) -> String {
+/// Common IP extraction logic (shared by both logging and non-logging versions)
+#[inline]
+fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
     use axum::extract::connect_info::ConnectInfo;
 
     let trusted_proxies = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.1"];
 
     if let Some(header) = req.headers().get("X-Forwarded-For") {
         if let Ok(value) = header.to_str() {
-            let first_ip = value.split(',').next().map(|s| s.trim());
-            if let Some(ip) = first_ip {
+            if let Some(ip) = value.split(',').next().map(|s| s.trim()) {
                 if is_valid_ip(ip)
                     && trusted_proxies
                         .iter()
                         .any(|range| is_ip_in_range(ip, range))
                 {
-                    return ip.to_string();
+                    return Some(ip.to_string());
                 }
             }
         }
@@ -1084,16 +1037,48 @@ fn extract_client_ip(req: &Request<Body>) -> String {
     if let Some(header) = req.headers().get("X-Real-IP") {
         if let Ok(ip) = header.to_str() {
             if is_valid_ip(ip) {
-                return ip.to_string();
+                return Some(ip.to_string());
             }
         }
     }
 
     if let Some(remote) = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>() {
-        return remote.0.ip().to_string();
+        return Some(remote.0.ip().to_string());
+    }
+
+    None
+}
+
+/// Extract client IP from request with security validation
+#[cfg(feature = "logging")]
+fn extract_client_ip(req: &Request<Body>) -> String {
+    if let Some(ip) = extract_client_ip_core(req) {
+        return ip;
+    }
+
+    if let Some(header) = req.headers().get("X-Forwarded-For") {
+        if let Ok(value) = header.to_str() {
+            if let Some(ip) = value.split(',').next().map(|s| s.trim()) {
+                tracing::warn!(target: "security", "X-Forwarded-For IP not from trusted proxy or invalid: {}", ip);
+            }
+        }
+    }
+
+    if let Some(header) = req.headers().get("X-Real-IP") {
+        if let Ok(ip) = header.to_str() {
+            if !is_valid_ip(ip) {
+                tracing::warn!(target: "security", "Invalid X-Real-IP: {}", ip);
+            }
+        }
     }
 
     "unknown".to_string()
+}
+
+/// Extract client IP from request without logging
+#[cfg(not(feature = "logging"))]
+fn extract_client_ip(req: &Request<Body>) -> String {
+    extract_client_ip_core(req).unwrap_or_else(|| "unknown".to_string())
 }
 
 /// Validate IP address format and security

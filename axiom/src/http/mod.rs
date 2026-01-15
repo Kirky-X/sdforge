@@ -1,6 +1,7 @@
 //! HTTP server implementation
 
 use crate::core::ApiMetadata;
+use axum::body::Body;
 use axum::routing::MethodRouter;
 use axum::Router;
 
@@ -303,7 +304,7 @@ pub fn build_with_config(
 /// ```
 #[allow(dead_code)]
 #[cfg(feature = "hot-reload")]
-pub fn build_with_hot_reload(
+pub async fn build_with_hot_reload(
     config_path: &std::path::Path,
 ) -> Result<
     (
@@ -321,7 +322,7 @@ pub fn build_with_hot_reload(
     let file_watcher = config_watcher.watch()?;
 
     // Build router with current configuration
-    let config = config_watcher.get();
+    let config = config_watcher.get().await;
     let router = build_with_config(&config)?;
 
     Ok((router, config_watcher, file_watcher))

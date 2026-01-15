@@ -94,14 +94,12 @@ impl From<ValidationErrorsWrapper> for super::ApiError {
 /// Common validation helpers
 pub mod validators {
     use super::*;
+    use dashmap::DashMap;
     use once_cell::sync::Lazy;
-    use std::collections::HashMap;
-    use std::sync::Mutex;
     use validator::ValidationError;
 
-    /// Regex pattern cache (thread-safe)
-    static REGEX_CACHE: Lazy<Mutex<HashMap<String, regex::Regex>>> =
-        Lazy::new(|| Mutex::new(HashMap::new()));
+    /// Regex pattern cache (thread-safe with fine-grained locking)
+    static REGEX_CACHE: Lazy<DashMap<String, regex::Regex>> = Lazy::new(|| DashMap::new());
 
     /// Validate that a string is a valid email
     pub fn validate_email(email: &str) -> Result<(), ValidationError> {
@@ -114,16 +112,12 @@ pub mod validators {
     /// Validate that a string matches a regex pattern (with caching)
     pub fn validate_regex(value: &str, pattern: &str) -> Result<(), ValidationError> {
         let regex = {
-            let cache = REGEX_CACHE
-                .lock()
-                .map_err(|_| ValidationError::new("regex"))?;
-            if let Some(cached) = cache.get(pattern) {
+            if let Some(cached) = REGEX_CACHE.get(pattern) {
                 cached.clone()
             } else {
                 let new_regex =
                     regex::Regex::new(pattern).map_err(|_| ValidationError::new("regex"))?;
-                let mut cache = cache;
-                cache.insert(pattern.to_string(), new_regex.clone());
+                REGEX_CACHE.insert(pattern.to_string(), new_regex.clone());
                 new_regex
             }
         };

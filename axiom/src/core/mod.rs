@@ -28,6 +28,14 @@ pub struct ApiMetadata {
 
 impl ApiMetadata {
     /// Create new API metadata
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the API endpoint
+    /// * `version` - The version string (e.g., "v1")
+    /// * `description` - Human-readable description of the API
+    /// * `cache_ttl` - Optional cache TTL in seconds (None means no caching)
+    /// * `is_streaming` - Whether this is a streaming endpoint (SSE, WebSocket, etc.)
     pub fn new(
         name: String,
         version: String,
@@ -60,6 +68,8 @@ impl ApiMetadata {
     }
 
     /// Get cache TTL
+    ///
+    /// Returns the cache TTL in seconds, or None if caching is disabled.
     pub fn cache_ttl(&self) -> Option<u64> {
         self.cache_ttl
     }
@@ -92,6 +102,14 @@ where
     T: Serialize,
 {
     /// Create a successful response
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The response data to include
+    ///
+    /// # Returns
+    ///
+    /// A new `ServiceResponse` with `success: true` and the provided data
     pub fn success(data: T) -> Self {
         Self {
             success: true,
@@ -103,9 +121,18 @@ where
     }
 
     /// Create an error response
+    ///
     /// Note: The generic parameter T is required by the struct definition but is not used
     /// for error responses (data is always None). Error responses typically use the default
     /// T = serde_json::Value.
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - The error details to include
+    ///
+    /// # Returns
+    ///
+    /// A new `ServiceResponse` with `success: false` and the provided error
     pub fn error(error: ServiceError) -> Self {
         Self {
             success: false,
@@ -117,21 +144,37 @@ where
     }
 
     /// Check if the response is successful
+    ///
+    /// # Returns
+    ///
+    /// `true` if the response represents a successful operation, `false` otherwise
     pub fn is_success(&self) -> bool {
         self.success
     }
 
     /// Get reference to response data
+    ///
+    /// # Returns
+    ///
+    /// A reference to the response data if present, `None` otherwise
     pub fn data(&self) -> Option<&T> {
         self.data.as_ref()
     }
 
     /// Get reference to error details
+    ///
+    /// # Returns
+    ///
+    /// A reference to the error details if present, `None` otherwise
     pub fn error_ref(&self) -> Option<&ServiceError> {
         self.error.as_ref()
     }
 
     /// Get timestamp if available
+    ///
+    /// # Returns
+    ///
+    /// The response timestamp in Unix epoch seconds, or `None` if the timestamp feature is disabled
     #[cfg(feature = "timestamp")]
     pub fn timestamp(&self) -> Option<i64> {
         self.timestamp
@@ -154,6 +197,12 @@ pub struct ServiceError {
 
 impl ServiceError {
     /// Create a new service error
+    ///
+    /// # Arguments
+    ///
+    /// * `code` - Error code identifier (e.g., "NOT_FOUND", "INVALID_INPUT")
+    /// * `message` - Human-readable error message
+    /// * `http_status` - HTTP status code to return (e.g., 404, 400, 500)
     pub fn new(code: impl Into<String>, message: impl Into<String>, http_status: u16) -> Self {
         Self {
             code: code.into(),
@@ -163,7 +212,14 @@ impl ServiceError {
         }
     }
 
-    /// Create a service error with details
+    /// Create a service error with additional details
+    ///
+    /// # Arguments
+    ///
+    /// * `code` - Error code identifier
+    /// * `message` - Human-readable error message
+    /// * `details` - Additional error details as JSON value
+    /// * `http_status` - HTTP status code to return
     pub fn with_details(
         code: impl Into<String>,
         message: impl Into<String>,
@@ -189,11 +245,19 @@ impl ServiceError {
     }
 
     /// Get error details
+    ///
+    /// # Returns
+    ///
+    /// A reference to the error details if present, `None` otherwise
     pub fn details(&self) -> Option<&serde_json::Value> {
         self.details.as_ref()
     }
 
     /// Get HTTP status code
+    ///
+    /// # Returns
+    ///
+    /// The HTTP status code associated with this error
     pub fn http_status(&self) -> u16 {
         self.http_status
     }
@@ -289,35 +353,22 @@ impl ApiError {
     /// Format error as MCP-compatible JSON string
     pub fn to_mcp_json(&self) -> String {
         let (code, message) = match self {
-            ApiError::NotFound {
-                resource,
-                resource_id: _,
-            } => ("NOT_FOUND", format!("Resource not found: {}", resource)),
-            ApiError::InvalidInput {
-                message,
-                field: _,
-                value: _,
-            } => ("INVALID_INPUT", message.clone()),
+            ApiError::NotFound { resource, .. } => {
+                ("NOT_FOUND", format!("Resource not found: {}", resource))
+            }
+            ApiError::InvalidInput { message, .. } => ("INVALID_INPUT", message.clone()),
             ApiError::AuthenticationFailed { reason } => (
                 "AUTHENTICATION_FAILED",
                 format!("Authentication failed: {}", reason),
             ),
-            ApiError::AccessDenied {
-                permission,
-                user_id: _,
-            } => ("ACCESS_DENIED", format!("Access denied: {}", permission)),
-            ApiError::RateLimitExceeded {
-                limit: _,
-                window_seconds: _,
-            } => ("RATE_LIMIT_EXCEEDED", "Rate limit exceeded".to_string()),
-            ApiError::Internal {
-                message,
-                error_id: _,
-            } => ("INTERNAL_ERROR", message.clone()),
-            ApiError::ServiceUnavailable {
-                service,
-                retry_after: _,
-            } => (
+            ApiError::AccessDenied { permission, .. } => {
+                ("ACCESS_DENIED", format!("Access denied: {}", permission))
+            }
+            ApiError::RateLimitExceeded { .. } => {
+                ("RATE_LIMIT_EXCEEDED", "Rate limit exceeded".to_string())
+            }
+            ApiError::Internal { message, .. } => ("INTERNAL_ERROR", message.clone()),
+            ApiError::ServiceUnavailable { service, .. } => (
                 "SERVICE_UNAVAILABLE",
                 format!("Service unavailable: {}", service),
             ),
@@ -329,10 +380,7 @@ impl ApiError {
 
         serde_json::to_string(&serde_json::json!({
             "success": false,
-            "error": {
-                "code": code,
-                "message": message
-            }
+            "error": { "code": code, "message": message }
         }))
         .unwrap_or_else(|_| {
             format!(r#"{{"success":false,"error":{{"code":"{code}","message":"{message}"}}}}"#)
@@ -415,6 +463,44 @@ impl From<ApiError> for ServiceError {
 }
 
 /// Implement IntoResponse for ApiError to enable direct return in HTTP handlers
+/// Build a JSON response with proper error handling and fallbacks
+#[inline]
+#[cfg(feature = "http")]
+fn build_json_response<T: Serialize>(
+    status: u16,
+    body: &T,
+    fallback_message: &str,
+) -> axum::response::Response {
+    match serde_json::to_vec(body) {
+        Ok(body_bytes) => axum::response::Response::builder()
+            .status(status)
+            .header(http::header::CONTENT_TYPE, "application/json")
+            .body(Body::from(body_bytes))
+            .unwrap_or_else(|_| build_fallback_response(status, fallback_message)),
+        Err(e) => {
+            #[cfg(feature = "logging")]
+            tracing::error!(error = %e, "Failed to serialize response");
+
+            build_fallback_response(status, fallback_message)
+        }
+    }
+}
+
+/// Build a fallback response when JSON serialization fails
+#[inline]
+#[cfg(feature = "http")]
+fn build_fallback_response(status: u16, message: &str) -> axum::response::Response {
+    let fallback = format!(
+        r#"{{"success":false,"error":{{"code":"SERIALIZATION_ERROR","message":"{}"}}}}"#,
+        message
+    );
+    axum::response::Response::builder()
+        .status(status)
+        .header(http::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(fallback))
+        .unwrap_or_else(|_| axum::response::Response::new(Body::empty()))
+}
+
 #[cfg(feature = "http")]
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
@@ -429,43 +515,7 @@ impl IntoResponse for ApiError {
             ApiError::ValidationError { .. } => 422,
         };
 
-        // Try to serialize the error, with fallback to plain text on failure
-        match serde_json::to_vec(&self) {
-            Ok(body) => axum::response::Response::builder()
-                .status(status)
-                .header(http::header::CONTENT_TYPE, "application/json")
-                .body(axum::body::Body::from(body))
-                .unwrap_or_else(|_| {
-                    // Fallback if body construction fails
-                    axum::response::Response::builder()
-                        .status(status)
-                        .header(http::header::CONTENT_TYPE, "text/plain")
-                        .body(axum::body::Body::from("Internal server error"))
-                        .unwrap_or_else(
-                            |_| axum::response::Response::new(axum::body::Body::empty()),
-                        )
-                }),
-            Err(e) => {
-                #[cfg(feature = "logging")]
-                tracing::error!(error = %e, "Failed to serialize ApiError response");
-
-                // Fallback to plain text error response
-                let fallback_body = r#"{"success":false,"error":{"code":"SERIALIZATION_ERROR","message":"Internal server error"}}"#.to_string();
-                axum::response::Response::builder()
-                    .status(status)
-                    .header(http::header::CONTENT_TYPE, "application/json")
-                    .body(axum::body::Body::from(fallback_body))
-                    .unwrap_or_else(|_| {
-                        axum::response::Response::builder()
-                            .status(status)
-                            .header(http::header::CONTENT_TYPE, "text/plain")
-                            .body(axum::body::Body::from("Internal server error"))
-                            .unwrap_or_else(|_| {
-                                axum::response::Response::new(axum::body::Body::empty())
-                            })
-                    })
-            }
-        }
+        build_json_response(status, &self, "Internal server error")
     }
 }
 
@@ -477,52 +527,12 @@ where
     fn into_response(self) -> axum::response::Response {
         let status = self.error.as_ref().map(|e| e.http_status).unwrap_or(200);
 
-        // Try to serialize the response, with fallback on failure
-        match serde_json::to_vec(&self) {
-            Ok(body) => axum::response::Response::builder()
-                .status(status)
-                .header(http::header::CONTENT_TYPE, "application/json")
-                .body(Body::from(body))
-                .unwrap_or_else(|_| {
-                    // Fallback if body construction fails
-                    axum::response::Response::builder()
-                        .status(status)
-                        .header(http::header::CONTENT_TYPE, "text/plain")
-                        .body(Body::from("Internal server error"))
-                        .unwrap_or_else(|_| axum::response::Response::new(Body::empty()))
-                }),
-            Err(e) => {
-                #[cfg(feature = "logging")]
-                tracing::error!(error = %e, "Failed to serialize ServiceResponse");
-
-                // Fallback error response if serialization fails
-                let fallback = ServiceResponse::<T>::error(ServiceError::new(
-                    "SERIALIZATION_ERROR",
-                    "Failed to serialize response",
-                    500,
-                ));
-                match serde_json::to_vec(&fallback) {
-                    Ok(fallback_body) => axum::response::Response::builder()
-                        .status(500)
-                        .header(http::header::CONTENT_TYPE, "application/json")
-                        .body(Body::from(fallback_body))
-                        .unwrap_or_else(|_| {
-                            axum::response::Response::builder()
-                                .status(500)
-                                .header(http::header::CONTENT_TYPE, "text/plain")
-                                .body(Body::from("Internal server error"))
-                                .unwrap_or_else(|_| axum::response::Response::new(Body::empty()))
-                        }),
-                    Err(_) => {
-                        // Ultimate fallback - should never happen
-                        axum::response::Response::builder()
-                            .status(500)
-                            .header(http::header::CONTENT_TYPE, "text/plain")
-                            .body(Body::from("Internal server error"))
-                            .unwrap_or_else(|_| axum::response::Response::new(Body::empty()))
-                    }
-                }
-            }
+        if let Some(ref error) = self.error {
+            // Create a error response with the same error
+            let error_response = ServiceResponse::<serde_json::Value>::error(error.clone());
+            build_json_response(status, &error_response, "Service error")
+        } else {
+            build_json_response(status, &self, "Response error")
         }
     }
 }

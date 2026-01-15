@@ -6,6 +6,7 @@
 mod uat_tests {
     use axiom::config::{CorsConfig, ServerConfig};
     use axiom::prelude::*;
+    #[cfg(feature = "security")]
     use axiom::security::{ApiKeyAuth, RateLimitConfig, RateLimiter};
     use serde_json::json;
     use std::time::Duration;
@@ -51,6 +52,7 @@ mod uat_tests {
 
     /// UAT-003: API with Rate Limiting
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_uat_rate_limiting() {
         // User configures rate limiting for their API
         let config = RateLimitConfig {
@@ -72,6 +74,7 @@ mod uat_tests {
 
     /// UAT-004: API with Authentication
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_uat_api_authentication() {
         // User configures API key authentication
         let auth = ApiKeyAuth::new();
@@ -156,6 +159,7 @@ mod uat_tests {
 
     /// UAT-009: Rate Limiter Boundary Conditions
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_uat_rate_limiter_boundaries() {
         // User tests rate limiter with extreme values
         let strict_config = RateLimitConfig {
@@ -172,6 +176,7 @@ mod uat_tests {
 
     /// UAT-010: Auth Context with Permissions
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_uat_auth_context_permissions() {
         // User creates auth context with multiple permissions
         use axiom::security::AuthContext;
@@ -321,6 +326,7 @@ mod uat_tests {
 
     /// UAT-015: Multiple Rate Limiters Independent
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_uat_multiple_rate_limiters_independent() {
         // User creates multiple rate limiters that operate independently
         let config1 = RateLimitConfig {

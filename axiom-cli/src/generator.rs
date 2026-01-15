@@ -118,12 +118,18 @@ fn render_templates(
         // Get relative path from template directory
         let relative_path = path.strip_prefix(template_dir)?;
 
-        // Calculate output path (remove .template extension)
-        let output_path = output_dir
-            .join(relative_path)
-            .to_string_lossy()
-            .replace(".template", "");
-        let output_path = Path::new(&output_path);
+        // Calculate output path (remove .template extension safely)
+        let output_path = {
+            let mut path = output_dir.join(relative_path);
+            // Safe extension removal using Path methods
+            if let Some(stem) = path.file_stem() {
+                let new_stem = stem.to_string_lossy().replace(".template", "");
+                if let Some(parent) = path.parent() {
+                    path = parent.join(&new_stem);
+                }
+            }
+            path
+        };
 
         // Create parent directories if needed
         if let Some(parent) = output_path.parent() {
@@ -132,7 +138,12 @@ fn render_templates(
 
         // Read template content
         let template_content = fs::read_to_string(path)?;
+
+        // Get template name for validation
         let template_name = relative_path.to_string_lossy().replace('\\', "/");
+
+        // Validate template content for dangerous patterns
+        validate_template_content(&template_name, &template_content)?;
 
         // Add template to tera
         tera.add_raw_template(&template_name, &template_content)?;
@@ -141,7 +152,7 @@ fn render_templates(
         let rendered = tera.render(&template_name, &tera_context)?;
 
         // Write output file
-        fs::write(output_path, rendered)?;
+        fs::write(&output_path, rendered)?;
 
         println!("  Created: {}", output_path.display());
     }
@@ -166,7 +177,47 @@ fn initialize_git(project_dir: &Path) -> Result<()> {
     }
 
     // Run git init with validated path
-    std::process::Command::new("git").arg("init").output().ok(); // Ignore errors if git is not available
+    let git_init_result = std::process::Command::new("git")
+        .arg("init")
+        .arg(&project_dir)
+        .output();
+
+    match git_init_result {
+        Ok(output) => {
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                tracing::warn!(target: "generator", "Git init failed: {}", stderr);
+            }
+        }
+        Err(e) => {
+            tracing::warn!(target: "generator", "Failed to run git init: {}", e);
+        }
+    }
+
+    Ok(())
+}
+
+/// Validate template content for potentially dangerous operations
+/// Prevents template injection attacks
+fn validate_template_content(template_name: &str, content: &str) -> Result<()> {
+    const DANGEROUS_PATTERNS: &[&str] = &[
+        "include::", // File inclusion
+        "import::",  // Module import
+        "crate::",   // Crate access
+        "super::",   // Parent module access
+        "self::",    // Current module access
+        "std::",     // Standard library (beyond safe subset)
+    ];
+
+    for pattern in DANGEROUS_PATTERNS {
+        if content.contains(pattern) {
+            return Err(anyhow::anyhow!(
+                "Template '{}' contains dangerous pattern: {}",
+                template_name,
+                pattern
+            ));
+        }
+    }
 
     Ok(())
 }
@@ -186,6 +237,9 @@ pub fn generate_from_template(
 
     // Read template content
     let template_content = fs::read_to_string(&template_path)?;
+
+    // Validate template content for dangerous patterns
+    validate_template_content(template_name, &template_content)?;
 
     // Create tera instance
     let mut tera = tera::Tera::default();

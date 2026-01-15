@@ -8,6 +8,7 @@ mod config_integration_tests {
         build_cors_layer, AppConfig, ConfigError, CorsConfig, RateLimitConfigFile,
         RateLimitEndpointConfig,
     };
+    #[cfg(feature = "security")]
     use axiom::security::{RateLimitConfig, RateLimiter};
     use std::convert::TryFrom;
 
@@ -24,6 +25,7 @@ mod config_integration_tests {
     }
 
     #[test]
+    #[cfg(feature = "security")]
     fn test_rate_limit_config_conversion() {
         let file_config = RateLimitConfigFile {
             max_requests: 100,
@@ -38,6 +40,7 @@ mod config_integration_tests {
     }
 
     #[test]
+    #[cfg(feature = "security")]
     fn test_rate_limit_config_conversion_with_endpoints() {
         let mut endpoints = std::collections::HashMap::new();
         endpoints.insert(
@@ -107,6 +110,7 @@ mod config_integration_tests {
     }
 
     #[test]
+    #[cfg(feature = "security")]
     fn test_rate_limiter() {
         let config = RateLimitConfig {
             max_requests: 3,
@@ -131,6 +135,7 @@ mod config_integration_tests {
     }
 
     #[test]
+    #[cfg(feature = "security")]
     fn test_rate_limiter_different_keys() {
         let config = RateLimitConfig {
             max_requests: 2,

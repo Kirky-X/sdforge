@@ -5,8 +5,8 @@
 #[cfg(all(test, feature = "http"))]
 mod error_handling_tests {
     use axiom::prelude::{ApiError, ServiceError, ServiceResponse};
+    #[cfg(feature = "security")]
     use axiom::security::{AuthContext, RateLimitConfig, RateLimiter};
-    use serde_json::json;
     use std::time::Duration;
 
     #[tokio::test]
@@ -158,6 +158,7 @@ mod error_handling_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_rate_limit_boundary() {
         let config = RateLimitConfig {
             max_requests: 1,
@@ -175,6 +176,7 @@ mod error_handling_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_rate_limit_zero_requests() {
         let config = RateLimitConfig {
             max_requests: 0,
@@ -187,10 +189,10 @@ mod error_handling_tests {
         // Even with 0 max requests, first check might succeed or fail depending on implementation
         let _result = limiter.check("zero-limit");
         // This tests the boundary condition
-        assert!(true);
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_rate_limit_many_keys() {
         let config = RateLimitConfig {
             max_requests: 5,
@@ -210,6 +212,7 @@ mod error_handling_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_auth_context_empty() {
         let context = AuthContext {
             user_id: None,
@@ -222,6 +225,7 @@ mod error_handling_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_auth_context_many_permissions() {
         let permissions: Vec<String> = (0..100).map(|i| format!("permission-{}", i)).collect();
 
@@ -238,6 +242,7 @@ mod error_handling_tests {
 #[cfg(all(test, feature = "http"))]
 mod boundary_tests {
     use axiom::config::{ApiConfig, CorsConfig, ServerConfig};
+    #[cfg(feature = "security")]
     use axiom::security::RateLimitConfig;
     use std::time::Duration;
 
@@ -307,6 +312,7 @@ mod boundary_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_rate_limit_window_boundaries() {
         // Min window
         let min_config = RateLimitConfig {
@@ -370,6 +376,7 @@ mod edge_case_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_empty_permissions() {
         use axiom::security::AuthContext;
 
@@ -383,6 +390,7 @@ mod edge_case_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_very_long_permission() {
         use axiom::security::AuthContext;
 
@@ -400,7 +408,6 @@ mod edge_case_tests {
 #[cfg(all(test, feature = "http"))]
 mod serialization_tests {
     use axiom::prelude::{ApiError, ServiceError, ServiceResponse};
-    use serde_json;
     use serde_json::json;
 
     #[tokio::test]

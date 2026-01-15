@@ -4,36 +4,17 @@
 
 #[cfg(all(test, feature = "http"))]
 mod http_integration_tests {
-    use serde::{Deserialize, Serialize};
     use serde_json::json;
     use std::time::Duration;
-
-    #[derive(Debug, Serialize, Deserialize)]
-    struct User {
-        id: u64,
-        name: String,
-        email: String,
-    }
-
-    #[derive(Debug, Serialize, Deserialize)]
-    struct ApiResponse<T> {
-        success: bool,
-        data: Option<T>,
-        error: Option<String>,
-    }
 
     #[tokio::test]
     async fn test_router_build() {
         let _router = axiom::http::build();
-        // Router is built successfully
-        assert!(true);
     }
 
     #[tokio::test]
     async fn test_router_build_with_redirect() {
         let _router = axiom::http::build_with_redirect();
-        // Router with redirect is built successfully
-        assert!(true);
     }
 
     #[tokio::test]
@@ -181,7 +162,6 @@ mod http_integration_tests {
 
         // VersionedRoute requires a handler which is complex to construct
         // Just test the concept here
-        assert!(true);
     }
 
     #[tokio::test]
@@ -196,10 +176,10 @@ mod http_integration_tests {
     #[tokio::test]
     async fn test_build_version_router() {
         let _router = axiom::http::version_routing::build_version_router();
-        assert!(true);
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_rate_limit_config() {
         use axiom::security::{RateLimitConfig, RateLimiter};
 
@@ -214,6 +194,7 @@ mod http_integration_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_rate_limit_exceeds() {
         use axiom::security::{RateLimitConfig, RateLimiter};
 
@@ -235,6 +216,7 @@ mod http_integration_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_rate_limit_different_keys() {
         use axiom::security::{RateLimitConfig, RateLimiter};
 
@@ -257,6 +239,7 @@ mod http_integration_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_api_key_authentication() {
         use axiom::security::ApiKeyAuth;
 
@@ -271,8 +254,9 @@ mod http_integration_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_audit_logger() {
-        use axiom::security::{AuditLogger, AuditResult};
+        use axiom::security::AuditLogger;
 
         let logger = AuditLogger::new();
         let context = axiom::security::AuthContext {
@@ -287,7 +271,7 @@ mod http_integration_tests {
         // Give the background worker time to process the log
         tokio::task::yield_now().await;
         let logs = logger.get_logs("user-123");
-        assert!(logs.len() >= 1);
+        assert!(!logs.is_empty());
     }
 
     #[tokio::test]
@@ -372,6 +356,7 @@ mod http_integration_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_auth_context() {
         use axiom::security::AuthContext;
 
@@ -386,6 +371,7 @@ mod http_integration_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_auth_error_types() {
         use axiom::security::AuthError;
 

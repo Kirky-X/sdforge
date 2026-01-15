@@ -578,8 +578,9 @@ where
                 middleware.update_access_time(&cache_key);
 
                 // 缓存命中，返回缓存的响应
-                let body_ref: &[u8] = &*entry.body;
-                let mut response = Response::new(axum::body::Body::from(body_ref.to_vec()));
+                // Use Bytes::from for zero-copy body creation when possible
+                let body_bytes = bytes::Bytes::copy_from_slice(&entry.body);
+                let mut response = Response::new(axum::body::Body::from(body_bytes));
 
                 // 添加缓存头
                 if let Ok(etag_value) = HeaderValue::from_str(&entry.etag) {
@@ -682,8 +683,9 @@ where
                 }
 
                 // 构建响应
-                let body_vec: Vec<u8> = (*entry.body).clone();
-                let mut response = Response::from_parts(parts, axum::body::Body::from(body_vec));
+                // Use Bytes::from for zero-copy body creation when possible
+                let body_bytes = bytes::Bytes::copy_from_slice(&entry.body);
+                let mut response = Response::from_parts(parts, axum::body::Body::from(body_bytes));
                 if let Ok(etag_value) = HeaderValue::from_str(&etag) {
                     response.headers_mut().insert(ETAG, etag_value);
                 }

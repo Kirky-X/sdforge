@@ -403,7 +403,7 @@ impl EnvHelper {
 /// init_logging(&config);
 /// ```
 #[cfg(feature = "logging")]
-pub fn init_logging(config: &LoggingConfig) {
+pub fn init_logging(config: &LoggingConfig) -> Result<(), ConfigError> {
     use tracing_appender::non_blocking::NonBlocking;
     use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter};
 
@@ -442,19 +442,21 @@ pub fn init_logging(config: &LoggingConfig) {
         config.level,
         config.format
     );
+
+    Ok(())
 }
 
 /// Initialize logging with default settings
 ///
 /// Uses INFO level and text format by default.
 #[cfg(feature = "logging")]
-pub fn init_logging_default() {
+pub fn init_logging_default() -> Result<(), ConfigError> {
     let config = LoggingConfig {
         level: "info".to_string(),
         format: "text".to_string(),
         output_file: None,
     };
-    init_logging(&config);
+    init_logging(&config)
 }
 
 /// Build CORS layer from configuration
