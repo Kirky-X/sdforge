@@ -21,12 +21,20 @@ pub struct ServerConfig {
     pub host: String,
     /// Server port
     pub port: u16,
+    /// Request timeout in seconds (default: 30)
+    #[serde(default = "default_request_timeout")]
+    pub request_timeout_secs: u64,
     /// TLS configuration
     #[serde(default)]
     pub tls: Option<TlsConfig>,
     /// CORS configuration
     #[serde(default)]
     pub cors: Option<CorsConfig>,
+}
+
+/// Default request timeout: 30 seconds
+fn default_request_timeout() -> u64 {
+    30
 }
 
 /// TLS configuration
@@ -219,6 +227,7 @@ impl Default for AppConfig {
             server: ServerConfig {
                 host: "0.0.0.0".to_string(),
                 port: 8080,
+                request_timeout_secs: 30,
                 tls: None,
                 cors: None,
             },
@@ -380,8 +389,12 @@ impl ConfigLoader {
                 if Self::validate_connection_string(&conn_str) {
                     *connection_string = conn_str;
                 } else {
+                    // Security: Only log that validation failed, not the actual connection string
                     #[cfg(feature = "logging")]
-                    tracing::warn!(target: "config", "Invalid database connection string format");
+                    tracing::warn!(target: "config",
+                        "Database connection string validation failed for {} database",
+                        config.database.name()
+                    );
                 }
             }
         }

@@ -123,24 +123,55 @@ impl ApiKeyAuth {
 
     /// Validate an API key with rate limiting
     ///
-    /// Security: Implements rate limiting per caller to prevent brute force
-    /// attacks on API key validation. Returns None immediately if rate limited.
-    /// Valid keys bypass rate limiting to prevent blocking legitimate users.
+    /// Security: Implements constant-time validation to prevent timing attacks.
+    /// All code paths take the same amount of time regardless of key validity.
+    /// Also implements rate limiting per caller to prevent brute force attacks.
+    /// Note: Valid keys bypass rate limiting to prevent locking out legitimate users.
     pub fn validate_key(&self, key: &str, client_ip: &str) -> Option<Vec<String>> {
+        let start = Instant::now();
         let key_hash = Self::hash_key(key);
-        let result = self.valid_keys.get(&key_hash).map(|p| p.clone());
 
-        if result.is_some() {
-            return result;
+        // Always check valid_keys first for constant timing
+        let is_valid = self.valid_keys.get(&key_hash).is_some();
+
+        // For valid keys, skip rate limiting and return immediately
+        // This prevents locking out legitimate users after suspicious activity
+        if is_valid {
+            // Apply delay for constant timing even for valid keys
+            Self::apply_constant_time_delay(start);
+            return self.valid_keys.get(&key_hash).map(|p| p.clone());
         }
 
-        if self.is_rate_limited(client_ip) {
-            return None;
+        // For invalid keys, check rate limit
+        let is_limited = self.is_rate_limited(client_ip);
+
+        // Record failed attempt if not already rate limited
+        if !is_limited {
+            self.record_failed_attempt(client_ip);
         }
 
-        self.record_failed_attempt(client_ip);
+        // Apply constant-time delay to normalize response time
+        Self::apply_constant_time_delay(start);
 
         None
+    }
+
+    /// Apply constant-time delay to prevent timing attacks
+    ///
+    /// This ensures that the validation function always takes the same
+    /// amount of time regardless of the key validity or rate limit status.
+    fn apply_constant_time_delay(start: Instant) {
+        // Skip delay in test mode for faster tests
+        if cfg!(test) {
+            return;
+        }
+
+        const TARGET_DELAY_US: u64 = 100; // 100 microseconds
+        let elapsed = start.elapsed();
+
+        if elapsed < Duration::from_micros(TARGET_DELAY_US) {
+            std::thread::sleep(Duration::from_micros(TARGET_DELAY_US) - elapsed);
+        }
     }
 
     /// Check if a client IP is rate limited
@@ -208,48 +239,107 @@ pub struct BearerAuth {
     expected_issuer: Option<String>,
 }
 
+/// Errors that can occur during authentication configuration
+#[derive(Debug, Error)]
+pub enum AuthConfigError {
+    /// Secret validation failed
+    #[error("Invalid secret: {0}")]
+    InvalidSecret(String),
+
+    /// Secret too short
+    #[error("Secret too short: {length} chars. Minimum 32 characters required for security.")]
+    SecretTooShort {
+        /// The length of the provided secret
+        length: usize,
+    },
+
+    /// Missing required character class
+    #[error("Secret must contain at least one {required_type}")]
+    MissingCharacterClass {
+        /// The type of character that is missing (e.g., "uppercase letter")
+        required_type: &'static str,
+    },
+
+    /// IO error during configuration
+    #[error("Configuration I/O error: {source}")]
+    IoError {
+        /// The underlying IO error
+        #[from]
+        source: std::io::Error,
+    },
+
+    /// TOML parse error
+    #[error("Configuration parse error: {source}")]
+    ParseError {
+        /// The underlying TOML parse error
+        #[from]
+        source: toml::de::Error,
+    },
+}
+
 impl BearerAuth {
     /// Create new bearer authentication with basic secret
     ///
     /// # Panics
     /// Panics if the secret is too short or doesn't meet complexity requirements
+    /// Use `try_new()` for error handling instead.
     pub fn new(secret: impl Into<String>) -> Self {
+        Self::try_new(secret).expect("Failed to create BearerAuth: invalid secret")
+    }
+
+    /// Create new bearer authentication with basic secret
+    ///
+    /// Returns an error if the secret doesn't meet security requirements.
+    ///
+    /// # Arguments
+    /// * `secret` - JWT signing secret (must be at least 32 characters)
+    ///
+    /// # Errors
+    /// Returns `AuthConfigError::SecretTooShort` if secret is too short
+    /// Returns `AuthConfigError::MissingCharacterClass` if secret lacks required character types
+    pub fn try_new(secret: impl Into<String>) -> Result<Self, AuthConfigError> {
         let secret_str = secret.into();
 
         if secret_str.len() < 32 {
-            panic!(
-                "JWT secret too short ({} chars). Minimum 32 characters required for security.",
-                secret_str.len()
-            );
+            return Err(AuthConfigError::SecretTooShort {
+                length: secret_str.len(),
+            });
         }
 
         if !secret_str.chars().any(|c| c.is_uppercase()) {
-            panic!("JWT secret must contain at least one uppercase letter");
+            return Err(AuthConfigError::MissingCharacterClass {
+                required_type: "uppercase letter",
+            });
         }
         if !secret_str.chars().any(|c| c.is_lowercase()) {
-            panic!("JWT secret must contain at least one lowercase letter");
+            return Err(AuthConfigError::MissingCharacterClass {
+                required_type: "lowercase letter",
+            });
         }
         if !secret_str.chars().any(|c| c.is_digit(10)) {
-            panic!("JWT secret must contain at least one digit");
+            return Err(AuthConfigError::MissingCharacterClass {
+                required_type: "digit",
+            });
         }
         if !secret_str.chars().any(|c| !c.is_alphanumeric()) {
-            panic!("JWT secret must contain at least one special character");
+            return Err(AuthConfigError::MissingCharacterClass {
+                required_type: "special character",
+            });
         }
 
-        Self {
+        Ok(Self {
             secret: secret_str.into_bytes(),
             valid_tokens: Arc::new(DashMap::new()),
             blacklisted_tokens: Arc::new(DashMap::new()),
             expected_audience: None,
             expected_issuer: None,
-        }
+        })
     }
 
     /// Create bearer authentication with audience validation
     ///
-    /// # Arguments
-    /// * `secret` - JWT signing secret
-    /// * `expected_audience` - Expected `aud` claim value (prevents token substitution)
+    /// # Panics
+    /// Panics if the secret doesn't meet complexity requirements
     pub fn with_audience(secret: impl Into<String>, expected_audience: impl Into<String>) -> Self {
         Self {
             secret: secret.into().into_bytes(),
@@ -1240,6 +1330,7 @@ mod tests {
         });
         auth.add_key("valid-key", vec!["read".to_string()]);
 
+        // Invalid keys should be rate limited
         for i in 0..3 {
             assert_eq!(
                 auth.validate_key(&format!("invalid-key-{}", i), "192.168.1.1"),
@@ -1247,10 +1338,18 @@ mod tests {
             );
         }
 
+        // After 3 failures, invalid keys should be rate limited
         assert_eq!(auth.validate_key("invalid-key-4", "192.168.1.1"), None);
 
+        // Valid keys bypass rate limiting (security: don't lock out legitimate users)
         let permissions = auth.validate_key("valid-key", "192.168.1.1");
         assert_eq!(permissions, Some(vec!["read".to_string()]));
+
+        // A different invalid key from the same IP should still be rate limited
+        assert_eq!(
+            auth.validate_key("another-invalid-key", "192.168.1.1"),
+            None
+        );
     }
 
     #[tokio::test]

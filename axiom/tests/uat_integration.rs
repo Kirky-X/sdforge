@@ -18,6 +18,7 @@ mod uat_tests {
         let config = ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 8080,
+            request_timeout_secs: 30,
             tls: None,
             cors: None,
         };

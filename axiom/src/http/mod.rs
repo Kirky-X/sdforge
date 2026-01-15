@@ -152,9 +152,11 @@ pub fn build_with_config(
         DEFAULT_BODY_LIMIT,
     ));
 
+    // Use configurable request timeout from server config
+    let timeout_secs = config.server.request_timeout_secs;
     router = router.layer(tower_http::timeout::TimeoutLayer::with_status_code(
         axum::http::StatusCode::REQUEST_TIMEOUT,
-        std::time::Duration::from_secs(30),
+        std::time::Duration::from_secs(timeout_secs),
     ));
 
     // Apply CORS

@@ -312,6 +312,7 @@ mod http_integration_tests {
         let config = ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 3000,
+            request_timeout_secs: 30,
             tls: None,
             cors: None,
         };
