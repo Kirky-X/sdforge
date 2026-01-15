@@ -383,7 +383,7 @@ impl CacheMiddleware {
     fn evict_lru(&self, min_needed: usize) {
         let max_entries = self.config.max_entries;
         let max_size = self.config.max_size_bytes;
-        let mut _freed = 0;
+        let mut freed = 0;
         let mut removed_count = 0;
 
         loop {
@@ -403,7 +403,7 @@ impl CacheMiddleware {
                         let size = cache_entry.body.len();
                         self.current_size.fetch_sub(size, Ordering::Relaxed);
                         self.entry_count.fetch_sub(1, Ordering::Relaxed);
-                        _freed += size;
+                        freed += size;
                         removed_count += 1;
                     }
                     found_entry = true;
