@@ -498,18 +498,13 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         .collect();
 
     // Build parameter unwrapping logic
+    // All parameter types use the same unwrapping pattern: extract .0 field
     let param_unwraps: Vec<_> = params
         .iter()
         .map(|p| {
             let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
-            match p.param_kind {
-                ParamKind::Path => quote! { let #name_ident = #name_ident.0; },
-                ParamKind::Query => quote! { let #name_ident = #name_ident.0; },
-                ParamKind::Header => quote! { let #name_ident = #name_ident.0; },
-                ParamKind::Cookie => quote! { let #name_ident = #name_ident.0; },
-                ParamKind::Form => quote! { let #name_ident = #name_ident.0; },
-                ParamKind::Body => quote! { let #name_ident = #name_ident.0; },
-            }
+            // All parameter kinds use identical unwrapping: extract first element
+            quote! { let #name_ident = #name_ident.0; }
         })
         .collect();
 

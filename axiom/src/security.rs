@@ -20,6 +20,8 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::impl_default_new;
+
 /// Authentication errors
 #[derive(Debug, Error, Clone)]
 pub enum AuthError {
@@ -212,11 +214,7 @@ impl ApiKeyAuth {
     }
 }
 
-impl Default for ApiKeyAuth {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+impl_default_new!(ApiKeyAuth);
 
 /// Bearer token authentication
 ///
@@ -1047,11 +1045,7 @@ impl AuditLogger {
     }
 }
 
-impl Default for AuditLogger {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+impl_default_new!(AuditLogger);
 
 /// Create authentication middleware
 pub fn auth_middleware<T: Clone + Send + Sync + 'static>(
