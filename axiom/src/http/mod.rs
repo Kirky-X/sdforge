@@ -163,6 +163,24 @@ pub fn build_with_config(
         router = router.layer(cors_layer);
     }
 
+    // Apply security headers
+    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+        axum::http::header::X_CONTENT_TYPE_OPTIONS,
+        axum::http::HeaderValue::from_static("nosniff"),
+    ));
+    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+        axum::http::header::X_FRAME_OPTIONS,
+        axum::http::HeaderValue::from_static("DENY"),
+    ));
+    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+        axum::http::header::X_XSS_PROTECTION,
+        axum::http::HeaderValue::from_static("1; mode=block"),
+    ));
+    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate"),
+    ));
+
     // Apply rate limiting middleware
     #[cfg(feature = "security")]
     if let Some(rate_limit) = &config.rate_limit {

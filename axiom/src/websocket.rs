@@ -35,6 +35,8 @@ use axum::{
 #[cfg(feature = "websocket")]
 use dashmap::DashMap;
 #[cfg(feature = "websocket")]
+use futures_util::SinkExt;
+#[cfg(feature = "websocket")]
 use futures_util::StreamExt;
 #[cfg(feature = "websocket")]
 use serde::{Deserialize, Serialize};
@@ -264,20 +266,16 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
                 if let Ok(text) = msg.to_text() {
                     // Check message size early
                     if text.len() > MAX_MESSAGE_SIZE {
-                        let error_msg = WebSocketMessage::Error {
-                            id: String::new(),
-                            error: format!(
-                                "Message too large: {} bytes (max: {} bytes)",
-                                text.len(),
-                                MAX_MESSAGE_SIZE
-                            ),
-                        };
-                        let response_json = serde_json::to_string(&error_msg)
-                            .expect("Failed to serialize error message");
-                        let _ = socket
-                            .send(axum::extract::ws::Message::Text(response_json.into()))
-                            .await;
-                        continue;
+                        #[cfg(feature = "logging")]
+                        tracing::warn!(target: "websocket",
+                            conn_id = %conn_id,
+                            msg_size = %text.len(),
+                            max_size = %MAX_MESSAGE_SIZE,
+                            "Message size exceeded limit, closing connection"
+                        );
+                        // Close connection immediately to prevent DoS
+                        let _ = socket.close().await;
+                        return;
                     }
 
                     match parse_websocket_message(text) {

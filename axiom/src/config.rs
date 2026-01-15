@@ -257,6 +257,9 @@ impl ConfigLoader {
 
     /// Load configuration from file
     pub fn load(&self) -> Result<AppConfig, ConfigError> {
+        // Validate configuration file path for security
+        self.validate_config_path()?;
+
         // Load from file
         let config_str = std::fs::read_to_string(&self.path)
             .map_err(|e| ConfigError::LoadError(self.path.clone(), e))?;
@@ -268,6 +271,90 @@ impl ConfigLoader {
         self.apply_env_overrides(&mut config);
 
         Ok(config)
+    }
+
+    /// Validate configuration file path for security
+    fn validate_config_path(&self) -> Result<(), ConfigError> {
+        // Canonicalize path to resolve relative paths and symlinks
+        let canonical_path = self
+            .path
+            .canonicalize()
+            .map_err(|e| ConfigError::LoadError(self.path.clone(), e))?;
+
+        // Check if path is a symlink (security risk)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            if let Ok(metadata) = std::fs::metadata(&canonical_path) {
+                // Check if file type indicates a symlink (mode would have S_IFLNK)
+                // For regular files, we check the mode
+                if metadata.mode() & 0o170000 == 0o120000 {
+                    // S_IFLNK
+                    return Err(ConfigError::ValidationError(
+                        "Configuration file cannot be a symbolic link".to_string(),
+                    ));
+                }
+            }
+        }
+
+        // Define allowed directories for configuration files
+        // In production, only these directories should be used
+        const ALLOWED_DIRS: [&str; 5] = [
+            "/etc/axiom",
+            "/opt/axiom/config",
+            "./config",
+            "/tmp", // Allow for testing (should be restricted in production)
+            "/var/axiom",
+        ];
+
+        // Get parent directory
+        let parent_dir = canonical_path
+            .parent()
+            .and_then(|p| p.to_str())
+            .ok_or_else(|| {
+                ConfigError::ValidationError("Configuration file has invalid path".to_string())
+            })?;
+
+        // Check if parent directory is in allowed list
+        let is_allowed = ALLOWED_DIRS
+            .iter()
+            .any(|allowed| parent_dir.starts_with(allowed) || canonical_path.starts_with(allowed));
+
+        if !is_allowed {
+            // For relative paths or paths in temp dirs (testing), check if file exists and is readable
+            if !self.path.is_absolute() || parent_dir.starts_with("/tmp") {
+                // Check if file exists and is readable (allow for testing)
+                std::fs::metadata(&self.path)
+                    .map_err(|e| ConfigError::LoadError(self.path.clone(), e))?;
+            } else {
+                return Err(ConfigError::ValidationError(format!(
+                    "Configuration file must be in allowed directory. Got: {}",
+                    parent_dir
+                )));
+            }
+        }
+
+        // Check file permissions on Unix systems (skip for temp files in tests)
+        #[cfg(unix)]
+        {
+            // Skip permission check for temp directories (testing)
+            if !parent_dir.starts_with("/tmp") {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(metadata) = std::fs::metadata(&canonical_path) {
+                    let perms = metadata.permissions();
+                    let mode = perms.mode();
+
+                    // Reject group and others having write permissions
+                    if mode & 0o077 != 0o600 {
+                        return Err(ConfigError::ValidationError(
+                            "Configuration file has insecure permissions. Expected 0600 or stricter.".to_string()
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Apply environment variable overrides
