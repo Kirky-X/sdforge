@@ -2,6 +2,8 @@
 
 #[cfg(feature = "websocket")]
 mod websocket_tests {
+    use std::sync::Arc;
+
     use axiom::websocket::{
         BoxFuture, ConnectionManager, WebSocketConnection, WebSocketHandler, WebSocketMessage,
     };
@@ -123,7 +125,7 @@ mod websocket_tests {
             event: "broadcast_test".to_string(),
             data: serde_json::json!({"value": 42}),
         };
-        manager.broadcast(message).await;
+        manager.broadcast(&Arc::new(message)).await;
 
         // Verify both connections received the message
         let msg1 = receiver1.recv().await;

@@ -47,8 +47,6 @@ mod cache_integration_tests {
         let config = AppConfig::default();
         let result = build_with_config(&config);
         assert!(result.is_ok());
-        // Router with cache is built successfully
-        assert!(true);
     }
 
     #[tokio::test]
@@ -123,8 +121,6 @@ mod cache_integration_tests {
 
     #[tokio::test]
     async fn test_cache_headers() {
-        use axum::http::header::{CACHE_CONTROL, ETAG, LAST_MODIFIED};
-
         // Test that cache headers are properly formatted
         let etag = "\"abc123\"";
         let last_modified = "1234567890";
@@ -153,7 +149,6 @@ mod cache_integration_tests {
 
         // CacheMiddleware should implement Layer trait
         let _layered_router = middleware.layer(router);
-        assert!(true);
     }
 
     #[tokio::test]
@@ -164,7 +159,5 @@ mod cache_integration_tests {
 
         let _config = CacheConfig::default();
         let _middleware = CacheMiddleware::new(_config);
-        // If we reach here, the cache feature compiles successfully
-        assert!(true);
     }
 }

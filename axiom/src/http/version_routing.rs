@@ -41,7 +41,14 @@ impl Default for VersionRouterConfig {
 
 inventory::collect!(VersionedRoute);
 
-/// Build a versioned router
+/// Build a versioned router for API routes
+///
+/// This function collects all routes registered via `inventory::submit!` with
+/// their associated versions and builds an Axum router with properly versioned
+/// paths in the format `/api/{version}/{path}`.
+///
+/// # Returns
+/// An Axum Router with all versioned API routes registered
 pub fn build_version_router() -> Router {
     let mut router = Router::new();
 

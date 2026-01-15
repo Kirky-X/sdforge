@@ -14,18 +14,11 @@ mod dual_protocol_tests {
         name: String,
     }
 
-    #[derive(Debug, Serialize, Deserialize)]
-    struct CreateUserRequest {
-        name: String,
-        email: String,
-    }
-
     #[tokio::test]
     async fn test_both_protocols_build() {
         // Both HTTP and MCP features should be available
         let _http_router = axiom::http::build();
         let _mcp_server = axiom::mcp::build();
-        assert!(true);
     }
 
     #[tokio::test]
@@ -105,10 +98,11 @@ mod dual_protocol_tests {
             "A test API for dual protocol testing"
         );
         assert_eq!(metadata.cache_ttl(), None);
-        assert_eq!(metadata.is_streaming(), false);
+        assert!(!metadata.is_streaming());
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_rate_limit_with_mcp() {
         // Rate limiter should work independently of MCP
         use axiom::security::{RateLimitConfig, RateLimiter};
@@ -133,6 +127,7 @@ mod dual_protocol_tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "security")]
     async fn test_auth_context_dual_protocol() {
         // Auth context should be usable by both protocols
         use axiom::security::AuthContext;
@@ -166,16 +161,9 @@ mod dual_protocol_tests {
 
 #[cfg(all(test, feature = "http", feature = "streaming"))]
 mod streaming_feature_tests {
-    use serde::{Deserialize, Serialize};
     use serde_json::json;
     use tokio::sync::mpsc;
     use tokio_stream::wrappers::ReceiverStream;
-
-    #[derive(Debug, Serialize, Deserialize)]
-    struct Event {
-        id: u64,
-        message: String,
-    }
 
     #[tokio::test]
     async fn test_stream_response_basic() {
@@ -212,9 +200,6 @@ mod streaming_feature_tests {
             }
             Err(err) => StreamEvent::error(err),
         });
-
-        // The stream should be created successfully
-        assert!(true);
     }
 
     #[tokio::test]
@@ -227,7 +212,7 @@ mod streaming_feature_tests {
             StreamEvent::Data {
                 id,
                 event_name: _,
-                data,
+                data: _,
             } => {
                 assert!(id.is_none() || id.is_some());
             }

@@ -9,9 +9,9 @@ use std::path::{Path, PathBuf};
 #[cfg(feature = "hot-reload")]
 use std::sync::Arc;
 #[cfg(feature = "hot-reload")]
-use std::sync::RwLock;
-#[cfg(feature = "hot-reload")]
 use tokio::sync::broadcast;
+#[cfg(feature = "hot-reload")]
+use tokio::sync::RwLock;
 
 #[cfg(feature = "hot-reload")]
 use crate::AppConfig;
@@ -43,6 +43,9 @@ pub enum ConfigError {
     /// Configuration file is outside allowed directory
     #[error("Configuration file is outside allowed directory")]
     OutsideAllowedDirectory,
+    /// Configuration validation error
+    #[error("Configuration validation error: {0}")]
+    ValidationError(String),
 }
 
 #[cfg(feature = "hot-reload")]
@@ -96,21 +99,14 @@ impl ConfigWatcher {
     }
 
     /// Get current configuration
-    pub fn get(&self) -> AppConfig {
-        self.current_config
-            .read()
-            .map_err(|_| ConfigError::ValidationError("Config lock poisoned".to_string()))?
-            .clone()
+    pub async fn get(&self) -> AppConfig {
+        self.current_config.read().await.clone()
     }
 
     /// Reload configuration
     pub async fn reload(&self) -> Result<(), Box<dyn std::error::Error>> {
         let config = crate::config::ConfigLoader::new(self.config_path.clone(), "AXIOM").load()?;
-        *self
-            .current_config
-            .write()
-            .map_err(|_| ConfigError::ValidationError("Config lock poisoned".to_string()))? =
-            config.clone();
+        *self.current_config.write().await = config.clone();
         let _ = self
             .event_sender
             .send(ConfigEvent::Reloaded(Box::new(config)));
@@ -150,15 +146,7 @@ impl ConfigWatcher {
                             {
                                 Ok(new_config) => {
                                     // Update current configuration
-                                    *current_config_clone
-                                        .write()
-                                        .map_err(|_| {
-                                            ConfigError::ValidationError(
-                                                "Config lock poisoned".to_string(),
-                                            )
-                                        })
-                                        .unwrap_or_else(|_| AppConfig::default()) =
-                                        new_config.clone();
+                                    *current_config_clone.write().await = new_config.clone();
 
                                     // Send reload event
                                     let _ = event_sender_clone
@@ -213,12 +201,12 @@ impl ConfigManager {
     }
 
     /// Get current configuration
-    pub fn get(&self) -> AppConfig {
-        self.config.read().expect("Config lock poisoned").clone()
+    pub async fn get(&self) -> AppConfig {
+        self.config.read().await.clone()
     }
 
     /// Update configuration
     pub async fn update(&self, new_config: AppConfig) {
-        *self.config.write().expect("Config lock poisoned") = new_config;
+        *self.config.write().await = new_config;
     }
 }

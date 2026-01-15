@@ -36,7 +36,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         let limiter = RateLimiter::new(Some(config));
 
         b.iter(|| {
-            limiter.check("bench-key");
+            let _ = limiter.check("bench-key");
         })
     });
 
@@ -50,7 +50,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         b.iter(|| {
             for i in 0..100 {
-                limiter.check(&format!("bench-key-{}", i));
+                let _ = limiter.check(&format!("bench-key-{}", i));
             }
         })
     });

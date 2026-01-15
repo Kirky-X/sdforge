@@ -34,7 +34,7 @@ version = "v1"
         let (watcher, _event_rx) = ConfigWatcher::new(config_path.clone()).unwrap();
 
         // Verify initial config was loaded
-        let config = watcher.get();
+        let config = watcher.get().await;
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 8080);
         assert_eq!(config.api.name, "test-api");
@@ -62,7 +62,7 @@ version = "v1"
         let (watcher, mut event_rx) = ConfigWatcher::new(config_path.clone()).unwrap();
 
         // Verify initial config
-        assert_eq!(watcher.get().server.port, 8080);
+        assert_eq!(watcher.get().await.server.port, 8080);
 
         // Update config file
         let updated_config = r#"
@@ -80,7 +80,7 @@ version = "v2"
         watcher.reload().await.unwrap();
 
         // Verify updated config
-        let config = watcher.get();
+        let config = watcher.get().await;
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 9090);
         assert_eq!(config.api.name, "updated-api");
@@ -142,8 +142,9 @@ version = "v1"
         std::fs::write(&config_path, config).unwrap();
 
         // Build router with hot reload
-        let (_router, _watcher, _file_watcher) =
-            axiom::http::build_with_hot_reload(&config_path).unwrap();
+        let (_router, _watcher, _file_watcher) = axiom::http::build_with_hot_reload(&config_path)
+            .await
+            .unwrap();
 
         // Router should be built successfully
         // Note: Router doesn't have a routes() method in axum 0.8
@@ -211,7 +212,7 @@ version = "v1"
             watcher.reload().await.unwrap();
 
             // Verify port was updated
-            assert_eq!(watcher.get().server.port, 8080 + i);
+            assert_eq!(watcher.get().await.server.port, 8080 + i);
 
             // Verify event was sent
             let event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())

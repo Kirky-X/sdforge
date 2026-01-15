@@ -27,6 +27,7 @@ type ServiceApiArgs = Result<
 >;
 
 /// Parse key=value pairs from token stream
+/// Preserves original string-based parsing for compatibility
 fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Error> {
     let args_str = args.to_string();
     let mut pairs = Vec::new();
@@ -251,7 +252,7 @@ impl ParamInfo {
         if let Pat::Ident(pat_ident) = pat {
             let name = pat_ident.ident.to_string();
 
-            // Get the type directly from pat_type.ty (clone to get owned value)
+            // Clone the type from the typed pattern
             let ty = (*pat_type.ty).clone();
 
             let ty_str = quote! { #ty }.to_string();
@@ -665,10 +666,9 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        let mcp_tool_name = tool_name.as_ref().cloned().unwrap_or_else(|| {
-            // This should not happen as we checked is_some() above
-            panic!("tool_name is None after is_some() check")
-        });
+        let mcp_tool_name = tool_name
+            .as_ref()
+            .expect("tool_name must be Some when generating MCP code - this is a bug in the macro");
         let mcp_tool_description = description.as_ref().unwrap_or(&name);
 
         quote! {

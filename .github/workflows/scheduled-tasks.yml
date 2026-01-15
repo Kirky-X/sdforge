@@ -1,0 +1,99 @@
+name: Scheduled Tasks
+
+on:
+  schedule:
+    - cron: "daily"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Delete old workflow runs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflowRuns = await github.actions.listWorkflowRunsForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100
+            });
+            
+            for (const run of workflowRuns.data.workflow_runs) {
+              const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+              if (new Date(run.created_at) < sevenDaysAgo && run.status === 'completed') {
+                await github.actions.deleteWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: run.id
+                });
+              }
+            }
+
+  stale-prs:
+    name: Mark Stale PRs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mark stale PRs
+        uses: actions/stale@v9
+        with:
+          days-before-stale: 14
+          days-before-close: 7
+          only-labels: ""
+          exempt-pr-labels: "pinned,security"
+          stale-pr-message: "This PR has been marked as stale due to inactivity."
+          close-pr-message: "This PR has been closed due to inactivity."
+          operations-per-run: 100
+
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rust-src
+
+      - name: Run benchmarks
+        run: |
+          cargo bench --all-features -- --output-format=json > benchmark.json 2>&1 || true
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark.json
+          retention-days: 7
+
+  doc-check:
+    name: Doc Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check documentation links
+        run: |
+          cargo doc --no-deps --all-features --workspace
+          echo "Documentation generated successfully"
+
+      - name: Check README links
+        run: |
+          which markdown-link-check || npm install -g markdown-link-check
+          markdown-link-check README.md 2>&1 || true

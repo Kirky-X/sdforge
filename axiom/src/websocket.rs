@@ -33,15 +33,13 @@ use axum::{
     Router,
 };
 #[cfg(feature = "websocket")]
+use dashmap::DashMap;
+#[cfg(feature = "websocket")]
 use futures_util::StreamExt;
 #[cfg(feature = "websocket")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "websocket")]
-use std::collections::HashMap;
-#[cfg(feature = "websocket")]
 use std::sync::Arc;
-#[cfg(feature = "websocket")]
-use tokio::sync::RwLock;
 
 #[cfg(feature = "websocket")]
 /// WebSocket message type
@@ -130,7 +128,7 @@ impl WebSocketConnection {
 #[cfg(feature = "websocket")]
 /// Connection manager for WebSocket connections
 pub struct ConnectionManager {
-    connections: Arc<RwLock<HashMap<String, WebSocketConnection>>>,
+    connections: Arc<DashMap<String, WebSocketConnection>>,
 }
 
 #[cfg(feature = "websocket")]
@@ -138,36 +136,35 @@ impl ConnectionManager {
     /// Create a new connection manager
     pub fn new() -> Self {
         Self {
-            connections: Arc::new(RwLock::new(HashMap::new())),
+            connections: Arc::new(DashMap::new()),
         }
     }
 
     /// Add a connection to the manager
     pub async fn add_connection(&self, id: String, conn: WebSocketConnection) {
-        self.connections.write().await.insert(id, conn);
+        self.connections.insert(id, conn);
     }
 
     /// Remove a connection from the manager
     pub async fn remove_connection(&self, id: &str) {
-        self.connections.write().await.remove(id);
+        self.connections.remove(id);
     }
 
     /// Get a connection by ID
     pub async fn get_connection(&self, id: &str) -> Option<WebSocketConnection> {
-        self.connections.read().await.get(id).cloned()
+        self.connections.get(id).map(|conn| conn.clone())
     }
 
-    /// Broadcast a message to all connections
-    pub async fn broadcast(&self, message: WebSocketMessage) {
-        let connections = self.connections.read().await;
-        for (_, conn) in connections.iter() {
-            let _ = conn.send(message.clone()).await;
+    /// Broadcast a message to all connections (optimized with Arc)
+    pub async fn broadcast(&self, message: &Arc<WebSocketMessage>) {
+        for conn in self.connections.iter() {
+            let _ = conn.send(message.as_ref().clone()).await;
         }
     }
 
     /// Get the number of active connections
     pub async fn connection_count(&self) -> usize {
-        self.connections.read().await.len()
+        self.connections.len()
     }
 }
 
@@ -320,7 +317,16 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
 }
 
 #[cfg(feature = "websocket")]
-/// Build WebSocket router
+/// Build WebSocket router with default connection manager
+///
+/// This function collects all WebSocket routes registered via `inventory::submit!`
+/// and builds an Axum router for handling WebSocket connections.
+///
+/// Routes are automatically registered with the WebSocket upgrade handler
+/// and connection management state.
+///
+/// # Returns
+/// A configured Axum Router ready to handle WebSocket connections
 pub fn build() -> Router {
     let mut router = Router::new();
     let manager = Arc::new(ConnectionManager::new());
@@ -337,6 +343,16 @@ pub fn build() -> Router {
 
 #[cfg(feature = "websocket")]
 /// Build WebSocket router with custom connection manager
+///
+/// This function is similar to `build()` but allows providing a custom
+/// connection manager for advanced use cases like connection sharing
+/// across multiple routers or custom connection handling.
+///
+/// # Arguments
+/// * `manager` - A shared connection manager for handling WebSocket connections
+///
+/// # Returns
+/// A configured Axum Router using the provided connection manager
 pub fn build_with_manager(manager: Arc<ConnectionManager>) -> Router {
     let mut router = Router::new();
 
