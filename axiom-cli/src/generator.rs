@@ -4,6 +4,47 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+/// Maximum project name length to prevent DoS attacks
+const MAX_PROJECT_NAME_LENGTH: usize = 64;
+
+/// Validate project name to prevent path traversal and other attacks
+fn validate_project_name(name: &str) -> Result<()> {
+    // Length validation
+    if name.is_empty() {
+        return Err(anyhow::anyhow!("Project name cannot be empty"));
+    }
+    if name.len() > MAX_PROJECT_NAME_LENGTH {
+        return Err(anyhow::anyhow!(
+            "Project name exceeds maximum length of {} characters",
+            MAX_PROJECT_NAME_LENGTH
+        ));
+    }
+
+    // Character whitelist validation (alphanumeric, underscore, hyphen, dot)
+    if !name
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
+    {
+        return Err(anyhow::anyhow!(
+            "Project name contains invalid characters. Use only alphanumeric, underscore, hyphen, and dot"
+        ));
+    }
+
+    // Prevent special patterns
+    if name.contains("..") || name.starts_with('.') || name.ends_with('.') {
+        return Err(anyhow::anyhow!("Project name contains invalid pattern"));
+    }
+
+    // Prevent path separators
+    if name.contains('/') || name.contains('\\') {
+        return Err(anyhow::anyhow!(
+            "Project name cannot contain path separators"
+        ));
+    }
+
+    Ok(())
+}
+
 /// Template context for rendering
 #[derive(Debug, Serialize)]
 struct TemplateContext {
@@ -19,6 +60,9 @@ pub fn generate_project(
     features: &str,
     template: &str,
 ) -> Result<()> {
+    // Validate project name first to prevent path traversal
+    validate_project_name(project_name)?;
+
     // Determine features string based on protocol
     let features_str = determine_features(protocol, features);
 
@@ -43,7 +87,22 @@ pub fn generate_project(
         ));
     }
 
-    let output_dir = Path::new(project_name);
+    // Create output path and validate it's within current directory
+    let output_dir = current_dir.join(project_name);
+
+    // Canonicalize to resolve any ".." or symlinks
+    let canonical_output = output_dir
+        .canonicalize()
+        .map_err(|_| anyhow::anyhow!("Invalid project path: {}", project_name))?;
+    let canonical_current = current_dir.canonicalize()?;
+
+    // Ensure the output path is within the current directory
+    if !canonical_output.starts_with(&canonical_current) {
+        return Err(anyhow::anyhow!(
+            "Project path escapes current directory: {}",
+            project_name
+        ));
+    }
 
     // Check if output directory already exists
     if output_dir.exists() {
@@ -54,13 +113,18 @@ pub fn generate_project(
     }
 
     // Create output directory
-    fs::create_dir_all(output_dir).context("Failed to create project directory")?;
+    fs::create_dir_all(&output_dir).with_context(|| {
+        format!(
+            "Failed to create project directory: {}",
+            output_dir.display()
+        )
+    })?;
 
     // Render templates
-    render_templates(&template_dir, output_dir, &context)?;
+    render_templates(&template_dir, &output_dir, &context)?;
 
     // Initialize git repository
-    initialize_git(output_dir)?;
+    initialize_git(&output_dir)?;
 
     println!("✓ Project '{}' created successfully!", project_name);
     println!("  Template: {}", template);

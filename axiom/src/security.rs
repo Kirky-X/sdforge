@@ -11,6 +11,7 @@ use axum::{
 };
 use dashmap::DashMap;
 use hmac::{Hmac, Mac};
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use std::future::Future;
@@ -778,6 +779,20 @@ struct AuditLogBatch {
     log: AuditLog,
 }
 
+static JWT_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
+    regex::Regex::new(r#"eyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+"#).unwrap()
+});
+
+static SECRET_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
+    regex::Regex::new(r#"(?i)(password|secret|token|key|auth|bearer)\s*[:=]\s*[^,\s}\]]+"#).unwrap()
+});
+
+static DB_PATTERN: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r#"postgresql://[^:]+:[^@]+@[^/]+/\w+"#).unwrap());
+
+static PATH_PATTERN: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r#"/[a-zA-Z0-9/_.-]+\.(pem|key|crt|p12|jks)"#).unwrap());
+
 /// Sanitize error messages to remove sensitive information before logging.
 ///
 /// This function helps prevent sensitive data (tokens, passwords, keys) from
@@ -785,36 +800,24 @@ struct AuditLogBatch {
 fn sanitize_error_message(message: &str) -> String {
     let mut result = message.to_string();
 
-    // Remove JWT tokens (header.payload.signature pattern)
-    let jwt_pattern = r#"eyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+"#;
-    result = regex::Regex::new(jwt_pattern)
-        .unwrap()
+    result = JWT_PATTERN
         .replace_all(&result, "[REDACTED_JWT]")
         .to_string();
 
-    // Remove potential password/secret patterns
-    let secret_pattern = r#"(?i)(password|secret|token|key|auth|bearer)\s*[:=]\s*[^,\s}\]]+"#;
-    result = regex::Regex::new(secret_pattern)
-        .unwrap()
+    result = SECRET_PATTERN
         .replace_all(&result, |caps: &regex::Captures| {
             format!("{}={}", &caps[1], "[REDACTED]")
         })
         .to_string();
 
-    // Remove database connection strings
-    let db_pattern = r#"postgresql://[^:]+:[^@]+@[^/]+/\w+"#;
-    result = regex::Regex::new(db_pattern)
-        .unwrap()
+    result = DB_PATTERN
         .replace_all(&result, "postgresql://[REDACTED]:[REDACTED]@localhost/db")
         .to_string();
 
-    // Remove file path references that might expose system info
-    result = regex::Regex::new(r#"/[a-zA-Z0-9/_.-]+\.(pem|key|crt|p12|jks)"#)
-        .unwrap()
+    result = PATH_PATTERN
         .replace_all(&result, "[REDACTED_PATH]")
         .to_string();
 
-    // Limit message length to prevent log flooding
     const MAX_SANITIZED_LENGTH: usize = 500;
     if result.len() > MAX_SANITIZED_LENGTH {
         result.truncate(MAX_SANITIZED_LENGTH);
