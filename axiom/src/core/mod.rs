@@ -7,14 +7,54 @@
 //! - `validation`: Request validation utilities
 
 pub mod error;
+pub mod json;
 pub mod response;
+pub mod str;
 pub mod types;
 pub mod validation;
 
 // Re-export types from submodules for convenience
 pub use error::ApiError;
+pub use json::{api_metadata_response, error_response, paginated_response, success_response};
 pub use response::{ServiceError, ServiceResponse};
+pub use str::{
+    format_empty_error, format_env_key, format_invalid_error, format_not_found, format_range_error,
+    format_validation_error, sanitize_for_identifier, truncate_with_ellipsis,
+};
 pub use types::ApiMetadata;
+
+/// Macro to implement Default trait via new() constructor.
+///
+/// # Usage
+///
+/// ```rust
+/// use axiom::impl_default_new;
+///
+/// struct MyStruct {
+///     value: i32,
+/// }
+///
+/// impl MyStruct {
+///     pub fn new() -> Self {
+///         Self { value: 42 }
+///     }
+/// }
+///
+/// impl_default_new!(MyStruct);
+///
+/// // Now MyStruct implements Default
+/// let _default: MyStruct = MyStruct::default();
+/// ```
+#[macro_export]
+macro_rules! impl_default_new {
+    ($type:ident) => {
+        impl Default for $type {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+    };
+}
 
 #[cfg(feature = "http")]
 use axum::body::Body;

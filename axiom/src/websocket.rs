@@ -43,6 +43,8 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "websocket")]
 use std::sync::Arc;
 
+use crate::impl_default_new;
+
 #[cfg(feature = "websocket")]
 /// WebSocket message type
 ///
@@ -171,11 +173,7 @@ impl ConnectionManager {
 }
 
 #[cfg(feature = "websocket")]
-impl Default for ConnectionManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+impl_default_new!(ConnectionManager);
 
 #[cfg(feature = "websocket")]
 /// Default implementation of WebSocketHandler

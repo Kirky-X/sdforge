@@ -23,6 +23,8 @@ use std::{
     },
     time::{SystemTime, UNIX_EPOCH},
 };
+
+use crate::impl_default_new;
 use tower::{Layer, Service};
 #[cfg(feature = "logging")]
 use tracing;
@@ -184,11 +186,7 @@ impl MinHeap {
     }
 }
 
-impl Default for MinHeap {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+impl_default_new!(MinHeap);
 
 /// 缓存配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
