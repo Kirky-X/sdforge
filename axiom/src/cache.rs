@@ -236,8 +236,8 @@ impl Default for CacheConfig {
 /// and metadata for cache validation (ETag, Last-Modified) and expiration.
 #[derive(Debug, Clone)]
 struct CacheEntry {
-    /// The cached response body as bytes
-    body: Vec<u8>,
+    /// The cached response body as bytes (Arc-wrapped for efficient sharing)
+    body: Arc<Vec<u8>>,
     /// Response headers (excluding caching-related headers like Cache-Control, ETag, Last-Modified)
     headers: HashMap<String, HeaderValue>,
     /// ETag header value for conditional requests (based on SHA256 hash of body)
@@ -369,7 +369,7 @@ impl CacheMiddleware {
     fn evict_lru(&self, min_needed: usize) {
         let max_entries = self.config.max_entries;
         let max_size = self.config.max_size_bytes;
-        let mut freed = 0;
+        let mut _freed = 0;
         let mut removed_count = 0;
 
         loop {
@@ -389,7 +389,7 @@ impl CacheMiddleware {
                         let size = cache_entry.body.len();
                         self.current_size.fetch_sub(size, Ordering::Relaxed);
                         self.entry_count.fetch_sub(1, Ordering::Relaxed);
-                        freed += size;
+                        _freed += size;
                         removed_count += 1;
                     }
                     found_entry = true;
@@ -436,7 +436,7 @@ impl CacheMiddleware {
         let now = CacheMiddleware::now();
         let mut removed = 0;
 
-        let mut expired_times: Vec<u64> = self
+        let expired_times: Vec<u64> = self
             .expiration_index
             .iter()
             .filter(|shard| shard.key() <= &now)
@@ -578,7 +578,8 @@ where
                 middleware.update_access_time(&cache_key);
 
                 // 缓存命中，返回缓存的响应
-                let mut response = Response::new(axum::body::Body::from(entry.body.clone()));
+                let body_ref: &[u8] = &*entry.body;
+                let mut response = Response::new(axum::body::Body::from(body_ref.to_vec()));
 
                 // 添加缓存头
                 if let Ok(etag_value) = HeaderValue::from_str(&entry.etag) {
@@ -616,14 +617,17 @@ where
                 let (parts, body) = response.into_parts();
                 let body_bytes = match axum::body::to_bytes(body, 10 * 1024 * 1024).await {
                     Ok(bytes) => bytes.to_vec(),
-                    Err(e) => {
+                    Err(_e) => {
                         // 响应体转换失败，不缓存
                         #[cfg(feature = "logging")]
-                        tracing::error!(error = %e, "Failed to convert response body to bytes for caching");
+                        tracing::error!(error = %_e, "Failed to convert response body to bytes for caching");
                         let response = Response::from_parts(parts, axum::body::Body::empty());
                         return Ok(response);
                     }
                 };
+
+                // 获取 body 长度（在移动 body_bytes 之前）
+                let body_len = body_bytes.len();
 
                 // 创建缓存条目
                 let etag = CacheMiddleware::generate_etag(&body_bytes);
@@ -639,17 +643,17 @@ where
                 }
 
                 let entry = CacheEntry {
-                    body: body_bytes.clone(),
+                    body: Arc::new(body_bytes),
                     headers,
                     etag: etag.clone(),
                     last_modified,
                     expires_at,
                     last_accessed: CacheMiddleware::now(),
-                    size: body_bytes.len(),
+                    size: body_len,
                 };
 
                 // 存储到缓存
-                let entry_size = body_bytes.len();
+                let entry_size = body_len;
 
                 // 检查大小限制（使用新的 LRU 机制）
                 middleware.enforce_size_limit(entry_size);
@@ -678,7 +682,8 @@ where
                 }
 
                 // 构建响应
-                let mut response = Response::from_parts(parts, axum::body::Body::from(body_bytes));
+                let body_vec: Vec<u8> = (*entry.body).clone();
+                let mut response = Response::from_parts(parts, axum::body::Body::from(body_vec));
                 if let Ok(etag_value) = HeaderValue::from_str(&etag) {
                     response.headers_mut().insert(ETAG, etag_value);
                 }

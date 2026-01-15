@@ -1,7 +1,6 @@
 //! HTTP server implementation
 
 use crate::core::ApiMetadata;
-use axum::body::Body;
 use axum::routing::MethodRouter;
 use axum::Router;
 
@@ -141,7 +140,7 @@ pub fn build_with_config(
 ) -> Result<Router, crate::config::ConfigError> {
     #[cfg(feature = "security")]
     use crate::security::{rate_limit_middleware, RateLimitConfig, RateLimiter};
-    use std::convert::TryFrom;
+    #[cfg(feature = "security")]
     use std::sync::Arc;
 
     const DEFAULT_BODY_LIMIT: usize = 10 * 1024 * 1024;
@@ -152,7 +151,8 @@ pub fn build_with_config(
         DEFAULT_BODY_LIMIT,
     ));
 
-    router = router.layer(tower_http::timeout::TimeoutLayer::new(
+    router = router.layer(tower_http::timeout::TimeoutLayer::with_status_code(
+        axum::http::StatusCode::REQUEST_TIMEOUT,
         std::time::Duration::from_secs(30),
     ));
 
@@ -252,7 +252,7 @@ pub fn build_with_config(
     // Initialize logging
     #[cfg(feature = "logging")]
     if let Some(logging) = &config.logging {
-        crate::config::init_logging(logging);
+        let _ = crate::config::init_logging(logging);
     }
 
     // Apply cache middleware
