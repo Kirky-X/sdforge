@@ -252,6 +252,7 @@ mod boundary_tests {
         let min_config = ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 1,
+            request_timeout_secs: 30,
             tls: None,
             cors: None,
         };
@@ -261,6 +262,7 @@ mod boundary_tests {
         let max_config = ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 65535,
+            request_timeout_secs: 30,
             tls: None,
             cors: None,
         };

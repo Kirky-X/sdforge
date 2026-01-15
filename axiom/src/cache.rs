@@ -263,16 +263,32 @@ pub struct CacheKey {
 
 impl CacheKey {
     /// Create cache key with optional body
+    ///
+    /// Security: Uses a fast non-cryptographic hash for cache keys to prevent
+    /// CPU exhaustion from repeated hash computations. This is safe because
+    /// cache keys only need to identify equivalent requests, not provide security.
     pub fn new(method: &str, uri: &str, body: &[u8]) -> Self {
-        let mut hasher = Sha256::new();
-        hasher.update(body);
-        let body_hash = format!("{:x}", hasher.finalize());
+        let body_hash = Self::fast_hash(body);
 
         Self {
             method: method.to_string(),
             uri: uri.to_string(),
             body_hash,
         }
+    }
+
+    /// Fast non-cryptographic hash for cache keys
+    ///
+    /// Uses std::collections::hash_map::DefaultHasher (SipHash 2-4) which is
+    /// much faster than SHA256 while still providing good distribution for
+    /// cache key purposes. Not suitable for security-critical operations.
+    fn fast_hash(data: &[u8]) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        data.hash(&mut hasher);
+        format!("{:016x}", hasher.finish())
     }
 }
 

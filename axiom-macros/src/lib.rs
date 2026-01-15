@@ -98,15 +98,72 @@ fn api_metadata_tokens(
     cache_ttl: TokenStream2,
     is_streaming: TokenStream2,
 ) -> TokenStream2 {
+    // Validate and sanitize inputs at compile time to prevent code injection
+    // These validations will cause compilation to fail if inputs are invalid
+    let validated_name = validate_api_name(&name.to_string());
+    let validated_version = validate_version(&version.to_string());
+
     quote! {
         axiom::core::ApiMetadata {
-            name: #name,
-            version: #version,
+            name: #validated_name,
+            version: #validated_version,
             description: #description,
             cache_ttl: #cache_ttl,
             is_streaming: #is_streaming,
         }
     }
+}
+
+/// Validate API name to prevent code injection
+/// API names must be valid Rust identifiers (alphanumeric + underscores, starting with letter)
+fn validate_api_name(name: &str) -> String {
+    // Check for empty name
+    if name.is_empty() {
+        panic!("API name cannot be empty");
+    }
+
+    // Check for invalid characters (allow alphanumeric and underscores)
+    if !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
+        panic!("API name contains invalid characters: {}", name);
+    }
+
+    // Check that name starts with a letter (valid Rust identifier)
+    if name.starts_with(|c: char| !c.is_alphabetic() && c != '_') {
+        panic!("API name must start with a letter or underscore: {}", name);
+    }
+
+    // Check for reserved Rust keywords
+    let reserved_keywords = [
+        "match", "if", "else", "loop", "while", "for", "break", "continue", "fn", "struct", "enum",
+        "impl", "trait", "pub", "mod", "use", "const", "static", "let", "mut", "ref", "self",
+        "super", "crate",
+    ];
+    if reserved_keywords.contains(&name) {
+        panic!("API name cannot be a Rust keyword: {}", name);
+    }
+
+    name.to_string()
+}
+
+/// Validate version string to prevent code injection
+/// Version strings should match common patterns like "v1", "1.0", "v1.2.3"
+fn validate_version(version: &str) -> String {
+    // Check for empty version
+    if version.is_empty() {
+        panic!("API version cannot be empty");
+    }
+
+    // Version should only contain alphanumeric characters, dots, and optionally a 'v' prefix
+    let invalid_chars: Vec<char> = version
+        .chars()
+        .filter(|c| !c.is_alphanumeric() && *c != '.' && *c != '-')
+        .collect();
+
+    if !invalid_chars.is_empty() {
+        panic!("API version contains invalid characters: {}", version);
+    }
+
+    version.to_string()
 }
 
 /// Parse service_api attributes
