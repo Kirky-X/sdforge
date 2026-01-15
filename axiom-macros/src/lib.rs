@@ -7,7 +7,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_macro_input, FnArg, ItemFn, ItemMod, LitStr, Pat};
+use syn::{parse_macro_input, FnArg, ItemFn, ItemMod, Pat};
 
 /// Type alias for service_api arguments parsing result
 type ServiceApiArgs = Result<
@@ -84,6 +84,28 @@ fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Erro
     }
 
     Ok(pairs)
+}
+
+/// Generate ApiMetadata TokenStream for service API
+/// Accepts TokenStream2 parameters to work within quote! macro
+#[allow(dead_code)]
+#[inline]
+fn api_metadata_tokens(
+    name: TokenStream2,
+    version: TokenStream2,
+    description: TokenStream2,
+    cache_ttl: TokenStream2,
+    is_streaming: TokenStream2,
+) -> TokenStream2 {
+    quote! {
+        axiom::core::ApiMetadata {
+            name: #name,
+            version: #version,
+            description: #description,
+            cache_ttl: #cache_ttl,
+            is_streaming: #is_streaming,
+        }
+    }
 }
 
 /// Parse service_api attributes
@@ -513,13 +535,13 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                             router = router.get(handler);
                             router
                         },
-                        metadata: axiom::core::ApiMetadata {
-                            name: #name.to_string(),
-                            version: #version.to_string(),
-                            description: #description_literal.to_string(),
-                            cache_ttl: None,
-                            is_streaming: true,
-                        },
+                        metadata: api_metadata_tokens(
+                            #name.to_string(),
+                            #version.to_string(),
+                            #description_literal.to_string(),
+                            quote! { None },
+                            quote! { true },
+                        ),
                         module_prefix: None,
                     }
                 }
@@ -544,13 +566,13 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                             }
                             router
                         },
-                        metadata: axiom::core::ApiMetadata {
-                            name: #name.to_string(),
-                            version: #version.to_string(),
-                            description: #description_literal.to_string(),
-                            cache_ttl: None,
-                            is_streaming: false,
-                        },
+                        metadata: api_metadata_tokens(
+                            #name.to_string(),
+                            #version.to_string(),
+                            #description_literal.to_string(),
+                            quote! { None },
+                            quote! { false },
+                        ),
                         module_prefix: None,
                     }
                 }
@@ -737,13 +759,13 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             // Register MCP tool (requires axiom's "mcp" feature)
             axiom::inventory::submit!(axiom::mcp::McpToolInstance {
                 tool: std::sync::Arc::new(AxiomMcpTool),
-                metadata: axiom::core::ApiMetadata {
-                    name: #name.to_string(),
-                    version: #version.to_string(),
-                    description: #description_literal.to_string(),
-                    cache_ttl: #cache_ttl_expr,
-                    is_streaming: false,
-                },
+                metadata: api_metadata_tokens(
+                    #name.to_string(),
+                    #version.to_string(),
+                    #description_literal.to_string(),
+                    #cache_ttl_expr,
+                    quote! { false },
+                ),
             });
         }
     } else {
@@ -769,13 +791,13 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             // gRPC route (requires axiom's "grpc" feature)
             axiom::inventory::submit!(axiom::grpc::GrpcRoute {
                 service_name: #name.to_string(),
-                metadata: axiom::core::ApiMetadata {
-                    name: #name.to_string(),
-                    version: #version.to_string(),
-                    description: #description_literal.to_string(),
-                    cache_ttl: #cache_ttl_expr,
-                    is_streaming: false,
-                },
+                metadata: api_metadata_tokens(
+                    #name.to_string(),
+                    #version.to_string(),
+                    #description_literal.to_string(),
+                    #cache_ttl_expr,
+                    quote! { false },
+                ),
             });
         }
     } else {
