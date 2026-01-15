@@ -392,8 +392,7 @@ impl ConfigLoader {
                     // Security: Only log that validation failed, not the actual connection string
                     #[cfg(feature = "logging")]
                     tracing::warn!(target: "config",
-                        "Database connection string validation failed for {} database",
-                        config.database.name()
+                        "Database connection string validation failed"
                     );
                 }
             }
