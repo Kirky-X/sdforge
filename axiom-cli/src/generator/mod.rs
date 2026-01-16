@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Axiom Code Generator
 //!
 //! A code generation tool for the Axiom framework. Provides project scaffolding,

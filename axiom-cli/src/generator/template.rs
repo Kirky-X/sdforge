@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Template rendering utilities.
 //!
 //! Provides functions for rendering templates using the Tera template engine
