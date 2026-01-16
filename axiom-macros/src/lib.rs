@@ -97,13 +97,13 @@ fn api_metadata_tokens(
     description: TokenStream2,
     cache_ttl: TokenStream2,
     is_streaming: TokenStream2,
-) -> TokenStream2 {
+) -> Result<TokenStream2, syn::Error> {
     // Validate and sanitize inputs at compile time to prevent code injection
     // These validations will cause compilation to fail if inputs are invalid
-    let validated_name = validate_api_name(&name.to_string());
-    let validated_version = validate_version(&version.to_string());
+    let validated_name = validate_api_name(&name.to_string())?;
+    let validated_version = validate_version(&version.to_string())?;
 
-    quote! {
+    Ok(quote! {
         axiom::core::ApiMetadata {
             name: #validated_name,
             version: #validated_version,
@@ -111,60 +111,96 @@ fn api_metadata_tokens(
             cache_ttl: #cache_ttl,
             is_streaming: #is_streaming,
         }
-    }
+    })
 }
 
 /// Validate API name to prevent code injection
 /// API names must be valid Rust identifiers (alphanumeric + underscores, starting with letter)
-fn validate_api_name(name: &str) -> String {
+fn validate_api_name(name: &str) -> Result<String, syn::Error> {
     // Check for empty name
     if name.is_empty() {
-        panic!("API name cannot be empty");
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "API name cannot be empty",
+        ));
     }
 
     // Check for invalid characters (allow alphanumeric and underscores)
     if !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
-        panic!("API name contains invalid characters: {}", name);
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!("API name contains invalid characters: {}", name),
+        ));
     }
 
     // Check that name starts with a letter (valid Rust identifier)
     if name.starts_with(|c: char| !c.is_alphabetic() && c != '_') {
-        panic!("API name must start with a letter or underscore: {}", name);
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!("API name must start with a letter or underscore: {}", name),
+        ));
     }
 
     // Check for reserved Rust keywords
-    let reserved_keywords = [
-        "match", "if", "else", "loop", "while", "for", "break", "continue", "fn", "struct", "enum",
-        "impl", "trait", "pub", "mod", "use", "const", "static", "let", "mut", "ref", "self",
-        "super", "crate",
-    ];
-    if reserved_keywords.contains(&name) {
-        panic!("API name cannot be a Rust keyword: {}", name);
+    if RESERVED_KEYWORDS.contains(&name) {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!("API name cannot be a Rust keyword: {}", name),
+        ));
     }
 
-    name.to_string()
+    Ok(name.to_string())
 }
 
 /// Validate version string to prevent code injection
 /// Version strings should match common patterns like "v1", "1.0", "v1.2.3"
-fn validate_version(version: &str) -> String {
+fn validate_version(version: &str) -> Result<String, syn::Error> {
     // Check for empty version
     if version.is_empty() {
-        panic!("API version cannot be empty");
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "API version cannot be empty",
+        ));
+    }
+
+    if version.is_empty() {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "API version cannot be empty",
+        ));
     }
 
     // Version should only contain alphanumeric characters, dots, and optionally a 'v' prefix
-    let invalid_chars: Vec<char> = version
+    if !version
         .chars()
-        .filter(|c| !c.is_alphanumeric() && *c != '.' && *c != '-')
-        .collect();
-
-    if !invalid_chars.is_empty() {
-        panic!("API version contains invalid characters: {}", version);
+        .all(|c| c.is_alphanumeric() || c == '.' || c == '-')
+    {
+        let invalid_chars: Vec<char> = version
+            .chars()
+            .filter(|c| !c.is_alphanumeric() && *c != '.' && *c != '-')
+            .collect();
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!(
+                "API version contains invalid characters: {}",
+                invalid_chars.iter().collect::<String>()
+            ),
+        ));
     }
 
-    version.to_string()
+    Ok(version.to_string())
 }
+
+/// Reserved Rust keywords that cannot be used as API names
+const RESERVED_KEYWORDS: &[&str] = &[
+    "match", "if", "else", "loop", "while", "for", "break", "continue", "fn", "struct", "enum",
+    "impl", "trait", "pub", "mod", "use", "const", "static", "let", "mut", "ref", "self", "super",
+    "crate", "return", "true", "false", "async", "await", "dyn", "unsafe", "extern", "type",
+    "where", "move", "as", "in", "of", "is", "Some", "None", "Ok", "Err",
+];
+
+/// Default cache TTL in seconds (5 minutes)
+const DEFAULT_CACHE_TTL: u64 = 300;
 
 /// Parse service_api attributes
 fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
@@ -189,8 +225,30 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
             "path" => path = Some(value),
             "method" => method = Some(value),
             "tool_name" => tool_name = Some(value),
-            "stream" => stream = Some(value.parse::<bool>().unwrap_or(false)),
-            "cache_ttl" => cache_ttl = Some(value.parse::<u64>().unwrap_or(300)),
+            "stream" => {
+                stream = Some(value.parse::<bool>().map_err(|_| {
+                    syn::Error::new(
+                        proc_macro2::Span::call_site(),
+                        format!("Invalid boolean value for 'stream': {}", value),
+                    )
+                })?)
+            }
+            "cache_ttl" => {
+                cache_ttl = Some(
+                    value
+                        .parse::<u64>()
+                        .map_err(|_| {
+                            syn::Error::new(
+                                proc_macro2::Span::call_site(),
+                                format!(
+                                    "Invalid cache TTL value (must be a positive integer): {}",
+                                    value
+                                ),
+                            )
+                        })?
+                        .max(DEFAULT_CACHE_TTL),
+                )
+            }
             "ws_path" => ws_path = Some(value),
             "grpc_method" => grpc_method = Some(value),
             _ => {
@@ -576,6 +634,29 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     let is_streaming = stream.unwrap_or(false);
 
     let http_code = if path.is_some() && method.is_some() {
+        // Generate metadata tokens before the quote block
+        let streaming_metadata = match api_metadata_tokens(
+            quote! { #name },
+            quote! { #version },
+            quote! { #description_literal },
+            quote! { None },
+            quote! { true },
+        ) {
+            Ok(tokens) => tokens,
+            Err(e) => return e.into_compile_error().into(),
+        };
+
+        let non_streaming_metadata = match api_metadata_tokens(
+            quote! { #name },
+            quote! { #version },
+            quote! { #description_literal },
+            quote! { None },
+            quote! { false },
+        ) {
+            Ok(tokens) => tokens,
+            Err(e) => return e.into_compile_error().into(),
+        };
+
         // Generate a function that creates the HttpRoute at runtime
         let route_creation = if is_streaming {
             quote! {
@@ -588,13 +669,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                             router = router.get(handler);
                             router
                         },
-                        metadata: api_metadata_tokens(
-                            #name.to_string(),
-                            #version.to_string(),
-                            #description_literal.to_string(),
-                            quote! { None },
-                            quote! { true },
-                        ),
+                        metadata: #streaming_metadata,
                         module_prefix: None,
                     }
                 }
@@ -619,13 +694,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                             }
                             router
                         },
-                        metadata: api_metadata_tokens(
-                            #name.to_string(),
-                            #version.to_string(),
-                            #description_literal.to_string(),
-                            quote! { None },
-                            quote! { false },
-                        ),
+                        metadata: #non_streaming_metadata,
                         module_prefix: None,
                     }
                 }
@@ -723,6 +792,18 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             .expect("tool_name must be Some when generating MCP code - this is a bug in the macro");
         let mcp_tool_description = description.as_ref().unwrap_or(&name);
 
+        // Generate metadata tokens before the quote block
+        let mcp_metadata = match api_metadata_tokens(
+            quote! { #name },
+            quote! { #version },
+            quote! { #description_literal },
+            quote! { #cache_ttl_expr },
+            quote! { false },
+        ) {
+            Ok(tokens) => tokens,
+            Err(e) => return e.into_compile_error().into(),
+        };
+
         quote! {
             struct AxiomMcpTool;
 
@@ -755,37 +836,34 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                             let response_json = serde_json::to_value(response).unwrap_or_else(|_| {
                                 serde_json::json!({
                                     "success": true,
-                                    "data": response
+                                    "data": "Response serialization failed"
                                 })
                             });
-
                             mcp_sdk::types::CallToolResponse {
                                 content: vec![mcp_sdk::types::ToolResponseContent::Text {
-                                    text: serde_json::to_string(&response_json).unwrap_or_else(|_| {
-                                        serde_json::json!({
-                                            "success": true,
-                                            "message": "Operation completed"
-                                        }).to_string()
-                                    }),
+                                    text: serde_json::to_string(&response_json)?,
                                 }],
                                 is_error: Some(false),
                                 meta: None,
                             }
                         }
-                        Err(error) => {
-                            let error_text = error.to_string();
-
-                            // Try to parse error as JSON
-                            let error_json: serde_json::Value = serde_json::from_str(&error_text).unwrap_or_else(|_| {
+                        Err(e) => {
+                            let error_json = serde_json::to_value(e).unwrap_or_else(|_| {
                                 serde_json::json!({
-                                    "code": "TOOL_ERROR",
-                                    "message": error_text
+                                    "success": false,
+                                    "error": {
+                                        "code": "UNKNOWN_ERROR",
+                                        "message": "An unknown error occurred"
+                                    }
                                 })
                             });
-
                             let error_code = error_json.get("code")
                                 .and_then(|c| c.as_str())
-                                .unwrap_or("TOOL_ERROR");
+                                .unwrap_or("UNKNOWN_ERROR");
+                            let error_text = error_json.get("error")
+                                .and_then(|e| e.get("message"))
+                                .and_then(|m| m.as_str())
+                                .unwrap_or("Unknown error");
                             let error_message = error_json.get("message")
                                 .and_then(|m| m.as_str())
                                 .unwrap_or(&error_text);
@@ -811,13 +889,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             // Register MCP tool (requires axiom's "mcp" feature)
             axiom::inventory::submit!(axiom::mcp::McpToolInstance {
                 tool: std::sync::Arc::new(AxiomMcpTool),
-                metadata: api_metadata_tokens(
-                    #name.to_string(),
-                    #version.to_string(),
-                    #description_literal.to_string(),
-                    #cache_ttl_expr,
-                    quote! { false },
-                ),
+                metadata: #mcp_metadata,
             });
         }
     } else {
@@ -837,19 +909,25 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
+    // Generate gRPC metadata tokens before the quote block
+    let grpc_metadata = match api_metadata_tokens(
+        quote! { #name },
+        quote! { #version },
+        quote! { #description_literal },
+        quote! { #cache_ttl_expr },
+        quote! { false },
+    ) {
+        Ok(tokens) => tokens,
+        Err(e) => return e.into_compile_error().into(),
+    };
+
     // Generate gRPC code
     let grpc_code = if grpc_method.is_some() {
         quote! {
             // gRPC route (requires axiom's "grpc" feature)
             axiom::inventory::submit!(axiom::grpc::GrpcRoute {
                 service_name: #name.to_string(),
-                metadata: api_metadata_tokens(
-                    #name.to_string(),
-                    #version.to_string(),
-                    #description_literal.to_string(),
-                    #cache_ttl_expr,
-                    quote! { false },
-                ),
+                metadata: #grpc_metadata,
             });
         }
     } else {

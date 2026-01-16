@@ -784,7 +784,10 @@ static JWT_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
 });
 
 static SECRET_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
-    regex::Regex::new(r#"(?i)(password|secret|token|key|auth|bearer)\s*[:=]\s*[^,\s}\]]+"#).unwrap()
+    // Limited repetition to prevent ReDoS attacks
+    // Maximum 100 characters after the separator
+    regex::Regex::new(r#"(?i)(password|secret|token|key|auth|bearer)\s*[:=]\s*[^,\s}\]]{1,100}"#)
+        .unwrap()
 });
 
 static DB_PATTERN: Lazy<regex::Regex> =

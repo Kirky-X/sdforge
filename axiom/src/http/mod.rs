@@ -209,11 +209,15 @@ pub fn build_with_config(
             let prefix = prefix.clone();
             let extract_auth =
                 move |req: &axum::http::Request<Body>| -> Result<AuthContext, AuthError> {
-                    let header_value = req
+                    // Get header value; if missing or malformed, return auth error immediately
+                    let header_value = match req
                         .headers()
                         .get(&header_name)
                         .and_then(|v: &HeaderValue| v.to_str().ok())
-                        .unwrap_or("");
+                    {
+                        Some(value) => value,
+                        None => return Err(AuthError::MissingAuth),
+                    };
 
                     let client_ip = req
                         .headers()

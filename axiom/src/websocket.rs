@@ -46,6 +46,12 @@ use std::sync::Arc;
 use crate::impl_default_new;
 
 #[cfg(feature = "websocket")]
+use std::time::Instant;
+
+#[cfg(feature = "websocket")]
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+
+#[cfg(feature = "websocket")]
 /// WebSocket message type
 ///
 /// Represents different types of WebSocket messages exchanged between
@@ -130,28 +136,144 @@ impl WebSocketConnection {
 }
 
 #[cfg(feature = "websocket")]
-/// Connection manager for WebSocket connections
+/// Connection manager for WebSocket connections with rate limiting
 pub struct ConnectionManager {
     connections: Arc<DashMap<String, WebSocketConnection>>,
+    /// Rate limiting: message count per connection per window
+    message_counts: Arc<DashMap<String, AtomicU64>>,
+    /// Rate limiting: connection count tracking
+    connection_count: Arc<AtomicUsize>,
+    /// Rate limiting: track messages per time window
+    last_message_time: Arc<DashMap<String, AtomicU64>>,
+}
+
+/// Rate limiting configuration for WebSocket connections
+#[derive(Debug, Clone)]
+pub struct RateLimitConfig {
+    /// Maximum messages per connection per second
+    pub max_messages_per_second: u64,
+    /// Maximum message size in bytes (1MB default)
+    pub max_message_size: usize,
+    /// Maximum connections allowed
+    pub max_connections: usize,
+    /// Time window in seconds for rate limiting
+    pub rate_limit_window_seconds: u64,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            max_messages_per_second: 100,
+            max_message_size: 1_048_576, // 1MB
+            max_connections: 1000,
+            rate_limit_window_seconds: 1,
+        }
+    }
 }
 
 #[cfg(feature = "websocket")]
 impl ConnectionManager {
-    /// Create a new connection manager
+    /// Create a new connection manager with rate limiting
     pub fn new() -> Self {
         Self {
             connections: Arc::new(DashMap::new()),
+            message_counts: Arc::new(DashMap::new()),
+            connection_count: Arc::new(AtomicUsize::new(0)),
+            last_message_time: Arc::new(DashMap::new()),
+        }
+    }
+
+    /// Check if connection is rate limited
+    /// Returns true if rate limited (should disconnect)
+    pub fn check_rate_limit(&self, conn_id: &str, config: &RateLimitConfig) -> bool {
+        let now = Instant::now();
+        let current_time = now.elapsed().as_secs();
+
+        // Check total connection limit
+        if self.connection_count.load(Ordering::Relaxed) >= config.max_connections {
+            #[cfg(feature = "logging")]
+            tracing::warn!(target: "websocket", "Max connections reached, rejecting new connection");
+            return true;
+        }
+
+        // Check per-connection rate limit
+        if let Some(count_ref) = self.message_counts.get(conn_id) {
+            let last_time = self
+                .last_message_time
+                .get(conn_id)
+                .map(|t| t.value().load(Ordering::Relaxed))
+                .unwrap_or(0);
+
+            // Reset counter if window has passed
+            if current_time - last_time >= config.rate_limit_window_seconds {
+                count_ref.value().store(0, Ordering::Relaxed);
+                if let Some(time_entry) = self.last_message_time.get_mut(conn_id) {
+                    time_entry.value().store(current_time, Ordering::Relaxed);
+                }
+                return false;
+            }
+
+            // Check if over rate limit
+            if count_ref.value().load(Ordering::Relaxed) >= config.max_messages_per_second {
+                #[cfg(feature = "logging")]
+                tracing::warn!(target: "websocket",
+                    conn_id = %conn_id,
+                    msg_count = %count_ref.value().load(Ordering::Relaxed),
+                    "Rate limit exceeded, disconnecting"
+                );
+                return true;
+            }
+
+            // Increment counter
+            count_ref.value().fetch_add(1, Ordering::Relaxed);
+        } else {
+            // New connection, initialize counter
+            self.message_counts
+                .insert(conn_id.to_string(), AtomicU64::new(1));
+            self.last_message_time
+                .insert(conn_id.to_string(), AtomicU64::new(current_time));
+        }
+
+        false
+    }
+
+    /// Record a message for rate limiting
+    pub fn record_message(&self, conn_id: &str, config: &RateLimitConfig) {
+        let now = Instant::now();
+        let current_time = now.elapsed().as_secs();
+
+        if let Some(count_ref) = self.message_counts.get(conn_id) {
+            let last_time = self
+                .last_message_time
+                .get(conn_id)
+                .map(|t| t.value().load(Ordering::Relaxed))
+                .unwrap_or(0);
+
+            // Reset counter if window has passed
+            if current_time - last_time >= config.rate_limit_window_seconds {
+                count_ref.value().store(0, Ordering::Relaxed);
+                if let Some(time_entry) = self.last_message_time.get_mut(conn_id) {
+                    time_entry.value().store(current_time, Ordering::Relaxed);
+                }
+            } else {
+                count_ref.value().fetch_add(1, Ordering::Relaxed);
+            }
         }
     }
 
     /// Add a connection to the manager
     pub async fn add_connection(&self, id: String, conn: WebSocketConnection) {
-        self.connections.insert(id, conn);
+        self.connections.insert(id.clone(), conn);
+        self.connection_count.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Remove a connection from the manager
     pub async fn remove_connection(&self, id: &str) {
         self.connections.remove(id);
+        self.connection_count.fetch_sub(1, Ordering::Relaxed);
+        // Clean up rate limiting data
+        self.message_counts.remove(id);
+        self.last_message_time.remove(id);
     }
 
     /// Get a connection by ID
@@ -168,7 +290,7 @@ impl ConnectionManager {
 
     /// Get the number of active connections
     pub async fn connection_count(&self) -> usize {
-        self.connections.len()
+        self.connection_count.load(Ordering::Relaxed)
     }
 }
 
@@ -281,8 +403,30 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
                             // Handle message with default handler
                             let handler = DefaultWebSocketHandler;
                             let response = handler.handle(ws_msg).await;
-                            let response_json = serde_json::to_string(&response)
-                                .expect("Failed to serialize response");
+                            // Use map_err to convert serialization errors to error messages
+                            let response_json = match serde_json::to_string(&response) {
+                                Ok(json) => json,
+                                Err(e) => {
+                                    #[cfg(feature = "logging")]
+                                    tracing::error!(target: "websocket",
+                                        conn_id = %conn_id,
+                                        error = %e,
+                                        "Failed to serialize response"
+                                    );
+                                    // Send a generic error to the client
+                                    let error_response = WebSocketMessage::Error {
+                                        id: String::new(),
+                                        error: "Internal serialization error".to_string(),
+                                    };
+                                    if let Ok(json) = serde_json::to_string(&error_response) {
+                                        json
+                                    } else {
+                                        // If even the error message can't be serialized, send a hardcoded fallback
+                                        r#"{"type":"error","id":"","error":"Internal error"}"#
+                                            .to_string()
+                                    }
+                                }
+                            };
                             let _ = socket
                                 .send(axum::extract::ws::Message::Text(response_json.into()))
                                 .await;
@@ -292,8 +436,20 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
                                 id: String::new(),
                                 error: e,
                             };
-                            let response_json = serde_json::to_string(&error_msg)
-                                .expect("Failed to serialize error message");
+                            // Use match instead of expect to handle serialization errors gracefully
+                            let response_json = match serde_json::to_string(&error_msg) {
+                                Ok(json) => json,
+                                Err(e) => {
+                                    #[cfg(feature = "logging")]
+                                    tracing::error!(target: "websocket",
+                                        conn_id = %conn_id,
+                                        error = %e,
+                                        "Failed to serialize error message"
+                                    );
+                                    // Send a hardcoded fallback error message
+                                    r#"{"type":"error","id":"","error":"Internal error processing request"}"#.to_string()
+                                }
+                            };
                             let _ = socket
                                 .send(axum::extract::ws::Message::Text(response_json.into()))
                                 .await;
