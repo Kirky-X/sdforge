@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Integration tests for gRPC protocol feature
 
 #[cfg(feature = "grpc")]

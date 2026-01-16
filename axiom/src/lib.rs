@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Axiom runtime library
 //!
 //! This crate provides the runtime types and service builders for the Axiom framework.

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! String helper utilities for consistent formatting.
 //!
 //! This module provides standardized string formatting functions used across

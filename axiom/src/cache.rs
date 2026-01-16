@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! HTTP 响应缓存中间件
 //!
 //! 提供基于内存的 HTTP 响应缓存，支持 ETag 和 Last-Modified 头实现条件请求。

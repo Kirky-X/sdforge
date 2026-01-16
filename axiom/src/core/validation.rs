@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Parameter validation and type conversion utilities
 //!
 //! This module provides utilities for validating request parameters and

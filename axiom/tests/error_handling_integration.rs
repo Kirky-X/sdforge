@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Error handling and boundary condition tests
 //!
 //! Tests that verify correct error handling and boundary conditions.

@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/axiom-rs/axiom"
 keywords = ["api", "http", "mcp", "macro", "framework"]
 categories = ["web-programming", "development-tools"]
-authors = ["Axiom Team"]
+authors = ["Kirky.X"]
 
 [dependencies]
 # Core dependencies

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! HTTP Performance Benchmarks
 //!
 //! Benchmarks for HTTP request/response performance.

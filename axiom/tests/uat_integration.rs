@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! User Acceptance Tests (UAT)
 //!
 //! These tests verify end-to-end user scenarios based on real-world usage patterns.

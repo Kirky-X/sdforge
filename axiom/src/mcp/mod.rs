@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! MCP server implementation
 
 use crate::core::ApiMetadata;

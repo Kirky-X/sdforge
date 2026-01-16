@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! HTTP protocol integration tests
 //!
 //! Tests for HTTP server functionality with the Axiom macros.

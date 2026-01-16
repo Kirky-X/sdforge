@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! MCP integration tests
 //!
 //! Tests for MCP tool registration and invocation.

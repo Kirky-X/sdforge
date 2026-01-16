@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Concurrent Safety Tests
 //!
 //! Tests for thread safety and concurrent access patterns.

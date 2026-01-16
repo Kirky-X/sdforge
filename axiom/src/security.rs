@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Security module providing authentication, rate limiting, and audit logging
 //!
 //! This module provides utilities for securing API endpoints.

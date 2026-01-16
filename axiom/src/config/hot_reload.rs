@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Configuration hot reload support
 //!
 //! This module provides configuration hot-reload functionality using file system watching.

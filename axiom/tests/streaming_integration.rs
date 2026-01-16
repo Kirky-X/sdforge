@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Streaming response integration tests
 //!
 //! Tests for SSE streaming functionality.

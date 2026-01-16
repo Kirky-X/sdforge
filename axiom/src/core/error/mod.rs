@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Framework error types
 //!
 //! Provides comprehensive error types for the framework.
