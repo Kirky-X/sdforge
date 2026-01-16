@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Git initialization utilities.
 //!
 //! Provides safe git repository initialization with security checks

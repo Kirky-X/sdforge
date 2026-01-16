@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Axiom CLI Tool
 //!
 //! Command-line interface for the Axiom framework.

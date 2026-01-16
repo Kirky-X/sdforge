@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Error types for the generator module.
 //!
 //! This module defines specific error types for code generation operations,

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Integration tests for the Axiom CLI generator.
 //!
 //! These tests verify the complete functionality of the generator

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Validation utilities for code generation.
 //!
 //! Provides validation functions for project names, template content,
