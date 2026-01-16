@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Debug information collection for macro expansion
 //!
 //! This module provides structures and functions for collecting debug information

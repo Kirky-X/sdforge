@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Axiom procedural macros
 //!
 //! This crate provides procedural macros for the Axiom framework.

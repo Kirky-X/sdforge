@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Generic type parsing for advanced generic support
 //!
 //! This module provides utilities for parsing and handling generic types
