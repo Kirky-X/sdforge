@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Configuration integration tests
 //!
 //! Tests for configuration loading, conversion, and application.

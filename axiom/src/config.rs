@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Configuration module for the Axiom framework
 //!
 //! This module provides configuration loading and management capabilities.

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Core types and error handling
 //!
 //! This module is organized into submodules:

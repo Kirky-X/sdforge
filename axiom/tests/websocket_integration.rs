@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Integration tests for WebSocket feature
 
 #[cfg(feature = "websocket")]

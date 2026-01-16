@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! gRPC protocol support for Axiom
 //!
 //! This module provides gRPC protocol support using tonic.

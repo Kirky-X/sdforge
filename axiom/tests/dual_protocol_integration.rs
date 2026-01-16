@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Dual protocol and feature combination tests
 //!
 //! Tests that verify correct behavior when both HTTP and MCP features are enabled

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 // Streaming response support
 //!
 //! This module provides utilities for streaming responses in both HTTP and MCP protocols.

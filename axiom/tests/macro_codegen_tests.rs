@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Integration Tests for Macro Behavior
 //!
 //! Tests that verify the behavior of macros through integration testing.

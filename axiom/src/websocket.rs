@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! WebSocket support for Axiom
 //!
 //! This module provides WebSocket protocol support alongside SSE.

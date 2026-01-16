@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Performance benchmarks for Axiom
 //!
 //! These benchmarks measure the performance of core Axiom operations.

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Cache integration tests
 //!
 //! Tests for HTTP response caching functionality.

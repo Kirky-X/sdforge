@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 //! Core type definitions for the Axiom framework
 //!
 //! This module provides fundamental types used across the framework.

@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=proto/axiom.proto");
 
