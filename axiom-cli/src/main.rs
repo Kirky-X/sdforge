@@ -18,27 +18,43 @@ struct Cli {
     command: Commands,
 }
 
+/// Validate protocol parameter
+fn validate_protocol(protocol: &str) -> Result<String, String> {
+    match protocol {
+        "http" | "mcp" | "both" => Ok(protocol.to_string()),
+        _ => Err("Protocol must be 'http', 'mcp', or 'both'".to_string()),
+    }
+}
+
+/// Validate template parameter
+fn validate_template(template: &str) -> Result<String, String> {
+    match template {
+        "basic" | "full" => Ok(template.to_string()),
+        _ => Err("Template must be 'basic' or 'full'".to_string()),
+    }
+}
+
 /// Available commands
 #[derive(Subcommand)]
 enum Commands {
     /// Create a new Axiom project
     New {
-        /// Project name
+        /// Project name (must be a valid Rust identifier)
         name: String,
         /// Protocol to use (http, mcp, both)
-        #[arg(long, default_value = "http")]
+        #[arg(long, default_value = "http", value_parser = validate_protocol)]
         protocol: String,
         /// Additional features (comma-separated)
         #[arg(long)]
         features: Option<String>,
         /// Template to use (basic, full)
-        #[arg(long, default_value = "basic")]
+        #[arg(long, default_value = "basic", value_parser = validate_template)]
         template: String,
     },
     /// Initialize Axiom in current directory
     Init {
         /// Protocol to use (http, mcp, both)
-        #[arg(long, default_value = "http")]
+        #[arg(long, default_value = "http", value_parser = validate_protocol)]
         protocol: String,
         /// Additional features (comma-separated)
         #[arg(long)]
@@ -48,13 +64,13 @@ enum Commands {
     Generate {
         /// Template name
         template: String,
-        /// Output file
+        /// Output file path
         #[arg(long)]
         output: Option<String>,
     },
 }
 
-fn main() -> Result<()> {
+fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -65,7 +81,7 @@ fn main() -> Result<()> {
             template,
         } => {
             let features_str = features.unwrap_or_default();
-            generator::generate_project(&name, &protocol, &features_str, &template)
+            generator::generate_project(&name, &protocol, &features_str, &template)?;
         }
         Commands::Init { protocol, features } => {
             let features_str = features.unwrap_or_default();
@@ -74,12 +90,14 @@ fn main() -> Result<()> {
                 .file_name()
                 .and_then(|n| n.to_str())
                 .ok_or_else(|| anyhow::anyhow!("Cannot determine current directory name"))?;
-            generator::generate_project(project_name, &protocol, &features_str, "full")
+            generator::generate_project(project_name, &protocol, &features_str, "full")?;
         }
         Commands::Generate { template, output } => {
             let output_path = output.as_deref();
             let context = HashMap::new();
-            generator::generate_from_template(&template, output_path, context)
+            generator::generate_from_template(&template, output_path, context)?;
         }
     }
+
+    Ok(())
 }
