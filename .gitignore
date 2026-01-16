@@ -120,6 +120,8 @@ IFLOW.md
 openspec/
 .iflow/
 AGENTS.md
+.opencode/
+.sisyphus/
 
 # Dependency databases
 requirements.db
@@ -200,6 +202,7 @@ Session.vim
 # Local development notes
 DEV_NOTES.md
 TODO.md
+CODE_REVIEW_REPORT.md
 
 # CI/CD local testing
 .github/workflows/tests/
