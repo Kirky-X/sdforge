@@ -262,11 +262,11 @@ pub struct CacheKey {
 impl CacheKey {
     /// Create cache key with optional body
     ///
-    /// Security: Uses a fast non-cryptographic hash for cache keys to prevent
-    /// CPU exhaustion from repeated hash computations. This is safe because
-    /// cache keys only need to identify equivalent requests, not provide security.
+    /// Security: Uses SHA256 cryptographic hash for cache keys to prevent
+    /// hash flooding attacks. This is safer than fast non-cryptographic hashes
+    /// when cache keys are derived from untrusted input.
     pub fn new(method: &str, uri: &str, body: &[u8]) -> Self {
-        let body_hash = Self::fast_hash(body);
+        let body_hash = Self::secure_hash(body);
 
         Self {
             method: method.to_string(),
@@ -275,18 +275,16 @@ impl CacheKey {
         }
     }
 
-    /// Fast non-cryptographic hash for cache keys
+    /// Secure cryptographic hash for cache keys
     ///
-    /// Uses std::collections::hash_map::DefaultHasher (SipHash 2-4) which is
-    /// much faster than SHA256 while still providing good distribution for
-    /// cache key purposes. Not suitable for security-critical operations.
-    fn fast_hash(data: &[u8]) -> String {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-
-        let mut hasher = DefaultHasher::new();
-        data.hash(&mut hasher);
-        format!("{:016x}", hasher.finish())
+    /// Uses SHA256 to prevent hash flooding attacks. While slightly slower than
+    /// SipHash, it provides better security against collision attacks where
+    /// an attacker crafts many requests that hash to the same cache key.
+    /// For cache keys, the security benefit outweighs the minor performance cost.
+    fn secure_hash(data: &[u8]) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        format!("{:x}", hasher.finalize())
     }
 }
 
@@ -380,17 +378,30 @@ impl CacheMiddleware {
     /// The binary heap provides O(1) access to the oldest entry and O(log n)
     /// for insertion/removal, compared to O(n) iteration + O(n log n) sorting
     /// in the naive approach.
+    ///
+    /// Security: Uses Acquire/Release ordering for consistency in concurrent scenarios
     fn evict_lru(&self, min_needed: usize) {
         let max_entries = self.config.max_entries;
         let max_size = self.config.max_size_bytes;
         let mut freed = 0;
         let mut removed_count = 0;
+        const MAX_ATTEMPTS: usize = 100; // 安全限制，避免无限循环
+
+        let mut attempts = 0;
 
         loop {
-            let size_now = self.current_size.load(Ordering::Relaxed);
-            let count_now = self.entry_count.load(Ordering::Relaxed);
+            // 使用 Acquire 顺序确保读取最新的缓存状态
+            let size_now = self.current_size.load(Ordering::Acquire);
+            let count_now = self.entry_count.load(Ordering::Acquire);
 
             if size_now + min_needed <= max_size && count_now < max_entries {
+                break;
+            }
+
+            // 检查是否达到安全限制
+            if removed_count >= MAX_ATTEMPTS {
+                #[cfg(feature = "logging")]
+                tracing::warn!("LRU eviction hit safety limit of {} entries", MAX_ATTEMPTS);
                 break;
             }
 
@@ -401,8 +412,8 @@ impl CacheMiddleware {
                     if let Some((_, cache_entry)) = self.cache.remove(&entry.key) {
                         self.remove_from_expiration_index(&entry.key, cache_entry.expires_at);
                         let size = cache_entry.body.len();
-                        self.current_size.fetch_sub(size, Ordering::Relaxed);
-                        self.entry_count.fetch_sub(1, Ordering::Relaxed);
+                        self.current_size.fetch_sub(size, Ordering::Release);
+                        self.entry_count.fetch_sub(1, Ordering::Release);
                         freed += size;
                         removed_count += 1;
                     }
@@ -411,15 +422,11 @@ impl CacheMiddleware {
                 }
             }
 
-            if !found_entry || self.entry_count.load(Ordering::Relaxed) == 0 {
+            if !found_entry || self.entry_count.load(Ordering::Acquire) == 0 {
                 break;
             }
 
-            if removed_count > 1000 {
-                #[cfg(feature = "logging")]
-                tracing::warn!("LRU eviction hit safety limit of 1000 entries");
-                break;
-            }
+            attempts += 1;
         }
 
         #[cfg(feature = "logging")]

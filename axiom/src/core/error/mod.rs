@@ -157,19 +157,19 @@ impl From<ApiError> for ServiceError {
                 serde_json::json!({ "field": field, "value": value }),
                 400,
             ),
-            ApiError::AuthenticationFailed { reason: _ } => ServiceError::with_details(
+            ApiError::AuthenticationFailed { reason } => ServiceError::with_details(
                 "AUTHENTICATION_FAILED",
-                "Authentication failed".to_string(),
-                serde_json::json!({ "reason": "authentication_failed" }),
+                format!("Authentication failed: {}", reason),
+                serde_json::json!({ "reason": reason }),
                 401,
             ),
             ApiError::AccessDenied {
-                permission: _,
+                permission,
                 user_id,
             } => ServiceError::with_details(
                 "ACCESS_DENIED",
-                "Access denied".to_string(),
-                serde_json::json!({ "permission": "denied", "user_id": user_id }),
+                format!("Access denied: {}", permission),
+                serde_json::json!({ "permission": permission, "user_id": user_id }),
                 403,
             ),
             ApiError::RateLimitExceeded {
@@ -181,12 +181,9 @@ impl From<ApiError> for ServiceError {
                 serde_json::json!({ "limit": limit, "window_seconds": window_seconds }),
                 429,
             ),
-            ApiError::Internal {
-                message: _,
-                error_id,
-            } => ServiceError::with_details(
+            ApiError::Internal { message, error_id } => ServiceError::with_details(
                 "INTERNAL_ERROR",
-                "An internal error occurred".to_string(),
+                message.clone(),
                 serde_json::json!({ "error_id": error_id, "timestamp": chrono::Utc::now().timestamp() }),
                 500,
             ),

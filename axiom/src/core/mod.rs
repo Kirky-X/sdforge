@@ -92,9 +92,10 @@ fn build_json_response<T: Serialize>(
 #[inline]
 #[cfg(feature = "http")]
 fn build_fallback_response(status: u16, message: &str) -> axum::response::Response {
+    let escaped_message = message.replace('"', "\\\"");
     let fallback = format!(
         r#"{{"success":false,"error":{{"code":"SERIALIZATION_ERROR","message":"{}"}}}}"#,
-        message
+        escaped_message
     );
     axum::response::Response::builder()
         .status(status)

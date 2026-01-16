@@ -308,13 +308,9 @@ impl ConfigLoader {
 
         // Define allowed directories for configuration files
         // In production, only these directories should be used
-        const ALLOWED_DIRS: [&str; 5] = [
-            "/etc/axiom",
-            "/opt/axiom/config",
-            "./config",
-            "/tmp", // Allow for testing (should be restricted in production)
-            "/var/axiom",
-        ];
+        // Note: /tmp is handled separately below for testing scenarios
+        const ALLOWED_DIRS: [&str; 4] =
+            ["/etc/axiom", "/opt/axiom/config", "./config", "/var/axiom"];
 
         // Get parent directory
         let parent_dir = canonical_path

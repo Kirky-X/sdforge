@@ -23,9 +23,14 @@ pub fn error_response(code: &str, message: &str) -> String {
             "message": message
         }
     }))
-    .unwrap_or_else(|_| {
-        // Fallback for serialization failures - avoids potential panic
-        format!(r#"{{"success":false,"error":{{"code":"{code}","message":"{message}"}}}}"#)
+    .unwrap_or_else(|e| {
+        // Fallback for serialization failures - escapes special characters safely
+        let escaped_code = code.replace('"', "\\\"");
+        let escaped_message = e.to_string().replace('"', "\\\"");
+        format!(
+            r#"{{"success":false,"error":{{"code":"{}","message":"{}"}}}}"#,
+            escaped_code, escaped_message
+        )
     })
 }
 
@@ -43,10 +48,7 @@ pub fn success_response<T: Serialize>(data: &T) -> String {
         "success": true,
         "data": data
     }))
-    .unwrap_or_else(|_| {
-        // Fallback for serialization failures
-        r#"{"success":false,"error":{"code":"SERIALIZATION_ERROR","message":"Failed to serialize response"}}"#.to_string()
-    })
+    .unwrap_or_else(|e| error_response("SERIALIZATION_ERROR", &e.to_string()))
 }
 
 /// Create a paginated response wrapper.
@@ -87,12 +89,7 @@ pub fn paginated_response<T: Serialize>(
             }
         }
     }))
-    .unwrap_or_else(|_| {
-        error_response(
-            "SERIALIZATION_ERROR",
-            "Failed to serialize paginated response",
-        )
-    })
+    .unwrap_or_else(|e| error_response("SERIALIZATION_ERROR", &e.to_string()))
 }
 
 /// Create an API metadata response.
@@ -115,7 +112,7 @@ pub fn api_metadata_response(name: &str, version: &str, description: &str) -> St
             "description": description
         }
     }))
-    .unwrap_or_else(|_| error_response("SERIALIZATION_ERROR", "Failed to serialize API metadata"))
+    .unwrap_or_else(|e| error_response("SERIALIZATION_ERROR", &e.to_string()))
 }
 
 #[cfg(test)]

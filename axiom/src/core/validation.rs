@@ -277,6 +277,13 @@ pub mod sanitizer {
         max: usize,
         field_name: &str,
     ) -> Result<String, ApiError> {
+        if min > max {
+            return Err(ApiError::InvalidInput {
+                message: format!("Invalid validation parameters for {}", field_name),
+                field: Some(field_name.to_string()),
+                value: None,
+            });
+        }
         let len = input.len();
         if len < min {
             Err(ApiError::validation_error(

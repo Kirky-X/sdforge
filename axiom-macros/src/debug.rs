@@ -4,9 +4,12 @@
 //! during macro expansion, which can be used to generate HTML reports.
 
 use proc_macro2::TokenStream as TokenStream2;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-/// Debug information collected during macro expansion
+/// Debug information collected during macro expansion.
+///
+/// This structure holds debug metadata for generated code, useful for
+/// diagnostics, logging, and generating HTML reports of macro expansion.
 #[derive(Debug, Clone)]
 pub struct MacroDebugInfo {
     /// Original function name
@@ -23,7 +26,7 @@ pub struct MacroDebugInfo {
     pub final_output: String,
 }
 
-/// Debug information for API configuration
+/// Debug information for API configuration.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ApiConfigDebug {
     pub name: String,
@@ -36,7 +39,7 @@ pub struct ApiConfigDebug {
     pub cache_ttl: Option<u64>,
 }
 
-/// Debug information for function parameters
+/// Debug information for function parameters.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ParamDebug {
     pub name: String,
@@ -46,7 +49,10 @@ pub struct ParamDebug {
     pub is_vec: bool,
 }
 
-/// Generate debug information from macro expansion
+/// Generate debug information from macro expansion.
+///
+/// Collects debug metadata including API configuration, extracted parameters,
+/// and generated handler code for diagnostics purposes.
 pub fn collect_debug_info(
     fn_name: &str,
     api_config: &ApiConfigDebug,
@@ -65,7 +71,9 @@ pub fn collect_debug_info(
     }
 }
 
-/// Format debug info as JSON
+/// Format debug info as JSON for logging or display.
+///
+/// Returns a pretty-printed JSON string representation of the debug information.
 pub fn debug_info_to_json(info: &MacroDebugInfo) -> String {
     format!(
         r#"{{"fn_name": "{}", "api_config": {}, "params": {}, "http_handler_length": {}, "mcp_handler_length": {}, "final_output_length": {} }}"#,
@@ -101,7 +109,7 @@ mod tests {
             mcp_handler: "".to_string(),
             final_output: "generated code".to_string(),
         };
-        
+
         let json = debug_info_to_json(&info);
         assert!(json.contains("\"fn_name\": \"test_fn\""));
         assert!(json.contains("\"name\": \"test_api\""));
