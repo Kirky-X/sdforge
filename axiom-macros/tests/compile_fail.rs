@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Kirky.X
 // Trybuild compile-fail tests for macro error handling
 // These tests verify that the macros properly reject invalid inputs at compile time
 
