@@ -6,7 +6,7 @@
 use thiserror::Error;
 
 /// Maximum project name length to prevent DoS attacks
-pub const MAX_PROJECT_NAME_LENGTH: usize = 64;
+pub(crate) const MAX_PROJECT_NAME_LENGTH: usize = 64;
 
 /// Errors that can occur during code generation.
 #[derive(Debug, Error)]

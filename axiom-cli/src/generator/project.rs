@@ -22,7 +22,7 @@ use std::fs;
 /// # Returns
 ///
 /// The features string for Cargo.toml
-pub fn determine_features(protocol: &str, additional_features: &str) -> String {
+pub(crate) fn determine_features(protocol: &str, additional_features: &str) -> String {
     let base = match protocol {
         "http" | "mcp" | "both" => protocol.to_string(),
         _ => "http".to_string(),
