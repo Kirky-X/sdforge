@@ -17,7 +17,7 @@ use crate::generator::validator::validate_template_content;
 ///
 /// This struct holds the data that will be inserted into templates.
 #[derive(Debug, Serialize)]
-pub struct TemplateContext {
+pub(crate) struct TemplateContext {
     /// Name of the project
     pub project_name: String,
     /// Communication protocol (http, mcp, both)
@@ -133,7 +133,7 @@ fn render_single_template(
 /// # Returns
 ///
 /// `Ok(())` on success, `Err(GeneratorError)` on failure
-pub fn render_templates(
+pub(crate) fn render_templates(
     template_dir: &Path,
     output_dir: &Path,
     context: &TemplateContext,

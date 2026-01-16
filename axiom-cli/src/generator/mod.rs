@@ -19,11 +19,7 @@ pub mod project;
 pub mod template;
 pub mod validator;
 
-pub use error::{GeneratorError, GeneratorResult};
-pub use git::initialize_git;
-pub use project::{determine_features, generate_project};
-pub use template::{generate_from_template, render_templates, TemplateContext};
-pub use validator::{
-    validate_output_path, validate_project_directory_does_not_exist, validate_project_name,
-    validate_template_content, validate_template_directory,
-};
+// 只暴露必要的公共 API
+pub use error::GeneratorError;
+pub use project::generate_project;
+pub use template::generate_from_template;

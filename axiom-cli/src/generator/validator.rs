@@ -25,7 +25,7 @@ use crate::generator::error::{GeneratorError, GeneratorResult};
 /// - Invalid characters (path traversal attempts)
 /// - Special patterns like ".."
 /// - Path separators
-pub fn validate_project_name(name: &str) -> GeneratorResult<()> {
+pub(crate) fn validate_project_name(name: &str) -> GeneratorResult<()> {
     // Length validation
     if name.is_empty() {
         return Err(GeneratorError::EmptyProjectName);
@@ -67,7 +67,7 @@ pub fn validate_project_name(name: &str) -> GeneratorResult<()> {
 /// # Returns
 ///
 /// `Ok(PathBuf)` with the canonical path if valid, `Err(GeneratorError)` otherwise
-pub fn validate_output_path(path: &Path) -> GeneratorResult<PathBuf> {
+pub(crate) fn validate_output_path(path: &Path) -> GeneratorResult<PathBuf> {
     let canonical_path = std::fs::canonicalize(path)
         .map_err(|e| GeneratorError::InvalidOutputPath(e.to_string()))?;
 
@@ -113,7 +113,7 @@ const DANGEROUS_PATTERNS: &[&str] = &[
 /// # Returns
 ///
 /// `Ok(())` if content is safe, `Err(GeneratorError)` if dangerous patterns found
-pub fn validate_template_content(template_name: &str, content: &str) -> GeneratorResult<()> {
+pub(crate) fn validate_template_content(template_name: &str, content: &str) -> GeneratorResult<()> {
     for pattern in DANGEROUS_PATTERNS {
         if content.contains(pattern) {
             return Err(GeneratorError::DangerousTemplate(
@@ -135,7 +135,7 @@ pub fn validate_template_content(template_name: &str, content: &str) -> Generato
 /// # Returns
 ///
 /// `Ok(())` if exists, `Err(GeneratorError)` otherwise
-pub fn validate_template_directory(template_dir: &Path) -> GeneratorResult<()> {
+pub(crate) fn validate_template_directory(template_dir: &Path) -> GeneratorResult<()> {
     if !template_dir.exists() {
         return Err(GeneratorError::TemplateNotFound(template_dir.to_path_buf()));
     }
@@ -151,7 +151,7 @@ pub fn validate_template_directory(template_dir: &Path) -> GeneratorResult<()> {
 /// # Returns
 ///
 /// `Ok(())` if does not exist, `Err(GeneratorError)` if exists
-pub fn validate_project_directory_does_not_exist(project_dir: &Path) -> GeneratorResult<()> {
+pub(crate) fn validate_project_directory_does_not_exist(project_dir: &Path) -> GeneratorResult<()> {
     if project_dir.exists() {
         return Err(GeneratorError::DirectoryExists(
             project_dir.to_string_lossy().to_string(),
