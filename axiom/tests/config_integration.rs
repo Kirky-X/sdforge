@@ -16,11 +16,11 @@ mod config_integration_tests {
     #[test]
     fn test_default_config() {
         let config = AppConfig::default();
-        assert_eq!(config.server.host, "0.0.0.0");
-        assert_eq!(config.server.port, 8080);
-        assert_eq!(config.api.name, "axiom-api");
-        assert_eq!(config.api.version, "0.1.0");
-        assert!(config.server.cors.is_none());
+        assert_eq!(config.server.host(), "0.0.0.0");
+        assert_eq!(config.server.port(), 8080);
+        assert_eq!(config.api.name(), "axiom-api");
+        assert_eq!(config.api.version(), "0.1.0");
+        assert!(config.server.cors().is_none());
         assert!(config.rate_limit.is_none());
         assert!(config.authentication.is_none());
     }
@@ -28,11 +28,7 @@ mod config_integration_tests {
     #[test]
     #[cfg(feature = "security")]
     fn test_rate_limit_config_conversion() {
-        let file_config = RateLimitConfigFile {
-            max_requests: 100,
-            window_seconds: 60,
-            endpoints: std::collections::HashMap::new(),
-        };
+        let file_config = RateLimitConfigFile::new(100, 60, std::collections::HashMap::new());
 
         let rate_config = RateLimitConfig::try_from(file_config).unwrap();
         assert_eq!(rate_config.max_requests, 100);
@@ -46,17 +42,10 @@ mod config_integration_tests {
         let mut endpoints = std::collections::HashMap::new();
         endpoints.insert(
             "api/v1/users".to_string(),
-            RateLimitEndpointConfig {
-                max_requests: 50,
-                window_seconds: 30,
-            },
+            RateLimitEndpointConfig::new(50, 30),
         );
 
-        let file_config = RateLimitConfigFile {
-            max_requests: 100,
-            window_seconds: 60,
-            endpoints,
-        };
+        let file_config = RateLimitConfigFile::new(100, 60, endpoints);
 
         let rate_config = RateLimitConfig::try_from(file_config).unwrap();
         assert_eq!(rate_config.max_requests, 100);
@@ -65,31 +54,31 @@ mod config_integration_tests {
 
     #[test]
     fn test_cors_config() {
-        let config = CorsConfig {
-            allowed_origins: vec!["*".to_string()],
-            allowed_methods: vec!["GET".to_string(), "POST".to_string()],
-            allowed_headers: vec!["Content-Type".to_string()],
-            allow_credentials: false,
-            max_age: Some(3600),
-        };
+        let config = CorsConfig::new(
+            vec!["*".to_string()],
+            vec!["GET".to_string(), "POST".to_string()],
+            vec!["Content-Type".to_string()],
+            false,
+            Some(3600),
+        );
 
-        assert!(config.allowed_origins.contains(&"*".to_string()));
-        assert_eq!(config.allowed_methods.len(), 2);
-        assert_eq!(config.max_age, Some(3600));
+        assert!(config.allowed_origins().contains(&"*".to_string()));
+        assert_eq!(config.allowed_methods().len(), 2);
+        assert_eq!(config.max_age(), Some(3600));
     }
 
     #[test]
     fn test_build_cors_layer() {
-        let config = CorsConfig {
-            allowed_origins: vec![
+        let config = CorsConfig::new(
+            vec![
                 "http://localhost:3000".to_string(),
                 "https://example.com".to_string(),
             ],
-            allowed_methods: vec!["GET".to_string(), "POST".to_string()],
-            allowed_headers: vec!["Content-Type".to_string()],
-            allow_credentials: false,
-            max_age: Some(3600),
-        };
+            vec!["GET".to_string(), "POST".to_string()],
+            vec!["Content-Type".to_string()],
+            false,
+            Some(3600),
+        );
 
         let cors_layer = build_cors_layer(&config);
         assert!(cors_layer.is_ok());
@@ -97,13 +86,7 @@ mod config_integration_tests {
 
     #[test]
     fn test_build_cors_layer_empty_origins() {
-        let config = CorsConfig {
-            allowed_origins: vec![],
-            allowed_methods: vec!["GET".to_string()],
-            allowed_headers: vec![],
-            allow_credentials: false,
-            max_age: None,
-        };
+        let config = CorsConfig::new(vec![], vec!["GET".to_string()], vec![], false, None);
 
         let result = build_cors_layer(&config);
         // Empty origins should be allowed

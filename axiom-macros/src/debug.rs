@@ -54,7 +54,7 @@ pub struct ParamDebug {
 ///
 /// Collects debug metadata including API configuration, extracted parameters,
 /// and generated handler code for diagnostics purposes.
-pub fn collect_debug_info(
+pub(crate) fn collect_debug_info(
     fn_name: &str,
     api_config: &ApiConfigDebug,
     params: &[ParamDebug],
@@ -75,7 +75,7 @@ pub fn collect_debug_info(
 /// Format debug info as JSON for logging or display.
 ///
 /// Returns a pretty-printed JSON string representation of the debug information.
-pub fn debug_info_to_json(info: &MacroDebugInfo) -> String {
+pub(crate) fn debug_info_to_json(info: &MacroDebugInfo) -> String {
     format!(
         r#"{{"fn_name": "{}", "api_config": {}, "params": {}, "http_handler_length": {}, "mcp_handler_length": {}, "final_output_length": {} }}"#,
         info.fn_name,

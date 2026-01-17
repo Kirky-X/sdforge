@@ -19,18 +19,18 @@ use axum::http::HeaderValue;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
     /// Server host
-    pub host: String,
+    pub(crate) host: String,
     /// Server port
-    pub port: u16,
+    pub(crate) port: u16,
     /// Request timeout in seconds (default: 30)
     #[serde(default = "default_request_timeout")]
-    pub request_timeout_secs: u64,
+    pub(crate) request_timeout_secs: u64,
     /// TLS configuration
     #[serde(default)]
-    pub tls: Option<TlsConfig>,
+    pub(crate) tls: Option<TlsConfig>,
     /// CORS configuration
     #[serde(default)]
-    pub cors: Option<CorsConfig>,
+    pub(crate) cors: Option<CorsConfig>,
 }
 
 /// Default request timeout: 30 seconds
@@ -42,9 +42,9 @@ fn default_request_timeout() -> u64 {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TlsConfig {
     /// Path to TLS certificate
-    pub cert_path: PathBuf,
+    pub(crate) cert_path: PathBuf,
     /// Path to TLS private key
-    pub key_path: PathBuf,
+    pub(crate) key_path: PathBuf,
 }
 
 /// CORS configuration
@@ -52,30 +52,30 @@ pub struct TlsConfig {
 pub struct CorsConfig {
     /// Allowed origins
     #[serde(default)]
-    pub allowed_origins: Vec<String>,
+    pub(crate) allowed_origins: Vec<String>,
     /// Allowed methods
     #[serde(default)]
-    pub allowed_methods: Vec<String>,
+    pub(crate) allowed_methods: Vec<String>,
     /// Allowed headers
     #[serde(default)]
-    pub allowed_headers: Vec<String>,
+    pub(crate) allowed_headers: Vec<String>,
     /// Allow credentials
     #[serde(default)]
-    pub allow_credentials: bool,
+    pub(crate) allow_credentials: bool,
     /// Max age in seconds
     #[serde(default)]
-    pub max_age: Option<u64>,
+    pub(crate) max_age: Option<u64>,
 }
 
 /// API configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiConfig {
     /// API name
-    pub name: String,
+    pub(crate) name: String,
     /// API version
-    pub version: String,
+    pub(crate) version: String,
     /// API description
-    pub description: Option<String>,
+    pub(crate) description: Option<String>,
 }
 
 /// Database configuration
@@ -110,21 +110,46 @@ pub enum DatabaseConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RateLimitConfigFile {
     /// Max requests per window
-    pub max_requests: u32,
+    pub(crate) max_requests: u32,
     /// Window duration in seconds
-    pub window_seconds: u32,
+    pub(crate) window_seconds: u32,
     /// Per-endpoint rate limits
     #[serde(default)]
-    pub endpoints: HashMap<String, RateLimitEndpointConfig>,
+    pub(crate) endpoints: HashMap<String, RateLimitEndpointConfig>,
+}
+
+impl RateLimitConfigFile {
+    /// Create new RateLimitConfigFile
+    pub fn new(
+        max_requests: u32,
+        window_seconds: u32,
+        endpoints: HashMap<String, RateLimitEndpointConfig>,
+    ) -> Self {
+        Self {
+            max_requests,
+            window_seconds,
+            endpoints,
+        }
+    }
 }
 
 /// Per-endpoint rate limit configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RateLimitEndpointConfig {
     /// Max requests for this endpoint
-    pub max_requests: u32,
+    pub(crate) max_requests: u32,
     /// Window duration in seconds for this endpoint
-    pub window_seconds: u32,
+    pub(crate) window_seconds: u32,
+}
+
+impl RateLimitEndpointConfig {
+    /// Create new RateLimitEndpointConfig
+    pub fn new(max_requests: u32, window_seconds: u32) -> Self {
+        Self {
+            max_requests,
+            window_seconds,
+        }
+    }
 }
 
 /// Authentication configuration
@@ -244,6 +269,166 @@ impl Default for AppConfig {
             tracing: None,
             custom: HashMap::new(),
         }
+    }
+}
+
+impl ServerConfig {
+    /// Get server host
+    pub fn host(&self) -> &str {
+        &self.host
+    }
+
+    /// Set server host
+    pub fn set_host(&mut self, host: String) {
+        self.host = host;
+    }
+
+    /// Get server port
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// Set server port
+    pub fn set_port(&mut self, port: u16) {
+        self.port = port;
+    }
+
+    /// Get request timeout in seconds
+    pub fn request_timeout_secs(&self) -> u64 {
+        self.request_timeout_secs
+    }
+
+    /// Set request timeout in seconds
+    pub fn set_request_timeout_secs(&mut self, timeout: u64) {
+        self.request_timeout_secs = timeout;
+    }
+
+    /// Get TLS configuration
+    pub fn tls(&self) -> Option<&TlsConfig> {
+        self.tls.as_ref()
+    }
+
+    /// Set TLS configuration
+    pub fn set_tls(&mut self, tls: Option<TlsConfig>) {
+        self.tls = tls;
+    }
+
+    /// Get CORS configuration
+    pub fn cors(&self) -> Option<&CorsConfig> {
+        self.cors.as_ref()
+    }
+
+    /// Set CORS configuration
+    pub fn set_cors(&mut self, cors: Option<CorsConfig>) {
+        self.cors = cors;
+    }
+
+    /// Create new ServerConfig with custom values
+    pub fn new(host: String, port: u16) -> Self {
+        Self {
+            host,
+            port,
+            request_timeout_secs: 30,
+            tls: None,
+            cors: None,
+        }
+    }
+}
+
+impl TlsConfig {
+    /// Get TLS certificate path
+    pub fn cert_path(&self) -> &PathBuf {
+        &self.cert_path
+    }
+
+    /// Get TLS private key path
+    pub fn key_path(&self) -> &PathBuf {
+        &self.key_path
+    }
+}
+
+impl CorsConfig {
+    /// Create new CorsConfig with given values
+    pub fn new(
+        allowed_origins: Vec<String>,
+        allowed_methods: Vec<String>,
+        allowed_headers: Vec<String>,
+        allow_credentials: bool,
+        max_age: Option<u64>,
+    ) -> Self {
+        Self {
+            allowed_origins,
+            allowed_methods,
+            allowed_headers,
+            allow_credentials,
+            max_age,
+        }
+    }
+
+    /// Get allowed origins
+    pub fn allowed_origins(&self) -> &[String] {
+        &self.allowed_origins
+    }
+
+    /// Get allowed methods
+    pub fn allowed_methods(&self) -> &[String] {
+        &self.allowed_methods
+    }
+
+    /// Get allowed headers
+    pub fn allowed_headers(&self) -> &[String] {
+        &self.allowed_headers
+    }
+
+    /// Check if credentials are allowed
+    pub fn allow_credentials(&self) -> bool {
+        self.allow_credentials
+    }
+
+    /// Get max age
+    pub fn max_age(&self) -> Option<u64> {
+        self.max_age
+    }
+}
+
+impl ApiConfig {
+    /// Create new ApiConfig with given values
+    pub fn new(name: String, version: String, description: Option<String>) -> Self {
+        Self {
+            name,
+            version,
+            description,
+        }
+    }
+
+    /// Get API name
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Get API version
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    /// Get API description
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    /// Set API name
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
+    }
+
+    /// Set API version
+    pub fn set_version(&mut self, version: String) {
+        self.version = version;
+    }
+
+    /// Set API description
+    pub fn set_description(&mut self, description: Option<String>) {
+        self.description = description;
     }
 }
 

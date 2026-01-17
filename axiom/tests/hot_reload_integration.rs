@@ -36,10 +36,10 @@ version = "v1"
 
         // Verify initial config was loaded
         let config = watcher.get().await;
-        assert_eq!(config.server.host, "127.0.0.1");
-        assert_eq!(config.server.port, 8080);
-        assert_eq!(config.api.name, "test-api");
-        assert_eq!(config.api.version, "v1");
+        assert_eq!(config.server.host(), "127.0.0.1");
+        assert_eq!(config.server.port(), 8080);
+        assert_eq!(config.api.name(), "test-api");
+        assert_eq!(config.api.version(), "v1");
     }
 
     /// Test config reload functionality
@@ -63,7 +63,7 @@ version = "v1"
         let (watcher, mut event_rx) = ConfigWatcher::new(config_path.clone()).unwrap();
 
         // Verify initial config
-        assert_eq!(watcher.get().await.server.port, 8080);
+        assert_eq!(watcher.get().await.server.port(), 8080);
 
         // Update config file
         let updated_config = r#"
@@ -82,10 +82,10 @@ version = "v2"
 
         // Verify updated config
         let config = watcher.get().await;
-        assert_eq!(config.server.host, "0.0.0.0");
-        assert_eq!(config.server.port, 9090);
-        assert_eq!(config.api.name, "updated-api");
-        assert_eq!(config.api.version, "v2");
+        assert_eq!(config.server.host(), "0.0.0.0");
+        assert_eq!(config.server.port(), 9090);
+        assert_eq!(config.api.name(), "updated-api");
+        assert_eq!(config.api.version(), "v2");
 
         // Verify reload event was sent
         let event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
@@ -94,7 +94,7 @@ version = "v2"
             .unwrap();
         match event {
             ConfigEvent::Reloaded(config) => {
-                assert_eq!(config.server.port, 9090);
+                assert_eq!(config.server.port(), 9090);
             }
             ConfigEvent::Error(msg) => {
                 panic!("Unexpected error event: {}", msg);
@@ -172,7 +172,7 @@ version = "v1"
 
         let loader = ConfigLoader::new(toml_path, "AXIOM");
         let config = loader.load().unwrap();
-        assert_eq!(config.server.port, 3000);
+        assert_eq!(config.server.port(), 3000);
     }
 
     /// Test multiple config updates
@@ -213,7 +213,7 @@ version = "v1"
             watcher.reload().await.unwrap();
 
             // Verify port was updated
-            assert_eq!(watcher.get().await.server.port, 8080 + i);
+            assert_eq!(watcher.get().await.server.port(), 8080 + i);
 
             // Verify event was sent
             let event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
@@ -222,7 +222,7 @@ version = "v1"
                 .unwrap();
             match event {
                 ConfigEvent::Reloaded(cfg) => {
-                    assert_eq!(cfg.server.port, 8080 + i);
+                    assert_eq!(cfg.server.port(), 8080 + i);
                 }
                 ConfigEvent::Error(msg) => {
                     panic!("Unexpected error: {}", msg);
