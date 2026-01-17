@@ -215,14 +215,10 @@ mod error_handling_tests {
     #[tokio::test]
     #[cfg(feature = "security")]
     async fn test_auth_context_empty() {
-        let context = AuthContext {
-            user_id: None,
-            permissions: vec![],
-            metadata: Default::default(),
-        };
+        let context = AuthContext::new(None, vec![], Default::default());
 
-        assert!(context.user_id.is_none());
-        assert!(context.permissions.is_empty());
+        assert!(context.user_id().is_none());
+        assert!(context.permissions().is_empty());
     }
 
     #[tokio::test]
@@ -230,13 +226,13 @@ mod error_handling_tests {
     async fn test_auth_context_many_permissions() {
         let permissions: Vec<String> = (0..100).map(|i| format!("permission-{}", i)).collect();
 
-        let context = AuthContext {
-            user_id: Some("user-100".to_string()),
+        let context = AuthContext::new(
+            Some("user-100".to_string()),
             permissions,
-            metadata: Default::default(),
-        };
+            Default::default(),
+        );
 
-        assert_eq!(context.permissions.len(), 100);
+        assert_eq!(context.permissions().len(), 100);
     }
 }
 
@@ -250,68 +246,43 @@ mod boundary_tests {
     #[tokio::test]
     async fn test_server_config_boundaries() {
         // Min port
-        let min_config = ServerConfig {
-            host: "0.0.0.0".to_string(),
-            port: 1,
-            request_timeout_secs: 30,
-            tls: None,
-            cors: None,
-        };
-        assert_eq!(min_config.port, 1);
+        let min_config = ServerConfig::new("0.0.0.0".to_string(), 1);
+        assert_eq!(min_config.port(), 1);
 
         // Max port
-        let max_config = ServerConfig {
-            host: "0.0.0.0".to_string(),
-            port: 65535,
-            request_timeout_secs: 30,
-            tls: None,
-            cors: None,
-        };
-        assert_eq!(max_config.port, 65535);
+        let max_config = ServerConfig::new("0.0.0.0".to_string(), 65535);
+        assert_eq!(max_config.port(), 65535);
     }
 
     #[tokio::test]
     async fn test_cors_config_boundaries() {
         // Empty origins
-        let empty = CorsConfig {
-            allowed_origins: vec![],
-            allowed_methods: vec![],
-            allowed_headers: vec![],
-            allow_credentials: false,
-            max_age: None,
-        };
-        assert!(empty.allowed_origins.is_empty());
+        let empty = CorsConfig::new(vec![], vec![], vec![], false, None);
+        assert!(empty.allowed_origins().is_empty());
 
         // Wildcard origin
-        let wildcard = CorsConfig {
-            allowed_origins: vec!["*".to_string()],
-            allowed_methods: vec!["*".to_string()],
-            allowed_headers: vec!["*".to_string()],
-            allow_credentials: false,
-            max_age: Some(86400),
-        };
-        assert!(wildcard.allowed_origins.contains(&"*".to_string()));
-        assert_eq!(wildcard.max_age, Some(86400));
+        let wildcard = CorsConfig::new(
+            vec!["*".to_string()],
+            vec!["*".to_string()],
+            vec!["*".to_string()],
+            false,
+            Some(86400),
+        );
+        assert!(wildcard.allowed_origins().contains(&"*".to_string()));
+        assert_eq!(wildcard.max_age(), Some(86400));
     }
 
     #[tokio::test]
     async fn test_api_config_boundaries() {
         // Long name
         let long_name = "a".repeat(1000);
-        let config = ApiConfig {
-            name: long_name.clone(),
-            version: "v1".to_string(),
-            description: None,
-        };
-        assert_eq!(config.name.len(), 1000);
+        let config = ApiConfig::new(long_name.clone(), "v1".to_string(), None);
+        assert_eq!(config.name().len(), 1000);
 
         // Empty version
-        let empty_version = ApiConfig {
-            name: "test".to_string(),
-            version: "".to_string(),
-            description: Some("Test".to_string()),
-        };
-        assert!(empty_version.version.is_empty());
+        let empty_version =
+            ApiConfig::new("test".to_string(), "".to_string(), Some("Test".to_string()));
+        assert!(empty_version.version().is_empty());
     }
 
     #[tokio::test]
@@ -383,13 +354,9 @@ mod edge_case_tests {
     async fn test_empty_permissions() {
         use axiom::security::AuthContext;
 
-        let context = AuthContext {
-            user_id: Some("user".to_string()),
-            permissions: vec![],
-            metadata: Default::default(),
-        };
+        let context = AuthContext::new(Some("user".to_string()), vec![], Default::default());
 
-        assert!(context.permissions.is_empty());
+        assert!(context.permissions().is_empty());
     }
 
     #[tokio::test]
@@ -398,13 +365,13 @@ mod edge_case_tests {
         use axiom::security::AuthContext;
 
         let long_permission = "a".repeat(10000);
-        let context = AuthContext {
-            user_id: Some("user".to_string()),
-            permissions: vec![long_permission],
-            metadata: Default::default(),
-        };
+        let context = AuthContext::new(
+            Some("user".to_string()),
+            vec![long_permission],
+            Default::default(),
+        );
 
-        assert_eq!(context.permissions[0].len(), 10000);
+        assert_eq!(context.permissions()[0].len(), 10000);
     }
 }
 

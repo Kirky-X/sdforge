@@ -133,14 +133,14 @@ mod dual_protocol_tests {
         // Auth context should be usable by both protocols
         use axiom::security::AuthContext;
 
-        let context = AuthContext {
-            user_id: Some("user-123".to_string()),
-            permissions: vec!["read".to_string(), "write".to_string()],
-            metadata: Default::default(),
-        };
+        let context = AuthContext::new(
+            Some("user-123".to_string()),
+            vec!["read".to_string(), "write".to_string()],
+            Default::default(),
+        );
 
-        assert_eq!(context.user_id, Some("user-123".to_string()));
-        assert_eq!(context.permissions.len(), 2);
+        assert_eq!(context.user_id(), Some("user-123"));
+        assert_eq!(context.permissions().len(), 2);
     }
 
     #[tokio::test]
@@ -151,12 +151,12 @@ mod dual_protocol_tests {
         let config = AppConfig::default();
 
         // Server config should be usable for HTTP
-        assert_eq!(config.server.host, "0.0.0.0");
-        assert_eq!(config.server.port, 8080);
+        assert_eq!(config.server.host(), "0.0.0.0");
+        assert_eq!(config.server.port(), 8080);
 
         // API config should be protocol-agnostic
-        assert_eq!(config.api.name, "axiom-api");
-        assert_eq!(config.api.version, "0.1.0");
+        assert_eq!(config.api.name(), "axiom-api");
+        assert_eq!(config.api.version(), "0.1.0");
     }
 }
 
@@ -304,11 +304,11 @@ mod security_feature_tests {
         use axiom::security::AuthContext;
 
         let logger = AuditLogger::new();
-        let context = AuthContext {
-            user_id: Some("user-1".to_string()),
-            permissions: vec!["read".to_string()],
-            metadata: Default::default(),
-        };
+        let context = AuthContext::new(
+            Some("user-1".to_string()),
+            vec!["read".to_string()],
+            Default::default(),
+        );
 
         logger
             .log(&context, "test_action", "/api/test", true, None)

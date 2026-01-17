@@ -31,17 +31,17 @@ mod http_integration_tests {
     async fn test_cors_config() {
         use axiom::config::CorsConfig;
 
-        let config = CorsConfig {
-            allowed_origins: vec!["*".to_string()],
-            allowed_methods: vec!["GET".to_string(), "POST".to_string()],
-            allowed_headers: vec!["Content-Type".to_string()],
-            allow_credentials: false,
-            max_age: Some(3600),
-        };
+        let config = CorsConfig::new(
+            vec!["*".to_string()],
+            vec!["GET".to_string(), "POST".to_string()],
+            vec!["Content-Type".to_string()],
+            false,
+            Some(3600),
+        );
 
-        assert!(config.allowed_origins.contains(&"*".to_string()));
-        assert_eq!(config.allowed_methods.len(), 2);
-        assert_eq!(config.max_age, Some(3600));
+        assert!(config.allowed_origins().contains(&"*".to_string()));
+        assert_eq!(config.allowed_methods().len(), 2);
+        assert_eq!(config.max_age(), Some(3600));
     }
 
     #[tokio::test]
@@ -260,11 +260,11 @@ mod http_integration_tests {
         use axiom::security::AuditLogger;
 
         let logger = AuditLogger::new();
-        let context = axiom::security::AuthContext {
-            user_id: Some("user-123".to_string()),
-            permissions: vec!["read".to_string()],
-            metadata: Default::default(),
-        };
+        let context = axiom::security::AuthContext::new(
+            Some("user-123".to_string()),
+            vec!["read".to_string()],
+            Default::default(),
+        );
 
         logger
             .log(&context, "test_action", "/api/test", true, None)
@@ -302,38 +302,32 @@ mod http_integration_tests {
         use axiom::config::AppConfig;
 
         let config = AppConfig::default();
-        assert_eq!(config.server.host, "0.0.0.0");
-        assert_eq!(config.server.port, 8080);
+        assert_eq!(config.server.host(), "0.0.0.0");
+        assert_eq!(config.server.port(), 8080);
     }
 
     #[tokio::test]
     async fn test_server_config() {
         use axiom::config::ServerConfig;
 
-        let config = ServerConfig {
-            host: "127.0.0.1".to_string(),
-            port: 3000,
-            request_timeout_secs: 30,
-            tls: None,
-            cors: None,
-        };
+        let config = ServerConfig::new("127.0.0.1".to_string(), 3000);
 
-        assert_eq!(config.host, "127.0.0.1");
-        assert_eq!(config.port, 3000);
+        assert_eq!(config.host(), "127.0.0.1");
+        assert_eq!(config.port(), 3000);
     }
 
     #[tokio::test]
     async fn test_api_config() {
         use axiom::config::ApiConfig;
 
-        let config = ApiConfig {
-            name: "my-api".to_string(),
-            version: "v2".to_string(),
-            description: Some("My API".to_string()),
-        };
+        let config = ApiConfig::new(
+            "my-api".to_string(),
+            "v2".to_string(),
+            Some("My API".to_string()),
+        );
 
-        assert_eq!(config.name, "my-api");
-        assert_eq!(config.version, "v2");
+        assert_eq!(config.name(), "my-api");
+        assert_eq!(config.version(), "v2");
     }
 
     #[tokio::test]
@@ -362,14 +356,14 @@ mod http_integration_tests {
     async fn test_auth_context() {
         use axiom::security::AuthContext;
 
-        let context = AuthContext {
-            user_id: Some("user-123".to_string()),
-            permissions: vec!["read".to_string()],
-            metadata: Default::default(),
-        };
+        let context = AuthContext::new(
+            Some("user-123".to_string()),
+            vec!["read".to_string()],
+            Default::default(),
+        );
 
-        assert_eq!(context.user_id, Some("user-123".to_string()));
-        assert_eq!(context.permissions.len(), 1);
+        assert_eq!(context.user_id(), Some("user-123"));
+        assert_eq!(context.permissions().len(), 1);
     }
 
     #[tokio::test]

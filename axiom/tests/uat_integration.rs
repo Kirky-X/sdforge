@@ -16,16 +16,10 @@ mod uat_tests {
     #[tokio::test]
     async fn test_uat_basic_api_service_setup() {
         // User wants to create a basic API service
-        let config = ServerConfig {
-            host: "0.0.0.0".to_string(),
-            port: 8080,
-            request_timeout_secs: 30,
-            tls: None,
-            cors: None,
-        };
+        let config = ServerConfig::new("0.0.0.0".to_string(), 8080);
 
-        assert_eq!(config.host, "0.0.0.0");
-        assert_eq!(config.port, 8080);
+        assert_eq!(config.host(), "0.0.0.0");
+        assert_eq!(config.port(), 8080);
     }
 
     /// UAT-002: API with Error Handling
@@ -106,20 +100,20 @@ mod uat_tests {
     #[tokio::test]
     async fn test_uat_cors_configuration() {
         // User configures CORS for their API
-        let cors = CorsConfig {
-            allowed_origins: vec!["https://example.com".to_string()],
-            allowed_methods: vec!["GET".to_string(), "POST".to_string()],
-            allowed_headers: vec!["Content-Type".to_string()],
-            allow_credentials: true,
-            max_age: Some(86400),
-        };
+        let cors = CorsConfig::new(
+            vec!["https://example.com".to_string()],
+            vec!["GET".to_string(), "POST".to_string()],
+            vec!["Content-Type".to_string()],
+            true,
+            Some(86400),
+        );
 
         assert!(cors
-            .allowed_origins
+            .allowed_origins()
             .iter()
             .any(|s| s == "https://example.com"));
-        assert!(cors.allow_credentials);
-        assert_eq!(cors.max_age, Some(86400));
+        assert!(cors.allow_credentials());
+        assert_eq!(cors.max_age(), Some(86400));
     }
 
     /// UAT-007: API Metadata
@@ -183,18 +177,18 @@ mod uat_tests {
         // User creates auth context with multiple permissions
         use axiom::security::AuthContext;
 
-        let context = AuthContext {
-            user_id: Some("user-123".to_string()),
-            permissions: vec![
+        let context = AuthContext::new(
+            Some("user-123".to_string()),
+            vec![
                 "users:read".to_string(),
                 "users:write".to_string(),
                 "admin:access".to_string(),
             ],
-            metadata: Default::default(),
-        };
+            Default::default(),
+        );
 
-        assert!(context.permissions.contains(&"users:read".to_string()));
-        assert!(context.permissions.contains(&"admin:access".to_string()));
+        assert!(context.permissions().contains(&"users:read".to_string()));
+        assert!(context.permissions().contains(&"admin:access".to_string()));
     }
 
     /// UAT-011: Service Error with Details
@@ -301,15 +295,9 @@ mod uat_tests {
 
         assert!(empty_metadata.name().is_empty());
 
-        let no_cors = CorsConfig {
-            allowed_origins: vec![],
-            allowed_methods: vec![],
-            allowed_headers: vec![],
-            allow_credentials: false,
-            max_age: None,
-        };
+        let no_cors = CorsConfig::new(vec![], vec![], vec![], false, None);
 
-        assert!(no_cors.allowed_origins.is_empty());
+        assert!(no_cors.allowed_origins().is_empty());
     }
 
     /// UAT-014: Service Response Serialization Roundtrip

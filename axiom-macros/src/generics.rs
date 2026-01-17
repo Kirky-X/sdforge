@@ -24,7 +24,7 @@ pub enum GenericBound {
 /// Parse generic parameters from function signature.
 ///
 /// Returns a vector of GenericParamInfo for each generic parameter found.
-pub fn parse_generics(generics: &Generics) -> Vec<GenericParamInfo> {
+pub(crate) fn parse_generics(generics: &Generics) -> Vec<GenericParamInfo> {
     let mut params = Vec::new();
 
     for param in &generics.params {
@@ -95,7 +95,7 @@ fn path_to_string(path: &syn::Path) -> String {
 /// Check if a type contains generic parameters.
 ///
 /// Returns true if the type is a generic type like `Option<T>` or `Vec<T>`.
-pub fn is_generic_type(ty: &Type) -> bool {
+pub(crate) fn is_generic_type(ty: &Type) -> bool {
     match ty {
         Type::Path(type_path) => {
             if let Some(segment) = type_path.path.segments.last() {
@@ -112,7 +112,7 @@ pub fn is_generic_type(ty: &Type) -> bool {
 ///
 /// For example, `Option<String>` returns `String`, `Vec<i32>` returns `i32`.
 /// Returns `None` if the type is not a generic wrapper.
-pub fn extract_inner_type(ty: &Type) -> Option<Type> {
+pub(crate) fn extract_inner_type(ty: &Type) -> Option<Type> {
     match ty {
         Type::Path(type_path) => {
             if let Some(segment) = type_path.path.segments.last() {
@@ -131,7 +131,7 @@ pub fn extract_inner_type(ty: &Type) -> Option<Type> {
 /// Generate where clause TokenStream for generic constraints.
 ///
 /// Returns the existing where clause or an empty TokenStream if none exists.
-pub fn generate_where_clause(generics: &Generics) -> proc_macro2::TokenStream {
+pub(crate) fn generate_where_clause(generics: &Generics) -> proc_macro2::TokenStream {
     if generics.where_clause.is_some() {
         let where_clause = &generics.where_clause;
         quote::quote! { #where_clause }

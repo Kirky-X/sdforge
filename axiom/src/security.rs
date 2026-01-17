@@ -49,24 +49,87 @@ pub enum AuthError {
 #[derive(Debug, Clone)]
 pub struct AuthContext {
     /// User ID
-    pub user_id: Option<String>,
+    pub(crate) user_id: Option<String>,
     /// User permissions
-    pub permissions: Vec<String>,
+    pub(crate) permissions: Vec<String>,
     /// Request metadata
-    pub metadata: AuthMetadata,
+    pub(crate) metadata: AuthMetadata,
 }
 
 /// Authentication metadata
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AuthMetadata {
     /// Client IP address
-    pub client_ip: Option<String>,
+    pub(crate) client_ip: Option<String>,
     /// User agent
-    pub user_agent: Option<String>,
+    pub(crate) user_agent: Option<String>,
     /// Request ID
-    pub request_id: String,
+    pub(crate) request_id: String,
     /// Timestamp
-    pub timestamp: i64,
+    pub(crate) timestamp: i64,
+}
+
+impl AuthContext {
+    /// Get user ID
+    pub fn user_id(&self) -> Option<&str> {
+        self.user_id.as_deref()
+    }
+
+    /// Get user permissions
+    pub fn permissions(&self) -> &[String] {
+        &self.permissions
+    }
+
+    /// Get authentication metadata
+    pub fn metadata(&self) -> &AuthMetadata {
+        &self.metadata
+    }
+
+    /// Check if user has a specific permission
+    pub fn has_permission(&self, permission: &str) -> bool {
+        self.permissions.contains(&permission.to_string())
+    }
+
+    /// Create new AuthContext
+    pub fn new(user_id: Option<String>, permissions: Vec<String>, metadata: AuthMetadata) -> Self {
+        Self {
+            user_id,
+            permissions,
+            metadata,
+        }
+    }
+}
+
+impl AuthMetadata {
+    /// Get client IP address
+    pub fn client_ip(&self) -> Option<&str> {
+        self.client_ip.as_deref()
+    }
+
+    /// Get user agent
+    pub fn user_agent(&self) -> Option<&str> {
+        self.user_agent.as_deref()
+    }
+
+    /// Get request ID
+    pub fn request_id(&self) -> &str {
+        &self.request_id
+    }
+
+    /// Get timestamp
+    pub fn timestamp(&self) -> i64 {
+        self.timestamp
+    }
+
+    /// Create new AuthMetadata
+    pub fn new(client_ip: Option<String>, user_agent: Option<String>) -> Self {
+        Self {
+            client_ip,
+            user_agent,
+            request_id: Uuid::new_v4().to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+        }
+    }
 }
 
 /// Authentication result
