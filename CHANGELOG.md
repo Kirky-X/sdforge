@@ -5,6 +5,77 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本规范](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## [0.2.0] - 2025-01-17
+
+### 重大变更 ⚠️
+
+**仓库结构重组**
+
+本版本对项目结构进行了重大重组，以简化维护并统一品牌形象。
+
+#### 破坏性变更
+
+- **重命名 crate**: `axiom` → `sdforge`, `axiom-macros` → `sdforge-macros`
+- **导入路径变更**:
+  - `use axiom::prelude::*` → `use sdforge::prelude::*`
+  - `use axiom_macros::service_api` → `use sdforge_macros::service_api`
+- **依赖声明变更**:
+  ```toml
+  # 旧
+  axiom = "0.1"
+  
+  # 新
+  sdforge = "0.2"
+  ```
+- **项目结构变更**: 从 3 个 workspace crate 合并为 2 个
+  - `axiom/`, `axiom-cli/`, `axiom-macros/` → `src/`, `macros/`
+
+#### 新增功能
+
+- **CLI 作为可选特性**: CLI 工具现在通过 `cli` 特性控制编译
+  ```toml
+  sdforge = { version = "0.2", features = ["cli"] }
+  ```
+  - 默认不编译 CLI，减少不必要的依赖
+  - 需要 CLI 时显式启用 `cli` 特性
+
+#### 新特性
+
+| 特性 | 说明 | 默认启用 |
+|------|------|---------|
+| `cli` | CLI 工具支持 | ❌ |
+
+#### 已知问题
+
+- 从 `axiom` 迁移需要更新所有导入路径和 Cargo.toml 依赖声明
+
+### 迁移指南
+
+1. 更新 `Cargo.toml`:
+   ```toml
+   [dependencies]
+   sdforge = "0.2"
+   ```
+
+2. 更新导入语句:
+   ```rust
+   // 库导入
+   use sdforge::prelude::*;
+   
+   // 宏导入
+   use sdforge_macros::service_api;
+   ```
+
+3. 如需 CLI 工具，启用 `cli` 特性:
+   ```toml
+   sdforge = { version = "0.2", features = ["cli"] }
+   ```
+
+4. 运行 CLI:
+   ```bash
+   cargo run --features cli -- --help
+   ```
+
 ## [0.1.0] - 2024-01-01
 
 ### 新增功能

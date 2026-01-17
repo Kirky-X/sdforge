@@ -81,7 +81,17 @@ Add SDForge to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.1", features = ["http"] }
+sdforge = { version = "0.2", features = ["http"] }
+```
+
+**CLI Tool**: To use the CLI, enable the `cli` feature:
+```toml
+sdforge = { version = "0.2", features = ["cli"] }
+```
+
+Then run:
+```bash
+cargo run --features cli -- --help
 ```
 
 </div>
@@ -490,25 +500,29 @@ at your option.
 
 ```
 sdforge/
-├── sdforge/              # Main framework crate
+├── src/                # Main framework crate
+│   ├── core/         # Core types and error handling
+│   ├── http/         # HTTP protocol implementation
+│   ├── mcp/          # MCP protocol implementation
+│   ├── security/     # Security features
+│   ├── cache/        # Caching implementation
+│   ├── websocket/    # WebSocket support
+│   ├── grpc/         # gRPC support
+│   ├── config/       # Configuration management
+│   ├── cli/          # CLI tool (optional, requires `cli` feature)
+│   ├── lib.rs        # Library entry point
+│   └── main.rs       # CLI binary entry point
+├── macros/            # Procedural macros crate
 │   ├── src/
-│   │   ├── core/       # Core types and error handling
-│   │   ├── http/       # HTTP protocol implementation
-│   │   ├── mcp/        # MCP protocol implementation
-│   │   ├── security/   # Security features
-│   │   ├── cache/      # Caching implementation
-│   │   ├── websocket/  # WebSocket support
-│   │   ├── grpc/       # gRPC support
-│   │   └── config/     # Configuration management
 │   └── Cargo.toml
-├── sdforge-macros/       # Procedural macros crate
-│   └── Cargo.toml
-├── sdforge-cli/          # CLI tool for project generation
-│   ├── src/
-│   └── Cargo.toml
-├── docs/               # Documentation
-├── .github/            # GitHub workflows
-└── scripts/            # Build and utility scripts
+├── docs/              # Documentation
+├── .github/           # GitHub workflows
+└── scripts/           # Build and utility scripts
+```
+
+**Note**: The CLI binary is only compiled when the `cli` feature is enabled:
+```toml
+sdforge = { version = "0.2", features = ["cli"] }
 ```
 
 ---
