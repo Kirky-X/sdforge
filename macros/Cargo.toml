@@ -1,0 +1,33 @@
+[package]
+name = "sdforge-macros"
+version.workspace = true
+edition.workspace = true
+description = "Procedural macros for SDForge framework"
+license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/sdforge-macros"
+
+[dependencies]
+proc-macro2 = { workspace = true }
+syn = { workspace = true, features = ["full", "extra-traits"] }
+quote = { workspace = true }
+darling = { workspace = true }
+proc-macro-error = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+prettyplease = { workspace = true, optional = true }
+axum = { version = "0.8.8", optional = true }
+tokio = { version = "1.41", optional = true, features = ["sync"] }
+
+[features]
+default = ["http"]
+http = ["dep:axum", "dep:tokio"]
+debug = ["dep:prettyplease"]
+
+[lib]
+proc-macro = true
+
+[dev-dependencies]
+trybuild = "1.0"
+pretty_assertions = "1.4"
