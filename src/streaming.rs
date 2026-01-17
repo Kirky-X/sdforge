@@ -138,7 +138,22 @@ where
             next = stream.next() => next,
         } {
             let event = mapper(item);
-            let data = serde_json::to_string(&event).unwrap_or_default();
+
+            // Security fix: Handle serialization errors properly instead of silently failing
+            // Log the error and send an error event to the client
+            let data = match serde_json::to_string(&event) {
+                Ok(data) => data,
+                Err(e) => {
+                    #[cfg(feature = "logging")]
+                    tracing::error!(error = %e, "Failed to serialize SSE event");
+                    // Send error event instead of silently failing
+                    serde_json::to_string(&StreamEvent::error(format!(
+                        "Serialization error: {}",
+                        e
+                    )))
+                    .unwrap_or_else(|_| r#"{"error":"Serialization failed"}"#.to_string())
+                }
+            };
             let sse = format!("data: {}\n\n", data);
 
             if tx.send(Ok(sse)).await.is_err() {

@@ -59,9 +59,10 @@ pub enum ApiError {
     },
 
     /// Internal server error
-    #[error("Internal server error: {message}")]
+    /// Security: message is sanitized to not leak internal implementation details
+    #[error("Internal server error")]
     Internal {
-        /// The error message describing the internal error
+        /// Sanitized error message (never contains sensitive data like paths, stack traces, or internal error details)
         message: String,
         /// A unique identifier for this error (for debugging)
         error_id: String,

@@ -81,7 +81,16 @@ inventory::collect!(GrpcRoute);
 #[cfg(feature = "grpc")]
 /// Build gRPC server
 pub async fn build_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let addr = addr.parse()?;
+    // Security fix: Validate address format before parsing to prevent information disclosure
+    let addr = match addr.parse::<std::net::SocketAddr>() {
+        Ok(addr) => addr,
+        Err(e) => {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid gRPC server address format: {}", e),
+            )));
+        }
+    };
     let service = AxiomGrpcService::default();
 
     println!("gRPC server listening on {}", addr);
@@ -101,7 +110,16 @@ pub async fn build_server_with_config(
     addr: &str,
     _config: GrpcServerConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let addr = addr.parse()?;
+    // Security fix: Validate address format before parsing to prevent information disclosure
+    let addr = match addr.parse::<std::net::SocketAddr>() {
+        Ok(addr) => addr,
+        Err(e) => {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Invalid gRPC server address format: {}", e),
+            )));
+        }
+    };
     let service = AxiomGrpcService::default();
 
     println!("gRPC server listening on {}", addr);
