@@ -183,6 +183,11 @@ pub fn build_with_config(
         axum::http::header::CACHE_CONTROL,
         axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate"),
     ));
+    // Security fix: Add Content-Security-Policy header to prevent XSS attacks
+    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+        axum::http::header::CONTENT_SECURITY_POLICY,
+        axum::http::HeaderValue::from_static("default-src 'self'"),
+    ));
 
     // Apply rate limiting middleware
     #[cfg(feature = "security")]
@@ -228,6 +233,12 @@ pub fn build_with_config(
                         .unwrap_or("unknown")
                         .to_string();
 
+                    // Security fix: Validate prefix is not empty before checking
+                    // This prevents authentication bypass when prefix is empty
+                    if prefix.is_empty() {
+                        return Err(AuthError::MissingAuth);
+                    }
+
                     if header_value.starts_with(&prefix) {
                         let key = &header_value[prefix.len()..];
                         if let Some(permissions) = auth.validate_key(key, &client_ip) {
@@ -250,20 +261,28 @@ pub fn build_with_config(
             let auth_clone = auth.clone();
             let extract_auth =
                 move |req: &axum::http::Request<Body>| -> Result<AuthContext, AuthError> {
-                    let header_value = req
+                    // Validate authorization header is present and properly formatted
+                    // Empty or malformed headers must be rejected to prevent authentication bypass
+                    let header_value = match req
                         .headers()
                         .get("authorization")
                         .and_then(|v: &HeaderValue| v.to_str().ok())
-                        .unwrap_or("");
+                    {
+                        Some(value) => value,
+                        None => return Err(AuthError::MissingAuth),
+                    };
 
-                    if let Some(token) = header_value.strip_prefix("Bearer ") {
-                        if let Some(context) = auth.validate_token(token) {
-                            Ok(context)
-                        } else {
-                            Err(AuthError::InvalidToken)
-                        }
+                    // Validate Bearer token format and non-empty token
+                    // Note: "".strip_prefix("Bearer ") returns Some("") - empty token must be rejected
+                    let token = match header_value.strip_prefix("Bearer ") {
+                        Some(token) if !token.is_empty() => token,
+                        _ => return Err(AuthError::InvalidToken),
+                    };
+
+                    if let Some(context) = auth.validate_token(token) {
+                        Ok(context)
                     } else {
-                        Err(AuthError::MissingAuth)
+                        Err(AuthError::InvalidToken)
                     }
                 };
             let middleware = auth_middleware(auth_clone, extract_auth);

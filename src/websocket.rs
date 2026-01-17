@@ -161,6 +161,43 @@ pub struct RateLimitConfig {
     pub rate_limit_window_seconds: u64,
 }
 
+impl RateLimitConfig {
+    /// Validate the rate limit configuration
+    /// Returns Err if configuration is invalid (could cause DoS or undefined behavior)
+    pub fn validate(&self) -> Result<(), String> {
+        if self.max_connections == 0 {
+            return Err("max_connections must be greater than 0".to_string());
+        }
+        if self.max_connections > 100_000 {
+            return Err("max_connections exceeds reasonable limit of 100,000".to_string());
+        }
+        if self.max_messages_per_second == 0 {
+            return Err("max_messages_per_second must be greater than 0".to_string());
+        }
+        if self.max_messages_per_second > 1_000_000 {
+            return Err(
+                "max_messages_per_second exceeds reasonable limit of 1,000,000".to_string(),
+            );
+        }
+        if self.max_message_size == 0 {
+            return Err("max_message_size must be greater than 0".to_string());
+        }
+        if self.max_message_size > 100_000_000 {
+            return Err("max_message_size exceeds reasonable limit of 100MB".to_string());
+        }
+        if self.rate_limit_window_seconds == 0 {
+            return Err("rate_limit_window_seconds must be greater than 0".to_string());
+        }
+        if self.rate_limit_window_seconds > 86400 {
+            return Err(
+                "rate_limit_window_seconds exceeds reasonable limit of 86400 (24 hours)"
+                    .to_string(),
+            );
+        }
+        Ok(())
+    }
+}
+
 impl Default for RateLimitConfig {
     fn default() -> Self {
         Self {
@@ -184,82 +221,65 @@ impl ConnectionManager {
         }
     }
 
-    /// Check if connection is rate limited
-    /// Returns true if rate limited (should disconnect)
-    pub fn check_rate_limit(&self, conn_id: &str, config: &RateLimitConfig) -> bool {
+    /// Check and record a message atomically for rate limiting
+    /// Returns true if rate limited (should disconnect), false otherwise
+    pub fn check_and_record(&self, conn_id: &str, config: &RateLimitConfig) -> bool {
         let now = Instant::now();
         let current_time = now.elapsed().as_secs();
 
-        // Check total connection limit
-        if self.connection_count.load(Ordering::Relaxed) >= config.max_connections {
+        // Atomically check connection limit and increment
+        if self.connection_count.fetch_add(1, Ordering::SeqCst) >= config.max_connections {
+            self.connection_count.fetch_sub(1, Ordering::SeqCst);
             #[cfg(feature = "logging")]
             tracing::warn!(target: "websocket", "Max connections reached, rejecting new connection");
             return true;
         }
 
         // Check per-connection rate limit
-        if let Some(count_ref) = self.message_counts.get(conn_id) {
-            let last_time = self
-                .last_message_time
-                .get(conn_id)
-                .map(|t| t.value().load(Ordering::Relaxed))
-                .unwrap_or(0);
+        let mut should_disconnect = false;
 
-            // Reset counter if window has passed
-            if current_time - last_time >= config.rate_limit_window_seconds {
-                count_ref.value().store(0, Ordering::Relaxed);
-                if let Some(time_entry) = self.last_message_time.get_mut(conn_id) {
-                    time_entry.value().store(current_time, Ordering::Relaxed);
+        let entry = self.message_counts.entry(conn_id.to_string());
+
+        match entry {
+            dashmap::mapref::entry::Entry::Occupied(count_entry) => {
+                let count = count_entry.get();
+                let last_time = self
+                    .last_message_time
+                    .get(conn_id)
+                    .map(|t| t.value().load(Ordering::Relaxed))
+                    .unwrap_or(0);
+
+                // Reset counter if window has passed
+                if current_time - last_time >= config.rate_limit_window_seconds {
+                    count.store(0, Ordering::Relaxed);
+                    if let Some(time_entry) = self.last_message_time.get_mut(conn_id) {
+                        time_entry.value().store(current_time, Ordering::Relaxed);
+                    }
+                } else if count.load(Ordering::Relaxed) >= config.max_messages_per_second {
+                    should_disconnect = true;
+                } else {
+                    count.fetch_add(1, Ordering::Relaxed);
                 }
-                return false;
             }
-
-            // Check if over rate limit
-            if count_ref.value().load(Ordering::Relaxed) >= config.max_messages_per_second {
-                #[cfg(feature = "logging")]
-                tracing::warn!(target: "websocket",
-                    conn_id = %conn_id,
-                    msg_count = %count_ref.value().load(Ordering::Relaxed),
-                    "Rate limit exceeded, disconnecting"
-                );
-                return true;
+            dashmap::mapref::entry::Entry::Vacant(_) => {
+                drop(entry);
+                self.message_counts
+                    .insert(conn_id.to_string(), AtomicU64::new(1));
+                self.last_message_time
+                    .insert(conn_id.to_string(), AtomicU64::new(current_time));
             }
-
-            // Increment counter
-            count_ref.value().fetch_add(1, Ordering::Relaxed);
-        } else {
-            // New connection, initialize counter
-            self.message_counts
-                .insert(conn_id.to_string(), AtomicU64::new(1));
-            self.last_message_time
-                .insert(conn_id.to_string(), AtomicU64::new(current_time));
         }
 
-        false
-    }
-
-    /// Record a message for rate limiting
-    pub fn record_message(&self, conn_id: &str, config: &RateLimitConfig) {
-        let now = Instant::now();
-        let current_time = now.elapsed().as_secs();
-
-        if let Some(count_ref) = self.message_counts.get(conn_id) {
-            let last_time = self
-                .last_message_time
-                .get(conn_id)
-                .map(|t| t.value().load(Ordering::Relaxed))
-                .unwrap_or(0);
-
-            // Reset counter if window has passed
-            if current_time - last_time >= config.rate_limit_window_seconds {
-                count_ref.value().store(0, Ordering::Relaxed);
-                if let Some(time_entry) = self.last_message_time.get_mut(conn_id) {
-                    time_entry.value().store(current_time, Ordering::Relaxed);
-                }
-            } else {
-                count_ref.value().fetch_add(1, Ordering::Relaxed);
-            }
+        if should_disconnect {
+            self.connection_count.fetch_sub(1, Ordering::SeqCst);
+            #[cfg(feature = "logging")]
+            tracing::warn!(target: "websocket",
+                conn_id = %conn_id,
+                "Rate limit exceeded, disconnecting"
+            );
         }
+
+        should_disconnect
     }
 
     /// Add a connection to the manager
@@ -283,9 +303,21 @@ impl ConnectionManager {
     }
 
     /// Broadcast a message to all connections (optimized with Arc)
+    /// Security fix: Handle broadcast errors properly and clean up failed connections
     pub async fn broadcast(&self, message: &Arc<WebSocketMessage>) {
+        let mut failed_connections: Vec<String> = Vec::new();
+
         for conn in self.connections.iter() {
-            let _ = conn.send(message.as_ref().clone()).await;
+            if let Err(e) = conn.send(message.as_ref().clone()).await {
+                // Track failed connections for cleanup
+                // Don't log every failure to avoid log spam
+                failed_connections.push(conn.id().to_string());
+            }
+        }
+
+        // Clean up failed connections
+        for conn_id in failed_connections {
+            self.remove_connection(&conn_id).await;
         }
     }
 
@@ -343,7 +375,7 @@ pub async fn websocket_upgrade(
 const MAX_MESSAGE_SIZE: usize = 1_048_576;
 
 /// Maximum nesting depth for JSON parsing (prevents stack overflow from deeply nested JSON)
-const MAX_JSON_DEPTH: usize = 32;
+const MAX_JSON_DEPTH: usize = 16;
 
 /// Maximum length for string fields in WebSocket messages
 #[allow(dead_code)]
@@ -360,18 +392,54 @@ fn parse_websocket_message(text: &str) -> Result<WebSocketMessage, String> {
         ));
     }
 
-    // Check for obviously malformed JSON that could cause excessive parsing
-    let depth_estimate = text.bytes().filter(|&b| b == b'{' || b == b'[').count();
-    if depth_estimate > MAX_JSON_DEPTH {
+    // Security fix: Use more accurate depth checking to prevent DoS from deeply nested JSON
+    // Previous implementation just counted brackets which could be fooled
+    let depth = calculate_json_depth(text);
+    if depth > MAX_JSON_DEPTH {
         return Err(format!(
-            "JSON nesting too deep: estimated depth {} (max: {})",
-            depth_estimate, MAX_JSON_DEPTH
+            "JSON nesting too deep: depth {} (max: {})",
+            depth, MAX_JSON_DEPTH
         ));
     }
 
     // Use serde_json with custom limit to prevent DoS from deeply nested structures
-    // The depth_estimate check above already limits nesting, so we just parse normally
+    // The depth check above already limits nesting, so we just parse normally
     serde_json::from_str::<WebSocketMessage>(text).map_err(|e| format!("Invalid JSON: {}", e))
+}
+
+/// Calculate actual JSON nesting depth by parsing the structure
+/// Returns the maximum nesting level encountered
+fn calculate_json_depth(text: &str) -> usize {
+    let mut depth = 0;
+    let mut max_depth = 0;
+    let mut in_string = false;
+    let mut escaped = false;
+
+    for c in text.chars() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_string = false;
+            }
+        } else {
+            if c == '"' {
+                in_string = true;
+                escaped = false;
+            } else if c == '{' || c == '[' {
+                depth += 1;
+                max_depth = max_depth.max(depth);
+            } else if c == '}' || c == ']' {
+                if depth > 0 {
+                    depth -= 1;
+                }
+            }
+        }
+    }
+
+    max_depth
 }
 
 #[cfg(feature = "websocket")]

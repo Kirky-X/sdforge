@@ -538,6 +538,24 @@ impl BearerAuth {
             }
         }
 
+        // Security fix: Validate iat (issued at) claim to prevent usage of future tokens
+        // This prevents replay attacks with tokens that have valid signatures but haven't been issued yet
+        if let Some(iat) = payload_value.get("iat").and_then(|v| v.as_i64()) {
+            let now = chrono::Utc::now().timestamp();
+            // Allow tokens issued up to 60 seconds in the future (clock skew tolerance)
+            const CLOCK_SKEW_SECONDS: i64 = 60;
+            if iat > now + CLOCK_SKEW_SECONDS {
+                return None; // Token issued in the future (possible tampering or clock issue)
+            }
+        }
+
+        // Security fix: Validate nbf (not before) claim to prevent usage of tokens that aren't yet valid
+        if let Some(nbf) = payload_value.get("nbf").and_then(|v| v.as_i64()) {
+            if chrono::Utc::now().timestamp() < nbf {
+                return None; // Token not yet valid
+            }
+        }
+
         // Validate audience claim if expected_audience is configured
         // This prevents token substitution attacks where an attacker uses
         // a token issued for a different audience
