@@ -5,7 +5,7 @@
 set -e
 
 echo "=========================================="
-echo "Axiom Feature 组合测试"
+echo "SdForge Feature 组合测试"
 echo "=========================================="
 
 # 定义要测试的 feature 组合
@@ -43,11 +43,11 @@ for FEATURES in "${FEATURE_COMBINATIONS[@]}"; do
 
     # 清理并构建
     echo "1. 清理构建..."
-    cargo clean -p axiom 2>/dev/null || true
+    cargo clean -p sdforge 2>/dev/null || true
 
     # 构建测试
     echo "2. 构建..."
-    if cargo build --features "$FEATURES" --package axiom 2>&1; then
+    if cargo build --features "$FEATURES" --package sdforge 2>&1; then
         echo -e "${GREEN}✓ 构建成功${NC}"
     else
         echo -e "${RED}✗ 构建失败${NC}"
@@ -57,7 +57,7 @@ for FEATURES in "${FEATURE_COMBINATIONS[@]}"; do
 
     # 运行测试
     echo "3. 运行测试..."
-    if cargo test --features "$FEATURES" --package axiom 2>&1; then
+    if cargo test --features "$FEATURES" --package sdforge 2>&1; then
         echo -e "${GREEN}✓ 测试通过${NC}"
         PASSED_TESTS=$((PASSED_TESTS + 1))
     else
@@ -67,9 +67,9 @@ for FEATURES in "${FEATURE_COMBINATIONS[@]}"; do
 
     # 获取 binary 大小
     echo "4. Binary 大小:"
-    SIZE=$(ls -l target/debug/libaxiom.rlib 2>/dev/null | awk '{print $5}')
+    SIZE=$(ls -l target/debug/libsdforge.rlib 2>/dev/null | awk '{print $5}')
     if [ -n "$SIZE" ]; then
-        echo "   libaxiom.rlib: $SIZE bytes"
+        echo "   libsdforge.rlib: $SIZE bytes"
     fi
 
     echo ""
