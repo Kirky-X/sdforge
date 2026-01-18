@@ -386,9 +386,7 @@ impl CacheMiddleware {
         let max_size = self.config.max_size_bytes;
         let mut freed = 0;
         let mut removed_count = 0;
-        const MAX_ATTEMPTS: usize = 100; // 安全限制，避免无限循环
-
-        let mut attempts = 0;
+        const MAX_ATTEMPTS: usize = 100; // 安全限制,避免无限循环
 
         loop {
             // 使用 Acquire 顺序确保读取最新的缓存状态
@@ -426,8 +424,6 @@ impl CacheMiddleware {
             if !found_entry || self.entry_count.load(Ordering::Acquire) == 0 {
                 break;
             }
-
-            attempts += 1;
         }
 
         #[cfg(feature = "logging")]

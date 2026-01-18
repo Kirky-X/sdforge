@@ -1,12 +1,10 @@
 // Copyright (c) 2026 Kirky.X
-//! Performance benchmarks for Axiom
+//! Performance benchmarks for SdForge
 //!
-//! These benchmarks measure the performance of core Axiom operations.
+//! These benchmarks measure the performance of core SdForge operations.
 
-use axiom::prelude::{ApiError, ServiceError, ServiceResponse};
-use axiom::security::{RateLimitConfig, RateLimiter};
 use criterion::{criterion_group, criterion_main, Criterion};
-use std::time::Duration;
+use sdforge::prelude::{ApiError, ServiceError, ServiceResponse};
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("api_error_not_found_creation", |b| {
@@ -26,34 +24,6 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function("service_response_error_creation", |b| {
         b.iter(|| ServiceResponse::<()>::error(ServiceError::new("ERR", "Error", 500)))
-    });
-
-    c.bench_function("rate_limiter_check", |b| {
-        let config = RateLimitConfig {
-            max_requests: 1000,
-            window: Duration::from_secs(60),
-            include_headers: true,
-        };
-        let limiter = RateLimiter::new(Some(config));
-
-        b.iter(|| {
-            let _ = limiter.check("bench-key");
-        })
-    });
-
-    c.bench_function("rate_limiter_many_keys", |b| {
-        let config = RateLimitConfig {
-            max_requests: 100,
-            window: Duration::from_secs(60),
-            include_headers: true,
-        };
-        let limiter = RateLimiter::new(Some(config));
-
-        b.iter(|| {
-            for i in 0..100 {
-                let _ = limiter.check(&format!("bench-key-{}", i));
-            }
-        })
     });
 }
 

@@ -655,6 +655,18 @@ impl Default for RateLimitConfig {
     }
 }
 
+impl TryFrom<crate::config::RateLimitConfigFile> for RateLimitConfig {
+    type Error = crate::config::ConfigError;
+
+    fn try_from(config: crate::config::RateLimitConfigFile) -> Result<Self, Self::Error> {
+        Ok(Self {
+            max_requests: config.requests,
+            window: Duration::from_secs(config.window_seconds),
+            include_headers: true,
+        })
+    }
+}
+
 /// Rate limiter with idempotency support
 ///
 /// Security features:
