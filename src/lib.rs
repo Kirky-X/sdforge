@@ -161,8 +161,8 @@ pub mod websocket;
 
 #[cfg(feature = "websocket")]
 pub use websocket::{
-    build, build_with_manager, websocket_upgrade, BoxFuture, ConnectionManager,
-    WebSocketConnection, WebSocketHandler, WebSocketMessage, WebSocketRoute,
+    build, websocket_upgrade, BoxFuture, ConnectionManager, WebSocketConnection, WebSocketHandler,
+    WebSocketMessage, WebSocketRoute,
 };
 
 #[cfg(feature = "grpc")]

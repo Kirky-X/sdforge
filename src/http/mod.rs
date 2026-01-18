@@ -379,3 +379,224 @@ pub async fn build_with_hot_reload(
 
     Ok((router, config_watcher, file_watcher))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{
+        AppConfig, AuthConfig, CorsConfig, DatabaseConfig, LoggingConfig, ServerConfig,
+    };
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use axum::routing::get;
+    use tower::ServiceExt;
+
+    /// Test build() returns a valid Router
+    #[test]
+    fn test_build_returns_router() {
+        let router = build();
+        // Just verify it doesn't panic
+        let _ = router;
+    }
+
+    /// Test build_with_redirect() returns Router with middleware
+    #[test]
+    fn test_build_with_redirect() {
+        let router = build_with_redirect();
+        // Should have layers applied
+        let _ = router;
+    }
+
+    /// Test build_with_config with JWT authentication
+    #[test]
+    fn test_build_with_config_jwt() {
+        let config = AppConfig {
+            server: ServerConfig {
+                host: "0.0.0.0".to_string(),
+                port: 3000,
+                request_timeout_secs: 30,
+                cors: None,
+            },
+            database: DatabaseConfig {
+                connection_string: "".to_string(),
+                max_connections: 10,
+            },
+            authentication: AuthConfig::Jwt {
+                secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
+            },
+            logging: LoggingConfig {
+                level: "info".to_string(),
+                format: "json".to_string(),
+            },
+            rate_limit: None,
+        };
+
+        let result = build_with_config(&config);
+        assert!(result.is_ok(), "Should build successfully with JWT config");
+    }
+
+    /// Test build_with_config with ApiKey authentication
+    #[test]
+    fn test_build_with_config_api_key() {
+        let config = AppConfig {
+            server: ServerConfig {
+                host: "0.0.0.0".to_string(),
+                port: 3000,
+                request_timeout_secs: 30,
+                cors: None,
+            },
+            database: DatabaseConfig {
+                connection_string: "".to_string(),
+                max_connections: 10,
+            },
+            authentication: AuthConfig::ApiKey {
+                header_name: "X-API-Key".to_string(),
+                prefix: "key-".to_string(),
+            },
+            logging: LoggingConfig {
+                level: "info".to_string(),
+                format: "json".to_string(),
+            },
+            rate_limit: None,
+        };
+
+        let result = build_with_config(&config);
+        assert!(
+            result.is_ok(),
+            "Should build successfully with ApiKey config"
+        );
+    }
+
+    /// Test build_with_config with OAuth2 returns error
+    #[test]
+    fn test_build_with_config_oauth2_error() {
+        let config = AppConfig {
+            server: ServerConfig {
+                host: "0.0.0.0".to_string(),
+                port: 3000,
+                request_timeout_secs: 30,
+                cors: None,
+            },
+            database: DatabaseConfig {
+                connection_string: "".to_string(),
+                max_connections: 10,
+            },
+            authentication: AuthConfig::OAuth2,
+            logging: LoggingConfig {
+                level: "info".to_string(),
+                format: "json".to_string(),
+            },
+            rate_limit: None,
+        };
+
+        let result = build_with_config(&config);
+        assert!(result.is_err(), "Should fail with OAuth2 config");
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("not yet implemented"));
+    }
+
+    /// Test build_with_config with CORS configuration
+    #[test]
+    fn test_build_with_config_cors() {
+        let config = AppConfig {
+            server: ServerConfig {
+                host: "0.0.0.0".to_string(),
+                port: 3000,
+                request_timeout_secs: 30,
+                cors: Some(CorsConfig {
+                    allowed_origins: vec!["http://localhost:3000".to_string()],
+                    allowed_methods: vec!["GET".to_string(), "POST".to_string()],
+                    allowed_headers: vec!["Content-Type".to_string()],
+                }),
+            },
+            database: DatabaseConfig {
+                connection_string: "".to_string(),
+                max_connections: 10,
+            },
+            authentication: AuthConfig::Jwt {
+                secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
+            },
+            logging: LoggingConfig {
+                level: "info".to_string(),
+                format: "json".to_string(),
+            },
+            rate_limit: None,
+        };
+
+        let result = build_with_config(&config);
+        assert!(result.is_ok(), "Should build successfully with CORS config");
+    }
+
+    /// Test HttpRoute structure
+    #[test]
+    fn test_http_route_creation() {
+        use axum::routing::get;
+        use tower::ServiceExt;
+
+        async fn test_handler() -> &'static str {
+            "test"
+        }
+
+        let route = HttpRoute {
+            path: "/test".to_string(),
+            handler: get(test_handler),
+            metadata: crate::core::ApiMetadata {
+                name: "test".to_string(),
+                version: "v1".to_string(),
+                description: "Test API".to_string(),
+                cache_ttl: None,
+                is_streaming: false,
+            },
+            module_prefix: None,
+        };
+
+        assert_eq!(route.path(), "/test");
+        assert_eq!(route.metadata().name, "test");
+        assert!(route.module_prefix().is_none());
+    }
+
+    /// Test resolve_route_path function
+    #[test]
+    fn test_resolve_route_path() {
+        // No prefix
+        assert_eq!(resolve_route_path("/api/users", None), "/api/users");
+        assert_eq!(resolve_route_path("/api/users", Some("")), "/api/users");
+
+        // With prefix
+        assert_eq!(
+            resolve_route_path("/api/users", Some("v1")),
+            "/v1/api/users"
+        );
+        assert_eq!(
+            resolve_route_path("/api/users", Some("/v1")),
+            "/v1/api/users"
+        );
+    }
+
+    /// Test RouteRegistration structure
+    #[test]
+    fn test_route_registration() {
+        async fn test_handler() {}
+        let registration = RouteRegistration {
+            name: "test",
+            version: "v1",
+            register_fn: || HttpRoute {
+                path: "/test".to_string(),
+                handler: get(test_handler),
+                metadata: crate::core::ApiMetadata {
+                    name: "test".to_string(),
+                    version: "v1".to_string(),
+                    description: "".to_string(),
+                    cache_ttl: None,
+                    is_streaming: false,
+                },
+                module_prefix: None,
+            },
+        };
+
+        assert_eq!(registration.name, "test");
+        assert_eq!(registration.version, "v1");
+    }
+}

@@ -213,3 +213,166 @@ impl From<ApiError> for ServiceError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test ApiError::NotFound variant
+    #[test]
+    fn test_api_error_not_found() {
+        let error = ApiError::NotFound {
+            resource: "user".to_string(),
+            resource_id: Some("123".to_string()),
+        };
+        assert!(error.to_string().contains("Resource not found"));
+        assert!(error.to_string().contains("user"));
+    }
+
+    /// Test ApiError::InvalidInput variant
+    #[test]
+    fn test_api_error_invalid_input() {
+        let error = ApiError::InvalidInput {
+            message: "Invalid email format".to_string(),
+            field: Some("email".to_string()),
+            value: Some(serde_json::json!("invalid@")),
+        };
+        assert!(error.to_string().contains("Invalid input"));
+    }
+
+    /// Test ApiError::AuthenticationFailed variant
+    #[test]
+    fn test_api_error_authentication_failed() {
+        let error = ApiError::AuthenticationFailed {
+            reason: "Invalid token".to_string(),
+        };
+        assert!(error.to_string().contains("Authentication failed"));
+        assert!(error.to_string().contains("Invalid token"));
+    }
+
+    /// Test ApiError::AccessDenied variant
+    #[test]
+    fn test_api_error_access_denied() {
+        let error = ApiError::AccessDenied {
+            permission: "admin.write".to_string(),
+            user_id: Some("user123".to_string()),
+        };
+        assert!(error.to_string().contains("Access denied"));
+        assert!(error.to_string().contains("admin.write"));
+    }
+
+    /// Test ApiError::RateLimitExceeded variant
+    #[test]
+    fn test_api_error_rate_limit_exceeded() {
+        let error = ApiError::RateLimitExceeded {
+            limit: 100,
+            window_seconds: 60,
+        };
+        assert!(error.to_string().contains("Rate limit exceeded"));
+    }
+
+    /// Test ApiError::Internal variant
+    #[test]
+    fn test_api_error_internal() {
+        let error = ApiError::Internal {
+            message: "Database connection failed".to_string(),
+            error_id: "abc123".to_string(),
+        };
+        assert!(error.to_string().contains("Internal server error"));
+        // Message should be sanitized (internal details not leaked)
+    }
+
+    /// Test ApiError::ServiceUnavailable variant
+    #[test]
+    fn test_api_error_service_unavailable() {
+        let error = ApiError::ServiceUnavailable {
+            service: "database".to_string(),
+            retry_after: Some(30),
+        };
+        assert!(error.to_string().contains("Service unavailable"));
+        assert!(error.to_string().contains("database"));
+    }
+
+    /// Test ApiError::ValidationError variant
+    #[test]
+    fn test_api_error_validation() {
+        let error = ApiError::ValidationError {
+            field: "email".to_string(),
+            constraint: "must be valid email".to_string(),
+        };
+        assert!(error.to_string().contains("Validation failed"));
+        assert!(error.to_string().contains("email"));
+    }
+
+    /// Test ApiError::validation_error constructor
+    #[test]
+    fn test_validation_error_constructor() {
+        let error = ApiError::validation_error("VALIDATION_001", "Invalid input");
+        match error {
+            ApiError::InvalidInput {
+                message,
+                field,
+                value,
+            } => {
+                assert_eq!(message, "Invalid input");
+                assert!(field.is_none());
+                assert!(value.is_none());
+            }
+            _ => panic!("Expected InvalidInput variant"),
+        }
+    }
+
+    /// Test to_mcp_json for all variants
+    #[test]
+    fn test_to_mcp_json() {
+        let not_found = ApiError::NotFound {
+            resource: "test".to_string(),
+            resource_id: None,
+        };
+        let json = not_found.to_mcp_json();
+        assert!(json.contains("NOT_FOUND"));
+        assert!(json.contains("success\":false"));
+
+        let auth_failed = ApiError::AuthenticationFailed {
+            reason: "bad token".to_string(),
+        };
+        let json = auth_failed.to_mcp_json();
+        assert!(json.contains("AUTHENTICATION_FAILED"));
+
+        let validation = ApiError::ValidationError {
+            field: "name".to_string(),
+            constraint: "required".to_string(),
+        };
+        let json = validation.to_mcp_json();
+        assert!(json.contains("VALIDATION_ERROR"));
+    }
+
+    /// Test ApiError serialization
+    #[test]
+    fn test_api_error_serialization() {
+        let error = ApiError::NotFound {
+            resource: "file".to_string(),
+            resource_id: Some("123".to_string()),
+        };
+        let json = serde_json::to_string(&error).unwrap();
+        assert!(json.contains("\"type\":\"NotFound\""));
+        assert!(json.contains("\"resource\":\"file\""));
+    }
+
+    /// Test ApiError deserialization
+    #[test]
+    fn test_api_error_deserialization() {
+        let json = r#"{"type":"NotFound","resource":"user","resource_id":"456"}"#;
+        let error: ApiError = serde_json::from_str(json).unwrap();
+        match error {
+            ApiError::NotFound {
+                resource,
+                resource_id,
+            } => {
+                assert_eq!(resource, "user");
+                assert_eq!(resource_id, Some("456".to_string()));
+            }
+            _ => panic!("Expected NotFound variant"),
+        }
+    }
+}
