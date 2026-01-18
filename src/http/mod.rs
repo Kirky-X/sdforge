@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Kirky.X
 //! HTTP server implementation
 
+use crate::config::{AppConfig, AuthConfig, ConfigError};
 use crate::core::ApiMetadata;
 use axum::body::Body;
 use axum::routing::MethodRouter;
@@ -137,9 +138,7 @@ pub fn build_with_redirect() -> Router {
 /// # Returns
 /// A configured Axum router with all middleware applied
 #[allow(dead_code)]
-pub fn build_with_config(
-    config: &crate::config::AppConfig,
-) -> Result<Router, crate::config::ConfigError> {
+pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, ConfigError> {
     #[cfg(feature = "security")]
     use crate::security::{rate_limit_middleware, RateLimitConfig, RateLimiter};
     #[cfg(feature = "security")]
@@ -207,7 +206,7 @@ pub fn build_with_config(
 
         let auth_config = &config.authentication;
 
-        if let crate::config::AuthConfig::ApiKey {
+        if let AuthConfig::ApiKey {
             header_name,
             prefix,
         } = auth_config
@@ -259,7 +258,7 @@ pub fn build_with_config(
                 };
             let middleware = auth_middleware(auth_clone, extract_auth);
             router = router.layer(axum::middleware::from_fn(middleware));
-        } else if let crate::config::AuthConfig::Jwt { secret, .. } = auth_config {
+        } else if let AuthConfig::Jwt { secret, .. } = auth_config {
             let auth = Arc::new(BearerAuth::new(secret));
             let auth_clone = auth.clone();
             let extract_auth =
@@ -290,14 +289,14 @@ pub fn build_with_config(
                 };
             let middleware = auth_middleware(auth_clone, extract_auth);
             router = router.layer(axum::middleware::from_fn(middleware));
-        } else if let crate::config::AuthConfig::OAuth2 = auth_config {
+        } else if let AuthConfig::OAuth2 = auth_config {
             // OAuth2 is not yet implemented - return error
-            return Err(crate::config::ConfigError::ValidationError(
+            return Err(ConfigError::ValidationError(
                 "OAuth2 authentication is not yet implemented".into(),
             ));
         } else {
             // This should not happen as we cover all variants, but return error for safety
-            return Err(crate::config::ConfigError::ValidationError(
+            return Err(ConfigError::ValidationError(
                 "Unknown authentication configuration".into(),
             ));
         }
