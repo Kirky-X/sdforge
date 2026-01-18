@@ -527,7 +527,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         grpc_method,
     ) = args;
     let fn_name = &input.sig.ident;
-    let fn_vis = &input.vis;
+    let _fn_vis = &input.vis; // Currently unused but kept for future use
     let return_type = &input.sig.output;
 
     // Extract path parameters from path string
@@ -592,7 +592,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Build parameter unwrapping logic
     // All parameter types use the same unwrapping pattern: extract .0 field
-    let param_unwraps: Vec<_> = params
+    let _param_unwraps: Vec<_> = params // Currently unused but kept for future use
         .iter()
         .map(|p| {
             let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
@@ -605,6 +605,9 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         .iter()
         .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
         .collect();
+
+    // Collect parameter types for MCP tool struct generation
+    let param_types: Vec<_> = params.iter().map(|p| &p.ty).collect();
 
     // Build MCP input schema
     let mcp_schema_props: Vec<String> = params.iter().map(|p| p.to_json_schema()).collect();
@@ -634,7 +637,8 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Generate unique handler name to avoid conflicts
     let fn_name_str = fn_name.to_string();
-    let handler_name = syn::Ident::new(
+    let _handler_name = syn::Ident::new(
+        // Currently unused but kept for future use
         &format!("__axiom_http_handler_{}", fn_name_str),
         proc_macro2::Span::call_site(),
     );
@@ -652,8 +656,8 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     let axum_path = path_str
         .split('/')
         .map(|segment| {
-            if segment.starts_with(':') {
-                format!("{{{}}}", &segment[1..])
+            if let Some(stripped) = segment.strip_prefix(':') {
+                format!("{{{}}}", stripped)
             } else {
                 segment.to_string()
             }
@@ -810,50 +814,41 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 #[derive(serde::Deserialize)]
                 struct Params {
-                    #(pub #param_names: #param_names),*
+                    #(pub #param_names: #param_types),*
                 }
 
                 let params: Params = match input {
-                    Some(v) => serde_json::from_value(v)?,
-                    None => Params { #(#param_names: Default::default()),* },
+                    Some(v) => serde_json::from_value(v)
+                        .map_err(|e| anyhow::anyhow!("Failed to parse input: {}", e))?,
+                    None => {
+                        return Err(anyhow::anyhow!("Missing input parameters"));
+                    }
                 };
 
                 let result = #fn_name(#(params.#param_names),*).await;
+                Ok(result)
             }
         } else {
             quote! {
                 let result = #fn_name().await;
+                Ok(result)
             }
         };
 
         let mcp_tool_name = tool_name;
-
         let mcp_tool_description = description.as_ref().unwrap_or(&name);
-
         let mcp_struct_name = syn::Ident::new(
             &format!("{}McpTool", fn_name),
             proc_macro2::Span::call_site(),
         );
 
-        // Generate metadata tokens before the quote block
-        let mcp_metadata = match api_metadata_tokens(
-            quote! { #name },
-            quote! { #version },
-            quote! { #description_literal },
-            quote! { #cache_ttl_expr },
-            quote! { false },
-        ) {
-            Ok(tokens) => tokens,
-            Err(e) => return e.into_compile_error().into(),
-        };
-
         quote! {
             #[cfg(feature = "mcp")]
+            #[derive(Debug)]
             struct #mcp_struct_name;
 
             #[cfg(feature = "mcp")]
-            #[mcp_sdk::types::Tool]
-            impl #mcp_struct_name {
+            impl sdforge::mcp_sdk::tools::Tool for #mcp_struct_name {
                 fn name(&self) -> String {
                     #mcp_tool_name.to_string()
                 }
@@ -870,58 +865,45 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                     })
                 }
 
-                #[mcp_sdk::types::tool_callback]
-                async fn call(&self, input: Option<serde_json::Value>) -> mcp_sdk::types::CallToolResponse {
+                fn call(&self, input: Option<serde_json::Value>) -> anyhow::Result<sdforge::mcp_sdk::types::CallToolResponse> {
                     use sdforge::prelude::*;
+                    use tokio::runtime::Runtime;
 
-                    #mcp_call_logic
+                    let rt = Runtime::new().map_err(|e| anyhow::anyhow!("Failed to create runtime: {}", e))?;
+                    let inner_result: Result<Result<_, ApiError>, anyhow::Error> = rt.block_on(async {
+                        #mcp_call_logic
+                    });
+                    let result = inner_result?;
 
                     match result {
                         Ok(response) => {
-                            let response_json = serde_json::to_value(response).unwrap_or_else(|_| {
-                                serde_json::json!({
-                                    "success": true,
-                                    "data": "Response serialization failed"
-                                })
-                            });
-                            mcp_sdk::types::CallToolResponse {
-                                content: vec![mcp_sdk::types::ToolResponseContent::Text {
-                                    text: serde_json::to_string(&response_json)?,
+                            let response_json = serde_json::to_value(response)
+                                .map_err(|e| anyhow::anyhow!("Failed to serialize response: {}", e))?;
+                            Ok(sdforge::mcp_sdk::types::CallToolResponse {
+                                content: vec![sdforge::mcp_sdk::types::ToolResponseContent::Text {
+                                    text: serde_json::to_string(&response_json)
+                                        .map_err(|e| anyhow::anyhow!("Failed to stringify response: {}", e))?,
                                 }],
                                 is_error: Some(false),
                                 meta: None,
-                            }
+                            })
                         }
                         Err(e) => {
-                            let error_json = serde_json::to_value(e).unwrap_or_else(|_| {
-                                serde_json::json!({
-                                    "success": false,
-                                    "error": {
-                                        "code": "UNKNOWN_ERROR",
-                                        "message": "An unknown error occurred"
-                                    }
-                                })
-                            });
-                            let error_code = error_json.get("code")
-                                .and_then(|c| c.as_str())
-                                .unwrap_or("UNKNOWN_ERROR");
-                            let error_text = error_json.get("error")
-                                .and_then(|e| e.get("message"))
-                                .and_then(|m| m.as_str())
-                                .unwrap_or("Unknown error");
-                            let error_message = error_json.get("message")
-                                .and_then(|m| m.as_str())
-                                .unwrap_or(&error_text);
-
-                            Ok(mcp_sdk::types::CallToolResponse {
-                                content: vec![mcp_sdk::types::ToolResponseContent::Text {
-                                    text: serde_json::to_string(&serde_json::json!({
+                            let error_json = serde_json::to_value(e)
+                                .map_err(|e| anyhow::anyhow!("Failed to serialize error: {}", e))
+                                .unwrap_or_else(|_| {
+                                    serde_json::json!({
                                         "success": false,
                                         "error": {
-                                            "code": error_code,
-                                            "message": error_message
+                                            "code": "UNKNOWN_ERROR",
+                                            "message": "An unknown error occurred"
                                         }
-                                    }))?,
+                                    })
+                                });
+                            Ok(sdforge::mcp_sdk::types::CallToolResponse {
+                                content: vec![sdforge::mcp_sdk::types::ToolResponseContent::Text {
+                                    text: serde_json::to_string(&error_json)
+                                        .map_err(|e| anyhow::anyhow!("Failed to stringify error: {}", e))?,
                                 }],
                                 is_error: Some(true),
                                 meta: None,
@@ -930,12 +912,6 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 }
             }
-
-            #[cfg(feature = "mcp")]
-            sdforge::inventory::submit!(sdforge::mcp::McpToolInstance {
-                tool: std::sync::Arc::new(#mcp_struct_name),
-                metadata: #mcp_metadata,
-            });
         }
     } else {
         quote! {}
