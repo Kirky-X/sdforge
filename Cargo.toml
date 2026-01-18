@@ -2,6 +2,10 @@
 members = [
     "src",
     "macros",
+    "examples",
+]
+exclude = [
+    "temp",
 ]
 resolver = "2"
 

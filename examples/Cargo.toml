@@ -1,0 +1,33 @@
+[package]
+name = "sdforge-examples"
+version = "0.2.0"
+edition = "2021"
+description = "Examples demonstrating SDForge framework functionality"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/sdforge-rs/sdforge"
+keywords = ["examples", "sdforge", "http", "mcp"]
+categories = ["web-programming", "development-tools"]
+
+[dependencies]
+sdforge = { path = "../src", default-features = false }
+tokio = { version = "1.41", features = ["rt", "rt-multi-thread", "macros"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+
+[features]
+default = ["http"]
+http = ["sdforge/http"]
+mcp = ["sdforge/mcp"]
+streaming = ["sdforge/streaming"]
+security = ["sdforge/security"]
+cache = ["sdforge/cache"]
+websocket = ["sdforge/websocket"]
+grpc = ["sdforge/grpc"]
+logging = ["sdforge/logging"]
+full = ["http", "mcp", "streaming", "security", "cache", "websocket", "grpc", "logging"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = "z"
