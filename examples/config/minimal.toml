@@ -1,0 +1,22 @@
+# SDForge Configuration - Minimal Example
+
+# Server Configuration
+[server]
+host = "0.0.0.0"
+port = 3000
+request_timeout_secs = 30
+
+# Database Configuration
+[database]
+connection_string = "sqlite:///app.db"
+max_connections = 5
+
+# Authentication Configuration - JWT
+[authentication]
+type = "jwt"
+secret = "change-this-secret-in-production"
+
+# Logging Configuration
+[logging]
+level = "info"
+format = "json"

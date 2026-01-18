@@ -1,0 +1,23 @@
+# SDForge Configuration - API Key Authentication Example
+
+# Server Configuration
+[server]
+host = "127.0.0.1"
+port = 8080
+request_timeout_secs = 15
+
+# Database Configuration
+[database]
+connection_string = "sqlite:///data.db"
+max_connections = 5
+
+# Authentication Configuration - API Key
+[authentication]
+type = "api_key"
+header_name = "X-API-Key"
+prefix = "Key "
+
+# Logging Configuration
+[logging]
+level = "debug"
+format = "pretty"
