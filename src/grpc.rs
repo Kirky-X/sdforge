@@ -151,3 +151,127 @@ impl Default for GrpcServerConfig {
         }
     }
 }
+
+#[cfg(feature = "grpc")]
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test GrpcServerConfig default values
+    #[test]
+    fn test_grpc_server_config_default() {
+        let config = GrpcServerConfig::default();
+        assert_eq!(config.max_connections, 1000);
+        assert_eq!(config.timeout_seconds, 30);
+    }
+
+    /// Test GrpcServerConfig with custom values
+    #[test]
+    fn test_grpc_server_config_custom() {
+        let config = GrpcServerConfig {
+            max_connections: 500,
+            timeout_seconds: 60,
+        };
+        assert_eq!(config.max_connections, 500);
+        assert_eq!(config.timeout_seconds, 60);
+    }
+
+    /// Test address validation with valid address
+    #[test]
+    fn test_address_validation_valid() {
+        let valid_addr = "127.0.0.1:50051";
+        let result = valid_addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().port(), 50051);
+    }
+
+    /// Test address validation with valid address (with hostname)
+    #[test]
+    fn test_address_validation_hostname() {
+        // Hostnames require DNS resolution, which can't be done with simple parse
+        // This test verifies that "localhost:8080" is a valid address format
+        // Note: In actual code, use std::net::ToSocketAddrs for hostname resolution
+        let valid_addr = "localhost:8080";
+        // Split to verify format is correct
+        let parts: Vec<&str> = valid_addr.split(':').collect();
+        assert_eq!(parts.len(), 2);
+        assert_eq!(parts[0], "localhost");
+        assert_eq!(parts[1], "8080");
+    }
+
+    /// Test address validation with invalid format
+    #[test]
+    fn test_address_validation_invalid() {
+        let invalid_addr = "not-a-valid-address";
+        let result = invalid_addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_err());
+    }
+
+    /// Test address validation with missing port
+    #[test]
+    fn test_address_validation_missing_port() {
+        let invalid_addr = "127.0.0.1";
+        let result = invalid_addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_err());
+    }
+
+    /// Test address validation with port out of range
+    #[test]
+    fn test_address_validation_port_range() {
+        // Port 0 is technically valid for binding to any available port
+        let addr = "127.0.0.1:0";
+        let result = addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_ok());
+    }
+
+    /// Test SdForgeGrpcService creation
+    #[test]
+    fn test_sd_forge_grpc_service_creation() {
+        let service = SdForgeGrpcService::default();
+        // Just verify it can be created
+        let _ = service;
+    }
+
+    /// Test GrpcRoute structure
+    #[test]
+    fn test_grpc_route_structure() {
+        use crate::core::ApiMetadata;
+
+        let route = GrpcRoute {
+            service_name: "test-service".to_string(),
+            metadata: ApiMetadata {
+                name: "test".to_string(),
+                version: "v1".to_string(),
+                description: "Test gRPC service".to_string(),
+                cache_ttl: None,
+                is_streaming: false,
+            },
+        };
+
+        assert_eq!(route.service_name, "test-service");
+        assert_eq!(route.metadata.name, "test");
+    }
+
+    /// Test GrpcRoute with ApiMetadata accessors
+    #[test]
+    fn test_grpc_route_metadata_accessors() {
+        use crate::core::ApiMetadata;
+
+        let route = GrpcRoute {
+            service_name: "api-service".to_string(),
+            metadata: ApiMetadata {
+                name: "my_api".to_string(),
+                version: "v2".to_string(),
+                description: "API service".to_string(),
+                cache_ttl: Some(300),
+                is_streaming: false,
+            },
+        };
+
+        assert_eq!(route.metadata.name(), "my_api");
+        assert_eq!(route.metadata.version(), "v2");
+        assert_eq!(route.metadata.description(), "API service");
+        assert_eq!(route.metadata.cache_ttl(), Some(300));
+        assert!(!route.metadata.is_streaming());
+    }
+}

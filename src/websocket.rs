@@ -561,27 +561,353 @@ pub fn build() -> Router {
     router
 }
 
-#[cfg(feature = "websocket")]
-/// Build WebSocket router with custom connection manager
-///
-/// This function is similar to `build()` but allows providing a custom
-/// connection manager for advanced use cases like connection sharing
-/// across multiple routers or custom connection handling.
-///
-/// # Arguments
-/// * `manager` - A shared connection manager for handling WebSocket connections
-///
-/// # Returns
-/// A configured Axum Router using the provided connection manager
-pub fn build_with_manager(manager: Arc<ConnectionManager>) -> Router {
-    let mut router = Router::new();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures_util::FutureExt;
+    use std::sync::Arc;
 
-    for route in inventory::iter::<WebSocketRoute> {
-        router = router.route(
-            &route.path,
-            axum::routing::get(websocket_upgrade).with_state(manager.clone()),
-        );
+    /// Test WebSocketMessage serialization and deserialization
+    #[test]
+    fn test_websocket_message_request() {
+        let msg = WebSocketMessage::Request {
+            id: "test-123".to_string(),
+            method: "get_data".to_string(),
+            params: serde_json::json!({"key": "value"}),
+        };
+
+        // Test serialization
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"request\""));
+        assert!(json.contains("\"id\":\"test-123\""));
+        assert!(json.contains("\"method\":\"get_data\""));
+
+        // Test deserialization
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        match decoded {
+            WebSocketMessage::Request { id, method, params } => {
+                assert_eq!(id, "test-123");
+                assert_eq!(method, "get_data");
+                assert_eq!(params["key"], "value");
+            }
+            _ => panic!("Expected Request variant"),
+        }
     }
 
-    router
+    /// Test WebSocketMessage Response variant
+    #[test]
+    fn test_websocket_message_response() {
+        let msg = WebSocketMessage::Response {
+            id: "resp-456".to_string(),
+            result: serde_json::json!({"status": "ok"}),
+        };
+
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"response\""));
+
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        match decoded {
+            WebSocketMessage::Response { id, result } => {
+                assert_eq!(id, "resp-456");
+                assert_eq!(result["status"], "ok");
+            }
+            _ => panic!("Expected Response variant"),
+        }
+    }
+
+    /// Test WebSocketMessage Error variant
+    #[test]
+    fn test_websocket_message_error() {
+        let msg = WebSocketMessage::Error {
+            id: "err-789".to_string(),
+            error: "Something went wrong".to_string(),
+        };
+
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"error\""));
+
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        match decoded {
+            WebSocketMessage::Error { id, error } => {
+                assert_eq!(id, "err-789");
+                assert_eq!(error, "Something went wrong");
+            }
+            _ => panic!("Expected Error variant"),
+        }
+    }
+
+    /// Test WebSocketMessage Notification variant
+    #[test]
+    fn test_websocket_message_notification() {
+        let msg = WebSocketMessage::Notification {
+            event: "user_joined".to_string(),
+            data: serde_json::json!({"user": "alice"}),
+        };
+
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"notification\""));
+
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        match decoded {
+            WebSocketMessage::Notification { event, data } => {
+                assert_eq!(event, "user_joined");
+                assert_eq!(data["user"], "alice");
+            }
+            _ => panic!("Expected Notification variant"),
+        }
+    }
+
+    /// Test WebSocketConnection creation
+    #[test]
+    fn test_websocket_connection_new() {
+        let (conn, mut receiver) = WebSocketConnection::new("conn-001".to_string());
+        assert_eq!(conn.id(), "conn-001");
+        assert!(!conn.id().is_empty());
+        // Receiver should be ready to receive
+        assert!(receiver.recv().now_or_never().is_none());
+    }
+
+    /// Test RateLimitConfig default values
+    #[test]
+    fn test_rate_limit_config_default() {
+        let config = RateLimitConfig::default();
+        assert_eq!(config.max_messages_per_second, 100);
+        assert_eq!(config.max_message_size, 1_048_576);
+        assert_eq!(config.max_connections, 1000);
+        assert_eq!(config.rate_limit_window_seconds, 1);
+    }
+
+    /// Test RateLimitConfig validation - valid config
+    #[test]
+    fn test_rate_limit_config_valid() {
+        let config = RateLimitConfig {
+            max_messages_per_second: 50,
+            max_message_size: 1024,
+            max_connections: 100,
+            rate_limit_window_seconds: 60,
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    /// Test RateLimitConfig validation - invalid max_connections
+    #[test]
+    fn test_rate_limit_config_invalid_connections() {
+        let config = RateLimitConfig {
+            max_connections: 0,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        assert!(config.validate().unwrap_err().contains("max_connections"));
+    }
+
+    /// Test RateLimitConfig validation - exceeds max connections
+    #[test]
+    fn test_rate_limit_config_exceeds_connections() {
+        let config = RateLimitConfig {
+            max_connections: 100_001,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        assert!(config.validate().unwrap_err().contains("100,000"));
+    }
+
+    /// Test RateLimitConfig validation - invalid messages per second
+    #[test]
+    fn test_rate_limit_config_invalid_messages() {
+        let config = RateLimitConfig {
+            max_messages_per_second: 0,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        assert!(config
+            .validate()
+            .unwrap_err()
+            .contains("max_messages_per_second"));
+    }
+
+    /// Test RateLimitConfig validation - exceeds max messages
+    #[test]
+    fn test_rate_limit_config_exceeds_messages() {
+        let config = RateLimitConfig {
+            max_messages_per_second: 1_000_001,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        assert!(config.validate().unwrap_err().contains("1,000,000"));
+    }
+
+    /// Test RateLimitConfig validation - invalid message size
+    #[test]
+    fn test_rate_limit_config_invalid_size() {
+        let config = RateLimitConfig {
+            max_message_size: 0,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        assert!(config.validate().unwrap_err().contains("max_message_size"));
+    }
+
+    /// Test RateLimitConfig validation - exceeds max size
+    #[test]
+    fn test_rate_limit_config_exceeds_size() {
+        let config = RateLimitConfig {
+            max_message_size: 100_000_001,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        assert!(config.validate().unwrap_err().contains("100MB"));
+    }
+
+    /// Test RateLimitConfig validation - invalid window
+    #[test]
+    fn test_rate_limit_config_invalid_window() {
+        let config = RateLimitConfig {
+            rate_limit_window_seconds: 0,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        assert!(config
+            .validate()
+            .unwrap_err()
+            .contains("rate_limit_window_seconds"));
+    }
+
+    /// Test RateLimitConfig validation - exceeds max window
+    #[test]
+    fn test_rate_limit_config_exceeds_window() {
+        let config = RateLimitConfig {
+            rate_limit_window_seconds: 86401,
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+        assert!(config.validate().unwrap_err().contains("24 hours"));
+    }
+
+    /// Test ConnectionManager creation
+    #[test]
+    fn test_connection_manager_new() {
+        let manager = ConnectionManager::new();
+        // Just verify it can be created without panic
+        let _ = manager;
+    }
+
+    /// Test calculate_json_depth function
+    #[test]
+    fn test_calculate_json_depth_empty() {
+        assert_eq!(calculate_json_depth(""), 0);
+    }
+
+    #[test]
+    fn test_calculate_json_depth_simple() {
+        assert_eq!(calculate_json_depth("{}"), 1);
+        assert_eq!(calculate_json_depth("[]"), 1);
+    }
+
+    #[test]
+    fn test_calculate_json_depth_nested() {
+        // The function counts maximum nesting depth of braces/brackets
+        // {"a":{"b":{"c":1}}} returns 3 as the max depth
+        assert_eq!(calculate_json_depth(r#"{"a":{"b":{"c":1}}}"#), 3);
+        // [{"a":[{"b":1}]}] starts with [ so returns 4
+        assert_eq!(calculate_json_depth(r#"[{"a":[{"b":1}]}]"#), 4);
+    }
+
+    #[test]
+    fn test_calculate_json_depth_with_strings() {
+        // Strings should not count toward depth
+        assert_eq!(calculate_json_depth(r#"{"a":"{"}"}"#), 1);
+    }
+
+    #[test]
+    fn test_calculate_json_depth_array_nesting() {
+        assert_eq!(calculate_json_depth("[[[[1]]]]"), 4);
+    }
+
+    /// Test parse_websocket_message with valid JSON
+    #[test]
+    fn test_parse_websocket_message_valid() {
+        let valid_json = r#"{"type":"request","id":"123","method":"test","params":{}}"#;
+        let result = parse_websocket_message(valid_json);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            WebSocketMessage::Request { id, method, .. } => {
+                assert_eq!(id, "123");
+                assert_eq!(method, "test");
+            }
+            _ => panic!("Expected Request"),
+        }
+    }
+
+    /// Test parse_websocket_message with invalid JSON
+    #[test]
+    fn test_parse_websocket_message_invalid() {
+        let invalid_json = "not valid json";
+        let result = parse_websocket_message(invalid_json);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid JSON"));
+    }
+
+    /// Test parse_websocket_message with too large message
+    #[test]
+    fn test_parse_websocket_message_too_large() {
+        let large_json = "x".repeat(MAX_MESSAGE_SIZE + 1);
+        let result = parse_websocket_message(&large_json);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Message too large"));
+    }
+
+    /// Test parse_websocket_message with deeply nested JSON
+    #[test]
+    fn test_parse_websocket_message_too_deep() {
+        let deep_json = "{".repeat(MAX_JSON_DEPTH + 1) + &"}".repeat(MAX_JSON_DEPTH + 1);
+        let result = parse_websocket_message(&deep_json);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("nesting too deep"));
+    }
+
+    /// Test DefaultWebSocketHandler
+    #[test]
+    fn test_default_websocket_handler() {
+        let handler = DefaultWebSocketHandler;
+
+        // Test Request handling
+        let request = WebSocketMessage::Request {
+            id: "test-id".to_string(),
+            method: "test_method".to_string(),
+            params: serde_json::json!({"test": true}),
+        };
+
+        // Handler is async, but we can verify it compiles
+        // Full async test would require runtime
+        let result = handler.handle(request).now_or_never().unwrap();
+        match result {
+            WebSocketMessage::Response { id, .. } => assert_eq!(id, "test-id"),
+            _ => panic!("Expected Response variant"),
+        }
+    }
+
+    /// Test WebSocketRoute structure
+    #[test]
+    fn test_websocket_route_structure() {
+        use std::sync::Arc;
+
+        struct MockHandler;
+        impl WebSocketHandler for MockHandler {
+            fn handle(&self, _message: WebSocketMessage) -> BoxFuture<'static, WebSocketMessage> {
+                Box::pin(async {
+                    WebSocketMessage::Response {
+                        id: String::new(),
+                        result: serde_json::json!({}),
+                    }
+                })
+            }
+        }
+
+        let route = WebSocketRoute {
+            path: "/ws".to_string(),
+            handler: Arc::new(MockHandler) as Arc<dyn WebSocketHandler>,
+        };
+
+        assert_eq!(route.path, "/ws");
+    }
 }

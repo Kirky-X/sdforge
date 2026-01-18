@@ -229,3 +229,132 @@ impl ConfigManager {
         *self.config.write().await = new_config;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{AppConfig, AuthConfig, DatabaseConfig, LoggingConfig, ServerConfig};
+    use std::fs;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    /// Test ConfigError variants in hot_reload module
+    #[test]
+    #[cfg(feature = "hot-reload")]
+    fn test_hot_reload_config_error_variants() {
+        let path = PathBuf::from("/nonexistent/path.yaml");
+        let not_found = ConfigError::NotFound(path.clone());
+        assert!(not_found.to_string().contains("not found"));
+
+        let not_a_file = ConfigError::NotAFile(path);
+        assert!(not_a_file.to_string().contains("not a file"));
+
+        let outside_dir = ConfigError::OutsideAllowedDirectory;
+        assert!(outside_dir
+            .to_string()
+            .contains("outside allowed directory"));
+
+        let validation = ConfigError::ValidationError("test error".to_string());
+        assert!(validation.to_string().contains("validation error"));
+    }
+
+    /// Test ConfigEvent variants
+    #[test]
+    #[cfg(feature = "hot-reload")]
+    fn test_config_event_variants() {
+        // Test Reloaded event
+        let config = AppConfig::default();
+        let reloaded_event = ConfigEvent::Reloaded(Box::new(config.clone()));
+        match reloaded_event {
+            ConfigEvent::Reloaded(c) => {
+                // Config was moved in
+            }
+            _ => panic!("Expected Reloaded variant"),
+        }
+
+        // Test Error event
+        let error_event = ConfigEvent::Error("Test error message".to_string());
+        match error_event {
+            ConfigEvent::Error(msg) => {
+                assert_eq!(msg, "Test error message");
+            }
+            _ => panic!("Expected Error variant"),
+        }
+    }
+
+    /// Test ConfigWatcher::validate_config_path with non-existent path
+    #[tokio::test]
+    #[cfg(feature = "hot-reload")]
+    async fn test_validate_config_path_not_found() {
+        let temp_dir = TempDir::new().unwrap();
+        let non_existent = temp_dir.path().join("nonexistent.yaml");
+
+        let result = ConfigWatcher::validate_config_path(&non_existent);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("not found"));
+        }
+    }
+
+    /// Test ConfigWatcher::validate_config_path with directory instead of file
+    #[tokio::test]
+    #[cfg(feature = "hot-reload")]
+    async fn test_validate_config_path_not_a_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir = temp_dir.path();
+
+        let result = ConfigWatcher::validate_config_path(dir);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("not a file"));
+        }
+    }
+
+    /// Test ConfigWatcher::validate_config_path with path traversal attempt
+    #[tokio::test]
+    #[cfg(feature = "hot-reload")]
+    async fn test_validate_config_path_path_traversal() {
+        // Create a relative path that tries to traverse
+        let malicious_path = std::path::PathBuf::from("../../../etc/passwd");
+        let result = ConfigWatcher::validate_config_path(&malicious_path);
+        // Should fail because relative paths with .. are suspicious
+        assert!(result.is_err());
+    }
+
+    /// Test ConfigManager creation and operations
+    #[tokio::test]
+    #[cfg(feature = "hot-reload")]
+    async fn test_config_manager_operations() {
+        let config = AppConfig::default();
+        let manager = ConfigManager::new(config.clone());
+
+        // Test get
+        let retrieved = manager.get().await;
+        assert_eq!(retrieved.server.host, config.server.host);
+
+        // Test update
+        let mut new_config = AppConfig::default();
+        new_config.server.host = "127.0.0.1".to_string();
+        manager.update(new_config.clone()).await;
+
+        let updated = manager.get().await;
+        assert_eq!(updated.server.host, "127.0.0.1");
+    }
+
+    /// Test ConfigManager with Arc operations
+    #[tokio::test]
+    #[cfg(feature = "hot-reload")]
+    async fn test_config_manager_arc_operations() {
+        let config = AppConfig::default();
+        let manager = ConfigManager::new(config);
+
+        let _retrieved = manager.get().await;
+
+        let mut new_config = AppConfig::default();
+        new_config.server.host = "127.0.0.1".to_string();
+        manager.update(new_config.clone()).await;
+
+        let updated = manager.get().await;
+        assert_eq!(updated.server.host, "127.0.0.1");
+    }
+}

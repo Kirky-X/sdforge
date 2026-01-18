@@ -81,3 +81,98 @@ pub async fn build() -> mcp_sdk::server::Server<mcp_sdk::transport::ServerStdioT
         .tools(tools)
         .build()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::ApiMetadata;
+    use std::sync::Arc;
+
+    /// Test ApiMetadata structure
+    #[test]
+    fn test_api_metadata_creation() {
+        let metadata = ApiMetadata {
+            name: "test_tool".to_string(),
+            version: "v1".to_string(),
+            description: "A test tool".to_string(),
+            cache_ttl: None,
+            is_streaming: false,
+        };
+        assert_eq!(metadata.name, "test_tool");
+        assert_eq!(metadata.version, "v1");
+        assert_eq!(metadata.description, "A test tool");
+    }
+
+    /// Test ApiMetadata name and version accessors
+    #[test]
+    fn test_api_metadata_accessors() {
+        let metadata = ApiMetadata {
+            name: "my_api".to_string(),
+            version: "v2".to_string(),
+            description: "".to_string(),
+            cache_ttl: Some(300),
+            is_streaming: true,
+        };
+        assert_eq!(metadata.name(), "my_api");
+        assert_eq!(metadata.version(), "v2");
+    }
+
+    /// Test McpToolInstance structure (compile check only, as Tool trait requires mcp-sdk)
+    #[cfg(feature = "mcp")]
+    #[test]
+    fn test_mcp_tool_instance_structure() {
+        // This test verifies the structure compiles correctly
+        // Full functionality tests require mcp-sdk mock implementations
+        struct MockTool;
+        impl mcp_sdk::tools::Tool for MockTool {
+            fn name(&self) -> String {
+                "mock_tool".to_string()
+            }
+            fn description(&self) -> String {
+                "Mock tool for testing".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let instance = McpToolInstance {
+            tool: Arc::new(MockTool) as Arc<dyn mcp_sdk::tools::Tool>,
+            metadata: ApiMetadata {
+                name: "test".to_string(),
+                version: "v1".to_string(),
+                description: "test".to_string(),
+                cache_ttl: None,
+                is_streaming: false,
+            },
+        };
+
+        assert_eq!(instance.metadata.name, "test");
+    }
+
+    /// Test ApiMetadata creation for MCP tools
+    #[test]
+    fn test_api_metadata_for_mcp() {
+        let metadata = ApiMetadata {
+            name: "mcp_tool".to_string(),
+            version: "v1".to_string(),
+            description: "MCP tool".to_string(),
+            cache_ttl: None,
+            is_streaming: false,
+        };
+        assert_eq!(metadata.name(), "mcp_tool");
+        assert_eq!(metadata.version(), "v1");
+        assert!(metadata.cache_ttl().is_none());
+        assert!(!metadata.is_streaming());
+    }
+}

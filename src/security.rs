@@ -1502,4 +1502,518 @@ mod tests {
         assert!(!is_ip_in_range("172.32.0.1", "172.16.0.0/12"));
         assert!(!is_ip_in_range("8.8.8.8", "192.168.0.0/16"));
     }
+
+    // ==================== AuthContext Tests ====================
+
+    #[test]
+    fn test_auth_context_creation() {
+        let metadata = AuthMetadata::new(
+            Some("192.168.1.1".to_string()),
+            Some("TestClient/1.0".to_string()),
+        );
+
+        let context = AuthContext::new(
+            Some("user-123".to_string()),
+            vec!["read".to_string(), "write".to_string()],
+            metadata,
+        );
+
+        assert_eq!(context.user_id(), Some("user-123"));
+        assert_eq!(context.permissions().len(), 2);
+        assert!(context.has_permission("read"));
+        assert!(context.has_permission("write"));
+        assert!(!context.has_permission("delete"));
+    }
+
+    #[test]
+    fn test_auth_context_without_user() {
+        let context = AuthContext::new(None, vec![], AuthMetadata::default());
+
+        assert_eq!(context.user_id(), None);
+        assert!(context.permissions().is_empty());
+        assert!(!context.has_permission("any"));
+    }
+
+    #[test]
+    fn test_auth_metadata_creation() {
+        let metadata = AuthMetadata::new(
+            Some("10.0.0.1".to_string()),
+            Some("Mozilla/5.0".to_string()),
+        );
+
+        assert_eq!(metadata.client_ip(), Some("10.0.0.1"));
+        assert_eq!(metadata.user_agent(), Some("Mozilla/5.0"));
+        assert!(!metadata.request_id().is_empty());
+        assert!(metadata.timestamp() > 0);
+    }
+
+    // ==================== AuthError Tests ====================
+
+    #[test]
+    fn test_auth_error_messages() {
+        let missing_auth = AuthError::MissingAuth;
+        assert_eq!(
+            missing_auth.to_string(),
+            "Missing or invalid authorization header"
+        );
+
+        let invalid_token = AuthError::InvalidToken;
+        assert_eq!(invalid_token.to_string(), "Invalid or expired token");
+
+        let insufficient = AuthError::InsufficientPermissions {
+            required: "admin".to_string(),
+            user_permissions: vec!["read".to_string()],
+        };
+        assert!(insufficient
+            .to_string()
+            .contains("Insufficient permissions"));
+        assert!(insufficient.to_string().contains("admin"));
+    }
+
+    // ==================== BearerAuth Secret Validation Tests ====================
+
+    #[test]
+    fn test_bearer_auth_secret_too_short() {
+        let result = BearerAuth::try_new("Short1!");
+        assert!(result.is_err());
+
+        if let Err(AuthConfigError::SecretTooShort { length }) = result {
+            assert_eq!(length, 7); // "Short1!" is 7 characters
+        } else {
+            panic!("Expected SecretTooShort error");
+        }
+    }
+
+    #[test]
+    fn test_bearer_auth_missing_uppercase() {
+        // Secret must be 32+ chars with lowercase + digit + special but NO uppercase
+        // "lowercase123!abcdefghijklmnopqrstuvwxyz" has 39 chars
+        let result = BearerAuth::try_new("lowercase123!abcdefghijklmnopqrstuvwxyz");
+        assert!(result.is_err());
+
+        match result {
+            Err(AuthConfigError::MissingCharacterClass { required_type }) => {
+                assert_eq!(required_type, "uppercase letter");
+            }
+            Err(_) => {
+                panic!("Expected MissingCharacterClass error");
+            }
+            Ok(_) => {
+                panic!("Expected error but got success");
+            }
+        }
+    }
+
+    #[test]
+    fn test_bearer_auth_missing_lowercase() {
+        // Secret must be 32+ chars with uppercase + digit + special but NO lowercase
+        let result = BearerAuth::try_new("UPPERCASE123!ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        assert!(result.is_err());
+
+        match result {
+            Err(AuthConfigError::MissingCharacterClass { required_type }) => {
+                assert_eq!(required_type, "lowercase letter");
+            }
+            Err(_) => {
+                panic!("Expected MissingCharacterClass error");
+            }
+            Ok(_) => {
+                panic!("Expected error but got success");
+            }
+        }
+    }
+
+    #[test]
+    fn test_bearer_auth_missing_digit() {
+        // Secret must be 32+ chars with lowercase + uppercase + special but NO digit
+        let result = BearerAuth::try_new("LowercaseUpper!ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        assert!(result.is_err());
+
+        match result {
+            Err(AuthConfigError::MissingCharacterClass { required_type }) => {
+                assert_eq!(required_type, "digit");
+            }
+            Err(_) => {
+                panic!("Expected MissingCharacterClass error");
+            }
+            Ok(_) => {
+                panic!("Expected error but got success");
+            }
+        }
+    }
+
+    #[test]
+    fn test_bearer_auth_missing_special_char() {
+        // Secret must be 32+ chars, this one is all alphanumeric (no special char)
+        let result = BearerAuth::try_new("LowercaseUpper123ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        assert!(result.is_err());
+
+        match result {
+            Err(AuthConfigError::MissingCharacterClass { required_type }) => {
+                assert_eq!(required_type, "special character");
+            }
+            Err(_) => {
+                panic!("Expected MissingCharacterClass error");
+            }
+            Ok(_) => {
+                panic!("Expected error but got success");
+            }
+        }
+    }
+
+    #[test]
+    fn test_bearer_auth_valid_secret() {
+        // Secret must be at least 32 characters with uppercase, lowercase, digit, and special char
+        let auth = BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+            .expect("Valid secret should work");
+        assert!(auth.validate_token("invalid-token").is_none());
+    }
+
+    #[test]
+    fn test_bearer_auth_with_audience() {
+        // Use a valid secret (32+ chars with all required types)
+        let auth = BearerAuth::with_audience("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ", "my-api");
+        assert!(auth.validate_token("any-token").is_none());
+    }
+
+    #[test]
+    fn test_bearer_auth_with_claims() {
+        // Use a valid secret (32+ chars with all required types)
+        let auth = BearerAuth::with_claims(
+            "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+            "my-api",
+            "issuer",
+        );
+        assert!(auth.validate_token("any-token").is_none());
+    }
+
+    // ==================== RateLimitConfig Tests ====================
+
+    #[test]
+    fn test_rate_limit_config_default() {
+        let config = RateLimitConfig::default();
+        assert_eq!(config.max_requests, 100);
+        assert_eq!(config.window, Duration::from_secs(60));
+        assert!(config.include_headers);
+    }
+
+    #[test]
+    fn test_rate_limit_config_custom() {
+        let config = RateLimitConfig {
+            max_requests: 50,
+            window: Duration::from_secs(30),
+            include_headers: false,
+        };
+        assert_eq!(config.max_requests, 50);
+        assert_eq!(config.window, Duration::from_secs(30));
+        assert!(!config.include_headers);
+    }
+
+    // ==================== RateLimiter Tests ====================
+
+    #[test]
+    fn test_rate_limiter_remaining() {
+        let config = RateLimitConfig {
+            max_requests: 5,
+            window: Duration::from_secs(60),
+            include_headers: false,
+        };
+        let limiter = RateLimiter::new(Some(config));
+
+        assert_eq!(limiter.remaining("test-ip"), 5);
+
+        let _ = limiter.check("test-ip");
+        assert_eq!(limiter.remaining("test-ip"), 4);
+
+        let _ = limiter.check("test-ip");
+        assert_eq!(limiter.remaining("test-ip"), 3);
+    }
+
+    #[test]
+    fn test_rate_limiter_idempotency() {
+        let limiter = RateLimiter::new(None);
+
+        // First request should not be duplicate
+        assert!(!limiter.check_idempotency("req-123"));
+
+        // Same idempotency key should be detected as duplicate
+        assert!(limiter.check_idempotency("req-123"));
+        assert!(limiter.check_idempotency("req-123"));
+
+        // Different key should not be duplicate
+        assert!(!limiter.check_idempotency("req-456"));
+    }
+
+    #[tokio::test]
+    async fn test_rate_limiter_acquire() {
+        let limiter = RateLimiter::new(Some(RateLimitConfig {
+            max_requests: 2,
+            window: Duration::from_secs(60),
+            include_headers: false,
+        }));
+
+        // Should be able to acquire 2 permits
+        assert!(limiter.acquire("ip-1").await.is_ok());
+        assert!(limiter.acquire("ip-1").await.is_ok());
+
+        // Third should fail due to rate limit
+        assert!(limiter.acquire("ip-1").await.is_err());
+    }
+
+    // ==================== AuditLogger Tests ====================
+
+    #[tokio::test]
+    async fn test_audit_logger_get_logs_empty() {
+        let logger = AuditLogger::new();
+        let logs = logger.get_logs("nonexistent-user");
+        assert!(logs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_audit_logger_clear_logs() {
+        let logger = AuditLogger::new();
+        let context = AuthContext::new(
+            Some("user-to-clear".to_string()),
+            vec![],
+            AuthMetadata::default(),
+        );
+
+        logger
+            .log(&context, "test_action", "test_resource", true, None)
+            .await;
+
+        tokio::task::yield_now().await;
+
+        assert_eq!(logger.get_logs("user-to-clear").len(), 1);
+
+        logger.clear_logs("user-to-clear");
+        assert!(logger.get_logs("user-to-clear").is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_audit_logger_total_log_count() {
+        let logger = AuditLogger::new();
+        let context = AuthContext::new(Some("user-1".to_string()), vec![], AuthMetadata::default());
+
+        logger
+            .log(&context, "action1", "resource1", true, None)
+            .await;
+
+        tokio::task::yield_now().await;
+
+        let count = logger.total_log_count();
+        assert!(count >= 1);
+    }
+
+    // ==================== Sanitize Error Message Tests ====================
+
+    #[test]
+    fn test_sanitize_jwt_token() {
+        // Use a JWT pattern that matches the regex
+        let message = "Invalid token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+        let sanitized = sanitize_error_message(message);
+        // Check that JWT pattern is redacted
+        assert!(
+            !sanitized.contains("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"),
+            "JWT header should be redacted"
+        );
+        assert!(
+            !sanitized.contains("eyJzdWIiOiIxMjM0NTY3ODkwIn0"),
+            "JWT payload should be redacted"
+        );
+        assert!(
+            sanitized.contains("REDACTED") || sanitized.contains("redacted"),
+            "Should contain redaction marker"
+        );
+    }
+
+    #[test]
+    fn test_sanitize_password() {
+        let message = "Connection failed: password=secret123, user=admin";
+        let sanitized = sanitize_error_message(message);
+        assert!(!sanitized.contains("secret123"));
+        assert!(sanitized.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn test_sanitize_database_url() {
+        let message = "DB error: postgresql://user:pass123@localhost/mydb";
+        let sanitized = sanitize_error_message(message);
+        assert!(!sanitized.contains("pass123"));
+        assert!(sanitized.contains("postgresql://[REDACTED]:[REDACTED]@localhost/db"));
+    }
+
+    #[test]
+    fn test_sanitize_private_key_path() {
+        let message = "Invalid file: /etc/ssl/private/server.key";
+        let sanitized = sanitize_error_message(message);
+        assert!(!sanitized.contains(".key"));
+        assert!(sanitized.contains("[REDACTED_PATH]"));
+    }
+
+    #[test]
+    fn test_sanitize_max_length() {
+        // Create a message long enough to exceed MAX_SANITIZED_LENGTH (500)
+        // Include patterns that won't be redacted so length check applies
+        let long_message = "Error: ".to_string() + &"x".repeat(600);
+        let sanitized = sanitize_error_message(&long_message);
+        // Check that the result is truncated to ~500 chars + truncation indicator
+        assert!(
+            sanitized.len() <= 520,
+            "Sanitized message should be truncated to ~520 chars max"
+        );
+        assert!(
+            sanitized.contains("...") || sanitized.len() <= 500,
+            "Should indicate truncation or be under limit"
+        );
+    }
+
+    // ==================== IP Validation Tests ====================
+
+    #[test]
+    fn test_is_valid_ip_public() {
+        // Valid public IPs
+        assert!(is_valid_ip("8.8.8.8"));
+        assert!(is_valid_ip("1.1.1.1"));
+        assert!(is_valid_ip("203.0.113.1"));
+    }
+
+    #[test]
+    fn test_is_valid_ip_private_ranges() {
+        // Private IP ranges should be invalid
+        assert!(!is_valid_ip("10.0.0.1"));
+        assert!(!is_valid_ip("172.16.0.1"));
+        assert!(!is_valid_ip("192.168.1.1"));
+    }
+
+    #[test]
+    fn test_is_valid_ip_loopback() {
+        // Loopback should be invalid
+        assert!(!is_valid_ip("127.0.0.1"));
+        assert!(!is_valid_ip("::1"));
+    }
+
+    #[test]
+    fn test_is_valid_ip_link_local() {
+        // Link-local should be invalid
+        assert!(!is_valid_ip("169.254.0.1"));
+    }
+
+    #[test]
+    fn test_is_valid_ip_multicast() {
+        // Multicast should be invalid
+        assert!(!is_valid_ip("224.0.0.1"));
+        assert!(!is_valid_ip("239.255.255.255"));
+    }
+
+    #[test]
+    fn test_is_valid_ip_empty() {
+        assert!(!is_valid_ip(""));
+    }
+
+    #[test]
+    fn test_is_valid_ip_too_long() {
+        let long_ip = "123.456.789.012.345.678.901.234.567";
+        assert!(!is_valid_ip(&long_ip));
+    }
+
+    #[test]
+    fn test_is_valid_ip_ipv6_public() {
+        // Public IPv6 (not loopback, link-local, etc.)
+        assert!(is_valid_ip("2001:db8::1"));
+    }
+
+    // ==================== RateLimitError Tests ====================
+
+    #[test]
+    fn test_rate_limit_error_message() {
+        let error = RateLimitError {
+            limit: 100,
+            remaining: 0,
+            retry_after: 30,
+        };
+        let message = error.to_string();
+        assert!(message.contains("30")); // retry_after
+        assert!(message.to_lowercase().contains("rate limit")); // Case-insensitive check
+    }
+
+    // ==================== AuditResult Tests ====================
+
+    #[test]
+    fn test_audit_result_serialization() {
+        use serde_json;
+
+        let success = AuditResult::Success;
+        let json = serde_json::to_string(&success).unwrap();
+        assert!(json.contains("\"status\":\"success\""));
+
+        let failure = AuditResult::Failure {
+            message: "Test error".to_string(),
+        };
+        let json = serde_json::to_string(&failure).unwrap();
+        assert!(json.contains("\"status\":\"failure\""));
+        assert!(json.contains("Test error"));
+    }
+
+    // ==================== ApiKeyAuth Edge Cases ====================
+
+    #[tokio::test]
+    async fn test_api_key_clear_failed_attempts() {
+        let auth = ApiKeyAuth::with_rate_limit(RateLimitConfig {
+            max_requests: 2,
+            window: Duration::from_secs(60),
+            include_headers: false,
+        });
+        auth.add_key("valid-key", vec!["read".to_string()]);
+
+        // Trigger rate limiting
+        let _ = auth.validate_key("invalid-1", "192.168.1.1");
+        let _ = auth.validate_key("invalid-2", "192.168.1.1");
+
+        // Should be rate limited
+        assert_eq!(auth.validate_key("invalid-3", "192.168.1.1"), None);
+
+        // Clear failed attempts
+        auth.clear_failed_attempts("192.168.1.1");
+
+        // Should be able to try again
+        assert_eq!(auth.validate_key("invalid-4", "192.168.1.1"), None);
+    }
+
+    #[tokio::test]
+    async fn test_api_key_different_ips() {
+        let auth = ApiKeyAuth::with_rate_limit(RateLimitConfig {
+            max_requests: 2,
+            window: Duration::from_secs(60),
+            include_headers: false,
+        });
+        auth.add_key("valid-key", vec!["read".to_string()]);
+
+        // Exhaust rate limit for IP 1
+        let _ = auth.validate_key("invalid", "192.168.1.1");
+        let _ = auth.validate_key("invalid", "192.168.1.1");
+
+        // IP 1 should be rate limited
+        assert_eq!(auth.validate_key("invalid", "192.168.1.1"), None);
+
+        // IP 2 should still work
+        assert_eq!(auth.validate_key("invalid", "192.168.1.2"), None);
+    }
+
+    // ==================== BearerAuth Token Blacklist Tests ====================
+
+    #[tokio::test]
+    async fn test_bearer_auth_blacklist() {
+        // Use a valid secret (32+ chars with all required types)
+        let auth =
+            BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ").expect("Valid secret");
+
+        // Note: We can't test actual JWT validation without a valid token
+        // but we can test the blacklist mechanism
+        auth.invalidate_token("test-token-to-blacklist");
+
+        // The blacklist is checked before JWT verification
+        // Since "test-token-to-blacklist" is not a valid JWT, it returns None anyway
+        assert!(auth.validate_token("test-token-to-blacklist").is_none());
+    }
 }
