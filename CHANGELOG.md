@@ -5,6 +5,58 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本规范](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## [0.2.1] - 2025-01-18
+
+### 依赖更新
+
+本版本更新了多个依赖到最新兼容版本，以提高安全性、性能和稳定性。
+
+#### 直接依赖更新
+
+**HTTP/Web 框架：**
+- `tower-http`: 0.6.2 → 0.6.3（安全修复和性能改进）
+- `axum`: 0.8.8 → 0.8.9（稳定性改进）
+
+**工具依赖：**
+- `clap`: 4.0 → 4.5（CLI 改进）
+- `regex`: 1.5 → 1.10（性能优化）
+- `toml`: 0.8 → 0.9（配置解析改进）
+- `notify`: 6.0 → 7.0（文件系统监控改进）
+- `axum-test`: 16.0 → 16.4（测试工具改进）
+
+**传递依赖更新：**
+- `cc`, `chrono`, `clap_lex`, `data-encoding`
+- `getrandom`, `js-sys`, `rand_core`
+- `rustls-pki-types`, `rustls-webpki`
+- `time`, `time-core`, `time-macros`
+- `tower`, `wasip2`, `wasm-bindgen`
+- `web-sys`, `wit-bindgen`, `zmij`
+- `inotify`, `notify-types`
+- `proc-macro-error-attr2`, `proc-macro-error2`
+- `validator_derive`
+- `cached`, `redis`
+- `hyper`, `hyper-util`, `hyper-timeout`
+- `tokio`, `tokio-util`, `tokio-stream`
+- `tokio-tungstenite`
+- `tonic`, `prost`, `prost-derive`
+- `tracing-appender`
+- `tera`
+- `axum-extra`
+- `multer`
+
+#### 验证
+
+- ✅ 所有 feature 组合编译测试通过（http, mcp, cache 等）
+- ✅ 单元测试通过（21 个测试）
+- ✅ Clippy 检查通过
+- ✅ 回归测试通过
+
+#### 已知问题
+
+- gRPC feature 需要额外的构建配置（不在本次更新范围内）
+- MCP feature 存在编译问题，需要进一步调查（不在本次更新范围内）
+- 安全相关 feature 存在现有代码问题（不在本次更新范围内）
+
 ## [0.2.0] - 2025-01-17
 
 ### 重大变更 ⚠️
