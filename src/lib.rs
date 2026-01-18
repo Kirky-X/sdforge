@@ -81,8 +81,10 @@ pub mod prelude {
     pub use crate::http::{HttpRoute, RouteRegistration};
     #[cfg(feature = "mcp")]
     pub use crate::mcp::McpToolInstance;
+
     #[cfg(feature = "http")]
     pub use axum::response::IntoResponse;
+
     pub use sdforge_macros::{service_api, service_module, test_macro};
 }
 
@@ -93,6 +95,31 @@ pub mod http;
 
 #[cfg(feature = "mcp")]
 pub mod mcp;
+
+// Create a module hierarchy for mcp-sdk to match generated code expectations
+#[cfg(feature = "mcp")]
+pub mod mcp_sdk_types {
+    pub mod tools {
+        pub use ::mcp_sdk::tools::Tool;
+    }
+
+    pub mod types {
+        pub use ::mcp_sdk::types::CallToolResponse;
+        pub use ::mcp_sdk::types::ToolResponseContent;
+    }
+}
+
+// Make mcp_sdk available for generated code (aliases mcp_sdk_types)
+#[cfg(feature = "mcp")]
+pub use mcp_sdk_types as mcp_sdk;
+
+// Re-export types at crate root for convenience
+#[cfg(feature = "mcp")]
+pub use mcp_sdk_types::tools::Tool;
+#[cfg(feature = "mcp")]
+pub use mcp_sdk_types::types::CallToolResponse;
+#[cfg(feature = "mcp")]
+pub use mcp_sdk_types::types::ToolResponseContent;
 
 #[cfg(feature = "streaming")]
 pub mod streaming;
@@ -121,7 +148,6 @@ pub use config::{
 };
 
 #[cfg(feature = "hot-reload")]
-#[cfg(feature = "hot-reload")]
 pub use config::hot_reload::ConfigWatcher;
 
 #[cfg(feature = "cache")]
@@ -144,12 +170,13 @@ pub mod grpc;
 
 #[cfg(feature = "grpc")]
 pub use grpc::{
-    build_server, build_server_with_config, AxiomGrpcService, GrpcRoute, GrpcServerConfig,
+    build_server, build_server_with_config, GrpcRoute, GrpcServerConfig, SdForgeGrpcService,
 };
 
 #[cfg(feature = "grpc")]
-pub use grpc::axiom_v1::{
-    axiom_service_server::AxiomServiceServer, CallRequest, CallResponse, InfoRequest, InfoResponse,
+pub use grpc::sdforge_v1::{
+    sd_forge_service_server::SdForgeServiceServer, CallRequest, CallResponse, InfoRequest,
+    InfoResponse,
 };
 
 #[cfg(feature = "http")]
