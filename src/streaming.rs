@@ -147,7 +147,7 @@ where
                     #[cfg(feature = "logging")]
                     tracing::error!(error = %e, "Failed to serialize SSE event");
                     // Send error event instead of silently failing
-                    serde_json::to_string(&StreamEvent::error(format!(
+                    serde_json::to_string(&StreamEvent::<()>::error(format!(
                         "Serialization error: {}",
                         e
                     )))

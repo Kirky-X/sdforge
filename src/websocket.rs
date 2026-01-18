@@ -117,7 +117,6 @@ pub struct WebSocketConnection {
     sender: tokio::sync::mpsc::UnboundedSender<WebSocketMessage>,
 }
 
-#[cfg(feature = "websocket")]
 impl WebSocketConnection {
     /// Create a new WebSocket connection
     pub fn new(id: String) -> (Self, tokio::sync::mpsc::UnboundedReceiver<WebSocketMessage>) {
@@ -308,7 +307,7 @@ impl ConnectionManager {
         let mut failed_connections: Vec<String> = Vec::new();
 
         for conn in self.connections.iter() {
-            if let Err(e) = conn.send(message.as_ref().clone()).await {
+            if let Err(_e) = conn.send(message.as_ref().clone()).await {
                 // Track failed connections for cleanup
                 // Don't log every failure to avoid log spam
                 failed_connections.push(conn.id().to_string());
