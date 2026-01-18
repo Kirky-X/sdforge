@@ -88,7 +88,12 @@ impl ConfigWatcher {
         let (event_sender, event_receiver) = broadcast::channel(100);
 
         // Load initial configuration
-        let config = crate::config::ConfigLoader::new(config_path.clone(), "AXIOM").load()?;
+        let config = crate::config::ConfigLoader::new(
+            config_path
+                .to_str()
+                .ok_or_else(|| ConfigError::OutsideAllowedDirectory)?,
+        )
+        .load()?;
 
         let watcher = Self {
             config_path,
@@ -106,7 +111,12 @@ impl ConfigWatcher {
 
     /// Reload configuration
     pub async fn reload(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let config = crate::config::ConfigLoader::new(self.config_path.clone(), "AXIOM").load()?;
+        let config = crate::config::ConfigLoader::new(
+            self.config_path
+                .to_str()
+                .ok_or_else(|| ConfigError::OutsideAllowedDirectory)?,
+        )
+        .load()?;
         *self.current_config.write().await = config.clone();
         let _ = self
             .event_sender
@@ -142,9 +152,17 @@ impl ConfigWatcher {
 
                         tokio::spawn(async move {
                             // Load new configuration
-                            match crate::config::ConfigLoader::new(config_path_clone, "AXIOM")
-                                .load()
-                            {
+                            let path_str = match config_path_clone.to_str() {
+                                Some(s) => s,
+                                None => {
+                                    let _ = event_sender_clone.send(ConfigEvent::Error(
+                                        "Invalid configuration path".to_string(),
+                                    ));
+                                    return;
+                                }
+                            };
+
+                            match crate::config::ConfigLoader::new(path_str).load() {
                                 Ok(new_config) => {
                                     // Update current configuration
                                     *current_config_clone.write().await = new_config.clone();

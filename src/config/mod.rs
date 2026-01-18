@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Kirky.X
 //! Configuration management module
 
+use serde::Deserialize;
+
 pub mod hot_reload;
 
 // Re-export hot_reload types with feature gate
@@ -27,23 +29,29 @@ pub enum ConfigError {
 
     #[error("IO error: {reason}")]
     IoError { reason: String },
+
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 /// Application configuration placeholder
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct AppConfig {
     /// Server configuration
     pub server: ServerConfig,
     /// Database configuration
     pub database: DatabaseConfig,
     /// Authentication configuration
-    pub auth: AuthConfig,
+    #[serde(alias = "auth")]
+    pub authentication: AuthConfig,
     /// Logging configuration
     pub logging: LoggingConfig,
+    /// Rate limiting configuration
+    pub rate_limit: Option<RateLimitConfigFile>,
 }
 
 /// Server configuration
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct ServerConfig {
     /// Host to bind to
     pub host: String,
@@ -56,7 +64,7 @@ pub struct ServerConfig {
 }
 
 /// Database configuration
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct DatabaseConfig {
     /// Database connection string
     pub connection_string: String,
@@ -65,16 +73,40 @@ pub struct DatabaseConfig {
 }
 
 /// Authentication configuration
-#[derive(Debug, Clone, Default)]
-pub struct AuthConfig {
-    /// JWT secret key
-    pub jwt_secret: String,
-    /// Token expiration in seconds
-    pub token_expiry: u64,
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type")]
+#[non_exhaustive]
+pub enum AuthConfig {
+    /// API key authentication
+    #[serde(rename = "api_key")]
+    ApiKey {
+        /// Header name for the API key
+        header_name: String,
+        /// Prefix for the API key value
+        prefix: String,
+    },
+    /// JWT authentication
+    #[serde(rename = "jwt")]
+    Jwt {
+        /// JWT secret key
+        secret: String,
+    },
+    /// OAuth2 authentication (not yet implemented)
+    #[serde(rename = "oauth2")]
+    OAuth2,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        // Default to JWT with empty secret (will be overridden by config)
+        AuthConfig::Jwt {
+            secret: String::new(),
+        }
+    }
 }
 
 /// Logging configuration
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct LoggingConfig {
     /// Log level
     pub level: String,
@@ -83,7 +115,7 @@ pub struct LoggingConfig {
 }
 
 /// API configuration
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct ApiConfig {
     /// API prefix
     pub prefix: String,
@@ -92,7 +124,7 @@ pub struct ApiConfig {
 }
 
 /// CORS configuration
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct CorsConfig {
     /// Allowed origins
     pub allowed_origins: Vec<String>,
@@ -103,7 +135,7 @@ pub struct CorsConfig {
 }
 
 /// Rate limit configuration
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct RateLimitConfigFile {
     /// Requests per window
     pub requests: u32,
@@ -112,7 +144,7 @@ pub struct RateLimitConfigFile {
 }
 
 /// Rate limit endpoint configuration
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct RateLimitEndpointConfig {
     /// Endpoint path
     pub path: String,
@@ -121,7 +153,7 @@ pub struct RateLimitEndpointConfig {
 }
 
 /// TLS configuration
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct TlsConfig {
     /// Path to certificate file
     pub cert_path: String,
@@ -130,14 +162,14 @@ pub struct TlsConfig {
 }
 
 /// Tracing configuration
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct TracingConfig {
     /// Tracing enabled
     pub enabled: bool,
 }
 
 /// Environment helper
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct EnvHelper {
     /// Environment name
     pub environment: String,
@@ -190,7 +222,7 @@ pub fn build_cors_layer(config: &CorsConfig) -> Result<tower_http::cors::CorsLay
 }
 
 /// Initialize logging
-pub fn init_logging(config: &LoggingConfig) {
+pub fn init_logging(_config: &LoggingConfig) {
     // Placeholder - would set up tracing subscriber
 }
 
