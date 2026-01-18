@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package sdforge.v1;
+
+service SdForgeService {
+  rpc Call(CallRequest) returns (CallResponse);
+  rpc GetInfo(InfoRequest) returns (InfoResponse);
+}
+
+message CallRequest {
+  string method = 1;
+  map<string, string> parameters = 2;
+  string data = 3;
+}
+
+message CallResponse {
+  bool success = 1;
+  string data = 2;
+  string error = 3;
+  int32 status_code = 4;
+}
+
+message InfoRequest {
+  string version = 1;
+}
+
+message InfoResponse {
+  string name = 1;
+  string version = 2;
+  repeated string methods = 3;
+  string description = 4;
+}
