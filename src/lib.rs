@@ -26,15 +26,10 @@ pub use tokio_stream;
 #[cfg(feature = "http")]
 pub mod axum {
     pub use axum::body::Body;
-    pub use axum::response::Response;
-    pub use tower;
+    pub use axum::response::IntoResponse;
 
     pub mod routing {
-        pub use axum::routing::{
-            any, any_service, connect, connect_service, delete, delete_service, get, get_service,
-            head, head_service, on, on_service, options, options_service, patch, patch_service,
-            post, post_service, put, put_service, trace, trace_service, MethodRouter,
-        };
+        pub use axum::routing::{get, post, MethodRouter};
     }
 
     pub mod extract {
@@ -43,7 +38,6 @@ pub mod axum {
     }
 
     pub mod http {
-        pub use axum::http;
         pub use axum::http::Request;
         pub mod header {
             pub use axum::http::header::CONTENT_TYPE;
@@ -53,20 +47,8 @@ pub mod axum {
         }
     }
 
-    pub mod body {
-        pub use axum::body;
-        pub use axum::body::Body;
-    }
-
     pub mod handler {
-        //! Re-export Handler trait from axum
-        pub use axum::handler;
         pub use axum::handler::Handler;
-    }
-
-    pub mod response {
-        pub use axum::response;
-        pub use axum::response::Response;
     }
 
     pub use axum::serve;
@@ -83,7 +65,7 @@ pub mod prelude {
     pub use crate::mcp::McpToolInstance;
 
     #[cfg(feature = "http")]
-    pub use axum::response::IntoResponse;
+    pub use crate::axum::IntoResponse;
 
     pub use sdforge_macros::{service_api, service_module, test_macro};
 }
@@ -184,3 +166,98 @@ pub use http::version_routing::{build_version_router, VersionRouterConfig, Versi
 
 #[cfg(feature = "logging")]
 pub use config::{init_logging, init_logging_default};
+
+/// Initialize all registered plugins and ensure they are not optimized away by the linker.
+///
+/// This function must be called at least once to ensure that all inventory-based
+/// registrations (HTTP routes, MCP tools, WebSocket routes, gRPC routes) are linked
+/// into the final binary. Call this at the start of your application.
+///
+/// Returns the count of registered items for each type for debugging purposes.
+///
+/// # Example
+///
+/// ```ignore
+/// use sdforge::init_all_plugins;
+///
+/// fn main() {
+///     let counts = sdforge::init_all_plugins();
+///     println!("Routes: {}, MCP: {}, WS: {}, gRPC: {}",
+///         counts.routes, counts.mcp_tools, counts.ws_routes, counts.grpc_routes);
+/// }
+/// ```
+#[cfg(any(feature = "http", feature = "mcp", feature = "websocket", feature = "grpc"))]
+pub fn init_all_plugins() -> PluginCounts {
+    use crate::http::RouteRegistration;
+    #[cfg(feature = "mcp")]
+    use crate::mcp::McpToolRegistration;
+    #[cfg(feature = "websocket")]
+    use crate::websocket::WebSocketRoute;
+    #[cfg(feature = "grpc")]
+    use crate::grpc::GrpcRoute;
+    use std::sync::Mutex;
+    use once_cell::sync::Lazy;
+
+    // Store in global static to prevent linker optimization
+    static ROUTES: Lazy<Mutex<Vec<&'static RouteRegistration>>> = Lazy::new(|| {
+        Mutex::new(inventory::iter::<RouteRegistration>().collect())
+    });
+    #[cfg(feature = "mcp")]
+    static MCP_TOOLS: Lazy<Mutex<Vec<&'static McpToolRegistration>>> = Lazy::new(|| {
+        Mutex::new(inventory::iter::<McpToolRegistration>().collect())
+    });
+    #[cfg(feature = "websocket")]
+    static WS_ROUTES: Lazy<Mutex<Vec<&'static WebSocketRoute>>> = Lazy::new(|| {
+        Mutex::new(inventory::iter::<WebSocketRoute>().collect())
+    });
+    #[cfg(feature = "grpc")]
+    static GRPC_ROUTES: Lazy<Mutex<Vec<&'static GrpcRoute>>> = Lazy::new(|| {
+        Mutex::new(inventory::iter::<GrpcRoute>().collect())
+    });
+
+    let routes = ROUTES.lock().unwrap();
+    #[cfg(feature = "mcp")]
+    let mcp_tools = MCP_TOOLS.lock().unwrap();
+    #[cfg(feature = "websocket")]
+    let ws_routes = WS_ROUTES.lock().unwrap();
+    #[cfg(feature = "grpc")]
+    let grpc_routes = GRPC_ROUTES.lock().unwrap();
+
+    PluginCounts {
+        routes: routes.len(),
+        #[cfg(feature = "mcp")]
+        mcp_tools: mcp_tools.len(),
+        #[cfg(feature = "websocket")]
+        ws_routes: ws_routes.len(),
+        #[cfg(feature = "grpc")]
+        grpc_routes: grpc_routes.len(),
+    }
+}
+
+/// Counts of registered plugins after initialization
+#[cfg(any(feature = "http", feature = "mcp", feature = "websocket", feature = "grpc"))]
+pub struct PluginCounts {
+    /// Number of registered HTTP routes
+    pub routes: usize,
+    /// Number of registered MCP tools
+    #[cfg(feature = "mcp")]
+    pub mcp_tools: usize,
+    /// Number of registered WebSocket routes
+    #[cfg(feature = "websocket")]
+    pub ws_routes: usize,
+    /// Number of registered gRPC routes
+    #[cfg(feature = "grpc")]
+    pub grpc_routes: usize,
+}
+
+/// Get all registered MCP tools
+#[cfg(feature = "mcp")]
+pub fn get_mcp_tools() -> Vec<crate::mcp::McpToolInstance> {
+    crate::mcp::get_mcp_tools()
+}
+
+/// Get all registered WebSocket routes
+#[cfg(feature = "websocket")]
+pub fn get_websocket_routes() -> Vec<&'static crate::websocket::WebSocketRoute> {
+    inventory::iter::<crate::websocket::WebSocketRoute>().collect()
+}

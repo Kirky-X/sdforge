@@ -67,9 +67,21 @@ pub struct ServerConfig {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct DatabaseConfig {
     /// Database connection string
-    pub connection_string: String,
+    connection_string: String,
     /// Maximum connections
-    pub max_connections: u32,
+    max_connections: u32,
+}
+
+impl DatabaseConfig {
+    /// Get database connection string
+    pub fn connection_string(&self) -> &str {
+        &self.connection_string
+    }
+
+    /// Get maximum connections
+    pub fn max_connections(&self) -> u32 {
+        self.max_connections
+    }
 }
 
 /// Authentication configuration
@@ -94,14 +106,15 @@ pub enum AuthConfig {
     /// OAuth2 authentication (not yet implemented)
     #[serde(rename = "oauth2")]
     OAuth2,
+    /// No authentication
+    #[serde(rename = "none")]
+    None,
 }
 
 impl Default for AuthConfig {
     fn default() -> Self {
-        // Default to JWT with empty secret (will be overridden by config)
-        AuthConfig::Jwt {
-            secret: String::new(),
-        }
+        // Default to None for easier development
+        AuthConfig::None
     }
 }
 
@@ -156,9 +169,21 @@ pub struct RateLimitEndpointConfig {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct TlsConfig {
     /// Path to certificate file
-    pub cert_path: String,
+    cert_path: String,
     /// Path to private key file
-    pub key_path: String,
+    key_path: String,
+}
+
+impl TlsConfig {
+    /// Get certificate path
+    pub fn cert_path(&self) -> &str {
+        &self.cert_path
+    }
+
+    /// Get private key path
+    pub fn key_path(&self) -> &str {
+        &self.key_path
+    }
 }
 
 /// Tracing configuration
@@ -265,7 +290,7 @@ mod tests {
         let config: AppConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 3000);
-        assert_eq!(config.database.max_connections, 25);
+        assert_eq!(config.database.max_connections(), 25);
         match &config.authentication {
             AuthConfig::ApiKey {
                 header_name,
@@ -348,10 +373,10 @@ mod tests {
     fn test_auth_config_default() {
         let default: AuthConfig = AuthConfig::default();
         match default {
-            AuthConfig::Jwt { secret } => {
-                assert!(secret.is_empty());
+            AuthConfig::None => {
+                // Default is now None for easier development
             }
-            _ => panic!("Default should be Jwt variant"),
+            _ => panic!("Default should be None variant"),
         }
     }
 
@@ -369,8 +394,8 @@ mod tests {
     #[test]
     fn test_database_config_default() {
         let config = DatabaseConfig::default();
-        assert!(config.connection_string.is_empty());
-        assert_eq!(config.max_connections, 0); // Default u32 is 0
+        assert!(config.connection_string().is_empty());
+        assert_eq!(config.max_connections(), 0); // Default u32 is 0
     }
 
     /// Test CorsConfig with origins
