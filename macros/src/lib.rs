@@ -809,6 +809,18 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
+    // Generate gRPC metadata tokens before the quote block
+    let grpc_metadata = match api_metadata_tokens(
+        quote! { #name },
+        quote! { #version },
+        quote! { #description_literal },
+        quote! { #cache_ttl_expr },
+        quote! { false },
+    ) {
+        Ok(tokens) => tokens,
+        Err(e) => return e.into_compile_error().into(),
+    };
+
     let mcp_code = if let Some(ref tool_name) = tool_name {
         let mcp_call_logic = if has_params {
             quote! {
@@ -841,11 +853,22 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             &format!("{}McpTool", fn_name),
             proc_macro2::Span::call_site(),
         );
+        let mcp_create_fn_name = syn::Ident::new(
+            &format!("__create_{}_mcp_tool", fn_name),
+            proc_macro2::Span::call_site(),
+        );
 
         quote! {
             #[cfg(feature = "mcp")]
             #[derive(Debug)]
             struct #mcp_struct_name;
+
+            #[cfg(feature = "mcp")]
+            impl #mcp_struct_name {
+                fn create() -> std::sync::Arc<dyn sdforge::mcp_sdk::tools::Tool> {
+                    std::sync::Arc::new(Self) as std::sync::Arc<dyn sdforge::mcp_sdk::tools::Tool>
+                }
+            }
 
             #[cfg(feature = "mcp")]
             impl sdforge::mcp_sdk::tools::Tool for #mcp_struct_name {
@@ -912,6 +935,19 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 }
             }
+
+            #[cfg(feature = "mcp")]
+            fn #mcp_create_fn_name() -> std::sync::Arc<dyn sdforge::mcp_sdk::tools::Tool> {
+                #mcp_struct_name::create()
+            }
+
+            #[cfg(feature = "mcp")]
+            sdforge::inventory::submit!(sdforge::mcp::McpToolRegistration {
+                name: #mcp_tool_name,
+                version: #version,
+                description: #mcp_tool_description,
+                create_fn: #mcp_create_fn_name,
+            });
         }
     } else {
         quote! {}
@@ -927,18 +963,6 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     } else {
         quote! {}
-    };
-
-    // Generate gRPC metadata tokens before the quote block
-    let grpc_metadata = match api_metadata_tokens(
-        quote! { #name },
-        quote! { #version },
-        quote! { #description_literal },
-        quote! { #cache_ttl_expr },
-        quote! { false },
-    ) {
-        Ok(tokens) => tokens,
-        Err(e) => return e.into_compile_error().into(),
     };
 
     let grpc_code = if grpc_method.is_some() {

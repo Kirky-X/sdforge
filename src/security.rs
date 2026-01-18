@@ -46,7 +46,7 @@ pub enum AuthError {
 }
 
 /// Authentication context
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthContext {
     /// User ID
     pub(crate) user_id: Option<String>,

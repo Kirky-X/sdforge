@@ -88,6 +88,31 @@ fn resolve_route_path(base_path: &str, module_prefix: Option<&str>) -> String {
 /// Routes are automatically prefixed with their module prefix if available.
 #[allow(dead_code)]
 pub fn build() -> Router {
+    // Force MCP tool inventory collection to prevent linker optimization
+    // This ensures MCP tools registered via macros are not optimized away
+    #[cfg(feature = "mcp")]
+    {
+        use crate::mcp::McpToolRegistration;
+        // Iterate but don't use - this forces linker to keep MCP tool symbols
+        let _ = inventory::iter::<McpToolRegistration>().count();
+    }
+
+    // Force WebSocket route inventory collection to prevent linker optimization
+    #[cfg(feature = "websocket")]
+    {
+        use crate::websocket::WebSocketRoute;
+        // Iterate but don't use - this forces linker to keep WebSocket route symbols
+        let _ = inventory::iter::<WebSocketRoute>().count();
+    }
+
+    // Force gRPC route inventory collection to prevent linker optimization
+    #[cfg(feature = "grpc")]
+    {
+        use crate::grpc::GrpcRoute;
+        // Iterate but don't use - this forces linker to keep gRPC route symbols
+        let _ = inventory::iter::<GrpcRoute>().count();
+    }
+
     let mut router = Router::new();
 
     // First, collect registrations with function pointers
@@ -198,6 +223,14 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         router = router.layer(axum::middleware::from_fn(middleware));
     }
 
+    // Validate authentication config early (before security block to handle OAuth2)
+    if let AuthConfig::OAuth2 = config.authentication {
+        // OAuth2 is not yet implemented - return error
+        return Err(ConfigError::ValidationError(
+            "OAuth2 authentication is not yet implemented".into(),
+        ));
+    }
+
     // Apply authentication middleware
     #[cfg(feature = "security")]
     {
@@ -289,17 +322,9 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
                 };
             let middleware = auth_middleware(auth_clone, extract_auth);
             router = router.layer(axum::middleware::from_fn(middleware));
-        } else if let AuthConfig::OAuth2 = auth_config {
-            // OAuth2 is not yet implemented - return error
-            return Err(ConfigError::ValidationError(
-                "OAuth2 authentication is not yet implemented".into(),
-            ));
-        } else {
-            // This should not happen as we cover all variants, but return error for safety
-            return Err(ConfigError::ValidationError(
-                "Unknown authentication configuration".into(),
-            ));
         }
+        // OAuth2 is already checked before this block
+        // None is handled by doing nothing
     }
 
     // Initialize logging
@@ -417,10 +442,7 @@ mod tests {
                 request_timeout_secs: 30,
                 cors: None,
             },
-            database: DatabaseConfig {
-                connection_string: "".to_string(),
-                max_connections: 10,
-            },
+            database: DatabaseConfig::default(),
             authentication: AuthConfig::Jwt {
                 secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
             },
@@ -445,10 +467,7 @@ mod tests {
                 request_timeout_secs: 30,
                 cors: None,
             },
-            database: DatabaseConfig {
-                connection_string: "".to_string(),
-                max_connections: 10,
-            },
+            database: DatabaseConfig::default(),
             authentication: AuthConfig::ApiKey {
                 header_name: "X-API-Key".to_string(),
                 prefix: "key-".to_string(),
@@ -477,10 +496,7 @@ mod tests {
                 request_timeout_secs: 30,
                 cors: None,
             },
-            database: DatabaseConfig {
-                connection_string: "".to_string(),
-                max_connections: 10,
-            },
+            database: DatabaseConfig::default(),
             authentication: AuthConfig::OAuth2,
             logging: LoggingConfig {
                 level: "info".to_string(),
@@ -511,10 +527,7 @@ mod tests {
                     allowed_headers: vec!["Content-Type".to_string()],
                 }),
             },
-            database: DatabaseConfig {
-                connection_string: "".to_string(),
-                max_connections: 10,
-            },
+            database: DatabaseConfig::default(),
             authentication: AuthConfig::Jwt {
                 secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
             },
