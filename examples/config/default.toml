@@ -1,0 +1,40 @@
+# SDForge Configuration Example
+
+# Server Configuration
+[server]
+host = "0.0.0.0"
+port = 3000
+request_timeout_secs = 30
+
+# CORS Configuration (optional)
+[server.cors]
+allowed_origins = ["http://localhost:3000", "https://example.com"]
+allowed_methods = ["GET", "POST", "PUT", "DELETE", "PATCH"]
+allowed_headers = ["Content-Type", "Authorization", "X-API-Key"]
+
+# Database Configuration
+[database]
+connection_string = "postgresql://user:password@localhost/sdforge"
+max_connections = 10
+
+# Authentication Configuration
+# Supports: jwt, api_key, oauth2 (oauth2 not yet implemented)
+[authentication]
+type = "jwt"
+secret = "your-jwt-secret-key-change-this-in-production"
+
+# Alternative: API Key Authentication
+# [authentication]
+# type = "api_key"
+# header_name = "X-API-Key"
+# prefix = "Key "
+
+# Rate Limiting Configuration (optional)
+[rate_limit]
+requests = 100
+window_seconds = 60
+
+# Logging Configuration
+[logging]
+level = "info"
+format = "json"
