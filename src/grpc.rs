@@ -11,26 +11,26 @@ use tonic::{transport::Server, Request, Response, Status};
 // Include generated proto code
 /// gRPC protocol buffer module
 #[cfg(feature = "grpc")]
-pub mod axiom_v1 {
-    tonic::include_proto!("axiom.v1");
+pub mod sdforge_v1 {
+    tonic::include_proto!("sdforge.v1");
 }
 
 #[cfg(feature = "grpc")]
-use axiom_v1::{
-    axiom_service_server::{AxiomService, AxiomServiceServer},
+use sdforge_v1::{
+    sd_forge_service_server::{SdForgeService, SdForgeServiceServer},
     CallRequest, CallResponse, InfoRequest, InfoResponse,
 };
 
 #[cfg(feature = "grpc")]
 /// gRPC service implementation
 #[derive(Debug, Default)]
-pub struct AxiomGrpcService {
+pub struct SdForgeGrpcService {
     // Add service state if needed
 }
 
 #[cfg(feature = "grpc")]
 #[tonic::async_trait]
-impl AxiomService for AxiomGrpcService {
+impl SdForgeService for SdForgeGrpcService {
     async fn call(&self, request: Request<CallRequest>) -> Result<Response<CallResponse>, Status> {
         let req = request.into_inner();
 
@@ -53,10 +53,10 @@ impl AxiomService for AxiomGrpcService {
         _request: Request<InfoRequest>,
     ) -> Result<Response<InfoResponse>, Status> {
         let response = InfoResponse {
-            name: "Axiom Service".to_string(),
+            name: "SdForge Service".to_string(),
             version: "0.1.0".to_string(),
             methods: vec!["Call".to_string(), "GetInfo".to_string()],
-            description: "Axiom Multi-Protocol SDK Framework".to_string(),
+            description: "SdForge Multi-Protocol SDK Framework".to_string(),
         };
 
         Ok(Response::new(response))
@@ -91,13 +91,13 @@ pub async fn build_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> 
             )));
         }
     };
-    let service = AxiomGrpcService::default();
+    let service = SdForgeGrpcService::default();
 
     println!("gRPC server listening on {}", addr);
 
     // Limit request size to 4MB to prevent large message attacks
     Server::builder()
-        .add_service(AxiomServiceServer::new(service).max_decoding_message_size(4 * 1024 * 1024))
+        .add_service(SdForgeServiceServer::new(service).max_decoding_message_size(4 * 1024 * 1024))
         .serve(addr)
         .await?;
 
@@ -120,12 +120,12 @@ pub async fn build_server_with_config(
             )));
         }
     };
-    let service = AxiomGrpcService::default();
+    let service = SdForgeGrpcService::default();
 
     println!("gRPC server listening on {}", addr);
 
     Server::builder()
-        .add_service(AxiomServiceServer::new(service))
+        .add_service(SdForgeServiceServer::new(service))
         .serve(addr)
         .await?;
 

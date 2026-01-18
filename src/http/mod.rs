@@ -192,7 +192,8 @@ pub fn build_with_config(
     // Apply rate limiting middleware
     #[cfg(feature = "security")]
     if let Some(rate_limit) = &config.rate_limit {
-        let rate_config = RateLimitConfig::try_from(rate_limit.clone())?;
+        let rate_config: crate::security::RateLimitConfig =
+            RateLimitConfig::try_from(rate_limit.clone())?;
         let limiter = Arc::new(RateLimiter::new(Some(rate_config)));
         let middleware = rate_limit_middleware(limiter);
         router = router.layer(axum::middleware::from_fn(middleware));
@@ -200,9 +201,11 @@ pub fn build_with_config(
 
     // Apply authentication middleware
     #[cfg(feature = "security")]
-    if let Some(auth_config) = &config.authentication {
+    {
         use crate::security::{auth_middleware, ApiKeyAuth, AuthContext, AuthError, BearerAuth};
         use axum::http::HeaderValue;
+
+        let auth_config = &config.authentication;
 
         if let crate::config::AuthConfig::ApiKey {
             header_name,
@@ -287,17 +290,23 @@ pub fn build_with_config(
                 };
             let middleware = auth_middleware(auth_clone, extract_auth);
             router = router.layer(axum::middleware::from_fn(middleware));
-        } else {
+        } else if let crate::config::AuthConfig::OAuth2 = auth_config {
+            // OAuth2 is not yet implemented - return error
             return Err(crate::config::ConfigError::ValidationError(
-                "OAuth2 not yet implemented".into(),
+                "OAuth2 authentication is not yet implemented".into(),
+            ));
+        } else {
+            // This should not happen as we cover all variants, but return error for safety
+            return Err(crate::config::ConfigError::ValidationError(
+                "Unknown authentication configuration".into(),
             ));
         }
     }
 
     // Initialize logging
     #[cfg(feature = "logging")]
-    if let Some(logging) = &config.logging {
-        let _ = crate::config::init_logging(logging);
+    {
+        let _ = crate::config::init_logging(&config.logging);
     }
 
     // Apply cache middleware
