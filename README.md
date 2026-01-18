@@ -2,7 +2,7 @@
 
 <img src="resource/sdforge.png" alt="SDForge Logo" width="200" height="200">
 
-[![Crates.io](https://img.shields.io/crates/v/sdforge)](https://crates.io/crates/sdforge) [![Documentation](https://img.shields.io/docsrs/sdforge)](https://docs.rs/sdforge) [![License](https://img.shields.io/badge/license-MIT%2FApache-blue.svg)](LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/sdforge-rs/sdforge/ci.yml?branch=main)](https://github.com/sdforge-rs/sdforge/actions) [![Rust Version](https://img.shields.io/badge/rust-2021%2B-orange.svg)](https://www.rust-lang.org)
+[![Crates.io](https://img.shields.io/crates/v/sdforge)](https://crates.io/crates/sdforge) [![Documentation](https://img.shields.io/docsrs/sdforge)](https://docs.rs/sdforge) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/sdforge-rs/sdforge/ci.yml?branch=main)](https://github.com/sdforge-rs/sdforge/actions) [![Rust Version](https://img.shields.io/badge/rust-2021%2B-orange.svg)](https://www.rust-lang.org)
 
 **SDForge** is a Rust-based declarative SDK framework that uses procedural macros to automatically generate multi-protocol service interfaces (HTTP + MCP) from unified function annotations. The key innovation is compile-time protocol selection via Cargo features—unused protocols produce zero compiled code.
 
@@ -48,6 +48,10 @@
 - [🛤️ Path Parameters](#path-parameters)
 - [🔨 Building and Testing](#building-and-testing)
 - [📚 Documentation](#documentation)
+- [🔒 Security Configuration](#security-configuration)
+- [⚡ Performance Optimization](#performance-optimization)
+- [🚀 Production Deployment](#deployment-guide)
+- [🐛 Troubleshooting](#troubleshooting)
 - [🤝 Contributing](#contributing)
 - [📜 License](#license)
 - [📂 Project Structure](#-project-structure)
@@ -487,12 +491,9 @@ cargo test --all-features
 
 ## <span id="license">📜 License</span>
 
-Licensed under either of:
+Licensed under the MIT License:
 
-- [Apache License, Version 2.0](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0
-- [MIT License](LICENSE-MIT) or http://opensource.org/licenses/MIT
-
-at your option.
+- [MIT License](LICENSE) or http://opensource.org/licenses/MIT
 
 ---
 
@@ -536,6 +537,226 @@ sdforge = { version = "0.2", features = ["cli"] }
 
 ---
 
+## <span id="security-configuration">🔒 Security Configuration</span>
+
+SDForge provides comprehensive security features out of the box. Here's how to configure them:
+
+### 🛡️ Authentication Setup
+
+```rust
+use sdforge::prelude::*;
+
+#[service_api(
+    name = "secure_endpoint",
+    version = "v1", 
+    path = "/secure",
+    method = "GET",
+    auth_required = true
+)]
+async fn secure_endpoint(
+    auth_context: AuthContext
+) -> Result<String, ApiError> {
+    // Only authenticated users can access this
+    Ok(format!("Hello, {}!", auth_context.user_id().unwrap_or("Anonymous")))
+}
+```
+
+### ⚡ Rate Limiting
+
+```toml
+# config.toml
+[rate_limit]
+enabled = true
+requests_per_minute = 60
+burst_size = 10
+```
+
+### 🔐 API Key Authentication
+
+```rust
+use sdforge::security::{ApiKeyAuth, auth_middleware};
+
+let app = Router::new()
+    .route("/api/*path", get(handler))
+    .layer(auth_middleware(ApiKeyAuth::new("your-secret-key")));
+```
+
+---
+
+## <span id="performance-optimization">⚡ Performance Optimization</span>
+
+### 🚀 Caching Configuration
+
+```toml
+# config.toml
+[cache]
+enabled = true
+ttl_seconds = 300
+max_size_mb = 100
+max_entries = 10000
+
+[cache.redis]
+url = "redis://localhost:6379"
+enabled = false
+```
+
+### 📊 Memory Management
+
+```rust
+use sdforge::cache::CacheConfig;
+
+let cache_config = CacheConfig {
+    ttl_seconds: 600,
+    max_size_bytes: 50 * 1024 * 1024, // 50MB
+    max_entries: 5000,
+    cacheable_methods: vec!["GET".to_string(), "HEAD".to_string()],
+    cacheable_status_codes: vec![200, 203, 204, 206, 300, 301, 404, 410],
+};
+```
+
+### ⚙️ Connection Pooling
+
+```rust
+use sdforge::http::build_with_config;
+
+let config = HttpConfig {
+    max_connections: 1000,
+    connection_timeout: Duration::from_secs(30),
+    keep_alive: Duration::from_secs(60),
+    ..Default::default()
+};
+
+let app = build_with_config(config);
+```
+
+---
+
+## <span id="deployment-guide">🚀 Production Deployment</span>
+
+### 🐳 Docker Deployment
+
+```dockerfile
+FROM rust:1.75 as builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release --features full
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=builder /app/target/release/sdforge /usr/local/bin/
+EXPOSE 3000
+CMD ["sdforge", "serve", "--port", "3000"]
+```
+
+### ☸️ Kubernetes Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sdforge-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sdforge-api
+  template:
+    metadata:
+      labels:
+        app: sdforge-api
+    spec:
+      containers:
+      - name: sdforge
+        image: sdforge:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: FEATURES
+          value: "full"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+```
+
+### 🔧 Environment Configuration
+
+```bash
+# Production environment variables
+export RUST_LOG=info
+export SD_FORGE_PORT=3000
+export SD_FORGE_HOST=0.0.0.0
+export SD_FORGE_CONFIG_PATH=/etc/sdforge/config.toml
+export SD_FORGE_FEATURES=full
+```
+
+---
+
+## <span id="troubleshooting">🐛 Troubleshooting</span>
+
+### 🔍 Common Issues
+
+#### **Compilation Errors**
+```bash
+# Error: Feature not found
+# Solution: Check available features
+cargo check --help | grep features
+
+# Enable specific features
+cargo build --features "http,security,cache"
+```
+
+#### **Runtime Issues**
+```bash
+# Check logs with tracing
+RUST_LOG=debug cargo run --features logging
+
+# Common port conflicts
+# Solution: Change port or kill existing process
+lsof -i :3000
+kill -9 <PID>
+```
+
+#### **Performance Issues**
+```bash
+# Profile with cargo-flamegraph
+cargo install flamegraph
+cargo flamegraph --bin sdforge --features full
+
+# Memory usage analysis
+valgrind --tool=massif target/release/sdforge
+```
+
+### 📋 Health Check Endpoint
+
+```rust
+#[service_api(
+    name = "health_check",
+    version = "v1",
+    path = "/health",
+    method = "GET"
+)]
+async fn health_check() -> Result<HealthStatus, ApiError> {
+    Ok(HealthStatus {
+        status: "healthy".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        uptime: get_uptime(),
+    })
+}
+```
+
+### 🆘 Getting Help
+
+- 📖 [Documentation](https://docs.rs/sdforge)
+- 🐛 [Issue Tracker](https://github.com/sdforge-rs/sdforge/issues)
+- 💬 [Discussions](https://github.com/sdforge-rs/sdforge/discussions)
+- 📧 [Support Email](mailto:support@sdforge.dev)
+
+---
+
 <div align="center">
 
 **Built with ❤️ using Rust**
@@ -546,7 +767,7 @@ sdforge = { version = "0.2", features = ["cli"] }
 
 <div align="center">
 
-[🔝 back to top](#readme) | [🇨🇳 中文版](./README_zh.md)
+[🔝 Back To Top](#readme) | [🇨🇳 中文版](./README_zh.md)
 
 </div>
 
