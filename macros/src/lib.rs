@@ -105,19 +105,21 @@ fn api_metadata_tokens(
     let validated_version = validate_version(&version.to_string())?;
 
     Ok(quote! {
-        sdforge::core::ApiMetadata {
-            name: #validated_name,
-            version: #validated_version,
-            description: #description,
-            cache_ttl: #cache_ttl,
-            is_streaming: #is_streaming,
-        }
+        sdforge::core::ApiMetadata::new(
+            #validated_name.to_string(),
+            #validated_version.to_string(),
+            #description.to_string(),
+            #cache_ttl,
+            #is_streaming,
+        )
     })
 }
 
 /// Validate API name to prevent code injection
 /// API names must be valid Rust identifiers (alphanumeric + underscores, starting with letter)
 fn validate_api_name(name: &str) -> Result<String, syn::Error> {
+    let name = name.trim_matches('"').trim();
+
     // Check for empty name
     if name.is_empty() {
         return Err(syn::Error::new(
@@ -156,14 +158,9 @@ fn validate_api_name(name: &str) -> Result<String, syn::Error> {
 /// Validate version string to prevent code injection
 /// Version strings should match common patterns like "v1", "1.0", "v1.2.3"
 fn validate_version(version: &str) -> Result<String, syn::Error> {
-    // Check for empty version
-    if version.is_empty() {
-        return Err(syn::Error::new(
-            proc_macro2::Span::call_site(),
-            "API version cannot be empty",
-        ));
-    }
+    let version = version.trim_matches('"').trim();
 
+    // Check for empty version
     if version.is_empty() {
         return Err(syn::Error::new(
             proc_macro2::Span::call_site(),
@@ -358,7 +355,12 @@ struct ParamInfo {
 }
 
 impl ParamInfo {
-    fn from_arg(arg: &FnArg, path_params: &[String]) -> Option<Self> {
+    fn from_arg(
+        arg: &FnArg,
+        path_params: &[String],
+        http_method: Option<&str>,
+        body_params: &[String],
+    ) -> Option<Self> {
         let pat_type = match arg {
             FnArg::Receiver(_) => return None,
             FnArg::Typed(pat_type) => pat_type,
@@ -390,6 +392,12 @@ impl ParamInfo {
                 } else {
                     ParamKind::Query
                 }
+            } else if http_method.map(|m| m.to_uppercase()) == Some("GET".to_string()) {
+                ParamKind::Query
+            } else if body_params.contains(&name) {
+                // Always use Json extractor for body parameters
+                // Form extractor is only for form-urlencoded requests
+                ParamKind::Body
             } else {
                 ParamKind::Body
             };
@@ -528,12 +536,36 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         .map(|p| extract_path_params(p))
         .unwrap_or_default();
 
+    // Collect all parameter names first to determine if we need Form extractor
+    let all_param_names: Vec<String> = input
+        .sig
+        .inputs
+        .iter()
+        .filter_map(|arg| {
+            if let FnArg::Typed(pat_type) = arg {
+                if let Pat::Ident(pat_ident) = &*pat_type.pat {
+                    return Some(pat_ident.ident.to_string());
+                }
+            }
+            None
+        })
+        .collect();
+
+    // Filter to get body params (non-path, non-Option params)
+    let body_param_names: Vec<String> = all_param_names
+        .iter()
+        .filter(|name| !path_params.contains(name))
+        .cloned()
+        .collect();
+
     // Extract function parameters
     let params: Vec<ParamInfo> = input
         .sig
         .inputs
         .iter()
-        .filter_map(|arg| ParamInfo::from_arg(arg, &path_params))
+        .filter_map(|arg| {
+            ParamInfo::from_arg(arg, &path_params, method.as_deref(), &body_param_names)
+        })
         .collect();
 
     // Check if there are any parameters
@@ -600,29 +632,39 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! { serde_json::json!([#(#mcp_schema_required),*]) }
     };
 
-    // Build HTTP path with version
-    let http_path = format!(
-        "/api/{}{}",
-        version,
-        path.as_ref().unwrap_or(&"".to_string())
-    );
-
-    // Build HTTP method
-    let http_method_upper = method.as_ref().unwrap_or(&"GET".to_string()).to_uppercase();
-    let http_method_lower = http_method_upper.to_lowercase();
-
     // Generate unique handler name to avoid conflicts
-    let sanitized_name = name.replace(|c: char| !c.is_alphanumeric(), "_");
+    let fn_name_str = fn_name.to_string();
     let handler_name = syn::Ident::new(
-        &format!("__axiom_http_handler_{}", sanitized_name),
+        &format!("__axiom_http_handler_{}", fn_name_str),
         proc_macro2::Span::call_site(),
     );
 
     // Generate unique route registration function name
     let register_fn_name = syn::Ident::new(
-        &format!("__axiom_register_{}", sanitized_name),
+        &format!("__axiom_register_{}", fn_name_str),
         proc_macro2::Span::call_site(),
     );
+
+    // Build HTTP path with version, converting :param to {param} for axum 0.8
+    let path_str = path.as_ref().cloned().unwrap_or_default();
+    // Convert :param to {param} for axum 0.8 compatibility
+    // e.g., "/users/:id" -> "/users/{id}"
+    let axum_path = path_str
+        .split('/')
+        .map(|segment| {
+            if segment.starts_with(':') {
+                format!("{{{}}}", &segment[1..])
+            } else {
+                segment.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/");
+    let http_path = format!("/api/{}{}", version, axum_path);
+
+    // Build HTTP method
+    let http_method_upper = method.as_ref().unwrap_or(&"GET".to_string()).to_uppercase();
+    let http_method_lower = http_method_upper.to_lowercase();
 
     // Convert cache_ttl to a proper expression for the quote macro
     let cache_ttl_expr = match &cache_ttl {
@@ -660,16 +702,32 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             Err(e) => return e.into_compile_error().into(),
         };
 
-        // Generate a function that creates the HttpRoute at runtime
+        // Generate route creation function with inline handler closure
         let route_creation = if is_streaming {
             quote! {
                 fn #register_fn_name() -> sdforge::http::HttpRoute {
-                    let handler = #handler_name;
                     sdforge::http::HttpRoute {
                         path: #http_path.to_string(),
                         handler: {
                             let mut router = sdforge::axum::routing::MethodRouter::new();
-                            router = router.get(handler);
+                            router = router.get(#(#param_patterns),* | #(#param_names.0),* | {
+                                async move {
+                                    use sdforge::prelude::*;
+                                    match #fn_name(#(#param_names.0),*).await {
+                                        Ok(_stream) => {
+                                            let body = sdforge::axum::body::Body::from_streaming_bytes(
+                                                tokio_stream::iter(vec![])
+                                            );
+                                            let response: sdforge::axum::response::Response = (
+                                                [(sdforge::axum::http::header::CONTENT_TYPE, "text/event-stream")],
+                                                body
+                                            ).into_response();
+                                            response
+                                        }
+                                        Err(e) => e.into_response(),
+                                    }
+                                }
+                            });
                             router
                         },
                         metadata: #streaming_metadata,
@@ -678,22 +736,52 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
         } else {
+            let is_result = match return_type {
+                syn::ReturnType::Type(_, ty) => {
+                    matches!(ty.as_ref(), syn::Type::Path(syn::TypePath { qself: None, path: syn::Path { segments, .. } }) if segments.iter().any(|s| s.ident == "Result"))
+                }
+                syn::ReturnType::Default => false,
+            };
+
+            let handler_closure = if is_result {
+                quote! {
+                    |#(#param_patterns),*| {
+                        async move {
+                            use sdforge::prelude::*;
+                            match #fn_name(#(#param_names.0),*).await {
+                                Ok(value) => sdforge::axum::extract::Json(value).into_response(),
+                                Err(e) => e.into_response(),
+                            }
+                        }
+                    }
+                }
+            } else {
+                quote! {
+                    |#(#param_patterns),*| {
+                        async move {
+                            use sdforge::prelude::*;
+                            let result = #fn_name(#(#param_names.0),*).await;
+                            sdforge::axum::extract::Json(result).into_response()
+                        }
+                    }
+                }
+            };
+
             quote! {
                 fn #register_fn_name() -> sdforge::http::HttpRoute {
-                    let handler = #handler_name;
                     sdforge::http::HttpRoute {
                         path: #http_path.to_string(),
                         handler: {
                             let mut router = sdforge::axum::routing::MethodRouter::new();
                             match #http_method_lower.as_ref() {
-                                "get" => router = router.get(handler),
-                                "post" => router = router.post(handler),
-                                "put" => router = router.put(handler),
-                                "delete" => router = router.delete(handler),
-                                "patch" => router = router.patch(handler),
-                                "head" => router = router.head(handler),
-                                "options" => router = router.options(handler),
-                                _ => router = router.get(handler),
+                                "get" => router = router.get(#handler_closure),
+                                "post" => router = router.post(#handler_closure),
+                                "put" => router = router.put(#handler_closure),
+                                "delete" => router = router.delete(#handler_closure),
+                                "patch" => router = router.patch(#handler_closure),
+                                "head" => router = router.head(#handler_closure),
+                                "options" => router = router.options(#handler_closure),
+                                _ => router = router.get(#handler_closure),
                             }
                             router
                         },
@@ -704,59 +792,8 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        // Generate handler code based on return type (Result or direct value)
-        let handler_code = if is_streaming {
-            quote! {
-                #fn_vis async fn #handler_name(#(#param_patterns),*) -> sdforge::axum::response::Response {
-                    #(#param_unwraps)*
-                    match #fn_name(#(#param_names),*).await {
-                        Ok(_stream) => {
-                            let body = sdforge::axum::body::Body::from_streaming_bytes(
-                                tokio_stream::iter(vec![])
-                            );
-                            let response: sdforge::axum::response::Response = (
-                                [(sdforge::axum::http::header::CONTENT_TYPE, "text/event-stream")],
-                                body
-                            ).into_response();
-                            response
-                        }
-                        Err(e) => e.into_response(),
-                    }
-                }
-            }
-        } else {
-            // Check if the return type is Result by looking at the original function's return type
-            let is_result = match return_type {
-                syn::ReturnType::Type(_, ty) => {
-                    matches!(ty.as_ref(), syn::Type::Path(syn::TypePath { qself: None, path: syn::Path { segments, .. } }) if segments.iter().any(|s| s.ident == "Result"))
-                }
-                syn::ReturnType::Default => false,
-            };
-
-            if is_result {
-                quote! {
-                    #fn_vis async fn #handler_name(#(#param_patterns),*) -> sdforge::axum::response::Response {
-                        #(#param_unwraps)*
-                        match #fn_name(#(#param_names),*).await {
-                            Ok(value) => value.into_response(),
-                            Err(e) => e.into_response(),
-                        }
-                    }
-                }
-            } else {
-                quote! {
-                    #fn_vis async fn #handler_name(#(#param_patterns),*) -> sdforge::axum::response::Response {
-                        #(#param_unwraps)*
-                        let result = #fn_name(#(#param_names),*).await;
-                        result.into_response()
-                    }
-                }
-            }
-        };
-
-        // Combine handler code, route creation function, and registration
+        // Combine route creation function and registration
         quote! {
-            #handler_code
             #route_creation
             sdforge::inventory::submit!(sdforge::http::RouteRegistration {
                 name: #name,
@@ -768,7 +805,6 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    // Generate MCP code
     let mcp_code = if let Some(ref tool_name) = tool_name {
         let mcp_call_logic = if has_params {
             quote! {
@@ -794,6 +830,11 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 
         let mcp_tool_description = description.as_ref().unwrap_or(&name);
 
+        let mcp_struct_name = syn::Ident::new(
+            &format!("{}McpTool", fn_name),
+            proc_macro2::Span::call_site(),
+        );
+
         // Generate metadata tokens before the quote block
         let mcp_metadata = match api_metadata_tokens(
             quote! { #name },
@@ -807,10 +848,12 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         };
 
         quote! {
-            struct AxiomMcpTool;
+            #[cfg(feature = "mcp")]
+            struct #mcp_struct_name;
 
+            #[cfg(feature = "mcp")]
             #[mcp_sdk::types::Tool]
-            impl AxiomMcpTool {
+            impl #mcp_struct_name {
                 fn name(&self) -> String {
                     #mcp_tool_name.to_string()
                 }
@@ -888,9 +931,9 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
             }
 
-            // Register MCP tool (requires axiom's "mcp" feature)
+            #[cfg(feature = "mcp")]
             sdforge::inventory::submit!(sdforge::mcp::McpToolInstance {
-                tool: std::sync::Arc::new(AxiomMcpTool),
+                tool: std::sync::Arc::new(#mcp_struct_name),
                 metadata: #mcp_metadata,
             });
         }
@@ -898,10 +941,9 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    // Generate WebSocket code
     let ws_code = if ws_path.is_some() {
         quote! {
-            // WebSocket route (requires axiom's "websocket" feature)
+            #[cfg(feature = "websocket")]
             sdforge::inventory::submit!(sdforge::websocket::WebSocketRoute {
                 path: #ws_path.unwrap().to_string(),
                 handler: #fn_name,
@@ -923,10 +965,9 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         Err(e) => return e.into_compile_error().into(),
     };
 
-    // Generate gRPC code
     let grpc_code = if grpc_method.is_some() {
         quote! {
-            // gRPC route (requires axiom's "grpc" feature)
+            #[cfg(feature = "grpc")]
             sdforge::inventory::submit!(sdforge::grpc::GrpcRoute {
                 service_name: #name.to_string(),
                 metadata: #grpc_metadata,

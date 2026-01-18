@@ -10,6 +10,9 @@ categories.workspace = true
 authors.workspace = true
 documentation = "https://docs.rs/sdforge"
 
+[lib]
+path = "lib.rs"
+
 [dependencies]
 # Core dependencies
 serde = { workspace = true, features = ["derive"] }
@@ -106,6 +109,7 @@ http = [
     "dep:once_cell",
     "dep:notify",
     "dep:tokio",
+    "dep:axum-extra",
 ]
 mcp = ["dep:mcp-sdk", "dep:inventory", "dep:anyhow"]
 streaming = ["http", "dep:tokio-stream", "dep:tokio", "dep:futures-util"]

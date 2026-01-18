@@ -16,13 +16,13 @@ pub use version_routing::{
 #[derive(Debug, Clone)]
 pub struct HttpRoute {
     /// Route path (may contain module prefix placeholders)
-    path: String,
+    pub path: String,
     /// Handler function (includes method routing)
-    handler: MethodRouter,
+    pub handler: MethodRouter,
     /// API metadata
-    metadata: ApiMetadata,
+    pub metadata: ApiMetadata,
     /// Module prefix (if any) - used for route grouping
-    module_prefix: Option<String>,
+    pub module_prefix: Option<String>,
 }
 
 impl HttpRoute {
