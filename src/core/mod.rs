@@ -80,9 +80,9 @@ fn build_json_response<T: Serialize>(
             .header(http::header::CONTENT_TYPE, "application/json")
             .body(Body::from(body_bytes))
             .unwrap_or_else(|_| build_fallback_response(status, fallback_message)),
-        Err(e) => {
+        Err(_e) => {
             #[cfg(feature = "logging")]
-            tracing::error!(error = %e, "Failed to serialize response");
+            tracing::error!("Failed to serialize response");
 
             build_fallback_response(status, fallback_message)
         }

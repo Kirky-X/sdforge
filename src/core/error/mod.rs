@@ -186,7 +186,13 @@ impl From<ApiError> for ServiceError {
             ApiError::Internal { message, error_id } => ServiceError::with_details(
                 "INTERNAL_ERROR",
                 message.clone(),
-                serde_json::json!({ "error_id": error_id, "timestamp": chrono::Utc::now().timestamp() }),
+                {
+                    #[cfg(feature = "timestamp")]
+                    let details = serde_json::json!({ "error_id": error_id, "timestamp": chrono::Utc::now().timestamp() });
+                    #[cfg(not(feature = "timestamp"))]
+                    let details = serde_json::json!({ "error_id": error_id });
+                    details
+                },
                 500,
             ),
             ApiError::ServiceUnavailable {
