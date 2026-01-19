@@ -14,7 +14,7 @@ use sdforge::prelude::*;
     tool_name = "grpc_service",
     description = "gRPC service endpoint"
 )]
-async fn grpc_service(request: serde_json::Value) -> Result<serde_json::Value, ApiError> {
+async fn grpc_service(_request: serde_json::Value) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "response": "This would be served via gRPC",
         "protocol": "grpc"

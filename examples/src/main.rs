@@ -12,9 +12,6 @@
 //! cargo run --features full
 //! ```
 
-#[cfg(feature = "http")]
-use sdforge::prelude::*;
-
 // Import only basic module to avoid route conflicts
 #[cfg(feature = "http")]
 mod basic;
