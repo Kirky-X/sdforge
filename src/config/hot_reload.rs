@@ -91,7 +91,7 @@ impl ConfigWatcher {
         let config = crate::config::ConfigLoader::new(
             config_path
                 .to_str()
-                .ok_or_else(|| ConfigError::OutsideAllowedDirectory)?,
+                .ok_or(ConfigError::OutsideAllowedDirectory)?,
         )
         .load()?;
 
@@ -114,7 +114,7 @@ impl ConfigWatcher {
         let config = crate::config::ConfigLoader::new(
             self.config_path
                 .to_str()
-                .ok_or_else(|| ConfigError::OutsideAllowedDirectory)?,
+                .ok_or(ConfigError::OutsideAllowedDirectory)?,
         )
         .load()?;
         *self.current_config.write().await = config.clone();
@@ -233,8 +233,6 @@ impl ConfigManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{AppConfig, AuthConfig, DatabaseConfig, LoggingConfig, ServerConfig};
-    use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
 
@@ -266,7 +264,7 @@ mod tests {
         let config = AppConfig::default();
         let reloaded_event = ConfigEvent::Reloaded(Box::new(config.clone()));
         match reloaded_event {
-            ConfigEvent::Reloaded(c) => {
+            ConfigEvent::Reloaded(_c) => {
                 // Config was moved in
             }
             _ => panic!("Expected Reloaded variant"),

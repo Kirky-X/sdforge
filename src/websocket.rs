@@ -466,6 +466,7 @@ fn calculate_value_depth(value: &serde_json::Value, current_depth: &mut usize) -
 
 /// Calculate actual JSON nesting depth by parsing the structure
 /// Returns the maximum nesting level encountered
+#[allow(dead_code)]
 fn calculate_json_depth(text: &str) -> usize {
     let mut depth = 0;
     let mut max_depth = 0;
@@ -481,18 +482,14 @@ fn calculate_json_depth(text: &str) -> usize {
             } else if c == '"' {
                 in_string = false;
             }
-        } else {
-            if c == '"' {
-                in_string = true;
-                escaped = false;
-            } else if c == '{' || c == '[' {
-                depth += 1;
-                max_depth = max_depth.max(depth);
-            } else if c == '}' || c == ']' {
-                if depth > 0 {
-                    depth -= 1;
-                }
-            }
+        } else if c == '"' {
+            in_string = true;
+            escaped = false;
+        } else if c == '{' || c == '[' {
+            depth += 1;
+            max_depth = max_depth.max(depth);
+        } else if (c == '}' || c == ']') && depth > 0 {
+            depth -= 1;
         }
     }
 
@@ -623,7 +620,6 @@ pub fn build() -> Router {
 mod tests {
     use super::*;
     use futures_util::FutureExt;
-    use std::sync::Arc;
 
     /// Test WebSocketMessage serialization and deserialization
     #[test]

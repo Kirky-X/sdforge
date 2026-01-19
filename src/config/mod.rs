@@ -21,15 +21,28 @@ pub struct ConfigEvent {
 /// Configuration loading error
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
+    /// File not found
     #[error("File not found: {path}")]
-    FileNotFound { path: String },
+    FileNotFound {
+        /// Path to the file that was not found
+        path: String,
+    },
 
+    /// Parse error
     #[error("Parse error: {message}")]
-    ParseError { message: String },
+    ParseError {
+        /// Error message from parsing
+        message: String,
+    },
 
+    /// IO error
     #[error("IO error: {reason}")]
-    IoError { reason: String },
+    IoError {
+        /// Reason for the IO error
+        reason: String,
+    },
 
+    /// Validation error
     #[error("Validation error: {0}")]
     ValidationError(String),
 }
@@ -89,7 +102,7 @@ impl DatabaseConfig {
 }
 
 /// Authentication configuration
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Default)]
 #[serde(tag = "type")]
 #[non_exhaustive]
 pub enum AuthConfig {
@@ -112,14 +125,8 @@ pub enum AuthConfig {
     OAuth2,
     /// No authentication
     #[serde(rename = "none")]
+    #[default]
     None,
-}
-
-impl Default for AuthConfig {
-    fn default() -> Self {
-        // Default to None for easier development
-        AuthConfig::None
-    }
 }
 
 /// Logging configuration
@@ -175,7 +182,7 @@ pub struct RequestSizeConfig {
 }
 
 fn default_max_json_size() -> usize {
-    1 * 1024 * 1024 // 1MB
+    1024 * 1024 // 1MB
 }
 
 fn default_max_file_size() -> usize {
@@ -266,17 +273,16 @@ impl TimeoutConfig {
 
         for (route, timeout) in &self.route_timeouts {
             if *timeout == 0 {
-                return Err(ConfigError::ValidationError(
-                    format!("Timeout for route {} must be greater than 0", route),
-                ));
+                return Err(ConfigError::ValidationError(format!(
+                    "Timeout for route {} must be greater than 0",
+                    route
+                )));
             }
             if *timeout > 7200 {
-                return Err(ConfigError::ValidationError(
-                    format!(
-                        "Timeout for route {} exceeds reasonable limit of 7200 seconds (2 hours)",
-                        route
-                    ),
-                ));
+                return Err(ConfigError::ValidationError(format!(
+                    "Timeout for route {} exceeds reasonable limit of 7200 seconds (2 hours)",
+                    route
+                )));
             }
         }
 
@@ -346,8 +352,9 @@ impl ConfigLoader {
     /// Load configuration from file
     pub fn load(&self) -> Result<AppConfig, ConfigError> {
         // 读取配置文件内容
-        let content = std::fs::read_to_string(&self.path)
-            .map_err(|e| ConfigError::IoError { reason: e.to_string() })?;
+        let content = std::fs::read_to_string(&self.path).map_err(|e| ConfigError::IoError {
+            reason: e.to_string(),
+        })?;
 
         // 替换环境变量
         let content = replace_env_vars(&content);
@@ -360,7 +367,9 @@ impl ConfigLoader {
                     message: e.to_string(),
                 })
             })
-            .map_err(|e| ConfigError::ParseError { message: e.to_string() })?;
+            .map_err(|e| ConfigError::ParseError {
+                message: e.to_string(),
+            })?;
 
         // 验证关键配置
         if config.server.port == 0 {
@@ -411,9 +420,10 @@ pub fn build_cors_layer(config: &CorsConfig) -> Result<tower_http::cors::CorsLay
     // Validate origin format
     for origin in &config.allowed_origins {
         if !origin.starts_with("http://") && !origin.starts_with("https://") {
-            return Err(ConfigError::ValidationError(
-                format!("Invalid CORS origin: {}. Must start with http:// or https://", origin),
-            ));
+            return Err(ConfigError::ValidationError(format!(
+                "Invalid CORS origin: {}. Must start with http:// or https://",
+                origin
+            )));
         }
     }
 
@@ -451,9 +461,10 @@ impl CorsConfig {
         // Validate origin format
         for origin in &self.allowed_origins {
             if !origin.starts_with("http://") && !origin.starts_with("https://") {
-                return Err(ConfigError::ValidationError(
-                    format!("Invalid CORS origin: {}. Must start with http:// or https://", origin),
-                ));
+                return Err(ConfigError::ValidationError(format!(
+                    "Invalid CORS origin: {}. Must start with http:// or https://",
+                    origin
+                )));
             }
         }
 
@@ -474,10 +485,6 @@ pub fn init_logging_default() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde::Deserialize;
-    use std::fs::File;
-    use std::io::Write;
-    use tempfile::TempDir;
 
     /// Test AppConfig deserialization with JSON
     #[test]

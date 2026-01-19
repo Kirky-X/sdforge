@@ -71,7 +71,7 @@ pub fn paginated_response<T: Serialize>(
     total_items: u32,
 ) -> String {
     let total_pages = if page_size > 0 {
-        (total_items + page_size - 1) / page_size
+        total_items.div_ceil(page_size)
     } else {
         0
     };

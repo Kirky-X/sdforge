@@ -109,11 +109,11 @@ pub async fn version_redirect_middleware(
                     );
 
                     // Add Link header to newer version
-                    if let Some(newer_version) = find_newer_version(version_part, &config.supported_versions) {
-                        let link_header = format!(
-                            "</api/{}>; rel=\"successor-version\"",
-                            newer_version
-                        );
+                    if let Some(newer_version) =
+                        find_newer_version(version_part, &config.supported_versions)
+                    {
+                        let link_header =
+                            format!("</api/{}>; rel=\"successor-version\"", newer_version);
                         response.headers_mut().insert(
                             axum::http::header::LINK,
                             axum::http::HeaderValue::from_str(&link_header).unwrap(),
@@ -154,11 +154,15 @@ fn find_newer_version(current: &str, supported: &[String]) -> Option<String> {
     let mut newer: Option<String> = None;
 
     for version in supported {
-        if let Some(num) = version.strip_prefix('v').and_then(|v| v.parse::<u32>().ok()) {
-            if num > current_num {
-                if newer.is_none() || num < newer.as_ref().and_then(|v| v[1..].parse::<u32>().ok())? {
-                    newer = Some(version.clone());
-                }
+        if let Some(num) = version
+            .strip_prefix('v')
+            .and_then(|v| v.parse::<u32>().ok())
+        {
+            if num > current_num
+                && (newer.is_none()
+                    || num < newer.as_ref().and_then(|v| v[1..].parse::<u32>().ok())?)
+            {
+                newer = Some(version.clone());
             }
         }
     }
