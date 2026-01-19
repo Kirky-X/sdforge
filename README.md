@@ -2,7 +2,7 @@
 
 <img src="resource/sdforge.png" alt="SDForge Logo" width="200" height="200">
 
-[![Crates.io](https://img.shields.io/crates/v/sdforge)](https://crates.io/crates/sdforge) [![Documentation](https://img.shields.io/docsrs/sdforge)](https://docs.rs/sdforge) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/sdforge-rs/sdforge/ci.yml?branch=main)](https://github.com/sdforge-rs/sdforge/actions) [![Rust Version](https://img.shields.io/badge/rust-2021%2B-orange.svg)](https://www.rust-lang.org)
+[![Crates.io](https://img.shields.io/crates/v/sdforge)](https://crates.io/crates/sdforge) [![Documentation](https://img.shields.io/docsrs/sdforge)](https://docs.rs/sdforge) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/Kirky-X/sdforge/ci.yml?branch=main)](https://github.com/Kirky-X/sdforge/actions) [![Rust Version](https://img.shields.io/badge/rust-2021%2B-orange.svg)](https://www.rust-lang.org)
 
 **SDForge** is a Rust-based declarative SDK framework that uses procedural macros to automatically generate multi-protocol service interfaces (HTTP + MCP) from unified function annotations. The key innovation is compile-time protocol selection via Cargo features—unused protocols produce zero compiled code.
 
@@ -466,7 +466,7 @@ We welcome contributions! Please read our [contributing guidelines](./docs/CONTR
 
 ```bash
 # Clone the repository
-git clone https://github.com/sdforge-rs/sdforge.git
+git clone https://github.com/Kirky-X/sdforge.git
 cd sdforge
 
 # Install pre-commit hooks
@@ -530,10 +530,10 @@ sdforge = { version = "0.2", features = ["cli"] }
 
 ## <span id="links">🔗 Links</span>
 
-- **🏠 Repository**: https://github.com/sdforge-rs/sdforge
+- **🏠 Repository**: https://github.com/Kirky-X/sdforge
 - **📖 Documentation**: https://docs.rs/sdforge
-- **🐛 Issues**: https://github.com/sdforge-rs/sdforge/issues
-- **💬 Discussions**: https://github.com/sdforge-rs/sdforge/discussions
+- **🐛 Issues**: https://github.com/Kirky-X/sdforge/issues
+- **💬 Discussions**: https://github.com/Kirky-X/sdforge/discussions
 
 ---
 
@@ -751,8 +751,8 @@ async fn health_check() -> Result<HealthStatus, ApiError> {
 ### 🆘 Getting Help
 
 - 📖 [Documentation](https://docs.rs/sdforge)
-- 🐛 [Issue Tracker](https://github.com/sdforge-rs/sdforge/issues)
-- 💬 [Discussions](https://github.com/sdforge-rs/sdforge/discussions)
+- 🐛 [Issue Tracker](https://github.com/Kirky-X/sdforge/issues)
+- 💬 [Discussions](https://github.com/Kirky-X/sdforge/discussions)
 - 📧 [Support Email](mailto:support@sdforge.dev)
 
 ---
