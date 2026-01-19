@@ -42,6 +42,8 @@ use futures_util::StreamExt;
 #[cfg(feature = "websocket")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "websocket")]
+use serde_json::Value;
+#[cfg(feature = "websocket")]
 use std::sync::Arc;
 
 use crate::impl_default_new;
@@ -402,17 +404,15 @@ fn parse_websocket_message(text: &str) -> Result<WebSocketMessage, String> {
         ));
     }
 
-    // Security fix: Use serde_json's streaming parser with recursion limit
+    // Security fix: Use serde_json's streaming parser to parse and validate depth
     // This provides more accurate depth checking than manual bracket counting
     use serde_json::{Deserializer, Value};
 
-    let deserializer = Deserializer::from_str(text);
-    deserializer.set_recursion_limit(MAX_JSON_DEPTH);
-
-    // Parse and validate depth in one pass
+    // Parse and validate depth
     let mut max_depth = 0;
     let mut current_depth = 0;
 
+    let deserializer = Deserializer::from_str(text);
     for result in deserializer.into_iter::<Value>() {
         match result {
             Ok(value) => {
@@ -917,7 +917,12 @@ mod tests {
     /// Test parse_websocket_message with deeply nested JSON
     #[test]
     fn test_parse_websocket_message_too_deep() {
-        let deep_json = "{".repeat(MAX_JSON_DEPTH + 1) + &"}".repeat(MAX_JSON_DEPTH + 1);
+        // Create a valid deeply nested JSON structure
+        let mut deep_json = String::from("0");
+        for _ in 0..=MAX_JSON_DEPTH {
+            deep_json = format!(r#"{{"a":{}}}"#, deep_json);
+        }
+
         let result = parse_websocket_message(&deep_json);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("nesting too deep"));

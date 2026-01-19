@@ -59,6 +59,13 @@ struct MinHeap {
 }
 
 impl MinHeap {
+    /// Create a new empty MinHeap
+    fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+        }
+    }
+
     /// Insert a new entry - O(log n)
     fn push(&mut self, entry: MinHeapEntry) {
         self.entries.push(entry);
@@ -280,7 +287,7 @@ impl CacheKey {
 #[derive(Clone)]
 pub struct CacheMiddleware {
     config: CacheConfig,
-    cache: Arc<DashMap<CacheKey, CacheEntry>>,
+    cache: Arc<DashMap<CacheKey, Arc<CacheEntry>>>,
     current_size: Arc<AtomicUsize>,
     entry_count: Arc<AtomicUsize>,
     /// LRU heap for O(1) eviction - stores (key, last_accessed) pairs
@@ -806,22 +813,23 @@ mod tests {
     #[test]
     fn test_min_heap_operations() {
         let mut heap = MinHeap::new();
-        assert!(heap.is_empty());
+        assert!(heap.entries.is_empty());
 
+        let empty_headers = axum::http::HeaderMap::new();
         heap.push(MinHeapEntry {
-            key: CacheKey::new("GET", "/a", b""),
+            key: CacheKey::new("GET", "/a", Some(b""), &empty_headers),
             last_accessed: 1,
         });
         heap.push(MinHeapEntry {
-            key: CacheKey::new("GET", "/b", b""),
+            key: CacheKey::new("GET", "/b", Some(b""), &empty_headers),
             last_accessed: 3,
         });
         heap.push(MinHeapEntry {
-            key: CacheKey::new("GET", "/c", b""),
+            key: CacheKey::new("GET", "/c", Some(b""), &empty_headers),
             last_accessed: 2,
         });
 
-        assert_eq!(heap.len(), 3);
+        assert_eq!(heap.entries.len(), 3);
 
         let min = heap.extract_min().unwrap();
         assert_eq!(min.last_accessed, 1);
