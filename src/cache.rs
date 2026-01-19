@@ -59,32 +59,6 @@ struct MinHeap {
 }
 
 impl MinHeap {
-    #[allow(dead_code)]
-    /// Create a new empty min-heap
-    fn new() -> Self {
-        Self {
-            entries: Vec::new(),
-        }
-    }
-
-    #[allow(dead_code)]
-    /// Get the number of entries in the heap
-    fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    #[allow(dead_code)]
-    /// Check if the heap is empty
-    fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
-    #[allow(dead_code)]
-    /// Get the minimum element (oldest accessed entry) without removing it - O(1)
-    fn peek_min(&self) -> Option<&MinHeapEntry> {
-        self.entries.first()
-    }
-
     /// Insert a new entry - O(log n)
     fn push(&mut self, entry: MinHeapEntry) {
         self.entries.push(entry);
@@ -174,17 +148,6 @@ impl MinHeap {
             }
         }
     }
-
-    /// Rebuild heap from all entries - O(n)
-    /// Used when access times are updated
-    #[allow(dead_code)]
-    fn rebuild(&mut self) {
-        // Use Floyd's heap construction algorithm - O(n)
-        let len = self.entries.len();
-        for i in (0..len / 2).rev() {
-            self.sift_down(i);
-        }
-    }
 }
 
 impl_default_new!(MinHeap);
@@ -245,9 +208,6 @@ struct CacheEntry {
     last_modified: u64,
     /// Expiration timestamp (Unix timestamp in seconds), entry is invalid after this time
     expires_at: u64,
-    /// Last access timestamp (Unix timestamp in seconds), used for LRU eviction
-    #[allow(dead_code)]
-    last_accessed: u64,
     /// Entry size in bytes (body length), used for size-based eviction
     size: usize,
 }
@@ -257,7 +217,9 @@ struct CacheEntry {
 pub struct CacheKey {
     method: String,
     uri: String,
-    body_hash: String,
+    query_string: String,
+    headers_hash: String,
+    body_hash: Option<String>,
 }
 
 impl CacheKey {
@@ -266,12 +228,37 @@ impl CacheKey {
     /// Security: Uses SHA256 cryptographic hash for cache keys to prevent
     /// hash flooding attacks. This is safer than fast non-cryptographic hashes
     /// when cache keys are derived from untrusted input.
-    pub fn new(method: &str, uri: &str, body: &[u8]) -> Self {
-        let body_hash = Self::secure_hash(body);
+    pub fn new(method: &str, uri: &str, body: Option<&[u8]>, headers: &axum::http::HeaderMap) -> Self {
+        // Extract query string
+        let query_string = if let Some(query) = uri.split('?').nth(1) {
+            query.to_string()
+        } else {
+            String::new()
+        };
+
+        // Extract and hash headers (exclude cache-related headers)
+        let cache_headers: Vec<_> = headers
+            .iter()
+            .filter(|(name, _)| {
+                !matches!(
+                    name.as_str(),
+                    "cache-control" | "pragma" | "authorization" | "cookie"
+                )
+            })
+            .map(|(name, value)| {
+                format!("{}:{}", name.as_str(), value.to_str().unwrap_or(""))
+            })
+            .collect();
+
+        let headers_hash = Self::secure_hash(cache_headers.join("\n").as_bytes());
+
+        let body_hash = body.map(|b| Self::secure_hash(b));
 
         Self {
             method: method.to_string(),
-            uri: uri.to_string(),
+            uri: uri.split('?').next().unwrap_or(uri).to_string(),
+            query_string,
+            headers_hash,
             body_hash,
         }
     }
@@ -339,8 +326,13 @@ impl CacheMiddleware {
 
     /// 生成缓存键
     #[inline]
-    pub fn generate_cache_key(method: &str, uri: &str, body: &[u8]) -> CacheKey {
-        CacheKey::new(method, uri, body)
+    pub fn generate_cache_key(
+        method: &str,
+        uri: &str,
+        body: Option<&[u8]>,
+        headers: &axum::http::HeaderMap,
+    ) -> CacheKey {
+        CacheKey::new(method, uri, body, headers)
     }
 
     /// 检查是否应该缓存响应
@@ -568,7 +560,7 @@ where
 
         // 生成缓存键（简化版本，不包含请求体）
         // 注意：对于 POST/PUT 请求，应该包含请求体，但为了简化，这里暂时不处理
-        let cache_key = CacheMiddleware::generate_cache_key(&method, &uri, &[]);
+        let cache_key = CacheMiddleware::generate_cache_key(&method, &uri, None, req.headers());
 
         // 检查条件请求（If-None-Match）
         if let Some(if_none_match) = req.headers().get(IF_NONE_MATCH) {
@@ -667,7 +659,6 @@ where
                     etag: etag.clone(),
                     last_modified,
                     expires_at,
-                    last_accessed: CacheMiddleware::now(),
                     size: body_len,
                 };
 
@@ -680,10 +671,13 @@ where
                 // 再次检查大小限制后尝试插入
                 let current_size = middleware.current_size.load(Ordering::Relaxed);
                 if current_size + entry_size <= middleware.config.max_size_bytes {
+                    // 使用 Arc 共享缓存条目，避免克隆
+                    let entry_arc = Arc::new(entry);
+
                     // Clone cache_key before moving into cache and expiration_index
                     let cache_key_for_heap = cache_key.clone();
                     let cache_key_for_expiry = cache_key.clone();
-                    middleware.cache.insert(cache_key.clone(), entry.clone());
+                    middleware.cache.insert(cache_key.clone(), Arc::clone(&entry_arc));
                     // Add to LRU heap for O(1) eviction
                     if let Some(mut shard) = middleware.lru_heap.iter_mut().next() {
                         let heap = shard.value_mut();
@@ -698,6 +692,23 @@ where
                         .current_size
                         .fetch_add(entry_size, Ordering::Relaxed);
                     middleware.entry_count.fetch_add(1, Ordering::Relaxed);
+
+                    // 构建响应
+                    let body_bytes = bytes::Bytes::copy_from_slice(&entry_arc.body);
+                    let mut response = Response::from_parts(parts, axum::body::Body::from(body_bytes));
+                    if let Ok(etag_value) = HeaderValue::from_str(&entry_arc.etag) {
+                        response.headers_mut().insert(ETAG, etag_value);
+                    }
+                    if let Ok(lm_value) = HeaderValue::from_str(&entry_arc.last_modified.to_string()) {
+                        response.headers_mut().insert(LAST_MODIFIED, lm_value);
+                    }
+                    if let Ok(cc_value) =
+                        HeaderValue::from_str(&format!("max-age={}", middleware.config.ttl_seconds))
+                    {
+                        response.headers_mut().insert(CACHE_CONTROL, cc_value);
+                    }
+
+                    return Ok(response);
                 }
 
                 // 构建响应
@@ -752,12 +763,17 @@ mod tests {
 
     #[test]
     fn test_cache_key_generation() {
-        let key1 = CacheMiddleware::generate_cache_key("GET", "/api/users", b"");
-        let key2 = CacheMiddleware::generate_cache_key("GET", "/api/users", b"");
+        let headers = axum::http::HeaderMap::new();
+        let key1 = CacheMiddleware::generate_cache_key("GET", "/api/users", None, &headers);
+        let key2 = CacheMiddleware::generate_cache_key("GET", "/api/users", None, &headers);
         assert_eq!(key1, key2);
 
-        let key3 =
-            CacheMiddleware::generate_cache_key("POST", "/api/users", b"{\"name\":\"test\"}");
+        let key3 = CacheMiddleware::generate_cache_key(
+            "POST",
+            "/api/users",
+            Some(b"{\"name\":\"test\"}"),
+            &headers,
+        );
         assert_ne!(key1, key3);
     }
 
@@ -774,14 +790,16 @@ mod tests {
 
     #[test]
     fn test_cache_key_with_body() {
-        let key1 = CacheMiddleware::generate_cache_key("GET", "/api/users", b"");
-        let key2 = CacheMiddleware::generate_cache_key("GET", "/api/users", b"");
+        let headers = axum::http::HeaderMap::new();
+        let key1 = CacheMiddleware::generate_cache_key("GET", "/api/users", None, &headers);
+        let key2 = CacheMiddleware::generate_cache_key("GET", "/api/users", None, &headers);
         assert_eq!(key1, key2);
 
-        let key3 = CacheMiddleware::generate_cache_key("POST", "/api/users", b"body");
+        let key3 = CacheMiddleware::generate_cache_key("POST", "/api/users", Some(b"body"), &headers);
         assert_ne!(key1, key3);
 
-        let key4 = CacheMiddleware::generate_cache_key("GET", "/api/users", b"different body");
+        let key4 =
+            CacheMiddleware::generate_cache_key("GET", "/api/users", Some(b"different body"), &headers);
         assert_ne!(key1, key4);
     }
 

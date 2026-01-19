@@ -226,12 +226,23 @@ impl ConnectionManager {
         let now = Instant::now();
         let current_time = now.elapsed().as_secs();
 
-        // Atomically check connection limit and increment
-        if self.connection_count.fetch_add(1, Ordering::SeqCst) >= config.max_connections {
-            self.connection_count.fetch_sub(1, Ordering::SeqCst);
-            #[cfg(feature = "logging")]
-            tracing::warn!(target: "websocket", "Max connections reached, rejecting new connection");
-            return true;
+        // 使用 compare_exchange 实现原子检查和设置，避免竞态窗口
+        let mut current = self.connection_count.load(Ordering::SeqCst);
+        loop {
+            if current >= config.max_connections {
+                #[cfg(feature = "logging")]
+                tracing::warn!(target: "websocket", "Max connections reached, rejecting new connection");
+                return true;
+            }
+            match self.connection_count.compare_exchange_weak(
+                current,
+                current + 1,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => break,
+                Err(new_current) => current = new_current,
+            }
         }
 
         // Check per-connection rate limit
@@ -391,19 +402,66 @@ fn parse_websocket_message(text: &str) -> Result<WebSocketMessage, String> {
         ));
     }
 
-    // Security fix: Use more accurate depth checking to prevent DoS from deeply nested JSON
-    // Previous implementation just counted brackets which could be fooled
-    let depth = calculate_json_depth(text);
-    if depth > MAX_JSON_DEPTH {
-        return Err(format!(
-            "JSON nesting too deep: depth {} (max: {})",
-            depth, MAX_JSON_DEPTH
-        ));
+    // Security fix: Use serde_json's streaming parser with recursion limit
+    // This provides more accurate depth checking than manual bracket counting
+    use serde_json::{Deserializer, Value};
+
+    let deserializer = Deserializer::from_str(text);
+    deserializer.set_recursion_limit(MAX_JSON_DEPTH);
+
+    // Parse and validate depth in one pass
+    let mut max_depth = 0;
+    let mut current_depth = 0;
+
+    for result in deserializer.into_iter::<Value>() {
+        match result {
+            Ok(value) => {
+                // Calculate actual depth of the parsed value
+                let depth = calculate_value_depth(&value, &mut current_depth);
+                max_depth = max_depth.max(depth);
+
+                if max_depth > MAX_JSON_DEPTH {
+                    return Err(format!(
+                        "JSON nesting too deep: depth {} (max: {})",
+                        max_depth, MAX_JSON_DEPTH
+                    ));
+                }
+            }
+            Err(e) => {
+                return Err(format!("Invalid JSON: {}", e));
+            }
+        }
     }
 
-    // Use serde_json with custom limit to prevent DoS from deeply nested structures
-    // The depth check above already limits nesting, so we just parse normally
+    // Parse the actual WebSocket message
     serde_json::from_str::<WebSocketMessage>(text).map_err(|e| format!("Invalid JSON: {}", e))
+}
+
+/// Calculate depth of a JSON value recursively
+fn calculate_value_depth(value: &serde_json::Value, current_depth: &mut usize) -> usize {
+    match value {
+        Value::Object(map) => {
+            *current_depth += 1;
+            let max_child_depth = map
+                .values()
+                .map(|v| calculate_value_depth(v, current_depth))
+                .max()
+                .unwrap_or(0);
+            *current_depth -= 1;
+            max_child_depth
+        }
+        Value::Array(arr) => {
+            *current_depth += 1;
+            let max_child_depth = arr
+                .iter()
+                .map(|v| calculate_value_depth(v, current_depth))
+                .max()
+                .unwrap_or(0);
+            *current_depth -= 1;
+            max_child_depth
+        }
+        _ => *current_depth,
+    }
 }
 
 /// Calculate actual JSON nesting depth by parsing the structure
