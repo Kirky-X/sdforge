@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Kirky.X
 //! HTTP server implementation
 
-use crate::config::{AppConfig, AuthConfig, ConfigError};
+use crate::config::{AuthConfig, ConfigError};
 use crate::core::ApiMetadata;
 use axum::body::Body;
 use axum::routing::MethodRouter;
@@ -379,7 +379,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     // Initialize logging
     #[cfg(feature = "logging")]
     {
-        let _ = crate::config::init_logging(&config.logging);
+        crate::config::init_logging(&config.logging);
     }
 
     // Apply cache middleware
@@ -460,10 +460,7 @@ mod tests {
     use crate::config::{
         AppConfig, AuthConfig, CorsConfig, DatabaseConfig, LoggingConfig, ServerConfig,
     };
-    use axum::body::Body;
-    use axum::http::{Request, StatusCode};
     use axum::routing::get;
-    use tower::ServiceExt;
 
     /// Test build() returns a valid Router
     #[test]
@@ -603,7 +600,6 @@ mod tests {
     #[test]
     fn test_http_route_creation() {
         use axum::routing::get;
-        use tower::ServiceExt;
 
         async fn test_handler() -> &'static str {
             "test"

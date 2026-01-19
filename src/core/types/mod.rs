@@ -7,7 +7,7 @@
 ///
 /// Contains metadata about an API endpoint that is used across
 /// HTTP, MCP, WebSocket, and gRPC protocols.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ApiMetadata {
     /// API name
     pub(crate) name: String,
@@ -72,17 +72,5 @@ impl ApiMetadata {
     /// Check if this is a streaming endpoint
     pub fn is_streaming(&self) -> bool {
         self.is_streaming
-    }
-}
-
-impl Default for ApiMetadata {
-    fn default() -> Self {
-        Self {
-            name: String::new(),
-            version: String::new(),
-            description: String::new(),
-            cache_ttl: None,
-            is_streaming: false,
-        }
     }
 }

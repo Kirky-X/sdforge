@@ -235,7 +235,12 @@ impl CacheKey {
     /// Security: Uses SHA256 cryptographic hash for cache keys to prevent
     /// hash flooding attacks. This is safer than fast non-cryptographic hashes
     /// when cache keys are derived from untrusted input.
-    pub fn new(method: &str, uri: &str, body: Option<&[u8]>, headers: &axum::http::HeaderMap) -> Self {
+    pub fn new(
+        method: &str,
+        uri: &str,
+        body: Option<&[u8]>,
+        headers: &axum::http::HeaderMap,
+    ) -> Self {
         // Extract query string
         let query_string = if let Some(query) = uri.split('?').nth(1) {
             query.to_string()
@@ -252,14 +257,12 @@ impl CacheKey {
                     "cache-control" | "pragma" | "authorization" | "cookie"
                 )
             })
-            .map(|(name, value)| {
-                format!("{}:{}", name.as_str(), value.to_str().unwrap_or(""))
-            })
+            .map(|(name, value)| format!("{}:{}", name.as_str(), value.to_str().unwrap_or("")))
             .collect();
 
         let headers_hash = Self::secure_hash(cache_headers.join("\n").as_bytes());
 
-        let body_hash = body.map(|b| Self::secure_hash(b));
+        let body_hash = body.map(Self::secure_hash);
 
         Self {
             method: method.to_string(),
@@ -684,7 +687,9 @@ where
                     // Clone cache_key before moving into cache and expiration_index
                     let cache_key_for_heap = cache_key.clone();
                     let cache_key_for_expiry = cache_key.clone();
-                    middleware.cache.insert(cache_key.clone(), Arc::clone(&entry_arc));
+                    middleware
+                        .cache
+                        .insert(cache_key.clone(), Arc::clone(&entry_arc));
                     // Add to LRU heap for O(1) eviction
                     if let Some(mut shard) = middleware.lru_heap.iter_mut().next() {
                         let heap = shard.value_mut();
@@ -702,11 +707,14 @@ where
 
                     // 构建响应
                     let body_bytes = bytes::Bytes::copy_from_slice(&entry_arc.body);
-                    let mut response = Response::from_parts(parts, axum::body::Body::from(body_bytes));
+                    let mut response =
+                        Response::from_parts(parts, axum::body::Body::from(body_bytes));
                     if let Ok(etag_value) = HeaderValue::from_str(&entry_arc.etag) {
                         response.headers_mut().insert(ETAG, etag_value);
                     }
-                    if let Ok(lm_value) = HeaderValue::from_str(&entry_arc.last_modified.to_string()) {
+                    if let Ok(lm_value) =
+                        HeaderValue::from_str(&entry_arc.last_modified.to_string())
+                    {
                         response.headers_mut().insert(LAST_MODIFIED, lm_value);
                     }
                     if let Ok(cc_value) =
@@ -802,11 +810,16 @@ mod tests {
         let key2 = CacheMiddleware::generate_cache_key("GET", "/api/users", None, &headers);
         assert_eq!(key1, key2);
 
-        let key3 = CacheMiddleware::generate_cache_key("POST", "/api/users", Some(b"body"), &headers);
+        let key3 =
+            CacheMiddleware::generate_cache_key("POST", "/api/users", Some(b"body"), &headers);
         assert_ne!(key1, key3);
 
-        let key4 =
-            CacheMiddleware::generate_cache_key("GET", "/api/users", Some(b"different body"), &headers);
+        let key4 = CacheMiddleware::generate_cache_key(
+            "GET",
+            "/api/users",
+            Some(b"different body"),
+            &headers,
+        );
         assert_ne!(key1, key4);
     }
 

@@ -28,25 +28,31 @@ pub mod axum {
     pub use axum::body::Body;
     pub use axum::response::IntoResponse;
 
+    /// HTTP routing utilities
     pub mod routing {
         pub use axum::routing::{get, post, MethodRouter};
     }
 
+    /// Extractor utilities for HTTP requests
     pub mod extract {
         pub use axum::extract::{Form, Json, Path, Query};
         pub use axum_extra::TypedHeader;
     }
 
+    /// HTTP types and utilities
     pub mod http {
         pub use axum::http::Request;
+        /// HTTP header utilities
         pub mod header {
             pub use axum::http::header::CONTENT_TYPE;
         }
+        /// HTTP status codes
         pub mod status {
             pub use axum::http::StatusCode;
         }
     }
 
+    /// Handler utilities
     pub mod handler {
         pub use axum::handler::Handler;
     }
@@ -54,7 +60,7 @@ pub mod axum {
     pub use axum::serve;
 }
 
-/// Commonly used types
+/// Commonly used types and re-exports
 pub mod prelude {
     #[cfg(feature = "http")]
     pub use crate::core::validation::validators::{validate_email, validate_length};
@@ -70,21 +76,27 @@ pub mod prelude {
     pub use sdforge_macros::{service_api, service_module, test_macro};
 }
 
+/// Core types and utilities
 pub mod core;
 
+/// HTTP server and routing
 #[cfg(feature = "http")]
 pub mod http;
 
+/// MCP (Model Context Protocol) support
 #[cfg(feature = "mcp")]
 pub mod mcp;
 
 // Create a module hierarchy for mcp-sdk to match generated code expectations
 #[cfg(feature = "mcp")]
+/// MCP SDK types re-exported for compatibility with generated code
 pub mod mcp_sdk_types {
+    /// MCP tool types
     pub mod tools {
         pub use ::mcp_sdk::tools::Tool;
     }
 
+    /// MCP type definitions
     pub mod types {
         pub use ::mcp_sdk::types::CallToolResponse;
         pub use ::mcp_sdk::types::ToolResponseContent;
@@ -103,12 +115,14 @@ pub use mcp_sdk_types::types::CallToolResponse;
 #[cfg(feature = "mcp")]
 pub use mcp_sdk_types::types::ToolResponseContent;
 
+/// Streaming utilities for SSE and streaming responses
 #[cfg(feature = "streaming")]
 pub mod streaming;
 
 #[cfg(feature = "streaming")]
 pub use streaming::{create_stream_channel, stream_to_sse, StreamEvent, StreamResponse};
 
+/// Security middleware and authentication utilities
 #[cfg(feature = "security")]
 pub mod security;
 
@@ -119,6 +133,7 @@ pub use security::{
     RateLimitError, RateLimiter,
 };
 
+/// Configuration management
 #[cfg(feature = "http")]
 pub mod config;
 
@@ -132,12 +147,14 @@ pub use config::{
 #[cfg(feature = "hot-reload")]
 pub use config::hot_reload::ConfigWatcher;
 
+/// Caching utilities and middleware
 #[cfg(feature = "cache")]
 pub mod cache;
 
 #[cfg(feature = "cache")]
 pub use cache::{CacheConfig, CacheMiddleware, CacheService};
 
+/// WebSocket support
 #[cfg(feature = "websocket")]
 pub mod websocket;
 
@@ -147,6 +164,7 @@ pub use websocket::{
     WebSocketMessage, WebSocketRoute,
 };
 
+/// gRPC server support
 #[cfg(feature = "grpc")]
 pub mod grpc;
 
@@ -186,34 +204,35 @@ pub use config::{init_logging, init_logging_default};
 ///         counts.routes, counts.mcp_tools, counts.ws_routes, counts.grpc_routes);
 /// }
 /// ```
-#[cfg(any(feature = "http", feature = "mcp", feature = "websocket", feature = "grpc"))]
+#[cfg(any(
+    feature = "http",
+    feature = "mcp",
+    feature = "websocket",
+    feature = "grpc"
+))]
 pub fn init_all_plugins() -> PluginCounts {
+    #[cfg(feature = "grpc")]
+    use crate::grpc::GrpcRoute;
     use crate::http::RouteRegistration;
     #[cfg(feature = "mcp")]
     use crate::mcp::McpToolRegistration;
     #[cfg(feature = "websocket")]
     use crate::websocket::WebSocketRoute;
-    #[cfg(feature = "grpc")]
-    use crate::grpc::GrpcRoute;
-    use std::sync::Mutex;
     use once_cell::sync::Lazy;
+    use std::sync::Mutex;
 
     // Store in global static to prevent linker optimization
-    static ROUTES: Lazy<Mutex<Vec<&'static RouteRegistration>>> = Lazy::new(|| {
-        Mutex::new(inventory::iter::<RouteRegistration>().collect())
-    });
+    static ROUTES: Lazy<Mutex<Vec<&'static RouteRegistration>>> =
+        Lazy::new(|| Mutex::new(inventory::iter::<RouteRegistration>().collect()));
     #[cfg(feature = "mcp")]
-    static MCP_TOOLS: Lazy<Mutex<Vec<&'static McpToolRegistration>>> = Lazy::new(|| {
-        Mutex::new(inventory::iter::<McpToolRegistration>().collect())
-    });
+    static MCP_TOOLS: Lazy<Mutex<Vec<&'static McpToolRegistration>>> =
+        Lazy::new(|| Mutex::new(inventory::iter::<McpToolRegistration>().collect()));
     #[cfg(feature = "websocket")]
-    static WS_ROUTES: Lazy<Mutex<Vec<&'static WebSocketRoute>>> = Lazy::new(|| {
-        Mutex::new(inventory::iter::<WebSocketRoute>().collect())
-    });
+    static WS_ROUTES: Lazy<Mutex<Vec<&'static WebSocketRoute>>> =
+        Lazy::new(|| Mutex::new(inventory::iter::<WebSocketRoute>().collect()));
     #[cfg(feature = "grpc")]
-    static GRPC_ROUTES: Lazy<Mutex<Vec<&'static GrpcRoute>>> = Lazy::new(|| {
-        Mutex::new(inventory::iter::<GrpcRoute>().collect())
-    });
+    static GRPC_ROUTES: Lazy<Mutex<Vec<&'static GrpcRoute>>> =
+        Lazy::new(|| Mutex::new(inventory::iter::<GrpcRoute>().collect()));
 
     let routes = ROUTES.lock().unwrap();
     #[cfg(feature = "mcp")]
@@ -235,7 +254,12 @@ pub fn init_all_plugins() -> PluginCounts {
 }
 
 /// Counts of registered plugins after initialization
-#[cfg(any(feature = "http", feature = "mcp", feature = "websocket", feature = "grpc"))]
+#[cfg(any(
+    feature = "http",
+    feature = "mcp",
+    feature = "websocket",
+    feature = "grpc"
+))]
 pub struct PluginCounts {
     /// Number of registered HTTP routes
     pub routes: usize,

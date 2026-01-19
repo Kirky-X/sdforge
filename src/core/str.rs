@@ -138,13 +138,11 @@ pub fn truncate_with_ellipsis(input: &str, max_length: usize) -> String {
     } else {
         let truncated_len = max_length - 3;
         // Use char indices to avoid breaking multi-byte characters
-        let mut char_count = 0;
         let mut byte_end = 0;
-        for (byte_idx, char) in input.char_indices() {
+        for (char_count, (byte_idx, char)) in input.char_indices().enumerate() {
             if char_count >= truncated_len {
                 break;
             }
-            char_count += 1;
             byte_end = byte_idx + char.len_utf8();
         }
         format!("{}...", &input[..byte_end])

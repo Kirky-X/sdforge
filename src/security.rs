@@ -284,12 +284,19 @@ impl_default_new!(ApiKeyAuth);
 /// JWT verification errors
 #[derive(Debug, Clone)]
 pub enum JwtError {
+    /// Invalid JWT format
     InvalidFormat,
+    /// Failed to decode base64
     Base64DecodeError,
+    /// Invalid JWT signature
     InvalidSignature,
+    /// JWT token expired
     Expired,
+    /// JWT token not yet valid
     NotYetValid,
+    /// Invalid JWT payload
     InvalidPayload,
+    /// Clock skew detected
     ClockSkew,
 }
 
@@ -407,7 +414,7 @@ impl BearerAuth {
                 required_type: "lowercase letter",
             });
         }
-        if !secret_str.chars().any(|c| c.is_digit(10)) {
+        if !secret_str.chars().any(|c| c.is_ascii_digit()) {
             return Err(AuthConfigError::MissingCharacterClass {
                 required_type: "digit",
             });
@@ -745,11 +752,7 @@ pub fn extract_client_ip(
     }
 
     // Fallback to X-Real-IP
-    if let Some(xri) = req
-        .headers()
-        .get("x-real-ip")
-        .and_then(|v| v.to_str().ok())
-    {
+    if let Some(xri) = req.headers().get("x-real-ip").and_then(|v| v.to_str().ok()) {
         return xri.to_string();
     }
 
@@ -2053,7 +2056,7 @@ mod tests {
     #[test]
     fn test_is_valid_ip_too_long() {
         let long_ip = "123.456.789.012.345.678.901.234.567";
-        assert!(!is_valid_ip(&long_ip));
+        assert!(!is_valid_ip(long_ip));
     }
 
     #[test]

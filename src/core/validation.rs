@@ -100,7 +100,7 @@ pub mod validators {
     use validator::ValidationError;
 
     /// Regex pattern cache (thread-safe with fine-grained locking)
-    static REGEX_CACHE: Lazy<DashMap<String, regex::Regex>> = Lazy::new(|| DashMap::new());
+    static REGEX_CACHE: Lazy<DashMap<String, regex::Regex>> = Lazy::new(DashMap::new);
 
     /// Validate that a string is a valid email
     pub fn validate_email(email: &str) -> Result<(), ValidationError> {
