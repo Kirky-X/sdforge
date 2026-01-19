@@ -1295,7 +1295,7 @@ pub fn rate_limit_middleware(
     move |req: Request<Body>, next: Next| {
         let limiter = limiter.clone();
         Box::pin(async move {
-            let client_ip = extract_client_ip(&req);
+            let client_ip = extract_client_ip_simple(&req);
 
             match limiter.check(&client_ip) {
                 Ok(remaining) => {
@@ -1402,7 +1402,7 @@ fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
 
 /// Extract client IP from request with security validation
 #[cfg(feature = "logging")]
-fn extract_client_ip(req: &Request<Body>) -> String {
+fn extract_client_ip_simple(req: &Request<Body>) -> String {
     // Use default trusted proxy configuration
     let proxy_config = TrustedProxyConfig::default();
     extract_client_ip_with_config(req, &proxy_config)
@@ -1410,7 +1410,7 @@ fn extract_client_ip(req: &Request<Body>) -> String {
 
 /// Extract client IP from request without logging
 #[cfg(not(feature = "logging"))]
-fn extract_client_ip(req: &Request<Body>) -> String {
+fn extract_client_ip_simple(req: &Request<Body>) -> String {
     // Use default trusted proxy configuration
     let proxy_config = TrustedProxyConfig::default();
     extract_client_ip_with_config(req, &proxy_config)
