@@ -48,6 +48,10 @@ pub struct AppConfig {
     pub logging: LoggingConfig,
     /// Rate limiting configuration
     pub rate_limit: Option<RateLimitConfigFile>,
+    /// Request size configuration
+    pub request_size: Option<RequestSizeConfig>,
+    /// Timeout configuration
+    pub timeout: Option<TimeoutConfig>,
 }
 
 /// Server configuration
@@ -156,6 +160,130 @@ pub struct RateLimitConfigFile {
     pub window_seconds: u64,
 }
 
+/// Request size configuration for different content types
+#[derive(Debug, Clone, Deserialize)]
+pub struct RequestSizeConfig {
+    /// Maximum JSON request body size (default 1MB)
+    #[serde(default = "default_max_json_size")]
+    pub max_json_size: usize,
+    /// Maximum file upload size (default 100MB)
+    #[serde(default = "default_max_file_size")]
+    pub max_file_size: usize,
+    /// Maximum form data size (default 10MB)
+    #[serde(default = "default_max_form_size")]
+    pub max_form_size: usize,
+}
+
+fn default_max_json_size() -> usize {
+    1 * 1024 * 1024 // 1MB
+}
+
+fn default_max_file_size() -> usize {
+    100 * 1024 * 1024 // 100MB
+}
+
+fn default_max_form_size() -> usize {
+    10 * 1024 * 1024 // 10MB
+}
+
+impl Default for RequestSizeConfig {
+    fn default() -> Self {
+        Self {
+            max_json_size: default_max_json_size(),
+            max_file_size: default_max_file_size(),
+            max_form_size: default_max_form_size(),
+        }
+    }
+}
+
+impl RequestSizeConfig {
+    /// Validate the request size configuration
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.max_json_size > 10 * 1024 * 1024 {
+            return Err(ConfigError::ValidationError(
+                "max_json_size exceeds reasonable limit of 10MB".into(),
+            ));
+        }
+        if self.max_file_size > 1024 * 1024 * 1024 {
+            return Err(ConfigError::ValidationError(
+                "max_file_size exceeds reasonable limit of 1GB".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Timeout configuration for different routes
+#[derive(Debug, Clone, Deserialize)]
+pub struct TimeoutConfig {
+    /// Default request timeout in seconds
+    #[serde(default = "default_timeout")]
+    pub default_timeout_secs: u64,
+    /// Route-specific timeouts
+    #[serde(default)]
+    pub route_timeouts: std::collections::HashMap<String, u64>,
+}
+
+fn default_timeout() -> u64 {
+    30
+}
+
+impl Default for TimeoutConfig {
+    fn default() -> Self {
+        let mut route_timeouts = std::collections::HashMap::new();
+        route_timeouts.insert("/api/upload".to_string(), 300); // 5 minutes
+        route_timeouts.insert("/api/export".to_string(), 120); // 2 minutes
+
+        Self {
+            default_timeout_secs: default_timeout(),
+            route_timeouts,
+        }
+    }
+}
+
+impl TimeoutConfig {
+    /// Get timeout for a specific route
+    pub fn get_timeout(&self, path: &str) -> u64 {
+        self.route_timeouts
+            .get(path)
+            .copied()
+            .unwrap_or(self.default_timeout_secs)
+    }
+
+    /// Validate the timeout configuration
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        if self.default_timeout_secs == 0 {
+            return Err(ConfigError::ValidationError(
+                "default_timeout_secs must be greater than 0".into(),
+            ));
+        }
+
+        if self.default_timeout_secs > 3600 {
+            return Err(ConfigError::ValidationError(
+                "default_timeout_secs exceeds reasonable limit of 3600 seconds (1 hour)".into(),
+            ));
+        }
+
+        for (route, timeout) in &self.route_timeouts {
+            if *timeout == 0 {
+                return Err(ConfigError::ValidationError(
+                    format!("Timeout for route {} must be greater than 0", route),
+                ));
+            }
+            if *timeout > 7200 {
+                return Err(ConfigError::ValidationError(
+                    format!(
+                        "Timeout for route {} exceeds reasonable limit of 7200 seconds (2 hours)",
+                        route
+                    ),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
 /// Rate limit endpoint configuration
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct RateLimitEndpointConfig {
@@ -217,33 +345,120 @@ impl ConfigLoader {
 
     /// Load configuration from file
     pub fn load(&self) -> Result<AppConfig, ConfigError> {
-        Ok(AppConfig::default())
+        // 读取配置文件内容
+        let content = std::fs::read_to_string(&self.path)
+            .map_err(|e| ConfigError::IoError { reason: e.to_string() })?;
+
+        // 替换环境变量
+        let content = replace_env_vars(&content);
+
+        // 尝试解析为 TOML
+        let config: AppConfig = toml::from_str(&content)
+            .or_else(|_| {
+                // 如果 TOML 解析失败，尝试 JSON
+                serde_json::from_str(&content).map_err(|e| ConfigError::ParseError {
+                    message: e.to_string(),
+                })
+            })
+            .map_err(|e| ConfigError::ParseError { message: e.to_string() })?;
+
+        // 验证关键配置
+        if config.server.port == 0 {
+            return Err(ConfigError::ValidationError(
+                "Server port cannot be 0".into(),
+            ));
+        }
+
+        // 验证认证配置
+        if let AuthConfig::None = &config.authentication {
+            let env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
+            if env == "production" {
+                return Err(ConfigError::ValidationError(
+                    "Authentication must be configured in production environment".into(),
+                ));
+            }
+        }
+
+        Ok(config)
     }
+}
+
+/// Replace environment variables in configuration string
+/// Supports ${VAR_NAME} syntax
+fn replace_env_vars(input: &str) -> String {
+    let mut result = input.to_string();
+
+    // 替换所有 ${VAR_NAME} 形式的环境变量
+    for (key, value) in std::env::vars() {
+        let pattern = format!("${{{}}}", key);
+        result = result.replace(&pattern, &value);
+    }
+
+    result
 }
 
 /// Build CORS layer from configuration
 pub fn build_cors_layer(config: &CorsConfig) -> Result<tower_http::cors::CorsLayer, ConfigError> {
     use tower_http::cors::{Any, CorsLayer};
 
+    // Security: Validate that allowed_origins is not empty
+    if config.allowed_origins.is_empty() {
+        return Err(ConfigError::ValidationError(
+            "CORS allowed_origins cannot be empty. Use explicit origin list or disable CORS".into(),
+        ));
+    }
+
+    // Validate origin format
+    for origin in &config.allowed_origins {
+        if !origin.starts_with("http://") && !origin.starts_with("https://") {
+            return Err(ConfigError::ValidationError(
+                format!("Invalid CORS origin: {}. Must start with http:// or https://", origin),
+            ));
+        }
+    }
+
     let cors = CorsLayer::new().allow_methods(Any).allow_headers(Any);
 
-    let cors = if !config.allowed_origins.is_empty() {
-        let origins: Vec<_> = config
-            .allowed_origins
-            .iter()
-            .filter_map(|origin| origin.parse().ok())
-            .collect();
+    // Parse and validate origins
+    let origins: Vec<_> = config
+        .allowed_origins
+        .iter()
+        .filter_map(|origin| origin.parse().ok())
+        .collect();
 
-        if !origins.is_empty() {
-            cors.allow_origin(origins)
-        } else {
-            cors.allow_origin(Any)
-        }
-    } else {
-        cors.allow_origin(Any)
-    };
+    if origins.is_empty() {
+        return Err(ConfigError::ValidationError(
+            "No valid origins found in CORS configuration".into(),
+        ));
+    }
+
+    // Security: Never use Any as origin, always use explicit list
+    let cors = cors.allow_origin(origins);
 
     Ok(cors)
+}
+
+impl CorsConfig {
+    /// Validate CORS configuration
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        // Check if allowed_origins is empty
+        if self.allowed_origins.is_empty() {
+            return Err(ConfigError::ValidationError(
+                "CORS allowed_origins cannot be empty".into(),
+            ));
+        }
+
+        // Validate origin format
+        for origin in &self.allowed_origins {
+            if !origin.starts_with("http://") && !origin.starts_with("https://") {
+                return Err(ConfigError::ValidationError(
+                    format!("Invalid CORS origin: {}. Must start with http:// or https://", origin),
+                ));
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// Initialize logging
@@ -315,6 +530,8 @@ mod tests {
             },
             logging: LoggingConfig::default(),
             rate_limit: None,
+            request_size: None,
+            timeout: None,
         };
         // Just verify we can create the config
         match &config.authentication {
@@ -417,9 +634,9 @@ mod tests {
     fn test_build_cors_layer_empty_origins() {
         let config = CorsConfig::default();
         let layer = build_cors_layer(&config);
-        assert!(layer.is_ok());
+        // Empty origins should now return an error
+        assert!(layer.is_err());
     }
-
     /// Test build_cors_layer with valid origins
     #[test]
     fn test_build_cors_layer_valid_origins() {
@@ -434,10 +651,10 @@ mod tests {
     fn test_config_loader() {
         let loader = ConfigLoader::new("/test/path.yaml");
         assert_eq!(loader.path, "/test/path.yaml");
+        // This should fail because the file doesn't exist
         let result = loader.load();
-        assert!(result.is_ok());
+        assert!(result.is_err());
     }
-
     /// Test ConfigError variants
     #[test]
     fn test_config_error_variants() {

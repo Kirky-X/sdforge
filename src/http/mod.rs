@@ -6,12 +6,25 @@ use crate::core::ApiMetadata;
 use axum::body::Body;
 use axum::routing::MethodRouter;
 use axum::Router;
+use uuid::Uuid;
 
 pub mod version_routing;
 
 pub use version_routing::{
     build_version_router, version_redirect_middleware, VersionRouterConfig, VersionedRoute,
 };
+
+/// Request ID header name
+pub const X_REQUEST_ID: &str = "x-request-id";
+
+/// Generate or extract request ID from request
+pub fn get_or_generate_request_id(req: &axum::http::Request<Body>) -> String {
+    req.headers()
+        .get(X_REQUEST_ID)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| Uuid::new_v4().to_string())
+}
 
 /// HTTP route registration
 #[derive(Debug, Clone)]
@@ -173,9 +186,30 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
 
     let mut router = build();
 
+    // Apply request ID middleware (first to ensure all requests have an ID)
+    router = router.layer(axum::middleware::from_fn(
+        |mut req: axum::http::Request<Body>, next: axum::middleware::Next| async move {
+            let request_id = get_or_generate_request_id(&req);
+            req.headers_mut().insert(
+                axum::http::header::HeaderName::from_static(X_REQUEST_ID),
+                axum::http::HeaderValue::from_str(&request_id).unwrap(),
+            );
+            let mut response = next.run(req).await;
+            response.headers_mut().insert(
+                axum::http::header::HeaderName::from_static(X_REQUEST_ID),
+                axum::http::HeaderValue::from_str(&request_id).unwrap(),
+            );
+            response
+        },
+    ));
+
+    // Apply global body limit
     router = router.layer(tower_http::limit::RequestBodyLimitLayer::new(
         DEFAULT_BODY_LIMIT,
     ));
+
+    // Apply response compression
+    router = router.layer(tower_http::compression::CompressionLayer::new());
 
     // Use configurable request timeout from server config
     let timeout_secs = config.server.request_timeout_secs;
@@ -210,7 +244,22 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     // Security fix: Add Content-Security-Policy header to prevent XSS attacks
     router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
         axum::http::header::CONTENT_SECURITY_POLICY,
-        axum::http::HeaderValue::from_static("default-src 'self'"),
+        axum::http::HeaderValue::from_static("default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'"),
+    ));
+    // Add Strict-Transport-Security header for HTTPS
+    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+        axum::http::header::STRICT_TRANSPORT_SECURITY,
+        axum::http::HeaderValue::from_static("max-age=31536000; includeSubDomains; preload"),
+    ));
+    // Add Referrer-Policy header
+    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+        axum::http::header::HeaderName::from_static("referrer-policy"),
+        axum::http::HeaderValue::from_static("strict-origin-when-cross-origin"),
+    ));
+    // Add Permissions-Policy header
+    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+        axum::http::header::HeaderName::from_static("permissions-policy"),
+        axum::http::HeaderValue::from_static("geolocation=(), microphone=(), camera=()"),
     ));
 
     // Apply rate limiting middleware
@@ -451,6 +500,8 @@ mod tests {
                 format: "json".to_string(),
             },
             rate_limit: None,
+            request_size: None,
+            timeout: None,
         };
 
         let result = build_with_config(&config);
@@ -477,6 +528,8 @@ mod tests {
                 format: "json".to_string(),
             },
             rate_limit: None,
+            request_size: None,
+            timeout: None,
         };
 
         let result = build_with_config(&config);
@@ -503,6 +556,8 @@ mod tests {
                 format: "json".to_string(),
             },
             rate_limit: None,
+            request_size: None,
+            timeout: None,
         };
 
         let result = build_with_config(&config);
@@ -536,6 +591,8 @@ mod tests {
                 format: "json".to_string(),
             },
             rate_limit: None,
+            request_size: None,
+            timeout: None,
         };
 
         let result = build_with_config(&config);

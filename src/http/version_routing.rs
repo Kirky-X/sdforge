@@ -28,6 +28,10 @@ pub struct VersionRouterConfig {
     pub supported_versions: Vec<String>,
     /// Enable version redirect (redirect /api/foo to /api/v1/foo)
     pub redirect_unknown: bool,
+    /// Deprecated versions with sunset dates (version -> sunset_date)
+    pub deprecated_versions: std::collections::HashMap<String, String>,
+    /// Sunset warning header name
+    pub sunset_header: String,
 }
 
 impl Default for VersionRouterConfig {
@@ -36,6 +40,8 @@ impl Default for VersionRouterConfig {
             default_version: "v1".to_string(),
             supported_versions: vec!["v1".to_string()],
             redirect_unknown: true,
+            deprecated_versions: std::collections::HashMap::new(),
+            sunset_header: "Sunset".to_string(),
         }
     }
 }
@@ -62,12 +68,13 @@ pub fn build_version_router() -> Router {
     router
 }
 
-/// Version redirect middleware
+/// Version redirect middleware with deprecation support
 pub async fn version_redirect_middleware(
     req: Request<Body>,
     next: axum::middleware::Next,
 ) -> Response {
     let uri = req.uri().path().to_string();
+    let config = VersionRouterConfig::default();
 
     // Check if path starts with /api/ and has a version
     if let Some(path_after_api) = uri.strip_prefix("/api/") {
@@ -84,13 +91,41 @@ pub async fn version_redirect_middleware(
                 .unwrap_or(false)
                 && version_part[1..].chars().all(|c| c.is_ascii_digit())
             {
-                // Valid version, proceed with request
-                return next.run(req).await;
+                // Valid version, proceed with request and add deprecation headers if needed
+                let mut response = next.run(req).await;
+
+                // Check if version is deprecated
+                if let Some(sunset_date) = config.deprecated_versions.get(version_part) {
+                    // Add Deprecation header
+                    response.headers_mut().insert(
+                        axum::http::header::HeaderName::from_static("deprecation"),
+                        axum::http::HeaderValue::from_str("true").unwrap(),
+                    );
+
+                    // Add Sunset header with date
+                    response.headers_mut().insert(
+                        axum::http::header::HeaderName::from_static("Sunset"),
+                        axum::http::HeaderValue::from_str(sunset_date).unwrap(),
+                    );
+
+                    // Add Link header to newer version
+                    if let Some(newer_version) = find_newer_version(version_part, &config.supported_versions) {
+                        let link_header = format!(
+                            "</api/{}>; rel=\"successor-version\"",
+                            newer_version
+                        );
+                        response.headers_mut().insert(
+                            axum::http::header::LINK,
+                            axum::http::HeaderValue::from_str(&link_header).unwrap(),
+                        );
+                    }
+                }
+
+                return response;
             }
         }
 
         // No version or invalid version - redirect to default version
-        let config = VersionRouterConfig::default();
         let default_version = &config.default_version;
         let path_without_version = if path_after_api.starts_with('/') {
             path_after_api.to_string()
@@ -111,6 +146,24 @@ pub async fn version_redirect_middleware(
 
     // Not an API path, proceed with request
     next.run(req).await
+}
+
+/// Find the next newer version
+fn find_newer_version(current: &str, supported: &[String]) -> Option<String> {
+    let current_num = current[1..].parse::<u32>().ok()?;
+    let mut newer: Option<String> = None;
+
+    for version in supported {
+        if let Some(num) = version.strip_prefix('v').and_then(|v| v.parse::<u32>().ok()) {
+            if num > current_num {
+                if newer.is_none() || num < newer.as_ref().and_then(|v| v[1..].parse::<u32>().ok())? {
+                    newer = Some(version.clone());
+                }
+            }
+        }
+    }
+
+    newer
 }
 
 /// Create a versioned route helper macro

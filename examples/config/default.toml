@@ -14,14 +14,14 @@ allowed_headers = ["Content-Type", "Authorization", "X-API-Key"]
 
 # Database Configuration
 [database]
-connection_string = "postgresql://user:password@localhost/sdforge"
+connection_string = "${DATABASE_URL}"
 max_connections = 10
 
 # Authentication Configuration
 # Supports: jwt, api_key, oauth2 (oauth2 not yet implemented)
 [authentication]
 type = "jwt"
-secret = "your-jwt-secret-key-change-this-in-production"
+secret = "${JWT_SECRET}"
 
 # Alternative: API Key Authentication
 # [authentication]
