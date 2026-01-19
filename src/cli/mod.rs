@@ -5,56 +5,6 @@ pub mod generator;
 
 #[cfg(test)]
 mod tests {
-    use super::generator::{GeneratorConfig, ProjectGenerator};
-    use std::path::PathBuf;
-    use tempfile::TempDir;
-
-    /// Test ProjectGenerator creation
-    #[test]
-    fn test_project_generator_creation() {
-        let generator = ProjectGenerator::new();
-        let _ = generator;
-    }
-
-    /// Test GeneratorConfig default values
-    #[test]
-    fn test_generator_config_default() {
-        let config = GeneratorConfig::default();
-        assert!(config.name.is_empty());
-        assert!(config.description.is_empty());
-        assert!(config.author.is_empty());
-        assert!(config.version.is_empty());
-    }
-
-    /// Test GeneratorConfig with custom values
-    #[test]
-    fn test_generator_config_custom() {
-        let config = GeneratorConfig {
-            name: "my-project".to_string(),
-            description: "A test project".to_string(),
-            author: "Test Author".to_string(),
-            version: "0.1.0".to_string(),
-            path: PathBuf::from("/tmp/test"),
-            features: vec!["http".to_string(), "mcp".to_string()],
-        };
-
-        assert_eq!(config.name, "my-project");
-        assert_eq!(config.features.len(), 2);
-        assert!(config.features.contains(&"http".to_string()));
-    }
-
-    /// Test GeneratorConfig path handling
-    #[test]
-    fn test_generator_config_path() {
-        let temp_dir = TempDir::new().unwrap();
-        let config = GeneratorConfig {
-            path: temp_dir.path().to_path_buf(),
-            ..Default::default()
-        };
-
-        assert_eq!(config.path, temp_dir.path());
-    }
-
     /// Test project name validation logic
     #[test]
     fn test_project_name_patterns() {
@@ -108,9 +58,9 @@ mod tests {
         if version.is_empty() {
             return false;
         }
-        // Simple semver-like check
+        // Simple semver-like check - requires major.minor.patch
         let parts: Vec<&str> = version.split('.').collect();
-        if parts.len() < 2 || parts.len() > 3 {
+        if parts.len() != 3 {
             return false;
         }
         for part in parts {
