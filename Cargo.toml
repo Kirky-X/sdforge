@@ -2,7 +2,6 @@
 members = [
     "src",
     "macros",
-    "examples",
 ]
 exclude = [
     "temp",
@@ -14,7 +13,7 @@ version = "0.2.0"
 edition = "2021"
 authors = ["Kirky.X"]
 license = "MIT"
-repository = "https://github.com/sdforge-rs/sdforge"
+repository = "https://github.com/Kirky-X/sdforge"
 keywords = ["api", "http", "mcp", "macro", "framework"]
 categories = ["web-programming", "development-tools"]
 

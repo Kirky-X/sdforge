@@ -2,7 +2,7 @@
 
 <img src="resource/sdforge.png" alt="SDForge Logo" width="200" height="200">
 
-[![Crates.io](https://img.shields.io/crates/v/sdforge)](https://crates.io/crates/sdforge) [![Documentation](https://img.shields.io/docsrs/sdforge)](https://docs.rs/sdforge) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/sdforge-rs/sdforge/ci.yml?branch=main)](https://github.com/sdforge-rs/sdforge/actions) [![Rust Version](https://img.shields.io/badge/rust-2021%2B-orange.svg)](https://www.rust-lang.org)
+[![Crates.io](https://img.shields.io/crates/v/sdforge)](https://crates.io/crates/sdforge) [![Documentation](https://img.shields.io/docsrs/sdforge)](https://docs.rs/sdforge) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/Kirky-X/sdforge/ci.yml?branch=main)](https://github.com/Kirky-X/sdforge/actions) [![Rust Version](https://img.shields.io/badge/rust-2021%2B-orange.svg)](https://www.rust-lang.org)
 
 **SDForge** 是一个基于 Rust 的声明式 SDK 框架，利用过程宏从统一的函数注解自动生成多协议服务接口（HTTP + MCP）。其核心创新在于通过 Cargo features 进行编译时协议选择——未使用的协议将产生零编译代码。
 
@@ -449,7 +449,7 @@ cargo clippy --all-features --all-targets
 
 ```bash
 # 克隆仓库
-git clone https://github.com/sdforge-rs/sdforge.git
+git clone https://github.com/Kirky-X/sdforge.git
 cd sdforge
 
 # 安装 pre-commit 钩子
@@ -513,10 +513,10 @@ sdforge = { version = "0.2", features = ["cli"] }
 
 ## <span id="links">🔗 链接</span>
 
-- **🏠 仓库**: https://github.com/sdforge-rs/sdforge
+- **🏠 仓库**: https://github.com/Kirky-X/sdforge
 - **📖 文档**: https://docs.rs/sdforge
-- **🐛 问题**: https://github.com/sdforge-rs/sdforge/issues
-- **💬 讨论**: https://github.com/sdforge-rs/sdforge/discussions
+- **🐛 问题**: https://github.com/Kirky-X/sdforge/issues
+- **💬 讨论**: https://github.com/Kirky-X/sdforge/discussions
 
 ---
 
@@ -734,8 +734,8 @@ async fn health_check() -> Result<HealthStatus, ApiError> {
 ### 🆘 获取帮助
 
 - 📖 [文档](https://docs.rs/sdforge)
-- 🐛 [问题跟踪器](https://github.com/sdforge-rs/sdforge/issues)
-- 💬 [讨论](https://github.com/sdforge-rs/sdforge/discussions)
+- 🐛 [问题跟踪器](https://github.com/Kirky-X/sdforge/issues)
+- 💬 [讨论](https://github.com/Kirky-X/sdforge/discussions)
 - 📧 [支持邮箱](mailto:support@sdforge.dev)
 
 ---
