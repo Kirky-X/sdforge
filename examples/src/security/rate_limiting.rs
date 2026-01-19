@@ -62,7 +62,7 @@ pub struct LoginRequest {
     tool_name = "auth_login",
     description = "Login with rate limiting"
 )]
-async fn auth_login(request: LoginRequest) -> Result<serde_json::Value, ApiError> {
+async fn auth_login(_request: LoginRequest) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "message": "Login attempt recorded",
         "rate_limited": "per IP"
