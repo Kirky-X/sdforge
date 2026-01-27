@@ -231,10 +231,9 @@ impl ConfigManager {
 }
 
 #[cfg(test)]
+#[allow(unused)]
 mod tests {
-    use super::*;
-    use std::path::PathBuf;
-    use tempfile::TempDir;
+    use crate::config::{ConfigError, ConfigEvent};
 
     /// Test ConfigError variants in hot_reload module
     #[test]
@@ -261,6 +260,7 @@ mod tests {
     #[cfg(feature = "hot-reload")]
     fn test_config_event_variants() {
         // Test Reloaded event
+        use crate::config::AppConfig;
         let config = AppConfig::default();
         let reloaded_event = ConfigEvent::Reloaded(Box::new(config.clone()));
         match reloaded_event {

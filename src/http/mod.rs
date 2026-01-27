@@ -1,15 +1,17 @@
 // Copyright (c) 2026 Kirky.X
 //! HTTP server implementation
 
-use crate::config::{AuthConfig, ConfigError};
+use crate::config::ConfigError;
 use crate::core::ApiMetadata;
 use axum::body::Body;
 use axum::routing::MethodRouter;
 use axum::Router;
 use uuid::Uuid;
 
+pub mod response;
 pub mod version_routing;
 
+pub use response::{build_fallback_response, build_json_response};
 pub use version_routing::{
     build_version_router, version_redirect_middleware, VersionRouterConfig, VersionedRoute,
 };
@@ -94,6 +96,32 @@ fn resolve_route_path(base_path: &str, module_prefix: Option<&str>) -> String {
     }
 }
 
+/// Prevent linker from optimizing away inventory registrations
+/// Uses reference iteration to ensure symbols are preserved
+#[cfg(feature = "mcp")]
+#[inline(never)]
+fn preserve_mcp_inventory() {
+    // Iterate and count - this forces linker to keep symbols
+    let _count = inventory::iter::<crate::mcp::McpToolRegistration>().count();
+    let _ = _count; // Suppress unused variable warning
+}
+
+/// Prevent linker from optimizing away WebSocket inventory registrations
+#[cfg(feature = "websocket")]
+#[inline(never)]
+fn preserve_websocket_inventory() {
+    let _count = inventory::iter::<crate::websocket::WebSocketRoute>().count();
+    let _ = _count;
+}
+
+/// Prevent linker from optimizing away gRPC inventory registrations
+#[cfg(feature = "grpc")]
+#[inline(never)]
+fn preserve_grpc_inventory() {
+    let _count = inventory::iter::<crate::grpc::GrpcRoute>().count();
+    let _ = _count;
+}
+
 /// Build HTTP router from registered routes
 ///
 /// This function collects all routes registered via `inventory::submit!`
@@ -101,30 +129,16 @@ fn resolve_route_path(base_path: &str, module_prefix: Option<&str>) -> String {
 /// Routes are automatically prefixed with their module prefix if available.
 #[allow(dead_code)]
 pub fn build() -> Router {
-    // Force MCP tool inventory collection to prevent linker optimization
-    // This ensures MCP tools registered via macros are not optimized away
+    // Force inventory collection to prevent linker optimization
+    // Using inline(never) functions to ensure symbols are preserved
     #[cfg(feature = "mcp")]
-    {
-        use crate::mcp::McpToolRegistration;
-        // Iterate but don't use - this forces linker to keep MCP tool symbols
-        let _ = inventory::iter::<McpToolRegistration>().count();
-    }
+    preserve_mcp_inventory();
 
-    // Force WebSocket route inventory collection to prevent linker optimization
     #[cfg(feature = "websocket")]
-    {
-        use crate::websocket::WebSocketRoute;
-        // Iterate but don't use - this forces linker to keep WebSocket route symbols
-        let _ = inventory::iter::<WebSocketRoute>().count();
-    }
+    preserve_websocket_inventory();
 
-    // Force gRPC route inventory collection to prevent linker optimization
     #[cfg(feature = "grpc")]
-    {
-        use crate::grpc::GrpcRoute;
-        // Iterate but don't use - this forces linker to keep gRPC route symbols
-        let _ = inventory::iter::<GrpcRoute>().count();
-    }
+    preserve_grpc_inventory();
 
     let mut router = Router::new();
 
@@ -270,14 +284,6 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         let limiter = Arc::new(RateLimiter::new(Some(rate_config)));
         let middleware = rate_limit_middleware(limiter);
         router = router.layer(axum::middleware::from_fn(middleware));
-    }
-
-    // Validate authentication config early (before security block to handle OAuth2)
-    if let AuthConfig::OAuth2 = config.authentication {
-        // OAuth2 is not yet implemented - return error
-        return Err(ConfigError::ValidationError(
-            "OAuth2 authentication is not yet implemented".into(),
-        ));
     }
 
     // Apply authentication middleware
@@ -547,7 +553,7 @@ mod tests {
                 cors: None,
             },
             database: DatabaseConfig::default(),
-            authentication: AuthConfig::OAuth2,
+            authentication: AuthConfig::None,
             logging: LoggingConfig {
                 level: "info".to_string(),
                 format: "json".to_string(),
@@ -558,11 +564,7 @@ mod tests {
         };
 
         let result = build_with_config(&config);
-        assert!(result.is_err(), "Should fail with OAuth2 config");
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("not yet implemented"));
+        assert!(result.is_ok(), "Should succeed with None auth config");
     }
 
     /// Test build_with_config with CORS configuration

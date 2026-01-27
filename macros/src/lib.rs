@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Kirky.X
-//! Axiom procedural macros
+//! SDForge procedural macros
 //!
-//! This crate provides procedural macros for the Axiom framework.
+//! This crate provides procedural macros for the SDForge framework.
 
 #![doc(html_root_url = "https://docs.rs/sdforge-macros/0.1.0")]
 
@@ -115,6 +115,9 @@ fn api_metadata_tokens(
     })
 }
 
+/// Maximum allowed length for API names (prevent DoS via excessively long names)
+const MAX_API_NAME_LENGTH: usize = 64;
+
 /// Validate API name to prevent code injection
 /// API names must be valid Rust identifiers (alphanumeric + underscores, starting with letter)
 fn validate_api_name(name: &str) -> Result<String, syn::Error> {
@@ -125,6 +128,17 @@ fn validate_api_name(name: &str) -> Result<String, syn::Error> {
         return Err(syn::Error::new(
             proc_macro2::Span::call_site(),
             "API name cannot be empty",
+        ));
+    }
+
+    // Check maximum length (prevent DoS via excessively long names)
+    if name.len() > MAX_API_NAME_LENGTH {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!(
+                "API name exceeds maximum length of {} characters",
+                MAX_API_NAME_LENGTH
+            ),
         ));
     }
 
@@ -149,6 +163,14 @@ fn validate_api_name(name: &str) -> Result<String, syn::Error> {
         return Err(syn::Error::new(
             proc_macro2::Span::call_site(),
             format!("API name cannot be a Rust keyword: {}", name),
+        ));
+    }
+
+    // Check for Unicode control characters (potential security risk)
+    if name.chars().any(|c| c.is_ascii_control()) {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "API name contains control characters",
         ));
     }
 

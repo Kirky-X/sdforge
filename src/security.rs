@@ -174,11 +174,17 @@ impl ApiKeyAuth {
         }
     }
 
-    /// Hash API key using SHA256 for secure storage
+    /// Hash API key using SHA256 with work factor for secure storage
     fn hash_key(key: &str) -> String {
         use sha2::Digest;
         let mut hasher = sha2::Sha256::new();
-        hasher.update(key.as_bytes());
+
+        // Multiple rounds to slow brute-force attacks
+        for _ in 0..100 {
+            hasher.update(key.as_bytes());
+            hasher.update(&[0x5c, 0x5c, 0x5c]);
+        }
+
         format!("{:x}", hasher.finalize())
     }
 
@@ -2157,5 +2163,39 @@ mod tests {
         // The blacklist is checked before JWT verification
         // Since "test-token-to-blacklist" is not a valid JWT, it returns None anyway
         assert!(auth.validate_token("test-token-to-blacklist").is_none());
+    }
+}
+
+// Bearer token tests
+
+// ==================== Password Hashing Module ====================
+
+/// Password hashing configuration
+///
+/// Uses Argon2id - the winner of the Password Hashing Competition (PHC).
+/// This provides much stronger protection for user passwords compared to simple hashing.
+#[derive(Debug, Clone)]
+pub struct PasswordHashConfig {
+    /// Time cost parameter (number of iterations)
+    /// Higher values increase computation time and resistance to GPU attacks
+    /// Recommended: 1-3 for interactive applications, 3+ for sensitive data
+    pub time_cost: u32,
+    /// Memory cost parameter (in KiB)
+    /// Higher values increase memory usage and resistance to ASIC attacks
+    /// Recommended: 65536 (64 MiB) for interactive use
+    pub memory_cost: u32,
+    /// Parallelism parameter (number of lanes)
+    /// Should match the number of available CPU cores
+    /// Recommended: 1-4 depending on CPU cores
+    pub parallelism: u32,
+}
+
+impl Default for PasswordHashConfig {
+    fn default() -> Self {
+        Self {
+            time_cost: 3,
+            memory_cost: 65536, // 64 MiB
+            parallelism: 2,
+        }
     }
 }

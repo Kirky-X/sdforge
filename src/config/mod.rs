@@ -120,9 +120,6 @@ pub enum AuthConfig {
         /// JWT secret key
         secret: String,
     },
-    /// OAuth2 authentication (not yet implemented)
-    #[serde(rename = "oauth2")]
-    OAuth2,
     /// No authentication
     #[serde(rename = "none")]
     #[default]
@@ -576,19 +573,6 @@ mod tests {
                 assert_eq!(secret, "super-secret-key");
             }
             _ => panic!("Expected Jwt variant"),
-        }
-    }
-
-    /// Test AuthConfig::OAuth2 variant
-    #[test]
-    fn test_auth_config_oauth2() {
-        let json = r#"{"type": "oauth2"}"#;
-        let config: AuthConfig = serde_json::from_str(json).unwrap();
-        match config {
-            AuthConfig::OAuth2 => {
-                // OAuth2 is unit variant, no fields
-            }
-            _ => panic!("Expected OAuth2 variant"),
         }
     }
 
