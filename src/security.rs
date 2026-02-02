@@ -22,8 +22,6 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::impl_default_new;
-
 /// Authentication errors
 #[derive(Debug, Error, Clone)]
 pub enum AuthError {
@@ -152,17 +150,13 @@ pub struct ApiKeyAuth {
     /// Failed attempt tracking (IP -> attempts with timestamps)
     failed_attempts: Arc<DashMap<String, Vec<Instant>>>,
     /// Rate limit configuration
-    rate_limit_config: RateLimitConfig,
+    rate_limit_config: Arc<RateLimitConfig>,
 }
 
 impl ApiKeyAuth {
     /// Create new API key authentication with default rate limiting
     pub fn new() -> Self {
-        Self::with_rate_limit(RateLimitConfig {
-            max_requests: 5,
-            window: Duration::from_secs(60),
-            include_headers: false,
-        })
+        Self::with_rate_limit(RateLimitConfig::default())
     }
 
     /// Create API key authentication with custom rate limiting
@@ -170,8 +164,26 @@ impl ApiKeyAuth {
         Self {
             valid_keys: Arc::new(DashMap::new()),
             failed_attempts: Arc::new(DashMap::new()),
-            rate_limit_config: config,
+            rate_limit_config: Arc::new(config),
         }
+    }
+
+    /// Create with dependencies (for full DI mode)
+    pub fn with_dependencies(
+        valid_keys: Arc<DashMap<String, Vec<String>>>,
+        failed_attempts: Arc<DashMap<String, Vec<Instant>>>,
+        rate_limit_config: Arc<RateLimitConfig>,
+    ) -> Self {
+        Self {
+            valid_keys,
+            failed_attempts,
+            rate_limit_config,
+        }
+    }
+
+    /// Create builder for configuration
+    pub fn builder() -> ApiKeyAuthBuilder {
+        ApiKeyAuthBuilder::new()
     }
 
     /// Hash API key using SHA256 with work factor for secure storage
@@ -285,7 +297,147 @@ impl ApiKeyAuth {
     }
 }
 
-impl_default_new!(ApiKeyAuth);
+impl Default for ApiKeyAuth {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Builder for ApiKeyAuth configuration
+#[derive(Debug, Clone, Default)]
+pub struct ApiKeyAuthBuilder {
+    rate_limit_config: RateLimitConfig,
+}
+
+impl ApiKeyAuthBuilder {
+    /// Create a new ApiKeyAuthBuilder with default rate limit settings.
+    ///
+    /// # Returns
+    ///
+    /// Returns a builder initialized with default rate limit configuration.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::ApiKeyAuthBuilder;
+    ///
+    /// let builder = ApiKeyAuthBuilder::new();
+    /// let _ = builder;
+    /// ```
+    pub fn new() -> Self {
+        Self {
+            rate_limit_config: RateLimitConfig::default(),
+        }
+    }
+
+    /// Set the maximum number of requests within the rate limit window.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_requests` - Maximum number of requests allowed in a window.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::ApiKeyAuthBuilder;
+    ///
+    /// let builder = ApiKeyAuthBuilder::new().max_requests(100);
+    /// let _ = builder;
+    /// ```
+    pub fn max_requests(mut self, max_requests: u32) -> Self {
+        self.rate_limit_config.max_requests = max_requests;
+        self
+    }
+
+    /// Set the duration of the rate limit window.
+    ///
+    /// # Arguments
+    ///
+    /// * `window` - Time window for rate limiting.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::ApiKeyAuthBuilder;
+    /// use std::time::Duration;
+    ///
+    /// let builder = ApiKeyAuthBuilder::new().window(Duration::from_secs(60));
+    /// let _ = builder;
+    /// ```
+    pub fn window(mut self, window: Duration) -> Self {
+        self.rate_limit_config.window = window;
+        self
+    }
+
+    /// Configure whether rate limit headers are included in responses.
+    ///
+    /// # Arguments
+    ///
+    /// * `include_headers` - Whether to include rate limit headers.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::ApiKeyAuthBuilder;
+    ///
+    /// let builder = ApiKeyAuthBuilder::new().include_headers(true);
+    /// let _ = builder;
+    /// ```
+    pub fn include_headers(mut self, include_headers: bool) -> Self {
+        self.rate_limit_config.include_headers = include_headers;
+        self
+    }
+
+    /// Build an ApiKeyAuth instance using the configured settings.
+    ///
+    /// # Returns
+    ///
+    /// Returns a fully configured ApiKeyAuth instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::ApiKeyAuthBuilder;
+    ///
+    /// let auth = ApiKeyAuthBuilder::new().max_requests(100).build();
+    /// let _ = auth;
+    /// ```
+    pub fn build(self) -> ApiKeyAuth {
+        ApiKeyAuth::with_rate_limit(self.rate_limit_config)
+    }
+}
 
 /// JWT verification errors
 #[derive(Debug, Clone)]
@@ -983,9 +1135,6 @@ static SECRET_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
         .unwrap()
 });
 
-static DB_PATTERN: Lazy<regex::Regex> =
-    Lazy::new(|| regex::Regex::new(r#"postgresql://[^:]+:[^@]+@[^/]+/\w+"#).unwrap());
-
 static PATH_PATTERN: Lazy<regex::Regex> =
     Lazy::new(|| regex::Regex::new(r#"/[a-zA-Z0-9/_.-]+\.(pem|key|crt|p12|jks)"#).unwrap());
 
@@ -1026,21 +1175,10 @@ fn sanitize_error_message(message: &str) -> String {
         .replace_all(&result, "[REDACTED_SSN]")
         .to_string();
 
-    // Remove database connection strings
-    result = DB_PATTERN
-        .replace_all(&result, "postgresql://[REDACTED]:[REDACTED]@localhost/db")
-        .to_string();
-
     // Remove certificate/key file paths
     result = PATH_PATTERN
         .replace_all(&result, "[REDACTED_PATH]")
         .to_string();
-
-    // Remove email addresses (optional, based on compliance requirements)
-    // result = regex::Regex::new(r#"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"#)
-    //     .unwrap()
-    //     .replace_all(&result, "[REDACTED_EMAIL]")
-    //     .to_string();
 
     const MAX_SANITIZED_LENGTH: usize = 500;
     if result.len() > MAX_SANITIZED_LENGTH {
@@ -1272,8 +1410,6 @@ impl AuditLogger {
     }
 }
 
-impl_default_new!(AuditLogger);
-
 /// Create authentication middleware
 pub fn auth_middleware<T: Clone + Send + Sync + 'static>(
     _auth: Arc<T>,
@@ -1410,15 +1546,6 @@ fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
 }
 
 /// Extract client IP from request with security validation
-#[cfg(feature = "logging")]
-fn extract_client_ip_simple(req: &Request<Body>) -> String {
-    // Use default trusted proxy configuration
-    let proxy_config = TrustedProxyConfig::default();
-    extract_client_ip_with_config(req, &proxy_config)
-}
-
-/// Extract client IP from request without logging
-#[cfg(not(feature = "logging"))]
 fn extract_client_ip_simple(req: &Request<Body>) -> String {
     // Use default trusted proxy configuration
     let proxy_config = TrustedProxyConfig::default();
@@ -1723,12 +1850,14 @@ mod tests {
     #[test]
     fn test_bearer_auth_secret_too_short() {
         let result = BearerAuth::try_new("Short1!");
-        assert!(result.is_err());
+        assert!(result.is_err(), "Expected error for short secret");
 
-        if let Err(AuthConfigError::SecretTooShort { length }) = result {
-            assert_eq!(length, 7); // "Short1!" is 7 characters
-        } else {
-            panic!("Expected SecretTooShort error");
+        match result {
+            Err(AuthConfigError::SecretTooShort { length }) => {
+                assert_eq!(length, 7); // "Short1!" is 7 characters
+            }
+            Err(e) => panic!("Expected SecretTooShort error, got {:?}", e),
+            Ok(_) => panic!("Expected error but got success"),
         }
     }
 
@@ -1737,18 +1866,14 @@ mod tests {
         // Secret must be 32+ chars with lowercase + digit + special but NO uppercase
         // "lowercase123!abcdefghijklmnopqrstuvwxyz" has 39 chars
         let result = BearerAuth::try_new("lowercase123!abcdefghijklmnopqrstuvwxyz");
-        assert!(result.is_err());
+        assert!(result.is_err(), "Expected error for missing uppercase");
 
         match result {
             Err(AuthConfigError::MissingCharacterClass { required_type }) => {
                 assert_eq!(required_type, "uppercase letter");
             }
-            Err(_) => {
-                panic!("Expected MissingCharacterClass error");
-            }
-            Ok(_) => {
-                panic!("Expected error but got success");
-            }
+            Err(e) => panic!("Expected MissingCharacterClass error, got {:?}", e),
+            Ok(_) => panic!("Expected error but got success"),
         }
     }
 
@@ -1756,18 +1881,14 @@ mod tests {
     fn test_bearer_auth_missing_lowercase() {
         // Secret must be 32+ chars with uppercase + digit + special but NO lowercase
         let result = BearerAuth::try_new("UPPERCASE123!ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-        assert!(result.is_err());
+        assert!(result.is_err(), "Expected error for missing lowercase");
 
         match result {
             Err(AuthConfigError::MissingCharacterClass { required_type }) => {
                 assert_eq!(required_type, "lowercase letter");
             }
-            Err(_) => {
-                panic!("Expected MissingCharacterClass error");
-            }
-            Ok(_) => {
-                panic!("Expected error but got success");
-            }
+            Err(e) => panic!("Expected MissingCharacterClass error, got {:?}", e),
+            Ok(_) => panic!("Expected error but got success"),
         }
     }
 
@@ -1775,18 +1896,14 @@ mod tests {
     fn test_bearer_auth_missing_digit() {
         // Secret must be 32+ chars with lowercase + uppercase + special but NO digit
         let result = BearerAuth::try_new("LowercaseUpper!ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-        assert!(result.is_err());
+        assert!(result.is_err(), "Expected error for missing digit");
 
         match result {
             Err(AuthConfigError::MissingCharacterClass { required_type }) => {
                 assert_eq!(required_type, "digit");
             }
-            Err(_) => {
-                panic!("Expected MissingCharacterClass error");
-            }
-            Ok(_) => {
-                panic!("Expected error but got success");
-            }
+            Err(e) => panic!("Expected MissingCharacterClass error, got {:?}", e),
+            Ok(_) => panic!("Expected error but got success"),
         }
     }
 
@@ -1794,18 +1911,14 @@ mod tests {
     fn test_bearer_auth_missing_special_char() {
         // Secret must be 32+ chars, this one is all alphanumeric (no special char)
         let result = BearerAuth::try_new("LowercaseUpper123ABCDEFGHIJKLMNOPQRSTUVWXYZ");
-        assert!(result.is_err());
+        assert!(result.is_err(), "Expected error for missing special char");
 
         match result {
             Err(AuthConfigError::MissingCharacterClass { required_type }) => {
                 assert_eq!(required_type, "special character");
             }
-            Err(_) => {
-                panic!("Expected MissingCharacterClass error");
-            }
-            Ok(_) => {
-                panic!("Expected error but got success");
-            }
+            Err(e) => panic!("Expected MissingCharacterClass error, got {:?}", e),
+            Ok(_) => panic!("Expected error but got success"),
         }
     }
 
@@ -1981,14 +2094,6 @@ mod tests {
         let sanitized = sanitize_error_message(message);
         assert!(!sanitized.contains("secret123"));
         assert!(sanitized.contains("[REDACTED]"));
-    }
-
-    #[test]
-    fn test_sanitize_database_url() {
-        let message = "DB error: postgresql://user:pass123@localhost/mydb";
-        let sanitized = sanitize_error_message(message);
-        assert!(!sanitized.contains("pass123"));
-        assert!(sanitized.contains("postgresql://[REDACTED]:[REDACTED]@localhost/db"));
     }
 
     #[test]

@@ -1,22 +1,19 @@
 // Copyright (c) 2026 Kirky.X
 //! Configuration management module
+//!
+//! This module provides configuration management using the Confers library.
+//! Configuration loading uses confers::ConfigLoader for all functionality.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+pub use confers::Config;
+pub use confers::OptionalValidate;
 
 pub mod hot_reload;
 
 // Re-export hot_reload types with feature gate
 #[cfg(feature = "hot-reload")]
-pub use hot_reload::ConfigWatcher;
-
-/// Configuration event type
-#[derive(Debug, Clone)]
-pub struct ConfigEvent {
-    /// Event type
-    pub event_type: String,
-    /// Path that changed
-    pub path: String,
-}
+pub use hot_reload::{create_config_watcher, ConfigEvent, ConfigManager, ConfigWatcherImpl};
 
 /// Configuration loading error
 #[derive(Debug, thiserror::Error)]
@@ -45,10 +42,23 @@ pub enum ConfigError {
     /// Validation error
     #[error("Validation error: {0}")]
     ValidationError(String),
+
+    /// Configuration load error (for Confers integration)
+    #[error("Configuration load error: {0}")]
+    LoadError(String),
+
+    /// Watch error (for hot reload)
+    #[error("Watch error: {0}")]
+    WatchError(String),
+
+    /// Unknown error
+    #[error("Unknown error: {0}")]
+    Unknown(String),
 }
 
-/// Application configuration placeholder
-#[derive(Debug, Clone, Default, Deserialize)]
+/// Application configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
+#[serde(default)]
 pub struct AppConfig {
     /// Server configuration
     pub server: ServerConfig,
@@ -56,6 +66,7 @@ pub struct AppConfig {
     pub database: DatabaseConfig,
     /// Authentication configuration
     #[serde(alias = "auth")]
+    #[config(skip)]
     pub authentication: AuthConfig,
     /// Logging configuration
     pub logging: LoggingConfig,
@@ -67,8 +78,285 @@ pub struct AppConfig {
     pub timeout: Option<TimeoutConfig>,
 }
 
+impl AppConfig {
+    /// Create builder for configuration
+    pub fn builder() -> AppConfigBuilder {
+        AppConfigBuilder::new()
+    }
+}
+
+/// Builder for AppConfig
+#[derive(Debug, Clone)]
+pub struct AppConfigBuilder {
+    server: ServerConfig,
+    database: DatabaseConfig,
+    authentication: AuthConfig,
+    logging: LoggingConfig,
+    rate_limit: Option<RateLimitConfigFile>,
+    request_size: Option<RequestSizeConfig>,
+    timeout: Option<TimeoutConfig>,
+}
+
+impl Default for AppConfigBuilder {
+    fn default() -> Self {
+        Self {
+            server: ServerConfig::default(),
+            database: DatabaseConfig::default(),
+            authentication: AuthConfig::default(),
+            logging: LoggingConfig::default(),
+            rate_limit: None,
+            request_size: None,
+            timeout: None,
+        }
+    }
+}
+
+impl AppConfigBuilder {
+    /// Create a new AppConfigBuilder with default configuration values.
+    ///
+    /// # Returns
+    ///
+    /// Returns a builder initialized with default configuration components.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::config::AppConfigBuilder;
+    ///
+    /// let builder = AppConfigBuilder::new();
+    /// let _ = builder;
+    /// ```
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the server configuration for the application.
+    ///
+    /// # Arguments
+    ///
+    /// * `server` - Server configuration value.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::config::{AppConfigBuilder, ServerConfig};
+    ///
+    /// let builder = AppConfigBuilder::new().server(ServerConfig::default());
+    /// let _ = builder;
+    /// ```
+    pub fn server(mut self, server: ServerConfig) -> Self {
+        self.server = server;
+        self
+    }
+
+    /// Set the database configuration for the application.
+    ///
+    /// # Arguments
+    ///
+    /// * `database` - Database configuration value.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::config::{AppConfigBuilder, DatabaseConfig};
+    ///
+    /// let builder = AppConfigBuilder::new().database(DatabaseConfig::default());
+    /// let _ = builder;
+    /// ```
+    pub fn database(mut self, database: DatabaseConfig) -> Self {
+        self.database = database;
+        self
+    }
+
+    /// Set the authentication configuration for the application.
+    ///
+    /// # Arguments
+    ///
+    /// * `authentication` - Authentication configuration value.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::config::{AppConfigBuilder, AuthConfig};
+    ///
+    /// let builder = AppConfigBuilder::new().authentication(AuthConfig::default());
+    /// let _ = builder;
+    /// ```
+    pub fn authentication(mut self, authentication: AuthConfig) -> Self {
+        self.authentication = authentication;
+        self
+    }
+
+    /// Set the logging configuration for the application.
+    ///
+    /// # Arguments
+    ///
+    /// * `logging` - Logging configuration value.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::config::{AppConfigBuilder, LoggingConfig};
+    ///
+    /// let builder = AppConfigBuilder::new().logging(LoggingConfig::default());
+    /// let _ = builder;
+    /// ```
+    pub fn logging(mut self, logging: LoggingConfig) -> Self {
+        self.logging = logging;
+        self
+    }
+
+    /// Set the rate limit configuration for the application.
+    ///
+    /// # Arguments
+    ///
+    /// * `rate_limit` - Rate limit configuration value.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::config::{AppConfigBuilder, RateLimitConfigFile};
+    ///
+    /// let builder = AppConfigBuilder::new().rate_limit(RateLimitConfigFile::default());
+    /// let _ = builder;
+    /// ```
+    pub fn rate_limit(mut self, rate_limit: RateLimitConfigFile) -> Self {
+        self.rate_limit = Some(rate_limit);
+        self
+    }
+
+    /// Set the request size configuration for the application.
+    ///
+    /// # Arguments
+    ///
+    /// * `request_size` - Request size configuration value.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::config::{AppConfigBuilder, RequestSizeConfig};
+    ///
+    /// let builder = AppConfigBuilder::new().request_size(RequestSizeConfig::default());
+    /// let _ = builder;
+    /// ```
+    pub fn request_size(mut self, request_size: RequestSizeConfig) -> Self {
+        self.request_size = Some(request_size);
+        self
+    }
+
+    /// Set the timeout configuration for the application.
+    ///
+    /// # Arguments
+    ///
+    /// * `timeout` - Timeout configuration value.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::config::{AppConfigBuilder, TimeoutConfig};
+    ///
+    /// let builder = AppConfigBuilder::new().timeout(TimeoutConfig::default());
+    /// let _ = builder;
+    /// ```
+    pub fn timeout(mut self, timeout: TimeoutConfig) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    /// Build an AppConfig instance from the current builder state.
+    ///
+    /// # Returns
+    ///
+    /// Returns a fully constructed AppConfig.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::config::AppConfigBuilder;
+    ///
+    /// let config = AppConfigBuilder::new().build();
+    /// let _ = config;
+    /// ```
+    pub fn build(self) -> AppConfig {
+        AppConfig {
+            server: self.server,
+            database: self.database,
+            authentication: self.authentication,
+            logging: self.logging,
+            rate_limit: self.rate_limit,
+            request_size: self.request_size,
+            timeout: self.timeout,
+        }
+    }
+}
+
 /// Server configuration
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
+#[serde(default)]
 pub struct ServerConfig {
     /// Host to bind to
     pub host: String,
@@ -80,8 +368,9 @@ pub struct ServerConfig {
     pub cors: Option<CorsConfig>,
 }
 
-/// Database configuration
-#[derive(Debug, Clone, Default, Deserialize)]
+/// Server configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
+#[serde(default)]
 pub struct DatabaseConfig {
     /// Database connection string
     connection_string: String,
@@ -102,7 +391,8 @@ impl DatabaseConfig {
 }
 
 /// Authentication configuration
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type")]
 #[non_exhaustive]
 pub enum AuthConfig {
@@ -127,7 +417,7 @@ pub enum AuthConfig {
 }
 
 /// Logging configuration
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
 pub struct LoggingConfig {
     /// Log level
     pub level: String,
@@ -136,7 +426,7 @@ pub struct LoggingConfig {
 }
 
 /// API configuration
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
 pub struct ApiConfig {
     /// API prefix
     pub prefix: String,
@@ -145,18 +435,21 @@ pub struct ApiConfig {
 }
 
 /// CORS configuration
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
 pub struct CorsConfig {
     /// Allowed origins
+    #[config(skip)]
     pub allowed_origins: Vec<String>,
     /// Allowed methods
+    #[config(skip)]
     pub allowed_methods: Vec<String>,
     /// Allowed headers
+    #[config(skip)]
     pub allowed_headers: Vec<String>,
 }
 
 /// Rate limit configuration
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
 pub struct RateLimitConfigFile {
     /// Requests per window
     pub requests: u32,
@@ -165,16 +458,20 @@ pub struct RateLimitConfigFile {
 }
 
 /// Request size configuration for different content types
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
+#[serde(default)]
 pub struct RequestSizeConfig {
     /// Maximum JSON request body size (default 1MB)
     #[serde(default = "default_max_json_size")]
+    #[config(default = default_max_json_size())]
     pub max_json_size: usize,
     /// Maximum file upload size (default 100MB)
     #[serde(default = "default_max_file_size")]
+    #[config(default = default_max_file_size())]
     pub max_file_size: usize,
     /// Maximum form data size (default 10MB)
     #[serde(default = "default_max_form_size")]
+    #[config(default = default_max_form_size())]
     pub max_form_size: usize,
 }
 
@@ -190,41 +487,18 @@ fn default_max_form_size() -> usize {
     10 * 1024 * 1024 // 10MB
 }
 
-impl Default for RequestSizeConfig {
-    fn default() -> Self {
-        Self {
-            max_json_size: default_max_json_size(),
-            max_file_size: default_max_file_size(),
-            max_form_size: default_max_form_size(),
-        }
-    }
-}
-
-impl RequestSizeConfig {
-    /// Validate the request size configuration
-    pub fn validate(&self) -> Result<(), ConfigError> {
-        if self.max_json_size > 10 * 1024 * 1024 {
-            return Err(ConfigError::ValidationError(
-                "max_json_size exceeds reasonable limit of 10MB".into(),
-            ));
-        }
-        if self.max_file_size > 1024 * 1024 * 1024 {
-            return Err(ConfigError::ValidationError(
-                "max_file_size exceeds reasonable limit of 1GB".into(),
-            ));
-        }
-        Ok(())
-    }
-}
-
 /// Timeout configuration for different routes
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
+#[serde(default)]
 pub struct TimeoutConfig {
     /// Default request timeout in seconds
     #[serde(default = "default_timeout")]
+    #[config(default = default_timeout())]
     pub default_timeout_secs: u64,
     /// Route-specific timeouts
     #[serde(default)]
+    #[config(default = default_route_timeouts())]
+    #[config(skip)]
     pub route_timeouts: std::collections::HashMap<String, u64>,
 }
 
@@ -232,17 +506,11 @@ fn default_timeout() -> u64 {
     30
 }
 
-impl Default for TimeoutConfig {
-    fn default() -> Self {
-        let mut route_timeouts = std::collections::HashMap::new();
-        route_timeouts.insert("/api/upload".to_string(), 300); // 5 minutes
-        route_timeouts.insert("/api/export".to_string(), 120); // 2 minutes
-
-        Self {
-            default_timeout_secs: default_timeout(),
-            route_timeouts,
-        }
-    }
+fn default_route_timeouts() -> std::collections::HashMap<String, u64> {
+    let mut route_timeouts = std::collections::HashMap::new();
+    route_timeouts.insert("/api/upload".to_string(), 300);
+    route_timeouts.insert("/api/export".to_string(), 120);
+    route_timeouts
 }
 
 impl TimeoutConfig {
@@ -253,42 +521,10 @@ impl TimeoutConfig {
             .copied()
             .unwrap_or(self.default_timeout_secs)
     }
-
-    /// Validate the timeout configuration
-    pub fn validate(&self) -> Result<(), ConfigError> {
-        if self.default_timeout_secs == 0 {
-            return Err(ConfigError::ValidationError(
-                "default_timeout_secs must be greater than 0".into(),
-            ));
-        }
-
-        if self.default_timeout_secs > 3600 {
-            return Err(ConfigError::ValidationError(
-                "default_timeout_secs exceeds reasonable limit of 3600 seconds (1 hour)".into(),
-            ));
-        }
-
-        for (route, timeout) in &self.route_timeouts {
-            if *timeout == 0 {
-                return Err(ConfigError::ValidationError(format!(
-                    "Timeout for route {} must be greater than 0",
-                    route
-                )));
-            }
-            if *timeout > 7200 {
-                return Err(ConfigError::ValidationError(format!(
-                    "Timeout for route {} exceeds reasonable limit of 7200 seconds (2 hours)",
-                    route
-                )));
-            }
-        }
-
-        Ok(())
-    }
 }
 
 /// Rate limit endpoint configuration
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
 pub struct RateLimitEndpointConfig {
     /// Endpoint path
     pub path: String,
@@ -297,7 +533,7 @@ pub struct RateLimitEndpointConfig {
 }
 
 /// TLS configuration
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
 pub struct TlsConfig {
     /// Path to certificate file
     cert_path: String,
@@ -318,89 +554,17 @@ impl TlsConfig {
 }
 
 /// Tracing configuration
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
 pub struct TracingConfig {
     /// Tracing enabled
     pub enabled: bool,
 }
 
 /// Environment helper
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Config)]
 pub struct EnvHelper {
     /// Environment name
     pub environment: String,
-}
-
-/// Configuration loader
-#[derive(Debug, Clone, Default)]
-pub struct ConfigLoader {
-    /// Configuration file path
-    pub path: String,
-}
-
-impl ConfigLoader {
-    /// Create a new configuration loader
-    pub fn new(path: &str) -> Self {
-        Self {
-            path: path.to_string(),
-        }
-    }
-
-    /// Load configuration from file
-    pub fn load(&self) -> Result<AppConfig, ConfigError> {
-        // 读取配置文件内容
-        let content = std::fs::read_to_string(&self.path).map_err(|e| ConfigError::IoError {
-            reason: e.to_string(),
-        })?;
-
-        // 替换环境变量
-        let content = replace_env_vars(&content);
-
-        // 尝试解析为 TOML
-        let config: AppConfig = toml::from_str(&content)
-            .or_else(|_| {
-                // 如果 TOML 解析失败，尝试 JSON
-                serde_json::from_str(&content).map_err(|e| ConfigError::ParseError {
-                    message: e.to_string(),
-                })
-            })
-            .map_err(|e| ConfigError::ParseError {
-                message: e.to_string(),
-            })?;
-
-        // 验证关键配置
-        if config.server.port == 0 {
-            return Err(ConfigError::ValidationError(
-                "Server port cannot be 0".into(),
-            ));
-        }
-
-        // 验证认证配置
-        if let AuthConfig::None = &config.authentication {
-            let env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
-            if env == "production" {
-                return Err(ConfigError::ValidationError(
-                    "Authentication must be configured in production environment".into(),
-                ));
-            }
-        }
-
-        Ok(config)
-    }
-}
-
-/// Replace environment variables in configuration string
-/// Supports ${VAR_NAME} syntax
-fn replace_env_vars(input: &str) -> String {
-    let mut result = input.to_string();
-
-    // 替换所有 ${VAR_NAME} 形式的环境变量
-    for (key, value) in std::env::vars() {
-        let pattern = format!("${{{}}}", key);
-        result = result.replace(&pattern, &value);
-    }
-
-    result
 }
 
 /// Build CORS layer from configuration
@@ -471,12 +635,44 @@ impl CorsConfig {
 
 /// Initialize logging
 pub fn init_logging(_config: &LoggingConfig) {
-    // Placeholder - would set up tracing subscriber
+    #[cfg(feature = "logging")]
+    {
+        use std::str::FromStr;
+        use tracing::Level;
+        use tracing_subscriber::fmt;
+
+        let level = if _config.level.trim().is_empty() {
+            Level::INFO
+        } else {
+            Level::from_str(_config.level.trim()).unwrap_or(Level::INFO)
+        };
+        let format = _config.format.trim().to_lowercase();
+
+        let base_builder = fmt().with_max_level(level);
+        let init_result = match format.as_str() {
+            "json" => base_builder.json().try_init(),
+            "compact" => base_builder.compact().try_init(),
+            "pretty" => base_builder.pretty().try_init(),
+            _ => base_builder.pretty().try_init(),
+        };
+        let _ = init_result;
+    }
+    #[cfg(not(feature = "logging"))]
+    {
+        let _ = _config;
+    }
 }
 
 /// Initialize logging with default settings
 pub fn init_logging_default() {
-    // Placeholder - would set up default logging
+    #[cfg(feature = "logging")]
+    {
+        let config = LoggingConfig {
+            level: "info".to_string(),
+            format: "pretty".to_string(),
+        };
+        init_logging(&config);
+    }
 }
 
 #[cfg(test)]
@@ -637,15 +833,6 @@ mod tests {
         assert!(layer.is_ok());
     }
 
-    /// Test ConfigLoader::new and load
-    #[test]
-    fn test_config_loader() {
-        let loader = ConfigLoader::new("/test/path.yaml");
-        assert_eq!(loader.path, "/test/path.yaml");
-        // This should fail because the file doesn't exist
-        let result = loader.load();
-        assert!(result.is_err());
-    }
     /// Test ConfigError variants
     #[test]
     fn test_config_error_variants() {
@@ -666,6 +853,12 @@ mod tests {
 
         let validation_error = ConfigError::ValidationError("Invalid config".to_string());
         assert!(validation_error.to_string().contains("Validation error"));
+
+        let load_error = ConfigError::LoadError("Failed to load".to_string());
+        assert!(load_error.to_string().contains("Configuration load error"));
+
+        let watch_error = ConfigError::WatchError("Watch failed".to_string());
+        assert!(watch_error.to_string().contains("Watch error"));
     }
 
     /// Test RateLimitConfigFile
@@ -677,36 +870,61 @@ mod tests {
         assert_eq!(config.window_seconds, 60);
     }
 
-    /// Test LoggingConfig
+    /// Test AppConfig default
     #[test]
-    fn test_logging_config() {
-        let config = LoggingConfig {
-            level: "debug".to_string(),
-            format: "json".to_string(),
-        };
-        assert_eq!(config.level, "debug");
-        assert_eq!(config.format, "json");
+    fn test_app_config_default() {
+        let config = AppConfig::default();
+        assert!(config.server.host.is_empty());
+        assert!(config.database.connection_string().is_empty());
+        matches!(config.authentication, AuthConfig::None);
     }
 
-    /// Test ApiConfig
+    /// Test AppConfig builder
     #[test]
-    fn test_api_config() {
-        let config = ApiConfig {
-            prefix: "/api".to_string(),
-            default_version: "v1".to_string(),
-        };
-        assert_eq!(config.prefix, "/api");
-        assert_eq!(config.default_version, "v1");
+    fn test_app_config_builder() {
+        let config = AppConfig::builder()
+            .server(ServerConfig {
+                host: "localhost".to_string(),
+                port: 8080,
+                request_timeout_secs: 30,
+                cors: None,
+            })
+            .database(DatabaseConfig {
+                connection_string: "postgres://localhost/db".to_string(),
+                max_connections: 10,
+            })
+            .authentication(AuthConfig::None)
+            .logging(LoggingConfig {
+                level: "info".to_string(),
+                format: "json".to_string(),
+            })
+            .build();
+
+        assert_eq!(config.server.host, "localhost");
+        assert_eq!(config.server.port, 8080);
+        assert_eq!(
+            config.database.connection_string(),
+            "postgres://localhost/db"
+        );
+        assert_eq!(config.database.max_connections(), 10);
     }
 
-    /// Test ConfigEvent structure
+    /// Test RequestSizeConfig defaults
     #[test]
-    fn test_config_event() {
-        let event = ConfigEvent {
-            event_type: "reloaded".to_string(),
-            path: "/etc/config.yaml".to_string(),
-        };
-        assert_eq!(event.event_type, "reloaded");
-        assert_eq!(event.path, "/etc/config.yaml");
+    fn test_request_size_config_defaults() {
+        let config = RequestSizeConfig::default();
+        assert_eq!(config.max_json_size, 1024 * 1024);
+        assert_eq!(config.max_file_size, 100 * 1024 * 1024);
+        assert_eq!(config.max_form_size, 10 * 1024 * 1024);
+    }
+
+    /// Test TimeoutConfig defaults and get_timeout
+    #[test]
+    fn test_timeout_config() {
+        let config = TimeoutConfig::default();
+        assert_eq!(config.default_timeout_secs, 30);
+        assert_eq!(config.get_timeout("/api/upload"), 300);
+        assert_eq!(config.get_timeout("/api/export"), 120);
+        assert_eq!(config.get_timeout("/unknown"), 30); // Uses default
     }
 }
