@@ -100,184 +100,41 @@ pub struct AppConfigBuilder {
 
 impl AppConfigBuilder {
     /// Create a new AppConfigBuilder with default configuration values.
-    ///
-    /// # Returns
-    ///
-    /// Returns a builder initialized with default configuration components.
-    ///
-    /// # Errors
-    ///
-    /// This function does not return errors.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sdforge::config::AppConfigBuilder;
-    ///
-    /// let builder = AppConfigBuilder::new();
-    /// let _ = builder;
-    /// ```
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set the server configuration for the application.
-    ///
-    /// # Arguments
-    ///
-    /// * `server` - Server configuration value.
-    ///
-    /// # Returns
-    ///
-    /// Returns the updated builder instance.
-    ///
-    /// # Errors
-    ///
-    /// This function does not return errors.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sdforge::config::{AppConfigBuilder, ServerConfig};
-    ///
-    /// let builder = AppConfigBuilder::new().server(ServerConfig::default());
-    /// let _ = builder;
-    /// ```
     pub fn server(mut self, server: ServerConfig) -> Self {
         self.server = server;
         self
     }
 
     /// Set the database configuration for the application.
-    ///
-    /// # Arguments
-    ///
-    /// * `database` - Database configuration value.
-    ///
-    /// # Returns
-    ///
-    /// Returns the updated builder instance.
-    ///
-    /// # Errors
-    ///
-    /// This function does not return errors.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sdforge::config::{AppConfigBuilder, DatabaseConfig};
-    ///
-    /// let builder = AppConfigBuilder::new().database(DatabaseConfig::default());
-    /// let _ = builder;
-    /// ```
     pub fn database(mut self, database: DatabaseConfig) -> Self {
         self.database = database;
         self
     }
 
     /// Set the authentication configuration for the application.
-    ///
-    /// # Arguments
-    ///
-    /// * `authentication` - Authentication configuration value.
-    ///
-    /// # Returns
-    ///
-    /// Returns the updated builder instance.
-    ///
-    /// # Errors
-    ///
-    /// This function does not return errors.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sdforge::config::{AppConfigBuilder, AuthConfig};
-    ///
-    /// let builder = AppConfigBuilder::new().authentication(AuthConfig::default());
-    /// let _ = builder;
-    /// ```
     pub fn authentication(mut self, authentication: AuthConfig) -> Self {
         self.authentication = authentication;
         self
     }
 
     /// Set the logging configuration for the application.
-    ///
-    /// # Arguments
-    ///
-    /// * `logging` - Logging configuration value.
-    ///
-    /// # Returns
-    ///
-    /// Returns the updated builder instance.
-    ///
-    /// # Errors
-    ///
-    /// This function does not return errors.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sdforge::config::{AppConfigBuilder, LoggingConfig};
-    ///
-    /// let builder = AppConfigBuilder::new().logging(LoggingConfig::default());
-    /// let _ = builder;
-    /// ```
     pub fn logging(mut self, logging: LoggingConfig) -> Self {
         self.logging = logging;
         self
     }
 
     /// Set the rate limit configuration for the application.
-    ///
-    /// # Arguments
-    ///
-    /// * `rate_limit` - Rate limit configuration value.
-    ///
-    /// # Returns
-    ///
-    /// Returns the updated builder instance.
-    ///
-    /// # Errors
-    ///
-    /// This function does not return errors.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sdforge::config::{AppConfigBuilder, RateLimitConfigFile};
-    ///
-    /// let builder = AppConfigBuilder::new().rate_limit(RateLimitConfigFile::default());
-    /// let _ = builder;
-    /// ```
     pub fn rate_limit(mut self, rate_limit: RateLimitConfigFile) -> Self {
         self.rate_limit = Some(rate_limit);
         self
     }
 
     /// Set the request size configuration for the application.
-    ///
-    /// # Arguments
-    ///
-    /// * `request_size` - Request size configuration value.
-    ///
-    /// # Returns
-    ///
-    /// Returns the updated builder instance.
-    ///
-    /// # Errors
-    ///
-    /// This function does not return errors.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sdforge::config::{AppConfigBuilder, RequestSizeConfig};
-    ///
-    /// let builder = AppConfigBuilder::new().request_size(RequestSizeConfig::default());
-    /// let _ = builder;
-    /// ```
     pub fn request_size(mut self, request_size: RequestSizeConfig) -> Self {
         self.request_size = Some(request_size);
         self
@@ -311,23 +168,6 @@ impl AppConfigBuilder {
     }
 
     /// Build an AppConfig instance from the current builder state.
-    ///
-    /// # Returns
-    ///
-    /// Returns a fully constructed AppConfig.
-    ///
-    /// # Errors
-    ///
-    /// This function does not return errors.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sdforge::config::AppConfigBuilder;
-    ///
-    /// let config = AppConfigBuilder::new().build();
-    /// let _ = config;
-    /// ```
     pub fn build(self) -> AppConfig {
         AppConfig {
             server: self.server,
