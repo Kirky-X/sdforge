@@ -245,7 +245,7 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
             "path" => path = Some(value),
             "method" => method = Some(value),
             "tool_name" => tool_name = Some(value),
-            "stream" => {
+            "stream" | "streaming" => {
                 stream = Some(value.parse::<bool>().map_err(|_| {
                     syn::Error::new(
                         proc_macro2::Span::call_site(),
@@ -593,7 +593,11 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     // Check if there are any parameters
     let has_params = !params.is_empty();
 
+    // Generate HTTP code - define is_streaming early (before param_patterns)
+    let is_streaming = stream.unwrap_or(false);
+
     // Build parameter patterns based on type
+    // For streaming endpoints, body params should use raw Value (no Json wrapper)
     let param_patterns: Vec<_> = params
         .iter()
         .map(|p| {
@@ -607,8 +611,26 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
                 ParamKind::Cookie => quote! { #name_ident: sdforge::axum::extract::Cookie },
                 ParamKind::Form => quote! { #name_ident: sdforge::axum::extract::Form<#ty> },
-                ParamKind::Body => quote! { #name_ident: sdforge::axum::extract::Json<#ty> },
+                ParamKind::Body => {
+                    if is_streaming {
+                        // For streaming endpoints, use raw Value (not Json wrapped)
+                        quote! { #name_ident: #ty }
+                    } else {
+                        quote! { #name_ident: sdforge::axum::extract::Json<#ty> }
+                    }
+                }
             }
+        })
+        .collect();
+
+    // Build parameter unwrapping logic
+    // All parameter types use the same unwrapping pattern: extract .0 field
+    let _param_unwraps: Vec<_> = params // Currently unused but kept for future use
+        .iter()
+        .map(|p| {
+            let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+            // All parameter kinds use identical unwrapping: extract first element
+            quote! { let #name_ident = #name_ident.0; }
         })
         .collect();
 
@@ -671,21 +693,32 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         proc_macro2::Span::call_site(),
     );
 
-    // Build HTTP path with version, converting :param to {param} for axum 0.8
+    let ws_create_fn_name = syn::Ident::new(
+        &format!("__create_{}_ws_handler", fn_name_str),
+        proc_macro2::Span::call_site(),
+    );
+
+    let grpc_create_fn_name = syn::Ident::new(
+        &format!("__create_{}_grpc_route", fn_name_str),
+        proc_macro2::Span::call_site(),
+    );
+
+    let convert_axum_path = |path_value: &str| {
+        path_value
+            .split('/')
+            .map(|segment| {
+                if let Some(stripped) = segment.strip_prefix(':') {
+                    format!("{{{}}}", stripped)
+                } else {
+                    segment.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("/")
+    };
+
     let path_str = path.as_ref().cloned().unwrap_or_default();
-    // Convert :param to {param} for axum 0.8 compatibility
-    // e.g., "/users/:id" -> "/users/{id}"
-    let axum_path = path_str
-        .split('/')
-        .map(|segment| {
-            if let Some(stripped) = segment.strip_prefix(':') {
-                format!("{{{}}}", stripped)
-            } else {
-                segment.to_string()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("/");
+    let axum_path = convert_axum_path(&path_str);
     let http_path = format!("/api/{}{}", version, axum_path);
 
     // Build HTTP method
@@ -702,8 +735,6 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     let description_literal = description.as_deref().unwrap_or(&name);
 
     // Generate HTTP code
-    let is_streaming = stream.unwrap_or(false);
-
     let http_code = if path.is_some() && method.is_some() {
         // Generate metadata tokens before the quote block
         let streaming_metadata = match api_metadata_tokens(
@@ -721,7 +752,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { #name },
             quote! { #version },
             quote! { #description_literal },
-            quote! { None },
+            quote! { #cache_ttl_expr },
             quote! { false },
         ) {
             Ok(tokens) => tokens,
@@ -730,35 +761,50 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 
         // Generate route creation function with inline handler closure
         let route_creation = if is_streaming {
+            let param_call_args: Vec<_> = params
+                .iter()
+                .map(|p| {
+                    let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+                    match p.param_kind {
+                        ParamKind::Body => quote! { #name_ident },
+                        _ => quote! { #name_ident.0 },
+                    }
+                })
+                .collect();
+
+            let handler_closure = quote! {
+                |#(#param_patterns),*| {
+                    async move {
+                        use sdforge::prelude::*;
+                        match #fn_name(#(#param_call_args),*).await {
+                            Ok(stream) => stream.into_response(),
+                            Err(e) => e.into_response(),
+                        }
+                    }
+                }
+            };
+
             quote! {
                 fn #register_fn_name() -> sdforge::http::HttpRoute {
-                    sdforge::http::HttpRoute {
-                        path: #http_path.to_string(),
-                        handler: {
+                    sdforge::http::HttpRoute::new(
+                        #http_path.to_string(),
+                        {
                             let mut router = sdforge::axum::routing::MethodRouter::new();
-                            router = router.get(#(#param_patterns),* | #(#param_names.0),* | {
-                                async move {
-                                    use sdforge::prelude::*;
-                                    match #fn_name(#(#param_names.0),*).await {
-                                        Ok(_stream) => {
-                                            let body = sdforge::axum::body::Body::from_streaming_bytes(
-                                                tokio_stream::iter(vec![])
-                                            );
-                                            let response: sdforge::axum::response::Response = (
-                                                [(sdforge::axum::http::header::CONTENT_TYPE, "text/event-stream")],
-                                                body
-                                            ).into_response();
-                                            response
-                                        }
-                                        Err(e) => e.into_response(),
-                                    }
-                                }
-                            });
+                            match #http_method_lower.as_ref() {
+                                "get" => router = router.get(#handler_closure),
+                                "post" => router = router.post(#handler_closure),
+                                "put" => router = router.put(#handler_closure),
+                                "delete" => router = router.delete(#handler_closure),
+                                "patch" => router = router.patch(#handler_closure),
+                                "head" => router = router.head(#handler_closure),
+                                "options" => router = router.options(#handler_closure),
+                                _ => router = router.get(#handler_closure),
+                            }
                             router
                         },
-                        metadata: #streaming_metadata,
-                        module_prefix: None,
-                    }
+                        #streaming_metadata,
+                        None,
+                    )
                 }
             }
         } else {
@@ -795,9 +841,9 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 
             quote! {
                 fn #register_fn_name() -> sdforge::http::HttpRoute {
-                    sdforge::http::HttpRoute {
-                        path: #http_path.to_string(),
-                        handler: {
+                    sdforge::http::HttpRoute::new(
+                        #http_path.to_string(),
+                        {
                             let mut router = sdforge::axum::routing::MethodRouter::new();
                             match #http_method_lower.as_ref() {
                                 "get" => router = router.get(#handler_closure),
@@ -811,9 +857,9 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                             }
                             router
                         },
-                        metadata: #non_streaming_metadata,
-                        module_prefix: None,
-                    }
+                        #non_streaming_metadata,
+                        None,
+                    )
                 }
             }
         };
@@ -821,11 +867,11 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         // Combine route creation function and registration
         quote! {
             #route_creation
-            sdforge::inventory::submit!(sdforge::http::RouteRegistration {
-                name: #name,
-                version: #version,
-                register_fn: #register_fn_name,
-            });
+            sdforge::inventory::submit!(sdforge::http::RouteRegistration::new(
+                #name,
+                #version,
+                #register_fn_name,
+            ));
         }
     } else {
         quote! {}
@@ -964,24 +1010,30 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #[cfg(feature = "mcp")]
-            sdforge::inventory::submit!(sdforge::mcp::McpToolRegistration {
-                name: #mcp_tool_name,
-                version: #version,
-                description: #mcp_tool_description,
-                create_fn: #mcp_create_fn_name,
-            });
+            sdforge::inventory::submit!(sdforge::mcp::McpToolRegistration::new(
+                #mcp_tool_name,
+                #version,
+                #mcp_tool_description,
+                #mcp_create_fn_name,
+            ));
         }
     } else {
         quote! {}
     };
 
-    let ws_code = if ws_path.is_some() {
+    let ws_code = if let Some(ws_path_value) = ws_path.as_ref() {
+        let ws_axum_path = convert_axum_path(ws_path_value);
         quote! {
             #[cfg(feature = "websocket")]
-            sdforge::inventory::submit!(sdforge::websocket::WebSocketRoute {
-                path: #ws_path.unwrap().to_string(),
-                handler: #fn_name,
-            });
+            fn #ws_create_fn_name() -> std::sync::Arc<dyn sdforge::websocket::WebSocketHandler> {
+                #fn_name()
+            }
+
+            #[cfg(feature = "websocket")]
+            sdforge::inventory::submit!(sdforge::websocket::WebSocketRoute::new(
+                #ws_axum_path,
+                #ws_create_fn_name,
+            ));
         }
     } else {
         quote! {}
@@ -990,10 +1042,18 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     let grpc_code = if grpc_method.is_some() {
         quote! {
             #[cfg(feature = "grpc")]
-            sdforge::inventory::submit!(sdforge::grpc::GrpcRoute {
-                service_name: #name.to_string(),
-                metadata: #grpc_metadata,
-            });
+            fn #grpc_create_fn_name() -> sdforge::grpc::GrpcRoute {
+                sdforge::grpc::GrpcRoute::new(
+                    #name.to_string(),
+                    #grpc_metadata,
+                )
+            }
+
+            #[cfg(feature = "grpc")]
+            sdforge::inventory::submit!(sdforge::grpc::GrpcRouteRegistration::new(
+                #name,
+                #grpc_create_fn_name,
+            ));
         }
     } else {
         quote! {}
