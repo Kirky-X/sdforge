@@ -127,6 +127,47 @@ fn resolve_route_path(base_path: &str, module_prefix: Option<&str>) -> String {
     }
 }
 
+fn apply_security_headers(router: Router) -> Router {
+    use tower_http::set_header::SetResponseHeaderLayer;
+    use axum::http::{header::*, HeaderValue};
+
+    let mut router = router;
+    router = router.layer(SetResponseHeaderLayer::overriding(
+        X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    ));
+    router = router.layer(SetResponseHeaderLayer::overriding(
+        X_FRAME_OPTIONS,
+        HeaderValue::from_static("DENY"),
+    ));
+    router = router.layer(SetResponseHeaderLayer::overriding(
+        X_XSS_PROTECTION,
+        HeaderValue::from_static("1; mode=block"),
+    ));
+    router = router.layer(SetResponseHeaderLayer::overriding(
+        CACHE_CONTROL,
+        HeaderValue::from_static("no-store, no-cache, must-revalidate"),
+    ));
+    router = router.layer(SetResponseHeaderLayer::overriding(
+        CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("default-src 'self'; script-src 'self'; style-src 'self'"),
+    ));
+    router = router.layer(SetResponseHeaderLayer::overriding(
+        STRICT_TRANSPORT_SECURITY,
+        HeaderValue::from_static("max-age=31536000; includeSubDomains; preload"),
+    ));
+    router = router.layer(SetResponseHeaderLayer::overriding(
+        HeaderName::from_static("referrer-policy"),
+        HeaderValue::from_static("strict-origin-when-cross-origin"),
+    ));
+    router = router.layer(SetResponseHeaderLayer::overriding(
+        HeaderName::from_static("permissions-policy"),
+        HeaderValue::from_static("geolocation=(), microphone=(), camera=()"),
+    ));
+
+    router
+}
+
 /// Prevent linker from optimizing away inventory registrations
 /// Uses reference iteration to ensure symbols are preserved
 #[cfg(feature = "mcp")]
@@ -287,42 +328,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     }
 
     // Apply security headers
-    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
-        axum::http::header::X_CONTENT_TYPE_OPTIONS,
-        axum::http::HeaderValue::from_static("nosniff"),
-    ));
-    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
-        axum::http::header::X_FRAME_OPTIONS,
-        axum::http::HeaderValue::from_static("DENY"),
-    ));
-    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
-        axum::http::header::X_XSS_PROTECTION,
-        axum::http::HeaderValue::from_static("1; mode=block"),
-    ));
-    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
-        axum::http::header::CACHE_CONTROL,
-        axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate"),
-    ));
-    // Security fix: Add Content-Security-Policy header to prevent XSS attacks
-    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
-        axum::http::header::CONTENT_SECURITY_POLICY,
-        axum::http::HeaderValue::from_static("default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'"),
-    ));
-    // Add Strict-Transport-Security header for HTTPS
-    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
-        axum::http::header::STRICT_TRANSPORT_SECURITY,
-        axum::http::HeaderValue::from_static("max-age=31536000; includeSubDomains; preload"),
-    ));
-    // Add Referrer-Policy header
-    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
-        axum::http::header::HeaderName::from_static("referrer-policy"),
-        axum::http::HeaderValue::from_static("strict-origin-when-cross-origin"),
-    ));
-    // Add Permissions-Policy header
-    router = router.layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
-        axum::http::header::HeaderName::from_static("permissions-policy"),
-        axum::http::HeaderValue::from_static("geolocation=(), microphone=(), camera=()"),
-    ));
+    router = apply_security_headers(router);
 
     // Apply rate limiting middleware
     #[cfg(feature = "security")]
