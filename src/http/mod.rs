@@ -17,10 +17,10 @@ pub use version_routing::{
 };
 
 /// Request ID header name
-pub const X_REQUEST_ID: &str = "x-request-id";
+pub(crate) const X_REQUEST_ID: &str = "x-request-id";
 
 /// Generate or extract request ID from request
-pub fn get_or_generate_request_id(req: &axum::http::Request<Body>) -> String {
+pub(crate) fn get_or_generate_request_id(req: &axum::http::Request<Body>) -> String {
     req.headers()
         .get(X_REQUEST_ID)
         .and_then(|v| v.to_str().ok())
@@ -32,16 +32,31 @@ pub fn get_or_generate_request_id(req: &axum::http::Request<Body>) -> String {
 #[derive(Debug, Clone)]
 pub struct HttpRoute {
     /// Route path (may contain module prefix placeholders)
-    pub path: String,
+    path: String,
     /// Handler function (includes method routing)
-    pub handler: MethodRouter,
+    handler: MethodRouter,
     /// API metadata
-    pub metadata: ApiMetadata,
+    metadata: ApiMetadata,
     /// Module prefix (if any) - used for route grouping
-    pub module_prefix: Option<String>,
+    module_prefix: Option<String>,
 }
 
 impl HttpRoute {
+    #[allow(missing_docs)]
+    pub fn new(
+        path: String,
+        handler: MethodRouter,
+        metadata: ApiMetadata,
+        module_prefix: Option<String>,
+    ) -> Self {
+        Self {
+            path,
+            handler,
+            metadata,
+            module_prefix,
+        }
+    }
+
     /// Get route path
     pub fn path(&self) -> &str {
         &self.path
@@ -67,14 +82,30 @@ impl HttpRoute {
 ///
 /// This struct stores a function pointer that creates an HttpRoute at runtime.
 /// This allows routes to be registered without requiring const-compatible types.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct RouteRegistration {
     /// API name
-    pub name: &'static str,
+    name: &'static str,
     /// API version
-    pub version: &'static str,
+    version: &'static str,
     /// Function that creates the HttpRoute at runtime
-    pub register_fn: fn() -> HttpRoute,
+    register_fn: fn() -> HttpRoute,
+}
+
+impl RouteRegistration {
+    #[allow(missing_docs)]
+    pub const fn new(
+        name: &'static str,
+        version: &'static str,
+        register_fn: fn() -> HttpRoute,
+    ) -> Self {
+        Self {
+            name,
+            version,
+            register_fn,
+        }
+    }
 }
 
 inventory::collect!(HttpRoute);
@@ -118,7 +149,7 @@ fn preserve_websocket_inventory() {
 #[cfg(feature = "grpc")]
 #[inline(never)]
 fn preserve_grpc_inventory() {
-    let _count = inventory::iter::<crate::grpc::GrpcRoute>().count();
+    let _count = inventory::iter::<crate::grpc::GrpcRouteRegistration>().count();
     let _ = _count;
 }
 
@@ -127,6 +158,13 @@ fn preserve_grpc_inventory() {
 /// This function collects all routes registered via `inventory::submit!`
 /// and builds a complete Axum router for serving HTTP requests.
 /// Routes are automatically prefixed with their module prefix if available.
+///
+/// # Returns
+/// A basic Axum router with all registered routes
+///
+/// # Note
+/// This is the simplest router building function. For production use,
+/// consider using `build_with_config()` for middleware support.
 #[allow(dead_code)]
 pub fn build() -> Router {
     // Force inventory collection to prevent linker optimization
@@ -173,6 +211,12 @@ pub fn build() -> Router {
 ///
 /// This function builds a router with automatic version redirect support.
 /// Requests to `/api/{path}` without a version are redirected to `/api/v1/{path}`.
+///
+/// # Returns
+/// An Axum router with version redirect middleware applied
+///
+/// # Note
+/// Use this when you want automatic version fallback for unversioned API requests.
 #[allow(dead_code)]
 pub fn build_with_redirect() -> Router {
     let router = build();
@@ -189,6 +233,10 @@ pub fn build_with_redirect() -> Router {
 ///
 /// # Returns
 /// A configured Axum router with all middleware applied
+///
+/// # Note
+/// This is the recommended function for production use. It applies security headers,
+/// CORS, rate limiting, compression, and timeout middleware based on the config.
 #[allow(dead_code)]
 pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, ConfigError> {
     #[cfg(feature = "security")]
@@ -289,6 +337,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     // Apply authentication middleware
     #[cfg(feature = "security")]
     {
+        use crate::config::AuthConfig;
         use crate::security::{auth_middleware, ApiKeyAuth, AuthContext, AuthError, BearerAuth};
         use axum::http::HeaderValue;
 
@@ -393,11 +442,25 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     {
         #[allow(unused_imports)]
         use crate::cache::CacheMiddleware;
+        use oxcache::cache::Cache;
+        use std::time::Duration;
 
-        // Use default cache config for now
-        // In the future, this could be configurable via config file
+        // Create cache instance with default settings
+        let cache_future = async {
+            Cache::<String, Vec<u8>>::builder()
+                .capacity(10_000.try_into().unwrap())
+                .ttl(Duration::from_secs(300))
+                .build()
+                .await
+        };
+
+        // Since we're in a sync context, we need to block on the async operation
+        // This is acceptable at startup time
+        let cache: Cache<String, Vec<u8>> =
+            futures::executor::block_on(cache_future).expect("Failed to initialize cache");
+
         let cache_config = crate::cache::CacheConfig::default();
-        let cache_middleware = CacheMiddleware::new(cache_config);
+        let cache_middleware = CacheMiddleware::with_config_and_cache(cache_config, cache);
         router = router.layer(cache_middleware);
     }
 
@@ -427,6 +490,14 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
 /// let (router, config_watcher, file_watcher) =
 ///     sdforge::http::build_with_hot_reload(&config_path).unwrap();
 ///
+/// Build router with hot reload support
+///
+/// This function creates a router and sets up configuration file watching.
+/// The ConfigWatcher can be used to get updated configurations when the file changes.
+///
+/// # Example
+/// ```ignore
+/// let (router, config_watcher) = build_with_hot_reload(Path::new("config.toml")).await?;
 /// // Keep file_watcher alive to maintain file watching
 /// tokio::spawn(async move {
 ///     while let Ok(event) = config_watcher.event_receiver.recv().await {
@@ -438,26 +509,18 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
 #[cfg(feature = "hot-reload")]
 pub async fn build_with_hot_reload(
     config_path: &std::path::Path,
-) -> Result<
-    (
-        Router,
-        crate::config::hot_reload::ConfigWatcher,
-        notify::RecommendedWatcher,
-    ),
-    Box<dyn std::error::Error>,
-> {
-    use crate::config::hot_reload::ConfigWatcher;
+) -> Result<(Router, crate::config::hot_reload::ConfigWatcherImpl), Box<dyn std::error::Error>> {
+    use crate::config::hot_reload::ConfigWatcherImpl;
     use std::path::PathBuf;
 
     let config_path = PathBuf::from(config_path);
-    let (config_watcher, _event_receiver) = ConfigWatcher::new(config_path.clone())?;
-    let file_watcher = config_watcher.watch()?;
+    let (config_watcher, _event_receiver) = ConfigWatcherImpl::new(config_path.clone()).await?;
 
     // Build router with current configuration
-    let config = config_watcher.get().await;
+    let config = config_watcher.get().await?;
     let router = build_with_config(&config)?;
 
-    Ok((router, config_watcher, file_watcher))
+    Ok((router, config_watcher))
 }
 
 #[cfg(test)]
@@ -607,21 +670,21 @@ mod tests {
             "test"
         }
 
-        let route = HttpRoute {
-            path: "/test".to_string(),
-            handler: get(test_handler),
-            metadata: crate::core::ApiMetadata {
+        let route = HttpRoute::new(
+            "/test".to_string(),
+            get(test_handler),
+            crate::core::ApiMetadata {
                 name: "test".to_string(),
                 version: "v1".to_string(),
                 description: "Test API".to_string(),
                 cache_ttl: None,
                 is_streaming: false,
             },
-            module_prefix: None,
-        };
+            None,
+        );
 
         assert_eq!(route.path(), "/test");
-        assert_eq!(route.metadata().name, "test");
+        assert_eq!(route.metadata().name(), "test");
         assert!(route.module_prefix().is_none());
     }
 
@@ -647,22 +710,20 @@ mod tests {
     #[test]
     fn test_route_registration() {
         async fn test_handler() {}
-        let registration = RouteRegistration {
-            name: "test",
-            version: "v1",
-            register_fn: || HttpRoute {
-                path: "/test".to_string(),
-                handler: get(test_handler),
-                metadata: crate::core::ApiMetadata {
+        let registration = RouteRegistration::new("test", "v1", || {
+            HttpRoute::new(
+                "/test".to_string(),
+                get(test_handler),
+                crate::core::ApiMetadata {
                     name: "test".to_string(),
                     version: "v1".to_string(),
                     description: "".to_string(),
                     cache_ttl: None,
                     is_streaming: false,
                 },
-                module_prefix: None,
-            },
-        };
+                None,
+            )
+        });
 
         assert_eq!(registration.name, "test");
         assert_eq!(registration.version, "v1");

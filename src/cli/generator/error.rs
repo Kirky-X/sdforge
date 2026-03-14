@@ -86,3 +86,66 @@ pub enum GeneratorError {
 
 /// Result type for generator operations.
 pub type GeneratorResult<T> = Result<T, GeneratorError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_error_messages() {
+        let err = GeneratorError::InvalidProjectName("bad".to_string());
+        assert!(err.to_string().contains("Project name validation failed"));
+        assert!(err.to_string().contains("bad"));
+
+        let err = GeneratorError::EmptyProjectName;
+        assert_eq!(err.to_string(), "Project name cannot be empty");
+
+        let err = GeneratorError::ProjectNameTooLong;
+        assert!(err
+            .to_string()
+            .contains(&MAX_PROJECT_NAME_LENGTH.to_string()));
+
+        let err = GeneratorError::InvalidProjectNameCharacters;
+        assert!(err.to_string().contains("invalid characters"));
+
+        let err = GeneratorError::InvalidProjectNamePattern;
+        assert!(err.to_string().contains("invalid pattern"));
+
+        let err = GeneratorError::ProjectNamePathSeparator;
+        assert!(err.to_string().contains("path separators"));
+    }
+
+    #[test]
+    fn test_path_errors() {
+        let path = std::path::PathBuf::from("/tmp/template");
+        let err = GeneratorError::TemplateNotFound(path.clone());
+        assert!(err.to_string().contains("Template directory"));
+
+        let err = GeneratorError::PathTraversal(path.clone());
+        assert!(err.to_string().contains("Output path escapes"));
+
+        let err = GeneratorError::WriteFileError(path.clone(), "fail".to_string());
+        assert!(err.to_string().contains("Failed to write output file"));
+    }
+
+    #[test]
+    fn test_string_errors() {
+        let err = GeneratorError::TemplateFileNotFound("file".to_string());
+        assert!(err.to_string().contains("Template 'file' not found"));
+
+        let err = GeneratorError::InvalidOutputPath("bad".to_string());
+        assert!(err.to_string().contains("Invalid output path"));
+
+        let err = GeneratorError::CurrentDirError("fail".to_string());
+        assert!(err.to_string().contains("Failed to get current directory"));
+
+        let err = GeneratorError::DirectoryExists("dir".to_string());
+        assert!(err.to_string().contains("already exists"));
+
+        let err = GeneratorError::DangerousTemplate("template".to_string(), "pattern".to_string());
+        assert!(err.to_string().contains("contains dangerous pattern"));
+
+        let err = GeneratorError::TemplateRenderError("template".to_string(), "reason".to_string());
+        assert!(err.to_string().contains("Failed to render template"));
+    }
+}

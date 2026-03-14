@@ -46,8 +46,6 @@ use serde_json::Value;
 #[cfg(feature = "websocket")]
 use std::sync::Arc;
 
-use crate::impl_default_new;
-
 #[cfg(feature = "websocket")]
 use std::time::Instant;
 
@@ -340,7 +338,11 @@ impl ConnectionManager {
 }
 
 #[cfg(feature = "websocket")]
-impl_default_new!(ConnectionManager);
+impl Default for ConnectionManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 #[cfg(feature = "websocket")]
 /// Default implementation of WebSocketHandler
@@ -365,9 +367,26 @@ impl WebSocketHandler for DefaultWebSocketHandler {
 /// WebSocket route registration
 pub struct WebSocketRoute {
     /// The WebSocket route path
-    pub path: String,
+    path: &'static str,
     /// The WebSocket handler for this route
-    pub handler: Arc<dyn WebSocketHandler>,
+    create_fn: fn() -> Arc<dyn WebSocketHandler>,
+}
+
+impl WebSocketRoute {
+    #[allow(missing_docs)]
+    pub const fn new(path: &'static str, create_fn: fn() -> Arc<dyn WebSocketHandler>) -> Self {
+        Self { path, create_fn }
+    }
+
+    #[allow(missing_docs)]
+    pub fn path(&self) -> &str {
+        self.path
+    }
+
+    #[allow(missing_docs)]
+    pub fn handler(&self) -> Arc<dyn WebSocketHandler> {
+        (self.create_fn)()
+    }
 }
 
 #[cfg(feature = "websocket")]
@@ -529,11 +548,11 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
                             // Use map_err to convert serialization errors to error messages
                             let response_json = match serde_json::to_string(&response) {
                                 Ok(json) => json,
-                                Err(e) => {
+                                Err(_e) => {
                                     #[cfg(feature = "logging")]
                                     tracing::error!(target: "websocket",
                                         conn_id = %conn_id,
-                                        error = %e,
+                                        error = %_e,
                                         "Failed to serialize response"
                                     );
                                     // Send a generic error to the client
@@ -562,11 +581,11 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
                             // Use match instead of expect to handle serialization errors gracefully
                             let response_json = match serde_json::to_string(&error_msg) {
                                 Ok(json) => json,
-                                Err(e) => {
+                                Err(_e) => {
                                     #[cfg(feature = "logging")]
                                     tracing::error!(target: "websocket",
                                         conn_id = %conn_id,
-                                        error = %e,
+                                        error = %_e,
                                         "Failed to serialize error message"
                                     );
                                     // Send a hardcoded fallback error message
@@ -608,7 +627,7 @@ pub fn build() -> Router {
 
     for route in inventory::iter::<WebSocketRoute> {
         router = router.route(
-            &route.path,
+            route.path,
             axum::routing::get(websocket_upgrade).with_state(manager.clone()),
         );
     }
@@ -638,14 +657,18 @@ mod tests {
 
         // Test deserialization
         let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
-        match decoded {
-            WebSocketMessage::Request { id, method, params } => {
-                assert_eq!(id, "test-123");
-                assert_eq!(method, "get_data");
-                assert_eq!(params["key"], "value");
-            }
-            _ => panic!("Expected Request variant"),
-        }
+
+        assert!(
+            matches!(
+                decoded,
+                WebSocketMessage::Request {
+                    ref id,
+                    ref method,
+                    ref params,
+                } if id == "test-123" && method == "get_data" && params["key"] == "value"
+            ),
+            "Expected Request variant with correct values"
+        );
     }
 
     /// Test WebSocketMessage Response variant
@@ -660,13 +683,15 @@ mod tests {
         assert!(json.contains("\"type\":\"response\""));
 
         let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
-        match decoded {
-            WebSocketMessage::Response { id, result } => {
-                assert_eq!(id, "resp-456");
-                assert_eq!(result["status"], "ok");
-            }
-            _ => panic!("Expected Response variant"),
-        }
+
+        assert!(
+            matches!(
+                decoded,
+                WebSocketMessage::Response { ref id, ref result }
+                    if id == "resp-456" && result["status"] == "ok"
+            ),
+            "Expected Response variant with correct values"
+        );
     }
 
     /// Test WebSocketMessage Error variant
@@ -681,13 +706,15 @@ mod tests {
         assert!(json.contains("\"type\":\"error\""));
 
         let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
-        match decoded {
-            WebSocketMessage::Error { id, error } => {
-                assert_eq!(id, "err-789");
-                assert_eq!(error, "Something went wrong");
-            }
-            _ => panic!("Expected Error variant"),
-        }
+
+        assert!(
+            matches!(
+                decoded,
+                WebSocketMessage::Error { ref id, ref error }
+                    if id == "err-789" && error == "Something went wrong"
+            ),
+            "Expected Error variant with correct values"
+        );
     }
 
     /// Test WebSocketMessage Notification variant
@@ -702,13 +729,15 @@ mod tests {
         assert!(json.contains("\"type\":\"notification\""));
 
         let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
-        match decoded {
-            WebSocketMessage::Notification { event, data } => {
-                assert_eq!(event, "user_joined");
-                assert_eq!(data["user"], "alice");
-            }
-            _ => panic!("Expected Notification variant"),
-        }
+
+        assert!(
+            matches!(
+                decoded,
+                WebSocketMessage::Notification { ref event, ref data }
+                    if event == "user_joined" && data["user"] == "alice"
+            ),
+            "Expected Notification variant with correct values"
+        );
     }
 
     /// Test WebSocketConnection creation
@@ -962,11 +991,12 @@ mod tests {
             }
         }
 
-        let route = WebSocketRoute {
-            path: "/ws".to_string(),
-            handler: Arc::new(MockHandler) as Arc<dyn WebSocketHandler>,
-        };
+        fn create_mock_handler() -> Arc<dyn WebSocketHandler> {
+            Arc::new(MockHandler) as Arc<dyn WebSocketHandler>
+        }
 
-        assert_eq!(route.path, "/ws");
+        let route = WebSocketRoute::new("/ws", create_mock_handler);
+
+        assert_eq!(route.path(), "/ws");
     }
 }
