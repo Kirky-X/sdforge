@@ -6,17 +6,43 @@
 
 use axum::{body::Body, extract::Request, response::Response, routing::MethodRouter, Router};
 
-/// Versioned route configuration
+#[allow(missing_docs)]
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct VersionedRoute {
-    /// Version prefix (e.g., "v1", "v2")
-    pub version: String,
-    /// Route path (without version prefix)
-    pub path: String,
-    /// HTTP method
-    pub method: axum::http::Method,
-    /// Handler function
-    pub handler: MethodRouter,
+    version: String,
+    path: String,
+    method: axum::http::Method,
+    handler: MethodRouter,
+}
+
+#[allow(missing_docs)]
+impl VersionedRoute {
+    pub fn new(
+        version: String,
+        path: String,
+        method: axum::http::Method,
+        handler: MethodRouter,
+    ) -> Self {
+        Self {
+            version,
+            path,
+            method,
+            handler,
+        }
+    }
+
+    pub fn version(&self) -> &str {
+        &self.version
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    pub fn handler(&self) -> &MethodRouter {
+        &self.handler
+    }
 }
 
 /// Version routing configuration
@@ -61,8 +87,8 @@ pub fn build_version_router() -> Router {
 
     // Collect all versioned routes
     for route in inventory::iter::<VersionedRoute> {
-        let path = format!("/api/{}{}", route.version, route.path);
-        router = router.route(&path, route.handler.clone());
+        let path = format!("/api/{}{}", route.version(), route.path());
+        router = router.route(&path, route.handler().clone());
     }
 
     router
@@ -174,12 +200,12 @@ fn find_newer_version(current: &str, supported: &[String]) -> Option<String> {
 #[macro_export]
 macro_rules! define_versioned_route {
     (version: $version:expr, path: $path:expr, method: $method:ident, handler: $handler:ident) => {
-        ::inventory::submit!(sdforge::http::version_routing::VersionedRoute {
-            version: $version.to_string(),
-            path: $path.to_string(),
-            method: ::axum::http::Method::$method,
-            handler: ::axum::routing::MethodRouter::new().$method($handler),
-        });
+        ::inventory::submit!(sdforge::http::version_routing::VersionedRoute::new(
+            $version.to_string(),
+            $path.to_string(),
+            ::axum::http::Method::$method,
+            ::axum::routing::MethodRouter::new().$method($handler),
+        ));
     };
 }
 

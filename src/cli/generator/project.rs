@@ -57,7 +57,7 @@ pub(crate) fn determine_features(protocol: &str, additional_features: &str) -> S
 /// ```ignore
 /// use sdforge_generator::generate_project;
 ///
-/// generate_project("my-project", "http", "database,auth", "basic")
+/// generate_project("my-project", "http", "auth,security", "basic")
 ///     .expect("Failed to create project");
 /// ```
 pub fn generate_project(
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn test_determine_features_http() {
         assert_eq!(determine_features("http", ""), "http");
-        assert_eq!(determine_features("http", "database"), "http,database");
+        assert_eq!(determine_features("http", "auth"), "http,auth");
     }
 
     #[test]

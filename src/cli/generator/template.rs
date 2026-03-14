@@ -294,7 +294,7 @@ mod tests {
         let mut file = File::create(&template_file).unwrap();
         writeln!(file, "fn main() {{ println!(\"Hello, {{}}\"); }}").unwrap();
 
-        let context = TemplateContext::new("test-project", "http", "database");
+        let context = TemplateContext::new("test-project", "http", "auth");
 
         assert!(render_templates(&template_dir, &output_dir, &context).is_ok());
 

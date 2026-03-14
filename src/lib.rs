@@ -9,6 +9,49 @@
 /// Re-export macros from sdforge-macros for convenient use
 pub use sdforge_macros::{service_api, service_module, test_macro};
 
+/// Macro to implement Default::default() constructor for types
+///
+/// This macro generates both a `new()` static method and implements `Default` trait.
+/// Useful for simple types that can be constructed with no arguments.
+///
+/// # Example
+///
+/// ```ignore
+/// use sdforge::impl_default_new;
+///
+/// struct MyConfig {
+///     host: String,
+///     port: u16,
+/// }
+///
+/// impl_default_new!(MyConfig);
+///
+/// // Generates:
+/// impl MyConfig {
+///     pub fn new() -> Self { Self { host: String::new(), port: 0 } }
+/// }
+/// impl Default for MyConfig {
+///     fn default() -> Self { Self::new() }
+/// }
+/// ```
+#[macro_export]
+macro_rules! impl_default_new {
+    ($type:ident) => {
+        impl $type {
+            /// Create a new instance with default values
+            pub fn new() -> Self {
+                Self
+            }
+        }
+
+        impl Default for $type {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
+    };
+}
+
 /// Re-export inventory for use in generated code
 #[cfg(any(
     feature = "http",
@@ -128,9 +171,9 @@ pub mod security;
 
 #[cfg(feature = "security")]
 pub use security::{
-    auth_middleware, rate_limit_middleware, ApiKeyAuth, AuditLog, AuditLogger, AuditResult,
-    AuthContext, AuthError, AuthExtractor, AuthMetadata, AuthResult, BearerAuth, RateLimitConfig,
-    RateLimitError, RateLimiter,
+    auth_middleware, rate_limit_middleware, ApiKeyAuth, AuditLog, AuditLogger, AuditLoggerBuilder,
+    AuditResult, AuthContext, AuthError, AuthExtractor, AuthMetadata, AuthResult, BearerAuth,
+    BearerAuthBuilder, RateLimitConfig, RateLimitError, RateLimiter, RateLimiterBuilder,
 };
 
 /// Configuration management
@@ -139,18 +182,18 @@ pub mod config;
 
 #[cfg(feature = "http")]
 pub use config::{
-    ApiConfig, AppConfig, AuthConfig, ConfigError, ConfigLoader, CorsConfig, DatabaseConfig,
-    EnvHelper, LoggingConfig, RateLimitConfigFile, RateLimitEndpointConfig, ServerConfig,
-    TlsConfig, TracingConfig,
+    ApiConfig, AppConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper, LoggingConfig,
+    RateLimitConfigFile, RateLimitEndpointConfig, ServerConfig, TlsConfig, TracingConfig,
 };
 
 #[cfg(feature = "hot-reload")]
-pub use config::hot_reload::ConfigWatcher;
+pub use config::hot_reload::{
+    create_config_watcher, ConfigEvent, ConfigManager, ConfigWatcherImpl,
+};
 
 /// Caching utilities and middleware
 #[cfg(feature = "cache")]
 pub mod cache;
-
 #[cfg(feature = "cache")]
 pub use cache::{CacheConfig, CacheMiddleware, CacheService};
 
@@ -211,45 +254,58 @@ pub use config::{init_logging, init_logging_default};
     feature = "grpc"
 ))]
 pub fn init_all_plugins() -> PluginCounts {
-    #[cfg(feature = "grpc")]
-    use crate::grpc::GrpcRoute;
-    use crate::http::RouteRegistration;
-    #[cfg(feature = "mcp")]
-    use crate::mcp::McpToolRegistration;
-    #[cfg(feature = "websocket")]
-    use crate::websocket::WebSocketRoute;
-    use once_cell::sync::Lazy;
     use std::sync::Mutex;
+    use std::sync::OnceLock;
 
     // Store in global static to prevent linker optimization
-    static ROUTES: Lazy<Mutex<Vec<&'static RouteRegistration>>> =
-        Lazy::new(|| Mutex::new(inventory::iter::<RouteRegistration>().collect()));
-    #[cfg(feature = "mcp")]
-    static MCP_TOOLS: Lazy<Mutex<Vec<&'static McpToolRegistration>>> =
-        Lazy::new(|| Mutex::new(inventory::iter::<McpToolRegistration>().collect()));
-    #[cfg(feature = "websocket")]
-    static WS_ROUTES: Lazy<Mutex<Vec<&'static WebSocketRoute>>> =
-        Lazy::new(|| Mutex::new(inventory::iter::<WebSocketRoute>().collect()));
-    #[cfg(feature = "grpc")]
-    static GRPC_ROUTES: Lazy<Mutex<Vec<&'static GrpcRoute>>> =
-        Lazy::new(|| Mutex::new(inventory::iter::<GrpcRoute>().collect()));
+    #[cfg(feature = "http")]
+    let routes = {
+        use crate::http::RouteRegistration;
 
-    let routes = ROUTES.lock().unwrap();
+        static ROUTES: OnceLock<Mutex<Vec<&'static RouteRegistration>>> = OnceLock::new();
+        let routes =
+            ROUTES.get_or_init(|| Mutex::new(inventory::iter::<RouteRegistration>().collect()));
+        routes.lock().unwrap().len()
+    };
+    #[cfg(not(feature = "http"))]
+    let routes = 0;
+
     #[cfg(feature = "mcp")]
-    let mcp_tools = MCP_TOOLS.lock().unwrap();
+    let mcp_tools = {
+        use crate::mcp::McpToolRegistration;
+
+        static MCP_TOOLS: OnceLock<Mutex<Vec<&'static McpToolRegistration>>> = OnceLock::new();
+        let tools = MCP_TOOLS
+            .get_or_init(|| Mutex::new(inventory::iter::<McpToolRegistration>().collect()));
+        tools.lock().unwrap().len()
+    };
     #[cfg(feature = "websocket")]
-    let ws_routes = WS_ROUTES.lock().unwrap();
+    let ws_routes = {
+        use crate::websocket::WebSocketRoute;
+
+        static WS_ROUTES: OnceLock<Mutex<Vec<&'static WebSocketRoute>>> = OnceLock::new();
+        let routes =
+            WS_ROUTES.get_or_init(|| Mutex::new(inventory::iter::<WebSocketRoute>().collect()));
+        routes.lock().unwrap().len()
+    };
     #[cfg(feature = "grpc")]
-    let grpc_routes = GRPC_ROUTES.lock().unwrap();
+    let grpc_routes = {
+        use crate::grpc::GrpcRouteRegistration;
+
+        static GRPC_ROUTES: OnceLock<Mutex<Vec<&'static GrpcRouteRegistration>>> = OnceLock::new();
+        let routes = GRPC_ROUTES
+            .get_or_init(|| Mutex::new(inventory::iter::<GrpcRouteRegistration>().collect()));
+        routes.lock().unwrap().len()
+    };
 
     PluginCounts {
-        routes: routes.len(),
+        routes,
         #[cfg(feature = "mcp")]
-        mcp_tools: mcp_tools.len(),
+        mcp_tools,
         #[cfg(feature = "websocket")]
-        ws_routes: ws_routes.len(),
+        ws_routes,
         #[cfg(feature = "grpc")]
-        grpc_routes: grpc_routes.len(),
+        grpc_routes,
     }
 }
 

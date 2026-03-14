@@ -68,15 +68,64 @@ use crate::core::ApiMetadata;
 
 #[cfg(feature = "grpc")]
 /// gRPC route registration
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
 pub struct GrpcRoute {
     /// The gRPC service name
-    pub service_name: String,
+    service_name: String,
     /// API metadata
-    pub metadata: ApiMetadata,
+    metadata: ApiMetadata,
+}
+
+#[allow(dead_code)]
+impl GrpcRoute {
+    #[allow(missing_docs)]
+    pub fn new(service_name: String, metadata: ApiMetadata) -> Self {
+        Self {
+            service_name,
+            metadata,
+        }
+    }
+
+    pub(crate) fn service_name(&self) -> &str {
+        &self.service_name
+    }
+
+    pub(crate) fn metadata(&self) -> &ApiMetadata {
+        &self.metadata
+    }
 }
 
 #[cfg(feature = "grpc")]
-inventory::collect!(GrpcRoute);
+#[allow(missing_docs)]
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy)]
+pub struct GrpcRouteRegistration {
+    name: &'static str,
+    create_fn: fn() -> GrpcRoute,
+}
+
+#[cfg(feature = "grpc")]
+#[allow(dead_code)]
+impl GrpcRouteRegistration {
+    #[allow(missing_docs)]
+    pub const fn new(name: &'static str, create_fn: fn() -> GrpcRoute) -> Self {
+        Self { name, create_fn }
+    }
+
+    #[allow(missing_docs)]
+    pub(crate) fn name(&self) -> &str {
+        self.name
+    }
+
+    #[allow(missing_docs)]
+    pub(crate) fn create(&self) -> GrpcRoute {
+        (self.create_fn)()
+    }
+}
+
+#[cfg(feature = "grpc")]
+inventory::collect!(GrpcRouteRegistration);
 
 #[cfg(feature = "grpc")]
 /// Build gRPC server
@@ -273,5 +322,283 @@ mod tests {
         assert_eq!(route.metadata.description(), "API service");
         assert_eq!(route.metadata.cache_ttl(), Some(300));
         assert!(!route.metadata.is_streaming());
+    }
+
+    // ============================================================================
+    // gRPC Service Method Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_grpc_service_call_method() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let mut parameters = HashMap::new();
+        parameters.insert("key".to_string(), "value".to_string());
+
+        let request = CallRequest {
+            method: "test_method".to_string(),
+            parameters,
+            data: "".to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert!(response.success);
+        assert_eq!(response.status_code, 200);
+        assert!(response.error.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_call_with_empty_method() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let request = CallRequest {
+            method: "".to_string(),
+            parameters: HashMap::new(),
+            data: "".to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert!(response.success);
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_call_with_complex_parameters() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let mut parameters = HashMap::new();
+        parameters.insert("user_id".to_string(), "123".to_string());
+        parameters.insert("name".to_string(), "Test User".to_string());
+        parameters.insert("active".to_string(), "true".to_string());
+
+        let complex_data = serde_json::json!({
+            "user_id": 123,
+            "name": "Test User",
+            "active": true,
+            "tags": ["tag1", "tag2"]
+        });
+
+        let request = CallRequest {
+            method: "update_user".to_string(),
+            parameters,
+            data: complex_data.to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert!(response.success);
+
+        let response_data: serde_json::Value = serde_json::from_str(&response.data).unwrap();
+        assert_eq!(response_data["method"], "update_user");
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_get_info() {
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let request = InfoRequest {
+            version: "".to_string(),
+        };
+        let result = service.get_info(Request::new(request)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert_eq!(response.name, "SdForge Service");
+        assert_eq!(response.version, "0.1.0");
+        assert!(!response.methods.is_empty());
+        assert_eq!(response.description, "SdForge Multi-Protocol SDK Framework");
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_get_info_methods_list() {
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let request = InfoRequest {
+            version: "0.1.0".to_string(),
+        };
+        let result = service.get_info(Request::new(request)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert!(response.methods.contains(&"Call".to_string()));
+        assert!(response.methods.contains(&"GetInfo".to_string()));
+        assert_eq!(response.methods.len(), 2);
+    }
+
+    // ============================================================================
+    // Error Handling Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_grpc_service_call_with_invalid_json() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let mut parameters = HashMap::new();
+        parameters.insert("key".to_string(), "value".to_string());
+
+        let request = CallRequest {
+            method: "test".to_string(),
+            parameters,
+            data: "invalid json {{{".to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert!(response.success);
+        assert!(response.data.contains("processed"));
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_call_with_large_payload() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let large_data = "x".repeat(1000);
+
+        let mut parameters = HashMap::new();
+        parameters.insert("data".to_string(), large_data.clone());
+
+        let request = CallRequest {
+            method: "large_payload".to_string(),
+            parameters,
+            data: large_data,
+        };
+
+        let result = service.call(Request::new(request)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert!(response.success);
+    }
+
+    // ============================================================================
+    // Metadata Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_grpc_route_with_streaming_metadata() {
+        use crate::core::ApiMetadata;
+
+        let route = GrpcRoute {
+            service_name: "stream-service".to_string(),
+            metadata: ApiMetadata {
+                name: "stream_api".to_string(),
+                version: "v1".to_string(),
+                description: "Streaming API".to_string(),
+                cache_ttl: None,
+                is_streaming: true,
+            },
+        };
+
+        assert!(route.metadata.is_streaming());
+        assert_eq!(route.metadata.cache_ttl(), None);
+    }
+
+    #[test]
+    fn test_grpc_route_with_cache_ttl() {
+        use crate::core::ApiMetadata;
+
+        let route = GrpcRoute {
+            service_name: "cached-service".to_string(),
+            metadata: ApiMetadata {
+                name: "cached_api".to_string(),
+                version: "v1".to_string(),
+                description: "Cached API".to_string(),
+                cache_ttl: Some(600),
+                is_streaming: false,
+            },
+        };
+
+        assert_eq!(route.metadata.cache_ttl(), Some(600));
+        assert!(!route.metadata.is_streaming());
+    }
+
+    #[test]
+    fn test_grpc_route_metadata_cloning() {
+        use crate::core::ApiMetadata;
+
+        let route = GrpcRoute {
+            service_name: "original".to_string(),
+            metadata: ApiMetadata {
+                name: "test".to_string(),
+                version: "v1".to_string(),
+                description: "Test".to_string(),
+                cache_ttl: Some(300),
+                is_streaming: false,
+            },
+        };
+
+        let route_cloned = route.clone();
+        assert_eq!(route_cloned.service_name, "original");
+        assert_eq!(route_cloned.metadata.name, "test");
+    }
+
+    // ============================================================================
+    // Boundary Condition Tests
+    // ============================================================================
+
+    #[test]
+    fn test_grpc_config_zero_timeout() {
+        let config = GrpcServerConfig {
+            max_connections: 100,
+            timeout_seconds: 0,
+        };
+
+        assert_eq!(config.timeout_seconds, 0);
+        assert_eq!(config.max_connections, 100);
+    }
+
+    #[test]
+    fn test_grpc_config_large_max_connections() {
+        let config = GrpcServerConfig {
+            max_connections: 100000,
+            timeout_seconds: 30,
+        };
+
+        assert_eq!(config.max_connections, 100000);
+    }
+
+    #[test]
+    fn test_grpc_config_boundary_values() {
+        let config1 = GrpcServerConfig {
+            max_connections: 1,
+            timeout_seconds: 1,
+        };
+
+        let config2 = GrpcServerConfig {
+            max_connections: usize::MAX,
+            timeout_seconds: u64::MAX,
+        };
+
+        assert_eq!(config1.max_connections, 1);
+        assert_eq!(config2.max_connections, usize::MAX);
+        assert_eq!(config2.timeout_seconds, u64::MAX);
     }
 }

@@ -286,11 +286,11 @@ mod tests {
     #[test]
     fn test_api_error_service_unavailable() {
         let error = ApiError::ServiceUnavailable {
-            service: "database".to_string(),
+            service: "external_service".to_string(),
             retry_after: Some(30),
         };
         assert!(error.to_string().contains("Service unavailable"));
-        assert!(error.to_string().contains("database"));
+        assert!(error.to_string().contains("external_service"));
     }
 
     /// Test ApiError::ValidationError variant
@@ -318,7 +318,7 @@ mod tests {
                 assert!(field.is_none());
                 assert!(value.is_none());
             }
-            _ => panic!("Expected InvalidInput variant"),
+            _ => unreachable!("Unexpected variant in ApiError::InvalidInput test"),
         }
     }
 
@@ -364,15 +364,12 @@ mod tests {
     fn test_api_error_deserialization() {
         let json = r#"{"type":"NotFound","resource":"user","resource_id":"456"}"#;
         let error: ApiError = serde_json::from_str(json).unwrap();
-        match error {
-            ApiError::NotFound {
-                resource,
-                resource_id,
-            } => {
-                assert_eq!(resource, "user");
-                assert_eq!(resource_id, Some("456".to_string()));
-            }
-            _ => panic!("Expected NotFound variant"),
-        }
+
+        assert!(
+            matches!(error, ApiError::NotFound { ref resource, resource_id: Some(ref id) } 
+                if resource == "user" && id == "456"),
+            "Expected NotFound variant with correct values, got {:?}",
+            error
+        );
     }
 }

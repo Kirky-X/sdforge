@@ -7,7 +7,8 @@
 use serde::{Deserialize, Serialize};
 
 pub use confers::Config;
-pub use confers::OptionalValidate;
+#[cfg(feature = "validation")]
+pub use confers::Validate;
 
 pub mod hot_reload;
 
@@ -86,7 +87,7 @@ impl AppConfig {
 }
 
 /// Builder for AppConfig
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AppConfigBuilder {
     server: ServerConfig,
     database: DatabaseConfig,
@@ -95,20 +96,6 @@ pub struct AppConfigBuilder {
     rate_limit: Option<RateLimitConfigFile>,
     request_size: Option<RequestSizeConfig>,
     timeout: Option<TimeoutConfig>,
-}
-
-impl Default for AppConfigBuilder {
-    fn default() -> Self {
-        Self {
-            server: ServerConfig::default(),
-            database: DatabaseConfig::default(),
-            authentication: AuthConfig::default(),
-            logging: LoggingConfig::default(),
-            rate_limit: None,
-            request_size: None,
-            timeout: None,
-        }
-    }
 }
 
 impl AppConfigBuilder {

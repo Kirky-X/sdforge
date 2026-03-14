@@ -156,7 +156,7 @@ impl CacheMiddleware {
     }
 
     /// Generate ETag header value for response body
-    pub fn etag(data: &[u8]) -> String {
+    pub(crate) fn etag(data: &[u8]) -> String {
         format!(
             "\"{:x}\"",
             sha2::Sha256::new().chain_update(data).finalize()
@@ -187,7 +187,7 @@ impl CacheMiddleware {
     /// let can_cache = config.methods.contains(&"GET".to_string());
     /// let _ = can_cache;
     /// ```
-    pub fn can_cache(&self, method: &str, status: u16) -> bool {
+    pub(crate) fn can_cache(&self, method: &str, status: u16) -> bool {
         self.config.methods.iter().any(|m| m == method) && self.config.statuses.contains(&status)
     }
 }

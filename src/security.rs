@@ -135,7 +135,22 @@ pub type AuthResult<T = AuthContext> = Result<T, AuthError>;
 
 /// Authentication extractor
 #[derive(Debug)]
-pub struct AuthExtractor(pub AuthContext);
+pub struct AuthExtractor(AuthContext);
+
+#[allow(missing_docs)]
+impl AuthExtractor {
+    pub fn new(context: AuthContext) -> Self {
+        Self(context)
+    }
+
+    pub fn context(&self) -> &AuthContext {
+        &self.0
+    }
+
+    pub fn into_inner(self) -> AuthContext {
+        self.0
+    }
+}
 
 /// API key authentication with brute-force protection
 ///
@@ -194,7 +209,7 @@ impl ApiKeyAuth {
         // Multiple rounds to slow brute-force attacks
         for _ in 0..100 {
             hasher.update(key.as_bytes());
-            hasher.update(&[0x5c, 0x5c, 0x5c]);
+            hasher.update([0x5c, 0x5c, 0x5c]);
         }
 
         format!("{:x}", hasher.finalize())
@@ -626,6 +641,92 @@ impl BearerAuth {
         }
     }
 
+    /// Create with dependencies (for full DI mode)
+    ///
+    /// This method allows full dependency injection, enabling the caller to provide
+    /// all internal dependencies. This is useful for testing and advanced configuration
+    /// scenarios where you need control over the internal state.
+    ///
+    /// # Arguments
+    ///
+    /// * `secret` - JWT signing secret as bytes
+    /// * `valid_tokens` - Cache for valid tokens (shared across instances)
+    /// * `blacklisted_tokens` - Cache for blacklisted tokens (shared across instances)
+    /// * `expected_audience` - Optional expected audience claim for validation
+    /// * `expected_issuer` - Optional expected issuer claim for validation
+    ///
+    /// # Returns
+    ///
+    /// Returns a `BearerAuth` instance configured with the provided dependencies.
+    ///
+    /// # Security Note
+    ///
+    /// This method does not validate the secret. The caller is responsible for
+    /// ensuring the secret meets security requirements when using this method.
+    /// For production use, prefer `new()`, `try_new()`, or `builder()` which
+    /// enforce secret validation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::BearerAuth;
+    /// use dashmap::DashMap;
+    /// use std::sync::Arc;
+    ///
+    /// let valid_tokens = Arc::new(DashMap::new());
+    /// let blacklisted_tokens = Arc::new(DashMap::new());
+    ///
+    /// let auth = BearerAuth::with_dependencies(
+    ///     b"my-secret-key".to_vec(),
+    ///     valid_tokens,
+    ///     blacklisted_tokens,
+    ///     Some("my-api".to_string()),
+    ///     Some("my-issuer".to_string()),
+    /// );
+    /// let _ = auth;
+    /// ```
+    pub fn with_dependencies(
+        secret: Vec<u8>,
+        valid_tokens: Arc<DashMap<String, AuthContext>>,
+        blacklisted_tokens: Arc<DashMap<String, Instant>>,
+        expected_audience: Option<String>,
+        expected_issuer: Option<String>,
+    ) -> Self {
+        Self {
+            secret,
+            valid_tokens,
+            blacklisted_tokens,
+            expected_audience,
+            expected_issuer,
+        }
+    }
+
+    /// Create a builder for configuring BearerAuth.
+    ///
+    /// The builder pattern allows for flexible configuration of BearerAuth
+    /// with validation of the secret at build time.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `BearerAuthBuilder` instance for configuration.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::BearerAuth;
+    ///
+    /// let auth = BearerAuth::builder()
+    ///     .secret("MySecureSecret123!@#ABCDEF")
+    ///     .audience("my-api")
+    ///     .issuer("my-issuer")
+    ///     .build()
+    ///     .expect("Failed to build BearerAuth");
+    /// let _ = auth;
+    /// ```
+    pub fn builder() -> BearerAuthBuilder {
+        BearerAuthBuilder::new()
+    }
+
     /// Constant-time comparison to prevent timing attacks
     /// Uses the subtle crate for secure constant-time comparison
     #[cfg(feature = "security")]
@@ -827,6 +928,251 @@ impl BearerAuth {
     }
 }
 
+/// Builder for BearerAuth configuration
+///
+/// This builder provides a fluent interface for configuring BearerAuth instances
+/// with proper validation of the secret at build time.
+///
+/// # Security Requirements
+///
+/// The secret must meet the following requirements:
+/// - At least 32 characters in length
+/// - Contains at least one uppercase letter
+/// - Contains at least one lowercase letter
+/// - Contains at least one digit
+/// - Contains at least one special character
+///
+/// # Examples
+///
+/// ```rust
+/// use sdforge::security::BearerAuth;
+///
+/// // Basic usage with secret only
+/// let auth = BearerAuth::builder()
+///     .secret("MySecureSecret123!@#ABCDEF")
+///     .build()
+///     .expect("Failed to build BearerAuth");
+///
+/// // With audience and issuer validation
+/// let auth = BearerAuth::builder()
+///     .secret("MySecureSecret123!@#ABCDEF")
+///     .audience("my-api")
+///     .issuer("my-issuer")
+///     .build()
+///     .expect("Failed to build BearerAuth");
+/// let _ = auth;
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct BearerAuthBuilder {
+    /// JWT signing secret
+    secret: Option<String>,
+    /// Expected audience claim for validation
+    audience: Option<String>,
+    /// Expected issuer claim for validation
+    issuer: Option<String>,
+}
+
+impl BearerAuthBuilder {
+    /// Create a new BearerAuthBuilder with default settings.
+    ///
+    /// # Returns
+    ///
+    /// Returns a builder initialized with no configuration.
+    /// The secret must be set before calling `build()`.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::BearerAuthBuilder;
+    ///
+    /// let builder = BearerAuthBuilder::new();
+    /// let _ = builder;
+    /// ```
+    pub fn new() -> Self {
+        Self {
+            secret: None,
+            audience: None,
+            issuer: None,
+        }
+    }
+
+    /// Set the JWT signing secret.
+    ///
+    /// The secret must meet security requirements:
+    /// - At least 32 characters in length
+    /// - Contains at least one uppercase letter
+    /// - Contains at least one lowercase letter
+    /// - Contains at least one digit
+    /// - Contains at least one special character
+    ///
+    /// # Arguments
+    ///
+    /// * `secret` - JWT signing secret string
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors. Validation occurs at build time.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::BearerAuthBuilder;
+    ///
+    /// let builder = BearerAuthBuilder::new()
+    ///     .secret("MySecureSecret123!@#ABCDEF");
+    /// let _ = builder;
+    /// ```
+    pub fn secret(mut self, secret: impl Into<String>) -> Self {
+        self.secret = Some(secret.into());
+        self
+    }
+
+    /// Set the expected audience claim for JWT validation.
+    ///
+    /// When set, the JWT's `aud` claim must match this value for the token
+    /// to be considered valid. This prevents token substitution attacks where
+    /// an attacker uses a token issued for a different audience.
+    ///
+    /// # Arguments
+    ///
+    /// * `audience` - Expected audience claim value
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::BearerAuthBuilder;
+    ///
+    /// let builder = BearerAuthBuilder::new()
+    ///     .secret("MySecureSecret123!@#ABCDEF")
+    ///     .audience("my-api");
+    /// let _ = builder;
+    /// ```
+    pub fn audience(mut self, audience: impl Into<String>) -> Self {
+        self.audience = Some(audience.into());
+        self
+    }
+
+    /// Set the expected issuer claim for JWT validation.
+    ///
+    /// When set, the JWT's `iss` claim must match this value for the token
+    /// to be considered valid. This ensures the token was issued by a trusted
+    /// authority.
+    ///
+    /// # Arguments
+    ///
+    /// * `issuer` - Expected issuer claim value
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::BearerAuthBuilder;
+    ///
+    /// let builder = BearerAuthBuilder::new()
+    ///     .secret("MySecureSecret123!@#ABCDEF")
+    ///     .issuer("my-issuer");
+    /// let _ = builder;
+    /// ```
+    pub fn issuer(mut self, issuer: impl Into<String>) -> Self {
+        self.issuer = Some(issuer.into());
+        self
+    }
+
+    /// Build a BearerAuth instance using the configured settings.
+    ///
+    /// This method validates the secret and returns an error if it doesn't
+    /// meet the security requirements.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing the configured `BearerAuth` instance
+    /// or an `AuthConfigError` if validation fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns `AuthConfigError::InvalidSecret` if no secret was provided.
+    /// Returns `AuthConfigError::SecretTooShort` if secret is less than 32 characters.
+    /// Returns `AuthConfigError::MissingCharacterClass` if secret lacks required character types.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::BearerAuthBuilder;
+    ///
+    /// let auth = BearerAuthBuilder::new()
+    ///     .secret("MySecureSecret123!@#ABCDEF")
+    ///     .audience("my-api")
+    ///     .build()
+    ///     .expect("Failed to build BearerAuth");
+    /// let _ = auth;
+    /// ```
+    pub fn build(self) -> Result<BearerAuth, AuthConfigError> {
+        let secret = self
+            .secret
+            .ok_or_else(|| AuthConfigError::InvalidSecret("Secret is required".to_string()))?;
+
+        // Validate secret length
+        if secret.len() < 32 {
+            return Err(AuthConfigError::SecretTooShort {
+                length: secret.len(),
+            });
+        }
+
+        // Validate character classes
+        if !secret.chars().any(|c| c.is_uppercase()) {
+            return Err(AuthConfigError::MissingCharacterClass {
+                required_type: "uppercase letter",
+            });
+        }
+        if !secret.chars().any(|c| c.is_lowercase()) {
+            return Err(AuthConfigError::MissingCharacterClass {
+                required_type: "lowercase letter",
+            });
+        }
+        if !secret.chars().any(|c| c.is_ascii_digit()) {
+            return Err(AuthConfigError::MissingCharacterClass {
+                required_type: "digit",
+            });
+        }
+        if !secret.chars().any(|c| !c.is_alphanumeric()) {
+            return Err(AuthConfigError::MissingCharacterClass {
+                required_type: "special character",
+            });
+        }
+
+        Ok(BearerAuth {
+            secret: secret.into_bytes(),
+            valid_tokens: Arc::new(DashMap::new()),
+            blacklisted_tokens: Arc::new(DashMap::new()),
+            expected_audience: self.audience,
+            expected_issuer: self.issuer,
+        })
+    }
+}
+
 /// Rate limiter configuration
 #[derive(Debug, Clone)]
 pub struct RateLimitConfig {
@@ -861,12 +1207,13 @@ impl TryFrom<crate::config::RateLimitConfigFile> for RateLimitConfig {
 }
 
 /// Trusted proxy configuration for IP extraction
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
-pub struct TrustedProxyConfig {
+pub(crate) struct TrustedProxyConfig {
     /// List of trusted proxy IP addresses
-    pub trusted_proxies: Vec<String>,
+    trusted_proxies: Vec<String>,
     /// Whether proxy verification is enabled
-    pub enabled: bool,
+    enabled: bool,
 }
 
 impl Default for TrustedProxyConfig {
@@ -886,7 +1233,8 @@ impl Default for TrustedProxyConfig {
 ///
 /// This function implements secure IP extraction that prevents IP spoofing
 /// by validating the proxy chain before trusting X-Forwarded-For headers.
-pub fn extract_client_ip(
+#[allow(dead_code)]
+pub(crate) fn extract_client_ip(
     req: &axum::http::Request<axum::body::Body>,
     config: &TrustedProxyConfig,
 ) -> String {
@@ -918,6 +1266,208 @@ pub fn extract_client_ip(
     "unknown".to_string()
 }
 
+/// Builder for RateLimiter configuration
+///
+/// This builder provides a fluent interface for configuring a RateLimiter
+/// with custom rate limiting parameters.
+///
+/// # Examples
+///
+/// ```rust
+/// use sdforge::security::RateLimiterBuilder;
+/// use std::time::Duration;
+///
+/// let limiter = RateLimiterBuilder::new()
+///     .max_requests(100)
+///     .window(Duration::from_secs(60))
+///     .max_concurrent(500)
+///     .build();
+/// let _ = limiter;
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct RateLimiterBuilder {
+    /// Rate limit configuration
+    config: RateLimitConfig,
+    /// Maximum concurrent requests (semaphore permits)
+    max_concurrent: usize,
+}
+
+impl RateLimiterBuilder {
+    /// Create a new RateLimiterBuilder with default settings.
+    ///
+    /// Default values:
+    /// - `max_requests`: 100
+    /// - `window`: 60 seconds
+    /// - `include_headers`: true
+    /// - `max_concurrent`: 1000
+    ///
+    /// # Returns
+    ///
+    /// Returns a builder initialized with default rate limit configuration.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::RateLimiterBuilder;
+    ///
+    /// let builder = RateLimiterBuilder::new();
+    /// let _ = builder;
+    /// ```
+    pub fn new() -> Self {
+        Self {
+            config: RateLimitConfig::default(),
+            max_concurrent: 1000,
+        }
+    }
+
+    /// Set the maximum number of requests within the rate limit window.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_requests` - Maximum number of requests allowed in a window.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::RateLimiterBuilder;
+    ///
+    /// let builder = RateLimiterBuilder::new().max_requests(100);
+    /// let _ = builder;
+    /// ```
+    pub fn max_requests(mut self, max_requests: u32) -> Self {
+        self.config.max_requests = max_requests;
+        self
+    }
+
+    /// Set the duration of the rate limit window.
+    ///
+    /// # Arguments
+    ///
+    /// * `window` - Time window for rate limiting.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::RateLimiterBuilder;
+    /// use std::time::Duration;
+    ///
+    /// let builder = RateLimiterBuilder::new().window(Duration::from_secs(60));
+    /// let _ = builder;
+    /// ```
+    pub fn window(mut self, window: Duration) -> Self {
+        self.config.window = window;
+        self
+    }
+
+    /// Set the maximum number of concurrent requests (semaphore permits).
+    ///
+    /// This controls the backpressure mechanism by limiting how many
+    /// requests can be processed concurrently.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_concurrent` - Maximum number of concurrent requests.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::RateLimiterBuilder;
+    ///
+    /// let builder = RateLimiterBuilder::new().max_concurrent(500);
+    /// let _ = builder;
+    /// ```
+    pub fn max_concurrent(mut self, max_concurrent: usize) -> Self {
+        self.max_concurrent = max_concurrent;
+        self
+    }
+
+    /// Configure whether rate limit headers are included in responses.
+    ///
+    /// # Arguments
+    ///
+    /// * `include_headers` - Whether to include rate limit headers.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::RateLimiterBuilder;
+    ///
+    /// let builder = RateLimiterBuilder::new().include_headers(true);
+    /// let _ = builder;
+    /// ```
+    pub fn include_headers(mut self, include_headers: bool) -> Self {
+        self.config.include_headers = include_headers;
+        self
+    }
+
+    /// Build a RateLimiter instance using the configured settings.
+    ///
+    /// # Returns
+    ///
+    /// Returns a fully configured RateLimiter instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::RateLimiterBuilder;
+    /// use std::time::Duration;
+    ///
+    /// let limiter = RateLimiterBuilder::new()
+    ///     .max_requests(100)
+    ///     .window(Duration::from_secs(60))
+    ///     .build();
+    /// let _ = limiter;
+    /// ```
+    pub fn build(self) -> RateLimiter {
+        RateLimiter::with_dependencies(
+            self.config,
+            Arc::new(DashMap::new()),
+            Arc::new(DashMap::new()),
+            Arc::new(tokio::sync::Semaphore::new(self.max_concurrent)),
+        )
+    }
+}
+
 /// Rate limiter with idempotency support
 ///
 /// Security features:
@@ -937,13 +1487,139 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
-    /// Create new rate limiter
+    /// Create a new rate limiter with optional configuration.
+    ///
+    /// This is the simplest way to create a RateLimiter - it provides
+    /// out-of-the-box functionality with sensible defaults.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Optional rate limit configuration. If `None`, uses defaults.
+    ///
+    /// # Returns
+    ///
+    /// Returns a new RateLimiter instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::RateLimiter;
+    ///
+    /// // With default configuration
+    /// let limiter = RateLimiter::new(None);
+    /// let _ = limiter;
+    ///
+    /// // With custom configuration
+    /// use sdforge::security::RateLimitConfig;
+    /// use std::time::Duration;
+    ///
+    /// let config = RateLimitConfig {
+    ///     max_requests: 200,
+    ///     window: Duration::from_secs(120),
+    ///     include_headers: true,
+    /// };
+    /// let limiter = RateLimiter::new(Some(config));
+    /// let _ = limiter;
+    /// ```
     pub fn new(config: Option<RateLimitConfig>) -> Self {
         Self {
             config: config.unwrap_or_default(),
             requests: Arc::new(DashMap::new()),
             idempotency_cache: Arc::new(DashMap::new()),
             semaphore: Arc::new(tokio::sync::Semaphore::new(1000)),
+        }
+    }
+
+    /// Create a builder for configuring a RateLimiter.
+    ///
+    /// This method returns a RateLimiterBuilder that allows for fluent
+    /// configuration of the rate limiter's parameters.
+    ///
+    /// # Returns
+    ///
+    /// Returns a RateLimiterBuilder instance for configuration.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::RateLimiter;
+    /// use std::time::Duration;
+    ///
+    /// let limiter = RateLimiter::builder()
+    ///     .max_requests(100)
+    ///     .window(Duration::from_secs(60))
+    ///     .max_concurrent(500)
+    ///     .build();
+    /// let _ = limiter;
+    /// ```
+    pub fn builder() -> RateLimiterBuilder {
+        RateLimiterBuilder::new()
+    }
+
+    /// Create a RateLimiter with all dependencies explicitly provided.
+    ///
+    /// This method is useful for dependency injection and testing scenarios
+    /// where you need full control over the internal state.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - Rate limit configuration.
+    /// * `requests` - Request tracking map (key -> list of request timestamps).
+    /// * `idempotency_cache` - Idempotency key cache for deduplication.
+    /// * `semaphore` - Semaphore for concurrent request limiting.
+    ///
+    /// # Returns
+    ///
+    /// Returns a RateLimiter instance with the provided dependencies.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::{RateLimiter, RateLimitConfig};
+    /// use dashmap::DashMap;
+    /// use std::sync::Arc;
+    /// use std::time::Duration;
+    ///
+    /// let config = RateLimitConfig {
+    ///     max_requests: 100,
+    ///     window: Duration::from_secs(60),
+    ///     include_headers: true,
+    /// };
+    /// let requests = Arc::new(DashMap::new());
+    /// let idempotency_cache = Arc::new(DashMap::new());
+    /// let semaphore = Arc::new(tokio::sync::Semaphore::new(1000));
+    ///
+    /// let limiter = RateLimiter::with_dependencies(
+    ///     config,
+    ///     requests,
+    ///     idempotency_cache,
+    ///     semaphore,
+    /// );
+    /// let _ = limiter;
+    /// ```
+    pub fn with_dependencies(
+        config: RateLimitConfig,
+        requests: Arc<DashMap<String, Vec<Instant>>>,
+        idempotency_cache: Arc<DashMap<String, Instant>>,
+        semaphore: Arc<tokio::sync::Semaphore>,
+    ) -> Self {
+        Self {
+            config,
+            requests,
+            idempotency_cache,
+            semaphore,
         }
     }
 
@@ -1041,8 +1717,35 @@ impl RateLimiter {
     }
 }
 
+impl Default for RateLimiter {
+    /// Create a RateLimiter with default configuration.
+    ///
+    /// This is equivalent to calling `RateLimiter::new(None)`.
+    ///
+    /// # Returns
+    ///
+    /// Returns a RateLimiter with default settings:
+    /// - `max_requests`: 100
+    /// - `window`: 60 seconds
+    /// - `include_headers`: true
+    /// - `max_concurrent`: 1000
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::RateLimiter;
+    ///
+    /// let limiter = RateLimiter::default();
+    /// let _ = limiter;
+    /// ```
+    fn default() -> Self {
+        Self::new(None)
+    }
+}
+
 /// RAII permit for rate limiting
-pub struct Permit(pub tokio::sync::OwnedSemaphorePermit);
+#[allow(dead_code)]
+pub struct Permit(tokio::sync::OwnedSemaphorePermit);
 
 impl Drop for Permit {
     fn drop(&mut self) {
@@ -1066,19 +1769,56 @@ pub struct RateLimitError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLog {
     /// Log ID
-    pub id: String,
+    pub(crate) id: String,
     /// Timestamp
-    pub timestamp: i64,
+    pub(crate) timestamp: i64,
     /// User ID
-    pub user_id: Option<String>,
+    pub(crate) user_id: Option<String>,
     /// Action
-    pub action: String,
+    pub(crate) action: String,
     /// Resource
-    pub resource: String,
+    pub(crate) resource: String,
     /// Result
-    pub result: AuditResult,
+    pub(crate) result: AuditResult,
     /// Request metadata
-    pub metadata: AuthMetadata,
+    pub(crate) metadata: AuthMetadata,
+}
+
+impl AuditLog {
+    /// Get log ID
+    pub fn id(&self) -> &str {
+        &self.id
+    }
+
+    /// Get log timestamp
+    pub fn timestamp(&self) -> i64 {
+        self.timestamp
+    }
+
+    /// Get user ID
+    pub fn user_id(&self) -> Option<&str> {
+        self.user_id.as_deref()
+    }
+
+    /// Get action
+    pub fn action(&self) -> &str {
+        &self.action
+    }
+
+    /// Get resource
+    pub fn resource(&self) -> &str {
+        &self.resource
+    }
+
+    /// Get result
+    pub fn result(&self) -> &AuditResult {
+        &self.result
+    }
+
+    /// Get request metadata
+    pub fn metadata(&self) -> &AuthMetadata {
+        &self.metadata
+    }
 }
 
 /// Audit result
@@ -1104,6 +1844,233 @@ pub enum AuditResult {
 /// - Async processing to avoid blocking main threads
 /// - Fallback storage when async channel is full (prevents log loss)
 #[derive(Clone)]
+/// Builder for creating AuditLogger with custom configuration.
+///
+/// This builder allows fine-grained control over audit logger settings
+/// including log limits, concurrency, and queue size.
+///
+/// # Examples
+///
+/// ```rust
+/// use sdforge::security::AuditLogger;
+///
+/// let logger = AuditLogger::builder()
+///     .max_logs_per_user(500)
+///     .max_concurrent_ops(50)
+///     .queue_size(2000)
+///     .build();
+/// ```
+pub struct AuditLoggerBuilder {
+    /// Maximum number of logs to retain per user
+    max_logs_per_user: usize,
+    /// Maximum number of concurrent log operations (semaphore permits)
+    max_concurrent_ops: usize,
+    /// Size of the async log processing queue
+    queue_size: usize,
+}
+
+impl Default for AuditLoggerBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AuditLoggerBuilder {
+    /// Create a new AuditLoggerBuilder with default settings.
+    ///
+    /// Default values:
+    /// - `max_logs_per_user`: 1000
+    /// - `max_concurrent_ops`: 100
+    /// - `queue_size`: 1000
+    ///
+    /// # Returns
+    ///
+    /// Returns a builder initialized with default configuration.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::AuditLoggerBuilder;
+    ///
+    /// let builder = AuditLoggerBuilder::new();
+    /// let _ = builder;
+    /// ```
+    pub fn new() -> Self {
+        Self {
+            max_logs_per_user: 1000,
+            max_concurrent_ops: 100,
+            queue_size: 1000,
+        }
+    }
+
+    /// Set the maximum number of logs to retain per user.
+    ///
+    /// When the limit is exceeded, older logs are truncated.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_logs` - Maximum number of logs per user (default: 1000).
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::AuditLoggerBuilder;
+    ///
+    /// let builder = AuditLoggerBuilder::new().max_logs_per_user(500);
+    /// let _ = builder;
+    /// ```
+    pub fn max_logs_per_user(mut self, max_logs: usize) -> Self {
+        self.max_logs_per_user = max_logs;
+        self
+    }
+
+    /// Set the maximum number of concurrent log operations.
+    ///
+    /// This controls the semaphore used to prevent DoS attacks on the
+    /// audit logging system. Higher values allow more concurrent operations
+    /// but may increase memory usage.
+    ///
+    /// # Arguments
+    ///
+    /// * `max_ops` - Maximum concurrent operations (default: 100).
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::AuditLoggerBuilder;
+    ///
+    /// let builder = AuditLoggerBuilder::new().max_concurrent_ops(50);
+    /// let _ = builder;
+    /// ```
+    pub fn max_concurrent_ops(mut self, max_ops: usize) -> Self {
+        self.max_concurrent_ops = max_ops;
+        self
+    }
+
+    /// Set the size of the async log processing queue.
+    ///
+    /// Larger queues can handle higher burst loads but consume more memory.
+    /// When the queue is full, logs are stored in a fallback synchronous buffer.
+    ///
+    /// # Arguments
+    ///
+    /// * `size` - Queue size (default: 1000).
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated builder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::AuditLoggerBuilder;
+    ///
+    /// let builder = AuditLoggerBuilder::new().queue_size(2000);
+    /// let _ = builder;
+    /// ```
+    pub fn queue_size(mut self, size: usize) -> Self {
+        self.queue_size = size;
+        self
+    }
+
+    /// Build an AuditLogger instance using the configured settings.
+    ///
+    /// This method spawns a background worker task for async log processing
+    /// and initializes all internal data structures.
+    ///
+    /// # Returns
+    ///
+    /// Returns a fully configured AuditLogger instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::AuditLoggerBuilder;
+    ///
+    /// let logger = AuditLoggerBuilder::new()
+    ///     .max_logs_per_user(500)
+    ///     .max_concurrent_ops(50)
+    ///     .queue_size(2000)
+    ///     .build();
+    /// let _ = logger;
+    /// ```
+    pub fn build(self) -> AuditLogger {
+        let (queue_sender, mut queue_receiver) =
+            tokio::sync::mpsc::channel::<AuditLogBatch>(self.queue_size);
+
+        // Spawn background worker for async log processing
+        let logs: Arc<DashMap<String, Vec<AuditLog>>> = Arc::new(DashMap::new());
+        let fallback_logs: Arc<DashMap<String, Vec<AuditLog>>> = Arc::new(DashMap::new());
+        let logs_clone = logs.clone();
+        let fallback_logs_clone = fallback_logs.clone();
+        let max_logs_clone = self.max_logs_per_user;
+        tokio::spawn(async move {
+            while let Some(batch) = queue_receiver.recv().await {
+                let mut entry = logs_clone.entry(batch.user_id.clone()).or_default();
+                entry.push(batch.log);
+
+                // Keep only last N logs per user
+                if entry.len() > max_logs_clone {
+                    entry.truncate(max_logs_clone);
+                }
+
+                // Also check if there are fallback logs to merge
+                if let Some(fallback) = fallback_logs_clone.get(&batch.user_id) {
+                    if !fallback.is_empty() {
+                        let mut entry = logs_clone.entry(batch.user_id.clone()).or_default();
+                        entry.extend(fallback.iter().cloned());
+                        if entry.len() > max_logs_clone {
+                            entry.truncate(max_logs_clone);
+                        }
+                        fallback_logs_clone.remove(&batch.user_id);
+                    }
+                }
+            }
+        });
+
+        AuditLogger {
+            logs,
+            max_logs_per_user: self.max_logs_per_user,
+            semaphore: Arc::new(tokio::sync::Semaphore::new(self.max_concurrent_ops)),
+            queue_sender: Arc::new(queue_sender),
+            fallback_logs,
+            dropped_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        }
+    }
+}
+
+/// Audit logger for tracking user actions and security events.
+///
+/// Provides async log processing with DoS protection and fallback
+/// synchronous storage for high-load scenarios.
 pub struct AuditLogger {
     /// Logs storage
     logs: Arc<DashMap<String, Vec<AuditLog>>>,
@@ -1189,7 +2156,121 @@ fn sanitize_error_message(message: &str) -> String {
     result
 }
 
+impl Default for AuditLogger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AuditLogger {
+    /// Create a new AuditLoggerBuilder for custom configuration.
+    ///
+    /// This is the recommended way to create an AuditLogger when you need
+    /// to customize any of the default settings.
+    ///
+    /// # Returns
+    ///
+    /// Returns a new AuditLoggerBuilder instance.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::AuditLogger;
+    ///
+    /// let logger = AuditLogger::builder()
+    ///     .max_logs_per_user(500)
+    ///     .max_concurrent_ops(50)
+    ///     .queue_size(2000)
+    ///     .build();
+    /// let _ = logger;
+    /// ```
+    pub fn builder() -> AuditLoggerBuilder {
+        AuditLoggerBuilder::new()
+    }
+
+    /// Create an AuditLogger with all dependencies injected.
+    ///
+    /// This method is used for complete dependency injection, allowing
+    /// external control over all internal components. This is useful for
+    /// testing or advanced integration scenarios.
+    ///
+    /// # Arguments
+    ///
+    /// * `logs` - Pre-initialized logs storage (DashMap)
+    /// * `max_logs_per_user` - Maximum logs to retain per user
+    /// * `semaphore` - Semaphore for controlling concurrent operations
+    /// * `queue_sender` - Channel sender for async log processing
+    /// * `fallback_logs` - Fallback storage for high-load scenarios
+    /// * `dropped_log_count` - Counter for monitoring dropped logs
+    ///
+    /// # Returns
+    ///
+    /// Returns an AuditLogger instance configured with the provided dependencies.
+    ///
+    /// # Errors
+    ///
+    /// This function does not return errors.
+    ///
+    /// # Note
+    ///
+    /// When using this method, you are responsible for spawning the background
+    /// worker task that processes logs from the channel. For most use cases,
+    /// prefer `new()`, `with_limit()`, or `builder().build()`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use sdforge::security::AuditLogger;
+    /// use dashmap::DashMap;
+    /// use std::sync::Arc;
+    /// use std::sync::atomic::AtomicU64;
+    ///
+    /// let (sender, mut receiver) = tokio::sync::mpsc::channel(1000);
+    ///
+    /// // Spawn background worker (required when using with_dependencies)
+    /// let logs = Arc::new(DashMap::new());
+    /// let fallback_logs = Arc::new(DashMap::new());
+    /// let logs_clone = logs.clone();
+    /// let fallback_logs_clone = fallback_logs.clone();
+    /// tokio::spawn(async move {
+    ///     while let Some(batch) = receiver.recv().await {
+    ///         let mut entry = logs_clone.entry(batch.user_id.clone()).or_default();
+    ///         entry.push(batch.log);
+    ///     }
+    /// });
+    ///
+    /// let logger = AuditLogger::with_dependencies(
+    ///     logs,
+    ///     1000,
+    ///     Arc::new(tokio::sync::Semaphore::new(100)),
+    ///     Arc::new(sender),
+    ///     fallback_logs,
+    ///     Arc::new(AtomicU64::new(0)),
+    /// );
+    /// let _ = logger;
+    /// ```
+    pub fn with_dependencies(
+        logs: Arc<DashMap<String, Vec<AuditLog>>>,
+        max_logs_per_user: usize,
+        semaphore: Arc<tokio::sync::Semaphore>,
+        queue_sender: Arc<tokio::sync::mpsc::Sender<AuditLogBatch>>,
+        fallback_logs: Arc<DashMap<String, Vec<AuditLog>>>,
+        dropped_log_count: Arc<std::sync::atomic::AtomicU64>,
+    ) -> Self {
+        Self {
+            logs,
+            max_logs_per_user,
+            semaphore,
+            queue_sender,
+            fallback_logs,
+            dropped_log_count,
+        }
+    }
+
     /// Create new audit logger with default limit
     pub fn new() -> Self {
         Self::with_limit(1000)
@@ -1675,6 +2756,54 @@ fn is_valid_ip(ip: &str) -> bool {
 mod tests {
     use super::*;
 
+    fn base64url_encode(data: &[u8]) -> String {
+        const TABLE: &[u8; 64] =
+            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let mut output = String::new();
+        let mut index = 0;
+
+        while index + 3 <= data.len() {
+            let chunk = ((data[index] as u32) << 16)
+                | ((data[index + 1] as u32) << 8)
+                | (data[index + 2] as u32);
+            output.push(TABLE[((chunk >> 18) & 0x3f) as usize] as char);
+            output.push(TABLE[((chunk >> 12) & 0x3f) as usize] as char);
+            output.push(TABLE[((chunk >> 6) & 0x3f) as usize] as char);
+            output.push(TABLE[(chunk & 0x3f) as usize] as char);
+            index += 3;
+        }
+
+        let remaining = data.len() - index;
+        if remaining == 1 {
+            let chunk = (data[index] as u32) << 16;
+            output.push(TABLE[((chunk >> 18) & 0x3f) as usize] as char);
+            output.push(TABLE[((chunk >> 12) & 0x3f) as usize] as char);
+        } else if remaining == 2 {
+            let chunk = ((data[index] as u32) << 16) | ((data[index + 1] as u32) << 8);
+            output.push(TABLE[((chunk >> 18) & 0x3f) as usize] as char);
+            output.push(TABLE[((chunk >> 12) & 0x3f) as usize] as char);
+            output.push(TABLE[((chunk >> 6) & 0x3f) as usize] as char);
+        }
+
+        output
+    }
+
+    fn create_jwt(secret: &str, payload: serde_json::Value) -> String {
+        let header = serde_json::json!({"alg":"HS256","typ":"JWT"});
+        let header_str = serde_json::to_string(&header).unwrap();
+        let payload_str = serde_json::to_string(&payload).unwrap();
+        let header_b64 = base64url_encode(header_str.as_bytes());
+        let payload_b64 = base64url_encode(payload_str.as_bytes());
+        let signing_input = format!("{}.{}", header_b64, payload_b64);
+
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(signing_input.as_bytes());
+        let signature = mac.finalize().into_bytes();
+        let signature_b64 = base64url_encode(&signature);
+
+        format!("{}.{}", signing_input, signature_b64)
+    }
+
     #[tokio::test]
     async fn test_api_key_auth() {
         let auth = ApiKeyAuth::new();
@@ -1776,6 +2905,53 @@ mod tests {
         assert!(!is_ip_in_range("8.8.8.8", "10.0.0.0/8"));
         assert!(!is_ip_in_range("172.32.0.1", "172.16.0.0/12"));
         assert!(!is_ip_in_range("8.8.8.8", "192.168.0.0/16"));
+    }
+
+    #[test]
+    fn test_trusted_proxy_config_default() {
+        let config = TrustedProxyConfig::default();
+        assert!(config.enabled);
+        assert!(config.trusted_proxies.contains(&"127.0.0.1".to_string()));
+    }
+
+    #[test]
+    fn test_extract_client_ip_prefers_forwarded_for() {
+        let req = Request::builder()
+            .header("x-forwarded-for", "203.0.113.5, 10.0.0.1")
+            .body(Body::empty())
+            .unwrap();
+        let config = TrustedProxyConfig {
+            trusted_proxies: vec![],
+            enabled: true,
+        };
+
+        let ip = extract_client_ip(&req, &config);
+        assert_eq!(ip, "203.0.113.5");
+    }
+
+    #[test]
+    fn test_extract_client_ip_fallbacks() {
+        let req = Request::builder()
+            .header("x-real-ip", "198.51.100.8")
+            .body(Body::empty())
+            .unwrap();
+        let enabled_config = TrustedProxyConfig {
+            trusted_proxies: vec![],
+            enabled: true,
+        };
+        let disabled_config = TrustedProxyConfig {
+            trusted_proxies: vec![],
+            enabled: false,
+        };
+
+        let ip_enabled = extract_client_ip(&req, &enabled_config);
+        let ip_disabled = extract_client_ip(&req, &disabled_config);
+        let req_no_headers = Request::builder().body(Body::empty()).unwrap();
+        let ip_no_headers = extract_client_ip(&req_no_headers, &enabled_config);
+
+        assert_eq!(ip_enabled, "198.51.100.8");
+        assert_eq!(ip_disabled, "unknown");
+        assert_eq!(ip_no_headers, "unknown");
     }
 
     // ==================== AuthContext Tests ====================
@@ -1928,6 +3104,116 @@ mod tests {
         let auth = BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
             .expect("Valid secret should work");
         assert!(auth.validate_token("invalid-token").is_none());
+    }
+
+    #[test]
+    fn test_bearer_auth_valid_jwt() {
+        let now = chrono::Utc::now().timestamp();
+        let payload = serde_json::json!({
+            "sub": "user-123",
+            "permissions": ["read", "write"],
+            "exp": now + 120,
+            "iat": now,
+            "nbf": now - 1
+        });
+        let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let token = create_jwt(secret, payload);
+        let auth = BearerAuth::try_new(secret).expect("valid secret");
+
+        let context = auth.validate_token(&token).expect("valid token");
+        assert_eq!(context.user_id(), Some("user-123"));
+        assert_eq!(
+            context.permissions(),
+            &["read".to_string(), "write".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_bearer_auth_invalid_signature() {
+        let now = chrono::Utc::now().timestamp();
+        let payload = serde_json::json!({
+            "sub": "user-123",
+            "permissions": ["read"],
+            "exp": now + 120
+        });
+        let token = create_jwt("OtherSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ", payload);
+        let auth =
+            BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ").expect("valid secret");
+        assert!(auth.validate_token(&token).is_none());
+    }
+
+    #[test]
+    fn test_bearer_auth_expired_jwt() {
+        let now = chrono::Utc::now().timestamp();
+        let payload = serde_json::json!({
+            "sub": "user-123",
+            "permissions": ["read"],
+            "exp": now - 1
+        });
+        let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let token = create_jwt(secret, payload);
+        let auth = BearerAuth::try_new(secret).expect("valid secret");
+        assert!(auth.validate_token(&token).is_none());
+    }
+
+    #[test]
+    fn test_bearer_auth_nbf_future() {
+        let now = chrono::Utc::now().timestamp();
+        let payload = serde_json::json!({
+            "sub": "user-123",
+            "permissions": ["read"],
+            "exp": now + 120,
+            "nbf": now + 120
+        });
+        let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let token = create_jwt(secret, payload);
+        let auth = BearerAuth::try_new(secret).expect("valid secret");
+        assert!(auth.validate_token(&token).is_none());
+    }
+
+    #[test]
+    fn test_bearer_auth_iat_future() {
+        let now = chrono::Utc::now().timestamp();
+        let payload = serde_json::json!({
+            "sub": "user-123",
+            "permissions": ["read"],
+            "exp": now + 120,
+            "iat": now + 120
+        });
+        let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let token = create_jwt(secret, payload);
+        let auth = BearerAuth::try_new(secret).expect("valid secret");
+        assert!(auth.validate_token(&token).is_none());
+    }
+
+    #[test]
+    fn test_bearer_auth_audience_mismatch() {
+        let now = chrono::Utc::now().timestamp();
+        let payload = serde_json::json!({
+            "sub": "user-123",
+            "permissions": ["read"],
+            "aud": "other-api",
+            "exp": now + 120
+        });
+        let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let token = create_jwt(secret, payload);
+        let auth = BearerAuth::with_audience(secret, "expected-api");
+        assert!(auth.validate_token(&token).is_none());
+    }
+
+    #[test]
+    fn test_bearer_auth_issuer_mismatch() {
+        let now = chrono::Utc::now().timestamp();
+        let payload = serde_json::json!({
+            "sub": "user-123",
+            "permissions": ["read"],
+            "iss": "other-issuer",
+            "exp": now + 120
+        });
+        let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let token = create_jwt(secret, payload);
+        let auth = BearerAuth::with_claims(secret, "expected-api", "expected-issuer");
+        assert!(auth.validate_token(&token).is_none());
     }
 
     #[test]
@@ -2268,6 +3554,244 @@ mod tests {
         // The blacklist is checked before JWT verification
         // Since "test-token-to-blacklist" is not a valid JWT, it returns None anyway
         assert!(auth.validate_token("test-token-to-blacklist").is_none());
+    }
+
+    // ==================== BearerAuthBuilder Tests ====================
+
+    #[test]
+    fn test_bearer_auth_builder_valid_secret() {
+        let auth = BearerAuthBuilder::new()
+            .secret("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+            .build()
+            .expect("Valid secret should build successfully");
+
+        assert!(auth.validate_token("invalid-token").is_none());
+    }
+
+    #[test]
+    fn test_bearer_auth_builder_with_audience_and_issuer() {
+        let auth = BearerAuthBuilder::new()
+            .secret("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+            .audience("my-api")
+            .issuer("my-issuer")
+            .build()
+            .expect("Valid configuration should build successfully");
+
+        assert!(auth.validate_token("invalid-token").is_none());
+    }
+
+    #[test]
+    fn test_bearer_auth_builder_missing_secret() {
+        let result = BearerAuthBuilder::new().build();
+        assert!(result.is_err(), "Expected error for missing secret");
+
+        match result {
+            Err(AuthConfigError::InvalidSecret(msg)) => {
+                assert!(msg.contains("required"));
+            }
+            Err(e) => panic!("Expected InvalidSecret error, got {:?}", e),
+            Ok(_) => panic!("Expected error but got success"),
+        }
+    }
+
+    #[test]
+    fn test_bearer_auth_builder_secret_too_short() {
+        let result = BearerAuthBuilder::new().secret("Short1!").build();
+
+        assert!(result.is_err(), "Expected error for short secret");
+
+        match result {
+            Err(AuthConfigError::SecretTooShort { length }) => {
+                assert_eq!(length, 7); // "Short1!" is 7 characters
+            }
+            Err(e) => panic!("Expected SecretTooShort error, got {:?}", e),
+            Ok(_) => panic!("Expected error but got success"),
+        }
+    }
+
+    #[test]
+    fn test_bearer_auth_builder_missing_uppercase() {
+        let result = BearerAuthBuilder::new()
+            .secret("lowercase123!abcdefghijklmnopqrstuvwxyz")
+            .build();
+
+        assert!(result.is_err(), "Expected error for missing uppercase");
+
+        match result {
+            Err(AuthConfigError::MissingCharacterClass { required_type }) => {
+                assert_eq!(required_type, "uppercase letter");
+            }
+            Err(e) => panic!("Expected MissingCharacterClass error, got {:?}", e),
+            Ok(_) => panic!("Expected error but got success"),
+        }
+    }
+
+    #[test]
+    fn test_bearer_auth_builder_missing_lowercase() {
+        let result = BearerAuthBuilder::new()
+            .secret("UPPERCASE123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+            .build();
+
+        assert!(result.is_err(), "Expected error for missing lowercase");
+
+        match result {
+            Err(AuthConfigError::MissingCharacterClass { required_type }) => {
+                assert_eq!(required_type, "lowercase letter");
+            }
+            Err(e) => panic!("Expected MissingCharacterClass error, got {:?}", e),
+            Ok(_) => panic!("Expected error but got success"),
+        }
+    }
+
+    #[test]
+    fn test_bearer_auth_builder_missing_digit() {
+        let result = BearerAuthBuilder::new()
+            .secret("LowercaseUpper!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+            .build();
+
+        assert!(result.is_err(), "Expected error for missing digit");
+
+        match result {
+            Err(AuthConfigError::MissingCharacterClass { required_type }) => {
+                assert_eq!(required_type, "digit");
+            }
+            Err(e) => panic!("Expected MissingCharacterClass error, got {:?}", e),
+            Ok(_) => panic!("Expected error but got success"),
+        }
+    }
+
+    #[test]
+    fn test_bearer_auth_builder_missing_special_char() {
+        let result = BearerAuthBuilder::new()
+            .secret("LowercaseUpper123ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+            .build();
+
+        assert!(result.is_err(), "Expected error for missing special char");
+
+        match result {
+            Err(AuthConfigError::MissingCharacterClass { required_type }) => {
+                assert_eq!(required_type, "special character");
+            }
+            Err(e) => panic!("Expected MissingCharacterClass error, got {:?}", e),
+            Ok(_) => panic!("Expected error but got success"),
+        }
+    }
+
+    #[test]
+    fn test_bearer_auth_builder_method() {
+        // Test that BearerAuth::builder() returns a BearerAuthBuilder
+        let auth = BearerAuth::builder()
+            .secret("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+            .build()
+            .expect("Builder should work");
+
+        assert!(auth.validate_token("invalid").is_none());
+    }
+
+    // ==================== BearerAuth with_dependencies Tests ====================
+
+    #[test]
+    fn test_bearer_auth_with_dependencies() {
+        let valid_tokens = Arc::new(DashMap::new());
+        let blacklisted_tokens = Arc::new(DashMap::new());
+
+        let auth = BearerAuth::with_dependencies(
+            b"test-secret-key-for-dependencies-test".to_vec(),
+            valid_tokens.clone(),
+            blacklisted_tokens.clone(),
+            Some("my-api".to_string()),
+            Some("my-issuer".to_string()),
+        );
+
+        // Verify the dependencies are properly set
+        assert!(auth.validate_token("invalid-token").is_none());
+
+        // Verify we can use the shared caches
+        let context = AuthContext::new(
+            Some("user-123".to_string()),
+            vec!["read".to_string()],
+            AuthMetadata::default(),
+        );
+        auth.register_token("test-token".to_string(), context);
+
+        // Verify the token is in the shared cache
+        assert!(valid_tokens.contains_key("test-token"));
+    }
+
+    #[test]
+    fn test_bearer_auth_with_dependencies_shared_state() {
+        let valid_tokens = Arc::new(DashMap::new());
+        let blacklisted_tokens = Arc::new(DashMap::new());
+
+        // Create two instances sharing the same caches
+        let auth1 = BearerAuth::with_dependencies(
+            b"shared-secret-key-for-testing-purposes".to_vec(),
+            valid_tokens.clone(),
+            blacklisted_tokens.clone(),
+            None,
+            None,
+        );
+
+        let auth2 = BearerAuth::with_dependencies(
+            b"shared-secret-key-for-testing-purposes".to_vec(),
+            valid_tokens.clone(),
+            blacklisted_tokens.clone(),
+            None,
+            None,
+        );
+
+        // Register a token with auth1
+        let context = AuthContext::new(
+            Some("user-456".to_string()),
+            vec!["write".to_string()],
+            AuthMetadata::default(),
+        );
+        auth1.register_token("shared-token".to_string(), context);
+
+        // Verify both instances can access the shared state
+        assert!(valid_tokens.contains_key("shared-token"));
+
+        // Blacklist a token with auth2
+        auth2.invalidate_token("blacklisted-token");
+
+        // Verify the blacklist is shared
+        assert!(blacklisted_tokens.contains_key("blacklisted-token"));
+    }
+
+    #[test]
+    fn test_bearer_auth_with_dependencies_optional_claims() {
+        let valid_tokens = Arc::new(DashMap::new());
+        let blacklisted_tokens = Arc::new(DashMap::new());
+
+        // Test with no audience or issuer
+        let auth_no_claims = BearerAuth::with_dependencies(
+            b"test-secret-key-no-claims-validation".to_vec(),
+            valid_tokens.clone(),
+            blacklisted_tokens.clone(),
+            None,
+            None,
+        );
+        assert!(auth_no_claims.validate_token("invalid").is_none());
+
+        // Test with only audience
+        let auth_with_audience = BearerAuth::with_dependencies(
+            b"test-secret-key-with-audience-validation".to_vec(),
+            valid_tokens.clone(),
+            blacklisted_tokens.clone(),
+            Some("my-api".to_string()),
+            None,
+        );
+        assert!(auth_with_audience.validate_token("invalid").is_none());
+
+        // Test with both audience and issuer
+        let auth_with_both = BearerAuth::with_dependencies(
+            b"test-secret-key-with-both-claims-validation".to_vec(),
+            valid_tokens,
+            blacklisted_tokens,
+            Some("my-api".to_string()),
+            Some("my-issuer".to_string()),
+        );
+        assert!(auth_with_both.validate_token("invalid").is_none());
     }
 }
 

@@ -175,7 +175,7 @@ pub mod validators {
 /// String sanitization alone cannot prevent SQL injection.
 #[cfg(feature = "http")]
 #[allow(dead_code)] // Reserved for future use
-pub mod sanitizer {
+pub(crate) mod sanitizer {
     use crate::core::ApiError;
     use std::path::PathBuf;
 
