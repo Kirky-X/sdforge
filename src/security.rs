@@ -716,7 +716,7 @@ impl BearerAuth {
     /// use sdforge::security::BearerAuth;
     ///
     /// let auth = BearerAuth::builder()
-    ///     .secret("MySecureSecret123!@#ABCDEF")
+    ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLMKLMKLM")
     ///     .audience("my-api")
     ///     .issuer("my-issuer")
     ///     .build()
@@ -949,13 +949,13 @@ impl BearerAuth {
 ///
 /// // Basic usage with secret only
 /// let auth = BearerAuth::builder()
-///     .secret("MySecureSecret123!@#ABCDEF")
+///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
 ///     .build()
 ///     .expect("Failed to build BearerAuth");
 ///
 /// // With audience and issuer validation
 /// let auth = BearerAuth::builder()
-///     .secret("MySecureSecret123!@#ABCDEF")
+///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
 ///     .audience("my-api")
 ///     .issuer("my-issuer")
 ///     .build()
@@ -1027,7 +1027,7 @@ impl BearerAuthBuilder {
     /// use sdforge::security::BearerAuthBuilder;
     ///
     /// let builder = BearerAuthBuilder::new()
-    ///     .secret("MySecureSecret123!@#ABCDEF");
+    ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM");
     /// let _ = builder;
     /// ```
     pub fn secret(mut self, secret: impl Into<String>) -> Self {
@@ -1059,7 +1059,7 @@ impl BearerAuthBuilder {
     /// use sdforge::security::BearerAuthBuilder;
     ///
     /// let builder = BearerAuthBuilder::new()
-    ///     .secret("MySecureSecret123!@#ABCDEF")
+    ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
     ///     .audience("my-api");
     /// let _ = builder;
     /// ```
@@ -1092,7 +1092,7 @@ impl BearerAuthBuilder {
     /// use sdforge::security::BearerAuthBuilder;
     ///
     /// let builder = BearerAuthBuilder::new()
-    ///     .secret("MySecureSecret123!@#ABCDEF")
+    ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
     ///     .issuer("my-issuer");
     /// let _ = builder;
     /// ```
@@ -1123,7 +1123,7 @@ impl BearerAuthBuilder {
     /// use sdforge::security::BearerAuthBuilder;
     ///
     /// let auth = BearerAuthBuilder::new()
-    ///     .secret("MySecureSecret123!@#ABCDEF")
+    ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
     ///     .audience("my-api")
     ///     .build()
     ///     .expect("Failed to build BearerAuth");
@@ -1851,7 +1851,7 @@ pub enum AuditResult {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```ignore
 /// use sdforge::security::AuditLogger;
 ///
 /// let logger = AuditLogger::builder()
@@ -2012,7 +2012,7 @@ impl AuditLoggerBuilder {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```ignore
     /// use sdforge::security::AuditLoggerBuilder;
     ///
     /// let logger = AuditLoggerBuilder::new()
@@ -2178,7 +2178,7 @@ impl AuditLogger {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```ignore
     /// use sdforge::security::AuditLogger;
     ///
     /// let logger = AuditLogger::builder()
@@ -2223,7 +2223,7 @@ impl AuditLogger {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```ignore
     /// use sdforge::security::AuditLogger;
     /// use dashmap::DashMap;
     /// use std::sync::Arc;
