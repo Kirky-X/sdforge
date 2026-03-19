@@ -9,6 +9,7 @@ keywords = ["examples", "sdforge", "http", "mcp"]
 categories = ["web-programming", "development-tools"]
 
 [workspace]
+members = ["mcp-client", "mcp-server", "websocket-chat", "grpc-streaming", "sse-live-feed", "logging-demo", "complete-auth"]
 
 [dependencies]
 sdforge = { path = "../src", default-features = false }

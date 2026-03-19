@@ -26,7 +26,7 @@ tower = { version = "0.5", optional = true }
 tower-http = { version = "0.6.8", optional = true, features = ["cors", "limit", "timeout", "set-header", "compression-gzip", "compression-deflate"] }
 inventory = { version = "0.3", optional = true }
 figment = { version = "0.10", optional = true }
-tokio = { version = "1.49", optional = true, features = ["sync"] }
+tokio = { version = "1.49", optional = true, features = ["full"] }
 axum-extra = { version = "0.9", optional = true, features = ["typed-header"] }
 futures = { version = "0.3", optional = true }
 
@@ -49,9 +49,6 @@ tonic-build = { version = "0.12", optional = true }
 
 # Feature dependencies
 chrono = { version = "0.4", optional = true, features = ["serde"] }
-tracing = { version = "0.1", optional = true }
-tracing-subscriber = { version = "0.3", optional = true, features = ["json"] }
-tracing-appender = { version = "0.2", optional = true }
 
 # Validation dependencies
 validator = { version = "0.19", optional = true, features = ["derive"] }
@@ -71,20 +68,24 @@ password-hash = { version = "0.6.0-rc.11", optional = true }
 rand = { version = "0.8", optional = true }
 
 # Configuration dependencies (按特性导入)
-confers = { path = "/home/dev/projects/confers", optional = true, default-features = false, features = ["toml", "json", "env", "watch", "snapshot", "validation", "progressive-reload", "dynamic"] }
+confers = { path = "/home/dev/projects/confers", optional = true, features = ["watch"] }
 toml = { version = "0.9", optional = true }
 schemars = { version = "0.8", optional = true }
 
-# Cache dependencies (按特性导入)
-oxcache = { version = "0.2", path = "/home/dev/projects/oxcache", optional = true, features = ["full"] }
-bytes = { version = "1.11", optional = true }
+# Cache dependencies (按特性导入) - oxcache 自己管理 sha2/md5/bytes/http 等
+oxcache = { version = "0.2", path = "/home/dev/projects/oxcache", optional = true }
 http = { version = "1.4", optional = true }
-md5 = { version = "0.7", optional = true }
+
+# Logging - inklog 完全接管（tracing 作为公共接口保留，由 inklog 内部使用）
+tracing = { version = "0.1", optional = true }
+tracing-subscriber = { version = "0.3", optional = true, features = ["json"] }
+inklog = { path = "/home/dev/projects/inklog", optional = true }
 
 # CLI dependencies (按特性导入)
 clap = { version = "4.5", optional = true, features = ["derive"] }
 tera = { version = "1.20", optional = true }
 walkdir = { version = "2.5", optional = true }
+url = "2.5.8"
 
 [dev-dependencies]
 tokio = { version = "1.49", features = ["rt", "rt-multi-thread", "macros"] }
@@ -129,8 +130,8 @@ streaming = ["http", "tokio-stream", "futures-util", "chrono"]
 # Timestamp 特性
 timestamp = ["chrono"]
 
-# Logging 特性
-logging = ["tracing", "tracing-subscriber", "tracing-appender"]
+# Logging 特性 - inklog 完全接管，tracing 作为公共接口由 inklog 内部管理
+logging = ["tracing", "tracing-subscriber", "inklog"]
 
 # Security 特性
 security = [
@@ -166,10 +167,10 @@ websocket = ["http", "streaming", "tokio-tungstenite", "axum-extra", "async-trai
 # gRPC 特性
 grpc = ["http", "tonic", "prost", "tonic-build"]
 
-# Cache 特性
-cache = ["http", "oxcache", "bytes", "dep:http", "async-trait", "tower", "sha2", "md5"]
+# Cache 特性 - 仅保留 oxcache 和基础异步依赖，其他由 oxcache 自行管理
+cache = ["dep:http", "oxcache", "async-trait"]
 
-# CLI 特性
+# CLI 特性 - 日志由 inklog 管理
 cli = [
     "clap",
     "anyhow",
@@ -177,6 +178,7 @@ cli = [
     "walkdir",
     "tracing",
     "tracing-subscriber",
+    "inklog",
     "confers/cli",
 ]
 
