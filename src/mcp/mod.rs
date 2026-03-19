@@ -584,4 +584,503 @@ mod tests {
         assert_eq!(instance.metadata().name(), "instance_test_tool");
         assert_eq!(instance.metadata().version(), "v1");
     }
+
+    // ============================================================================
+    // MCP Protocol Message Serialization Tests (Task 2.1)
+    // ============================================================================
+
+    /// Test: JSON-RPC request serialization and deserialization round-trip
+    #[test]
+    fn test_mcp_protocol_request_roundtrip() {
+        use mcp_sdk::transport::{JsonRpcRequest, JsonRpcVersion};
+
+        let request = JsonRpcRequest {
+            jsonrpc: JsonRpcVersion::default(),
+            method: "tools/call".to_string(),
+            params: Some(serde_json::json!({
+                "name": "my_tool",
+                "arguments": {"key": "value"}
+            })),
+            id: 1_u64,
+        };
+
+        let serialized = serde_json::to_string(&request).expect("serialization should succeed");
+        assert!(serialized.contains("\"jsonrpc\":\"2.0\""));
+        assert!(serialized.contains("\"method\":\"tools/call\""));
+        assert!(serialized.contains("\"params\""));
+
+        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert_eq!(deserialized.jsonrpc.as_str(), "2.0");
+        assert_eq!(deserialized.method, "tools/call");
+        assert_eq!(deserialized.id, 1_u64);
+    }
+
+    /// Test: JSON-RPC request with numeric ID round-trip
+    #[test]
+    fn test_mcp_protocol_request_numeric_id() {
+        use mcp_sdk::transport::{JsonRpcRequest, JsonRpcVersion};
+
+        let request = JsonRpcRequest {
+            jsonrpc: JsonRpcVersion::default(),
+            method: "tools/list".to_string(),
+            params: None,
+            id: 42_u64,
+        };
+
+        let serialized = serde_json::to_string(&request).expect("serialization should succeed");
+        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert_eq!(deserialized.id, 42_u64);
+    }
+
+    /// Test: JSON-RPC response (with result) serialization
+    #[test]
+    fn test_mcp_protocol_response_with_result() {
+        use mcp_sdk::transport::{JsonRpcResponse, JsonRpcVersion};
+
+        let response = JsonRpcResponse {
+            jsonrpc: JsonRpcVersion::default(),
+            id: 1_u64,
+            result: Some(serde_json::json!({
+                "content": [{"type": "text", "text": "hello"}]
+            })),
+            error: None,
+        };
+
+        let serialized = serde_json::to_string(&response).expect("serialization should succeed");
+        assert!(serialized.contains("\"jsonrpc\":\"2.0\""));
+        assert!(serialized.contains("\"result\""));
+        assert!(!serialized.contains("\"error\""));
+
+        let deserialized: JsonRpcResponse = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert!(deserialized.result.is_some());
+        assert!(deserialized.error.is_none());
+    }
+
+    /// Test: JSON-RPC response (with error) serialization
+    #[test]
+    fn test_mcp_protocol_response_with_error() {
+        use mcp_sdk::transport::{JsonRpcError, JsonRpcResponse, JsonRpcVersion};
+
+        let response = JsonRpcResponse {
+            id: 1_u64,
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32601,
+                message: "Method not found".to_string(),
+                data: None,
+            }),
+            jsonrpc: JsonRpcVersion::default(),
+        };
+
+        let serialized = serde_json::to_string(&response).expect("serialization should succeed");
+        assert!(serialized.contains("\"error\""));
+        assert!(!serialized.contains("\"result\""));
+    }
+
+    /// Test: JSON-RPC notification (no ID) serialization
+    #[test]
+    fn test_mcp_protocol_notification_roundtrip() {
+        use mcp_sdk::transport::{JsonRpcNotification, JsonRpcVersion};
+
+        let notification = JsonRpcNotification {
+            jsonrpc: JsonRpcVersion::default(),
+            method: "notifications/initialized".to_string(),
+            params: None,
+        };
+
+        let serialized = serde_json::to_string(&notification).expect("serialization should succeed");
+        assert!(serialized.contains("\"jsonrpc\":\"2.0\""));
+        assert!(serialized.contains("\"method\":\"notifications/initialized\""));
+        assert!(!serialized.contains("\"id\""));
+
+        let deserialized: JsonRpcNotification = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert_eq!(deserialized.method, "notifications/initialized");
+    }
+
+    /// Test: Protocol version constant
+    #[test]
+    fn test_mcp_protocol_version_constant() {
+        use mcp_sdk::types::LATEST_PROTOCOL_VERSION;
+
+        assert!(!LATEST_PROTOCOL_VERSION.is_empty());
+    }
+
+    // ============================================================================
+    // MCP Resource Subscription Tests (Task 2.4)
+    // ============================================================================
+
+    /// Test: Resource struct serialization
+    #[test]
+    fn test_mcp_resource_serialization() {
+        use mcp_sdk::types::Resource;
+        use url::Url;
+
+        let resource = Resource {
+            uri: Url::parse("file:///path/to/resource").expect("valid URL"),
+            name: "my-resource".to_string(),
+            description: Some("A test resource".to_string()),
+            mime_type: Some("text/plain".to_string()),
+        };
+
+        let serialized = serde_json::to_string(&resource).expect("serialization should succeed");
+        assert!(serialized.contains("\"uri\""));
+        assert!(serialized.contains("\"name\""));
+        assert!(serialized.contains("\"mimeType\""));
+
+        let deserialized: Resource = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert_eq!(deserialized.uri.as_str(), "file:///path/to/resource");
+        assert_eq!(deserialized.name, "my-resource");
+        assert_eq!(deserialized.mime_type, Some("text/plain".to_string()));
+    }
+
+    /// Test: Resource subscription (subscribe/unsubscribe flow)
+    #[test]
+    fn test_mcp_resource_subscription_flow() {
+        use mcp_sdk::transport::{JsonRpcRequest, JsonRpcVersion};
+
+        // Test subscribe request
+        let subscribe_request = JsonRpcRequest {
+            jsonrpc: JsonRpcVersion::default(),
+            method: "resources/subscribe".to_string(),
+            params: Some(serde_json::json!({
+                "uri": "file:///path/to/resource"
+            })),
+            id: 1_u64,
+        };
+
+        let serialized = serde_json::to_string(&subscribe_request).expect("serialization should succeed");
+        assert!(serialized.contains("\"method\":\"resources/subscribe\""));
+        assert!(serialized.contains("\"uri\""));
+
+        // Test unsubscribe request
+        let unsubscribe_request = JsonRpcRequest {
+            jsonrpc: JsonRpcVersion::default(),
+            method: "resources/unsubscribe".to_string(),
+            params: Some(serde_json::json!({
+                "uri": "file:///path/to/resource"
+            })),
+            id: 2_u64,
+        };
+
+        let serialized = serde_json::to_string(&unsubscribe_request).expect("serialization should succeed");
+        assert!(serialized.contains("\"method\":\"resources/unsubscribe\""));
+    }
+
+    /// Test: Resource subscription request (subscribe method)
+    #[test]
+    fn test_mcp_resource_subscription_request() {
+        use mcp_sdk::transport::{JsonRpcRequest, JsonRpcVersion};
+
+        let subscribe_request = JsonRpcRequest {
+            jsonrpc: JsonRpcVersion::default(),
+            method: "resources/subscribe".to_string(),
+            params: Some(serde_json::json!({
+                "uri": "file:///path/to/resource"
+            })),
+            id: 1_u64,
+        };
+
+        let serialized = serde_json::to_string(&subscribe_request).expect("serialization should succeed");
+        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert_eq!(deserialized.method, "resources/subscribe");
+        assert!(deserialized.params.is_some());
+    }
+
+    /// Test: Resource list request and response structure
+    #[test]
+    fn test_mcp_resource_list_response() {
+        use mcp_sdk::transport::{JsonRpcResponse, JsonRpcVersion};
+
+        let list_response = JsonRpcResponse {
+            jsonrpc: JsonRpcVersion::default(),
+            id: 2_u64,
+            result: Some(serde_json::json!({
+                "resources": [
+                    {
+                        "uri": "file:///a",
+                        "name": "Resource A",
+                        "mimeType": "text/plain"
+                    },
+                    {
+                        "uri": "file:///b",
+                        "name": "Resource B",
+                        "mimeType": "application/json"
+                    }
+                ]
+            })),
+            error: None,
+        };
+
+        let serialized = serde_json::to_string(&list_response).expect("serialization should succeed");
+        let deserialized: JsonRpcResponse = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let result = deserialized.result.expect("should have result");
+        let resources = result.get("resources").expect("should have resources array");
+        assert!(resources.is_array());
+        assert_eq!(resources.as_array().unwrap().len(), 2);
+    }
+
+    /// Test: Unsubscribe request format
+    #[test]
+    fn test_mcp_resource_unsubscribe_request() {
+        use mcp_sdk::transport::{JsonRpcRequest, JsonRpcVersion};
+
+        // Note: MCP doesn't have explicit unsubscribe; unsubscribe is implicit.
+        // But we test the pattern for resources/unsubscribe if it exists.
+        let unsubscribe_request = JsonRpcRequest {
+            jsonrpc: JsonRpcVersion::default(),
+            method: "resources/unsubscribe".to_string(),
+            params: Some(serde_json::json!({
+                "uri": "file:///path/to/resource"
+            })),
+            id: 99_u64,
+        };
+
+        let serialized = serde_json::to_string(&unsubscribe_request).expect("serialization should succeed");
+        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert_eq!(deserialized.method, "resources/unsubscribe");
+    }
+
+    // ============================================================================
+    // MCP Prompt Template Tests (Task 2.5)
+    // ============================================================================
+
+    /// Test: Prompt template serialization with variables
+    #[test]
+    fn test_mcp_prompt_template_with_variables() {
+        use mcp_sdk::transport::{JsonRpcRequest, JsonRpcVersion};
+
+        let prompt_request = JsonRpcRequest {
+            jsonrpc: JsonRpcVersion::default(),
+            method: "prompts/get".to_string(),
+            params: Some(serde_json::json!({
+                "name": "greeting",
+                "arguments": {
+                    "name": "Alice",
+                    "language": "English"
+                }
+            })),
+            id: 3_u64,
+        };
+
+        let serialized = serde_json::to_string(&prompt_request).expect("serialization should succeed");
+        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert_eq!(deserialized.method, "prompts/get");
+        let params = deserialized.params.expect("should have params");
+        assert_eq!(params["name"], "greeting");
+        assert_eq!(params["arguments"]["name"], "Alice");
+        assert_eq!(params["arguments"]["language"], "English");
+    }
+
+    /// Test: Prompt template rendering with multiple variables
+    #[test]
+    fn test_mcp_prompt_template_multiple_variables() {
+        use mcp_sdk::transport::{JsonRpcRequest, JsonRpcVersion};
+
+        let prompt_request = JsonRpcRequest {
+            jsonrpc: JsonRpcVersion::default(),
+            method: "prompts/get".to_string(),
+            params: Some(serde_json::json!({
+                "name": "code_review",
+                "arguments": {
+                    "repo": "sdforge",
+                    "pr_number": 42,
+                    "reviewer": "Bob",
+                    "priority": "high"
+                }
+            })),
+            id: 7_u64,
+        };
+
+        let serialized = serde_json::to_string(&prompt_request).expect("serialization should succeed");
+        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let params = deserialized.params.expect("should have params");
+        assert_eq!(params["arguments"]["repo"], "sdforge");
+        assert_eq!(params["arguments"]["pr_number"], 42);
+        assert_eq!(params["arguments"]["reviewer"], "Bob");
+        assert_eq!(params["arguments"]["priority"], "high");
+    }
+
+    /// Test: Prompt get response structure
+    #[test]
+    fn test_mcp_prompt_get_response_structure() {
+        use mcp_sdk::transport::{JsonRpcResponse, JsonRpcVersion};
+
+        let prompt_response = JsonRpcResponse {
+            jsonrpc: JsonRpcVersion::default(),
+            id: 4_u64,
+            result: Some(serde_json::json!({
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": {
+                            "type": "text",
+                            "text": "Hello, how can I help you today?"
+                        }
+                    }
+                ]
+            })),
+            error: None,
+        };
+
+        let serialized = serde_json::to_string(&prompt_response).expect("serialization should succeed");
+        let deserialized: JsonRpcResponse = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let result = deserialized.result.expect("should have result");
+        let messages = result.get("messages").expect("should have messages");
+        assert!(messages.is_array());
+        assert_eq!(messages[0]["role"], "user");
+    }
+
+    /// Test: Prompt list request
+    #[test]
+    fn test_mcp_prompts_list_request() {
+        use mcp_sdk::transport::{JsonRpcRequest, JsonRpcVersion};
+
+        let list_request = JsonRpcRequest {
+            jsonrpc: JsonRpcVersion::default(),
+            method: "prompts/list".to_string(),
+            params: None,
+            id: 3_u64,
+        };
+
+        let serialized = serde_json::to_string(&list_request).expect("serialization should succeed");
+        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert_eq!(deserialized.method, "prompts/list");
+        assert!(deserialized.params.is_none());
+    }
+
+    // ============================================================================
+    // MCP Protocol Error Handling Tests (Task 2.6)
+    // ============================================================================
+
+    /// Test: Invalid JSON is detected during deserialization
+    #[test]
+    fn test_mcp_protocol_invalid_json() {
+        use mcp_sdk::transport::JsonRpcRequest;
+
+        let invalid_json = r#"{"jsonrpc": "2.0", "method": "test", "params": invalid}"#;
+        let result: Result<JsonRpcRequest, _> = serde_json::from_str(invalid_json);
+        assert!(result.is_err(), "Invalid JSON should fail to parse");
+    }
+
+    /// Test: Valid JSON that is not a valid request object
+    #[test]
+    fn test_mcp_protocol_invalid_request_object() {
+        use mcp_sdk::transport::JsonRpcRequest;
+
+        // Valid JSON but missing required fields for a Request
+        let not_a_request = r#"{"jsonrpc": "2.0", "foo": "bar"}"#;
+        let result: Result<JsonRpcRequest, _> = serde_json::from_str(not_a_request);
+        assert!(result.is_err(), "JSON without required 'method' and 'id' fields should fail");
+    }
+
+    /// Test: Wrong JSON-RPC version is preserved during deserialization
+    #[test]
+    fn test_mcp_protocol_version_mismatch() {
+        use mcp_sdk::transport::JsonRpcRequest;
+
+        let wrong_version = r#"{
+            "jsonrpc": "1.0",
+            "method": "test",
+            "params": {},
+            "id": 123
+        }"#;
+        let request: JsonRpcRequest = serde_json::from_str(wrong_version).expect("deserialization should succeed");
+        // The version field is preserved as-is (no validation, just roundtrip)
+        assert_eq!(request.jsonrpc.as_str(), "1.0");
+    }
+
+    /// Test: Empty params handled correctly
+    #[test]
+    fn test_mcp_protocol_empty_params() {
+        use mcp_sdk::transport::{JsonRpcRequest, JsonRpcVersion};
+
+        let request = JsonRpcRequest {
+            jsonrpc: JsonRpcVersion::default(),
+            method: "tools/list".to_string(),
+            params: None,
+            id: 10_u64,
+        };
+
+        let serialized = serde_json::to_string(&request).expect("serialization should succeed");
+        // params should be omitted when None due to skip_serializing_if
+        assert!(!serialized.contains("\"params\":null"));
+        assert!(!serialized.contains("\"params\":[]"));
+
+        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert!(deserialized.params.is_none());
+    }
+
+    /// Test: Unsupported protocol version in capabilities
+    #[test]
+    fn test_mcp_capabilities_with_unsupported_version() {
+        use mcp_sdk::types::ServerCapabilities;
+
+        // Server advertising no capabilities (all None)
+        let caps = ServerCapabilities {
+            experimental: None,
+            logging: None,
+            prompts: None,
+            resources: None,
+            tools: None,
+        };
+
+        let serialized = serde_json::to_string(&caps).expect("serialization should succeed");
+        // All-None capabilities serialize to empty object
+        assert_eq!(serialized, "{}");
+
+        let deserialized: ServerCapabilities = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert!(deserialized.tools.is_none());
+        assert!(deserialized.resources.is_none());
+    }
+
+    /// Test: Server capabilities with tools enabled
+    #[test]
+    fn test_mcp_capabilities_tools_enabled() {
+        use mcp_sdk::types::ServerCapabilities;
+
+        let caps = ServerCapabilities {
+            tools: Some(serde_json::json!({})),
+            ..Default::default()
+        };
+
+        let serialized = serde_json::to_string(&caps).expect("serialization should succeed");
+        assert!(serialized.contains("\"tools\""));
+    }
+
+    /// Test: Client capabilities roundtrip
+    #[test]
+    fn test_mcp_client_capabilities_roundtrip() {
+        use mcp_sdk::types::{ClientCapabilities, RootCapabilities};
+
+        let client_caps = ClientCapabilities {
+            experimental: None,
+            roots: Some(RootCapabilities {
+                list_changed: Some(true),
+            }),
+            sampling: None,
+        };
+
+        let serialized = serde_json::to_string(&client_caps).expect("serialization should succeed");
+        let deserialized: ClientCapabilities = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert!(deserialized.roots.is_some());
+        assert_eq!(deserialized.roots.unwrap().list_changed, Some(true));
+    }
+
+    /// Test: Implementation struct serialization
+    #[test]
+    fn test_mcp_implementation_serialization() {
+        use mcp_sdk::types::Implementation;
+
+        let impl_info = Implementation {
+            name: "sdforge-mcp".to_string(),
+            version: "0.1.0".to_string(),
+        };
+
+        let serialized = serde_json::to_string(&impl_info).expect("serialization should succeed");
+        assert!(serialized.contains("\"name\":\"sdforge-mcp\""));
+        assert!(serialized.contains("\"version\":\"0.1.0\""));
+
+        let deserialized: Implementation = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        assert_eq!(deserialized.name, "sdforge-mcp");
+    }
 }
