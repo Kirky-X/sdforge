@@ -171,18 +171,31 @@ pub mod security;
 
 #[cfg(feature = "security")]
 pub use security::{
-    auth_middleware, rate_limit_middleware, ApiKeyAuth, AuditLog, AuditLogger, AuditLoggerBuilder,
-    AuditResult, AuthContext, AuthError, AuthExtractor, AuthMetadata, AuthResult, BearerAuth,
-    BearerAuthBuilder, RateLimitConfig, RateLimitError, RateLimiter, RateLimiterBuilder,
+    auth_middleware, rate_limit_middleware,
+    // Trait interfaces (feature layer)
+    ApiKeyAuth, AuditLog, AuditLogger, RateLimiter,
+    // Concrete implementations (renamed structs)
+    AppApiKeyAuth, AppApiKeyAuthBuilder, AppAuditLogger, AppAuditLoggerBuilder,
+    AppRateLimiter, AppRateLimiterBuilder,
+    // Supporting types
+    AuditResult, AuthContext, AuthError, AuthExtractor, AuthMetadata, AuthResult,
+    BearerAuth, BearerAuthBuilder, RateLimitConfig, RateLimitError,
 };
 
 /// Configuration management
 #[cfg(feature = "http")]
 pub mod config;
 
+/// 直接透传 confers 库（配置管理由 confers 统一提供）
+#[cfg(feature = "http")]
+pub use confers;
+/// confers 的 Config trait（用于派生配置结构体）
+#[cfg(feature = "http")]
+pub use confers::Config;
+
 #[cfg(feature = "http")]
 pub use config::{
-    ApiConfig, AppConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper, LoggingConfig,
+    ApiConfig, AppConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper,
     RateLimitConfigFile, RateLimitEndpointConfig, ServerConfig, TlsConfig, TracingConfig,
 };
 
@@ -191,11 +204,13 @@ pub use config::hot_reload::{
     create_config_watcher, ConfigEvent, ConfigManager, ConfigWatcherImpl,
 };
 
-/// Caching utilities and middleware
+/// 直接透传 oxcache 库（缓存功能由 oxcache 统一提供）
 #[cfg(feature = "cache")]
-pub mod cache;
-#[cfg(feature = "cache")]
-pub use cache::{CacheConfig, CacheMiddleware, CacheService};
+pub use oxcache;
+
+/// 直接透传 inklog 库（日志功能由 inklog 统一提供）
+#[cfg(feature = "logging")]
+pub use inklog;
 
 /// WebSocket support
 #[cfg(feature = "websocket")]
@@ -203,8 +218,9 @@ pub mod websocket;
 
 #[cfg(feature = "websocket")]
 pub use websocket::{
-    build, websocket_upgrade, BoxFuture, ConnectionManager, WebSocketConnection, WebSocketHandler,
-    WebSocketMessage, WebSocketRoute,
+    build, websocket_upgrade, BoxFuture, ConnectionManager, WebSocketConfig,
+    WebSocketConnection, WebSocketHandler, WebSocketMessage, WebSocketRoute,
+    ValidatedWebSocketUpgrade,
 };
 
 /// gRPC server support
@@ -225,10 +241,9 @@ pub use grpc::sdforge_v1::{
 #[cfg(feature = "http")]
 pub use http::version_routing::{build_version_router, VersionRouterConfig, VersionedRoute};
 
-#[cfg(feature = "logging")]
-pub use config::{init_logging, init_logging_default};
-
-/// Initialize all registered plugins and ensure they are not optimized away by the linker.
+/// 日志功能由 sdforge::inklog 统一管理（已移除内置日志实现）
+///
+/// 初始化所有已注册的插件，确保它们不会被链接器优化掉。
 ///
 /// This function must be called at least once to ensure that all inventory-based
 /// registrations (HTTP routes, MCP tools, WebSocket routes, gRPC routes) are linked

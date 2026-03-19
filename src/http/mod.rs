@@ -281,7 +281,7 @@ pub fn build_with_redirect() -> Router {
 #[allow(dead_code)]
 pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, ConfigError> {
     #[cfg(feature = "security")]
-    use crate::security::{rate_limit_middleware, RateLimitConfig, RateLimiter};
+    use crate::security::{rate_limit_middleware, RateLimitConfig, AppRateLimiter};
     #[cfg(feature = "security")]
     use std::sync::Arc;
 
@@ -335,7 +335,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     if let Some(rate_limit) = &config.rate_limit {
         let rate_config: crate::security::RateLimitConfig =
             RateLimitConfig::try_from(rate_limit.clone())?;
-        let limiter = Arc::new(RateLimiter::new(Some(rate_config)));
+        let limiter = Arc::new(AppRateLimiter::new(Some(rate_config)));
         let middleware = rate_limit_middleware(limiter);
         router = router.layer(axum::middleware::from_fn(middleware));
     }
@@ -344,7 +344,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     #[cfg(feature = "security")]
     {
         use crate::config::AuthConfig;
-        use crate::security::{auth_middleware, ApiKeyAuth, AuthContext, AuthError, BearerAuth};
+        use crate::security::{auth_middleware, AppApiKeyAuth, AuthContext, AuthError, BearerAuth};
         use axum::http::HeaderValue;
 
         let auth_config = &config.authentication;
@@ -354,7 +354,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
             prefix,
         } = auth_config
         {
-            let auth = Arc::new(ApiKeyAuth::new());
+            let auth = Arc::new(AppApiKeyAuth::new());
             let auth_clone = auth.clone();
             let header_name = header_name.clone();
             let prefix = prefix.clone();
@@ -437,39 +437,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         // None is handled by doing nothing
     }
 
-    // Initialize logging
-    #[cfg(feature = "logging")]
-    {
-        crate::config::init_logging(&config.logging);
-    }
-
-    // Apply cache middleware
-    #[cfg(feature = "cache")]
-    {
-        #[allow(unused_imports)]
-        use crate::cache::CacheMiddleware;
-        use oxcache::cache::Cache;
-        use std::time::Duration;
-
-        // Create cache instance with default settings
-        let cache_future = async {
-            Cache::<String, Vec<u8>>::builder()
-                .capacity(10_000.try_into().unwrap())
-                .ttl(Duration::from_secs(300))
-                .build()
-                .await
-        };
-
-        // Since we're in a sync context, we need to block on the async operation
-        // This is acceptable at startup time
-        let cache: Cache<String, Vec<u8>> =
-            futures::executor::block_on(cache_future).expect("Failed to initialize cache");
-
-        let cache_config = crate::cache::CacheConfig::default();
-        let cache_middleware = CacheMiddleware::with_config_and_cache(cache_config, cache);
-        router = router.layer(cache_middleware);
-    }
-
+    // Note: 日志初始化已移除，由使用方通过 sdforge::inklog 直接管理
     Ok(router)
 }
 
@@ -532,9 +500,7 @@ pub async fn build_with_hot_reload(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{
-        AppConfig, AuthConfig, CorsConfig, DatabaseConfig, LoggingConfig, ServerConfig,
-    };
+    use crate::config::{AppConfig, AuthConfig, CorsConfig, ServerConfig};
     use axum::routing::get;
 
     /// Test build() returns a valid Router
@@ -563,13 +529,8 @@ mod tests {
                 request_timeout_secs: 30,
                 cors: None,
             },
-            database: DatabaseConfig::default(),
             authentication: AuthConfig::Jwt {
                 secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
-            },
-            logging: LoggingConfig {
-                level: "info".to_string(),
-                format: "json".to_string(),
             },
             rate_limit: None,
             request_size: None,
@@ -590,14 +551,9 @@ mod tests {
                 request_timeout_secs: 30,
                 cors: None,
             },
-            database: DatabaseConfig::default(),
             authentication: AuthConfig::ApiKey {
                 header_name: "X-API-Key".to_string(),
                 prefix: "key-".to_string(),
-            },
-            logging: LoggingConfig {
-                level: "info".to_string(),
-                format: "json".to_string(),
             },
             rate_limit: None,
             request_size: None,
@@ -621,12 +577,7 @@ mod tests {
                 request_timeout_secs: 30,
                 cors: None,
             },
-            database: DatabaseConfig::default(),
             authentication: AuthConfig::None,
-            logging: LoggingConfig {
-                level: "info".to_string(),
-                format: "json".to_string(),
-            },
             rate_limit: None,
             request_size: None,
             timeout: None,
@@ -650,13 +601,8 @@ mod tests {
                     allowed_headers: vec!["Content-Type".to_string()],
                 }),
             },
-            database: DatabaseConfig::default(),
             authentication: AuthConfig::Jwt {
                 secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
-            },
-            logging: LoggingConfig {
-                level: "info".to_string(),
-                format: "json".to_string(),
             },
             rate_limit: None,
             request_size: None,
