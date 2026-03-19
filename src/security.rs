@@ -22,6 +22,70 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 use uuid::Uuid;
 
+// =============================================================================
+// Feature Layer Trait Interfaces
+// =============================================================================
+
+/// Feature layer trait for API key authentication.
+///
+/// Implement this trait to provide custom API key validation logic while
+/// maintaining a consistent interface across the security module.
+pub trait ApiKeyAuth: Send + Sync {
+    /// Validate an API key and return permissions if valid.
+    ///
+    /// Returns `Some(Vec<String>)` with permissions if the key is valid,
+    /// or `None` if the key is invalid or rate limited.
+    ///
+    /// # Arguments
+    /// * `key` - The API key to validate
+    /// * `client_ip` - The client IP address for rate limiting
+    fn validate_key(&self, key: &str, client_ip: &str) -> Option<Vec<String>>;
+
+    /// Add a valid API key with associated permissions.
+    ///
+    /// The key will be securely hashed before storage.
+    ///
+    /// # Arguments
+    /// * `key` - The API key to add
+    /// * `permissions` - List of permissions granted by this key
+    fn add_key(&self, key: impl Into<String>, permissions: Vec<String>);
+}
+
+/// Feature layer trait for rate limiting.
+///
+/// Implement this trait to provide custom rate limiting logic while
+/// maintaining a consistent interface across the security module.
+pub trait RateLimiter: Send + Sync {
+    /// Check if a request is allowed under the rate limit.
+    ///
+    /// Returns `true` if the request is allowed, `false` if rate limited.
+    ///
+    /// # Arguments
+    /// * `key` - The rate limit key (typically client IP or user ID)
+    fn allow(&self, key: &str) -> bool;
+
+    /// Reset rate limit state for a key.
+    ///
+    /// Clears all rate limiting data for the given key, allowing
+    /// new requests to be processed without restriction.
+    ///
+    /// # Arguments
+    /// * `key` - The rate limit key to reset
+    fn reset(&self, key: &str);
+}
+
+/// Feature layer trait for audit logging.
+///
+/// Implement this trait to provide custom audit logging logic while
+/// maintaining a consistent interface across the security module.
+pub trait AuditLogger: Send + Sync {
+    /// Log an audit event.
+    ///
+    /// # Arguments
+    /// * `log` - The audit log entry to record
+    fn log(&self, log: AuditLog);
+}
+
 /// Authentication errors
 #[derive(Debug, Error, Clone)]
 pub enum AuthError {
@@ -159,7 +223,7 @@ impl AuthExtractor {
 /// - Rate limiting on validation attempts to prevent brute force attacks
 /// - Per-IP attempt tracking with automatic cleanup
 #[derive(Clone)]
-pub struct ApiKeyAuth {
+pub struct AppApiKeyAuth {
     /// Valid API keys (stored as SHA256 hash -> permissions)
     valid_keys: Arc<DashMap<String, Vec<String>>>,
     /// Failed attempt tracking (IP -> attempts with timestamps)
@@ -168,7 +232,7 @@ pub struct ApiKeyAuth {
     rate_limit_config: Arc<RateLimitConfig>,
 }
 
-impl ApiKeyAuth {
+impl AppApiKeyAuth {
     /// Create new API key authentication with default rate limiting
     pub fn new() -> Self {
         Self::with_rate_limit(RateLimitConfig::default())
@@ -197,8 +261,8 @@ impl ApiKeyAuth {
     }
 
     /// Create builder for configuration
-    pub fn builder() -> ApiKeyAuthBuilder {
-        ApiKeyAuthBuilder::new()
+    pub fn builder() -> AppApiKeyAuthBuilder {
+        AppApiKeyAuthBuilder::new()
     }
 
     /// Hash API key using SHA256 with work factor for secure storage
@@ -312,19 +376,19 @@ impl ApiKeyAuth {
     }
 }
 
-impl Default for ApiKeyAuth {
+impl Default for AppApiKeyAuth {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// Builder for ApiKeyAuth configuration
+/// Builder for AppApiKeyAuth configuration
 #[derive(Debug, Clone, Default)]
-pub struct ApiKeyAuthBuilder {
+pub struct AppApiKeyAuthBuilder {
     rate_limit_config: RateLimitConfig,
 }
 
-impl ApiKeyAuthBuilder {
+impl AppApiKeyAuthBuilder {
     /// Create a new ApiKeyAuthBuilder with default rate limit settings.
     ///
     /// # Returns
@@ -338,9 +402,9 @@ impl ApiKeyAuthBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::ApiKeyAuthBuilder;
+    /// use sdforge::security::AppApiKeyAuthBuilder;
     ///
-    /// let builder = ApiKeyAuthBuilder::new();
+    /// let builder = AppApiKeyAuthBuilder::new();
     /// let _ = builder;
     /// ```
     pub fn new() -> Self {
@@ -366,9 +430,9 @@ impl ApiKeyAuthBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::ApiKeyAuthBuilder;
+    /// use sdforge::security::AppApiKeyAuthBuilder;
     ///
-    /// let builder = ApiKeyAuthBuilder::new().max_requests(100);
+    /// let builder = AppApiKeyAuthBuilder::new().max_requests(100);
     /// let _ = builder;
     /// ```
     pub fn max_requests(mut self, max_requests: u32) -> Self {
@@ -393,10 +457,10 @@ impl ApiKeyAuthBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::ApiKeyAuthBuilder;
+    /// use sdforge::security::AppApiKeyAuthBuilder;
     /// use std::time::Duration;
     ///
-    /// let builder = ApiKeyAuthBuilder::new().window(Duration::from_secs(60));
+    /// let builder = AppApiKeyAuthBuilder::new().window(Duration::from_secs(60));
     /// let _ = builder;
     /// ```
     pub fn window(mut self, window: Duration) -> Self {
@@ -421,9 +485,9 @@ impl ApiKeyAuthBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::ApiKeyAuthBuilder;
+    /// use sdforge::security::AppApiKeyAuthBuilder;
     ///
-    /// let builder = ApiKeyAuthBuilder::new().include_headers(true);
+    /// let builder = AppApiKeyAuthBuilder::new().include_headers(true);
     /// let _ = builder;
     /// ```
     pub fn include_headers(mut self, include_headers: bool) -> Self {
@@ -431,11 +495,11 @@ impl ApiKeyAuthBuilder {
         self
     }
 
-    /// Build an ApiKeyAuth instance using the configured settings.
+    /// Build an AppApiKeyAuth instance using the configured settings.
     ///
     /// # Returns
     ///
-    /// Returns a fully configured ApiKeyAuth instance.
+    /// Returns a fully configured AppApiKeyAuth instance.
     ///
     /// # Errors
     ///
@@ -444,13 +508,13 @@ impl ApiKeyAuthBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::ApiKeyAuthBuilder;
+    /// use sdforge::security::AppApiKeyAuthBuilder;
     ///
-    /// let auth = ApiKeyAuthBuilder::new().max_requests(100).build();
+    /// let auth = AppApiKeyAuthBuilder::new().max_requests(100).build();
     /// let _ = auth;
     /// ```
-    pub fn build(self) -> ApiKeyAuth {
-        ApiKeyAuth::with_rate_limit(self.rate_limit_config)
+    pub fn build(self) -> AppApiKeyAuth {
+        AppApiKeyAuth::with_rate_limit(self.rate_limit_config)
     }
 }
 
@@ -926,6 +990,44 @@ impl BearerAuth {
         self.blacklisted_tokens
             .insert(token.to_string(), Instant::now());
     }
+
+    /// Start a background task that periodically removes expired entries from the blacklist.
+    ///
+    /// Expired entries remain in the DashMap until this cleanup task removes them.
+    /// Calling this method spawns a tokio task that runs indefinitely.
+    ///
+    /// # Arguments
+    ///
+    /// * `interval` - How often to scan for expired entries (e.g., `Duration::from_secs(60)`)
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use std::time::Duration;
+    /// let auth = BearerAuth::new("my-secret-key-32-chars-minimum!!");
+    /// auth.start_blacklist_cleanup(Duration::from_secs(60));
+    /// ```
+    #[cfg(feature = "tokio")]
+    pub fn start_blacklist_cleanup(&self, interval: std::time::Duration) {
+        let blacklisted = Arc::clone(&self.blacklisted_tokens);
+
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(interval);
+            loop {
+                interval.tick().await;
+                let now = Instant::now();
+                // Collect keys to remove (can't remove while iterating)
+                let expired: Vec<String> = blacklisted
+                    .iter()
+                    .filter(|entry| now >= *entry.value())
+                    .map(|entry| entry.key().clone())
+                    .collect();
+                for key in expired {
+                    blacklisted.remove(&key);
+                }
+            }
+        });
+    }
 }
 
 /// Builder for BearerAuth configuration
@@ -1266,18 +1368,18 @@ pub(crate) fn extract_client_ip(
     "unknown".to_string()
 }
 
-/// Builder for RateLimiter configuration
+/// Builder for AppRateLimiter configuration
 ///
-/// This builder provides a fluent interface for configuring a RateLimiter
+/// This builder provides a fluent interface for configuring a AppRateLimiter
 /// with custom rate limiting parameters.
 ///
 /// # Examples
 ///
 /// ```rust
-/// use sdforge::security::RateLimiterBuilder;
+/// use sdforge::security::AppRateLimiterBuilder;
 /// use std::time::Duration;
 ///
-/// let limiter = RateLimiterBuilder::new()
+/// let limiter = AppRateLimiterBuilder::new()
 ///     .max_requests(100)
 ///     .window(Duration::from_secs(60))
 ///     .max_concurrent(500)
@@ -1285,15 +1387,15 @@ pub(crate) fn extract_client_ip(
 /// let _ = limiter;
 /// ```
 #[derive(Debug, Clone, Default)]
-pub struct RateLimiterBuilder {
+pub struct AppRateLimiterBuilder {
     /// Rate limit configuration
     config: RateLimitConfig,
     /// Maximum concurrent requests (semaphore permits)
     max_concurrent: usize,
 }
 
-impl RateLimiterBuilder {
-    /// Create a new RateLimiterBuilder with default settings.
+impl AppRateLimiterBuilder {
+    /// Create a new AppRateLimiterBuilder with default settings.
     ///
     /// Default values:
     /// - `max_requests`: 100
@@ -1312,9 +1414,9 @@ impl RateLimiterBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::RateLimiterBuilder;
+    /// use sdforge::security::AppRateLimiterBuilder;
     ///
-    /// let builder = RateLimiterBuilder::new();
+    /// let builder = AppRateLimiterBuilder::new();
     /// let _ = builder;
     /// ```
     pub fn new() -> Self {
@@ -1341,9 +1443,9 @@ impl RateLimiterBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::RateLimiterBuilder;
+    /// use sdforge::security::AppRateLimiterBuilder;
     ///
-    /// let builder = RateLimiterBuilder::new().max_requests(100);
+    /// let builder = AppRateLimiterBuilder::new().max_requests(100);
     /// let _ = builder;
     /// ```
     pub fn max_requests(mut self, max_requests: u32) -> Self {
@@ -1368,10 +1470,10 @@ impl RateLimiterBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::RateLimiterBuilder;
+    /// use sdforge::security::AppRateLimiterBuilder;
     /// use std::time::Duration;
     ///
-    /// let builder = RateLimiterBuilder::new().window(Duration::from_secs(60));
+    /// let builder = AppRateLimiterBuilder::new().window(Duration::from_secs(60));
     /// let _ = builder;
     /// ```
     pub fn window(mut self, window: Duration) -> Self {
@@ -1399,9 +1501,9 @@ impl RateLimiterBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::RateLimiterBuilder;
+    /// use sdforge::security::AppRateLimiterBuilder;
     ///
-    /// let builder = RateLimiterBuilder::new().max_concurrent(500);
+    /// let builder = AppRateLimiterBuilder::new().max_concurrent(500);
     /// let _ = builder;
     /// ```
     pub fn max_concurrent(mut self, max_concurrent: usize) -> Self {
@@ -1426,9 +1528,9 @@ impl RateLimiterBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::RateLimiterBuilder;
+    /// use sdforge::security::AppRateLimiterBuilder;
     ///
-    /// let builder = RateLimiterBuilder::new().include_headers(true);
+    /// let builder = AppRateLimiterBuilder::new().include_headers(true);
     /// let _ = builder;
     /// ```
     pub fn include_headers(mut self, include_headers: bool) -> Self {
@@ -1436,11 +1538,11 @@ impl RateLimiterBuilder {
         self
     }
 
-    /// Build a RateLimiter instance using the configured settings.
+    /// Build a AppRateLimiter instance using the configured settings.
     ///
     /// # Returns
     ///
-    /// Returns a fully configured RateLimiter instance.
+    /// Returns a fully configured AppRateLimiter instance.
     ///
     /// # Errors
     ///
@@ -1449,17 +1551,17 @@ impl RateLimiterBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::RateLimiterBuilder;
+    /// use sdforge::security::AppRateLimiterBuilder;
     /// use std::time::Duration;
     ///
-    /// let limiter = RateLimiterBuilder::new()
+    /// let limiter = AppRateLimiterBuilder::new()
     ///     .max_requests(100)
     ///     .window(Duration::from_secs(60))
     ///     .build();
     /// let _ = limiter;
     /// ```
-    pub fn build(self) -> RateLimiter {
-        RateLimiter::with_dependencies(
+    pub fn build(self) -> AppRateLimiter {
+        AppRateLimiter::with_dependencies(
             self.config,
             Arc::new(DashMap::new()),
             Arc::new(DashMap::new()),
@@ -1475,7 +1577,7 @@ impl RateLimiterBuilder {
 /// - Request deduplication for idempotent requests
 /// - Per-key tracking with automatic cleanup
 #[derive(Clone)]
-pub struct RateLimiter {
+pub struct AppRateLimiter {
     /// Configuration
     config: RateLimitConfig,
     /// Request tracking per IP
@@ -1486,10 +1588,10 @@ pub struct RateLimiter {
     semaphore: Arc<tokio::sync::Semaphore>,
 }
 
-impl RateLimiter {
+impl AppRateLimiter {
     /// Create a new rate limiter with optional configuration.
     ///
-    /// This is the simplest way to create a RateLimiter - it provides
+    /// This is the simplest way to create a AppRateLimiter - it provides
     /// out-of-the-box functionality with sensible defaults.
     ///
     /// # Arguments
@@ -1498,7 +1600,7 @@ impl RateLimiter {
     ///
     /// # Returns
     ///
-    /// Returns a new RateLimiter instance.
+    /// Returns a new AppRateLimiter instance.
     ///
     /// # Errors
     ///
@@ -1507,10 +1609,10 @@ impl RateLimiter {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::RateLimiter;
+    /// use sdforge::security::AppRateLimiter;
     ///
     /// // With default configuration
-    /// let limiter = RateLimiter::new(None);
+    /// let limiter = AppRateLimiter::new(None);
     /// let _ = limiter;
     ///
     /// // With custom configuration
@@ -1522,7 +1624,7 @@ impl RateLimiter {
     ///     window: Duration::from_secs(120),
     ///     include_headers: true,
     /// };
-    /// let limiter = RateLimiter::new(Some(config));
+    /// let limiter = AppRateLimiter::new(Some(config));
     /// let _ = limiter;
     /// ```
     pub fn new(config: Option<RateLimitConfig>) -> Self {
@@ -1534,14 +1636,14 @@ impl RateLimiter {
         }
     }
 
-    /// Create a builder for configuring a RateLimiter.
+    /// Create a builder for configuring a AppRateLimiter.
     ///
-    /// This method returns a RateLimiterBuilder that allows for fluent
+    /// This method returns a AppRateLimiterBuilder that allows for fluent
     /// configuration of the rate limiter's parameters.
     ///
     /// # Returns
     ///
-    /// Returns a RateLimiterBuilder instance for configuration.
+    /// Returns a AppRateLimiterBuilder instance for configuration.
     ///
     /// # Errors
     ///
@@ -1550,21 +1652,21 @@ impl RateLimiter {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::RateLimiter;
+    /// use sdforge::security::AppRateLimiter;
     /// use std::time::Duration;
     ///
-    /// let limiter = RateLimiter::builder()
+    /// let limiter = AppRateLimiter::builder()
     ///     .max_requests(100)
     ///     .window(Duration::from_secs(60))
     ///     .max_concurrent(500)
     ///     .build();
     /// let _ = limiter;
     /// ```
-    pub fn builder() -> RateLimiterBuilder {
-        RateLimiterBuilder::new()
+    pub fn builder() -> AppRateLimiterBuilder {
+        AppRateLimiterBuilder::new()
     }
 
-    /// Create a RateLimiter with all dependencies explicitly provided.
+    /// Create a AppRateLimiter with all dependencies explicitly provided.
     ///
     /// This method is useful for dependency injection and testing scenarios
     /// where you need full control over the internal state.
@@ -1578,7 +1680,7 @@ impl RateLimiter {
     ///
     /// # Returns
     ///
-    /// Returns a RateLimiter instance with the provided dependencies.
+    /// Returns a AppRateLimiter instance with the provided dependencies.
     ///
     /// # Errors
     ///
@@ -1587,7 +1689,7 @@ impl RateLimiter {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::{RateLimiter, RateLimitConfig};
+    /// use sdforge::security::{AppRateLimiter, RateLimitConfig};
     /// use dashmap::DashMap;
     /// use std::sync::Arc;
     /// use std::time::Duration;
@@ -1601,7 +1703,7 @@ impl RateLimiter {
     /// let idempotency_cache = Arc::new(DashMap::new());
     /// let semaphore = Arc::new(tokio::sync::Semaphore::new(1000));
     ///
-    /// let limiter = RateLimiter::with_dependencies(
+    /// let limiter = AppRateLimiter::with_dependencies(
     ///     config,
     ///     requests,
     ///     idempotency_cache,
@@ -1715,16 +1817,40 @@ impl RateLimiter {
 
         Ok(Permit(permit))
     }
+
+    /// Check if a request is allowed under the rate limit (trait method).
+    ///
+    /// Returns `true` if the request is allowed, `false` if rate limited.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The rate limit key (typically client IP or user ID)
+    pub fn allow(&self, key: &str) -> bool {
+        self.check(key).is_ok()
+    }
+
+    /// Reset rate limit state for a key (trait method).
+    ///
+    /// Clears all rate limiting data for the given key, allowing
+    /// new requests to be processed without restriction.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The rate limit key to reset
+    pub fn reset(&self, key: &str) {
+        self.requests.remove(key);
+        self.idempotency_cache.remove(key);
+    }
 }
 
-impl Default for RateLimiter {
-    /// Create a RateLimiter with default configuration.
+impl Default for AppRateLimiter {
+    /// Create a AppRateLimiter with default configuration.
     ///
-    /// This is equivalent to calling `RateLimiter::new(None)`.
+    /// This is equivalent to calling `AppRateLimiter::new(None)`.
     ///
     /// # Returns
     ///
-    /// Returns a RateLimiter with default settings:
+    /// Returns a AppRateLimiter with default settings:
     /// - `max_requests`: 100
     /// - `window`: 60 seconds
     /// - `include_headers`: true
@@ -1733,9 +1859,9 @@ impl Default for RateLimiter {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::RateLimiter;
+    /// use sdforge::security::AppRateLimiter;
     ///
-    /// let limiter = RateLimiter::default();
+    /// let limiter = AppRateLimiter::default();
     /// let _ = limiter;
     /// ```
     fn default() -> Self {
@@ -1843,8 +1969,9 @@ pub enum AuditResult {
 /// - Per-user log count limits
 /// - Async processing to avoid blocking main threads
 /// - Fallback storage when async channel is full (prevents log loss)
+///
 #[derive(Clone)]
-/// Builder for creating AuditLogger with custom configuration.
+/// Builder for creating AppAuditLogger with custom configuration.
 ///
 /// This builder allows fine-grained control over audit logger settings
 /// including log limits, concurrency, and queue size.
@@ -1852,15 +1979,15 @@ pub enum AuditResult {
 /// # Examples
 ///
 /// ```ignore
-/// use sdforge::security::AuditLogger;
+/// use sdforge::security::AppAuditLogger;
 ///
-/// let logger = AuditLogger::builder()
+/// let logger = AppAuditLogger::builder()
 ///     .max_logs_per_user(500)
 ///     .max_concurrent_ops(50)
 ///     .queue_size(2000)
 ///     .build();
 /// ```
-pub struct AuditLoggerBuilder {
+pub struct AppAuditLoggerBuilder {
     /// Maximum number of logs to retain per user
     max_logs_per_user: usize,
     /// Maximum number of concurrent log operations (semaphore permits)
@@ -1869,14 +1996,14 @@ pub struct AuditLoggerBuilder {
     queue_size: usize,
 }
 
-impl Default for AuditLoggerBuilder {
+impl Default for AppAuditLoggerBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl AuditLoggerBuilder {
-    /// Create a new AuditLoggerBuilder with default settings.
+impl AppAuditLoggerBuilder {
+    /// Create a new AppAuditLoggerBuilder with default settings.
     ///
     /// Default values:
     /// - `max_logs_per_user`: 1000
@@ -1894,9 +2021,9 @@ impl AuditLoggerBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::AuditLoggerBuilder;
+    /// use sdforge::security::AppAuditLoggerBuilder;
     ///
-    /// let builder = AuditLoggerBuilder::new();
+    /// let builder = AppAuditLoggerBuilder::new();
     /// let _ = builder;
     /// ```
     pub fn new() -> Self {
@@ -1926,9 +2053,9 @@ impl AuditLoggerBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::AuditLoggerBuilder;
+    /// use sdforge::security::AppAuditLoggerBuilder;
     ///
-    /// let builder = AuditLoggerBuilder::new().max_logs_per_user(500);
+    /// let builder = AppAuditLoggerBuilder::new().max_logs_per_user(500);
     /// let _ = builder;
     /// ```
     pub fn max_logs_per_user(mut self, max_logs: usize) -> Self {
@@ -1957,9 +2084,9 @@ impl AuditLoggerBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::AuditLoggerBuilder;
+    /// use sdforge::security::AppAuditLoggerBuilder;
     ///
-    /// let builder = AuditLoggerBuilder::new().max_concurrent_ops(50);
+    /// let builder = AppAuditLoggerBuilder::new().max_concurrent_ops(50);
     /// let _ = builder;
     /// ```
     pub fn max_concurrent_ops(mut self, max_ops: usize) -> Self {
@@ -1987,9 +2114,9 @@ impl AuditLoggerBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::AuditLoggerBuilder;
+    /// use sdforge::security::AppAuditLoggerBuilder;
     ///
-    /// let builder = AuditLoggerBuilder::new().queue_size(2000);
+    /// let builder = AppAuditLoggerBuilder::new().queue_size(2000);
     /// let _ = builder;
     /// ```
     pub fn queue_size(mut self, size: usize) -> Self {
@@ -1997,14 +2124,14 @@ impl AuditLoggerBuilder {
         self
     }
 
-    /// Build an AuditLogger instance using the configured settings.
+    /// Build an AppAuditLogger instance using the configured settings.
     ///
     /// This method spawns a background worker task for async log processing
     /// and initializes all internal data structures.
     ///
     /// # Returns
     ///
-    /// Returns a fully configured AuditLogger instance.
+    /// Returns a fully configured AppAuditLogger instance.
     ///
     /// # Errors
     ///
@@ -2013,16 +2140,16 @@ impl AuditLoggerBuilder {
     /// # Examples
     ///
     /// ```ignore
-    /// use sdforge::security::AuditLoggerBuilder;
+    /// use sdforge::security::AppAuditLoggerBuilder;
     ///
-    /// let logger = AuditLoggerBuilder::new()
+    /// let logger = AppAuditLoggerBuilder::new()
     ///     .max_logs_per_user(500)
     ///     .max_concurrent_ops(50)
     ///     .queue_size(2000)
     ///     .build();
     /// let _ = logger;
     /// ```
-    pub fn build(self) -> AuditLogger {
+    pub fn build(self) -> AppAuditLogger {
         let (queue_sender, mut queue_receiver) =
             tokio::sync::mpsc::channel::<AuditLogBatch>(self.queue_size);
 
@@ -2056,7 +2183,7 @@ impl AuditLoggerBuilder {
             }
         });
 
-        AuditLogger {
+        AppAuditLogger {
             logs,
             max_logs_per_user: self.max_logs_per_user,
             semaphore: Arc::new(tokio::sync::Semaphore::new(self.max_concurrent_ops)),
@@ -2071,7 +2198,7 @@ impl AuditLoggerBuilder {
 ///
 /// Provides async log processing with DoS protection and fallback
 /// synchronous storage for high-load scenarios.
-pub struct AuditLogger {
+pub struct AppAuditLogger {
     /// Logs storage
     logs: Arc<DashMap<String, Vec<AuditLog>>>,
     /// Maximum logs per user
@@ -2086,7 +2213,10 @@ pub struct AuditLogger {
     dropped_log_count: Arc<std::sync::atomic::AtomicU64>,
 }
 
-struct AuditLogBatch {
+/// Batch of audit logs for async processing.
+///
+/// Internal struct used to pass user ID and log entry through the async channel.
+pub struct AuditLogBatch {
     user_id: String,
     log: AuditLog,
 }
@@ -2156,21 +2286,21 @@ fn sanitize_error_message(message: &str) -> String {
     result
 }
 
-impl Default for AuditLogger {
+impl Default for AppAuditLogger {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl AuditLogger {
-    /// Create a new AuditLoggerBuilder for custom configuration.
+impl AppAuditLogger {
+    /// Create a new AppAuditLoggerBuilder for custom configuration.
     ///
-    /// This is the recommended way to create an AuditLogger when you need
+    /// This is the recommended way to create an AppAuditLogger when you need
     /// to customize any of the default settings.
     ///
     /// # Returns
     ///
-    /// Returns a new AuditLoggerBuilder instance.
+    /// Returns a new AppAuditLoggerBuilder instance.
     ///
     /// # Errors
     ///
@@ -2179,20 +2309,20 @@ impl AuditLogger {
     /// # Examples
     ///
     /// ```ignore
-    /// use sdforge::security::AuditLogger;
+    /// use sdforge::security::AppAuditLogger;
     ///
-    /// let logger = AuditLogger::builder()
+    /// let logger = AppAuditLogger::builder()
     ///     .max_logs_per_user(500)
     ///     .max_concurrent_ops(50)
     ///     .queue_size(2000)
     ///     .build();
     /// let _ = logger;
     /// ```
-    pub fn builder() -> AuditLoggerBuilder {
-        AuditLoggerBuilder::new()
+    pub fn builder() -> AppAuditLoggerBuilder {
+        AppAuditLoggerBuilder::new()
     }
 
-    /// Create an AuditLogger with all dependencies injected.
+    /// Create an AppAuditLogger with all dependencies injected.
     ///
     /// This method is used for complete dependency injection, allowing
     /// external control over all internal components. This is useful for
@@ -2209,7 +2339,7 @@ impl AuditLogger {
     ///
     /// # Returns
     ///
-    /// Returns an AuditLogger instance configured with the provided dependencies.
+    /// Returns an AppAuditLogger instance configured with the provided dependencies.
     ///
     /// # Errors
     ///
@@ -2224,7 +2354,7 @@ impl AuditLogger {
     /// # Examples
     ///
     /// ```ignore
-    /// use sdforge::security::AuditLogger;
+    /// use sdforge::security::AppAuditLogger;
     /// use dashmap::DashMap;
     /// use std::sync::Arc;
     /// use std::sync::atomic::AtomicU64;
@@ -2243,7 +2373,7 @@ impl AuditLogger {
     ///     }
     /// });
     ///
-    /// let logger = AuditLogger::with_dependencies(
+    /// let logger = AppAuditLogger::with_dependencies(
     ///     logs,
     ///     1000,
     ///     Arc::new(tokio::sync::Semaphore::new(100)),
@@ -2491,6 +2621,80 @@ impl AuditLogger {
     }
 }
 
+// =============================================================================
+// Feature Layer Trait Implementations
+// =============================================================================
+
+/// Implement ApiKeyAuth trait for AppApiKeyAuth
+impl ApiKeyAuth for AppApiKeyAuth {
+    fn validate_key(&self, key: &str, client_ip: &str) -> Option<Vec<String>> {
+        AppApiKeyAuth::validate_key(self, key, client_ip)
+    }
+
+    fn add_key(&self, key: impl Into<String>, permissions: Vec<String>) {
+        AppApiKeyAuth::add_key(self, key, permissions);
+    }
+}
+
+/// Implement RateLimiter trait for AppRateLimiter
+impl RateLimiter for AppRateLimiter {
+    fn allow(&self, key: &str) -> bool {
+        AppRateLimiter::allow(self, key)
+    }
+
+    fn reset(&self, key: &str) {
+        AppRateLimiter::reset(self, key);
+    }
+}
+
+/// Implement AuditLogger trait for AppAuditLogger
+impl AuditLogger for AppAuditLogger {
+    fn log(&self, log: AuditLog) {
+        // Build an AuthContext from the audit log for the async log method
+        let context = AuthContext {
+            user_id: log.user_id.clone(),
+            permissions: vec![],
+            metadata: log.metadata.clone(),
+        };
+        let result = matches!(log.result, AuditResult::Success);
+        let message = match &log.result {
+            AuditResult::Success => None,
+            AuditResult::Failure { message } => Some(message.clone()),
+        };
+        let action = log.action.clone();
+        let resource = log.resource.clone();
+
+        // Clone all Arc fields from self for use in the spawned thread
+        let logs = self.logs.clone();
+        let max_logs_per_user = self.max_logs_per_user;
+        let semaphore = self.semaphore.clone();
+        let queue_sender = self.queue_sender.clone();
+        let fallback_logs = self.fallback_logs.clone();
+        let dropped_log_count = self.dropped_log_count.clone();
+
+        // Spawn a background thread with its own runtime for the async log method
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("Failed to build runtime for AuditLogger::log");
+            rt.block_on(async {
+                let logger = AppAuditLogger {
+                    logs,
+                    max_logs_per_user,
+                    semaphore,
+                    queue_sender,
+                    fallback_logs,
+                    dropped_log_count,
+                };
+                logger
+                    .log(&context, action, resource, result, message)
+                    .await;
+            });
+        });
+    }
+}
+
 /// Create authentication middleware
 pub fn auth_middleware<T: Clone + Send + Sync + 'static>(
     _auth: Arc<T>,
@@ -2516,7 +2720,7 @@ pub fn auth_middleware<T: Clone + Send + Sync + 'static>(
 
 /// Create rate limiting middleware
 pub fn rate_limit_middleware(
-    limiter: Arc<RateLimiter>,
+    limiter: Arc<AppRateLimiter>,
 ) -> impl Fn(Request<Body>, Next) -> Pin<Box<dyn Future<Output = Response> + Send>> + Clone + Send {
     move |req: Request<Body>, next: Next| {
         let limiter = limiter.clone();
@@ -2752,6 +2956,58 @@ fn is_valid_ip(ip: &str) -> bool {
     }
 }
 
+// =============================================================================
+// Backward Compatibility Layer
+//
+// Structs have been renamed from ApiKeyAuth->AppApiKeyAuth, RateLimiter->AppRateLimiter,
+// and AuditLogger->AppAuditLogger (and their builders). The original names are now
+// reserved for the trait interfaces.
+//
+// For backward compatibility, the old names are re-exported from the `compat`
+// submodule so that existing code using `use sdforge::security::ApiKeyAuth` as a
+// type will continue to work.
+// =============================================================================
+/// Backward Compatibility Module
+///
+/// This module provides type aliases for backward compatibility with code that
+/// uses the old struct names before they were renamed.
+///
+/// # Migration Guide
+///
+/// The following type aliases are deprecated and should be replaced:
+/// - `ApiKeyAuth` → `AppApiKeyAuth`
+/// - `RateLimiter` → `AppRateLimiter`
+/// - `AuditLogger` → `AppAuditLogger`
+///
+/// # Example
+///
+/// ```ignore
+/// // Old (deprecated):
+/// use sdforge::security::compat::ApiKeyAuth;
+///
+/// // New (recommended):
+/// use sdforge::security::AppApiKeyAuth;
+/// ```
+pub mod compat {
+    #[deprecated(since = "0.3.0", note = "Use AppApiKeyAuth instead")]
+    pub use super::AppApiKeyAuth;
+
+    #[deprecated(since = "0.3.0", note = "Use AppApiKeyAuthBuilder instead")]
+    pub use super::AppApiKeyAuthBuilder;
+
+    #[deprecated(since = "0.3.0", note = "Use AppRateLimiter instead")]
+    pub use super::AppRateLimiter;
+
+    #[deprecated(since = "0.3.0", note = "Use AppRateLimiterBuilder instead")]
+    pub use super::AppRateLimiterBuilder;
+
+    #[deprecated(since = "0.3.0", note = "Use AppAuditLogger instead")]
+    pub use super::AppAuditLogger;
+
+    #[deprecated(since = "0.3.0", note = "Use AppAuditLoggerBuilder instead")]
+    pub use super::AppAuditLoggerBuilder;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2806,7 +3062,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_api_key_auth() {
-        let auth = ApiKeyAuth::new();
+        let auth = AppApiKeyAuth::new();
         auth.add_key("test-key", vec!["read".to_string(), "write".to_string()]);
 
         let permissions = auth.validate_key("test-key", "127.0.0.1");
@@ -2821,7 +3077,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_api_key_auth_rate_limiting() {
-        let auth = ApiKeyAuth::with_rate_limit(RateLimitConfig {
+        let auth = AppApiKeyAuth::with_rate_limit(RateLimitConfig {
             max_requests: 3,
             window: Duration::from_secs(60),
             include_headers: false,
@@ -2852,7 +3108,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_api_key_hashing() {
-        let auth = ApiKeyAuth::new();
+        let auth = AppApiKeyAuth::new();
         auth.add_key("test-key", vec!["admin".to_string()]);
 
         assert!(auth.validate_key("test-key", "127.0.0.1").is_some());
@@ -2866,7 +3122,7 @@ mod tests {
             window: Duration::from_secs(60),
             include_headers: true,
         };
-        let limiter = RateLimiter::new(Some(config));
+        let limiter = AppRateLimiter::new(Some(config));
 
         for _ in 0..3 {
             assert!(limiter.check("test-ip").is_ok());
@@ -2877,7 +3133,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_audit_logger() {
-        let logger = AuditLogger::new();
+        let logger = AppAuditLogger::new();
         let context = AuthContext {
             user_id: Some("user-123".to_string()),
             permissions: vec![],
@@ -3265,7 +3521,7 @@ mod tests {
             window: Duration::from_secs(60),
             include_headers: false,
         };
-        let limiter = RateLimiter::new(Some(config));
+        let limiter = AppRateLimiter::new(Some(config));
 
         assert_eq!(limiter.remaining("test-ip"), 5);
 
@@ -3278,7 +3534,7 @@ mod tests {
 
     #[test]
     fn test_rate_limiter_idempotency() {
-        let limiter = RateLimiter::new(None);
+        let limiter = AppRateLimiter::new(None);
 
         // First request should not be duplicate
         assert!(!limiter.check_idempotency("req-123"));
@@ -3293,7 +3549,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_rate_limiter_acquire() {
-        let limiter = RateLimiter::new(Some(RateLimitConfig {
+        let limiter = AppRateLimiter::new(Some(RateLimitConfig {
             max_requests: 2,
             window: Duration::from_secs(60),
             include_headers: false,
@@ -3311,14 +3567,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_audit_logger_get_logs_empty() {
-        let logger = AuditLogger::new();
+        let logger = AppAuditLogger::new();
         let logs = logger.get_logs("nonexistent-user");
         assert!(logs.is_empty());
     }
 
     #[tokio::test]
     async fn test_audit_logger_clear_logs() {
-        let logger = AuditLogger::new();
+        let logger = AppAuditLogger::new();
         let context = AuthContext::new(
             Some("user-to-clear".to_string()),
             vec![],
@@ -3339,7 +3595,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_audit_logger_total_log_count() {
-        let logger = AuditLogger::new();
+        let logger = AppAuditLogger::new();
         let context = AuthContext::new(Some("user-1".to_string()), vec![], AuthMetadata::default());
 
         logger
@@ -3498,7 +3754,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_api_key_clear_failed_attempts() {
-        let auth = ApiKeyAuth::with_rate_limit(RateLimitConfig {
+        let auth = AppApiKeyAuth::with_rate_limit(RateLimitConfig {
             max_requests: 2,
             window: Duration::from_secs(60),
             include_headers: false,
@@ -3521,7 +3777,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_api_key_different_ips() {
-        let auth = ApiKeyAuth::with_rate_limit(RateLimitConfig {
+        let auth = AppApiKeyAuth::with_rate_limit(RateLimitConfig {
             max_requests: 2,
             window: Duration::from_secs(60),
             include_headers: false,
