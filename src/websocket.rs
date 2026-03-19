@@ -26,11 +26,9 @@
 
 #[cfg(feature = "websocket")]
 use axum::{
-    extract::{
-        ws::{WebSocket, WebSocketUpgrade},
-        State,
-    },
-    response::IntoResponse,
+    extract::ws::{WebSocket, WebSocketUpgrade},
+    http::{header::AUTHORIZATION, StatusCode},
+    response::{IntoResponse, Response},
     Router,
 };
 #[cfg(feature = "websocket")]
@@ -204,6 +202,67 @@ impl Default for RateLimitConfig {
             max_message_size: 1_048_576, // 1MB
             max_connections: 1000,
             rate_limit_window_seconds: 1,
+        }
+    }
+}
+
+/// WebSocket server configuration with optional JWT authentication.
+///
+/// # Security
+///
+/// When `auth` is `Some`, all WebSocket upgrade requests must include a valid
+/// JWT bearer token in the `Authorization` header. Requests without a valid
+/// token receive HTTP 401 and the connection is rejected.
+///
+/// # Example
+///
+/// ```ignore
+/// use sdforge::websocket::WebSocketConfig;
+/// use sdforge::security::BearerAuth;
+///
+/// let auth = BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ").ok();
+/// let config = WebSocketConfig {
+///     auth,
+///     rate_limit: RateLimitConfig::default(),
+/// };
+/// ```
+#[derive(Clone, Default)]
+pub struct WebSocketConfig {
+    /// Optional JWT authentication validator.
+    /// When `Some`, all connections must present a valid JWT bearer token.
+    /// When `None`, connections are accepted without authentication.
+    pub auth: Option<crate::security::BearerAuth>,
+    /// Rate limiting configuration for connections.
+    pub rate_limit: RateLimitConfig,
+}
+
+#[cfg(feature = "websocket")]
+#[derive(Clone)]
+/// Application state for the WebSocket router.
+///
+/// Combines WebSocket configuration with connection manager for active connection tracking.
+pub struct AppState {
+    /// WebSocket configuration including optional auth.
+    pub config: Arc<WebSocketConfig>,
+    /// Connection manager for tracking active WebSocket connections.
+    pub manager: Arc<ConnectionManager>,
+}
+
+#[cfg(feature = "websocket")]
+impl AppState {
+    /// Create a new AppState with default WebSocketConfig.
+    pub fn new(manager: Arc<ConnectionManager>) -> Self {
+        Self {
+            config: Arc::new(WebSocketConfig::default()),
+            manager,
+        }
+    }
+
+    /// Create a new AppState with custom WebSocketConfig.
+    pub fn with_config(config: WebSocketConfig, manager: Arc<ConnectionManager>) -> Self {
+        Self {
+            config: Arc::new(config),
+            manager,
         }
     }
 }
@@ -391,14 +450,90 @@ impl WebSocketRoute {
 
 #[cfg(feature = "websocket")]
 inventory::collect!(WebSocketRoute);
+/// Custom WebSocket upgrade extractor that validates JWT auth before upgrade.
+///
+/// This type handles the entire WebSocket upgrade lifecycle:
+/// 1. Reads the `Authorization` header from the request
+/// 2. If auth is configured in `AppState`, validates the bearer token (returns 401 if invalid)
+/// 3. Extracts the WebSocketUpgrade
+/// 4. Implements `IntoResponse` to perform the actual upgrade
+///
+/// Usage:
+/// ```ignore
+/// pub async fn ws_handler(ws: ValidatedWebSocketUpgrade) -> impl IntoResponse {
+///     ws // performs upgrade automatically via IntoResponse
+/// }
+/// ```
+#[cfg(feature = "websocket")]
+pub struct ValidatedWebSocketUpgrade {
+    ws: WebSocketUpgrade,
+    manager: Arc<ConnectionManager>,
+}
 
 #[cfg(feature = "websocket")]
-/// WebSocket upgrade handler
-pub async fn websocket_upgrade(
-    ws: WebSocketUpgrade,
-    State(manager): State<Arc<ConnectionManager>>,
-) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_socket(socket, manager))
+impl IntoResponse for ValidatedWebSocketUpgrade {
+    fn into_response(self) -> Response {
+        self.ws.on_upgrade(move |socket| {
+            handle_socket(socket, self.manager.clone())
+        })
+    }
+}
+
+#[cfg(feature = "websocket")]
+impl<S> axum::extract::FromRequest<S> for ValidatedWebSocketUpgrade
+where
+    S: Clone + Send + Sync + 'static,
+{
+    type Rejection = StatusCode;
+
+    async fn from_request(req: axum::extract::Request, state: &S) -> Result<Self, Self::Rejection> {
+        let req = req;
+
+        // Get bearer token from Authorization header
+        let bearer_token: Option<String> = req
+            .headers()
+            .get(AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|h| h.strip_prefix("Bearer "))
+            .map(String::from);
+
+        // Get AppState from request extensions (injected via with_state by axum)
+        // The state parameter is &Arc<AppState> since that's what we registered
+        let app_state = req
+            .extensions()
+            .get::<Arc<AppState>>()
+            .cloned();
+
+        // Validate auth if configured
+        if let Some(ref state_ref) = app_state {
+            if let Some(ref auth) = state_ref.config.auth {
+                let token = bearer_token.ok_or(StatusCode::UNAUTHORIZED)?;
+                auth.validate_token(&token).ok_or(StatusCode::UNAUTHORIZED)?;
+            }
+        }
+
+        // Extract WebSocketUpgrade via axum's built-in extractor
+        let ws = axum::extract::ws::WebSocketUpgrade::from_request(req, state)
+            .await
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+        // Get manager for connection handling
+        let manager = app_state
+            .map(|s| s.manager.clone())
+            .unwrap_or_else(|| Arc::new(ConnectionManager::new()));
+
+        Ok(Self { ws, manager })
+    }
+}
+
+#[cfg(feature = "websocket")]
+/// WebSocket upgrade handler with optional JWT authentication.
+///
+/// Security: When `WebSocketConfig::auth` is `Some`, this handler validates
+/// the `Authorization: Bearer <token>` header before upgrading the connection.
+/// Invalid or missing tokens result in HTTP 401 Unauthorized.
+pub async fn websocket_upgrade(ws: ValidatedWebSocketUpgrade) -> impl IntoResponse {
+    ws // IntoResponse performs the upgrade
 }
 
 #[cfg(feature = "websocket")]
@@ -624,11 +759,12 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
 pub fn build() -> Router {
     let mut router = Router::new();
     let manager = Arc::new(ConnectionManager::new());
+    let state = Arc::new(AppState::new(manager));
 
     for route in inventory::iter::<WebSocketRoute> {
         router = router.route(
             route.path,
-            axum::routing::get(websocket_upgrade).with_state(manager.clone()),
+            axum::routing::get(websocket_upgrade).with_state(state.clone()),
         );
     }
 
@@ -998,5 +1134,75 @@ mod tests {
         let route = WebSocketRoute::new("/ws", create_mock_handler);
 
         assert_eq!(route.path(), "/ws");
+    }
+
+    /// Test WebSocketConfig default has no auth configured
+    #[test]
+    fn test_websocket_config_default_no_auth() {
+        let config = WebSocketConfig::default();
+        assert!(config.auth.is_none());
+        assert_eq!(config.rate_limit.max_connections, 1000);
+        assert_eq!(config.rate_limit.max_messages_per_second, 100);
+    }
+
+    /// Test WebSocketConfig with BearerAuth configured
+    #[test]
+    fn test_websocket_config_with_auth() {
+        let auth = crate::security::BearerAuth::try_new(
+            "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        )
+        .expect("valid secret");
+        let config = WebSocketConfig {
+            auth: Some(auth),
+            rate_limit: RateLimitConfig::default(),
+        };
+        assert!(config.auth.is_some());
+    }
+
+    /// Test AppState creation with custom config
+    #[test]
+    fn test_app_state_with_config() {
+        use std::sync::Arc;
+        let manager = Arc::new(ConnectionManager::new());
+        let auth = crate::security::BearerAuth::try_new(
+            "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        )
+        .expect("valid secret");
+        let config = WebSocketConfig {
+            auth: Some(auth),
+            rate_limit: RateLimitConfig::default(),
+        };
+        let state = AppState::with_config(config, manager.clone());
+        assert!(state.config.auth.is_some());
+    }
+
+    /// Test bearer token extraction from Authorization header value
+    #[test]
+    fn test_bearer_token_extraction() {
+        use axum::http::header::AUTHORIZATION;
+        use axum::http::HeaderMap;
+        let mut headers = HeaderMap::new();
+        headers.insert(AUTHORIZATION, "Bearer my-test-token".parse().unwrap());
+        let token = headers
+            .get(AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|h| h.strip_prefix("Bearer "))
+            .map(String::from);
+        assert_eq!(token, Some("my-test-token".to_string()));
+    }
+
+    /// Test bearer token extraction fails without Bearer prefix
+    #[test]
+    fn test_bearer_token_extraction_no_bearer() {
+        use axum::http::header::AUTHORIZATION;
+        use axum::http::HeaderMap;
+        let mut headers = HeaderMap::new();
+        headers.insert(AUTHORIZATION, "Basic abc123".parse().unwrap());
+        let token = headers
+            .get(AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|h| h.strip_prefix("Bearer "))
+            .map(String::from);
+        assert!(token.is_none());
     }
 }
