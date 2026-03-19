@@ -350,6 +350,7 @@ where
 #[cfg(all(feature = "http", test))]
 mod tests {
     use super::*;
+    use super::super::ApiError;
     use serde::Deserialize;
     use validator::Validate;
 
@@ -396,6 +397,237 @@ mod tests {
         });
 
         let result = extract_validated::<TestParams>(&json).await;
+        assert!(result.is_err());
+    }
+
+    // ============================================================================
+    // Task 2.10: XSS Protection Tests
+    // ============================================================================
+
+    #[test]
+    fn test_sanitize_xss_legitimate_input() {
+        // Legitimate input should pass through unchanged
+        let input = "Hello, World!";
+        let sanitized = sanitizer::sanitize_xss(input);
+        assert_eq!(sanitized, input);
+
+        let input = "This is a normal sentence with punctuation.";
+        let sanitized = sanitizer::sanitize_xss(input);
+        assert_eq!(sanitized, input);
+    }
+
+    #[test]
+    fn test_sanitize_xss_script_tag() {
+        // Script tags should be escaped
+        let input = "<script>alert('xss')</script>";
+        let sanitized = sanitizer::sanitize_xss(input);
+        assert_eq!(sanitized, "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;&#x2F;script&gt;");
+        assert!(!sanitized.contains("<script>"));
+    }
+
+    #[test]
+    fn test_sanitize_xss_img_tag() {
+        // Image tags should be escaped
+        let input = "<img src=x onerror=alert('xss')>";
+        let sanitized = sanitizer::sanitize_xss(input);
+        assert_eq!(sanitized, "&lt;img src=x onerror=alert(&#x27;xss&#x27;)&gt;");
+        assert!(!sanitized.contains("<img"));
+    }
+
+    #[test]
+    fn test_sanitize_xss_iframe_tag() {
+        // Iframe tags should be escaped
+        let input = "<iframe src=\"http://evil.com\"></iframe>";
+        let sanitized = sanitizer::sanitize_xss(input);
+        assert_eq!(sanitized, "&lt;iframe src=&quot;http:&#x2F;&#x2F;evil.com&quot;&gt;&lt;&#x2F;iframe&gt;");
+        assert!(!sanitized.contains("<iframe"));
+    }
+
+    #[test]
+    fn test_sanitize_xss_multiple_special_chars() {
+        // Multiple special characters should all be escaped
+        let input = "<div>'\"/\\";
+        let sanitized = sanitizer::sanitize_xss(input);
+        assert_eq!(sanitized, "&lt;div&gt;&#x27;&quot;&#x2F;\\");
+        assert!(!sanitized.contains('<'));
+        assert!(!sanitized.contains('>'));
+        assert!(!sanitized.contains('"'));
+        assert!(!sanitized.contains('\''));
+    }
+
+    // ============================================================================
+    // Task 2.11: Path Traversal Protection Tests
+    // ============================================================================
+
+    #[test]
+    fn test_sanitize_path_legitimate() {
+        // Legitimate paths should pass through
+        let input = "/var/log/app.log";
+        let result = sanitizer::sanitize_path(input);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), input);
+
+        let input = "home/user/documents";
+        let result = sanitizer::sanitize_path(input);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), input);
+    }
+
+    #[test]
+    fn test_sanitize_path_reject_double_dot() {
+        // Path traversal with .. should be rejected
+        let input = "../../../etc/passwd";
+        let result = sanitizer::sanitize_path(input);
+        assert!(result.is_err());
+        // validation_error returns InvalidInput variant
+        if let Err(ApiError::InvalidInput { message: msg, field: _, value: _ }) = result {
+            assert!(msg.contains("invalid") || msg.contains("traversal"));
+        } else {
+            panic!("Expected InvalidInput error");
+        }
+    }
+
+    #[test]
+    fn test_sanitize_path_reject_double_slash() {
+        // Double slashes should be rejected
+        let input = "//etc/passwd";
+        let result = sanitizer::sanitize_path(input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sanitize_path_null_byte() {
+        // Null bytes should be removed
+        let input = "file\0.txt";
+        let result = sanitizer::sanitize_path(input);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "file.txt");
+    }
+
+    #[test]
+    fn test_sanitize_path_mixed_traversal() {
+        // Mixed traversal attempts should be rejected
+        let input = "/var/../etc/passwd";
+        let result = sanitizer::sanitize_path(input);
+        assert!(result.is_err());
+    }
+
+    // ============================================================================
+    // Task 2.12: Custom Validator Tests
+    // ============================================================================
+
+    #[test]
+    fn test_custom_email_validator_valid() {
+        // Valid email should pass
+        let result = validators::validate_email("user@example.com");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_custom_email_validator_invalid() {
+        // Invalid email should fail
+        let result = validators::validate_email("notanemail");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_custom_regex_validator_valid() {
+        // Valid pattern match should pass
+        let result = validators::validate_regex("abc123", r"^[a-z0-9]+$");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_custom_regex_validator_invalid() {
+        // Invalid pattern match should fail
+        let result = validators::validate_regex("abc-123", r"^[a-z0-9]+$");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_regex_cache_performance() {
+        // Regex should be cached for performance
+        let pattern = r"^\d{3}-\d{3}-\d{4}$";
+        let result1 = validators::validate_regex("123-456-7890", pattern);
+        let result2 = validators::validate_regex("987-654-3210", pattern);
+        assert!(result1.is_ok());
+        assert!(result2.is_ok());
+    }
+
+    // ============================================================================
+    // Task 2.13: Range Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_validate_range_integer_valid() {
+        // Value within range should pass
+        let result = validators::validate_range(50, 0, 100);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_range_integer_too_low() {
+        // Value below minimum should fail
+        let result = validators::validate_range(-1, 0, 100);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_range_integer_too_high() {
+        // Value above maximum should fail
+        let result = validators::validate_range(101, 0, 100);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_range_float() {
+        // Float range validation should work
+        let result = validators::validate_range(0.5_f64, 0.0_f64, 1.0_f64);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_length_string_valid() {
+        // String within length range should pass
+        let result = validators::validate_length("hello", 1, 10);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_length_string_too_short() {
+        // String too short should fail
+        let result = validators::validate_length("hi", 3, 10);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_length_string_too_long() {
+        // String too long should fail
+        let result = validators::validate_length("hello world", 1, 5);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_length_string_exact_min() {
+        // String exactly at minimum should pass
+        let result = validators::validate_length("abc", 3, 10);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_length_string_exact_max() {
+        // String exactly at maximum should pass
+        let result = validators::validate_length("abcde", 1, 5);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitize_length_validation() {
+        // Sanitizer length validation should work
+        let result = sanitizer::validate_length("test", 1, 10, "test_field");
+        assert!(result.is_ok());
+
+        let result = sanitizer::validate_length("test", 5, 10, "test_field");
         assert!(result.is_err());
     }
 }
