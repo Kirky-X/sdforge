@@ -13,6 +13,7 @@
 
 pub mod error;
 pub mod json;
+pub mod registration;
 pub mod response;
 pub mod str;
 pub mod types;
@@ -21,6 +22,7 @@ pub mod validation;
 // Re-export types from submodules for convenience
 pub use error::ApiError;
 pub use json::{api_metadata_response, error_response, paginated_response, success_response};
+pub use registration::Registration;
 pub use response::{ServiceError, ServiceResponse};
 pub use str::{
     format_empty_error, format_env_key, format_invalid_error, format_not_found, format_range_error,
