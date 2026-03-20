@@ -1,153 +1,57 @@
-# Pre-commit Configuration for Axiom
-# Multi-protocol Declarative SDK Framework
-
-# See https://pre-commit.com for more information
+# Pre-commit hooks for SDForge Rust Project
+# Install: pip install pre-commit && pre-commit install
+# Docs: https://pre-commit.com/
 
 repos:
-  # =============================================================================
-  # System checks (no external dependencies)
-  # =============================================================================
-  
-  - repo: local
-    hooks:
-      # -----------------------------------------------------------------------------
-      # Detect merge conflict markers
-      # -----------------------------------------------------------------------------
-      - id: detect-merge-conflicts
-        name: Detect Merge Conflicts
-        entry: scripts/pre-commit-check.sh --check-conflicts
-        language: system
-        stages: [pre-commit]
-        pass_filenames: false
-        
-      # -----------------------------------------------------------------------------
-      # Detect large files
-      # -----------------------------------------------------------------------------
-      - id: detect-large-files
-        name: Detect Large Files (>1MB)
-        entry: scripts/pre-commit-check.sh --check-large-files
-        language: system
-        stages: [pre-commit]
-        pass_filenames: false
-        
-      # -----------------------------------------------------------------------------
-      # Remove trailing whitespace
-      # -----------------------------------------------------------------------------
-      - id: remove-trailing-whitespace
-        name: Remove Trailing Whitespace
-        entry: scripts/pre-commit-check.sh --fix-whitespace
-        language: system
-        stages: [pre-commit]
-        pass_filenames: false
-
-  # =============================================================================
-  # YAML Syntax Check
-  # =============================================================================
-  
+  # 1. Basic file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
       - id: check-yaml
-        name: Check YAML Syntax
-        args:
-          - --unsafe
-        exclude: ^\.github/workflows/cargo-deny\.yml$
-
-  # =============================================================================
-  # TOML Format Check
-  # =============================================================================
-  
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
       - id: check-toml
-        name: Check TOML Format
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key
+      - id: check-merge-conflict
+        args: ['--assume-in-merge']
+      - id: no-commit-to-branch
+        args: ['--branch', 'main', '--branch', 'master']
 
-  # =============================================================================
-  # Rust Formatting (rustfmt)
-  # =============================================================================
-  
-  - repo: https://github.com/densebair/rustfmt-pre-commit
-    rev: v1.1.1
+  # 2. Detect secrets (with baseline for known false positives)
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
     hooks:
-      - id: rustfmt
-        name: Rust Formatting (rustfmt)
-        args:
-          - --edition=2021
-          - --check
-        types: [rust]
-        require_serial: true
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: '^Cargo\.lock$'
 
-  # =============================================================================
-  # Rust Linting (clippy)
-  # =============================================================================
-  
-  - repo: https://github.com/densebair/rust-clippy-pre-commit
-    rev: v0.0.266
-    hooks:
-      - id: clippy
-        name: Rust Linting (clippy)
-        args:
-          - --all-features
-          - --all-targets
-          - --workspace
-          - -- -D warnings
-        types: [rust]
-        require_serial: true
-        stages: [pre-commit]
-
-  # =============================================================================
-  # Rust Compilation Check
-  # =============================================================================
-  
+  # 3. Rust formatting and checks
   - repo: local
     hooks:
+      - id: cargo-fmt
+        name: Format Rust code
+        description: Run rustfmt on Rust files (workspace only)
+        entry: cargo fmt -- --check
+        language: system
+        types: [rust]
+        pass_filenames: false
+
       - id: cargo-check
-        name: Rust Compilation Check
-        entry: scripts/pre-commit-check.sh --check-compile
+        name: cargo check
+        entry: cargo check --all-features --workspace
         language: system
-        stages: [pre-commit]
+        types: [rust]
         pass_filenames: false
-        require_serial: true
 
-  # =============================================================================
-  # Rust Full Build Check
-  # =============================================================================
-  
-  - repo: local
-    hooks:
-      - id: cargo-build
-        name: Rust Build Check
-        entry: scripts/pre-commit-check.sh --check-build
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy --all-targets --all-features --workspace -- -D warnings
         language: system
-        stages: [pre-commit]
+        types: [rust]
         pass_filenames: false
-        require_serial: true
 
-# =============================================================================
-# Exclude patterns
-# =============================================================================
-exclude: |
-  (?x)^(
-    target/|
-    \.git/|
-    \.cargo/|
-    \.claude/|
-    \.github/workflows/cargo-deny\.yml|
-    docs/|
-    \.iflow/|
-    temp/|
-    \.gitignore|
-    \.env\.example|
-    \.cargo/config\.toml|
-    tarpaulin-report\.html|
-    requirements\.db
-  )
-
-# =============================================================================
-# Default settings
-# =============================================================================
-default_install_hook_types: [pre-commit]
-default_stages: [pre-commit]
-verbose: true
-fail_fast: false
+ci:
+  autoupdate_commit_msg: "chore: update pre-commit hooks"
