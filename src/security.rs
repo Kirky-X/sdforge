@@ -1790,11 +1790,11 @@ impl AppRateLimiter {
     pub fn new(config: Option<RateLimitConfig>) -> Self {
         Self {
             config: config.unwrap_or_default(),
-            requests: Arc::new(DashMap::new()),
-            idempotency_cache: Arc::new(DashMap::new()),
-            semaphore: Arc::new(tokio::sync::Semaphore::new(1000)),
+            requests: Arc::new(crate::cache::DashMapCache::new()),
+            idempotency_cache: Arc::new(crate::cache::DashMapCache::new()),
         }
     }
+
 
     /// Create a builder for configuring a AppRateLimiter.
     ///
@@ -1834,12 +1834,12 @@ impl AppRateLimiter {
     /// # Arguments
     ///
     /// * `config` - Rate limit configuration.
-    /// * `requests` - Request tracking map (key -> list of request timestamps).
-    /// * `idempotency_cache` - Idempotency key cache for deduplication.
-    /// * `semaphore` - Semaphore for concurrent request limiting.
+    /// * `requests` - Request tracking cache (keyed by "sdforge:rl:{key}").
+    /// * `idempotency_cache` - Idempotency key cache (keyed by "sdforge:idempotency:{key}").
     ///
     /// # Returns
     ///
+
     /// Returns a AppRateLimiter instance with the provided dependencies.
     ///
     /// # Errors
@@ -1850,51 +1850,55 @@ impl AppRateLimiter {
     ///
     /// ```rust
     /// use sdforge::security::{AppRateLimiter, RateLimitConfig};
-    /// use dashmap::DashMap;
+    /// use sdforge::cache::DashMapCache;
     /// use std::sync::Arc;
     /// use std::time::Duration;
     ///
+
     /// let config = RateLimitConfig {
     ///     max_requests: 100,
     ///     window: Duration::from_secs(60),
     ///     include_headers: true,
     /// };
-    /// let requests = Arc::new(DashMap::new());
-    /// let idempotency_cache = Arc::new(DashMap::new());
-    /// let semaphore = Arc::new(tokio::sync::Semaphore::new(1000));
+    /// let requests = Arc::new(DashMapCache::new()) as _;
+    /// let idempotency_cache = Arc::new(DashMapCache::new()) as _;
     ///
     /// let limiter = AppRateLimiter::with_dependencies(
     ///     config,
     ///     requests,
     ///     idempotency_cache,
-    ///     semaphore,
     /// );
     /// let _ = limiter;
     /// ```
     pub fn with_dependencies(
         config: RateLimitConfig,
-        requests: Arc<DashMap<String, Vec<Instant>>>,
-        idempotency_cache: Arc<DashMap<String, Instant>>,
-        semaphore: Arc<tokio::sync::Semaphore>,
+        requests: SharedCache,
+        idempotency_cache: SharedCache,
     ) -> Self {
         Self {
             config,
             requests,
             idempotency_cache,
-            semaphore,
         }
     }
+
 
     /// Check if request is rate limited
     pub fn check(&self, key: &str) -> Result<u32, RateLimitError> {
         let now = Instant::now();
         let window_start = now - self.config.window;
+        let store_key = format!("sdforge:rl:{key}");
 
-        let mut entry = self.requests.entry(key.to_string()).or_default();
-        let times = entry.value_mut();
+        // Load existing timestamps
+        let data = self.requests.get(&store_key);
+        let mut times: Vec<Instant> = data
+            .as_ref()
+            .map(|d| deserialize_instants(d))
+            .unwrap_or_default();
 
         // Remove old requests outside the window
         times.retain(|&t| t > window_start);
+
 
         // Check rate limit
         if times.len() >= self.config.max_requests as usize {
@@ -1915,9 +1919,11 @@ impl AppRateLimiter {
 
         // Add current request
         times.push(now);
+        self.requests.set(&store_key, serialize_instants(&times));
 
         Ok(self.config.max_requests - times.len() as u32)
     }
+
 
     /// Check idempotency (returns true if this is a duplicate request)
     ///
@@ -1926,59 +1932,53 @@ impl AppRateLimiter {
     pub fn check_idempotency(&self, idempotency_key: &str) -> bool {
         let now = Instant::now();
         let window = Duration::from_secs(60); // Idempotency key cache window
+        let store_key = format!("sdforge:idempotency:{idempotency_key}");
 
-        if let Some(existing) = self.idempotency_cache.get(idempotency_key) {
-            // Clone the instant since Ref doesn't deref to the value directly
-            let existing_time = *existing;
-            // Use saturating_duration_since to avoid panic if system clock is adjusted
-            // This can happen when system time goes backwards (NTP correction, manual change)
-            let elapsed = now.saturating_duration_since(existing_time).as_secs();
-            if elapsed < window.as_secs() {
-                return true; // Duplicate request
+        if let Some(data) = self.idempotency_cache.get(&store_key) {
+            let existing_times = deserialize_instants(&data);
+            if let Some(&existing) = existing_times.first() {
+                let elapsed = now.saturating_duration_since(existing).as_secs();
+                if elapsed < window.as_secs() {
+                    return true; // Duplicate request
+                }
             }
         }
 
         // Record this idempotency key
         self.idempotency_cache
-            .insert(idempotency_key.to_string(), now);
+            .set(&store_key, serialize_instants(&[now]));
 
         false // Not a duplicate
     }
+
 
     /// Get remaining requests
     pub fn remaining(&self, key: &str) -> u32 {
         let now = Instant::now();
         let window_start = now - self.config.window;
+        let store_key = format!("sdforge:rl:{key}");
 
-        let entry = self.requests.get(key);
-        if let Some(times) = entry {
+        let data = self.requests.get(&store_key);
+        if let Some(d) = data {
+            let times = deserialize_instants(&d);
             let active = times.iter().filter(|&&t| t > window_start).count();
             self.config.max_requests - active as u32
         } else {
+
             self.config.max_requests
         }
     }
 
-    /// Acquire rate limit permit (async, with backpressure)
-    pub async fn acquire(&self, key: &str) -> Result<Permit, RateLimitError> {
-        // Check rate limit first (check returns info but we only care about side effects)
-        let _remaining = self.check(key)?;
-
-        // Try to acquire semaphore permit (owned to allow returning from function)
-        let permit = self
-            .semaphore
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| RateLimitError {
-                limit: self.config.max_requests,
-                remaining: 0,
-                retry_after: 1,
-            })?;
-
-        Ok(Permit(permit))
+    /// Acquire rate limit permit (simple per-key rate limiting).
+    ///
+    /// Uses the per-key windowed rate limiting from `check()`.
+    /// Returns `Ok(())` if permitted, `Err(RateLimitError)` if rejected.
+    pub fn acquire(&self, key: &str) -> Result<(), RateLimitError> {
+        self.check(key).map(|_| ())
     }
 
     /// Check if a request is allowed under the rate limit (trait method).
+
     ///
     /// Returns `true` if the request is allowed, `false` if rate limited.
     ///
@@ -1998,10 +1998,13 @@ impl AppRateLimiter {
     ///
     /// * `key` - The rate limit key to reset
     pub fn reset(&self, key: &str) {
-        self.requests.remove(key);
-        self.idempotency_cache.remove(key);
+        let rl_key = format!("sdforge:rl:{key}");
+        let idemp_key = format!("sdforge:idempotency:{key}");
+        self.requests.delete(&rl_key);
+        self.idempotency_cache.delete(&idemp_key);
     }
 }
+
 
 impl Default for AppRateLimiter {
     /// Create a AppRateLimiter with default configuration.
@@ -2029,19 +2032,10 @@ impl Default for AppRateLimiter {
     }
 }
 
-/// RAII permit for rate limiting
-#[allow(dead_code)]
-pub struct Permit(tokio::sync::OwnedSemaphorePermit);
-
-impl Drop for Permit {
-    fn drop(&mut self) {
-        // Permit is automatically released when dropped
-    }
-}
-
 /// Rate limit error
 #[derive(Debug, Error)]
 #[error("Rate limit exceeded. Try again in {retry_after} seconds")]
+
 pub struct RateLimitError {
     /// Rate limit
     pub limit: u32,
@@ -2052,10 +2046,11 @@ pub struct RateLimitError {
 }
 
 /// Audit log entry
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct AuditLog {
     /// Log ID
     pub(crate) id: String,
+
     /// Timestamp
     pub(crate) timestamp: i64,
     /// User ID
@@ -2070,11 +2065,25 @@ pub struct AuditLog {
     pub(crate) metadata: AuthMetadata,
 }
 
+impl Serialize for AuditLog {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut s = serializer.serialize_struct("AuditLog", 7)?;
+        s.serialize_field("id", &self.id)?;
+        s.serialize_field("timestamp", &self.timestamp)?;
+        s.serialize_field("user_id", &self.user_id)?;
+        s.serialize_field("action", &self.action)?;
+        s.serialize_field("resource", &self.resource)?;
+        s.serialize_field("result", &self.result)?;
+        s.serialize_field("metadata", &self.metadata)?;
+        s.end()
+    }
+}
+
 impl AuditLog {
-    /// Get log ID
     pub fn id(&self) -> &str {
         &self.id
     }
+
 
     /// Get log timestamp
     pub fn timestamp(&self) -> i64 {
@@ -2108,17 +2117,15 @@ impl AuditLog {
 }
 
 /// Audit result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "status")]
+#[derive(Debug, Clone)]
 pub enum AuditResult {
     /// Success
-    #[serde(rename = "success")]
     Success,
     /// Failure
-    #[serde(rename = "failure")]
     Failure {
         /// Error message
         message: String,
+
     },
 }
 
@@ -2314,33 +2321,35 @@ impl AppAuditLoggerBuilder {
             tokio::sync::mpsc::channel::<AuditLogBatch>(self.queue_size);
 
         // Spawn background worker for async log processing
-        let logs: Arc<DashMap<String, Vec<AuditLog>>> = Arc::new(DashMap::new());
-        let fallback_logs: Arc<DashMap<String, Vec<AuditLog>>> = Arc::new(DashMap::new());
+        let logs: SharedCache = Arc::new(crate::cache::DashMapCache::new());
+        let fallback_logs: SharedCache = Arc::new(crate::cache::DashMapCache::new());
         let logs_clone = logs.clone();
         let fallback_logs_clone = fallback_logs.clone();
         let max_logs_clone = self.max_logs_per_user;
         tokio::spawn(async move {
+            // Primary storage is done synchronously by log() — this worker only
+            // handles draining the queue and merging fallback logs.
             while let Some(batch) = queue_receiver.recv().await {
-                let mut entry = logs_clone.entry(batch.user_id.clone()).or_default();
-                entry.push(batch.log);
-
-                // Keep only last N logs per user
-                if entry.len() > max_logs_clone {
-                    entry.truncate(max_logs_clone);
-                }
-
-                // Also check if there are fallback logs to merge
-                if let Some(fallback) = fallback_logs_clone.get(&batch.user_id) {
+                let key = &batch.user_id;
+                // Drain the queue: primary log was already stored by log().
+                // Just handle any fallback logs for this user.
+                if let Some(fallback_data) = fallback_logs_clone.get(key) {
+                    let fallback: Vec<AuditLog> = deserialize_audit_logs(&fallback_data);
                     if !fallback.is_empty() {
-                        let mut entry = logs_clone.entry(batch.user_id.clone()).or_default();
-                        entry.extend(fallback.iter().cloned());
-                        if entry.len() > max_logs_clone {
-                            entry.truncate(max_logs_clone);
+                        let data = logs_clone.get(key);
+                        let mut logs_vec: Vec<AuditLog> =
+                            data.as_ref().and_then(|d| Some(deserialize_audit_logs(d)))
+                                .unwrap_or_default();
+                        logs_vec.extend(fallback);
+                        if logs_vec.len() > max_logs_clone {
+                            logs_vec.truncate(max_logs_clone);
                         }
-                        fallback_logs_clone.remove(&batch.user_id);
+                        logs_clone.set(key, serialize_audit_logs(&logs_vec));
+                        fallback_logs_clone.delete(key);
                     }
                 }
             }
+
         });
 
         AppAuditLogger {
@@ -2358,20 +2367,24 @@ impl AppAuditLoggerBuilder {
 ///
 /// Provides async log processing with DoS protection and fallback
 /// synchronous storage for high-load scenarios.
+///
+/// Storage: `logs` and `fallback_logs` use `Arc<dyn SyncCache>` trait,
+/// allowing custom storage backends. Optional `db_pool` enables persistence.
 pub struct AppAuditLogger {
-    /// Logs storage
-    logs: Arc<DashMap<String, Vec<AuditLog>>>,
+    /// Logs storage via SyncCache (keyed by user_id)
+    logs: SharedCache,
     /// Maximum logs per user
     max_logs_per_user: usize,
     /// Rate limiting semaphore (max concurrent log operations)
     semaphore: Arc<tokio::sync::Semaphore>,
     /// Log queue sender (for async processing)
     queue_sender: Arc<tokio::sync::mpsc::Sender<AuditLogBatch>>,
-    /// Fallback storage for when channel is full (synchronous path)
-    fallback_logs: Arc<DashMap<String, Vec<AuditLog>>>,
+    /// Fallback storage for when channel is full (synchronous path) via SyncCache
+    fallback_logs: SharedCache,
     /// Counter for dropped logs (monitoring)
     dropped_log_count: Arc<std::sync::atomic::AtomicU64>,
 }
+
 
 /// Batch of audit logs for async processing.
 ///
@@ -2544,14 +2557,15 @@ impl AppAuditLogger {
     /// let _ = logger;
     /// ```
     pub fn with_dependencies(
-        logs: Arc<DashMap<String, Vec<AuditLog>>>,
+        logs: SharedCache,
         max_logs_per_user: usize,
         semaphore: Arc<tokio::sync::Semaphore>,
         queue_sender: Arc<tokio::sync::mpsc::Sender<AuditLogBatch>>,
-        fallback_logs: Arc<DashMap<String, Vec<AuditLog>>>,
+        fallback_logs: SharedCache,
         dropped_log_count: Arc<std::sync::atomic::AtomicU64>,
     ) -> Self {
         Self {
+
             logs,
             max_logs_per_user,
             semaphore,
@@ -2571,33 +2585,35 @@ impl AppAuditLogger {
         let (queue_sender, mut queue_receiver) = tokio::sync::mpsc::channel::<AuditLogBatch>(1000);
 
         // Spawn background worker for async log processing
-        let logs: Arc<DashMap<String, Vec<AuditLog>>> = Arc::new(DashMap::new());
-        let fallback_logs: Arc<DashMap<String, Vec<AuditLog>>> = Arc::new(DashMap::new());
+        let logs: SharedCache = Arc::new(crate::cache::DashMapCache::new());
+        let fallback_logs: SharedCache = Arc::new(crate::cache::DashMapCache::new());
         let logs_clone = logs.clone();
         let fallback_logs_clone = fallback_logs.clone();
         let max_logs_clone = max_logs;
         tokio::spawn(async move {
+            // Primary storage is done synchronously by log() — this worker only
+            // handles draining the queue and merging fallback logs.
             while let Some(batch) = queue_receiver.recv().await {
-                let mut entry = logs_clone.entry(batch.user_id.clone()).or_default();
-                entry.push(batch.log);
-
-                // Keep only last N logs per user
-                if entry.len() > max_logs_clone {
-                    entry.truncate(max_logs_clone);
-                }
-
-                // Also check if there are fallback logs to merge
-                if let Some(fallback) = fallback_logs_clone.get(&batch.user_id) {
+                let key = &batch.user_id;
+                // Drain the queue: primary log was already stored by log().
+                // Just handle any fallback logs for this user.
+                if let Some(fallback_data) = fallback_logs_clone.get(key) {
+                    let fallback: Vec<AuditLog> = deserialize_audit_logs(&fallback_data);
                     if !fallback.is_empty() {
-                        let mut entry = logs_clone.entry(batch.user_id.clone()).or_default();
-                        entry.extend(fallback.iter().cloned());
-                        if entry.len() > max_logs_clone {
-                            entry.truncate(max_logs_clone);
+                        let data = logs_clone.get(key);
+                        let mut logs_vec: Vec<AuditLog> =
+                            data.as_ref().and_then(|d| Some(deserialize_audit_logs(d)))
+                                .unwrap_or_default();
+                        logs_vec.extend(fallback);
+                        if logs_vec.len() > max_logs_clone {
+                            logs_vec.truncate(max_logs_clone);
                         }
-                        fallback_logs_clone.remove(&batch.user_id);
+                        logs_clone.set(key, serialize_audit_logs(&logs_vec));
+                        fallback_logs_clone.delete(key);
                     }
                 }
             }
+
         });
 
         Self {
