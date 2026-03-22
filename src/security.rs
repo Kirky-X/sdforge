@@ -408,10 +408,12 @@ impl AppApiKeyAuth {
     /// Add a valid API key (stored as hash)
     pub fn add_key(&self, key: impl Into<String>, permissions: Vec<String>) {
         let key_hash = Self::hash_key(&key.into());
-        self.valid_keys.insert(key_hash, permissions);
+        self.valid_keys
+            .set(&format!("sdforge:apikey:{key_hash}"), serialize_permissions(&permissions));
     }
 
     /// Validate an API key with rate limiting
+
     ///
     /// Security: Implements constant-time validation to prevent timing attacks.
     /// All code paths take the same amount of time regardless of key validity.
@@ -420,19 +422,29 @@ impl AppApiKeyAuth {
     pub fn validate_key(&self, key: &str, client_ip: &str) -> Option<Vec<String>> {
         let start = Instant::now();
         let key_hash = Self::hash_key(key);
+        let store_key = format!("sdforge:apikey:{key_hash}");
 
         // Always check valid_keys first for constant timing
-        let is_valid = self.valid_keys.get(&key_hash).is_some();
+        let perms = self
+            .valid_keys
+            .get(&store_key)
+            .and_then(|data| {
+                let p = deserialize_permissions(&data);
+                if p.is_empty() {
+                    None
+                } else {
+                    Some(p)
+                }
+            });
 
-        // For valid keys, skip rate limiting and return immediately
-        // This prevents locking out legitimate users after suspicious activity
-        if is_valid {
+        if perms.is_some() {
             // Apply delay for constant timing even for valid keys
             Self::apply_constant_time_delay(start);
-            return self.valid_keys.get(&key_hash).map(|p| p.clone());
+            return perms;
         }
 
         // For invalid keys, check rate limit
+
         let is_limited = self.is_rate_limited(client_ip);
 
         // Record failed attempt if not already rate limited
@@ -468,39 +480,47 @@ impl AppApiKeyAuth {
     fn is_rate_limited(&self, client_ip: &str) -> bool {
         let now = Instant::now();
         let window_start = now - self.rate_limit_config.window;
+        let key = format!("sdforge:apifailed:{client_ip}");
 
-        let entry = self.failed_attempts.get(client_ip);
-        if let Some(times) = entry {
-            let recent_attempts = times.iter().filter(|&&t| t > window_start).count();
-            recent_attempts >= self.rate_limit_config.max_requests as usize
-        } else {
-            false
-        }
+        let data = match self.failed_attempts.get(&key) {
+            Some(d) => d,
+            None => return false,
+        };
+        let times = deserialize_instants(&data);
+        let recent_attempts = times.iter().filter(|&&t| t > window_start).count();
+        recent_attempts >= self.rate_limit_config.max_requests as usize
     }
 
     /// Record a failed validation attempt
     fn record_failed_attempt(&self, client_ip: &str) {
         let now = Instant::now();
         let window_start = now - self.rate_limit_config.window;
+        let key = format!("sdforge:apifailed:{client_ip}");
 
-        let mut entry = self
-            .failed_attempts
-            .entry(client_ip.to_string())
-            .or_default();
-        let times = entry.value_mut();
+        // Load existing attempts
+        let data = self.failed_attempts.get(&key);
+        let mut times: Vec<Instant> = data
+            .as_ref()
+            .map(|d| deserialize_instants(d))
+            .unwrap_or_default();
 
         // Clean old attempts outside the window
         times.retain(|&t| t > window_start);
 
         // Add new attempt
         times.push(now);
+
+        // Store back
+        self.failed_attempts.set(&key, serialize_instants(&times));
     }
 
     /// Clear failed attempts for a client (e.g., after successful auth)
     pub fn clear_failed_attempts(&self, client_ip: &str) {
-        self.failed_attempts.remove(client_ip);
+        let key = format!("sdforge:apifailed:{client_ip}");
+        self.failed_attempts.delete(&key);
     }
 }
+
 
 impl Default for AppApiKeyAuth {
     fn default() -> Self {
@@ -686,17 +706,20 @@ impl std::error::Error for JwtError {}
 /// - Audience and issuer claim validation (prevents token substitution attacks)
 /// - Expiration time checking
 /// - Token blacklist for immediate invalidation
+///
+/// Storage: All internal state is stored via `Arc<dyn SyncCache>` trait.
 #[derive(Clone)]
 pub struct BearerAuth {
     /// JWT secret for HMAC-SHA256 signing
     secret: Vec<u8>,
-    /// Valid tokens cache
-    valid_tokens: Arc<DashMap<String, AuthContext>>,
-    /// Token blacklist (for logout)
-    blacklisted_tokens: Arc<DashMap<String, Instant>>,
+    /// Valid tokens cache via SyncCache
+    valid_tokens: SharedCache,
+    /// Token blacklist (for logout) via SyncCache
+    blacklisted_tokens: SharedCache,
     /// Expected audience claim (prevents token substitution)
     expected_audience: Option<String>,
     /// Expected issuer claim (validates token origin)
+
     expected_issuer: Option<String>,
 }
 
