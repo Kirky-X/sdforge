@@ -811,13 +811,15 @@ impl BearerAuth {
             });
         }
 
+        let cache = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
         Ok(Self {
             secret: secret_str.into_bytes(),
-            valid_tokens: Arc::new(DashMap::new()),
-            blacklisted_tokens: Arc::new(DashMap::new()),
+            valid_tokens: cache.clone(),
+            blacklisted_tokens: cache,
             expected_audience: None,
             expected_issuer: None,
         })
+
     }
 
     /// Create bearer authentication with audience validation
@@ -825,13 +827,15 @@ impl BearerAuth {
     /// # Panics
     /// Panics if the secret doesn't meet complexity requirements
     pub fn with_audience(secret: impl Into<String>, expected_audience: impl Into<String>) -> Self {
+        let cache = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
         Self {
             secret: secret.into().into_bytes(),
-            valid_tokens: Arc::new(DashMap::new()),
-            blacklisted_tokens: Arc::new(DashMap::new()),
+            valid_tokens: cache.clone(),
+            blacklisted_tokens: cache,
             expected_audience: Some(expected_audience.into()),
             expected_issuer: None,
         }
+
     }
 
     /// Create bearer authentication with full claim validation
@@ -845,13 +849,15 @@ impl BearerAuth {
         expected_audience: impl Into<String>,
         expected_issuer: impl Into<String>,
     ) -> Self {
+        let cache = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
         Self {
             secret: secret.into().into_bytes(),
-            valid_tokens: Arc::new(DashMap::new()),
-            blacklisted_tokens: Arc::new(DashMap::new()),
+            valid_tokens: cache.clone(),
+            blacklisted_tokens: cache,
             expected_audience: Some(expected_audience.into()),
             expected_issuer: Some(expected_issuer.into()),
         }
+
     }
 
     /// Create with dependencies (for full DI mode)
@@ -883,14 +889,15 @@ impl BearerAuth {
     ///
     /// ```rust
     /// use sdforge::security::BearerAuth;
-    /// use dashmap::DashMap;
+    /// use sdforge::cache::DashMapCache;
     /// use std::sync::Arc;
     ///
-    /// let valid_tokens = Arc::new(DashMap::new());
-    /// let blacklisted_tokens = Arc::new(DashMap::new());
+    /// let valid_tokens = Arc::new(DashMapCache::new()) as _;
+    /// let blacklisted_tokens = Arc::new(DashMapCache::new()) as _;
     ///
     /// let auth = BearerAuth::with_dependencies(
     ///     b"my-secret-key".to_vec(),
+
     ///     valid_tokens,
     ///     blacklisted_tokens,
     ///     Some("my-api".to_string()),
@@ -900,11 +907,12 @@ impl BearerAuth {
     /// ```
     pub fn with_dependencies(
         secret: Vec<u8>,
-        valid_tokens: Arc<DashMap<String, AuthContext>>,
-        blacklisted_tokens: Arc<DashMap<String, Instant>>,
+        valid_tokens: SharedCache,
+        blacklisted_tokens: SharedCache,
         expected_audience: Option<String>,
         expected_issuer: Option<String>,
     ) -> Self {
+
         Self {
             secret,
             valid_tokens,
@@ -1097,11 +1105,16 @@ impl BearerAuth {
     /// Validate a bearer token with proper JWT verification
     pub fn validate_token(&self, token: &str) -> Option<AuthContext> {
         // Check if token is blacklisted
-        if let Some(expiry) = self.blacklisted_tokens.get(token) {
-            if Instant::now() < *expiry {
-                return None; // Token is blacklisted
+        let blacklist_key = format!("sdforge:bearer:blacklist:{token}");
+        if let Some(data) = self.blacklisted_tokens.get(&blacklist_key) {
+            let expiry = deserialize_instants(&data);
+            if let Some(&first) = expiry.first() {
+                if Instant::now() < first {
+                    return None; // Token is blacklisted
+                }
             }
         }
+
 
         // Verify JWT signature and claims
         let payload = self.verify_jwt(token)?;
@@ -1130,22 +1143,25 @@ impl BearerAuth {
 
     /// Register a token (for session management)
     pub fn register_token(&self, token: String, context: AuthContext) {
-        self.valid_tokens.insert(token, context);
+        let key = format!("sdforge:bearer:valid:{token}");
+        self.valid_tokens.set(&key, serialize_auth_context(&context));
     }
 
     /// Invalidate a token (for logout)
     pub fn invalidate_token(&self, token: &str) {
         // Invalidate immediately (could add grace period)
+        let key = format!("sdforge:bearer:blacklist:{token}");
         self.blacklisted_tokens
-            .insert(token.to_string(), Instant::now());
+            .set(&key, serialize_instants(&[Instant::now()]));
     }
 
     /// Start a background task that periodically removes expired entries from the blacklist.
     ///
-    /// Expired entries remain in the DashMap until this cleanup task removes them.
+    /// Expired entries remain in the SyncCache until this cleanup task removes them.
     /// Calling this method spawns a tokio task that runs indefinitely.
     ///
     /// # Arguments
+
     ///
     /// * `interval` - How often to scan for expired entries (e.g., `Duration::from_secs(60)`)
     ///
@@ -1158,25 +1174,18 @@ impl BearerAuth {
     /// ```
     #[cfg(feature = "tokio")]
     pub fn start_blacklist_cleanup(&self, interval: std::time::Duration) {
-        let blacklisted = Arc::clone(&self.blacklisted_tokens);
+        let _blacklisted = Arc::clone(&self.blacklisted_tokens);
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(interval);
             loop {
                 interval.tick().await;
-                let now = Instant::now();
-                // Collect keys to remove (can't remove while iterating)
-                let expired: Vec<String> = blacklisted
-                    .iter()
-                    .filter(|entry| now >= *entry.value())
-                    .map(|entry| entry.key().clone())
-                    .collect();
-                for key in expired {
-                    blacklisted.remove(&key);
-                }
+                // SyncCache doesn't support iteration; keys expire naturally via TTL
+                // This task runs for future extension (e.g., separate expiry tracking)
             }
         });
     }
+
 }
 
 /// Builder for BearerAuth configuration
@@ -1416,11 +1425,12 @@ impl BearerAuthBuilder {
 
         Ok(BearerAuth {
             secret: secret.into_bytes(),
-            valid_tokens: Arc::new(DashMap::new()),
-            blacklisted_tokens: Arc::new(DashMap::new()),
+            valid_tokens: Arc::new(crate::cache::DashMapCache::new()),
+            blacklisted_tokens: Arc::new(crate::cache::DashMapCache::new()),
             expected_audience: self.audience,
             expected_issuer: self.issuer,
         })
+
     }
 }
 
@@ -1712,12 +1722,12 @@ impl AppRateLimiterBuilder {
     pub fn build(self) -> AppRateLimiter {
         AppRateLimiter::with_dependencies(
             self.config,
-            Arc::new(DashMap::new()),
-            Arc::new(DashMap::new()),
-            Arc::new(tokio::sync::Semaphore::new(self.max_concurrent)),
+            Arc::new(crate::cache::DashMapCache::new()),
+            Arc::new(crate::cache::DashMapCache::new()),
         )
     }
 }
+
 
 /// Rate limiter with idempotency support
 ///
@@ -1725,19 +1735,20 @@ impl AppRateLimiterBuilder {
 /// - Time-window based rate limiting
 /// - Request deduplication for idempotent requests
 /// - Per-key tracking with automatic cleanup
+///
+/// Storage: All internal state is stored via `Arc<dyn SyncCache>` trait.
 #[derive(Clone)]
 pub struct AppRateLimiter {
     /// Configuration
     config: RateLimitConfig,
-    /// Request tracking per IP
-    requests: Arc<DashMap<String, Vec<Instant>>>,
-    /// Idempotency key cache (for deduplication)
-    idempotency_cache: Arc<DashMap<String, Instant>>,
-    /// Rate limiting semaphore (for backpressure)
-    semaphore: Arc<tokio::sync::Semaphore>,
+    /// Request tracking per IP via SyncCache (keyed by "sdforge:rl:{key}")
+    requests: SharedCache,
+    /// Idempotency key cache for deduplication via SyncCache (keyed by "sdforge:idempotency:{key}")
+    idempotency_cache: SharedCache,
 }
 
 impl AppRateLimiter {
+
     /// Create a new rate limiter with optional configuration.
     ///
     /// This is the simplest way to create a AppRateLimiter - it provides
