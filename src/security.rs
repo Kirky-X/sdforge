@@ -4,27 +4,145 @@
 //! This module provides utilities for securing API endpoints.
 //! Requires the `http` feature.
 
+use crate::cache::SharedCache;
 use axum::{
     body::Body,
     http::{HeaderValue, Request, StatusCode},
     middleware::Next,
     response::Response,
 };
-use dashmap::DashMap;
 use hmac::{Hmac, Mac};
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, ser::SerializeStruct, Serializer};
 use sha2::Sha256;
 use std::future::Future;
 use std::pin::Pin;
+
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 use uuid::Uuid;
 
 // =============================================================================
+// Serialization Helpers for SyncCache Storage
+// =============================================================================
+
+/// Serialize a list of Instants to bytes using bincode
+fn serialize_instants(insts: &[Instant]) -> Vec<u8> {
+    let as_i64: Vec<i64> = insts.iter().map(|i| i.elapsed().as_secs() as i64).collect();
+    bincode::serialize(&as_i64).unwrap_or_default()
+}
+
+/// Deserialize a list of Instants from bytes using bincode
+fn deserialize_instants(data: &[u8]) -> Vec<Instant> {
+    let as_i64: Vec<i64> = match bincode::deserialize(data) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    as_i64
+        .iter()
+        .map(|&s| Instant::now() - Duration::from_secs(s as u64))
+        .collect()
+}
+
+/// Serialize a list of permissions (Vec<String>) to bytes
+fn serialize_permissions(perms: &[String]) -> Vec<u8> {
+    bincode::serialize(perms).unwrap_or_default()
+}
+
+/// Deserialize a list of permissions from bytes
+fn deserialize_permissions(data: &[u8]) -> Vec<String> {
+    bincode::deserialize(data).unwrap_or_default()
+}
+
+/// Serialize AuthContext to bytes using bincode
+#[allow(dead_code)]
+fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {
+    bincode::serialize(ctx).unwrap_or_default()
+}
+
+/// Deserialize AuthContext from bytes using bincode
+#[allow(dead_code)]
+fn deserialize_auth_context(data: &[u8]) -> Option<AuthContext> {
+    bincode::deserialize(data).ok()
+}
+
+/// AuditResult custom Serialize: produces `{"status":"success"}` / `{"status":"failure","message":"..."}`
+impl Serialize for AuditResult {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            AuditResult::Success => {
+                let mut s = serializer.serialize_struct("AuditResult", 1)?;
+                s.serialize_field("status", "success")?;
+                s.end()
+            }
+            AuditResult::Failure { message } => {
+                let mut s = serializer.serialize_struct("AuditResult", 2)?;
+                s.serialize_field("status", "failure")?;
+                s.serialize_field("message", message)?;
+                s.end()
+            }
+        }
+    }
+}
+
+/// Parse a single AuditLog from a serde_json::Value object.
+fn parse_audit_log(v: &serde_json::Value) -> Option<AuditLog> {
+    let obj = v.as_object()?;
+    let id = obj.get("id")?.as_str()?.to_string();
+    let timestamp = obj.get("timestamp")?.as_i64()?;
+    let user_id = obj.get("user_id").and_then(|v| v.as_str().map(String::from));
+    let action = obj.get("action")?.as_str()?.to_string();
+    let resource = obj.get("resource")?.as_str()?.to_string();
+
+    // Parse result: {"status": "success"} or {"status": "failure", "message": "..."}
+    let result_val = obj.get("result")?.as_object()?;
+    let status = result_val.get("status")?.as_str()?;
+    let result = match status {
+        "success" => AuditResult::Success,
+        "failure" => {
+            let msg = result_val.get("message")?.as_str()?.to_string();
+            AuditResult::Failure { message: msg }
+        }
+        _ => return None,
+    };
+
+    // Parse metadata: AuthMetadata
+    let meta_val = obj.get("metadata")?.as_object()?;
+    let client_ip = meta_val.get("client_ip").and_then(|v| v.as_str()).map(String::from);
+    let user_agent = meta_val.get("user_agent").and_then(|v| v.as_str()).map(String::from);
+    let request_id = meta_val.get("request_id").and_then(|v| v.as_str()).map(String::from).unwrap_or_default();
+    let timestamp_meta = meta_val.get("timestamp").and_then(|v| v.as_i64()).unwrap_or(0);
+
+    Some(AuditLog {
+        id,
+        timestamp,
+        user_id,
+        action,
+        resource,
+        result,
+        metadata: AuthMetadata { client_ip, user_agent, request_id, timestamp: timestamp_meta },
+    })
+}
+
+fn serialize_audit_logs(logs: &[AuditLog]) -> Vec<u8> {
+    serde_json::to_vec(logs).unwrap_or_default()
+}
+
+fn deserialize_audit_logs(data: &[u8]) -> Vec<AuditLog> {
+    match serde_json::from_slice::<serde_json::Value>(data) {
+        Ok(serde_json::Value::Array(arr)) => arr.iter().filter_map(parse_audit_log).collect(),
+        Ok(serde_json::Value::Object(_)) => {
+            parse_audit_log(&serde_json::from_slice(data).unwrap()).into_iter().collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
+// =============================================================================
 // Feature Layer Trait Interfaces
 // =============================================================================
+
 
 /// Feature layer trait for API key authentication.
 ///
@@ -222,15 +340,19 @@ impl AuthExtractor {
 /// - Valid API keys storage with permissions mapping (hashed for security)
 /// - Rate limiting on validation attempts to prevent brute force attacks
 /// - Per-IP attempt tracking with automatic cleanup
+///
+/// Storage: All internal state is stored via `Arc<dyn SyncCache>` trait,
+/// allowing injection of custom storage backends for testing or production.
 #[derive(Clone)]
 pub struct AppApiKeyAuth {
-    /// Valid API keys (stored as SHA256 hash -> permissions)
-    valid_keys: Arc<DashMap<String, Vec<String>>>,
-    /// Failed attempt tracking (IP -> attempts with timestamps)
-    failed_attempts: Arc<DashMap<String, Vec<Instant>>>,
+    /// Valid API keys (stored as SHA256 hash -> permissions) via SyncCache
+    valid_keys: SharedCache,
+    /// Failed attempt tracking (IP -> attempts with timestamps) via SyncCache
+    failed_attempts: SharedCache,
     /// Rate limit configuration
     rate_limit_config: Arc<RateLimitConfig>,
 }
+
 
 impl AppApiKeyAuth {
     /// Create new API key authentication with default rate limiting
@@ -241,19 +363,23 @@ impl AppApiKeyAuth {
     /// Create API key authentication with custom rate limiting
     pub fn with_rate_limit(config: RateLimitConfig) -> Self {
         Self {
-            valid_keys: Arc::new(DashMap::new()),
-            failed_attempts: Arc::new(DashMap::new()),
+            valid_keys: Arc::new(crate::cache::DashMapCache::new()),
+            failed_attempts: Arc::new(crate::cache::DashMapCache::new()),
             rate_limit_config: Arc::new(config),
         }
     }
 
     /// Create with dependencies (for full DI mode)
+    ///
+    /// Accepts `Arc<dyn SyncCache>` for storage, enabling custom backends
+    /// (e.g., distributed cache, persistent storage) for production use.
     pub fn with_dependencies(
-        valid_keys: Arc<DashMap<String, Vec<String>>>,
-        failed_attempts: Arc<DashMap<String, Vec<Instant>>>,
+        valid_keys: SharedCache,
+        failed_attempts: SharedCache,
         rate_limit_config: Arc<RateLimitConfig>,
     ) -> Self {
         Self {
+
             valid_keys,
             failed_attempts,
             rate_limit_config,
