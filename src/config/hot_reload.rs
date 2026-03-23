@@ -7,8 +7,8 @@ use std::path::PathBuf;
 
 use tokio::sync::mpsc;
 
-use crate::AppConfig;
 use crate::config::ConfigError;
+use crate::AppConfig;
 
 /// Configuration event type for hot reload
 #[derive(Debug, Clone)]
@@ -191,10 +191,10 @@ mod tests {
             host = "localhost"
             port = 8080
             request_timeout_secs = 30
-            
+
             [authentication]
             type = "none"
-            
+
             [logging]
             level = "info"
             format = "json"

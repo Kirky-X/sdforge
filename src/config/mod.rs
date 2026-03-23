@@ -690,4 +690,485 @@ mod tests {
         };
         assert!(config.validate().is_ok());
     }
+
+    #[test]
+    fn test_app_config_builder_with_rate_limit() {
+        let config = AppConfig::builder()
+            .rate_limit(RateLimitConfigFile {
+                requests: 1000,
+                window_seconds: 60,
+            })
+            .build();
+        assert!(config.rate_limit.is_some());
+        let rl = config.rate_limit.unwrap();
+        assert_eq!(rl.requests, 1000);
+        assert_eq!(rl.window_seconds, 60);
+    }
+
+    #[test]
+    fn test_app_config_builder_with_request_size() {
+        let config = AppConfig::builder()
+            .request_size(RequestSizeConfig {
+                max_json_size: 2048,
+                max_file_size: 4096,
+                max_form_size: 1024,
+            })
+            .build();
+        assert!(config.request_size.is_some());
+        let rs = config.request_size.unwrap();
+        assert_eq!(rs.max_json_size, 2048);
+        assert_eq!(rs.max_file_size, 4096);
+        assert_eq!(rs.max_form_size, 1024);
+    }
+
+    #[test]
+    fn test_app_config_builder_with_timeout() {
+        let config = AppConfig::builder()
+            .timeout(TimeoutConfig {
+                default_timeout_secs: 60,
+                route_timeouts: std::collections::HashMap::new(),
+            })
+            .build();
+        assert!(config.timeout.is_some());
+        assert_eq!(config.timeout.unwrap().default_timeout_secs, 60);
+    }
+
+    #[test]
+    fn test_app_config_builder_full() {
+        let config = AppConfig::builder()
+            .server(ServerConfig {
+                host: "0.0.0.0".to_string(),
+                port: 8080,
+                request_timeout_secs: 120,
+                cors: None,
+            })
+            .authentication(AuthConfig::ApiKey {
+                header_name: "X-Auth".to_string(),
+                prefix: "token-".to_string(),
+            })
+            .rate_limit(RateLimitConfigFile {
+                requests: 500,
+                window_seconds: 30,
+            })
+            .request_size(RequestSizeConfig::default())
+            .timeout(TimeoutConfig::default())
+            .build();
+        assert_eq!(config.server.host, "0.0.0.0");
+        assert_eq!(config.server.port, 8080);
+        assert!(config.rate_limit.is_some());
+        assert!(config.request_size.is_some());
+        assert!(config.timeout.is_some());
+    }
+
+    #[test]
+    fn test_server_config_serialization() {
+        let config = ServerConfig {
+            host: "localhost".to_string(),
+            port: 9000,
+            request_timeout_secs: 45,
+            cors: None,
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: ServerConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.host, "localhost");
+        assert_eq!(deserialized.port, 9000);
+        assert_eq!(deserialized.request_timeout_secs, 45);
+    }
+
+    #[test]
+    fn test_server_config_with_cors() {
+        let config = ServerConfig {
+            host: "0.0.0.0".to_string(),
+            port: 3000,
+            request_timeout_secs: 30,
+            cors: Some(CorsConfig {
+                allowed_origins: vec!["http://localhost:3000".to_string()],
+                allowed_methods: vec!["GET".to_string()],
+                allowed_headers: vec!["Authorization".to_string()],
+            }),
+        };
+        assert!(config.cors.is_some());
+        let cors = config.cors.unwrap();
+        assert_eq!(cors.allowed_origins.len(), 1);
+    }
+
+    #[test]
+    fn test_auth_config_api_key_serialization() {
+        let config = AuthConfig::ApiKey {
+            header_name: "X-API-Key".to_string(),
+            prefix: "sk-".to_string(),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("api_key"));
+        assert!(json.contains("X-API-Key"));
+        let deserialized: AuthConfig = serde_json::from_str(&json).unwrap();
+        match deserialized {
+            AuthConfig::ApiKey {
+                header_name,
+                prefix,
+            } => {
+                assert_eq!(header_name, "X-API-Key");
+                assert_eq!(prefix, "sk-");
+            }
+            _ => panic!("Expected ApiKey variant"),
+        }
+    }
+
+    #[test]
+    fn test_auth_config_jwt_serialization() {
+        let config = AuthConfig::Jwt {
+            secret: "my-secret-key".to_string(),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("jwt"));
+        let deserialized: AuthConfig = serde_json::from_str(&json).unwrap();
+        match deserialized {
+            AuthConfig::Jwt { secret } => {
+                assert_eq!(secret, "my-secret-key");
+            }
+            _ => panic!("Expected Jwt variant"),
+        }
+    }
+
+    #[test]
+    fn test_auth_config_none_serialization() {
+        let config = AuthConfig::None;
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("none"));
+        let deserialized: AuthConfig = serde_json::from_str(&json).unwrap();
+        assert!(matches!(deserialized, AuthConfig::None));
+    }
+
+    #[test]
+    fn test_rate_limit_config_serialization() {
+        let config = RateLimitConfigFile {
+            requests: 500,
+            window_seconds: 120,
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: RateLimitConfigFile = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.requests, 500);
+        assert_eq!(deserialized.window_seconds, 120);
+    }
+
+    #[test]
+    fn test_rate_limit_config_zero_requests() {
+        let config = RateLimitConfigFile {
+            requests: 0,
+            window_seconds: 60,
+        };
+        assert_eq!(config.requests, 0);
+    }
+
+    #[test]
+    fn test_rate_limit_config_zero_window() {
+        let config = RateLimitConfigFile {
+            requests: 100,
+            window_seconds: 0,
+        };
+        assert_eq!(config.window_seconds, 0);
+    }
+
+    #[test]
+    fn test_request_size_config_serialization() {
+        let config = RequestSizeConfig {
+            max_json_size: 2 * 1024 * 1024,
+            max_file_size: 200 * 1024 * 1024,
+            max_form_size: 20 * 1024 * 1024,
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: RequestSizeConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.max_json_size, 2 * 1024 * 1024);
+        assert_eq!(deserialized.max_file_size, 200 * 1024 * 1024);
+        assert_eq!(deserialized.max_form_size, 20 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_request_size_config_partial_json() {
+        let json = r#"{"max_json_size": 524288}"#;
+        let config: RequestSizeConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.max_json_size, 524288);
+        assert_eq!(config.max_file_size, default_max_file_size());
+        assert_eq!(config.max_form_size, default_max_form_size());
+    }
+
+    #[test]
+    fn test_timeout_config_custom_route_timeouts() {
+        let mut route_timeouts = std::collections::HashMap::new();
+        route_timeouts.insert("/api/custom".to_string(), 600);
+        route_timeouts.insert("/api/long".to_string(), 900);
+        let config = TimeoutConfig {
+            default_timeout_secs: 45,
+            route_timeouts,
+        };
+        assert_eq!(config.get_timeout("/api/custom"), 600);
+        assert_eq!(config.get_timeout("/api/long"), 900);
+        assert_eq!(config.get_timeout("/api/other"), 45);
+    }
+
+    #[test]
+    fn test_timeout_config_serialization() {
+        let config = TimeoutConfig {
+            default_timeout_secs: 60,
+            route_timeouts: std::collections::HashMap::new(),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: TimeoutConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.default_timeout_secs, 60);
+    }
+
+    #[test]
+    fn test_cors_config_validate_empty_origins() {
+        let config = CorsConfig {
+            allowed_origins: vec![],
+            allowed_methods: vec!["GET".to_string()],
+            allowed_headers: vec![],
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("empty"));
+    }
+
+    #[test]
+    fn test_cors_config_validate_invalid_origin_no_scheme() {
+        let config = CorsConfig {
+            allowed_origins: vec!["localhost:3000".to_string()],
+            allowed_methods: vec!["GET".to_string()],
+            allowed_headers: vec![],
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid CORS origin"));
+    }
+
+    #[test]
+    fn test_cors_config_validate_invalid_origin_http_only() {
+        let config = CorsConfig {
+            allowed_origins: vec!["http://".to_string()],
+            allowed_methods: vec!["GET".to_string()],
+            allowed_headers: vec![],
+        };
+        let result = config.validate();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cors_config_validate_valid_origins() {
+        let config = CorsConfig {
+            allowed_origins: vec![
+                "http://localhost:3000".to_string(),
+                "https://example.com".to_string(),
+            ],
+            allowed_methods: vec!["GET".to_string(), "POST".to_string()],
+            allowed_headers: vec!["Content-Type".to_string()],
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_tls_config_getters() {
+        let config = TlsConfig {
+            cert_path: "/etc/ssl/cert.pem".to_string(),
+            key_path: "/etc/ssl/key.pem".to_string(),
+        };
+        assert_eq!(config.cert_path(), "/etc/ssl/cert.pem");
+        assert_eq!(config.key_path(), "/etc/ssl/key.pem");
+    }
+
+    #[test]
+    fn test_tls_config_serialization() {
+        let config = TlsConfig {
+            cert_path: "/path/to/cert.pem".to_string(),
+            key_path: "/path/to/key.pem".to_string(),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: TlsConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.cert_path(), "/path/to/cert.pem");
+        assert_eq!(deserialized.key_path(), "/path/to/key.pem");
+    }
+
+    #[test]
+    fn test_tracing_config_default() {
+        let config = TracingConfig::default();
+        assert!(!config.enabled);
+    }
+
+    #[test]
+    fn test_tracing_config_enabled() {
+        let config = TracingConfig { enabled: true };
+        assert!(config.enabled);
+    }
+
+    #[test]
+    fn test_tracing_config_serialization() {
+        let config = TracingConfig { enabled: true };
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: TracingConfig = serde_json::from_str(&json).unwrap();
+        assert!(deserialized.enabled);
+    }
+
+    #[test]
+    fn test_env_helper_default() {
+        let config = EnvHelper::default();
+        assert!(config.environment.is_empty());
+    }
+
+    #[test]
+    fn test_env_helper_custom() {
+        let config = EnvHelper {
+            environment: "production".to_string(),
+        };
+        assert_eq!(config.environment, "production");
+    }
+
+    #[test]
+    fn test_env_helper_serialization() {
+        let config = EnvHelper {
+            environment: "staging".to_string(),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: EnvHelper = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.environment, "staging");
+    }
+
+    #[test]
+    fn test_api_config_default() {
+        let config = ApiConfig::default();
+        assert!(config.prefix.is_empty());
+        assert!(config.default_version.is_empty());
+    }
+
+    #[test]
+    fn test_api_config_custom() {
+        let config = ApiConfig {
+            prefix: "/api".to_string(),
+            default_version: "v1".to_string(),
+        };
+        assert_eq!(config.prefix, "/api");
+        assert_eq!(config.default_version, "v1");
+    }
+
+    #[test]
+    fn test_api_config_serialization() {
+        let config = ApiConfig {
+            prefix: "/v2".to_string(),
+            default_version: "v2".to_string(),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: ApiConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.prefix, "/v2");
+        assert_eq!(deserialized.default_version, "v2");
+    }
+
+    #[test]
+    fn test_rate_limit_endpoint_config() {
+        let config = RateLimitEndpointConfig {
+            path: "/api/heavy".to_string(),
+            config: RateLimitConfigFile {
+                requests: 10,
+                window_seconds: 60,
+            },
+        };
+        assert_eq!(config.path, "/api/heavy");
+        assert_eq!(config.config.requests, 10);
+    }
+
+    #[test]
+    fn test_rate_limit_endpoint_config_serialization() {
+        let config = RateLimitEndpointConfig {
+            path: "/api/upload".to_string(),
+            config: RateLimitConfigFile {
+                requests: 5,
+                window_seconds: 300,
+            },
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: RateLimitEndpointConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.path, "/api/upload");
+        assert_eq!(deserialized.config.requests, 5);
+        assert_eq!(deserialized.config.window_seconds, 300);
+    }
+
+    #[test]
+    fn test_config_error_unknown_variant() {
+        let error = ConfigError::Unknown("Something went wrong".to_string());
+        assert!(error.to_string().contains("Unknown"));
+        assert!(error.to_string().contains("Something went wrong"));
+    }
+
+    #[test]
+    fn test_default_timeout_function() {
+        assert_eq!(default_timeout(), 30);
+    }
+
+    #[test]
+    fn test_default_max_json_size_function() {
+        assert_eq!(default_max_json_size(), 1024 * 1024);
+    }
+
+    #[test]
+    fn test_default_max_file_size_function() {
+        assert_eq!(default_max_file_size(), 100 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_default_max_form_size_function() {
+        assert_eq!(default_max_form_size(), 10 * 1024 * 1024);
+    }
+
+    #[test]
+    fn test_default_route_timeouts_function() {
+        let route_timeouts = default_route_timeouts();
+        assert_eq!(route_timeouts.get("/api/upload"), Some(&300));
+        assert_eq!(route_timeouts.get("/api/export"), Some(&120));
+    }
+
+    #[test]
+    fn test_app_config_serialization_roundtrip() {
+        let original = AppConfig {
+            server: ServerConfig {
+                host: "127.0.0.1".to_string(),
+                port: 4000,
+                request_timeout_secs: 90,
+                cors: None,
+            },
+            authentication: AuthConfig::Jwt {
+                secret: "test-secret".to_string(),
+            },
+            rate_limit: Some(RateLimitConfigFile {
+                requests: 200,
+                window_seconds: 45,
+            }),
+            request_size: Some(RequestSizeConfig::default()),
+            timeout: Some(TimeoutConfig::default()),
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.server.host, "127.0.0.1");
+        assert_eq!(deserialized.server.port, 4000);
+        assert!(deserialized.rate_limit.is_some());
+    }
+
+    #[test]
+    fn test_auth_config_equality() {
+        let a = AuthConfig::None;
+        let b = AuthConfig::None;
+        assert!(matches!(a, AuthConfig::None));
+        assert!(matches!(b, AuthConfig::None));
+    }
+
+    #[test]
+    fn test_cors_config_clone() {
+        let config = CorsConfig {
+            allowed_origins: vec!["http://localhost:3000".to_string()],
+            allowed_methods: vec!["GET".to_string()],
+            allowed_headers: vec!["Authorization".to_string()],
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.allowed_origins, config.allowed_origins);
+        assert_eq!(cloned.allowed_methods, config.allowed_methods);
+    }
 }
