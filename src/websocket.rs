@@ -217,7 +217,7 @@ impl Default for RateLimitConfig {
 /// # Example
 ///
 /// ```ignore
-/// use sdforge::websocket::WebSocketConfig;
+/// use sdforge::websocket::{WebSocketConfig, RateLimitConfig};
 /// use sdforge::security::BearerAuth;
 ///
 /// let auth = BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ").ok();
@@ -460,6 +460,9 @@ inventory::collect!(WebSocketRoute);
 ///
 /// Usage:
 /// ```ignore
+/// use axum::response::IntoResponse;
+/// use sdforge::websocket::ValidatedWebSocketUpgrade;
+///
 /// pub async fn ws_handler(ws: ValidatedWebSocketUpgrade) -> impl IntoResponse {
 ///     ws // performs upgrade automatically via IntoResponse
 /// }
@@ -473,9 +476,8 @@ pub struct ValidatedWebSocketUpgrade {
 #[cfg(feature = "websocket")]
 impl IntoResponse for ValidatedWebSocketUpgrade {
     fn into_response(self) -> Response {
-        self.ws.on_upgrade(move |socket| {
-            handle_socket(socket, self.manager.clone())
-        })
+        self.ws
+            .on_upgrade(move |socket| handle_socket(socket, self.manager.clone()))
     }
 }
 
@@ -499,16 +501,14 @@ where
 
         // Get AppState from request extensions (injected via with_state by axum)
         // The state parameter is &Arc<AppState> since that's what we registered
-        let app_state = req
-            .extensions()
-            .get::<Arc<AppState>>()
-            .cloned();
+        let app_state = req.extensions().get::<Arc<AppState>>().cloned();
 
         // Validate auth if configured
         if let Some(ref state_ref) = app_state {
             if let Some(ref auth) = state_ref.config.auth {
                 let token = bearer_token.ok_or(StatusCode::UNAUTHORIZED)?;
-                auth.validate_token(&token).ok_or(StatusCode::UNAUTHORIZED)?;
+                auth.validate_token(&token)
+                    .ok_or(StatusCode::UNAUTHORIZED)?;
             }
         }
 
@@ -1148,10 +1148,9 @@ mod tests {
     /// Test WebSocketConfig with BearerAuth configured
     #[test]
     fn test_websocket_config_with_auth() {
-        let auth = crate::security::BearerAuth::try_new(
-            "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-        )
-        .expect("valid secret");
+        let auth =
+            crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+                .expect("valid secret");
         let config = WebSocketConfig {
             auth: Some(auth),
             rate_limit: RateLimitConfig::default(),
@@ -1164,10 +1163,9 @@ mod tests {
     fn test_app_state_with_config() {
         use std::sync::Arc;
         let manager = Arc::new(ConnectionManager::new());
-        let auth = crate::security::BearerAuth::try_new(
-            "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-        )
-        .expect("valid secret");
+        let auth =
+            crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+                .expect("valid secret");
         let config = WebSocketConfig {
             auth: Some(auth),
             rate_limit: RateLimitConfig::default(),
@@ -1204,5 +1202,554 @@ mod tests {
             .and_then(|h| h.strip_prefix("Bearer "))
             .map(String::from);
         assert!(token.is_none());
+    }
+
+    #[test]
+    fn test_websocket_message_request_empty_fields() {
+        let msg = WebSocketMessage::Request {
+            id: String::new(),
+            method: String::new(),
+            params: serde_json::json!(null),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            decoded,
+            WebSocketMessage::Request { ref id, ref method, ref params }
+                if id.is_empty() && method.is_empty() && params.is_null()
+        ));
+    }
+
+    #[test]
+    fn test_websocket_message_request_unicode() {
+        let msg = WebSocketMessage::Request {
+            id: "日本語".to_string(),
+            method: "方法".to_string(),
+            params: serde_json::json!({"键": "值"}),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert!(matches!(
+            decoded,
+            WebSocketMessage::Request { ref id, ref method, .. }
+                if id == "日本語" && method == "方法"
+        ));
+    }
+
+    #[test]
+    fn test_websocket_message_request_large_params() {
+        let large_array: Vec<i32> = (0..10000).collect();
+        let msg = WebSocketMessage::Request {
+            id: "large".to_string(),
+            method: "test".to_string(),
+            params: serde_json::json!({ "data": large_array }),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.len() > 40000);
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert!(matches!(decoded, WebSocketMessage::Request { .. }));
+    }
+
+    #[test]
+    fn test_websocket_message_response_empty_result() {
+        let msg = WebSocketMessage::Response {
+            id: "test".to_string(),
+            result: serde_json::json!(null),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert!(matches!(decoded, WebSocketMessage::Response { .. }));
+    }
+
+    #[test]
+    fn test_websocket_message_response_nested_result() {
+        let nested = serde_json::json!({
+            "level1": {
+                "level2": {
+                    "level3": "deep"
+                }
+            }
+        });
+        let msg = WebSocketMessage::Response {
+            id: "nested".to_string(),
+            result: nested.clone(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        if let WebSocketMessage::Response { result, .. } = decoded {
+            assert_eq!(result["level1"]["level2"]["level3"], "deep");
+        } else {
+            panic!("Expected Response");
+        }
+    }
+
+    #[test]
+    fn test_websocket_message_error_empty_error() {
+        let msg = WebSocketMessage::Error {
+            id: String::new(),
+            error: String::new(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert!(matches!(decoded, WebSocketMessage::Error { .. }));
+    }
+
+    #[test]
+    fn test_websocket_message_error_long_message() {
+        let long_error = "x".repeat(10000);
+        let msg = WebSocketMessage::Error {
+            id: "err".to_string(),
+            error: long_error.clone(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        if let WebSocketMessage::Error { error, .. } = decoded {
+            assert_eq!(error.len(), 10000);
+        } else {
+            panic!("Expected Error");
+        }
+    }
+
+    #[test]
+    fn test_websocket_message_notification_empty_event() {
+        let msg = WebSocketMessage::Notification {
+            event: String::new(),
+            data: serde_json::json!({}),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        assert!(matches!(decoded, WebSocketMessage::Notification { .. }));
+    }
+
+    #[test]
+    fn test_websocket_message_notification_array_data() {
+        let msg = WebSocketMessage::Notification {
+            event: "list_update".to_string(),
+            data: serde_json::json!([1, 2, 3, 4, 5]),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let decoded: WebSocketMessage = serde_json::from_str(&json).unwrap();
+        if let WebSocketMessage::Notification { data, .. } = decoded {
+            assert_eq!(data.as_array().unwrap().len(), 5);
+        } else {
+            panic!("Expected Notification");
+        }
+    }
+
+    #[test]
+    fn test_websocket_message_deserialize_missing_type() {
+        let json = r#"{"id":"123","method":"test","params":{}}"#;
+        let result: Result<WebSocketMessage, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_websocket_message_deserialize_invalid_type() {
+        let json = r#"{"type":"invalid","id":"123"}"#;
+        let result: Result<WebSocketMessage, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_websocket_message_deserialize_request_missing_field() {
+        let json = r#"{"type":"request","id":"123"}"#;
+        let result: Result<WebSocketMessage, _> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_websocket_connection_id_accessor() {
+        let (conn, _) = WebSocketConnection::new("unique-id-123".to_string());
+        assert_eq!(conn.id(), "unique-id-123");
+    }
+
+    #[test]
+    fn test_websocket_connection_clone() {
+        let (conn, _) = WebSocketConnection::new("clone-test".to_string());
+        let cloned = conn.clone();
+        assert_eq!(cloned.id(), "clone-test");
+    }
+
+    #[tokio::test]
+    async fn test_websocket_connection_send_success() {
+        let (conn, mut receiver) = WebSocketConnection::new("send-test".to_string());
+        let msg = WebSocketMessage::Notification {
+            event: "test".to_string(),
+            data: serde_json::json!({}),
+        };
+        let result = conn.send(msg.clone()).await;
+        let received = receiver.recv().await;
+        assert!(result.is_ok());
+        assert!(received.is_some());
+    }
+
+    #[test]
+    fn rate_limit_config_clone() {
+        let config = RateLimitConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.max_connections, cloned.max_connections);
+        assert_eq!(
+            config.max_messages_per_second,
+            cloned.max_messages_per_second
+        );
+    }
+
+    #[test]
+    fn rate_limit_config_debug() {
+        let config = RateLimitConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("max_messages_per_second"));
+        assert!(debug_str.contains("max_message_size"));
+        assert!(debug_str.contains("max_connections"));
+    }
+
+    #[test]
+    fn rate_limit_config_boundary_min_connections() {
+        let config = RateLimitConfig {
+            max_connections: 1,
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn rate_limit_config_boundary_max_connections() {
+        let config = RateLimitConfig {
+            max_connections: 100_000,
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn rate_limit_config_boundary_min_messages() {
+        let config = RateLimitConfig {
+            max_messages_per_second: 1,
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn rate_limit_config_boundary_max_messages() {
+        let config = RateLimitConfig {
+            max_messages_per_second: 1_000_000,
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn rate_limit_config_boundary_min_size() {
+        let config = RateLimitConfig {
+            max_message_size: 1,
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn rate_limit_config_boundary_max_size() {
+        let config = RateLimitConfig {
+            max_message_size: 100_000_000,
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn rate_limit_config_boundary_min_window() {
+        let config = RateLimitConfig {
+            rate_limit_window_seconds: 1,
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn rate_limit_config_boundary_max_window() {
+        let config = RateLimitConfig {
+            rate_limit_window_seconds: 86400,
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn websocket_config_clone() {
+        let config = WebSocketConfig::default();
+        let cloned = config.clone();
+        assert_eq!(config.auth.is_some(), cloned.auth.is_some());
+        assert_eq!(
+            config.rate_limit.max_connections,
+            cloned.rate_limit.max_connections
+        );
+    }
+
+    #[tokio::test]
+    async fn connection_manager_add_connection() {
+        let manager = ConnectionManager::new();
+        let (conn, _) = WebSocketConnection::new("test-conn-1".to_string());
+        manager
+            .add_connection("test-conn-1".to_string(), conn)
+            .await;
+        assert_eq!(manager.connection_count().await, 1);
+    }
+
+    #[tokio::test]
+    async fn connection_manager_remove_connection() {
+        let manager = ConnectionManager::new();
+        let (conn, _) = WebSocketConnection::new("test-conn-2".to_string());
+        manager
+            .add_connection("test-conn-2".to_string(), conn)
+            .await;
+        assert_eq!(manager.connection_count().await, 1);
+        manager.remove_connection("test-conn-2").await;
+        assert_eq!(manager.connection_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn connection_manager_get_connection() {
+        let manager = ConnectionManager::new();
+        let (conn, _) = WebSocketConnection::new("test-conn-3".to_string());
+        manager
+            .add_connection("test-conn-3".to_string(), conn)
+            .await;
+        let retrieved = manager.get_connection("test-conn-3").await;
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().id(), "test-conn-3");
+    }
+
+    #[tokio::test]
+    async fn connection_manager_get_nonexistent() {
+        let manager = ConnectionManager::new();
+        let retrieved = manager.get_connection("nonexistent").await;
+        assert!(retrieved.is_none());
+    }
+
+    #[tokio::test]
+    async fn connection_manager_multiple_connections() {
+        let manager = ConnectionManager::new();
+        for i in 0..10 {
+            let (conn, _) = WebSocketConnection::new(format!("conn-{}", i));
+            manager.add_connection(format!("conn-{}", i), conn).await;
+        }
+        assert_eq!(manager.connection_count().await, 10);
+    }
+
+    #[tokio::test]
+    async fn connection_manager_broadcast() {
+        let manager = ConnectionManager::new();
+        let (conn1, mut rx1) = WebSocketConnection::new("broadcast-1".to_string());
+        let (conn2, mut rx2) = WebSocketConnection::new("broadcast-2".to_string());
+        manager
+            .add_connection("broadcast-1".to_string(), conn1)
+            .await;
+        manager
+            .add_connection("broadcast-2".to_string(), conn2)
+            .await;
+        let msg = Arc::new(WebSocketMessage::Notification {
+            event: "broadcast".to_string(),
+            data: serde_json::json!({"msg": "hello"}),
+        });
+        manager.broadcast(&msg).await;
+        assert!(rx1.recv().await.is_some());
+        assert!(rx2.recv().await.is_some());
+        assert_eq!(manager.connection_count().await, 2);
+    }
+
+    #[tokio::test]
+    async fn connection_manager_default() {
+        let manager = ConnectionManager::default();
+        assert_eq!(manager.connection_count().await, 0);
+    }
+
+    #[test]
+    fn parse_websocket_message_empty_string() {
+        let result = parse_websocket_message("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_websocket_message_whitespace() {
+        let result = parse_websocket_message("   ");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_websocket_message_response_variant() {
+        let json = r#"{"type":"response","id":"resp-1","result":{"status":"success"}}"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_ok());
+        if let WebSocketMessage::Response { id, result } = result.unwrap() {
+            assert_eq!(id, "resp-1");
+            assert_eq!(result["status"], "success");
+        } else {
+            panic!("Expected Response");
+        }
+    }
+
+    #[test]
+    fn parse_websocket_message_error_variant() {
+        let json = r#"{"type":"error","id":"err-1","error":"Something failed"}"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_ok());
+        if let WebSocketMessage::Error { id, error } = result.unwrap() {
+            assert_eq!(id, "err-1");
+            assert_eq!(error, "Something failed");
+        } else {
+            panic!("Expected Error");
+        }
+    }
+
+    #[test]
+    fn parse_websocket_message_notification_variant() {
+        let json = r#"{"type":"notification","event":"update","data":{"value":42}}"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_ok());
+        if let WebSocketMessage::Notification { event, data } = result.unwrap() {
+            assert_eq!(event, "update");
+            assert_eq!(data["value"], 42);
+        } else {
+            panic!("Expected Notification");
+        }
+    }
+
+    #[test]
+    fn calculate_value_depth_primitive() {
+        let value = serde_json::json!(42);
+        let mut depth = 0;
+        assert_eq!(calculate_value_depth(&value, &mut depth), 0);
+    }
+
+    #[test]
+    fn calculate_value_depth_string() {
+        let value = serde_json::json!("hello");
+        let mut depth = 0;
+        assert_eq!(calculate_value_depth(&value, &mut depth), 0);
+    }
+
+    #[test]
+    fn calculate_value_depth_simple_object() {
+        let value = serde_json::json!({"a": 1});
+        let mut depth = 0;
+        assert_eq!(calculate_value_depth(&value, &mut depth), 1);
+    }
+
+    #[test]
+    fn calculate_value_depth_nested_object() {
+        let value = serde_json::json!({"a": {"b": {"c": 1}}});
+        let mut depth = 0;
+        assert_eq!(calculate_value_depth(&value, &mut depth), 3);
+    }
+
+    #[test]
+    fn calculate_value_depth_simple_array() {
+        let value = serde_json::json!([1, 2, 3]);
+        let mut depth = 0;
+        assert_eq!(calculate_value_depth(&value, &mut depth), 1);
+    }
+
+    #[test]
+    fn calculate_value_depth_nested_array() {
+        let value = serde_json::json!([[[1, 2], [3, 4]], [[5, 6]]]);
+        let mut depth = 0;
+        assert_eq!(calculate_value_depth(&value, &mut depth), 3);
+    }
+
+    #[test]
+    fn calculate_value_depth_mixed() {
+        let value = serde_json::json!({
+            "users": [
+                {"name": "Alice", "tags": ["a", "b"]},
+                {"name": "Bob", "tags": ["c"]}
+            ]
+        });
+        let mut depth = 0;
+        assert_eq!(calculate_value_depth(&value, &mut depth), 4);
+    }
+
+    #[test]
+    fn app_state_new_default_config() {
+        let manager = Arc::new(ConnectionManager::new());
+        let state = AppState::new(manager);
+        assert!(state.config.auth.is_none());
+    }
+
+    #[test]
+    fn app_state_clone() {
+        let manager = Arc::new(ConnectionManager::new());
+        let state = AppState::new(manager);
+        let cloned = state.clone();
+        assert!(cloned.config.auth.is_none());
+    }
+
+    #[test]
+    fn default_websocket_handler_returns_response_for_request() {
+        let handler = DefaultWebSocketHandler;
+        let request = WebSocketMessage::Request {
+            id: "handler-test".to_string(),
+            method: "custom_method".to_string(),
+            params: serde_json::json!({}),
+        };
+        let result = handler.handle(request).now_or_never().unwrap();
+        match result {
+            WebSocketMessage::Response { id, result } => {
+                assert_eq!(id, "handler-test");
+                assert_eq!(result["method"], "custom_method");
+            }
+            _ => panic!("Expected Response"),
+        }
+    }
+
+    #[test]
+    fn default_websocket_handler_passes_through_response() {
+        let handler = DefaultWebSocketHandler;
+        let response = WebSocketMessage::Response {
+            id: "pass-through".to_string(),
+            result: serde_json::json!({"key": "value"}),
+        };
+        let result = handler.handle(response.clone()).now_or_never().unwrap();
+        match result {
+            WebSocketMessage::Response { id, result } => {
+                assert_eq!(id, "pass-through");
+                assert_eq!(result["key"], "value");
+            }
+            _ => panic!("Expected Response"),
+        }
+    }
+
+    #[test]
+    fn default_websocket_handler_passes_through_error() {
+        let handler = DefaultWebSocketHandler;
+        let error = WebSocketMessage::Error {
+            id: "error-test".to_string(),
+            error: "Test error".to_string(),
+        };
+        let result = handler.handle(error.clone()).now_or_never().unwrap();
+        match result {
+            WebSocketMessage::Error { id, error } => {
+                assert_eq!(id, "error-test");
+                assert_eq!(error, "Test error");
+            }
+            _ => panic!("Expected Error"),
+        }
+    }
+
+    #[test]
+    fn default_websocket_handler_passes_through_notification() {
+        let handler = DefaultWebSocketHandler;
+        let notification = WebSocketMessage::Notification {
+            event: "test_event".to_string(),
+            data: serde_json::json!({"test": true}),
+        };
+        let result = handler.handle(notification.clone()).now_or_never().unwrap();
+        match result {
+            WebSocketMessage::Notification { event, data } => {
+                assert_eq!(event, "test_event");
+                assert_eq!(data["test"], true);
+            }
+            _ => panic!("Expected Notification"),
+        }
     }
 }
