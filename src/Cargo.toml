@@ -27,7 +27,7 @@ tower-http = { version = "0.6.8", optional = true, features = ["cors", "limit", 
 inventory = { version = "0.3", optional = true }
 figment = { version = "0.10", optional = true }
 tokio = { version = "1.49", optional = true, features = ["full"] }
-axum-extra = { version = "0.9", optional = true, features = ["typed-header"] }
+axum-extra = { version = "0.10", optional = true, features = ["typed-header"] }
 futures = { version = "0.3", optional = true }
 
 # MCP dependencies
@@ -73,8 +73,14 @@ toml = { version = "0.9", optional = true }
 schemars = { version = "0.8", optional = true }
 
 # Cache dependencies (按特性导入) - oxcache 自己管理 sha2/md5/bytes/http 等
-oxcache = { version = "0.2", path = "/home/dev/projects/oxcache", optional = true }
+oxcache = { version = "0.2", path = "/home/dev/projects/oxcache", features = ["rate-limiting"], optional = true }
 http = { version = "1.4", optional = true }
+
+# Database dependencies (按特性导入) - AppAuditLogger 可选持久化
+dbnexus = { path = "/home/dev/projects/dbnexus", optional = true }
+
+# Serialization for SyncCache storage values
+bincode = { version = "1.3", optional = true }
 
 # Logging - inklog 完全接管（tracing 作为公共接口保留，由 inklog 内部使用）
 tracing = { version = "0.1", optional = true }
@@ -92,7 +98,8 @@ tokio = { version = "1.49", features = ["rt", "rt-multi-thread", "macros"] }
 once_cell = "1.21"
 sdforge-macros = { version = "0.1.0", path = "../macros" }
 tempfile = "3.24"
-axum-test = "16.4"
+serial_test = "3.0"
+axum-test = "19"
 reqwest = { version = "0.12", features = ["json"] }
 criterion = "0.5"
 trybuild = "1.0"
@@ -150,6 +157,10 @@ security = [
     "password-hash",
     "rand",
     "regex",
+    "oxcache/rate-limiting",
+    "bincode",
+    "confers",
+    "cache",
 ]
 
 # Hot reload 特性
@@ -167,8 +178,8 @@ websocket = ["http", "streaming", "tokio-tungstenite", "axum-extra", "async-trai
 # gRPC 特性
 grpc = ["http", "tonic", "prost", "tonic-build"]
 
-# Cache 特性 - 仅保留 oxcache 和基础异步依赖，其他由 oxcache 自行管理
-cache = ["dep:http", "oxcache", "async-trait"]
+# Cache 特性 - oxcache 提供缓存抽象，rate-limiting 提供 TokenBucket
+cache = ["dep:http", "oxcache/rate-limiting", "async-trait"]
 
 # CLI 特性 - 日志由 inklog 管理
 cli = [
