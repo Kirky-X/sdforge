@@ -262,10 +262,9 @@ mod tests {
     /// Test GrpcServerConfig with auth configured
     #[test]
     fn test_grpc_server_config_with_auth() {
-        let auth = crate::security::BearerAuth::try_new(
-            "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-        )
-        .expect("valid secret");
+        let auth =
+            crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+                .expect("valid secret");
         let config = GrpcServerConfig {
             max_connections: 500,
             timeout_seconds: 60,
@@ -310,16 +309,23 @@ mod tests {
     /// Base64url encode (no padding) for JWT encoding.
     /// Standard base64 uses `+/=`; base64url uses `-_` with no padding.
     fn base64url_encode(input: &[u8]) -> String {
-        const ALPHABET: &[u8] =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         let mut result = String::new();
         let mut i = 0;
         while i < input.len() {
             let b0 = input[i] as usize;
-            let b1 = if i + 1 < input.len() { input[i + 1] as usize } else { 0 };
-            let b2 = if i + 2 < input.len() { input[i + 2] as usize } else { 0 };
+            let b1 = if i + 1 < input.len() {
+                input[i + 1] as usize
+            } else {
+                0
+            };
+            let b2 = if i + 2 < input.len() {
+                input[i + 2] as usize
+            } else {
+                0
+            };
 
-            result.push(ALPHABET[(b0 >> 2)] as char);
+            result.push(ALPHABET[b0 >> 2] as char);
             result.push(ALPHABET[((b0 & 0x03) << 4) | (b1 >> 4)] as char);
 
             if i + 1 < input.len() {
@@ -856,10 +862,7 @@ mod tests {
     async fn test_grpc_server_streaming_async() {
         // Test async streaming RPC
         async fn generate_stream() -> Vec<String> {
-            vec![
-                "async msg 1".to_string(),
-                "async msg 2".to_string(),
-            ]
+            vec!["async msg 1".to_string(), "async msg 2".to_string()]
         }
 
         let stream = generate_stream().await;
@@ -881,7 +884,7 @@ mod tests {
     #[test]
     fn test_grpc_protobuf_serialization() {
         // Test ProtoBuf-like serialization
-        use serde::{Serialize, Deserialize};
+        use serde::{Deserialize, Serialize};
 
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
         struct TestMessage {
@@ -905,7 +908,7 @@ mod tests {
     #[test]
     fn test_grpc_protobuf_deserialization() {
         // Test ProtoBuf-like deserialization
-        use serde::{Serialize, Deserialize};
+        use serde::{Deserialize, Serialize};
 
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
         struct TestMessage {
@@ -914,7 +917,8 @@ mod tests {
         }
 
         let json = r#"{"id":456,"name":"deser_test"}"#;
-        let deserialized: TestMessage = serde_json::from_str(json).expect("deserialization should succeed");
+        let deserialized: TestMessage =
+            serde_json::from_str(json).expect("deserialization should succeed");
 
         assert_eq!(deserialized.id, 456);
         assert_eq!(deserialized.name, "deser_test");
@@ -923,7 +927,7 @@ mod tests {
     #[test]
     fn test_grpc_protobuf_roundtrip() {
         // Test serialization/deserialization roundtrip
-        use serde::{Serialize, Deserialize};
+        use serde::{Deserialize, Serialize};
 
         #[derive(Debug, Serialize, Deserialize, PartialEq)]
         struct RoundtripMessage {
@@ -937,7 +941,8 @@ mod tests {
         };
 
         let serialized = serde_json::to_string(&original).expect("serialization should succeed");
-        let deserialized: RoundtripMessage = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let deserialized: RoundtripMessage =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
 
         assert_eq!(original, deserialized);
     }
@@ -969,8 +974,11 @@ mod tests {
         use crate::core::ApiError;
 
         // Test validation error
-        let validation_err = ApiError::validation_error("INVALID_PARAM", "Parameter validation failed");
-        assert!(validation_err.to_string().contains("Parameter validation failed"));
+        let validation_err =
+            ApiError::validation_error("INVALID_PARAM", "Parameter validation failed");
+        assert!(validation_err
+            .to_string()
+            .contains("Parameter validation failed"));
 
         // Test not found error
         let not_found_err = ApiError::NotFound {
@@ -996,6 +1004,865 @@ mod tests {
         assert!(result.is_err());
         if let Err(e) = result {
             assert!(e.to_string().contains("Async call failed"));
+        }
+    }
+
+    // ============================================================================
+    // GrpcRoute Constructor and Accessor Tests
+    // ============================================================================
+
+    #[test]
+    fn test_grpc_route_new_basic() {
+        use crate::core::ApiMetadata;
+
+        let metadata = ApiMetadata::new(
+            "test_api".to_string(),
+            "v1".to_string(),
+            "Test API description".to_string(),
+            None,
+            false,
+        );
+
+        let route = GrpcRoute::new("my_service".to_string(), metadata);
+
+        assert_eq!(route.service_name(), "my_service");
+        assert_eq!(route.metadata().name(), "test_api");
+    }
+
+    #[test]
+    fn test_grpc_route_new_with_cache_ttl() {
+        use crate::core::ApiMetadata;
+
+        let metadata = ApiMetadata::new(
+            "cached_api".to_string(),
+            "v2".to_string(),
+            "Cached API".to_string(),
+            Some(600),
+            false,
+        );
+
+        let route = GrpcRoute::new("cached_service".to_string(), metadata);
+
+        assert_eq!(route.metadata().cache_ttl(), Some(600));
+    }
+
+    #[test]
+    fn test_grpc_route_new_with_streaming() {
+        use crate::core::ApiMetadata;
+
+        let metadata = ApiMetadata::new(
+            "stream_api".to_string(),
+            "v1".to_string(),
+            "Streaming API".to_string(),
+            None,
+            true,
+        );
+
+        let route = GrpcRoute::new("stream_service".to_string(), metadata);
+
+        assert!(route.metadata().is_streaming());
+    }
+
+    #[test]
+    fn test_grpc_route_service_name_accessor() {
+        use crate::core::ApiMetadata;
+
+        let metadata = ApiMetadata::default();
+        let route = GrpcRoute::new("unique_service_name".to_string(), metadata);
+
+        assert_eq!(route.service_name(), "unique_service_name");
+    }
+
+    #[test]
+    fn test_grpc_route_metadata_accessor() {
+        use crate::core::ApiMetadata;
+
+        let metadata = ApiMetadata::new(
+            "accessor_test".to_string(),
+            "v3".to_string(),
+            "Accessor test description".to_string(),
+            Some(120),
+            false,
+        );
+
+        let route = GrpcRoute::new("accessor_service".to_string(), metadata.clone());
+
+        let retrieved_metadata = route.metadata();
+        assert_eq!(retrieved_metadata.name(), "accessor_test");
+        assert_eq!(retrieved_metadata.version(), "v3");
+        assert_eq!(
+            retrieved_metadata.description(),
+            "Accessor test description"
+        );
+    }
+
+    #[test]
+    fn test_grpc_route_empty_service_name() {
+        use crate::core::ApiMetadata;
+
+        let metadata = ApiMetadata::default();
+        let route = GrpcRoute::new("".to_string(), metadata);
+
+        assert_eq!(route.service_name(), "");
+    }
+
+    #[test]
+    fn test_grpc_route_unicode_service_name() {
+        use crate::core::ApiMetadata;
+
+        let metadata = ApiMetadata::default();
+        let route = GrpcRoute::new("服务名称".to_string(), metadata);
+
+        assert_eq!(route.service_name(), "服务名称");
+    }
+
+    #[test]
+    fn test_grpc_route_long_service_name() {
+        use crate::core::ApiMetadata;
+
+        let long_name = "a".repeat(1000);
+        let metadata = ApiMetadata::default();
+        let route = GrpcRoute::new(long_name.clone(), metadata);
+
+        assert_eq!(route.service_name().len(), 1000);
+    }
+
+    // ============================================================================
+    // GrpcRouteRegistration Tests
+    // ============================================================================
+
+    #[test]
+    fn test_grpc_route_registration_new() {
+        use crate::core::ApiMetadata;
+
+        fn create_test_route() -> GrpcRoute {
+            let metadata = ApiMetadata::new(
+                "registration_test".to_string(),
+                "v1".to_string(),
+                "Test route".to_string(),
+                None,
+                false,
+            );
+            GrpcRoute::new("test_registration_service".to_string(), metadata)
+        }
+
+        let registration = GrpcRouteRegistration::new("test_route", create_test_route);
+
+        assert_eq!(registration.name(), "test_route");
+    }
+
+    #[test]
+    fn test_grpc_route_registration_name_accessor() {
+        fn create_route() -> GrpcRoute {
+            GrpcRoute::new("service".to_string(), crate::core::ApiMetadata::default())
+        }
+
+        let registration = GrpcRouteRegistration::new("unique_name", create_route);
+
+        assert_eq!(registration.name(), "unique_name");
+    }
+
+    #[test]
+    fn test_grpc_route_registration_create() {
+        use crate::core::ApiMetadata;
+
+        fn factory_route() -> GrpcRoute {
+            let metadata = ApiMetadata::new(
+                "factory_api".to_string(),
+                "v1".to_string(),
+                "Factory created".to_string(),
+                Some(300),
+                false,
+            );
+            GrpcRoute::new("factory_service".to_string(), metadata)
+        }
+
+        let registration = GrpcRouteRegistration::new("factory_route", factory_route);
+        let route = registration.create();
+
+        assert_eq!(route.service_name(), "factory_service");
+        assert_eq!(route.metadata().name(), "factory_api");
+    }
+
+    #[test]
+    fn test_grpc_route_registration_create_multiple_times() {
+        fn create_route() -> GrpcRoute {
+            GrpcRoute::new(
+                "multi_create".to_string(),
+                crate::core::ApiMetadata::default(),
+            )
+        }
+
+        let registration = GrpcRouteRegistration::new("multi", create_route);
+
+        let route1 = registration.create();
+        let route2 = registration.create();
+
+        assert_eq!(route1.service_name(), route2.service_name());
+    }
+
+    #[test]
+    fn test_grpc_route_registration_empty_name() {
+        fn create_route() -> GrpcRoute {
+            GrpcRoute::new(
+                "empty_name_test".to_string(),
+                crate::core::ApiMetadata::default(),
+            )
+        }
+
+        let registration = GrpcRouteRegistration::new("", create_route);
+
+        assert_eq!(registration.name(), "");
+    }
+
+    #[test]
+    fn test_grpc_route_registration_debug_impl() {
+        fn create_route() -> GrpcRoute {
+            GrpcRoute::new(
+                "debug_service".to_string(),
+                crate::core::ApiMetadata::default(),
+            )
+        }
+
+        let registration = GrpcRouteRegistration::new("debug_test", create_route);
+        let debug_str = format!("{:?}", registration);
+
+        assert!(debug_str.contains("debug_test"));
+    }
+
+    #[test]
+    fn test_grpc_route_registration_clone_impl() {
+        fn create_route() -> GrpcRoute {
+            GrpcRoute::new(
+                "clone_service".to_string(),
+                crate::core::ApiMetadata::default(),
+            )
+        }
+
+        let registration = GrpcRouteRegistration::new("clone_test", create_route);
+        let cloned = registration;
+
+        assert_eq!(registration.name(), cloned.name());
+    }
+
+    // ============================================================================
+    // GrpcServerConfig Extended Tests
+    // ============================================================================
+
+    #[test]
+    fn test_grpc_server_config_clone() {
+        let config = GrpcServerConfig {
+            max_connections: 500,
+            timeout_seconds: 45,
+            auth: None,
+        };
+
+        let cloned = config.clone();
+
+        assert_eq!(config.max_connections, cloned.max_connections);
+        assert_eq!(config.timeout_seconds, cloned.timeout_seconds);
+    }
+
+    #[test]
+    fn test_grpc_server_config_equality() {
+        let config1 = GrpcServerConfig {
+            max_connections: 100,
+            timeout_seconds: 30,
+            auth: None,
+        };
+
+        let config2 = GrpcServerConfig {
+            max_connections: 100,
+            timeout_seconds: 30,
+            auth: None,
+        };
+
+        assert_eq!(config1.max_connections, config2.max_connections);
+        assert_eq!(config1.timeout_seconds, config2.timeout_seconds);
+    }
+
+    #[test]
+    fn test_grpc_server_config_with_minimal_connections() {
+        let config = GrpcServerConfig {
+            max_connections: 1,
+            timeout_seconds: 30,
+            auth: None,
+        };
+
+        assert_eq!(config.max_connections, 1);
+    }
+
+    #[test]
+    fn test_grpc_server_config_with_zero_timeout() {
+        let config = GrpcServerConfig {
+            max_connections: 100,
+            timeout_seconds: 0,
+            auth: None,
+        };
+
+        assert_eq!(config.timeout_seconds, 0);
+    }
+
+    #[test]
+    fn test_grpc_server_config_timeout_edge_cases() {
+        let short_timeout = GrpcServerConfig {
+            max_connections: 100,
+            timeout_seconds: 1,
+            auth: None,
+        };
+
+        let long_timeout = GrpcServerConfig {
+            max_connections: 100,
+            timeout_seconds: 86400,
+            auth: None,
+        };
+
+        assert_eq!(short_timeout.timeout_seconds, 1);
+        assert_eq!(long_timeout.timeout_seconds, 86400);
+    }
+
+    #[test]
+    fn test_grpc_server_config_auth_none() {
+        let config = GrpcServerConfig {
+            max_connections: 100,
+            timeout_seconds: 30,
+            auth: None,
+        };
+
+        assert!(config.auth.is_none());
+    }
+
+    // ============================================================================
+    // SdForgeGrpcService Extended Tests
+    // ============================================================================
+
+    #[test]
+    fn test_sd_forge_grpc_service_default_is_send_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<SdForgeGrpcService>();
+    }
+
+    #[test]
+    fn test_sd_forge_grpc_service_debug_impl() {
+        let service = SdForgeGrpcService::default();
+        let debug_str = format!("{:?}", service);
+
+        assert!(debug_str.contains("SdForgeGrpcService"));
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_call_with_special_characters_in_method() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let request = CallRequest {
+            method: "method-with_special.chars:123".to_string(),
+            parameters: HashMap::new(),
+            data: "".to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert!(response.success);
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_call_with_unicode_method() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let request = CallRequest {
+            method: "方法名称".to_string(),
+            parameters: HashMap::new(),
+            data: "".to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert!(response.success);
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_call_with_very_long_method_name() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let long_method = "method_".repeat(100);
+        let request = CallRequest {
+            method: long_method.clone(),
+            parameters: HashMap::new(),
+            data: "".to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert!(response.success);
+        assert!(response.data.contains(&long_method));
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_call_with_parameters_containing_special_values() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let mut parameters = HashMap::new();
+        parameters.insert("null_value".to_string(), "null".to_string());
+        parameters.insert("empty_string".to_string(), "".to_string());
+        parameters.insert("whitespace".to_string(), "   ".to_string());
+        parameters.insert("json_like".to_string(), r#"{"key":"value"}"#.to_string());
+
+        let request = CallRequest {
+            method: "test_params".to_string(),
+            parameters,
+            data: "".to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert!(response.success);
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_call_with_empty_parameters() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let request = CallRequest {
+            method: "empty_params".to_string(),
+            parameters: HashMap::new(),
+            data: "".to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_get_info_with_version_parameter() {
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let request = InfoRequest {
+            version: "2.0.0".to_string(),
+        };
+
+        let result = service.get_info(Request::new(request)).await;
+        assert!(result.is_ok());
+
+        let response = result.unwrap().into_inner();
+        assert_eq!(response.version, "0.1.0");
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_get_info_response_structure() {
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let request = InfoRequest {
+            version: "".to_string(),
+        };
+
+        let result = service.get_info(Request::new(request)).await;
+        let response = result.unwrap().into_inner();
+
+        assert!(!response.name.is_empty());
+        assert!(!response.version.is_empty());
+        assert!(!response.methods.is_empty());
+        assert!(!response.description.is_empty());
+    }
+
+    // ============================================================================
+    // Address Validation Extended Tests
+    // ============================================================================
+
+    #[test]
+    fn test_address_validation_ipv6_loopback() {
+        let addr = "[::1]:50051";
+        let result = addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_address_validation_ipv6_any() {
+        let addr = "[::]:8080";
+        let result = addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_address_validation_ipv4_any() {
+        let addr = "0.0.0.0:8080";
+        let result = addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_address_validation_ipv4_loopback() {
+        let addr = "127.0.0.1:9090";
+        let result = addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().port(), 9090);
+    }
+
+    #[test]
+    fn test_address_validation_private_ip() {
+        let addr = "192.168.1.1:50051";
+        let result = addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_address_validation_with_empty_string() {
+        let addr = "";
+        let result = addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_address_validation_with_only_colon() {
+        let addr = ":";
+        let result = addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_address_validation_with_invalid_port() {
+        let addr = "127.0.0.1:abc";
+        let result = addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_address_validation_with_port_too_large() {
+        let addr = "127.0.0.1:99999";
+        let result = addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_address_validation_with_negative_port() {
+        let addr = "127.0.0.1:-1";
+        let result = addr.parse::<std::net::SocketAddr>();
+        assert!(result.is_err());
+    }
+
+    // ============================================================================
+    // Auth Interceptor Extended Tests
+    // ============================================================================
+
+    #[test]
+    fn test_auth_interceptor_with_malformed_bearer_prefix() {
+        let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let auth = crate::security::BearerAuth::try_new(secret).expect("valid secret");
+        let mut interceptor = make_auth_interceptor(Some(auth));
+
+        let auth_value: tonic::metadata::MetadataValue<tonic::metadata::Ascii> =
+            tonic::metadata::MetadataValue::try_from("Bearerinvalid_token")
+                .expect("valid metadata value");
+
+        let mut req = tonic::Request::new(());
+        req.metadata_mut().insert("authorization", auth_value);
+
+        let result = interceptor(req);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_auth_interceptor_with_basic_auth_instead_of_bearer() {
+        let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let auth = crate::security::BearerAuth::try_new(secret).expect("valid secret");
+        let mut interceptor = make_auth_interceptor(Some(auth));
+
+        let auth_value: tonic::metadata::MetadataValue<tonic::metadata::Ascii> =
+            tonic::metadata::MetadataValue::try_from("Basic dXNlcjpwYXNz")
+                .expect("valid metadata value");
+
+        let mut req = tonic::Request::new(());
+        req.metadata_mut().insert("authorization", auth_value);
+
+        let result = interceptor(req);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_auth_interceptor_with_empty_token() {
+        let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let auth = crate::security::BearerAuth::try_new(secret).expect("valid secret");
+        let mut interceptor = make_auth_interceptor(Some(auth));
+
+        let auth_value: tonic::metadata::MetadataValue<tonic::metadata::Ascii> =
+            tonic::metadata::MetadataValue::try_from("Bearer ").expect("valid metadata value");
+
+        let mut req = tonic::Request::new(());
+        req.metadata_mut().insert("authorization", auth_value);
+
+        let result = interceptor(req);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_auth_interceptor_metadata_key_lowercase_required() {
+        let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let auth = crate::security::BearerAuth::try_new(secret).expect("valid secret");
+        let mut interceptor = make_auth_interceptor(Some(auth));
+
+        let exp = chrono::Utc::now().timestamp() + 365 * 24 * 3600;
+        let valid_token = make_test_jwt(secret, exp);
+
+        let auth_value: tonic::metadata::MetadataValue<tonic::metadata::Ascii> =
+            tonic::metadata::MetadataValue::try_from(format!("Bearer {}", valid_token).as_str())
+                .expect("valid metadata value");
+
+        let mut req = tonic::Request::new(());
+        req.metadata_mut().insert("authorization", auth_value);
+
+        let result = interceptor(req);
+        assert!(result.is_ok(), "Lowercase 'authorization' key should work");
+    }
+
+    // ============================================================================
+    // CallResponse Structure Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_call_response_data_contains_method() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let request = CallRequest {
+            method: "my_custom_method".to_string(),
+            parameters: HashMap::new(),
+            data: "".to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await.unwrap();
+        let response = result.into_inner();
+
+        let data: serde_json::Value = serde_json::from_str(&response.data).unwrap();
+        assert_eq!(data["method"], "my_custom_method");
+    }
+
+    #[tokio::test]
+    async fn test_call_response_data_contains_result() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let request = CallRequest {
+            method: "test".to_string(),
+            parameters: HashMap::new(),
+            data: "".to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await.unwrap();
+        let response = result.into_inner();
+
+        let data: serde_json::Value = serde_json::from_str(&response.data).unwrap();
+        assert_eq!(data["result"], "processed");
+    }
+
+    #[tokio::test]
+    async fn test_call_response_status_code() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let request = CallRequest {
+            method: "test".to_string(),
+            parameters: HashMap::new(),
+            data: "".to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await.unwrap();
+        let response = result.into_inner();
+
+        assert_eq!(response.status_code, 200);
+    }
+
+    #[tokio::test]
+    async fn test_call_response_error_field_empty_on_success() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+
+        let request = CallRequest {
+            method: "test".to_string(),
+            parameters: HashMap::new(),
+            data: "".to_string(),
+        };
+
+        let result = service.call(Request::new(request)).await.unwrap();
+        let response = result.into_inner();
+
+        assert!(response.error.is_empty());
+    }
+
+    // ============================================================================
+    // InfoResponse Structure Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_info_response_name_value() {
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+        let request = InfoRequest {
+            version: "".to_string(),
+        };
+
+        let result = service.get_info(Request::new(request)).await.unwrap();
+        let response = result.into_inner();
+
+        assert_eq!(response.name, "SdForge Service");
+    }
+
+    #[tokio::test]
+    async fn test_info_response_version_value() {
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+        let request = InfoRequest {
+            version: "".to_string(),
+        };
+
+        let result = service.get_info(Request::new(request)).await.unwrap();
+        let response = result.into_inner();
+
+        assert_eq!(response.version, "0.1.0");
+    }
+
+    #[tokio::test]
+    async fn test_info_response_methods_count() {
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+        let request = InfoRequest {
+            version: "".to_string(),
+        };
+
+        let result = service.get_info(Request::new(request)).await.unwrap();
+        let response = result.into_inner();
+
+        assert_eq!(response.methods.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_info_response_description_value() {
+        use tonic::Request;
+
+        let service = SdForgeGrpcService::default();
+        let request = InfoRequest {
+            version: "".to_string(),
+        };
+
+        let result = service.get_info(Request::new(request)).await.unwrap();
+        let response = result.into_inner();
+
+        assert_eq!(response.description, "SdForge Multi-Protocol SDK Framework");
+    }
+
+    // ============================================================================
+    // GrpcRoute Debug Implementation Test
+    // ============================================================================
+
+    #[test]
+    fn test_grpc_route_debug_output() {
+        use crate::core::ApiMetadata;
+
+        let metadata = ApiMetadata::new(
+            "debug_api".to_string(),
+            "v1".to_string(),
+            "Debug test".to_string(),
+            None,
+            false,
+        );
+        let route = GrpcRoute::new("debug_service".to_string(), metadata);
+
+        let debug_output = format!("{:?}", route);
+
+        assert!(debug_output.contains("debug_service"));
+        assert!(debug_output.contains("GrpcRoute"));
+    }
+
+    // ============================================================================
+    // Concurrent Request Simulation Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_grpc_service_concurrent_calls() {
+        use std::collections::HashMap;
+        use tonic::Request;
+
+        let service = std::sync::Arc::new(SdForgeGrpcService::default());
+
+        let mut handles = vec![];
+
+        for i in 0..10 {
+            let service_clone = service.clone();
+            let handle = tokio::spawn(async move {
+                let request = CallRequest {
+                    method: format!("concurrent_method_{}", i),
+                    parameters: HashMap::new(),
+                    data: "".to_string(),
+                };
+                service_clone.call(Request::new(request)).await
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            let result = handle.await.unwrap();
+            assert!(result.is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_grpc_service_concurrent_get_info() {
+        use tonic::Request;
+
+        let service = std::sync::Arc::new(SdForgeGrpcService::default());
+
+        let mut handles = vec![];
+
+        for _ in 0..5 {
+            let service_clone = service.clone();
+            let handle = tokio::spawn(async move {
+                let request = InfoRequest {
+                    version: "".to_string(),
+                };
+                service_clone.get_info(Request::new(request)).await
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            let result = handle.await.unwrap();
+            assert!(result.is_ok());
         }
     }
 }
