@@ -13,15 +13,53 @@ use axum::{
 };
 use hmac::{Hmac, Mac};
 use once_cell::sync::Lazy;
-use serde::{Deserialize, Serialize, ser::SerializeStruct, Serializer};
+use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use sha2::Sha256;
 use std::future::Future;
 use std::pin::Pin;
 
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 use uuid::Uuid;
+
+// =============================================================================
+// Cache Key Namespaces
+// =============================================================================
+
+/// Cache key namespaces for type-safe key generation
+///
+/// Centralizes all cache key prefixes to avoid string duplication
+/// and enable easy refactoring of cache key formats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CacheNamespace {
+    /// API Key storage: `sdforge:apikey:{key_hash}`
+    ApiKey,
+    /// API Key failure tracking: `sdforge:apifailed:{client_ip}`
+    ApiFailed,
+    /// Bearer token blacklist: `sdforge:bearer:blacklist:{token}`
+    BearerBlacklist,
+    /// Bearer token valid cache: `sdforge:bearer:valid:{token}`
+    BearerValid,
+    /// Rate limiting: `sdforge:rl:{key}`
+    RateLimit,
+    /// Idempotency key cache: `sdforge:idempotency:{key}`
+    Idempotency,
+}
+
+impl CacheNamespace {
+    /// Generate the full cache key with namespace prefix
+    pub fn key(&self, suffix: &str) -> String {
+        match self {
+            CacheNamespace::ApiKey => format!("sdforge:apikey:{suffix}"),
+            CacheNamespace::ApiFailed => format!("sdforge:apifailed:{suffix}"),
+            CacheNamespace::BearerBlacklist => format!("sdforge:bearer:blacklist:{suffix}"),
+            CacheNamespace::BearerValid => format!("sdforge:bearer:valid:{suffix}"),
+            CacheNamespace::RateLimit => format!("sdforge:rl:{suffix}"),
+            CacheNamespace::Idempotency => format!("sdforge:idempotency:{suffix}"),
+        }
+    }
+}
 
 // =============================================================================
 // Serialization Helpers for SyncCache Storage
@@ -53,6 +91,42 @@ fn serialize_permissions(perms: &[String]) -> Vec<u8> {
 /// Deserialize a list of permissions from bytes
 fn deserialize_permissions(data: &[u8]) -> Vec<String> {
     bincode::deserialize(data).unwrap_or_default()
+}
+
+// =============================================================================
+// O(1) Rate Limiting State (Fixed Window Counter)
+// =============================================================================
+
+/// Window state for O(1) rate limiting
+///
+/// Uses fixed window counter algorithm instead of storing all timestamps.
+/// This provides O(1) check operations with a small accuracy trade-off
+/// at window boundaries.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WindowState {
+    /// Current count of requests in this window
+    count: u64,
+    /// Window start time in seconds since an arbitrary epoch (using Instant::now().elapsed())
+    window_start_secs: u64,
+}
+
+impl Default for WindowState {
+    fn default() -> Self {
+        Self {
+            count: 0,
+            window_start_secs: 0,
+        }
+    }
+}
+
+/// Serialize WindowState to bytes
+fn serialize_window_state(state: &WindowState) -> Vec<u8> {
+    bincode::serialize(state).unwrap_or_default()
+}
+
+/// Deserialize WindowState from bytes
+fn deserialize_window_state(data: &[u8]) -> Option<WindowState> {
+    bincode::deserialize(data).ok()
 }
 
 /// Serialize AuthContext to bytes using bincode
@@ -91,7 +165,9 @@ fn parse_audit_log(v: &serde_json::Value) -> Option<AuditLog> {
     let obj = v.as_object()?;
     let id = obj.get("id")?.as_str()?.to_string();
     let timestamp = obj.get("timestamp")?.as_i64()?;
-    let user_id = obj.get("user_id").and_then(|v| v.as_str().map(String::from));
+    let user_id = obj
+        .get("user_id")
+        .and_then(|v| v.as_str().map(String::from));
     let action = obj.get("action")?.as_str()?.to_string();
     let resource = obj.get("resource")?.as_str()?.to_string();
 
@@ -109,10 +185,23 @@ fn parse_audit_log(v: &serde_json::Value) -> Option<AuditLog> {
 
     // Parse metadata: AuthMetadata
     let meta_val = obj.get("metadata")?.as_object()?;
-    let client_ip = meta_val.get("client_ip").and_then(|v| v.as_str()).map(String::from);
-    let user_agent = meta_val.get("user_agent").and_then(|v| v.as_str()).map(String::from);
-    let request_id = meta_val.get("request_id").and_then(|v| v.as_str()).map(String::from).unwrap_or_default();
-    let timestamp_meta = meta_val.get("timestamp").and_then(|v| v.as_i64()).unwrap_or(0);
+    let client_ip = meta_val
+        .get("client_ip")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let user_agent = meta_val
+        .get("user_agent")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+    let request_id = meta_val
+        .get("request_id")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .unwrap_or_default();
+    let timestamp_meta = meta_val
+        .get("timestamp")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
 
     Some(AuditLog {
         id,
@@ -121,7 +210,12 @@ fn parse_audit_log(v: &serde_json::Value) -> Option<AuditLog> {
         action,
         resource,
         result,
-        metadata: AuthMetadata { client_ip, user_agent, request_id, timestamp: timestamp_meta },
+        metadata: AuthMetadata {
+            client_ip,
+            user_agent,
+            request_id,
+            timestamp: timestamp_meta,
+        },
     })
 }
 
@@ -133,7 +227,12 @@ fn deserialize_audit_logs(data: &[u8]) -> Vec<AuditLog> {
     match serde_json::from_slice::<serde_json::Value>(data) {
         Ok(serde_json::Value::Array(arr)) => arr.iter().filter_map(parse_audit_log).collect(),
         Ok(serde_json::Value::Object(_)) => {
-            parse_audit_log(&serde_json::from_slice(data).unwrap()).into_iter().collect()
+            // Safe: we already know it's valid JSON object
+            serde_json::from_slice(data)
+                .ok()
+                .and_then(|v| parse_audit_log(&v))
+                .into_iter()
+                .collect()
         }
         _ => Vec::new(),
     }
@@ -142,7 +241,6 @@ fn deserialize_audit_logs(data: &[u8]) -> Vec<AuditLog> {
 // =============================================================================
 // Feature Layer Trait Interfaces
 // =============================================================================
-
 
 /// Feature layer trait for API key authentication.
 ///
@@ -353,7 +451,6 @@ pub struct AppApiKeyAuth {
     rate_limit_config: Arc<RateLimitConfig>,
 }
 
-
 impl AppApiKeyAuth {
     /// Create new API key authentication with default rate limiting
     pub fn new() -> Self {
@@ -379,7 +476,6 @@ impl AppApiKeyAuth {
         rate_limit_config: Arc<RateLimitConfig>,
     ) -> Self {
         Self {
-
             valid_keys,
             failed_attempts,
             rate_limit_config,
@@ -408,8 +504,10 @@ impl AppApiKeyAuth {
     /// Add a valid API key (stored as hash)
     pub fn add_key(&self, key: impl Into<String>, permissions: Vec<String>) {
         let key_hash = Self::hash_key(&key.into());
-        self.valid_keys
-            .set(&format!("sdforge:apikey:{key_hash}"), serialize_permissions(&permissions));
+        self.valid_keys.set(
+            &CacheNamespace::ApiKey.key(&key_hash),
+            serialize_permissions(&permissions),
+        );
     }
 
     /// Validate an API key with rate limiting
@@ -422,20 +520,17 @@ impl AppApiKeyAuth {
     pub fn validate_key(&self, key: &str, client_ip: &str) -> Option<Vec<String>> {
         let start = Instant::now();
         let key_hash = Self::hash_key(key);
-        let store_key = format!("sdforge:apikey:{key_hash}");
+        let store_key = CacheNamespace::ApiKey.key(&key_hash);
 
         // Always check valid_keys first for constant timing
-        let perms = self
-            .valid_keys
-            .get(&store_key)
-            .and_then(|data| {
-                let p = deserialize_permissions(&data);
-                if p.is_empty() {
-                    None
-                } else {
-                    Some(p)
-                }
-            });
+        let perms = self.valid_keys.get(&store_key).and_then(|data| {
+            let p = deserialize_permissions(&data);
+            if p.is_empty() {
+                None
+            } else {
+                Some(p)
+            }
+        });
 
         if perms.is_some() {
             // Apply delay for constant timing even for valid keys
@@ -480,7 +575,7 @@ impl AppApiKeyAuth {
     fn is_rate_limited(&self, client_ip: &str) -> bool {
         let now = Instant::now();
         let window_start = now - self.rate_limit_config.window;
-        let key = format!("sdforge:apifailed:{client_ip}");
+        let key = CacheNamespace::ApiFailed.key(client_ip);
 
         let data = match self.failed_attempts.get(&key) {
             Some(d) => d,
@@ -495,7 +590,7 @@ impl AppApiKeyAuth {
     fn record_failed_attempt(&self, client_ip: &str) {
         let now = Instant::now();
         let window_start = now - self.rate_limit_config.window;
-        let key = format!("sdforge:apifailed:{client_ip}");
+        let key = CacheNamespace::ApiFailed.key(client_ip);
 
         // Load existing attempts
         let data = self.failed_attempts.get(&key);
@@ -516,11 +611,10 @@ impl AppApiKeyAuth {
 
     /// Clear failed attempts for a client (e.g., after successful auth)
     pub fn clear_failed_attempts(&self, client_ip: &str) {
-        let key = format!("sdforge:apifailed:{client_ip}");
+        let key = CacheNamespace::ApiFailed.key(client_ip);
         self.failed_attempts.delete(&key);
     }
 }
-
 
 impl Default for AppApiKeyAuth {
     fn default() -> Self {
@@ -719,7 +813,6 @@ pub struct BearerAuth {
     /// Expected audience claim (prevents token substitution)
     expected_audience: Option<String>,
     /// Expected issuer claim (validates token origin)
-
     expected_issuer: Option<String>,
 }
 
@@ -819,7 +912,6 @@ impl BearerAuth {
             expected_audience: None,
             expected_issuer: None,
         })
-
     }
 
     /// Create bearer authentication with audience validation
@@ -835,7 +927,6 @@ impl BearerAuth {
             expected_audience: Some(expected_audience.into()),
             expected_issuer: None,
         }
-
     }
 
     /// Create bearer authentication with full claim validation
@@ -857,7 +948,6 @@ impl BearerAuth {
             expected_audience: Some(expected_audience.into()),
             expected_issuer: Some(expected_issuer.into()),
         }
-
     }
 
     /// Create with dependencies (for full DI mode)
@@ -912,7 +1002,6 @@ impl BearerAuth {
         expected_audience: Option<String>,
         expected_issuer: Option<String>,
     ) -> Self {
-
         Self {
             secret,
             valid_tokens,
@@ -1105,7 +1194,7 @@ impl BearerAuth {
     /// Validate a bearer token with proper JWT verification
     pub fn validate_token(&self, token: &str) -> Option<AuthContext> {
         // Check if token is blacklisted
-        let blacklist_key = format!("sdforge:bearer:blacklist:{token}");
+        let blacklist_key = CacheNamespace::BearerBlacklist.key(token);
         if let Some(data) = self.blacklisted_tokens.get(&blacklist_key) {
             let expiry = deserialize_instants(&data);
             if let Some(&first) = expiry.first() {
@@ -1114,7 +1203,6 @@ impl BearerAuth {
                 }
             }
         }
-
 
         // Verify JWT signature and claims
         let payload = self.verify_jwt(token)?;
@@ -1143,14 +1231,15 @@ impl BearerAuth {
 
     /// Register a token (for session management)
     pub fn register_token(&self, token: String, context: AuthContext) {
-        let key = format!("sdforge:bearer:valid:{token}");
-        self.valid_tokens.set(&key, serialize_auth_context(&context));
+        let key = CacheNamespace::BearerValid.key(&token);
+        self.valid_tokens
+            .set(&key, serialize_auth_context(&context));
     }
 
     /// Invalidate a token (for logout)
     pub fn invalidate_token(&self, token: &str) {
         // Invalidate immediately (could add grace period)
-        let key = format!("sdforge:bearer:blacklist:{token}");
+        let key = CacheNamespace::BearerBlacklist.key(token);
         self.blacklisted_tokens
             .set(&key, serialize_instants(&[Instant::now()]));
     }
@@ -1169,8 +1258,13 @@ impl BearerAuth {
     ///
     /// ```ignore
     /// use std::time::Duration;
-    /// let auth = BearerAuth::new("my-secret-key-32-chars-minimum!!");
-    /// auth.start_blacklist_cleanup(Duration::from_secs(60));
+    /// use sdforge::security::BearerAuth;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let auth = BearerAuth::new("MySecret123!@#$%^&*()ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    ///     auth.start_blacklist_cleanup(Duration::from_secs(60));
+    /// }
     /// ```
     #[cfg(feature = "tokio")]
     pub fn start_blacklist_cleanup(&self, interval: std::time::Duration) {
@@ -1185,7 +1279,6 @@ impl BearerAuth {
             }
         });
     }
-
 }
 
 /// Builder for BearerAuth configuration
@@ -1430,7 +1523,6 @@ impl BearerAuthBuilder {
             expected_audience: self.audience,
             expected_issuer: self.issuer,
         })
-
     }
 }
 
@@ -1728,7 +1820,6 @@ impl AppRateLimiterBuilder {
     }
 }
 
-
 /// Rate limiter with idempotency support
 ///
 /// Security features:
@@ -1748,7 +1839,6 @@ pub struct AppRateLimiter {
 }
 
 impl AppRateLimiter {
-
     /// Create a new rate limiter with optional configuration.
     ///
     /// This is the simplest way to create a AppRateLimiter - it provides
@@ -1794,7 +1884,6 @@ impl AppRateLimiter {
             idempotency_cache: Arc::new(crate::cache::DashMapCache::new()),
         }
     }
-
 
     /// Create a builder for configuring a AppRateLimiter.
     ///
@@ -1882,48 +1971,67 @@ impl AppRateLimiter {
         }
     }
 
-
-    /// Check if request is rate limited
+    /// Check if request is rate limited (O(1) fixed window counter)
+    ///
+    /// Uses a fixed window counter algorithm for O(1) performance.
+    /// Trade-off: Slightly less accurate at window boundaries compared
+    /// to sliding window, but significantly faster for high-throughput scenarios.
     pub fn check(&self, key: &str) -> Result<u32, RateLimitError> {
-        let now = Instant::now();
-        let window_start = now - self.config.window;
-        let store_key = format!("sdforge:rl:{key}");
+        let window_secs = self.config.window.as_secs();
+        let store_key = CacheNamespace::RateLimit.key(key);
 
-        // Load existing timestamps
-        let data = self.requests.get(&store_key);
-        let mut times: Vec<Instant> = data
-            .as_ref()
-            .map(|d| deserialize_instants(d))
+        // Get current Unix timestamp in seconds
+        let current_time_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        // Load existing window state or create new
+        let mut state = self
+            .requests
+            .get(&store_key)
+            .and_then(|d| deserialize_window_state(&d))
             .unwrap_or_default();
 
-        // Remove old requests outside the window
-        times.retain(|&t| t > window_start);
+        // Calculate the current window number (integer division)
+        // This gives us fixed windows aligned to epoch boundaries
+        let current_window = current_time_secs / window_secs;
 
+        // Check if we're in a new window (different window number)
+        let stored_window = if state.window_start_secs > 0 {
+            state.window_start_secs / window_secs
+        } else {
+            0
+        };
+
+        if current_window != stored_window || state.window_start_secs == 0 {
+            // Start a new window
+            state.window_start_secs = current_time_secs;
+            state.count = 1;
+        } else {
+            // Same window, increment counter
+            state.count += 1;
+        }
 
         // Check rate limit
-        if times.len() >= self.config.max_requests as usize {
-            let retry_after = times
-                .first()
-                .map(|t| {
-                    let elapsed = now - *t;
-                    (self.config.window - elapsed).as_secs()
-                })
-                .unwrap_or(1);
+        if state.count > self.config.max_requests as u64 {
+            // Calculate time until next window starts
+            let next_window_start = (current_window + 1) * window_secs;
+            let time_remaining = next_window_start.saturating_sub(current_time_secs);
 
             return Err(RateLimitError {
                 limit: self.config.max_requests,
                 remaining: 0,
-                retry_after,
+                retry_after: if time_remaining > 0 { time_remaining } else { 1 },
             });
         }
 
-        // Add current request
-        times.push(now);
-        self.requests.set(&store_key, serialize_instants(&times));
+        // Save updated state
+        self.requests
+            .set(&store_key, serialize_window_state(&state));
 
-        Ok(self.config.max_requests - times.len() as u32)
+        Ok(self.config.max_requests - state.count as u32)
     }
-
 
     /// Check idempotency (returns true if this is a duplicate request)
     ///
@@ -1932,7 +2040,7 @@ impl AppRateLimiter {
     pub fn check_idempotency(&self, idempotency_key: &str) -> bool {
         let now = Instant::now();
         let window = Duration::from_secs(60); // Idempotency key cache window
-        let store_key = format!("sdforge:idempotency:{idempotency_key}");
+        let store_key = CacheNamespace::Idempotency.key(idempotency_key);
 
         if let Some(data) = self.idempotency_cache.get(&store_key) {
             let existing_times = deserialize_instants(&data);
@@ -1951,21 +2059,37 @@ impl AppRateLimiter {
         false // Not a duplicate
     }
 
-
-    /// Get remaining requests
+    /// Get remaining requests (O(1) fixed window counter)
     pub fn remaining(&self, key: &str) -> u32 {
-        let now = Instant::now();
-        let window_start = now - self.config.window;
-        let store_key = format!("sdforge:rl:{key}");
+        let window_secs = self.config.window.as_secs();
+        let store_key = CacheNamespace::RateLimit.key(key);
 
-        let data = self.requests.get(&store_key);
-        if let Some(d) = data {
-            let times = deserialize_instants(&d);
-            let active = times.iter().filter(|&&t| t > window_start).count();
-            self.config.max_requests - active as u32
+        // Get current Unix timestamp in seconds
+        let current_time_secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+
+        let state = self
+            .requests
+            .get(&store_key)
+            .and_then(|d| deserialize_window_state(&d))
+            .unwrap_or_default();
+
+        // Calculate window numbers
+        let current_window = current_time_secs / window_secs;
+        let stored_window = if state.window_start_secs > 0 {
+            state.window_start_secs / window_secs
         } else {
+            0
+        };
 
+        if current_window != stored_window || state.window_start_secs == 0 {
+            // Window expired or no state, full allowance
             self.config.max_requests
+        } else {
+            // Calculate remaining
+            self.config.max_requests.saturating_sub(state.count as u32)
         }
     }
 
@@ -1998,13 +2122,12 @@ impl AppRateLimiter {
     ///
     /// * `key` - The rate limit key to reset
     pub fn reset(&self, key: &str) {
-        let rl_key = format!("sdforge:rl:{key}");
-        let idemp_key = format!("sdforge:idempotency:{key}");
+        let rl_key = CacheNamespace::RateLimit.key(key);
+        let idemp_key = CacheNamespace::Idempotency.key(key);
         self.requests.delete(&rl_key);
         self.idempotency_cache.delete(&idemp_key);
     }
 }
-
 
 impl Default for AppRateLimiter {
     /// Create a AppRateLimiter with default configuration.
@@ -2084,7 +2207,6 @@ impl AuditLog {
         &self.id
     }
 
-
     /// Get log timestamp
     pub fn timestamp(&self) -> i64 {
         self.timestamp
@@ -2125,7 +2247,6 @@ pub enum AuditResult {
     Failure {
         /// Error message
         message: String,
-
     },
 }
 
@@ -2148,11 +2269,15 @@ pub enum AuditResult {
 /// ```ignore
 /// use sdforge::security::AppAuditLogger;
 ///
-/// let logger = AppAuditLogger::builder()
-///     .max_logs_per_user(500)
-///     .max_concurrent_ops(50)
-///     .queue_size(2000)
-///     .build();
+/// #[tokio::main]
+/// async fn main() {
+///     let logger = AppAuditLogger::builder()
+///         .max_logs_per_user(500)
+///         .max_concurrent_ops(50)
+///         .queue_size(2000)
+///         .build();
+///     let _ = logger;
+/// }
 /// ```
 pub struct AppAuditLoggerBuilder {
     /// Maximum number of logs to retain per user
@@ -2309,12 +2434,15 @@ impl AppAuditLoggerBuilder {
     /// ```ignore
     /// use sdforge::security::AppAuditLoggerBuilder;
     ///
-    /// let logger = AppAuditLoggerBuilder::new()
-    ///     .max_logs_per_user(500)
-    ///     .max_concurrent_ops(50)
-    ///     .queue_size(2000)
-    ///     .build();
-    /// let _ = logger;
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let logger = AppAuditLoggerBuilder::new()
+    ///         .max_logs_per_user(500)
+    ///         .max_concurrent_ops(50)
+    ///         .queue_size(2000)
+    ///         .build();
+    ///     let _ = logger;
+    /// }
     /// ```
     pub fn build(self) -> AppAuditLogger {
         let (queue_sender, mut queue_receiver) =
@@ -2337,9 +2465,10 @@ impl AppAuditLoggerBuilder {
                     let fallback: Vec<AuditLog> = deserialize_audit_logs(&fallback_data);
                     if !fallback.is_empty() {
                         let data = logs_clone.get(key);
-                        let mut logs_vec: Vec<AuditLog> =
-                            data.as_ref().and_then(|d| Some(deserialize_audit_logs(d)))
-                                .unwrap_or_default();
+                        let mut logs_vec: Vec<AuditLog> = data
+                            .as_ref()
+                            .and_then(|d| Some(deserialize_audit_logs(d)))
+                            .unwrap_or_default();
                         logs_vec.extend(fallback);
                         if logs_vec.len() > max_logs_clone {
                             logs_vec.truncate(max_logs_clone);
@@ -2349,7 +2478,6 @@ impl AppAuditLoggerBuilder {
                     }
                 }
             }
-
         });
 
         AppAuditLogger {
@@ -2384,7 +2512,6 @@ pub struct AppAuditLogger {
     /// Counter for dropped logs (monitoring)
     dropped_log_count: Arc<std::sync::atomic::AtomicU64>,
 }
-
 
 /// Batch of audit logs for async processing.
 ///
@@ -2484,12 +2611,15 @@ impl AppAuditLogger {
     /// ```ignore
     /// use sdforge::security::AppAuditLogger;
     ///
-    /// let logger = AppAuditLogger::builder()
-    ///     .max_logs_per_user(500)
-    ///     .max_concurrent_ops(50)
-    ///     .queue_size(2000)
-    ///     .build();
-    /// let _ = logger;
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let logger = AppAuditLogger::builder()
+    ///         .max_logs_per_user(500)
+    ///         .max_concurrent_ops(50)
+    ///         .queue_size(2000)
+    ///         .build();
+    ///     let _ = logger;
+    /// }
     /// ```
     pub fn builder() -> AppAuditLoggerBuilder {
         AppAuditLoggerBuilder::new()
@@ -2528,23 +2658,15 @@ impl AppAuditLogger {
     ///
     /// ```ignore
     /// use sdforge::security::AppAuditLogger;
-    /// use dashmap::DashMap;
+    /// use sdforge::cache::DashMapCache;
     /// use std::sync::Arc;
     /// use std::sync::atomic::AtomicU64;
     ///
     /// let (sender, mut receiver) = tokio::sync::mpsc::channel(1000);
     ///
-    /// // Spawn background worker (required when using with_dependencies)
-    /// let logs = Arc::new(DashMap::new());
-    /// let fallback_logs = Arc::new(DashMap::new());
-    /// let logs_clone = logs.clone();
-    /// let fallback_logs_clone = fallback_logs.clone();
-    /// tokio::spawn(async move {
-    ///     while let Some(batch) = receiver.recv().await {
-    ///         let mut entry = logs_clone.entry(batch.user_id.clone()).or_default();
-    ///         entry.push(batch.log);
-    ///     }
-    /// });
+    /// // Create SharedCache instances
+    /// let logs = Arc::new(DashMapCache::default());
+    /// let fallback_logs = Arc::new(DashMapCache::default());
     ///
     /// let logger = AppAuditLogger::with_dependencies(
     ///     logs,
@@ -2565,7 +2687,6 @@ impl AppAuditLogger {
         dropped_log_count: Arc<std::sync::atomic::AtomicU64>,
     ) -> Self {
         Self {
-
             logs,
             max_logs_per_user,
             semaphore,
@@ -2601,9 +2722,10 @@ impl AppAuditLogger {
                     let fallback: Vec<AuditLog> = deserialize_audit_logs(&fallback_data);
                     if !fallback.is_empty() {
                         let data = logs_clone.get(key);
-                        let mut logs_vec: Vec<AuditLog> =
-                            data.as_ref().and_then(|d| Some(deserialize_audit_logs(d)))
-                                .unwrap_or_default();
+                        let mut logs_vec: Vec<AuditLog> = data
+                            .as_ref()
+                            .and_then(|d| Some(deserialize_audit_logs(d)))
+                            .unwrap_or_default();
                         logs_vec.extend(fallback);
                         if logs_vec.len() > max_logs_clone {
                             logs_vec.truncate(max_logs_clone);
@@ -2613,7 +2735,6 @@ impl AppAuditLogger {
                     }
                 }
             }
-
         });
 
         Self {
@@ -2741,7 +2862,6 @@ impl AppAuditLogger {
             }
         }
 
-
         // Drop permit to release semaphore
         drop(permit);
     }
@@ -2812,7 +2932,11 @@ impl AppAuditLogger {
             .as_ref()
             .and_then(|d| {
                 let v = deserialize_audit_logs(d);
-                if v.is_empty() { None } else { Some(v) }
+                if v.is_empty() {
+                    None
+                } else {
+                    Some(v)
+                }
             })
             .unwrap_or_default();
 
@@ -2827,7 +2951,6 @@ impl AppAuditLogger {
 
         // Log warning periodically (every 100th drop)
         if count > 0 && count.is_multiple_of(100) {
-
             #[cfg(feature = "logging")]
             tracing::warn!(target: "audit",
                 "High audit log drop rate: {} logs dropped due to channel congestion",
@@ -3204,11 +3327,13 @@ fn is_valid_ip(ip: &str) -> bool {
 /// # Example
 ///
 /// ```ignore
-/// // Old (deprecated):
-/// use sdforge::security::compat::ApiKeyAuth;
+/// // Old (deprecated alias - still works but shows warning):
+/// use sdforge::security::compat::AppApiKeyAuth;
 ///
-/// // New (recommended):
-/// use sdforge::security::AppApiKeyAuth;
+/// // The compat module re-exports the new types:
+/// // - AppApiKeyAuth (was ApiKeyAuth)
+/// // - AppRateLimiter (was RateLimiter)
+/// // - AppAuditLogger (was AuditLogger)
 /// ```
 pub mod compat {
     #[deprecated(since = "0.3.0", note = "Use AppApiKeyAuth instead")]
@@ -3442,7 +3567,6 @@ mod tests {
     #[test]
     fn test_auth_context_creation() {
         let metadata = AuthMetadata::new(
-
             Some("192.168.1.1".to_string()),
             Some("TestClient/1.0".to_string()),
         );
@@ -3740,7 +3864,6 @@ mod tests {
     #[test]
     fn test_rate_limiter_remaining() {
         let config = RateLimitConfig {
-
             max_requests: 5,
             window: Duration::from_secs(60),
             include_headers: false,
@@ -3944,7 +4067,6 @@ mod tests {
     #[test]
     fn test_rate_limit_error_message() {
         let error = RateLimitError {
-
             limit: 100,
             remaining: 0,
             retry_after: 30,
@@ -3957,7 +4079,6 @@ mod tests {
     #[test]
     fn test_audit_result_serialization() {
         use serde_json;
-
 
         let success = AuditResult::Success;
         let json = serde_json::to_string(&success).unwrap();
@@ -3974,7 +4095,6 @@ mod tests {
     #[tokio::test]
     async fn test_api_key_clear_failed_attempts() {
         let auth = AppApiKeyAuth::with_rate_limit(RateLimitConfig {
-
             max_requests: 2,
             window: Duration::from_secs(60),
             include_headers: false,
@@ -4034,7 +4154,6 @@ mod tests {
     #[test]
     fn test_bearer_auth_builder_valid_secret() {
         let auth = BearerAuthBuilder::new()
-
             .secret("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
             .build()
             .expect("Valid secret should build successfully");
@@ -4170,7 +4289,6 @@ mod tests {
 
         let auth = BearerAuth::with_dependencies(
             b"test-secret-key-for-dependencies-test".to_vec(),
-
             valid_tokens.clone(),
             blacklisted_tokens.clone(),
             Some("my-api".to_string()),
@@ -4197,7 +4315,6 @@ mod tests {
 
         // Create two instances sharing the same caches
         let auth1 = BearerAuth::with_dependencies(
-
             b"shared-secret-key-for-testing-purposes".to_vec(),
             valid_tokens.clone(),
             blacklisted_tokens.clone(),
@@ -4238,7 +4355,6 @@ mod tests {
 
         // Test with no audience or issuer
         let auth_no_claims = BearerAuth::with_dependencies(
-
             b"test-secret-key-no-claims-validation".to_vec(),
             valid_tokens.clone(),
             blacklisted_tokens.clone(),
@@ -5091,7 +5207,6 @@ mod tests {
 }
 
 // Bearer token tests
-
 
 // ==================== Password Hashing Module ====================
 
