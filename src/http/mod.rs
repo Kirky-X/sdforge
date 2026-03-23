@@ -128,8 +128,8 @@ fn resolve_route_path(base_path: &str, module_prefix: Option<&str>) -> String {
 }
 
 fn apply_security_headers(router: Router) -> Router {
-    use tower_http::set_header::SetResponseHeaderLayer;
     use axum::http::{header::*, HeaderValue};
+    use tower_http::set_header::SetResponseHeaderLayer;
 
     let mut router = router;
     router = router.layer(SetResponseHeaderLayer::overriding(
@@ -281,7 +281,7 @@ pub fn build_with_redirect() -> Router {
 #[allow(dead_code)]
 pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, ConfigError> {
     #[cfg(feature = "security")]
-    use crate::security::{rate_limit_middleware, RateLimitConfig, AppRateLimiter};
+    use crate::security::{rate_limit_middleware, AppRateLimiter, RateLimitConfig};
     #[cfg(feature = "security")]
     use std::sync::Arc;
 
@@ -454,30 +454,21 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
 /// A tuple containing:
 /// * The configured Axum router
 /// * A `ConfigWatcher` that manages configuration updates
-/// * A `RecommendedWatcher` that watches for file changes
 ///
 /// # Example
-/// ```ignore
+/// ```no_run
 /// use std::path::PathBuf;
 ///
-/// let config_path = PathBuf::from("config.yaml");
-/// let (router, config_watcher, file_watcher) =
-///     sdforge::http::build_with_hot_reload(&config_path).unwrap();
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let config_path = PathBuf::from("config.toml");
+///     let (router, config_watcher) =
+///         sdforge::http::build_with_hot_reload(&config_path).await?;
 ///
-/// Build router with hot reload support
-///
-/// This function creates a router and sets up configuration file watching.
-/// The ConfigWatcher can be used to get updated configurations when the file changes.
-///
-/// # Example
-/// ```ignore
-/// let (router, config_watcher) = build_with_hot_reload(Path::new("config.toml")).await?;
-/// // Keep file_watcher alive to maintain file watching
-/// tokio::spawn(async move {
-///     while let Ok(event) = config_watcher.event_receiver.recv().await {
-///         println!("Config event: {:?}", event);
-///     }
-/// });
+///     // Use router and config_watcher as needed
+///     let _ = (router, config_watcher);
+///     Ok(())
+/// }
 /// ```
 #[allow(dead_code)]
 #[cfg(feature = "hot-reload")]
