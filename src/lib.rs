@@ -19,20 +19,11 @@ pub use sdforge_macros::{service_api, service_module, test_macro};
 /// ```ignore
 /// use sdforge::impl_default_new;
 ///
-/// struct MyConfig {
-///     host: String,
-///     port: u16,
-/// }
+/// // Works with unit structs:
+/// struct EmptyConfig;
+/// impl_default_new!(EmptyConfig);
 ///
-/// impl_default_new!(MyConfig);
-///
-/// // Generates:
-/// impl MyConfig {
-///     pub fn new() -> Self { Self { host: String::new(), port: 0 } }
-/// }
-/// impl Default for MyConfig {
-///     fn default() -> Self { Self::new() }
-/// }
+/// let config = EmptyConfig::new();
 /// ```
 #[macro_export]
 macro_rules! impl_default_new {
@@ -171,15 +162,31 @@ pub mod security;
 
 #[cfg(feature = "security")]
 pub use security::{
-    auth_middleware, rate_limit_middleware,
+    auth_middleware,
+    rate_limit_middleware,
     // Trait interfaces (feature layer)
-    ApiKeyAuth, AuditLog, AuditLogger, RateLimiter,
+    ApiKeyAuth,
     // Concrete implementations (renamed structs)
-    AppApiKeyAuth, AppApiKeyAuthBuilder, AppAuditLogger, AppAuditLoggerBuilder,
-    AppRateLimiter, AppRateLimiterBuilder,
+    AppApiKeyAuth,
+    AppApiKeyAuthBuilder,
+    AppAuditLogger,
+    AppAuditLoggerBuilder,
+    AppRateLimiter,
+    AppRateLimiterBuilder,
+    AuditLog,
+    AuditLogger,
     // Supporting types
-    AuditResult, AuthContext, AuthError, AuthExtractor, AuthMetadata, AuthResult,
-    BearerAuth, BearerAuthBuilder, RateLimitConfig, RateLimitError,
+    AuditResult,
+    AuthContext,
+    AuthError,
+    AuthExtractor,
+    AuthMetadata,
+    AuthResult,
+    BearerAuth,
+    BearerAuthBuilder,
+    RateLimitConfig,
+    RateLimitError,
+    RateLimiter,
 };
 
 /// Configuration management
@@ -195,8 +202,8 @@ pub use confers::Config;
 
 #[cfg(feature = "http")]
 pub use config::{
-    ApiConfig, AppConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper,
-    RateLimitConfigFile, RateLimitEndpointConfig, ServerConfig, TlsConfig, TracingConfig,
+    ApiConfig, AppConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper, RateLimitConfigFile,
+    RateLimitEndpointConfig, ServerConfig, TlsConfig, TracingConfig,
 };
 
 #[cfg(feature = "hot-reload")]
@@ -208,6 +215,13 @@ pub use config::hot_reload::{
 #[cfg(feature = "cache")]
 pub use oxcache;
 
+/// 缓存抽象模块（功能组件的标准同步存储接口）
+#[cfg(feature = "cache")]
+pub mod cache;
+
+#[cfg(feature = "cache")]
+pub use cache::{DashMapCache, SharedCache, SyncCache};
+
 /// 直接透传 inklog 库（日志功能由 inklog 统一提供）
 #[cfg(feature = "logging")]
 pub use inklog;
@@ -218,9 +232,8 @@ pub mod websocket;
 
 #[cfg(feature = "websocket")]
 pub use websocket::{
-    build, websocket_upgrade, BoxFuture, ConnectionManager, WebSocketConfig,
-    WebSocketConnection, WebSocketHandler, WebSocketMessage, WebSocketRoute,
-    ValidatedWebSocketUpgrade,
+    build, websocket_upgrade, BoxFuture, ConnectionManager, ValidatedWebSocketUpgrade,
+    WebSocketConfig, WebSocketConnection, WebSocketHandler, WebSocketMessage, WebSocketRoute,
 };
 
 /// gRPC server support
