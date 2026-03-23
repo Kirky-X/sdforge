@@ -366,7 +366,7 @@ mod tests {
         let error: ApiError = serde_json::from_str(json).unwrap();
 
         assert!(
-            matches!(error, ApiError::NotFound { ref resource, resource_id: Some(ref id) } 
+            matches!(error, ApiError::NotFound { ref resource, resource_id: Some(ref id) }
                 if resource == "user" && id == "456"),
             "Expected NotFound variant with correct values, got {:?}",
             error

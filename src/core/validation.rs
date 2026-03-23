@@ -349,8 +349,8 @@ where
 
 #[cfg(all(feature = "http", test))]
 mod tests {
-    use super::*;
     use super::super::ApiError;
+    use super::*;
     use serde::Deserialize;
     use validator::Validate;
 
@@ -421,7 +421,10 @@ mod tests {
         // Script tags should be escaped
         let input = "<script>alert('xss')</script>";
         let sanitized = sanitizer::sanitize_xss(input);
-        assert_eq!(sanitized, "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;&#x2F;script&gt;");
+        assert_eq!(
+            sanitized,
+            "&lt;script&gt;alert(&#x27;xss&#x27;)&lt;&#x2F;script&gt;"
+        );
         assert!(!sanitized.contains("<script>"));
     }
 
@@ -430,7 +433,10 @@ mod tests {
         // Image tags should be escaped
         let input = "<img src=x onerror=alert('xss')>";
         let sanitized = sanitizer::sanitize_xss(input);
-        assert_eq!(sanitized, "&lt;img src=x onerror=alert(&#x27;xss&#x27;)&gt;");
+        assert_eq!(
+            sanitized,
+            "&lt;img src=x onerror=alert(&#x27;xss&#x27;)&gt;"
+        );
         assert!(!sanitized.contains("<img"));
     }
 
@@ -439,7 +445,10 @@ mod tests {
         // Iframe tags should be escaped
         let input = "<iframe src=\"http://evil.com\"></iframe>";
         let sanitized = sanitizer::sanitize_xss(input);
-        assert_eq!(sanitized, "&lt;iframe src=&quot;http:&#x2F;&#x2F;evil.com&quot;&gt;&lt;&#x2F;iframe&gt;");
+        assert_eq!(
+            sanitized,
+            "&lt;iframe src=&quot;http:&#x2F;&#x2F;evil.com&quot;&gt;&lt;&#x2F;iframe&gt;"
+        );
         assert!(!sanitized.contains("<iframe"));
     }
 
@@ -480,7 +489,12 @@ mod tests {
         let result = sanitizer::sanitize_path(input);
         assert!(result.is_err());
         // validation_error returns InvalidInput variant
-        if let Err(ApiError::InvalidInput { message: msg, field: _, value: _ }) = result {
+        if let Err(ApiError::InvalidInput {
+            message: msg,
+            field: _,
+            value: _,
+        }) = result
+        {
             assert!(msg.contains("invalid") || msg.contains("traversal"));
         } else {
             panic!("Expected InvalidInput error");
@@ -629,5 +643,593 @@ mod tests {
 
         let result = sanitizer::validate_length("test", 5, 10, "test_field");
         assert!(result.is_err());
+    }
+
+    // ============================================================================
+    // Comprehensive ValidationErrorsWrapper Tests
+    // ============================================================================
+
+    #[test]
+    fn test_validation_errors_wrapper_new_empty() {
+        let wrapper = ValidationErrorsWrapper::new(vec![]);
+        assert!(wrapper.errors.is_empty());
+    }
+
+    #[test]
+    fn test_validation_errors_wrapper_new_multiple() {
+        let errors = vec![
+            FieldValidationError {
+                field: "email".to_string(),
+                constraints: vec!["email".to_string()],
+            },
+            FieldValidationError {
+                field: "name".to_string(),
+                constraints: vec!["length".to_string()],
+            },
+        ];
+        let wrapper = ValidationErrorsWrapper::new(errors);
+        assert_eq!(wrapper.errors.len(), 2);
+    }
+
+    #[test]
+    fn test_field_validation_error_equality() {
+        let error1 = FieldValidationError {
+            field: "email".to_string(),
+            constraints: vec!["email".to_string()],
+        };
+        let error2 = FieldValidationError {
+            field: "email".to_string(),
+            constraints: vec!["email".to_string()],
+        };
+        assert_eq!(error1, error2);
+    }
+
+    #[test]
+    fn test_field_validation_error_clone() {
+        let error = FieldValidationError {
+            field: "password".to_string(),
+            constraints: vec!["min_length".to_string()],
+        };
+        let cloned = error.clone();
+        assert_eq!(error, cloned);
+    }
+
+    // ============================================================================
+    // Comprehensive Email Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_validate_email_valid_with_subdomain() {
+        let result = validators::validate_email("user@mail.example.com");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_email_valid_with_plus() {
+        let result = validators::validate_email("user+tag@example.com");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_email_valid_with_dots() {
+        let result = validators::validate_email("first.last@example.com");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_email_invalid_empty() {
+        let result = validators::validate_email("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_email_invalid_no_at() {
+        let result = validators::validate_email("userexample.com");
+        assert!(result.is_err());
+    }
+
+    // ============================================================================
+    // Comprehensive Regex Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_validate_regex_phone_pattern() {
+        let result = validators::validate_regex("123-456-7890", r"^\d{3}-\d{3}-\d{4}$");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_regex_phone_invalid() {
+        let result = validators::validate_regex("12-456-7890", r"^\d{3}-\d{3}-\d{4}$");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_regex_invalid_pattern() {
+        let result = validators::validate_regex("test", r"[invalid(");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_regex_empty_string() {
+        let result = validators::validate_regex("", r"^$");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_regex_unicode() {
+        let result = validators::validate_regex("Hello 世界", r"[\w\s\u{4e00}-\u{9fff}]+");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_regex_case_sensitive() {
+        let result = validators::validate_regex("ABC", r"^[a-z]+$");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_regex_case_insensitive() {
+        let result = validators::validate_regex("ABC", r"(?i)^[a-z]+$");
+        assert!(result.is_ok());
+    }
+
+    // ============================================================================
+    // Comprehensive Range Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_validate_range_i8() {
+        let result = validators::validate_range(50_i8, 0_i8, 100_i8);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_range_i16() {
+        let result = validators::validate_range(500_i16, 0_i16, 1000_i16);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_range_i32() {
+        let result = validators::validate_range(50000_i32, 0_i32, 100000_i32);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_range_i64() {
+        let result = validators::validate_range(5000000000_i64, 0_i64, 10000000000_i64);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_range_u8() {
+        let result = validators::validate_range(128_u8, 0_u8, 255_u8);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_range_u16() {
+        let result = validators::validate_range(30000_u16, 0_u16, 65535_u16);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_range_u32() {
+        let result = validators::validate_range(1000000000_u32, 0_u32, 4000000000_u32);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_range_u64() {
+        let result = validators::validate_range(5000000000_u64, 0_u64, 10000000000_u64);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_range_f32() {
+        let result = validators::validate_range(0.5_f32, 0.0_f32, 1.0_f32);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_range_negative() {
+        let result = validators::validate_range(-50, -100, -1);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_range_negative_below_min() {
+        let result = validators::validate_range(-101, -100, -1);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_range_negative_above_max() {
+        let result = validators::validate_range(0, -100, -1);
+        assert!(result.is_err());
+    }
+
+    // ============================================================================
+    // Comprehensive Length Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_validate_length_unicode() {
+        let result = validators::validate_length("世界", 1, 10);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_length_emoji() {
+        let result = validators::validate_length("😀😁😂", 1, 10);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_length_emoji_exact() {
+        let result = validators::validate_length("😀😁😂😃", 4, 4);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_length_mixed_unicode() {
+        let result = validators::validate_length("Hello 世界 🌍", 1, 20);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_length_whitespace() {
+        let result = validators::validate_length("   ", 1, 10);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_length_newlines() {
+        let result = validators::validate_length("line1\nline2", 1, 20);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_length_empty_min_zero() {
+        let result = validators::validate_length("", 0, 10);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_length_very_long() {
+        let long_string = "a".repeat(1000);
+        let result = validators::validate_length(&long_string, 1, 100);
+        assert!(result.is_err());
+    }
+
+    // ============================================================================
+    // Comprehensive XSS Sanitization Tests
+    // ============================================================================
+
+    #[test]
+    fn test_sanitize_xss_empty() {
+        let sanitized = sanitizer::sanitize_xss("");
+        assert_eq!(sanitized, "");
+    }
+
+    #[test]
+    fn test_sanitize_xss_event_handler() {
+        let input = "<div onclick=\"alert('xss')\">Click me</div>";
+        let sanitized = sanitizer::sanitize_xss(input);
+        assert!(!sanitized.contains("<div"));
+    }
+
+    #[test]
+    fn test_sanitize_xss_javascript_url() {
+        let input = "<a href=\"javascript:alert('xss')\">Click</a>";
+        let sanitized = sanitizer::sanitize_xss(input);
+        assert!(sanitized.contains("&lt;a"));
+        assert!(sanitized.contains("&quot;"));
+    }
+
+    #[test]
+    fn test_sanitize_xss_unicode() {
+        let input = "Hello 世界";
+        let sanitized = sanitizer::sanitize_xss(input);
+        assert_eq!(sanitized, input);
+    }
+
+    #[test]
+    fn test_sanitize_xss_preserves_normal_text() {
+        let input = "This is normal text with numbers 123 and symbols !@#$%^&*()";
+        let sanitized = sanitizer::sanitize_xss(input);
+        assert_eq!(sanitized, input);
+    }
+
+    // ============================================================================
+    // Comprehensive Path Sanitization Tests
+    // ============================================================================
+
+    #[test]
+    fn test_sanitize_path_relative() {
+        let result = sanitizer::sanitize_path("home/user/documents");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitize_path_filename() {
+        let result = sanitizer::sanitize_path("file.txt");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitize_path_empty() {
+        let result = sanitizer::sanitize_path("");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "");
+    }
+
+    #[test]
+    fn test_sanitize_path_multiple_null_bytes() {
+        let result = sanitizer::sanitize_path("file\0\0\0.txt");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "file.txt");
+    }
+
+    #[test]
+    fn test_sanitize_path_hidden_file() {
+        let result = sanitizer::sanitize_path(".hidden_file");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitize_path_unicode() {
+        let result = sanitizer::sanitize_path("/var/文档/文件.txt");
+        assert!(result.is_ok());
+    }
+
+    // ============================================================================
+    // Comprehensive Filename Sanitization Tests
+    // ============================================================================
+
+    #[test]
+    fn test_sanitize_filename_valid_underscore() {
+        let result = sanitizer::sanitize_filename("my_document.pdf");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitize_filename_valid_hyphen() {
+        let result = sanitizer::sanitize_filename("my-document.pdf");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitize_filename_valid_spaces() {
+        let result = sanitizer::sanitize_filename("my document.pdf");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitize_filename_removes_special() {
+        let result = sanitizer::sanitize_filename("file<>:\"|?*.txt");
+        assert!(result.is_ok());
+        let sanitized = result.unwrap();
+        assert!(!sanitized.contains('<'));
+        assert!(!sanitized.contains('>'));
+    }
+
+    #[test]
+    fn test_sanitize_filename_only_special_chars() {
+        let result = sanitizer::sanitize_filename("<>:\"|?*");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sanitize_filename_unicode() {
+        let result = sanitizer::sanitize_filename("文档.pdf");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "文档.pdf");
+    }
+
+    #[test]
+    fn test_sanitize_filename_multiple_dots() {
+        let result = sanitizer::sanitize_filename("file.name.tar.gz");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitize_filename_hidden() {
+        let result = sanitizer::sanitize_filename(".hidden");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitize_filename_null_byte() {
+        let result = sanitizer::sanitize_filename("file\0.txt");
+        assert!(result.is_ok());
+        let sanitized = result.unwrap();
+        assert!(!sanitized.contains('\0'));
+    }
+
+    // ============================================================================
+    // Comprehensive User ID Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_validate_user_id_one() {
+        let result = sanitizer::validate_user_id(1);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_user_id_max() {
+        let result = sanitizer::validate_user_id(i64::MAX);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_user_id_zero() {
+        let result = sanitizer::validate_user_id(0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_user_id_negative() {
+        let result = sanitizer::validate_user_id(-1);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_user_id_min() {
+        let result = sanitizer::validate_user_id(i64::MIN);
+        assert!(result.is_err());
+    }
+
+    // ============================================================================
+    // Comprehensive Not-Empty Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_validate_not_empty_with_spaces() {
+        let result = sanitizer::validate_not_empty("  hello  ", "field");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "hello");
+    }
+
+    #[test]
+    fn test_validate_not_empty_whitespace_only() {
+        let result = sanitizer::validate_not_empty("   ", "field");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_not_empty_tabs_only() {
+        let result = sanitizer::validate_not_empty("\t\t", "field");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_not_empty_newlines_only() {
+        let result = sanitizer::validate_not_empty("\n\n", "field");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_not_empty_preserves_inner_spaces() {
+        let result = sanitizer::validate_not_empty("  hello world  ", "field");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "hello world");
+    }
+
+    #[test]
+    fn test_validate_not_empty_unicode() {
+        let result = sanitizer::validate_not_empty("  世界  ", "field");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "世界");
+    }
+
+    // ============================================================================
+    // Comprehensive Sanitizer Length Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_sanitizer_validate_length_exact_min() {
+        let result = sanitizer::validate_length("abc", 3, 10, "field");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitizer_validate_length_exact_max() {
+        let result = sanitizer::validate_length("abcde", 1, 5, "field");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitizer_validate_length_too_short() {
+        let result = sanitizer::validate_length("ab", 3, 10, "field");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sanitizer_validate_length_too_long() {
+        let result = sanitizer::validate_length("abcdefghijk", 1, 10, "field");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sanitizer_validate_length_invalid_params() {
+        let result = sanitizer::validate_length("test", 10, 1, "field");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_sanitizer_validate_length_zero_to_zero() {
+        let result = sanitizer::validate_length("", 0, 0, "field");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_sanitizer_validate_length_preserves_original() {
+        let input = "  hello  ";
+        let result = sanitizer::validate_length(input, 1, 20, "field");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "  hello  ");
+    }
+
+    // ============================================================================
+    // Comprehensive Email Format Validation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_validate_email_format_valid() {
+        let result = sanitizer::validate_email_format("user@example.com");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "user@example.com");
+    }
+
+    #[test]
+    fn test_validate_email_format_trims() {
+        let result = sanitizer::validate_email_format("  user@example.com  ");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "user@example.com");
+    }
+
+    #[test]
+    fn test_validate_email_format_missing_at() {
+        let result = sanitizer::validate_email_format("userexample.com");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_email_format_missing_dot() {
+        let result = sanitizer::validate_email_format("user@examplecom");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_email_format_starts_with_at() {
+        let result = sanitizer::validate_email_format("@example.com");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_email_format_ends_with_at() {
+        let result = sanitizer::validate_email_format("user@");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_email_format_empty() {
+        let result = sanitizer::validate_email_format("");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_email_format_with_subdomain() {
+        let result = sanitizer::validate_email_format("user@mail.example.com");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_email_format_with_plus() {
+        let result = sanitizer::validate_email_format("user+tag@example.com");
+        assert!(result.is_ok());
     }
 }

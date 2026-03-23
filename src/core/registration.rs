@@ -253,16 +253,14 @@ mod tests {
 
     #[test]
     fn test_websocket_registration() {
-        let reg = websocket::WsRegistration::new(test_metadata())
-            .with_handlers(5);
+        let reg = websocket::WsRegistration::new(test_metadata()).with_handlers(5);
         assert_eq!(reg.protocol(), "websocket");
         assert_eq!(reg.route_count(), 5);
     }
 
     #[test]
     fn test_grpc_registration() {
-        let reg = grpc::GrpcRegistration::new(test_metadata())
-            .with_services(4);
+        let reg = grpc::GrpcRegistration::new(test_metadata()).with_services(4);
         assert_eq!(reg.protocol(), "grpc");
         assert_eq!(reg.route_count(), 4);
     }
