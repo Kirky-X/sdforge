@@ -10,7 +10,7 @@ mod streaming_tests {
     #[test]
     fn test_create_stream_channel() {
         let (tx, response) = create_stream_channel::<String>(10);
-        
+
         assert!(tx.capacity() > 0);
         assert!(!tx.is_closed());
     }
@@ -20,7 +20,7 @@ mod streaming_tests {
         let (tx, rx) = mpsc::channel::<Result<String, String>>(10);
         let stream = ReceiverStream::new(rx);
         let response = StreamResponse::new(stream);
-        
+
         assert!(!response.is_final());
     }
 
@@ -39,13 +39,13 @@ mod streaming_tests {
     #[tokio::test]
     async fn test_stream_to_sse_basic() {
         let (tx, rx) = mpsc::channel::<Result<String, String>>(10);
-        
+
         let sse_stream = stream_to_sse(rx);
-        
+
         tx.send(Ok("first message".to_string())).await.unwrap();
         tx.send(Ok("second message".to_string())).await.unwrap();
         drop(tx);
-        
+
         let mut stream = Box::pin(sse_stream);
         let first = stream.next().await;
         assert!(first.is_some());
@@ -58,7 +58,7 @@ mod streaming_tests {
             event_name: Some("message".to_string()),
             data: "test data".to_string(),
         };
-        
+
         let serialized = serde_json::to_string(&event).unwrap();
         assert!(serialized.contains("test data"));
     }
@@ -68,7 +68,7 @@ mod streaming_tests {
         let event = StreamEvent::<String>::Ping {
             timestamp: 1234567890,
         };
-        
+
         let serialized = serde_json::to_string(&event).unwrap();
         assert!(serialized.contains("ping"));
         assert!(serialized.contains("1234567890"));
@@ -79,7 +79,7 @@ mod streaming_tests {
         let event = StreamEvent::<String>::Error {
             message: "Something went wrong".to_string(),
         };
-        
+
         let serialized = serde_json::to_string(&event).unwrap();
         assert!(serialized.contains("error"));
         assert!(serialized.contains("Something went wrong"));
@@ -90,7 +90,7 @@ mod streaming_tests {
         let event = StreamEvent::<String>::Complete {
             message: Some("Stream completed".to_string()),
         };
-        
+
         let serialized = serde_json::to_string(&event).unwrap();
         assert!(serialized.contains("complete"));
     }
@@ -102,7 +102,7 @@ mod streaming_tests {
             event_name: None,
             data: "no id event".to_string(),
         };
-        
+
         let serialized = serde_json::to_string(&event).unwrap();
         assert!(serialized.contains("no id event"));
     }
@@ -110,14 +110,14 @@ mod streaming_tests {
     #[tokio::test]
     async fn test_stream_channel_send_and_receive() {
         let (tx, rx) = create_stream_channel::<i32>(5);
-        
+
         tx.send(Ok(1)).await.unwrap();
         tx.send(Ok(2)).await.unwrap();
         tx.send(Ok(3)).await.unwrap();
         drop(tx);
-        
+
         let mut stream = Box::pin(ReceiverStream::new(rx));
-        
+
         assert_eq!(stream.next().await.unwrap().unwrap(), 1);
         assert_eq!(stream.next().await.unwrap().unwrap(), 2);
         assert_eq!(stream.next().await.unwrap().unwrap(), 3);
@@ -127,13 +127,13 @@ mod streaming_tests {
     #[tokio::test]
     async fn test_stream_channel_error_handling() {
         let (tx, rx) = create_stream_channel::<String>(5);
-        
+
         tx.send(Ok("success".to_string())).await.unwrap();
         tx.send(Err("error occurred".to_string())).await.unwrap();
         drop(tx);
-        
+
         let mut stream = Box::pin(ReceiverStream::new(rx));
-        
+
         assert!(stream.next().await.unwrap().is_ok());
         assert!(stream.next().await.unwrap().is_err());
     }
@@ -143,7 +143,7 @@ mod streaming_tests {
         let (tx, rx) = mpsc::channel::<Result<String, String>>(10);
         let stream = ReceiverStream::new(rx);
         let response = StreamResponse::new(stream);
-        
+
         let _ = response.into_stream();
     }
 
@@ -163,7 +163,7 @@ mod streaming_tests {
             StreamEvent::<String>::Ping { timestamp: 100 },
             StreamEvent::<String>::Complete { message: None },
         ];
-        
+
         for event in events {
             let serialized = serde_json::to_string(&event);
             assert!(serialized.is_ok());

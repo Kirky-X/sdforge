@@ -42,7 +42,7 @@ mod version_routing_tests {
     fn test_version_router_config_with_deprecated() {
         let mut deprecated = std::collections::HashMap::new();
         deprecated.insert("v1".to_string(), "2025-01-01".to_string());
-        
+
         let config = VersionRouterConfig {
             default_version: "v2".to_string(),
             supported_versions: vec!["v1".to_string(), "v2".to_string()],
@@ -50,7 +50,7 @@ mod version_routing_tests {
             deprecated_versions: deprecated,
             sunset_header: "Sunset".to_string(),
         };
-        
+
         assert!(config.deprecated_versions.contains_key("v1"));
         assert_eq!(config.deprecated_versions.get("v1"), Some(&"2025-01-01".to_string()));
     }
@@ -64,7 +64,7 @@ mod version_routing_tests {
             axum::http::Method::GET,
             router,
         );
-        
+
         assert_eq!(route.version(), "v1");
         assert_eq!(route.path(), "/test");
     }

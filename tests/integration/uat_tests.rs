@@ -35,7 +35,7 @@ mod uat_003_dual_protocol {
     async fn test_dual_protocol_build() {
         let http_result = http_build();
         let mcp_result = mcp_build().await;
-        
+
         assert!(http_result.is_ok(), "HTTP should build");
         assert!(mcp_result.is_ok(), "MCP should build");
     }
@@ -55,7 +55,7 @@ mod uat_004_module_organization {
             cache_ttl: None,
             is_streaming: false,
         };
-        
+
         let metadata2 = ApiMetadata {
             name: "users/profile".to_string(),
             version: "v1".to_string(),
@@ -63,7 +63,7 @@ mod uat_004_module_organization {
             cache_ttl: None,
             is_streaming: false,
         };
-        
+
         assert_ne!(metadata1.name(), metadata2.name());
     }
 }
@@ -92,10 +92,10 @@ mod uat_007_nested_serialization {
             id: 1,
             customer: Customer { id: 100, name: "Alice".to_string() },
         };
-        
+
         let response = ServiceResponse::new(order);
         let json = serde_json::to_string(&response).unwrap();
-        
+
         assert!(json.contains("id"));
         assert!(json.contains("customer"));
     }
@@ -114,7 +114,7 @@ mod uat_009_error_response {
             ApiError::validation_error("email", "Invalid format"),
             ApiError::invalid_input("Query cannot be empty", Some("query".to_string())),
         ];
-        
+
         for error in errors {
             let json = serde_json::to_string(&error).unwrap();
             assert!(json.contains("NOT_FOUND") || json.contains("VALIDATION") || json.contains("INVALID"));
@@ -125,10 +125,10 @@ mod uat_009_error_response {
     fn test_error_http_status_mapping() {
         let not_found = ApiError::not_found("User", None);
         assert_eq!(not_found.status_code(), 404);
-        
+
         let validation = ApiError::validation_error("field", "msg");
         assert_eq!(validation.status_code(), 400);
-        
+
         let invalid = ApiError::invalid_input("msg", None);
         assert_eq!(invalid.status_code(), 400);
     }
@@ -148,7 +148,7 @@ mod uat_010_version_management {
             cache_ttl: None,
             is_streaming: false,
         };
-        
+
         let v2 = ApiMetadata {
             name: "get_user".to_string(),
             version: "v2".to_string(),
@@ -156,7 +156,7 @@ mod uat_010_version_management {
             cache_ttl: None,
             is_streaming: false,
         };
-        
+
         assert_eq!(v1.name(), v2.name());
         assert_eq!(v1.version(), "v1");
         assert_eq!(v2.version(), "v2");
@@ -172,11 +172,11 @@ mod uat_011_performance {
     #[test]
     fn test_response_creation_performance() {
         let start = Instant::now();
-        
+
         for _ in 0..10000 {
             let _ = ServiceResponse::new("test data".to_string());
         }
-        
+
         let duration = start.elapsed();
         assert!(duration.as_millis() < 1000, "Response creation should be fast");
     }
