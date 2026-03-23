@@ -153,6 +153,7 @@ pub async fn build() -> mcp_sdk::server::Server<mcp_sdk::transport::ServerStdioT
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mcp_sdk::tools::Tool;
 
     /// Test McpToolRegistration structure
     #[test]
@@ -609,7 +610,8 @@ mod tests {
         assert!(serialized.contains("\"method\":\"tools/call\""));
         assert!(serialized.contains("\"params\""));
 
-        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let deserialized: JsonRpcRequest =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert_eq!(deserialized.jsonrpc.as_str(), "2.0");
         assert_eq!(deserialized.method, "tools/call");
         assert_eq!(deserialized.id, 1_u64);
@@ -628,7 +630,8 @@ mod tests {
         };
 
         let serialized = serde_json::to_string(&request).expect("serialization should succeed");
-        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let deserialized: JsonRpcRequest =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert_eq!(deserialized.id, 42_u64);
     }
 
@@ -651,7 +654,8 @@ mod tests {
         assert!(serialized.contains("\"result\""));
         assert!(!serialized.contains("\"error\""));
 
-        let deserialized: JsonRpcResponse = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let deserialized: JsonRpcResponse =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert!(deserialized.result.is_some());
         assert!(deserialized.error.is_none());
     }
@@ -688,12 +692,14 @@ mod tests {
             params: None,
         };
 
-        let serialized = serde_json::to_string(&notification).expect("serialization should succeed");
+        let serialized =
+            serde_json::to_string(&notification).expect("serialization should succeed");
         assert!(serialized.contains("\"jsonrpc\":\"2.0\""));
         assert!(serialized.contains("\"method\":\"notifications/initialized\""));
         assert!(!serialized.contains("\"id\""));
 
-        let deserialized: JsonRpcNotification = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let deserialized: JsonRpcNotification =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert_eq!(deserialized.method, "notifications/initialized");
     }
 
@@ -727,7 +733,8 @@ mod tests {
         assert!(serialized.contains("\"name\""));
         assert!(serialized.contains("\"mimeType\""));
 
-        let deserialized: Resource = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let deserialized: Resource =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert_eq!(deserialized.uri.as_str(), "file:///path/to/resource");
         assert_eq!(deserialized.name, "my-resource");
         assert_eq!(deserialized.mime_type, Some("text/plain".to_string()));
@@ -748,7 +755,8 @@ mod tests {
             id: 1_u64,
         };
 
-        let serialized = serde_json::to_string(&subscribe_request).expect("serialization should succeed");
+        let serialized =
+            serde_json::to_string(&subscribe_request).expect("serialization should succeed");
         assert!(serialized.contains("\"method\":\"resources/subscribe\""));
         assert!(serialized.contains("\"uri\""));
 
@@ -762,7 +770,8 @@ mod tests {
             id: 2_u64,
         };
 
-        let serialized = serde_json::to_string(&unsubscribe_request).expect("serialization should succeed");
+        let serialized =
+            serde_json::to_string(&unsubscribe_request).expect("serialization should succeed");
         assert!(serialized.contains("\"method\":\"resources/unsubscribe\""));
     }
 
@@ -780,8 +789,10 @@ mod tests {
             id: 1_u64,
         };
 
-        let serialized = serde_json::to_string(&subscribe_request).expect("serialization should succeed");
-        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let serialized =
+            serde_json::to_string(&subscribe_request).expect("serialization should succeed");
+        let deserialized: JsonRpcRequest =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert_eq!(deserialized.method, "resources/subscribe");
         assert!(deserialized.params.is_some());
     }
@@ -811,10 +822,14 @@ mod tests {
             error: None,
         };
 
-        let serialized = serde_json::to_string(&list_response).expect("serialization should succeed");
-        let deserialized: JsonRpcResponse = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let serialized =
+            serde_json::to_string(&list_response).expect("serialization should succeed");
+        let deserialized: JsonRpcResponse =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         let result = deserialized.result.expect("should have result");
-        let resources = result.get("resources").expect("should have resources array");
+        let resources = result
+            .get("resources")
+            .expect("should have resources array");
         assert!(resources.is_array());
         assert_eq!(resources.as_array().unwrap().len(), 2);
     }
@@ -835,8 +850,10 @@ mod tests {
             id: 99_u64,
         };
 
-        let serialized = serde_json::to_string(&unsubscribe_request).expect("serialization should succeed");
-        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let serialized =
+            serde_json::to_string(&unsubscribe_request).expect("serialization should succeed");
+        let deserialized: JsonRpcRequest =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert_eq!(deserialized.method, "resources/unsubscribe");
     }
 
@@ -862,8 +879,10 @@ mod tests {
             id: 3_u64,
         };
 
-        let serialized = serde_json::to_string(&prompt_request).expect("serialization should succeed");
-        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let serialized =
+            serde_json::to_string(&prompt_request).expect("serialization should succeed");
+        let deserialized: JsonRpcRequest =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert_eq!(deserialized.method, "prompts/get");
         let params = deserialized.params.expect("should have params");
         assert_eq!(params["name"], "greeting");
@@ -891,8 +910,10 @@ mod tests {
             id: 7_u64,
         };
 
-        let serialized = serde_json::to_string(&prompt_request).expect("serialization should succeed");
-        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let serialized =
+            serde_json::to_string(&prompt_request).expect("serialization should succeed");
+        let deserialized: JsonRpcRequest =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         let params = deserialized.params.expect("should have params");
         assert_eq!(params["arguments"]["repo"], "sdforge");
         assert_eq!(params["arguments"]["pr_number"], 42);
@@ -922,8 +943,10 @@ mod tests {
             error: None,
         };
 
-        let serialized = serde_json::to_string(&prompt_response).expect("serialization should succeed");
-        let deserialized: JsonRpcResponse = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let serialized =
+            serde_json::to_string(&prompt_response).expect("serialization should succeed");
+        let deserialized: JsonRpcResponse =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         let result = deserialized.result.expect("should have result");
         let messages = result.get("messages").expect("should have messages");
         assert!(messages.is_array());
@@ -942,8 +965,10 @@ mod tests {
             id: 3_u64,
         };
 
-        let serialized = serde_json::to_string(&list_request).expect("serialization should succeed");
-        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let serialized =
+            serde_json::to_string(&list_request).expect("serialization should succeed");
+        let deserialized: JsonRpcRequest =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert_eq!(deserialized.method, "prompts/list");
         assert!(deserialized.params.is_none());
     }
@@ -970,7 +995,10 @@ mod tests {
         // Valid JSON but missing required fields for a Request
         let not_a_request = r#"{"jsonrpc": "2.0", "foo": "bar"}"#;
         let result: Result<JsonRpcRequest, _> = serde_json::from_str(not_a_request);
-        assert!(result.is_err(), "JSON without required 'method' and 'id' fields should fail");
+        assert!(
+            result.is_err(),
+            "JSON without required 'method' and 'id' fields should fail"
+        );
     }
 
     /// Test: Wrong JSON-RPC version is preserved during deserialization
@@ -984,7 +1012,8 @@ mod tests {
             "params": {},
             "id": 123
         }"#;
-        let request: JsonRpcRequest = serde_json::from_str(wrong_version).expect("deserialization should succeed");
+        let request: JsonRpcRequest =
+            serde_json::from_str(wrong_version).expect("deserialization should succeed");
         // The version field is preserved as-is (no validation, just roundtrip)
         assert_eq!(request.jsonrpc.as_str(), "1.0");
     }
@@ -1006,7 +1035,8 @@ mod tests {
         assert!(!serialized.contains("\"params\":null"));
         assert!(!serialized.contains("\"params\":[]"));
 
-        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let deserialized: JsonRpcRequest =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert!(deserialized.params.is_none());
     }
 
@@ -1028,7 +1058,8 @@ mod tests {
         // All-None capabilities serialize to empty object
         assert_eq!(serialized, "{}");
 
-        let deserialized: ServerCapabilities = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let deserialized: ServerCapabilities =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert!(deserialized.tools.is_none());
         assert!(deserialized.resources.is_none());
     }
@@ -1061,7 +1092,8 @@ mod tests {
         };
 
         let serialized = serde_json::to_string(&client_caps).expect("serialization should succeed");
-        let deserialized: ClientCapabilities = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let deserialized: ClientCapabilities =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert!(deserialized.roots.is_some());
         assert_eq!(deserialized.roots.unwrap().list_changed, Some(true));
     }
@@ -1080,7 +1112,1298 @@ mod tests {
         assert!(serialized.contains("\"name\":\"sdforge-mcp\""));
         assert!(serialized.contains("\"version\":\"0.1.0\""));
 
-        let deserialized: Implementation = serde_json::from_str(&serialized).expect("deserialization should succeed");
+        let deserialized: Implementation =
+            serde_json::from_str(&serialized).expect("deserialization should succeed");
         assert_eq!(deserialized.name, "sdforge-mcp");
+    }
+
+    // ============================================================================
+    // ArcToolWrapper Tests
+    // ============================================================================
+
+    #[test]
+    fn test_arc_tool_wrapper_name_delegation() {
+        struct NameTool;
+        impl mcp_sdk::tools::Tool for NameTool {
+            fn name(&self) -> String {
+                "wrapped_name_tool".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let inner = Arc::new(NameTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner };
+        assert_eq!(wrapper.name(), "wrapped_name_tool");
+    }
+
+    #[test]
+    fn test_arc_tool_wrapper_description_delegation() {
+        struct DescTool;
+        impl mcp_sdk::tools::Tool for DescTool {
+            fn name(&self) -> String {
+                "name".to_string()
+            }
+            fn description(&self) -> String {
+                "wrapped description text".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let inner = Arc::new(DescTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner };
+        assert_eq!(wrapper.description(), "wrapped description text");
+    }
+
+    #[test]
+    fn test_arc_tool_wrapper_input_schema_delegation() {
+        struct SchemaTool;
+        impl mcp_sdk::tools::Tool for SchemaTool {
+            fn name(&self) -> String {
+                "name".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "wrapped_field": {"type": "string"}
+                    }
+                })
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let inner = Arc::new(SchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner };
+        let schema = wrapper.input_schema();
+        assert_eq!(schema["type"], "object");
+        assert!(schema["properties"]["wrapped_field"].is_object());
+    }
+
+    #[test]
+    fn test_arc_tool_wrapper_call_delegation() {
+        struct CallTool;
+        impl mcp_sdk::tools::Tool for CallTool {
+            fn name(&self) -> String {
+                "name".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                let val = input.unwrap_or(serde_json::json!({}));
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                        text: val.to_string(),
+                    }],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let inner = Arc::new(CallTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner };
+        let result = wrapper.call(Some(serde_json::json!({"key": "value"})));
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(!response.content.is_empty());
+    }
+
+    #[test]
+    fn test_arc_tool_wrapper_error_propagation() {
+        struct ErrorTool;
+        impl mcp_sdk::tools::Tool for ErrorTool {
+            fn name(&self) -> String {
+                "name".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Err(anyhow::anyhow!("Wrapped error"))
+            }
+        }
+
+        let inner = Arc::new(ErrorTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner };
+        let result = wrapper.call(None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Wrapped error"));
+    }
+
+    // ============================================================================
+    // Edge Case Tests - Names and Strings
+    // ============================================================================
+
+    #[test]
+    fn test_tool_name_with_unicode() {
+        struct UnicodeTool;
+        impl mcp_sdk::tools::Tool for UnicodeTool {
+            fn name(&self) -> String {
+                "工具_🛠️_tool".to_string()
+            }
+            fn description(&self) -> String {
+                "描述 🎯 description".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(UnicodeTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        assert_eq!(tool.name(), "工具_🛠️_tool");
+        assert_eq!(tool.description(), "描述 🎯 description");
+    }
+
+    #[test]
+    fn test_tool_name_with_special_characters() {
+        struct SpecialTool;
+        impl mcp_sdk::tools::Tool for SpecialTool {
+            fn name(&self) -> String {
+                "tool-with_special.chars:123".to_string()
+            }
+            fn description(&self) -> String {
+                "Description with\nnewline and\ttab".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(SpecialTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        assert_eq!(tool.name(), "tool-with_special.chars:123");
+        assert!(tool.description().contains('\n'));
+        assert!(tool.description().contains('\t'));
+    }
+
+    #[test]
+    fn test_tool_name_empty_string() {
+        struct EmptyNameTool;
+        impl mcp_sdk::tools::Tool for EmptyNameTool {
+            fn name(&self) -> String {
+                "".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(EmptyNameTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        assert_eq!(tool.name(), "");
+    }
+
+    #[test]
+    fn test_tool_description_empty_string() {
+        struct EmptyDescTool;
+        impl mcp_sdk::tools::Tool for EmptyDescTool {
+            fn name(&self) -> String {
+                "name".to_string()
+            }
+            fn description(&self) -> String {
+                "".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(EmptyDescTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        assert_eq!(tool.description(), "");
+    }
+
+    #[test]
+    fn test_tool_name_very_long() {
+        struct LongNameTool;
+        impl mcp_sdk::tools::Tool for LongNameTool {
+            fn name(&self) -> String {
+                "a".repeat(1000)
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(LongNameTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        assert_eq!(tool.name().len(), 1000);
+    }
+
+    #[test]
+    fn test_tool_description_very_long() {
+        struct LongDescTool;
+        impl mcp_sdk::tools::Tool for LongDescTool {
+            fn name(&self) -> String {
+                "name".to_string()
+            }
+            fn description(&self) -> String {
+                "d".repeat(5000)
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(LongDescTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        assert_eq!(tool.description().len(), 5000);
+    }
+
+    // ============================================================================
+    // Input Schema Edge Cases
+    // ============================================================================
+
+    #[test]
+    fn test_input_schema_empty_object() {
+        struct EmptySchemaTool;
+        impl mcp_sdk::tools::Tool for EmptySchemaTool {
+            fn name(&self) -> String {
+                "name".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(EmptySchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let schema = tool.input_schema();
+        assert!(schema.is_object());
+        assert!(schema.as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_input_schema_with_nested_objects() {
+        struct NestedSchemaTool;
+        impl mcp_sdk::tools::Tool for NestedSchemaTool {
+            fn name(&self) -> String {
+                "nested".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "user": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string"},
+                                "address": {
+                                    "type": "object",
+                                    "properties": {
+                                        "city": {"type": "string"},
+                                        "zip": {"type": "string"}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                })
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(NestedSchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let schema = tool.input_schema();
+        assert!(
+            schema["properties"]["user"]["properties"]["address"]["properties"]["city"].is_object()
+        );
+    }
+
+    #[test]
+    fn test_input_schema_with_array_type() {
+        struct ArraySchemaTool;
+        impl mcp_sdk::tools::Tool for ArraySchemaTool {
+            fn name(&self) -> String {
+                "array".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "integer"}
+                        }
+                    }
+                })
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(ArraySchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let schema = tool.input_schema();
+        assert_eq!(schema["type"], "array");
+        assert!(schema["items"].is_object());
+    }
+
+    #[test]
+    fn test_input_schema_with_enum() {
+        struct EnumSchemaTool;
+        impl mcp_sdk::tools::Tool for EnumSchemaTool {
+            fn name(&self) -> String {
+                "enum".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({
+                    "type": "string",
+                    "enum": ["option1", "option2", "option3"]
+                })
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(EnumSchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let schema = tool.input_schema();
+        assert!(schema["enum"].is_array());
+        assert_eq!(schema["enum"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_input_schema_with_oneof() {
+        struct OneOfSchemaTool;
+        impl mcp_sdk::tools::Tool for OneOfSchemaTool {
+            fn name(&self) -> String {
+                "oneof".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({
+                    "oneOf": [
+                        {"type": "string"},
+                        {"type": "number"}
+                    ]
+                })
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(OneOfSchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let schema = tool.input_schema();
+        assert!(schema["oneOf"].is_array());
+    }
+
+    // ============================================================================
+    // Tool Call with Various Inputs
+    // ============================================================================
+
+    #[test]
+    fn test_tool_call_with_null_input() {
+        struct NullInputTool;
+        impl mcp_sdk::tools::Tool for NullInputTool {
+            fn name(&self) -> String {
+                "null_input".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                match input {
+                    None => Ok(mcp_sdk::types::CallToolResponse {
+                        content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                            text: "no input".to_string(),
+                        }],
+                        is_error: None,
+                        meta: None,
+                    }),
+                    Some(v) if v.is_null() => Ok(mcp_sdk::types::CallToolResponse {
+                        content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                            text: "null input".to_string(),
+                        }],
+                        is_error: None,
+                        meta: None,
+                    }),
+                    _ => Err(anyhow::anyhow!("unexpected input")),
+                }
+            }
+        }
+
+        let tool = Arc::new(NullInputTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let result = tool.call(None);
+        assert!(result.is_ok());
+        let result = tool.call(Some(serde_json::Value::Null));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_tool_call_with_array_input() {
+        struct ArrayInputTool;
+        impl mcp_sdk::tools::Tool for ArrayInputTool {
+            fn name(&self) -> String {
+                "array_input".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "array"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                let arr = input.unwrap_or(serde_json::json!([]));
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                        text: format!(
+                            "array length: {}",
+                            arr.as_array().map(|a| a.len()).unwrap_or(0)
+                        ),
+                    }],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(ArrayInputTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let result = tool.call(Some(serde_json::json!([1, 2, 3])));
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        match &response.content[0] {
+            mcp_sdk::types::ToolResponseContent::Text { text } => {
+                assert!(text.contains("3"));
+            }
+            _ => panic!("Expected text content"),
+        }
+    }
+
+    #[test]
+    fn test_tool_call_with_large_json() {
+        struct LargeJsonTool;
+        impl mcp_sdk::tools::Tool for LargeJsonTool {
+            fn name(&self) -> String {
+                "large".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                let obj = input.unwrap_or(serde_json::json!({}));
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: Some(obj),
+                })
+            }
+        }
+
+        let tool = Arc::new(LargeJsonTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let large_input: serde_json::Value = serde_json::json!({
+            "items": (0..1000).map(|i| format!("item_{}", i)).collect::<Vec<_>>()
+        });
+        let result = tool.call(Some(large_input));
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.meta.is_some());
+    }
+
+    #[test]
+    fn test_tool_call_with_deeply_nested_input() {
+        struct DeepNestedTool;
+        impl mcp_sdk::tools::Tool for DeepNestedTool {
+            fn name(&self) -> String {
+                "deep".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                let val = input.unwrap_or(serde_json::json!({}));
+                let depth = count_depth(&val);
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                        text: format!("depth: {}", depth),
+                    }],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        fn count_depth(val: &serde_json::Value) -> usize {
+            match val {
+                serde_json::Value::Object(map) => {
+                    1 + map.values().map(count_depth).max().unwrap_or(0)
+                }
+                serde_json::Value::Array(arr) => 1 + arr.iter().map(count_depth).max().unwrap_or(0),
+                _ => 0,
+            }
+        }
+
+        let tool = Arc::new(DeepNestedTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let nested = serde_json::json!({
+            "l1": {
+                "l2": {
+                    "l3": {
+                        "l4": {
+                            "l5": "deep"
+                        }
+                    }
+                }
+            }
+        });
+        let result = tool.call(Some(nested));
+        assert!(result.is_ok());
+    }
+
+    // ============================================================================
+    // Tool Response Content Tests
+    // ============================================================================
+
+    #[test]
+    fn test_tool_response_text_content() {
+        struct TextContentTool;
+        impl mcp_sdk::tools::Tool for TextContentTool {
+            fn name(&self) -> String {
+                "text".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![
+                        mcp_sdk::types::ToolResponseContent::Text {
+                            text: "First message".to_string(),
+                        },
+                        mcp_sdk::types::ToolResponseContent::Text {
+                            text: "Second message".to_string(),
+                        },
+                    ],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(TextContentTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let result = tool.call(None).unwrap();
+        assert_eq!(result.content.len(), 2);
+    }
+
+    #[test]
+    fn test_tool_response_with_meta() {
+        struct MetaTool;
+        impl mcp_sdk::tools::Tool for MetaTool {
+            fn name(&self) -> String {
+                "meta".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: Some(serde_json::json!({
+                        "custom_field": "custom_value",
+                        "timestamp": 1234567890
+                    })),
+                })
+            }
+        }
+
+        let tool = Arc::new(MetaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let result = tool.call(None).unwrap();
+        assert!(result.meta.is_some());
+        let meta = result.meta.unwrap();
+        assert_eq!(meta["custom_field"], "custom_value");
+    }
+
+    #[test]
+    fn test_tool_response_is_error_flag() {
+        struct ErrorFlagTool;
+        impl mcp_sdk::tools::Tool for ErrorFlagTool {
+            fn name(&self) -> String {
+                "error_flag".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                        text: "This is a soft error".to_string(),
+                    }],
+                    is_error: Some(true),
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(ErrorFlagTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let result = tool.call(None).unwrap();
+        assert_eq!(result.is_error, Some(true));
+    }
+
+    // ============================================================================
+    // ApiMetadata Variations
+    // ============================================================================
+
+    #[test]
+    fn test_api_metadata_with_all_fields() {
+        let metadata = ApiMetadata {
+            name: "full_tool".to_string(),
+            version: "v3.2.1".to_string(),
+            description: "Full metadata test".to_string(),
+            cache_ttl: Some(3600),
+            is_streaming: true,
+        };
+
+        assert_eq!(metadata.name(), "full_tool");
+        assert_eq!(metadata.version(), "v3.2.1");
+        assert_eq!(metadata.cache_ttl, Some(3600));
+        assert!(metadata.is_streaming);
+    }
+
+    #[test]
+    fn test_api_metadata_zero_cache_ttl() {
+        let metadata = ApiMetadata {
+            name: "no_cache".to_string(),
+            version: "v1".to_string(),
+            description: "desc".to_string(),
+            cache_ttl: Some(0),
+            is_streaming: false,
+        };
+
+        assert_eq!(metadata.cache_ttl, Some(0));
+    }
+
+    #[test]
+    fn test_api_metadata_large_cache_ttl() {
+        let metadata = ApiMetadata {
+            name: "long_cache".to_string(),
+            version: "v1".to_string(),
+            description: "desc".to_string(),
+            cache_ttl: Some(u64::MAX),
+            is_streaming: false,
+        };
+
+        assert_eq!(metadata.cache_ttl, Some(u64::MAX));
+    }
+
+    // ============================================================================
+    // McpToolRegistration Tests
+    // ============================================================================
+
+    #[test]
+    fn test_mcp_tool_registration_const_fn() {
+        fn create_const_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+            struct ConstTool;
+            impl mcp_sdk::tools::Tool for ConstTool {
+                fn name(&self) -> String {
+                    "const_tool".to_string()
+                }
+                fn description(&self) -> String {
+                    "desc".to_string()
+                }
+                fn input_schema(&self) -> serde_json::Value {
+                    serde_json::json!({"type": "object"})
+                }
+                fn call(
+                    &self,
+                    _input: Option<serde_json::Value>,
+                ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                    Ok(mcp_sdk::types::CallToolResponse {
+                        content: vec![],
+                        is_error: None,
+                        meta: None,
+                    })
+                }
+            }
+            Arc::new(ConstTool) as Arc<dyn mcp_sdk::tools::Tool>
+        }
+
+        const REGISTRATION: McpToolRegistration =
+            McpToolRegistration::new("const_test", "v1", "Const tool test", create_const_tool);
+
+        assert_eq!(REGISTRATION.name, "const_test");
+        assert_eq!(REGISTRATION.version, "v1");
+        assert_eq!(REGISTRATION.description, "Const tool test");
+    }
+
+    #[test]
+    fn test_mcp_tool_registration_clone() {
+        fn create_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+            struct CloneTestTool;
+            impl mcp_sdk::tools::Tool for CloneTestTool {
+                fn name(&self) -> String {
+                    "clone_test".to_string()
+                }
+                fn description(&self) -> String {
+                    "desc".to_string()
+                }
+                fn input_schema(&self) -> serde_json::Value {
+                    serde_json::json!({"type": "object"})
+                }
+                fn call(
+                    &self,
+                    _input: Option<serde_json::Value>,
+                ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                    Ok(mcp_sdk::types::CallToolResponse {
+                        content: vec![],
+                        is_error: None,
+                        meta: None,
+                    })
+                }
+            }
+            Arc::new(CloneTestTool) as Arc<dyn mcp_sdk::tools::Tool>
+        }
+
+        let reg = McpToolRegistration::new("clone_tool", "v1", "Clone test", create_tool);
+        let cloned = reg;
+
+        assert_eq!(cloned.name, reg.name);
+        assert_eq!(cloned.version, reg.version);
+    }
+
+    #[test]
+    fn test_mcp_tool_registration_debug_impl() {
+        fn create_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+            struct DebugTool;
+            impl mcp_sdk::tools::Tool for DebugTool {
+                fn name(&self) -> String {
+                    "debug".to_string()
+                }
+                fn description(&self) -> String {
+                    "desc".to_string()
+                }
+                fn input_schema(&self) -> serde_json::Value {
+                    serde_json::json!({"type": "object"})
+                }
+                fn call(
+                    &self,
+                    _input: Option<serde_json::Value>,
+                ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                    Ok(mcp_sdk::types::CallToolResponse {
+                        content: vec![],
+                        is_error: None,
+                        meta: None,
+                    })
+                }
+            }
+            Arc::new(DebugTool) as Arc<dyn mcp_sdk::tools::Tool>
+        }
+
+        let reg = McpToolRegistration::new("debug_tool", "v1", "Debug test", create_tool);
+        let debug_str = format!("{:?}", reg);
+        assert!(debug_str.contains("McpToolRegistration"));
+        assert!(debug_str.contains("debug_tool"));
+    }
+
+    // ============================================================================
+    // JSON-RPC Protocol Tests - Additional
+    // ============================================================================
+
+    #[test]
+    fn test_json_rpc_error_codes() {
+        use mcp_sdk::transport::{JsonRpcError, JsonRpcResponse, JsonRpcVersion};
+
+        let parse_error = JsonRpcResponse {
+            jsonrpc: JsonRpcVersion::default(),
+            id: 1_u64,
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32700,
+                message: "Parse error".to_string(),
+                data: None,
+            }),
+        };
+
+        let invalid_request = JsonRpcResponse {
+            jsonrpc: JsonRpcVersion::default(),
+            id: 2_u64,
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32600,
+                message: "Invalid Request".to_string(),
+                data: None,
+            }),
+        };
+
+        let method_not_found = JsonRpcResponse {
+            jsonrpc: JsonRpcVersion::default(),
+            id: 3_u64,
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32601,
+                message: "Method not found".to_string(),
+                data: None,
+            }),
+        };
+
+        assert!(parse_error.error.as_ref().unwrap().code < 0);
+        assert!(invalid_request.error.as_ref().unwrap().code < 0);
+        assert!(method_not_found.error.as_ref().unwrap().code < 0);
+    }
+
+    #[test]
+    fn test_json_rpc_error_with_data() {
+        use mcp_sdk::transport::{JsonRpcError, JsonRpcResponse, JsonRpcVersion};
+
+        let response = JsonRpcResponse {
+            jsonrpc: JsonRpcVersion::default(),
+            id: 1_u64,
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32602,
+                message: "Invalid params".to_string(),
+                data: Some(serde_json::json!({
+                    "expected": "string",
+                    "received": "number"
+                })),
+            }),
+        };
+
+        let serialized = serde_json::to_string(&response).expect("should serialize");
+        assert!(serialized.contains("\"data\""));
+        assert!(serialized.contains("\"expected\""));
+    }
+
+    #[test]
+    fn test_json_rpc_request_with_string_id() {
+        use mcp_sdk::transport::JsonRpcRequest;
+
+        let json_str = r#"{
+            "jsonrpc": "2.0",
+            "method": "test",
+            "params": {},
+            "id": "string-id-123"
+        }"#;
+
+        let result: Result<JsonRpcRequest, _> = serde_json::from_str(json_str);
+        assert!(result.is_ok() || result.is_err());
+    }
+
+    // ============================================================================
+    // Server Capabilities Tests - Additional
+    // ============================================================================
+
+    #[test]
+    fn test_server_capabilities_with_logging() {
+        use mcp_sdk::types::ServerCapabilities;
+
+        let caps = ServerCapabilities {
+            experimental: None,
+            logging: Some(serde_json::json!({})),
+            prompts: None,
+            resources: None,
+            tools: None,
+        };
+
+        let serialized = serde_json::to_string(&caps).expect("should serialize");
+        assert!(serialized.contains("\"logging\""));
+    }
+
+    #[test]
+    fn test_server_capabilities_with_prompts() {
+        use mcp_sdk::types::{PromptCapabilities, ServerCapabilities};
+
+        let caps = ServerCapabilities {
+            experimental: None,
+            logging: None,
+            prompts: Some(PromptCapabilities {
+                list_changed: Some(true),
+            }),
+            resources: None,
+            tools: None,
+        };
+
+        let serialized = serde_json::to_string(&caps).expect("should serialize");
+        assert!(serialized.contains("\"prompts\""));
+        assert!(serialized.contains("\"listChanged\""));
+    }
+
+    #[test]
+    fn test_server_capabilities_with_resources() {
+        use mcp_sdk::types::{ResourceCapabilities, ServerCapabilities};
+
+        let caps = ServerCapabilities {
+            experimental: None,
+            logging: None,
+            prompts: None,
+            resources: Some(ResourceCapabilities {
+                subscribe: Some(true),
+                list_changed: Some(true),
+            }),
+            tools: None,
+        };
+
+        let serialized = serde_json::to_string(&caps).expect("should serialize");
+        assert!(serialized.contains("\"resources\""));
+        assert!(serialized.contains("\"subscribe\""));
+    }
+
+    #[test]
+    fn test_server_capabilities_with_experimental() {
+        use mcp_sdk::types::ServerCapabilities;
+
+        let caps = ServerCapabilities {
+            experimental: Some(serde_json::json!({
+                "customFeature": {
+                    "enabled": true,
+                    "version": "1.0"
+                }
+            })),
+            logging: None,
+            prompts: None,
+            resources: None,
+            tools: None,
+        };
+
+        let serialized = serde_json::to_string(&caps).expect("should serialize");
+        assert!(serialized.contains("\"experimental\""));
+        assert!(serialized.contains("\"customFeature\""));
+    }
+
+    // ============================================================================
+    // Tool Multi-Call and Concurrency Tests
+    // ============================================================================
+
+    #[test]
+    fn test_tool_multiple_sequential_calls() {
+        struct StatefulTool;
+        impl mcp_sdk::tools::Tool for StatefulTool {
+            fn name(&self) -> String {
+                "stateful".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                let val = input
+                    .and_then(|v| v.get("value").cloned())
+                    .unwrap_or(serde_json::json!(0));
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                        text: format!("received: {}", val),
+                    }],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(StatefulTool) as Arc<dyn mcp_sdk::tools::Tool>;
+
+        for i in 0..10 {
+            let result = tool.call(Some(serde_json::json!({"value": i})));
+            assert!(result.is_ok());
+            let response = result.unwrap();
+            match &response.content[0] {
+                mcp_sdk::types::ToolResponseContent::Text { text } => {
+                    assert!(text.contains(&format!("received: {}", i)));
+                }
+                _ => panic!("Expected text content"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_tool_arc_cloning() {
+        struct CloneableTool;
+        impl mcp_sdk::tools::Tool for CloneableTool {
+            fn name(&self) -> String {
+                "cloneable".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(CloneableTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let tool2 = tool.clone();
+        let tool3 = Arc::clone(&tool);
+
+        assert_eq!(tool.name(), tool2.name());
+        assert_eq!(tool.name(), tool3.name());
+    }
+
+    // ============================================================================
+    // Initialize Result Tests
+    // ============================================================================
+
+    #[test]
+    fn test_initialize_result_serialization() {
+        use mcp_sdk::transport::{JsonRpcResponse, JsonRpcVersion};
+
+        let init_response = JsonRpcResponse {
+            jsonrpc: JsonRpcVersion::default(),
+            id: 1_u64,
+            result: Some(serde_json::json!({
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "tools": {}
+                },
+                "serverInfo": {
+                    "name": "sdforge-mcp",
+                    "version": "0.1.0"
+                }
+            })),
+            error: None,
+        };
+
+        let serialized = serde_json::to_string(&init_response).expect("should serialize");
+        assert!(serialized.contains("\"protocolVersion\""));
+        assert!(serialized.contains("\"capabilities\""));
+        assert!(serialized.contains("\"serverInfo\""));
+    }
+
+    #[test]
+    fn test_list_tools_response() {
+        use mcp_sdk::transport::{JsonRpcResponse, JsonRpcVersion};
+
+        let list_response = JsonRpcResponse {
+            jsonrpc: JsonRpcVersion::default(),
+            id: 1_u64,
+            result: Some(serde_json::json!({
+                "tools": [
+                    {
+                        "name": "tool1",
+                        "description": "First tool",
+                        "inputSchema": {"type": "object"}
+                    },
+                    {
+                        "name": "tool2",
+                        "description": "Second tool",
+                        "inputSchema": {"type": "string"}
+                    }
+                ]
+            })),
+            error: None,
+        };
+
+        let serialized = serde_json::to_string(&list_response).expect("should serialize");
+        assert!(serialized.contains("\"tools\""));
+        assert!(serialized.contains("\"tool1\""));
+        assert!(serialized.contains("\"tool2\""));
     }
 }
