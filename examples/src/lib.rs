@@ -19,13 +19,13 @@
 pub mod basic;
 pub mod cache;
 pub mod combined;
-// pub mod config;  // Disabled due to sdforge dependency issues
+pub mod config;
 pub mod grpc;
 pub mod http;
-// pub mod logging;  // Disabled due to sdforge dependency issues
+pub mod logging;
 pub mod mcp;
 pub mod security;
-// pub mod streaming;  // Disabled due to sdforge dependency issues
-// pub mod websocket;  // Disabled due to sdforge dependency issues
+pub mod streaming;
+pub mod websocket;
 
 pub use sdforge::prelude::*;

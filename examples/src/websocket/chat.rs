@@ -1,11 +1,12 @@
-// Copyright (c) 2026 Kirky.X
-//! Real-time chat example
-
 use sdforge::prelude::*;
+use serde::{Deserialize, Serialize};
 
-/// Chat WebSocket
-///
-/// This would be the main WebSocket endpoint for chat functionality.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct ChatMessage {
+    pub room: String,
+    pub message: String,
+}
+
 #[service_api(
     name = "chat_ws",
     version = "v1",
@@ -18,9 +19,6 @@ async fn chat_ws() -> Result<String, ApiError> {
     Ok("WebSocket chat connection".to_string())
 }
 
-/// Chat message endpoint
-///
-/// HTTP endpoint for sending chat messages.
 #[service_api(
     name = "send_message",
     version = "v1",
@@ -29,10 +27,10 @@ async fn chat_ws() -> Result<String, ApiError> {
     tool_name = "send_message",
     description = "Send a chat message"
 )]
-async fn send_message(room: String, message: String) -> Result<serde_json::Value, ApiError> {
+async fn send_message(message: ChatMessage) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "room": room,
-        "message": message,
+        "room": message.room,
+        "message": message.message,
         "sent": true
     }))
 }
