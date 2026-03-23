@@ -40,7 +40,7 @@ mod edge_case_tests {
             "Custom error message",
             Some(serde_json::json!({"field": "value"})),
         );
-        
+
         let json = serde_json::to_string(&error).unwrap();
         assert!(json.contains("CUSTOM_ERROR"));
     }
@@ -50,7 +50,7 @@ mod edge_case_tests {
         let original = ApiError::not_found("User", Some("123"));
         let json = serde_json::to_string(&original).unwrap();
         let restored: ApiError = serde_json::from_str(&json).unwrap();
-        
+
         match restored {
             ApiError::NotFound { resource, .. } => {
                 assert_eq!(resource, "User");
@@ -134,7 +134,7 @@ mod concurrency_tests {
     #[test]
     fn test_concurrent_error_creation() {
         use sdforge::core::ApiError;
-        
+
         let handles: Vec<_> = (0..100)
             .map(|_| {
                 thread::spawn(|| {
@@ -151,7 +151,7 @@ mod concurrency_tests {
     #[test]
     fn test_response_cloning_thread_safety() {
         use sdforge::core::ServiceResponse;
-        
+
         let response = Arc::new(ServiceResponse::new("test".to_string()));
         let mut handles = vec![];
 

@@ -84,7 +84,7 @@ mod mcp_tool_instance_tests {
             "A test tool",
             create_echo_tool,
         );
-        
+
         assert_eq!(registration.name, "test_tool");
         assert_eq!(registration.version, "v1");
         assert_eq!(registration.description, "A test tool");
@@ -98,7 +98,7 @@ mod mcp_tool_instance_tests {
             "Echo tool",
             create_echo_tool,
         );
-        
+
         let tool = (registration.create_fn)();
         assert_eq!(tool.name(), "echo");
         assert_eq!(tool.description(), "Echoes input back");
@@ -118,7 +118,7 @@ mod mcp_tool_instance_tests {
             "Test instance",
             create_echo_tool,
         );
-        
+
         let tool = (registration.create_fn)();
         let instance = McpToolInstance {
             tool,
@@ -130,7 +130,7 @@ mod mcp_tool_instance_tests {
                 false,
             ),
         };
-        
+
         let retrieved_tool = instance.tool();
         assert_eq!(retrieved_tool.name(), "test_instance");
     }
@@ -143,7 +143,7 @@ mod mcp_tool_instance_tests {
             "Metadata test tool",
             create_echo_tool,
         );
-        
+
         let tool = (registration.create_fn)();
         let instance = McpToolInstance {
             tool,
@@ -155,7 +155,7 @@ mod mcp_tool_instance_tests {
                 true,
             ),
         };
-        
+
         assert_eq!(instance.metadata().name(), "metadata_test");
         assert_eq!(instance.metadata().version(), "v2");
         assert_eq!(instance.metadata().cache_ttl(), Some(300));
@@ -167,7 +167,7 @@ mod mcp_tool_instance_tests {
         let tool = create_echo_tool();
         let input = serde_json::json!({"message": "Hello"});
         let result = tool.call(Some(input));
-        
+
         assert!(result.is_ok());
         let response = result.unwrap();
         assert!(!response.content.is_empty());
@@ -177,7 +177,7 @@ mod mcp_tool_instance_tests {
     fn test_tool_call_without_input() {
         let tool = create_echo_tool();
         let result = tool.call(None);
-        
+
         assert!(result.is_ok());
         let response = result.unwrap();
         assert!(response.content.is_empty() || response.content.len() > 0);
@@ -188,7 +188,7 @@ mod mcp_tool_instance_tests {
         let tool = create_add_tool();
         let input = serde_json::json!({"a": 5, "b": 3});
         let result = tool.call(Some(input));
-        
+
         assert!(result.is_ok());
     }
 
@@ -196,10 +196,10 @@ mod mcp_tool_instance_tests {
     fn test_multiple_tool_registrations() {
         let reg1 = McpToolRegistration::new("tool1", "v1", "Tool 1", create_echo_tool);
         let reg2 = McpToolRegistration::new("tool2", "v1", "Tool 2", create_add_tool);
-        
+
         let tool1 = (reg1.create_fn)();
         let tool2 = (reg2.create_fn)();
-        
+
         assert_eq!(tool1.name(), "echo");
         assert_eq!(tool2.name(), "add");
     }
@@ -208,7 +208,7 @@ mod mcp_tool_instance_tests {
     fn test_tool_input_schema_validation() {
         let tool = create_add_tool();
         let schema = tool.input_schema();
-        
+
         assert!(schema.get("properties").is_some());
         let props = schema.get("properties").unwrap();
         assert!(props.get("a").is_some());
@@ -237,10 +237,10 @@ mod mcp_tool_instance_tests {
             }
             Arc::new(TextTool) as Arc<dyn mcp_sdk::tools::Tool>
         }
-        
+
         let tool = create_text_tool();
         let result = tool.call(None).unwrap();
-        
+
         assert!(matches!(
             result.content.first(),
             Some(mcp_sdk::types::ToolResponseContent::Text { .. })
@@ -263,7 +263,7 @@ mod mcp_tool_instance_tests {
             Some(600),
             true,
         );
-        
+
         assert_eq!(metadata.name(), "full_tool");
         assert_eq!(metadata.version(), "v3");
         assert_eq!(metadata.description(), "Full metadata tool");

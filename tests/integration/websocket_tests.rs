@@ -14,7 +14,7 @@ mod websocket_tests {
             method: "get_data".to_string(),
             params: serde_json::json!({"key": "value"}),
         };
-        
+
         let serialized = serde_json::to_string(&message).unwrap();
         assert!(serialized.contains("\"type\":\"request\""));
         assert!(serialized.contains("123"));
@@ -27,7 +27,7 @@ mod websocket_tests {
             id: "456".to_string(),
             result: serde_json::json!({"status": "ok"}),
         };
-        
+
         let serialized = serde_json::to_string(&message).unwrap();
         assert!(serialized.contains("\"type\":\"response\""));
         assert!(serialized.contains("456"));
@@ -39,7 +39,7 @@ mod websocket_tests {
             id: "789".to_string(),
             error: "Something went wrong".to_string(),
         };
-        
+
         let serialized = serde_json::to_string(&message).unwrap();
         assert!(serialized.contains("\"type\":\"error\""));
         assert!(serialized.contains("Something went wrong"));
@@ -51,7 +51,7 @@ mod websocket_tests {
             event: "update".to_string(),
             data: serde_json::json!({"count": 5}),
         };
-        
+
         let serialized = serde_json::to_string(&message).unwrap();
         assert!(serialized.contains("\"type\":\"notification\""));
         assert!(serialized.contains("update"));
@@ -61,7 +61,7 @@ mod websocket_tests {
     fn test_websocket_message_deserialization() {
         let json = r#"{"type":"request","id":"123","method":"test","params":{}}"#;
         let message: WebSocketMessage = serde_json::from_str(json).unwrap();
-        
+
         match message {
             WebSocketMessage::Request { id, method, params } => {
                 assert_eq!(id, "123");
@@ -100,7 +100,7 @@ mod websocket_tests {
             max_connections: 100,
             rate_limit_window_seconds: 5,
         };
-        
+
         assert!(config.validate().is_ok());
     }
 
@@ -112,7 +112,7 @@ mod websocket_tests {
             max_connections: 0,
             rate_limit_window_seconds: 1,
         };
-        
+
         let result = config.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("max_connections"));
@@ -126,7 +126,7 @@ mod websocket_tests {
             max_connections: 200_000,
             rate_limit_window_seconds: 1,
         };
-        
+
         let result = config.validate();
         assert!(result.is_err());
     }
@@ -139,7 +139,7 @@ mod websocket_tests {
             max_connections: 100,
             rate_limit_window_seconds: 1,
         };
-        
+
         let result = config.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("max_messages_per_second"));
@@ -153,7 +153,7 @@ mod websocket_tests {
             max_connections: 100,
             rate_limit_window_seconds: 1,
         };
-        
+
         let result = config.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("max_message_size"));
@@ -167,7 +167,7 @@ mod websocket_tests {
             max_connections: 100,
             rate_limit_window_seconds: 0,
         };
-        
+
         let result = config.validate();
         assert!(result.is_err());
     }
@@ -180,7 +180,7 @@ mod websocket_tests {
             max_connections: 100,
             rate_limit_window_seconds: 100_000,
         };
-        
+
         let result = config.validate();
         assert!(result.is_err());
     }
@@ -192,7 +192,7 @@ mod websocket_tests {
             method: "test_method".to_string(),
             params: serde_json::json!({}),
         };
-        
+
         let cloned = message.clone();
         match cloned {
             WebSocketMessage::Request { id, .. } => {
@@ -213,10 +213,10 @@ mod websocket_tests {
                 "boolean": true
             }),
         };
-        
+
         let serialized = serde_json::to_string(&message).unwrap();
         let deserialized: WebSocketMessage = serde_json::from_str(&serialized).unwrap();
-        
+
         match deserialized {
             WebSocketMessage::Request { method, params, .. } => {
                 assert_eq!(method, "process");

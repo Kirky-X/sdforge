@@ -22,7 +22,7 @@ mod grpc_tests {
             false,
         );
         let route = GrpcRoute::new("test_service".to_string(), metadata);
-        
+
         assert_eq!(route.service_name(), "test_service");
     }
 
@@ -36,7 +36,7 @@ mod grpc_tests {
             false,
         );
         let route = GrpcRoute::new("metadata_test".to_string(), metadata);
-        
+
         assert_eq!(route.metadata().name(), "metadata_test");
         assert_eq!(route.metadata().version(), "v1");
     }
@@ -53,7 +53,7 @@ mod grpc_tests {
             );
             GrpcRoute::new("reg_test".to_string(), metadata)
         }
-        
+
         let registration = GrpcRouteRegistration::new("test_service", create_route);
         assert_eq!(registration.name(), "test_service");
     }
@@ -70,10 +70,10 @@ mod grpc_tests {
             );
             GrpcRoute::new("create_test".to_string(), metadata)
         }
-        
+
         let registration = GrpcRouteRegistration::new("create_service", create_route);
         let route = registration.create();
-        
+
         assert_eq!(route.service_name(), "create_test");
     }
 
@@ -92,7 +92,7 @@ mod grpc_tests {
             max_concurrent_calls: 50,
             max_message_size: 8 * 1024 * 1024,
         };
-        
+
         assert_eq!(config.addr, "127.0.0.1:8080");
         assert_eq!(config.max_concurrent_calls, 50);
         assert_eq!(config.max_message_size, 8 * 1024 * 1024);
@@ -118,7 +118,7 @@ mod grpc_tests {
             max_concurrent_calls: 100,
             max_message_size: 4 * 1024 * 1024,
         };
-        
+
         let result = sdforge::grpc::build_server_with_config(&config).await;
         assert!(result.is_err());
     }
@@ -132,7 +132,7 @@ mod grpc_tests {
             Some(600),
             true,
         );
-        
+
         assert_eq!(metadata.name(), "grpc_service");
         assert_eq!(metadata.version(), "v1");
         assert_eq!(metadata.description(), "gRPC service description");
@@ -150,7 +150,7 @@ mod grpc_tests {
             false,
         );
         let route = GrpcRoute::new("debug_test".to_string(), metadata);
-        
+
         let debug_str = format!("{:?}", route);
         assert!(debug_str.contains("GrpcRoute"));
     }
@@ -161,15 +161,15 @@ mod grpc_tests {
             let metadata = ApiMetadata::new("service1".to_string(), "v1".to_string(), "Service 1".to_string(), None, false);
             GrpcRoute::new("service1".to_string(), metadata)
         }
-        
+
         fn create_route2() -> GrpcRoute {
             let metadata = ApiMetadata::new("service2".to_string(), "v1".to_string(), "Service 2".to_string(), None, false);
             GrpcRoute::new("service2".to_string(), metadata)
         }
-        
+
         let reg1 = GrpcRouteRegistration::new("svc1", create_route1);
         let reg2 = GrpcRouteRegistration::new("svc2", create_route2);
-        
+
         assert_eq!(reg1.name(), "svc1");
         assert_eq!(reg2.name(), "svc2");
     }

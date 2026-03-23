@@ -42,10 +42,10 @@ mod http_mcp_tests {
     async fn test_dual_protocol_build() {
         use sdforge::http::build as http_build;
         use sdforge::mcp::build as mcp_build;
-        
+
         let http_app = http_build();
         let mcp_server = mcp_build().await;
-        
+
         assert!(http_app.is_ok());
         assert!(mcp_server.is_ok());
     }
@@ -85,10 +85,10 @@ mod full_feature_tests {
     async fn test_full_build() {
         use sdforge::http::build as http_build;
         use sdforge::mcp::build as mcp_build;
-        
+
         let http_app = http_build();
         let mcp_server = mcp_build().await;
-        
+
         assert!(http_app.is_ok());
         assert!(mcp_server.is_ok());
     }
