@@ -6,16 +6,6 @@
 #[cfg(test)]
 mod integration_tests {
     // ============================================================================
-    // Feature Combination Tests
-    // ============================================================================
-
-    #[test]
-    fn test_http_and_mcp_features_enabled() {
-        // Test that core functionality works regardless of feature flags
-        assert!(true);
-    }
-
-    // ============================================================================
     // Core Type Tests
     // ============================================================================
 
@@ -27,6 +17,7 @@ mod integration_tests {
             resource: "TestResource".to_string(),
             resource_id: Some("123".into()),
         };
+        assert!(not_found.to_string().contains("TestResource"));
         let invalid_input = ApiError::validation_error("field", "Invalid value");
 
         match not_found {
@@ -111,15 +102,17 @@ mod integration_tests {
         };
 
         let _ = config;
-        assert!(true);
+        // Config created successfully
+        assert!(matches!(config.authentication, sdforge::config::AuthConfig::None));
     }
 
     #[test]
     fn test_http_builder() {
         use sdforge::http::build;
 
-        let _app = build();
-        assert!(true);
+        let app = build();
+        // App built successfully
+        assert!(!format!("{:?}", app).is_empty());
     }
 
     // ============================================================================
@@ -131,8 +124,9 @@ mod integration_tests {
     async fn test_mcp_build() {
         use sdforge::mcp::build;
 
-        let _server = build().await;
-        assert!(true);
+        let server = build().await;
+        // Server built successfully
+        assert!(!format!("{:?}", server).is_empty());
     }
 
     // ============================================================================

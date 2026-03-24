@@ -44,15 +44,7 @@ mod websocket_integration_tests {
         let manager = Arc::new(ConnectionManager::new());
         let state = AppState::new(manager);
         
-        // Basic verification
-        assert!(true);
-    }
-}
-
-#[cfg(not(feature = "websocket"))]
-mod websocket_integration_tests_placeholder {
-    #[test]
-    fn test_websocket_feature_required() {
-        assert!(true, "WebSocket integration tests require websocket feature");
+        // Basic verification - state was created successfully
+        assert!(state.get_manager().len() == 0);
     }
 }

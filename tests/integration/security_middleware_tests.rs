@@ -40,11 +40,3 @@ mod security_tests {
         let _ = auth;
     }
 }
-
-#[cfg(not(feature = "security"))]
-mod security_tests_placeholder {
-    #[test]
-    fn test_security_feature_required() {
-        assert!(true, "Security tests require security feature");
-    }
-}

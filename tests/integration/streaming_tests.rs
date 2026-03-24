@@ -70,11 +70,3 @@ mod streaming_tests {
         assert!(json.contains("test data"));
     }
 }
-
-#[cfg(not(all(feature = "streaming", feature = "http")))]
-mod streaming_tests_placeholder {
-    #[test]
-    fn test_streaming_feature_required() {
-        assert!(true, "Streaming tests require streaming and http features");
-    }
-}

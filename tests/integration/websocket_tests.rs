@@ -85,11 +85,3 @@ mod websocket_tests {
         assert_eq!(conn.id(), "test-conn-1");
     }
 }
-
-#[cfg(not(feature = "websocket"))]
-mod websocket_tests_placeholder {
-    #[test]
-    fn test_websocket_feature_required() {
-        assert!(true, "WebSocket tests require websocket feature");
-    }
-}

@@ -41,16 +41,9 @@ mod security_headers_tests {
 
     #[test]
     fn test_security_headers_config_default() {
+        use sdforge::http::SecurityHeaders;
         // Test that we can create default security configuration
-        // The security headers are applied internally by the build function
-        assert!(true);
-    }
-}
-
-#[cfg(not(feature = "http"))]
-mod security_headers_tests_placeholder {
-    #[test]
-    fn test_http_feature_required() {
-        assert!(true, "Security headers tests require http feature");
+        let headers = SecurityHeaders::default();
+        assert_eq!(headers.content_type_options, "nosniff");
     }
 }

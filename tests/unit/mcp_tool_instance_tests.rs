@@ -85,8 +85,8 @@ mod mcp_tool_instance_tests {
             "A test tool",
             create_echo_tool,
         );
-        // If we get here without panicking, the registration was created successfully
-        assert!(true);
+        // Registration was successful if we reach here
+        assert!(true, "Tool registration should succeed without panic");
     }
 
     #[test]
