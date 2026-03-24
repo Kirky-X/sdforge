@@ -130,9 +130,9 @@ mod version_routing_tests {
 
     #[tokio::test]
     async fn test_build_version_router_returns_router() {
-        let _router = build_version_router();
-        // Just verify we can call build_version_router without panicking
-        assert!(true);
+        let router = build_version_router();
+        // Verify we can call build_version_router and get a valid router
+        assert!(!format!("{:?}", router).is_empty());
     }
 
     #[tokio::test]

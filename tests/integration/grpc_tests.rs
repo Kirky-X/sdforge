@@ -51,11 +51,3 @@ mod grpc_tests {
         let _ = config;
     }
 }
-
-#[cfg(not(feature = "grpc"))]
-mod grpc_tests_placeholder {
-    #[test]
-    fn test_grpc_feature_required() {
-        assert!(true, "gRPC tests require grpc feature");
-    }
-}

@@ -103,7 +103,6 @@ mod uat_007_nested_serialization {
 #[cfg(feature = "http")]
 mod uat_009_error_response {
     use sdforge::core::ApiError;
-    use serde_json;
 
     #[test]
     fn test_error_response_format() {
