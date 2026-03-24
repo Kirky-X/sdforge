@@ -531,7 +531,7 @@ use sdforge::prelude::*;
 
 #[service_api(
     name = "secure_endpoint",
-    version = "v1", 
+    version = "v1",
     path = "/secure",
     method = "GET",
     auth_required = true
