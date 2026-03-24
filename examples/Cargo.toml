@@ -9,7 +9,7 @@ keywords = ["examples", "sdforge", "http", "mcp"]
 categories = ["web-programming", "development-tools"]
 
 [dependencies]
-sdforge = { path = "../src", default-features = false }
+sdforge = { path = "..", default-features = false }
 tokio = { version = "1.41", features = ["rt", "rt-multi-thread", "macros"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
