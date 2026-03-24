@@ -77,7 +77,8 @@ oxcache = { version = "0.2", path = "/home/dev/projects/oxcache", features = ["r
 http = { version = "1.4", optional = true }
 
 # Database dependencies (按特性导入) - AppAuditLogger 可选持久化
-dbnexus = { path = "/home/dev/projects/dbnexus", optional = true }
+# TODO: 暂时注释掉，dbnexus manifest 有问题，且项目当前不使用数据库
+# dbnexus = { path = "/home/dev/projects/dbnexus", optional = true }
 
 # Serialization for SyncCache storage values
 bincode = { version = "1.3", optional = true }
@@ -221,3 +222,73 @@ path = "main.rs"
 name = "axiom_bench"
 path = "benches/sdforge_bench.rs"
 harness = false
+
+# Integration tests
+[[test]]
+name = "feature_combinations"
+path = "../tests/integration/feature_combinations.rs"
+
+[[test]]
+name = "grpc_tests"
+path = "../tests/integration/grpc_tests.rs"
+
+[[test]]
+name = "http_integration"
+path = "../tests/integration/http_integration.rs"
+
+[[test]]
+name = "mcp_integration"
+path = "../tests/integration/mcp_integration.rs"
+
+[[test]]
+name = "security_headers_tests"
+path = "../tests/integration/security_headers_tests.rs"
+
+[[test]]
+name = "security_middleware_tests"
+path = "../tests/integration/security_middleware_tests.rs"
+
+[[test]]
+name = "streaming_tests"
+path = "../tests/integration/streaming_tests.rs"
+
+[[test]]
+name = "uat_tests"
+path = "../tests/integration/uat_tests.rs"
+
+[[test]]
+name = "websocket_integration_tests"
+path = "../tests/integration/websocket_integration_tests.rs"
+
+[[test]]
+name = "websocket_tests"
+path = "../tests/integration/websocket_tests.rs"
+
+[[test]]
+name = "integration_http_mcp"
+path = "../tests/integration_http_mcp.rs"
+
+# Unit tests
+[[test]]
+name = "config_tests"
+path = "../tests/unit/config_tests.rs"
+
+[[test]]
+name = "core_tests"
+path = "../tests/unit/core_tests.rs"
+
+[[test]]
+name = "edge_case_tests"
+path = "../tests/unit/edge_case_tests.rs"
+
+[[test]]
+name = "http_version_routing_tests"
+path = "../tests/unit/http_version_routing_tests.rs"
+
+[[test]]
+name = "mcp_tool_instance_tests"
+path = "../tests/unit/mcp_tool_instance_tests.rs"
+
+[[test]]
+name = "macro_tests"
+path = "../tests/macros/macro_tests.rs"
