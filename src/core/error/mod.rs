@@ -6,6 +6,24 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Error category classification for error handling and reporting
+///
+/// This enum categorizes errors to enable proper error handling strategies,
+/// monitoring, and user-facing error messages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ErrorCategory {
+    /// Client errors (4xx) - request was malformed or invalid
+    ClientError,
+    /// Authentication and authorization errors (401/403)
+    AuthError,
+    /// Server errors (5xx) - internal processing failure
+    ServerError,
+    /// Rate limiting errors (429)
+    RateLimitError,
+    /// Validation errors - input failed business rule validation
+    ValidationError,
+}
+
 /// Framework errors
 ///
 /// Represents various error conditions that can occur during request processing.
@@ -94,6 +112,125 @@ impl ApiError {
             message: message.into(),
             field: None,
             value: None,
+        }
+    }
+
+    /// Get the error category for this error
+    ///
+    /// This allows proper error handling and classification for monitoring,
+    /// alerting, and user-facing error messages.
+    pub fn category(&self) -> ErrorCategory {
+        match self {
+            ApiError::NotFound { .. } => ErrorCategory::ClientError,
+            ApiError::InvalidInput { .. } => ErrorCategory::ClientError,
+            ApiError::AuthenticationFailed { .. } => ErrorCategory::AuthError,
+            ApiError::AccessDenied { .. } => ErrorCategory::AuthError,
+            ApiError::RateLimitExceeded { .. } => ErrorCategory::RateLimitError,
+            ApiError::Internal { .. } => ErrorCategory::ServerError,
+            ApiError::ServiceUnavailable { .. } => ErrorCategory::ServerError,
+            ApiError::ValidationError { .. } => ErrorCategory::ValidationError,
+        }
+    }
+
+    /// Get the underlying source error if available
+    ///
+    /// This allows error chaining for debugging purposes.
+    /// The source is typically None for client-facing errors,
+    /// but may contain the original error for Internal or ServiceUnavailable errors.
+    pub fn source(&self) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
+        None
+    }
+
+    /// Create a new Internal error with an optional source
+    ///
+    /// This is the recommended way to create Internal errors from other errors.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - A sanitized error message for the user
+    /// * `error_id` - A unique identifier for debugging
+    /// * `source` - An optional underlying error
+    pub fn internal_error(
+        message: impl Into<String>,
+        error_id: impl Into<String>,
+    ) -> Self {
+        Self::Internal {
+            message: message.into(),
+            error_id: error_id.into(),
+        }
+    }
+
+    /// Create a ServiceUnavailable error
+    pub fn service_unavailable(
+        service: impl Into<String>,
+        retry_after: Option<u64>,
+    ) -> Self {
+        Self::ServiceUnavailable {
+            service: service.into(),
+            retry_after,
+        }
+    }
+
+    /// Create a NotFound error
+    pub fn not_found(resource: impl Into<String>, resource_id: Option<String>) -> Self {
+        Self::NotFound {
+            resource: resource.into(),
+            resource_id,
+        }
+    }
+
+    /// Create an InvalidInput error
+    pub fn invalid_input(
+        message: impl Into<String>,
+        field: Option<String>,
+        value: Option<serde_json::Value>,
+    ) -> Self {
+        Self::InvalidInput {
+            message: message.into(),
+            field,
+            value,
+        }
+    }
+
+    /// Create an AuthenticationFailed error
+    pub fn authentication_failed(reason: impl Into<String>) -> Self {
+        Self::AuthenticationFailed {
+            reason: reason.into(),
+        }
+    }
+
+    /// Create an AccessDenied error
+    pub fn access_denied(permission: impl Into<String>, user_id: Option<String>) -> Self {
+        Self::AccessDenied {
+            permission: permission.into(),
+            user_id,
+        }
+    }
+
+    /// Create a RateLimitExceeded error
+    pub fn rate_limit_exceeded(limit: u32, window_seconds: u32) -> Self {
+        Self::RateLimitExceeded {
+            limit,
+            window_seconds,
+        }
+    }
+
+    /// Create a ValidationError
+    pub fn validation(field: impl Into<String>, constraint: impl Into<String>) -> Self {
+        Self::ValidationError {
+            field: field.into(),
+            constraint: constraint.into(),
+        }
+    }
+
+    /// Get a sanitized error message for external display
+    ///
+    /// This strips any sensitive information that should not be exposed to clients.
+    pub fn sanitized_message(&self) -> String {
+        match self {
+            ApiError::Internal { .. } => "An internal error occurred. Please try again later.".into(),
+            ApiError::ServiceUnavailable { .. } => "The service is temporarily unavailable. Please try again later.".into(),
+            other => other.to_string(),
         }
     }
 
@@ -227,6 +364,7 @@ mod tests {
         };
         assert!(error.to_string().contains("Resource not found"));
         assert!(error.to_string().contains("user"));
+        assert_eq!(error.category(), ErrorCategory::ClientError);
     }
 
     /// Test ApiError::InvalidInput variant
@@ -238,6 +376,7 @@ mod tests {
             value: Some(serde_json::json!("invalid@")),
         };
         assert!(error.to_string().contains("Invalid input"));
+        assert_eq!(error.category(), ErrorCategory::ClientError);
     }
 
     /// Test ApiError::AuthenticationFailed variant
@@ -248,6 +387,7 @@ mod tests {
         };
         assert!(error.to_string().contains("Authentication failed"));
         assert!(error.to_string().contains("Invalid token"));
+        assert_eq!(error.category(), ErrorCategory::AuthError);
     }
 
     /// Test ApiError::AccessDenied variant
@@ -259,6 +399,7 @@ mod tests {
         };
         assert!(error.to_string().contains("Access denied"));
         assert!(error.to_string().contains("admin.write"));
+        assert_eq!(error.category(), ErrorCategory::AuthError);
     }
 
     /// Test ApiError::RateLimitExceeded variant
@@ -269,6 +410,7 @@ mod tests {
             window_seconds: 60,
         };
         assert!(error.to_string().contains("Rate limit exceeded"));
+        assert_eq!(error.category(), ErrorCategory::RateLimitError);
     }
 
     /// Test ApiError::Internal variant
@@ -280,6 +422,7 @@ mod tests {
         };
         assert!(error.to_string().contains("Internal server error"));
         // Message should be sanitized (internal details not leaked)
+        assert_eq!(error.category(), ErrorCategory::ServerError);
     }
 
     /// Test ApiError::ServiceUnavailable variant
@@ -291,6 +434,7 @@ mod tests {
         };
         assert!(error.to_string().contains("Service unavailable"));
         assert!(error.to_string().contains("external_service"));
+        assert_eq!(error.category(), ErrorCategory::ServerError);
     }
 
     /// Test ApiError::ValidationError variant
@@ -302,6 +446,61 @@ mod tests {
         };
         assert!(error.to_string().contains("Validation failed"));
         assert!(error.to_string().contains("email"));
+        assert_eq!(error.category(), ErrorCategory::ValidationError);
+    }
+
+    /// Test ErrorCategory for all error types
+    #[test]
+    fn test_error_category_all_variants() {
+        let client_errors = vec![
+            ApiError::NotFound { resource: "x".into(), resource_id: None },
+            ApiError::InvalidInput { message: "x".into(), field: None, value: None },
+        ];
+        for err in client_errors {
+            assert_eq!(err.category(), ErrorCategory::ClientError);
+        }
+
+        let auth_errors = vec![
+            ApiError::AuthenticationFailed { reason: "x".into() },
+            ApiError::AccessDenied { permission: "x".into(), user_id: None },
+        ];
+        for err in auth_errors {
+            assert_eq!(err.category(), ErrorCategory::AuthError);
+        }
+
+        let server_errors = vec![
+            ApiError::Internal { message: "x".into(), error_id: "x".into() },
+            ApiError::ServiceUnavailable { service: "x".into(), retry_after: None },
+        ];
+        for err in server_errors {
+            assert_eq!(err.category(), ErrorCategory::ServerError);
+        }
+
+        assert_eq!(
+            ApiError::RateLimitExceeded { limit: 0, window_seconds: 0 }.category(),
+            ErrorCategory::RateLimitError
+        );
+        assert_eq!(
+            ApiError::ValidationError { field: "x".into(), constraint: "x".into() }.category(),
+            ErrorCategory::ValidationError
+        );
+    }
+
+    /// Test ErrorCategory serialization
+    #[test]
+    fn test_error_category_serialization() {
+        let categories = vec![
+            ErrorCategory::ClientError,
+            ErrorCategory::AuthError,
+            ErrorCategory::ServerError,
+            ErrorCategory::RateLimitError,
+            ErrorCategory::ValidationError,
+        ];
+        for cat in categories {
+            let json = serde_json::to_string(&cat).unwrap();
+            let deserialized: ErrorCategory = serde_json::from_str(&json).unwrap();
+            assert_eq!(cat, deserialized);
+        }
     }
 
     /// Test ApiError::validation_error constructor
@@ -371,5 +570,82 @@ mod tests {
             "Expected NotFound variant with correct values, got {:?}",
             error
         );
+    }
+
+    /// Test ApiError constructor methods
+    #[test]
+    fn test_api_error_constructors() {
+        let not_found = ApiError::not_found("user", Some("123".into()));
+        assert!(matches!(not_found, ApiError::NotFound { .. }));
+
+        let invalid = ApiError::invalid_input("bad data", Some("email".into()), None);
+        assert!(matches!(invalid, ApiError::InvalidInput { .. }));
+
+        let auth_failed = ApiError::authentication_failed("Invalid token");
+        assert!(matches!(auth_failed, ApiError::AuthenticationFailed { .. }));
+
+        let access_denied = ApiError::access_denied("admin", Some("user1".into()));
+        assert!(matches!(access_denied, ApiError::AccessDenied { .. }));
+
+        let rate_limit = ApiError::rate_limit_exceeded(100, 60);
+        assert!(matches!(rate_limit, ApiError::RateLimitExceeded { .. }));
+
+        let internal = ApiError::internal_error("Something went wrong", "ERR123");
+        assert!(matches!(internal, ApiError::Internal { .. }));
+
+        let unavailable = ApiError::service_unavailable("database", Some(30));
+        assert!(matches!(unavailable, ApiError::ServiceUnavailable { .. }));
+
+        let validation = ApiError::validation("email", "must be valid");
+        assert!(matches!(validation, ApiError::ValidationError { .. }));
+    }
+
+    /// Test sanitized_message for internal errors
+    #[test]
+    fn test_sanitized_message() {
+        let internal = ApiError::internal_error("Database connection failed: host=localhost port=5432", "ERR123");
+        let msg = internal.sanitized_message();
+        assert!(msg.contains("internal error"));
+        assert!(!msg.contains("localhost"));
+        assert!(!msg.contains("5432"));
+
+        let unavailable = ApiError::service_unavailable("Database connection failed", None);
+        let msg = unavailable.sanitized_message();
+        assert!(msg.contains("temporarily unavailable"));
+        assert!(!msg.contains("Database"));
+
+        let not_found = ApiError::not_found("user", Some("123".into()));
+        let msg = not_found.sanitized_message();
+        assert!(msg.contains("user"));
+
+        let auth_failed = ApiError::authentication_failed("Invalid token");
+        let msg = auth_failed.sanitized_message();
+        assert!(msg.contains("Authentication failed"));
+    }
+
+    /// Test source() returns None for all error types
+    #[test]
+    fn test_source_returns_none() {
+        let errors = vec![
+            ApiError::not_found("test", None),
+            ApiError::invalid_input("test", None, None),
+            ApiError::authentication_failed("test"),
+            ApiError::access_denied("test", None),
+            ApiError::rate_limit_exceeded(1, 1),
+            ApiError::internal_error("test", "test"),
+            ApiError::service_unavailable("test", None),
+            ApiError::validation("test", "test"),
+        ];
+        for err in errors {
+            assert!(err.source().is_none());
+        }
+    }
+
+    /// Test ErrorCategory derives
+    #[test]
+    fn test_error_category_derives() {
+        let cat = ErrorCategory::ClientError;
+        let copied = cat;
+        assert_eq!(ErrorCategory::ClientError, copied);
     }
 }
