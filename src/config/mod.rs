@@ -10,6 +10,7 @@ pub use confers::Config;
 #[cfg(feature = "validation")]
 pub use confers::Validate;
 
+pub mod defaults;
 pub mod hot_reload;
 
 // Re-export hot_reload types with feature gate
@@ -79,6 +80,78 @@ impl AppConfig {
     /// Create builder for configuration
     pub fn builder() -> AppConfigBuilder {
         AppConfigBuilder::new()
+    }
+
+    /// Validate configuration with cross-field validation
+    ///
+    /// This method performs validation that requires access to multiple fields
+    /// and cannot be done at the individual field level.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Rate limit requests is 0 but rate limiting is enabled
+    /// - Rate limit window is 0
+    /// - Timeout values are inconsistent
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        // Validate rate limiting configuration
+        if let Some(ref rate_limit) = self.rate_limit {
+            if rate_limit.requests == 0 {
+                return Err(ConfigError::ValidationError(
+                    "rate_limit.requests must be greater than 0 when rate limiting is enabled".into(),
+                ));
+            }
+            if rate_limit.window_seconds == 0 {
+                return Err(ConfigError::ValidationError(
+                    "rate_limit.window_seconds must be greater than 0".into(),
+                ));
+            }
+            if rate_limit.window_seconds > defaults::rate_limit::MAX_WINDOW_SECS {
+                return Err(ConfigError::ValidationError(format!(
+                    "rate_limit.window_seconds exceeds maximum allowed value of {} seconds",
+                    defaults::rate_limit::MAX_WINDOW_SECS
+                )));
+            }
+        }
+
+        // Validate timeout configuration
+        if let Some(ref timeout) = self.timeout {
+            if timeout.default_timeout_secs == 0 {
+                return Err(ConfigError::ValidationError(
+                    "timeout.default_timeout_secs must be greater than 0".into(),
+                ));
+            }
+            // Check for unreasonably long timeouts
+            if timeout.default_timeout_secs > 3600 {
+                return Err(ConfigError::ValidationError(
+                    "timeout.default_timeout_secs should not exceed 3600 seconds (1 hour)".into(),
+                ));
+            }
+        }
+
+        // Validate authentication configuration
+        self.authentication.validate()?;
+
+        // Validate request size limits
+        if let Some(ref request_size) = self.request_size {
+            if request_size.max_json_size == 0 {
+                return Err(ConfigError::ValidationError(
+                    "request_size.max_json_size must be greater than 0".into(),
+                ));
+            }
+            if request_size.max_file_size == 0 {
+                return Err(ConfigError::ValidationError(
+                    "request_size.max_file_size must be greater than 0".into(),
+                ));
+            }
+            if request_size.max_form_size == 0 {
+                return Err(ConfigError::ValidationError(
+                    "request_size.max_form_size must be greater than 0".into(),
+                ));
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -274,15 +347,15 @@ pub struct RequestSizeConfig {
 }
 
 fn default_max_json_size() -> usize {
-    1024 * 1024 // 1MB
+    defaults::request_size::MAX_JSON_SIZE
 }
 
 fn default_max_file_size() -> usize {
-    100 * 1024 * 1024 // 100MB
+    defaults::request_size::MAX_FILE_SIZE
 }
 
 fn default_max_form_size() -> usize {
-    10 * 1024 * 1024 // 10MB
+    defaults::request_size::MAX_FORM_SIZE
 }
 
 /// Timeout configuration for different routes
@@ -301,13 +374,13 @@ pub struct TimeoutConfig {
 }
 
 fn default_timeout() -> u64 {
-    30
+    defaults::timeout::DEFAULT_TIMEOUT_SECS
 }
 
 fn default_route_timeouts() -> std::collections::HashMap<String, u64> {
     let mut route_timeouts = std::collections::HashMap::new();
-    route_timeouts.insert("/api/upload".to_string(), 300);
-    route_timeouts.insert("/api/export".to_string(), 120);
+    route_timeouts.insert("/api/upload".to_string(), defaults::timeout::UPLOAD_TIMEOUT_SECS);
+    route_timeouts.insert("/api/export".to_string(), defaults::timeout::EXPORT_TIMEOUT_SECS);
     route_timeouts
 }
 
