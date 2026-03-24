@@ -2203,6 +2203,7 @@ impl Serialize for AuditLog {
 }
 
 impl AuditLog {
+    /// Get the unique identifier for this audit log entry.
     pub fn id(&self) -> &str {
         &self.id
     }
@@ -2518,6 +2519,7 @@ pub struct AppAuditLogger {
 /// Internal struct used to pass user ID and log entry through the async channel.
 pub struct AuditLogBatch {
     user_id: String,
+    #[allow(dead_code)]  // Used in queue transfer, field access not needed directly
     log: AuditLog,
 }
 
@@ -2921,6 +2923,7 @@ impl AppAuditLogger {
     ///
     /// Security: This is used when the async channel is full, preventing
     /// audit log loss during high load or potential DoS attempts.
+    #[allow(dead_code)]  // Reserved for fallback handling when queue is full
     fn store_fallback_log(&self, user_id: &str, log: &AuditLog) {
         let count = self
             .dropped_log_count
