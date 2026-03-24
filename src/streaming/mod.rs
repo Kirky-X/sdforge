@@ -328,8 +328,8 @@ mod tests {
         assert!(json.is_ok());
 
         if let Ok(json_str) = json {
-            assert!(json_str.contains("\"type\":\"data\""));
-            assert!(json_str.contains("\"message\""));
+            assert!(json_str.contains(r#""type":"data""#));
+            assert!(json_str.contains("message"));
         }
     }
 
@@ -399,7 +399,7 @@ mod tests {
         assert!(json.is_ok());
 
         if let Ok(json_str) = json {
-            assert!(json_str.contains("\"type\":\"data\""));
+            assert!(json_str.contains(r#""type":"data""#));
             assert!(json_str.contains("test_value"));
         }
     }
@@ -411,8 +411,8 @@ mod tests {
         assert!(json.is_ok());
 
         if let Ok(json_str) = json {
-            assert!(json_str.contains("\"type\":\"ping\""));
-            assert!(json_str.contains("\"timestamp\""));
+            assert!(json_str.contains(r#""type":"ping""#));
+            assert!(json_str.contains("timestamp"));
         }
     }
 
@@ -423,7 +423,7 @@ mod tests {
         assert!(json.is_ok());
 
         if let Ok(json_str) = json {
-            assert!(json_str.contains("\"type\":\"error\""));
+            assert!(json_str.contains(r#""type":"error""#));
             assert!(json_str.contains("error msg"));
         }
     }
@@ -435,7 +435,7 @@ mod tests {
         assert!(json.is_ok());
 
         if let Ok(json_str) = json {
-            assert!(json_str.contains("\"type\":\"complete\""));
+            assert!(json_str.contains(r#""type":"complete""#));
         }
     }
 
@@ -691,9 +691,9 @@ mod tests {
             data: serde_json::json!({"user": "alice"}),
         };
         let json = serde_json::to_string(&event).unwrap();
-        assert!(json.contains("\"id\":\"msg-123\""));
-        assert!(json.contains("\"event_name\":\"user_update\""));
-        assert!(json.contains("\"user\":\"alice\""));
+        assert!(json.contains(r#""id":"msg-123""#));
+        assert!(json.contains(r#""event_name":"user_update""#));
+        assert!(json.contains(r#""user":"alice""#));
     }
 
     #[test]
@@ -785,7 +785,7 @@ mod tests {
 
         assert!(results.len() >= 3);
         assert!(results[0].starts_with("data: "));
-        assert!(results[0].contains("\"type\":\"data\""));
+        assert!(results[0].contains(r#""type":"data""#));
         assert!(results[results.len() - 1].contains("complete"));
     }
 
@@ -799,8 +799,8 @@ mod tests {
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
         assert!(results.len() >= 1);
-        assert!(results[0].contains("\"type\":\"ping\""));
-        assert!(results[0].contains("\"timestamp\""));
+        assert!(results[0].contains(r#""type":"ping""#));
+        assert!(results[0].contains("timestamp"));
     }
 
     #[tokio::test]
@@ -815,7 +815,7 @@ mod tests {
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
         assert!(results.len() >= 1);
-        assert!(results[0].contains("\"type\":\"error\""));
+        assert!(results[0].contains(r#""type":"error""#));
         assert!(results[0].contains("test error"));
     }
 
@@ -870,7 +870,7 @@ mod tests {
 
         let data_events: Vec<_> = results
             .iter()
-            .filter(|r| r.contains("\"type\":\"data\""))
+            .filter(|r| r.contains(r#""type":"data""#))
             .collect();
         assert_eq!(data_events.len(), 5);
     }
@@ -884,7 +884,7 @@ mod tests {
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-        assert!(results[0].contains("\"key\":\"value\""));
+        assert!(results[0].contains(r#""key":"value""#));
     }
 
     #[tokio::test]
@@ -973,7 +973,7 @@ mod tests {
 
     #[test]
     fn test_stream_event_special_characters_in_error() {
-        let error_msg = "Error: \"quotes\" and \\backslashes\\ \n newlines \t tabs";
+        let error_msg = r#"Error: "quotes" and \backslashes\ \n newlines \t tabs"#;
         let event: StreamEvent<()> = StreamEvent::error(error_msg.to_string());
 
         let json = serde_json::to_string(&event).unwrap();
@@ -1123,8 +1123,8 @@ mod tests {
         };
 
         let json = serde_json::to_string(&event).unwrap();
-        assert!(json.contains("\"id\":null"));
-        assert!(json.contains("\"event_name\":null"));
+        assert!(json.contains(r#""id":null"#));
+        assert!(json.contains(r#""event_name":null"#));
     }
 
     #[tokio::test]
