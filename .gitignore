@@ -34,9 +34,13 @@ profdata/
 doc/
 docs/book/
 target/doc/
-**/docs/
-
-# Code coverage reports
+# Specific docs are gitignored
+docs/ettara.md
+docs/prd.md
+docs/task.md
+docs/tdd.md
+docs/test.md
+docs/uat.md
 coverage/
 *.lcov
 htmlcov/
