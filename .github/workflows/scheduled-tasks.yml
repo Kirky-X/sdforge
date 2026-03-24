@@ -25,7 +25,7 @@ jobs:
               repo: context.repo.repo,
               per_page: 100
             });
-            
+
             for (const run of workflowRuns.data.workflow_runs) {
               const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
               if (new Date(run.created_at) < sevenDaysAgo && run.status === 'completed') {
