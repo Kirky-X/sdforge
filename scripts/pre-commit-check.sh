@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Axiom Pre-commit Check Script
+# SDForge Pre-commit Check Script
 # =============================================================================
 # This script performs comprehensive checks before allowing a git commit.
 # It checks code formatting, linting, compilation, and more.
@@ -82,25 +82,25 @@ print_duration() {
 
 check_prerequisites() {
     log_info "Checking prerequisites..."
-    
+
     local missing_deps=()
-    
+
     # Check for Rust
     if ! command -v cargo &> /dev/null; then
         missing_deps+=("cargo (Rust)")
     fi
-    
+
     # Check for git
     if ! command -v git &> /dev/null; then
         missing_deps+=("git")
     fi
-    
+
     if [ ${#missing_deps[@]} -ne 0 ]; then
         log_error "Missing dependencies: ${missing_deps[*]}"
         log_info "Please install the missing dependencies and try again."
         exit 1
     fi
-    
+
     log_success "All prerequisites satisfied"
 }
 
@@ -120,20 +120,20 @@ stop_timer() {
 check_merge_conflicts() {
     log_section "Checking for Merge Conflict Markers"
     start_timer
-    
+
     local conflicts_found=0
     local conflict_patterns=("<<<<<<< HEAD" "=======" ">>>>>>> ")
-    
+
     # Check staged files
     local staged_files
     staged_files=$(git diff --cached --name-only -- '*.rs' '*.toml' '*.md' '*.yml' '*.yaml' 2>/dev/null || echo "")
-    
+
     if [ -z "$staged_files" ]; then
         log_warning "No staged files to check"
         stop_timer
         return 0
     fi
-    
+
     while IFS= read -r file; do
         if [ -f "$file" ]; then
             for pattern in "${conflict_patterns[@]}"; do
@@ -145,9 +145,9 @@ check_merge_conflicts() {
             done
         fi
     done <<< "$staged_files"
-    
+
     stop_timer
-    
+
     if [ $conflicts_found -eq 0 ]; then
         log_success "No merge conflict markers found ($(print_duration $DURATION))"
         return 0
@@ -161,34 +161,34 @@ check_merge_conflicts() {
 check_large_files() {
     log_section "Checking for Large Files (>${MAX_FILE_SIZE_MB}MB)"
     start_timer
-    
+
     local large_files=()
-    
+
     # Check staged files
     local staged_files
     staged_files=$(git diff --cached --name-only 2>/dev/null || echo "")
-    
+
     if [ -z "$staged_files" ]; then
         log_warning "No staged files to check"
         stop_timer
         return 0
     fi
-    
+
     while IFS= read -r file; do
         if [ -f "$file" ]; then
             local file_size
             file_size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo "0")
             file_size=$((file_size))
-            
+
             if [ $file_size -gt $MAX_FILE_SIZE_BYTES ]; then
                 local size_mb=$((file_size / 1024 / 1024))
                 large_files+=("$file (${size_mb}MB)")
             fi
         fi
     done <<< "$staged_files"
-    
+
     stop_timer
-    
+
     if [ ${#large_files[@]} -eq 0 ]; then
         log_success "No large files found ($(print_duration $DURATION))"
         return 0
@@ -205,39 +205,39 @@ check_large_files() {
 fix_trailing_whitespace() {
     log_section "Checking and Fixing Trailing Whitespace"
     start_timer
-    
+
     local files_fixed=0
     local files_with_issues=()
-    
+
     # Check staged Rust files
     local staged_files
     staged_files=$(git diff --cached --name-only -- '*.rs' 2>/dev/null || echo "")
-    
+
     if [ -z "$staged_files" ]; then
         log_warning "No staged Rust files to check"
         stop_timer
         return 0
     fi
-    
+
     while IFS= read -r file; do
         if [ -f "$file" ]; then
             # Check for trailing whitespace
             if grep -q '[[:space:]]$' "$file" 2>/dev/null; then
                 files_with_issues+=("$file")
-                
+
                 # Fix trailing whitespace
                 sed -i 's/[[:space:]]*$//' "$file" 2>/dev/null || \
                 sed -i 's/[[:space:]]\+$//' "$file" 2>/dev/null
-                
+
                 # Re-stage the fixed file
                 git add "$file" 2>/dev/null || true
                 ((files_fixed++)) || true
             fi
         fi
     done <<< "$staged_files"
-    
+
     stop_timer
-    
+
     if [ $files_fixed -eq 0 ]; then
         log_success "No trailing whitespace issues found ($(print_duration $DURATION))"
         return 0
@@ -254,13 +254,13 @@ fix_trailing_whitespace() {
 check_code_formatting() {
     log_section "Checking Code Formatting (cargo fmt)"
     start_timer
-    
+
     if ! command -v cargo &> /dev/null; then
         log_error "cargo not found. Please install Rust."
         stop_timer
         return 1
     fi
-    
+
     # Check if rustfmt is available
     if ! cargo fmt --version &> /dev/null; then
         log_warning "rustfmt not available. Installing..."
@@ -270,13 +270,13 @@ check_code_formatting() {
             return 1
         }
     fi
-    
+
     # Run formatting check
     local fmt_output
     fmt_output=$(cargo fmt --all -- --check 2>&1) && fmt_result=0 || fmt_result=$?
-    
+
     stop_timer
-    
+
     if [ $fmt_result -eq 0 ]; then
         log_success "Code formatting is correct ($(print_duration $DURATION))"
         return 0
@@ -291,13 +291,13 @@ check_code_formatting() {
 check_code_quality() {
     log_section "Checking Code Quality (cargo clippy)"
     start_timer
-    
+
     if ! command -v cargo &> /dev/null; then
         log_error "cargo not found. Please install Rust."
         stop_timer
         return 1
     fi
-    
+
     # Check if clippy is available
     if ! cargo clippy --version &> /dev/null; then
         log_warning "clippy not available. Installing..."
@@ -307,31 +307,31 @@ check_code_quality() {
             return 1
         }
     fi
-    
+
     log_info "Running clippy with --all-features and -- -D warnings..."
-    
+
     # Run clippy with all features
     local clippy_output
     local clippy_result=0
     clippy_output=$(cargo clippy --all-targets --all-features --workspace -- -D warnings 2>&1) || clippy_result=$?
-    
+
     # Filter out some known warnings that are acceptable
     local filtered_output
     filtered_output=$(echo "$clippy_output" | grep -v "warning: unused import" || true)
-    
+
     stop_timer
-    
+
     if [ $clippy_result -eq 0 ] || [ -z "$filtered_output" ]; then
         log_success "Code quality check passed ($(print_duration $DURATION))"
         return 0
     else
         log_error "Code quality issues detected!"
         echo "$filtered_output" | head -50
-        
+
         if [ $(echo "$filtered_output" | wc -l) -gt 50 ]; then
             log_info "... (output truncated, run 'cargo clippy --all-features --workspace' for full output)"
         fi
-        
+
         log_info "Solution: Review the warnings above and fix them, or run 'cargo clippy --fix' for auto-fixable issues."
         return 1
     fi
@@ -340,29 +340,29 @@ check_code_quality() {
 check_compilation() {
     log_section "Checking Compilation (cargo check)"
     start_timer
-    
+
     if ! command -v cargo &> /dev/null; then
         log_error "cargo not found. Please install Rust."
         stop_timer
         return 1
     fi
-    
+
     log_info "Running cargo check with --all-features..."
-    
+
     # Run cargo check with all features
     local check_output
     local check_result=0
     check_output=$(cargo check --all-features --workspace 2>&1) || check_result=$?
-    
+
     stop_timer
-    
+
     if [ $check_result -eq 0 ]; then
         log_success "Compilation check passed ($(print_duration $DURATION))"
         return 0
     else
         log_error "Compilation errors detected!"
         echo "$check_output" | head -50
-        
+
         log_info "Solution: Fix the compilation errors listed above."
         return 1
     fi
@@ -371,29 +371,29 @@ check_compilation() {
 check_build() {
     log_section "Checking Build (cargo build)"
     start_timer
-    
+
     if ! command -v cargo &> /dev/null; then
         log_error "cargo not found. Please install Rust."
         stop_timer
         return 1
     fi
-    
+
     log_info "Running cargo build with --all-features..."
-    
+
     # Run cargo build with all features
     local build_output
     local build_result=0
     build_output=$(cargo build --all-features --workspace 2>&1) || build_result=$?
-    
+
     stop_timer
-    
+
     if [ $build_result -eq 0 ]; then
         log_success "Build check passed ($(print_duration $DURATION))"
         return 0
     else
         log_error "Build errors detected!"
         echo "$build_output" | head -50
-        
+
         log_info "Solution: Fix the build errors listed above."
         return 1
     fi
@@ -406,20 +406,20 @@ check_build() {
 run_all_checks() {
     local overall_start=$(date +%s)
     local failed_checks=()
-    
+
     # Clear log file
     : > "$LOG_FILE"
-    
-    log_section "Axiom Pre-commit Checks"
+
+    log_section "SDForge Pre-commit Checks"
     log_info "Project: $(basename "$PROJECT_ROOT")"
     log_info "Rust version: $(rustc --version 2>/dev/null || echo 'N/A')"
     log_info "Cargo version: $(cargo --version 2>/dev/null || echo 'N/A')"
     echo ""
-    
+
     # Prerequisites
     check_prerequisites || exit 1
     echo ""
-    
+
     # Run checks
     local checks=(
         "check_merge_conflicts"
@@ -430,7 +430,7 @@ run_all_checks() {
         "check_compilation"
         "check_build"
     )
-    
+
     for check in "${checks[@]}"; do
         start_timer
         if ! $check; then
@@ -438,13 +438,13 @@ run_all_checks() {
         fi
         echo ""
     done
-    
+
     local overall_end=$(date +%s)
     local overall_duration=$((overall_end - overall_start))
-    
+
     log_section "Pre-commit Check Summary"
     echo ""
-    
+
     if [ ${#failed_checks[@]} -eq 0 ]; then
         log_success "All checks passed! ✓"
         log_info "Total time: $(print_duration $overall_duration)"
@@ -478,7 +478,7 @@ run_all_checks() {
 
 show_help() {
     cat << EOF
-${BOLD}Axiom Pre-commit Check Script${RESET}
+${BOLD}SDForge Pre-commit Check Script${RESET}
 
 ${BOLD}Usage:${RESET}
   $(basename "$0") [OPTIONS]
@@ -515,7 +515,7 @@ EOF
 main() {
     # Parse arguments
     local mode="all"
-    
+
     while [[ $# -gt 0 ]]; do
         case $1 in
             --check-conflicts)
@@ -561,7 +561,7 @@ main() {
                 ;;
         esac
     done
-    
+
     # Run the appropriate mode
     case $mode in
         check_conflicts)
