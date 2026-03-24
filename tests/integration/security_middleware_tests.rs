@@ -4,13 +4,13 @@
 #[cfg(feature = "security")]
 mod security_tests {
     use sdforge::security::{AppApiKeyAuth, AppRateLimiter};
-    use std::sync::Arc;
+    use std::time::Duration;
 
     #[test]
     fn test_api_key_auth_builder() {
         let auth = AppApiKeyAuth::builder()
-            .header_name("X-API-Key")
-            .prefix("key")
+            .max_requests(100)
+            .window(Duration::from_secs(60))
             .build();
         
         // If we get here without panicking, the builder works
@@ -21,7 +21,7 @@ mod security_tests {
     fn test_rate_limiter_builder() {
         let limiter = AppRateLimiter::builder()
             .max_requests(100)
-            .window_secs(60)
+            .window(Duration::from_secs(60))
             .build();
         
         // If we get here without panicking, the builder works
