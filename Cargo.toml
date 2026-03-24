@@ -2,6 +2,7 @@
 members = [
     "src",
     "macros",
+    "examples",
 ]
 exclude = [
     "temp",
