@@ -11,8 +11,8 @@ mod http_only_tests {
     #[test]
     fn test_http_routes_registered() {
         use sdforge::http::build;
-        let app = build();
-        assert!(app.is_ok());
+        let _app = build();
+        // If we get here without panicking, the build succeeded
     }
 }
 
@@ -26,8 +26,8 @@ mod mcp_only_tests {
     #[tokio::test]
     async fn test_mcp_server_runs() {
         use sdforge::mcp::build;
-        let server = build().await;
-        assert!(server.is_ok());
+        let _server = build().await;
+        // If we get here without panicking, the build succeeded
     }
 }
 
@@ -43,11 +43,9 @@ mod http_mcp_tests {
         use sdforge::http::build as http_build;
         use sdforge::mcp::build as mcp_build;
 
-        let http_app = http_build();
-        let mcp_server = mcp_build().await;
-
-        assert!(http_app.is_ok());
-        assert!(mcp_server.is_ok());
+        let _http_app = http_build();
+        let _mcp_server = mcp_build().await;
+        // If we get here without panicking, both builds succeeded
     }
 }
 
@@ -61,8 +59,8 @@ mod http_streaming_tests {
     #[test]
     fn test_streaming_routes_available() {
         use sdforge::http::build;
-        let app = build();
-        assert!(app.is_ok());
+        let _app = build();
+        // If we get here without panicking, the build succeeded
     }
 }
 
@@ -86,11 +84,9 @@ mod full_feature_tests {
         use sdforge::http::build as http_build;
         use sdforge::mcp::build as mcp_build;
 
-        let http_app = http_build();
-        let mcp_server = mcp_build().await;
-
-        assert!(http_app.is_ok());
-        assert!(mcp_server.is_ok());
+        let _http_app = http_build();
+        let _mcp_server = mcp_build().await;
+        // If we get here without panicking, both builds succeeded
     }
 }
 

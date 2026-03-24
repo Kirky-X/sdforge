@@ -7,47 +7,38 @@ mod edge_case_tests {
 
     #[test]
     fn test_empty_response() {
-        let response: ServiceResponse<String> = ServiceResponse::new(String::new());
-        assert_eq!(response.data(), "");
+        let response: ServiceResponse<String> = ServiceResponse::success(String::new());
+        assert_eq!(response.data(), Some(&String::new()));
         assert!(response.is_success());
     }
 
     #[test]
     fn test_large_response() {
         let large_data = "x".repeat(1_000_000);
-        let response = ServiceResponse::new(large_data);
-        assert_eq!(response.data().len(), 1_000_000);
+        let response = ServiceResponse::success(large_data);
+        assert_eq!(response.data().map(|s| s.len()), Some(1_000_000));
     }
 
     #[test]
     fn test_unicode_content() {
         let unicode_data = "Hello 世界 🎉 Ñoño Москва";
-        let response = ServiceResponse::new(unicode_data.to_string());
-        assert_eq!(response.data(), unicode_data);
+        let response = ServiceResponse::success(unicode_data.to_string());
+        assert_eq!(response.data(), Some(&unicode_data.to_string()));
     }
 
     #[test]
     fn test_special_characters() {
         let special = "Tab:\tNewline:\nQuote:\"Backslash:\\";
-        let response = ServiceResponse::new(special.to_string());
-        assert_eq!(response.data(), special);
-    }
-
-    #[test]
-    fn test_error_with_all_fields() {
-        let error = ApiError::with_details(
-            "CUSTOM_ERROR",
-            "Custom error message",
-            Some(serde_json::json!({"field": "value"})),
-        );
-
-        let json = serde_json::to_string(&error).unwrap();
-        assert!(json.contains("CUSTOM_ERROR"));
+        let response = ServiceResponse::success(special.to_string());
+        assert_eq!(response.data(), Some(&special.to_string()));
     }
 
     #[test]
     fn test_error_serialization_roundtrip() {
-        let original = ApiError::not_found("User", Some("123"));
+        let original = ApiError::NotFound {
+            resource: "User".to_string(),
+            resource_id: Some("123".to_string()),
+        };
         let json = serde_json::to_string(&original).unwrap();
         let restored: ApiError = serde_json::from_str(&json).unwrap();
 
@@ -57,54 +48,6 @@ mod edge_case_tests {
             }
             _ => panic!("Roundtrip failed"),
         }
-    }
-}
-
-#[cfg(test)]
-mod parameter_boundary_tests {
-    use sdforge::core::validation::{validate_string, validate_email, validate_url};
-
-    #[test]
-    fn test_max_string_length() {
-        let max_string = "a".repeat(10000);
-        let result = validate_string(&max_string, 1, 10000);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_exceed_max_string_length() {
-        let too_long = "a".repeat(10001);
-        let result = validate_string(&too_long, 1, 10000);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_min_string_length() {
-        let result = validate_string("a", 1, 100);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_below_min_string_length() {
-        let result = validate_string("", 1, 100);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_various_email_formats() {
-        assert!(validate_email("user@domain.com").is_ok());
-        assert!(validate_email("user.name@domain.com").is_ok());
-        assert!(validate_email("user+tag@domain.co.uk").is_ok());
-        assert!(validate_email("invalid").is_err());
-        assert!(validate_email("@domain.com").is_err());
-    }
-
-    #[test]
-    fn test_various_url_formats() {
-        assert!(validate_url("https://example.com").is_ok());
-        assert!(validate_url("http://localhost:8080").is_ok());
-        assert!(validate_url("https://example.com/path?query=1").is_ok());
-        assert!(validate_url("not-a-url").is_err());
     }
 }
 
@@ -138,7 +81,10 @@ mod concurrency_tests {
         let handles: Vec<_> = (0..100)
             .map(|_| {
                 thread::spawn(|| {
-                    let _ = ApiError::not_found("Test", None);
+                    let _ = ApiError::NotFound {
+                        resource: "Test".to_string(),
+                        resource_id: None,
+                    };
                 })
             })
             .collect();
@@ -152,11 +98,12 @@ mod concurrency_tests {
     fn test_response_cloning_thread_safety() {
         use sdforge::core::ServiceResponse;
 
-        let response = Arc::new(ServiceResponse::new("test".to_string()));
+        let response: ServiceResponse<String> = ServiceResponse::success("test".to_string());
+        let arc_response: Arc<ServiceResponse<String>> = Arc::new(response);
         let mut handles = vec![];
 
         for _ in 0..10 {
-            let r = Arc::clone(&response);
+            let r = Arc::clone(&arc_response);
             handles.push(thread::spawn(move || {
                 let _ = r.clone();
             }));

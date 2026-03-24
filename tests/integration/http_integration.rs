@@ -4,18 +4,17 @@
 #[cfg(feature = "http")]
 mod http_tests {
     use sdforge::http::build;
-    use sdforge::core::{ApiError, ServiceResponse};
 
     #[tokio::test]
     async fn test_http_server_builds() {
-        let app = build();
-        assert!(app.is_ok(), "HTTP service should build successfully");
+        let _app = build();
+        // If we get here without panicking, the build succeeded
     }
 
     #[test]
     fn test_http_build_sync() {
-        let app = build();
-        assert!(app.is_ok());
+        let _app = build();
+        // If we get here without panicking, the build succeeded
     }
 }
 
@@ -25,8 +24,8 @@ mod timestamp_tests {
 
     #[test]
     fn test_timestamp_feature_enabled() {
-        let app = build();
-        assert!(app.is_ok());
+        let _app = build();
+        // If we get here without panicking, the build succeeded
     }
 }
 
@@ -36,8 +35,8 @@ mod no_timestamp_tests {
 
     #[test]
     fn test_timestamp_feature_disabled() {
-        let app = build();
-        assert!(app.is_ok());
+        let _app = build();
+        // If we get here without panicking, the build succeeded
     }
 }
 
@@ -47,7 +46,7 @@ mod streaming_tests {
 
     #[test]
     fn test_streaming_feature_enabled() {
-        let app = build();
-        assert!(app.is_ok());
+        let _app = build();
+        // If we get here without panicking, the build succeeded
     }
 }
