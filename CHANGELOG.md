@@ -75,7 +75,7 @@
   ```toml
   # 旧
   axiom = "0.1"
-  
+
   # 新
   sdforge = "0.2"
   ```
@@ -113,7 +113,7 @@
    ```rust
    // 库导入
    use sdforge::prelude::*;
-   
+
    // 宏导入
    use sdforge_macros::service_api;
    ```
