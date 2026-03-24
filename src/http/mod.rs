@@ -9,9 +9,11 @@ use axum::Router;
 use uuid::Uuid;
 
 pub mod response;
+pub mod security_headers;
 pub mod version_routing;
 
 pub use response::{build_fallback_response, build_json_response};
+pub use security_headers::SecurityHeaders;
 pub use version_routing::{
     build_version_router, version_redirect_middleware, VersionRouterConfig, VersionedRoute,
 };
@@ -128,44 +130,7 @@ fn resolve_route_path(base_path: &str, module_prefix: Option<&str>) -> String {
 }
 
 fn apply_security_headers(router: Router) -> Router {
-    use axum::http::{header::*, HeaderValue};
-    use tower_http::set_header::SetResponseHeaderLayer;
-
-    let mut router = router;
-    router = router.layer(SetResponseHeaderLayer::overriding(
-        X_CONTENT_TYPE_OPTIONS,
-        HeaderValue::from_static("nosniff"),
-    ));
-    router = router.layer(SetResponseHeaderLayer::overriding(
-        X_FRAME_OPTIONS,
-        HeaderValue::from_static("DENY"),
-    ));
-    router = router.layer(SetResponseHeaderLayer::overriding(
-        X_XSS_PROTECTION,
-        HeaderValue::from_static("1; mode=block"),
-    ));
-    router = router.layer(SetResponseHeaderLayer::overriding(
-        CACHE_CONTROL,
-        HeaderValue::from_static("no-store, no-cache, must-revalidate"),
-    ));
-    router = router.layer(SetResponseHeaderLayer::overriding(
-        CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static("default-src 'self'; script-src 'self'; style-src 'self'"),
-    ));
-    router = router.layer(SetResponseHeaderLayer::overriding(
-        STRICT_TRANSPORT_SECURITY,
-        HeaderValue::from_static("max-age=31536000; includeSubDomains; preload"),
-    ));
-    router = router.layer(SetResponseHeaderLayer::overriding(
-        HeaderName::from_static("referrer-policy"),
-        HeaderValue::from_static("strict-origin-when-cross-origin"),
-    ));
-    router = router.layer(SetResponseHeaderLayer::overriding(
-        HeaderName::from_static("permissions-policy"),
-        HeaderValue::from_static("geolocation=(), microphone=(), camera=()"),
-    ));
-
-    router
+    SecurityHeaders::default().apply(router)
 }
 
 /// Prevent linker from optimizing away inventory registrations
