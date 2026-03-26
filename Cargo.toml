@@ -135,6 +135,7 @@ async-trait = { version = "0.1", optional = true }
 # gRPC dependencies
 tonic = { workspace = true, optional = true }
 prost = { workspace = true, optional = true }
+tonic-prost = { version = "0.14", optional = true }
 
 # Feature dependencies
 chrono = { workspace = true, optional = true }
@@ -260,7 +261,7 @@ audit = ["confers/audit"]
 websocket = ["http", "streaming", "tokio-tungstenite", "axum-extra", "async-trait", "chrono"]
 
 # gRPC 特性
-grpc = ["http", "tonic", "prost"]
+grpc = ["http", "tonic", "prost", "tonic-prost"]
 
 # Cache 特性 - oxcache 提供缓存抽象，rate-limiting 提供 TokenBucket
 cache = ["dep:http", "oxcache/rate-limiting", "async-trait"]
@@ -292,7 +293,8 @@ full = [
 ]
 
 [build-dependencies]
-tonic-build = { version = "0.12", features = ["prost"] }
+tonic-build = "0.14"
+tonic-prost-build = "0.14"
 
 [package.metadata.docs.rs]
 all-features = true

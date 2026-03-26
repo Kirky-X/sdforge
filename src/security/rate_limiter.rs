@@ -6,7 +6,7 @@
 use crate::cache::SharedCache;
 use crate::security::types::{
     CacheNamespace, RateLimitConfig, RateLimitError, deserialize_window_state,
-    serialize_instants, serialize_window_state, WindowState,
+    serialize_instants, serialize_window_state,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -577,10 +577,10 @@ mod tests {
 
         assert_eq!(limiter.remaining("test_key"), 10);
 
-        limiter.check("test_key");
+        let _ = limiter.check("test_key");
         assert_eq!(limiter.remaining("test_key"), 9);
 
-        limiter.check("test_key");
+        let _ = limiter.check("test_key");
         assert_eq!(limiter.remaining("test_key"), 8);
     }
 

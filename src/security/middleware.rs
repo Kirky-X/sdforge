@@ -4,7 +4,7 @@
 //! This module provides Axum middleware for authentication and rate limiting.
 
 use crate::security::rate_limiter::AppRateLimiter;
-use crate::security::types::{AuthContext, AuthError, AuthResult, RateLimitConfig, TrustedProxyConfig};
+use crate::security::types::{AuthContext, AuthResult, TrustedProxyConfig};
 use axum::{
     body::Body,
     http::{HeaderValue, Request, StatusCode},

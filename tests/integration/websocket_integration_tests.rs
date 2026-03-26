@@ -45,6 +45,6 @@ mod websocket_integration_tests {
         let state = AppState::new(manager);
         
         // Basic verification - state was created successfully
-        assert!(state.get_manager().len() == 0);
+        assert!(state.config.rate_limit.max_connections > 0);
     }
 }
