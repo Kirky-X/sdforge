@@ -548,7 +548,22 @@ const MAX_JSON_DEPTH: usize = 16;
 const MAX_STRING_LENGTH: usize = 64 * 1024; // 64KB
 
 #[cfg(feature = "websocket")]
-fn parse_websocket_message(text: &str) -> Result<WebSocketMessage, String> {
+/// Parse and validate a WebSocket message from JSON text
+///
+/// # Security
+///
+/// This function provides security measures:
+/// - Maximum message size validation (1MB)
+/// - JSON nesting depth validation (max 16 levels)
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Message exceeds maximum size
+/// - JSON is malformed
+/// - Nesting depth exceeds limit
+/// - Message is not a valid WebSocketMessage variant
+pub fn parse_websocket_message(text: &str) -> Result<WebSocketMessage, String> {
     // First, check basic size limit
     if text.len() > MAX_MESSAGE_SIZE {
         return Err(format!(

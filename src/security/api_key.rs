@@ -118,36 +118,24 @@ impl AppApiKeyAuth {
         AppApiKeyAuthBuilder::new()
     }
 
-    /// Hash API key using Argon2id for secure storage
+    /// Hash API key using SHA256 for deterministic storage and lookup
     ///
-    /// Uses Argon2id with OWASP-recommended parameters (2024):
-    /// - Time cost: 3 iterations
-    /// - Memory cost: 64 MiB (65536 KiB)
-    /// - Parallelism: 4 threads
-    /// - Output length: 32 bytes
-    /// - Random salt per key
+    /// Uses SHA256 to create a deterministic hash of the API key.
+    /// This ensures that the same key always produces the same hash,
+    /// allowing correct validation later.
     ///
-    /// Argon2id is resistant to GPU/ASIC attacks and side-channel attacks.
+    /// Note: While SHA256 is cryptographically secure for integrity,
+    /// API keys stored in this format should still be treated as sensitive.
     fn hash_key(key: &str) -> String {
-        use argon2::{
-            password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, SaltString},
-            Argon2,
-        };
+        use sha2::{Digest, Sha256};
 
-        // Argon2id with OWASP 2024 recommended parameters
-        // Time Cost: 3, Memory: 64 MiB (65536 KiB), Parallelism: 4, Output: 32 bytes
-        let argon2 = Argon2::default();
+        // Use SHA256 for deterministic hashing
+        let mut hasher = Sha256::new();
+        hasher.update(key.as_bytes());
+        let result = hasher.finalize();
 
-        // Generate random salt
-        let salt = SaltString::generate(&mut OsRng);
-
-        // Hash the password
-        let password_hash = argon2
-            .hash_password(key.as_bytes(), &salt)
-            .expect("Argon2 hashing should not fail with valid parameters");
-
-        // Return PHC string format (e.g., $argon2id$v=19$m=65536,t=3,p=4$...)
-        password_hash.to_string()
+        // Convert to hex string
+        hex::encode(result)
     }
 
     /// Add a valid API key (stored as hash)
