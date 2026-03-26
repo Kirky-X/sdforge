@@ -5,7 +5,7 @@
 
 use crate::cache::SharedCache;
 use crate::security::types::{
-    AuthContext, AuditLog, AuditResult, deserialize_audit_logs, serialize_audit_logs,
+    deserialize_audit_logs, serialize_audit_logs, AuditLog, AuditResult, AuthContext,
 };
 use once_cell::sync::Lazy;
 use std::sync::Arc;
@@ -17,7 +17,7 @@ use uuid::Uuid;
 /// Internal struct used to pass user ID and log entry through the async channel.
 pub(crate) struct AuditLogBatch {
     user_id: String,
-    #[allow(dead_code)]  // Used in queue transfer, field access not needed directly
+    #[allow(dead_code)] // Used in queue transfer, field access not needed directly
     log: AuditLog,
 }
 
@@ -444,7 +444,7 @@ impl AppAuditLogger {
     ///
     /// Security: This is used when the async channel is full, preventing
     /// audit log loss during high load or potential DoS attempts.
-    #[allow(dead_code)]  // Reserved for fallback handling when queue is full
+    #[allow(dead_code)] // Reserved for fallback handling when queue is full
     fn store_fallback_log(&self, user_id: &str, log: &AuditLog) {
         let count = self
             .dropped_log_count
@@ -722,7 +722,8 @@ impl AppAuditLoggerBuilder {
     /// }
     /// ```
     pub fn build(self) -> AppAuditLogger {
-        let (queue_sender, mut queue_receiver) = tokio::sync::mpsc::channel::<AuditLogBatch>(self.queue_size);
+        let (queue_sender, mut queue_receiver) =
+            tokio::sync::mpsc::channel::<AuditLogBatch>(self.queue_size);
 
         // Spawn background worker for async log processing
         let logs: SharedCache = Arc::new(crate::cache::DashMapCache::new());
@@ -789,7 +790,9 @@ mod tests {
             metadata: crate::security::types::AuthMetadata::default(),
         };
 
-        logger.log(&context, "test_action", "test_resource", true, None).await;
+        logger
+            .log(&context, "test_action", "test_resource", true, None)
+            .await;
 
         let logs = logger.get_logs("test_user");
         assert_eq!(logs.len(), 1);
@@ -812,7 +815,9 @@ mod tests {
             metadata: crate::security::types::AuthMetadata::default(),
         };
 
-        logger.log(&context, "test_action", "test_resource", true, None).await;
+        logger
+            .log(&context, "test_action", "test_resource", true, None)
+            .await;
         assert_eq!(logger.get_logs("test_user").len(), 1);
 
         logger.clear_logs("test_user");
