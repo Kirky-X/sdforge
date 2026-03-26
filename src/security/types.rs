@@ -54,21 +54,12 @@ impl CacheNamespace {
 /// Uses fixed window counter algorithm instead of storing all timestamps.
 /// This provides O(1) check operations with a small accuracy trade-off
 /// at window boundaries.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct WindowState {
     /// Current count of requests in this window
     pub(crate) count: u64,
     /// Window start time in seconds since an arbitrary epoch (using Instant::now().elapsed())
     pub(crate) window_start_secs: u64,
-}
-
-impl Default for WindowState {
-    fn default() -> Self {
-        Self {
-            count: 0,
-            window_start_secs: 0,
-        }
-    }
 }
 
 // =============================================================================

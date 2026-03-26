@@ -232,8 +232,9 @@ pub mod websocket;
 
 #[cfg(feature = "websocket")]
 pub use websocket::{
-    build, websocket_upgrade, BoxFuture, ConnectionManager, ValidatedWebSocketUpgrade,
-    WebSocketConfig, WebSocketConnection, WebSocketHandler, WebSocketMessage, WebSocketRoute,
+    build, parse_websocket_message, websocket_upgrade, BoxFuture, ConnectionManager,
+    ValidatedWebSocketUpgrade, WebSocketConfig, WebSocketConnection, WebSocketHandler,
+    WebSocketMessage, WebSocketRoute,
 };
 
 /// gRPC server support

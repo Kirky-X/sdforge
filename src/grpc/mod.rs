@@ -6,6 +6,7 @@
 #[cfg(feature = "grpc")]
 use serde_json;
 #[cfg(all(feature = "grpc", feature = "security"))]
+#[allow(unused_imports)]
 use tonic::service::Interceptor;
 #[cfg(feature = "grpc")]
 use tonic::{transport::Server, Request, Response, Status};
@@ -296,6 +297,7 @@ mod tests {
     // ============================================================================
 
     /// Generate a valid JWT for testing with the given secret and expiration timestamp
+    #[allow(dead_code)]
     fn make_test_jwt(secret: &str, exp_timestamp: i64) -> String {
         use hmac::{Hmac, Mac};
         use sha2::Sha256;
@@ -326,6 +328,7 @@ mod tests {
 
     /// Base64url encode (no padding) for JWT encoding.
     /// Standard base64 uses `+/=`; base64url uses `-_` with no padding.
+    #[allow(dead_code)]
     fn base64url_encode(input: &[u8]) -> String {
         const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         let mut result = String::new();

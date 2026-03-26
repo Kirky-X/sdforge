@@ -7,14 +7,13 @@
 //! - Automatic key rotation with grace period
 
 use crate::cache::SharedCache;
-use crate::security::types::{deserialize_permissions, serialize_permissions, CacheNamespace};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// API key version information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ApiKeyVersion {
     /// Version identifier (v1, v2, etc.)
     pub version: String,
@@ -28,6 +27,55 @@ pub struct ApiKeyVersion {
     pub expires_at: Option<Instant>,
     /// Whether this version is active
     pub is_active: bool,
+}
+
+/// Custom serialization for ApiKeyVersion
+impl Serialize for ApiKeyVersion {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("ApiKeyVersion", 6)?;
+        state.serialize_field("version", &self.version)?;
+        state.serialize_field("key_hash", &self.key_hash)?;
+        state.serialize_field("permissions", &self.permissions)?;
+        let created_nanos = self.created_at.elapsed().as_nanos() as i64;
+        state.serialize_field("created_at", &created_nanos)?;
+        let expires_nanos = self.expires_at.map(|i| i.elapsed().as_nanos() as i64);
+        state.serialize_field("expires_at", &expires_nanos)?;
+        state.serialize_field("is_active", &self.is_active)?;
+        state.end()
+    }
+}
+
+/// Custom deserialization for ApiKeyVersion
+impl<'de> Deserialize<'de> for ApiKeyVersion {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Helper {
+            version: String,
+            key_hash: String,
+            permissions: Vec<String>,
+            created_at: i64,
+            expires_at: Option<i64>,
+            is_active: bool,
+        }
+        let helper = Helper::deserialize(deserializer)?;
+        Ok(Self {
+            version: helper.version,
+            key_hash: helper.key_hash,
+            permissions: helper.permissions,
+            created_at: Instant::now() - Duration::from_nanos(helper.created_at as u64),
+            expires_at: helper
+                .expires_at
+                .map(|n| Instant::now() - Duration::from_nanos(n as u64)),
+            is_active: helper.is_active,
+        })
+    }
 }
 
 impl ApiKeyVersion {
@@ -67,7 +115,7 @@ impl ApiKeyVersion {
 }
 
 /// API key metadata with versioning support
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ApiKeyMetadata {
     /// Key identifier (unique ID for this API key)
     pub key_id: String,
@@ -79,6 +127,49 @@ pub struct ApiKeyMetadata {
     pub created_at: Instant,
     /// Key description
     pub description: Option<String>,
+}
+
+/// Custom serialization for ApiKeyMetadata
+impl Serialize for ApiKeyMetadata {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("ApiKeyMetadata", 5)?;
+        state.serialize_field("key_id", &self.key_id)?;
+        state.serialize_field("versions", &self.versions)?;
+        state.serialize_field("active_version_index", &self.active_version_index)?;
+        let created_nanos = self.created_at.elapsed().as_nanos() as i64;
+        state.serialize_field("created_at", &created_nanos)?;
+        state.serialize_field("description", &self.description)?;
+        state.end()
+    }
+}
+
+/// Custom deserialization for ApiKeyMetadata
+impl<'de> Deserialize<'de> for ApiKeyMetadata {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Helper {
+            key_id: String,
+            versions: Vec<ApiKeyVersion>,
+            active_version_index: Option<usize>,
+            created_at: i64,
+            description: Option<String>,
+        }
+        let helper = Helper::deserialize(deserializer)?;
+        Ok(Self {
+            key_id: helper.key_id,
+            versions: helper.versions,
+            active_version_index: helper.active_version_index,
+            created_at: Instant::now() - Duration::from_nanos(helper.created_at as u64),
+            description: helper.description,
+        })
+    }
 }
 
 impl ApiKeyMetadata {
@@ -95,9 +186,10 @@ impl ApiKeyMetadata {
 
     /// Add a new version to this key
     pub fn add_version(&mut self, version: ApiKeyVersion) {
+        let is_active = version.is_active;
         self.versions.push(version);
         // Set as active if it's the first version or explicitly marked active
-        if self.active_version_index.is_none() || version.is_active {
+        if self.active_version_index.is_none() || is_active {
             self.active_version_index = Some(self.versions.len() - 1);
         }
     }
@@ -134,27 +226,27 @@ impl ApiKeyMetadata {
 
     /// Clean up expired and old versions
     pub fn cleanup_versions(&mut self, keep_last_n: usize) {
-        let now = Instant::now();
         let active_idx = self.active_version_index;
+        let last_idx = self.versions.len().saturating_sub(1);
 
         // Remove expired versions that are not the active one
         self.versions
-            .retain(|v| !v.is_expired() || active_idx == Some(self.versions.len() - 1));
+            .retain(|v| !v.is_expired() || active_idx == Some(last_idx));
 
         // Keep only the last N versions
         if self.versions.len() > keep_last_n {
             let active = self.get_active_version();
             let active_version_name = active.map(|v| v.version.clone());
 
-            self.versions = self
-                .versions
-                .into_iter()
-                .rev()
-                .take(keep_last_n)
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect();
+            // Take the last N versions
+            let len = self.versions.len();
+            let to_take = keep_last_n.min(len);
+            let remaining: Vec<_> = self.versions.drain(len - to_take..).collect();
+
+            // Reverse to maintain order, take N, reverse back
+            let mut kept: Vec<_> = remaining.into_iter().rev().take(keep_last_n).collect();
+            kept.reverse();
+            self.versions = kept;
 
             // Update active index
             if let Some(ref version_name) = active_version_name {
@@ -190,14 +282,16 @@ impl Default for LruConfig {
     }
 }
 
-/// LRU cache entry with timestamp
+/// LRU cache entry with timestamp (reserved for future use)
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct LruEntry<T> {
     data: T,
     last_accessed: Instant,
     created_at: Instant,
 }
 
+#[allow(dead_code)]
 impl<T> LruEntry<T> {
     fn new(data: T) -> Self {
         let now = Instant::now();
@@ -283,7 +377,7 @@ impl LruCacheManager {
     /// Check and evict old entries if needed
     fn check_and_evict(&self) {
         let access_times = self.access_times.clone();
-        let config = self.config;
+        let config = self.config.clone();
 
         tokio::spawn(async move {
             let mut times = access_times.write().await;
@@ -319,8 +413,11 @@ impl LruCacheManager {
 /// LRU cache statistics
 #[derive(Debug, Clone)]
 pub struct LruStats {
+    /// Total number of entries in the cache
     pub total_entries: usize,
+    /// Maximum number of entries allowed
     pub max_entries: usize,
+    /// Time-to-live for cache entries
     pub ttl: Duration,
 }
 

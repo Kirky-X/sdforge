@@ -49,6 +49,7 @@ subtle = "~2.6"
 argon2 = { version = "~0.5", features = ["std"] }
 password-hash = { version = "~0.6", default-features = false }
 rand = "~0.8"
+hex = "~0.4"
 
 # 配置依赖（本地路径保持不变）
 confers = { path = "/home/dev/projects/confers", features = ["watch"] }
@@ -156,6 +157,7 @@ subtle = { workspace = true, optional = true }
 argon2 = { workspace = true, optional = true }
 password-hash = { version = "0.6.0-rc.11", optional = true }
 rand = { workspace = true, optional = true }
+hex = { workspace = true, optional = true }
 
 # Configuration dependencies (按特性导入)
 confers = { path = "/home/dev/projects/confers", optional = true, features = ["watch"] }
@@ -182,6 +184,7 @@ clap = { workspace = true, optional = true }
 tera = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 url = "2.5.8"
+base64 = "0.22.1"
 
 [dev-dependencies]
 tokio = { workspace = true }
@@ -249,6 +252,7 @@ security = [
     "bincode",
     "confers",
     "cache",
+    "hex",
 ]
 
 # Hot reload 特性
@@ -298,6 +302,7 @@ full = [
     "websocket",
     "grpc",
 ]
+hex = ["dep:hex"]
 
 [build-dependencies]
 tonic-build = "0.14"
@@ -314,6 +319,11 @@ path = "src/main.rs"
 name = "axiom_bench"
 path = "src/benches/sdforge_bench.rs"
 harness = false
+
+# Cache tests
+[[test]]
+name = "cache_tests"
+path = "tests/integration/cache_tests.rs"
 
 # Integration tests
 [[test]]
@@ -333,12 +343,20 @@ name = "mcp_integration"
 path = "tests/integration/mcp_integration.rs"
 
 [[test]]
+name = "mcp_protocol_tests"
+path = "tests/integration/mcp_protocol_tests.rs"
+
+[[test]]
 name = "security_headers_tests"
 path = "tests/integration/security_headers_tests.rs"
 
 [[test]]
 name = "security_middleware_tests"
 path = "tests/integration/security_middleware_tests.rs"
+
+[[test]]
+name = "security_tests"
+path = "tests/integration/security_tests.rs"
 
 [[test]]
 name = "streaming_tests"
@@ -360,6 +378,10 @@ path = "tests/integration/websocket_tests.rs"
 name = "integration_http_mcp"
 path = "tests/integration_http_mcp.rs"
 
+[[test]]
+name = "http_tests"
+path = "tests/integration/http_tests.rs"
+
 # Unit tests
 [[test]]
 name = "config_tests"
@@ -380,6 +402,10 @@ path = "tests/unit/http_version_routing_tests.rs"
 [[test]]
 name = "mcp_tool_instance_tests"
 path = "tests/unit/mcp_tool_instance_tests.rs"
+
+[[test]]
+name = "error_handling_tests"
+path = "tests/integration/error_handling_tests.rs"
 
 [[test]]
 name = "macro_tests"
