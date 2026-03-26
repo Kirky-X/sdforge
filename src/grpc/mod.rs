@@ -5,12 +5,11 @@
 
 #[cfg(feature = "grpc")]
 use serde_json;
+#[cfg(all(feature = "grpc", feature = "security"))]
+use tonic::service::Interceptor;
 #[cfg(feature = "grpc")]
 use tonic::{transport::Server, Request, Response, Status};
 #[cfg(all(feature = "grpc", feature = "security"))]
-use tonic::service::Interceptor;
-#[cfg(all(feature = "grpc", feature = "security"))]
-
 // Include generated proto code
 /// gRPC protocol buffer module
 #[cfg(feature = "grpc")]
@@ -228,9 +227,7 @@ impl Default for GrpcServerConfig {
 /// When `auth` is `None`, returns `Ok(())` (no auth required).
 /// When `auth` is `Some`, validates the `authorization` metadata header as a bearer token.
 #[cfg(all(feature = "grpc", feature = "security"))]
-fn make_auth_interceptor(
-    auth: Option<crate::security::BearerAuth>,
-) -> AuthGrpcInterceptor {
+fn make_auth_interceptor(auth: Option<crate::security::BearerAuth>) -> AuthGrpcInterceptor {
     AuthGrpcInterceptor { auth }
 }
 
@@ -268,7 +265,6 @@ impl tonic::service::Interceptor for AuthGrpcInterceptor {
         }
     }
 }
-
 
 mod tests {
     use super::*;
