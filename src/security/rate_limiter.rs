@@ -5,8 +5,8 @@
 
 use crate::cache::SharedCache;
 use crate::security::types::{
-    CacheNamespace, RateLimitConfig, RateLimitError, deserialize_window_state,
-    serialize_instants, serialize_window_state,
+    deserialize_window_state, serialize_instants, serialize_window_state, CacheNamespace,
+    RateLimitConfig, RateLimitError,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -211,7 +211,11 @@ impl AppRateLimiter {
             return Err(RateLimitError {
                 limit: self.config.max_requests,
                 remaining: 0,
-                retry_after: if time_remaining > 0 { time_remaining } else { 1 },
+                retry_after: if time_remaining > 0 {
+                    time_remaining
+                } else {
+                    1
+                },
             });
         }
 
