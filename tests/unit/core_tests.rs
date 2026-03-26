@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod core_tests {
-    use sdforge::core::{ApiError, ServiceResponse, ApiMetadata};
+    use sdforge::core::{ApiError, ApiMetadata, ServiceResponse};
 
     #[test]
     fn test_api_error_not_found() {
@@ -12,7 +12,10 @@ mod core_tests {
             resource_id: Some("123".to_string()),
         };
         match error {
-            ApiError::NotFound { resource, resource_id } => {
+            ApiError::NotFound {
+                resource,
+                resource_id,
+            } => {
                 assert_eq!(resource, "User");
                 assert_eq!(resource_id, Some("123".to_string()));
             }
@@ -91,7 +94,7 @@ mod core_tests {
 
 #[cfg(test)]
 mod config_tests {
-    use sdforge::config::{AppConfig, ServerConfig, AuthConfig};
+    use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
 
     #[test]
     fn test_app_config_default() {
@@ -124,7 +127,10 @@ mod config_tests {
         };
 
         match config {
-            AuthConfig::ApiKey { header_name, prefix } => {
+            AuthConfig::ApiKey {
+                header_name,
+                prefix,
+            } => {
                 assert_eq!(header_name, "X-API-Key");
                 assert_eq!(prefix, "key1");
             }

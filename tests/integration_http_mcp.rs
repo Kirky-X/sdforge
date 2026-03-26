@@ -103,7 +103,10 @@ mod integration_tests {
 
         let _ = config;
         // Config created successfully
-        assert!(matches!(config.authentication, sdforge::config::AuthConfig::None));
+        assert!(matches!(
+            config.authentication,
+            sdforge::config::AuthConfig::None
+        ));
     }
 
     #[test]

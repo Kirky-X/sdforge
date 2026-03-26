@@ -12,7 +12,7 @@ mod security_tests {
             .max_requests(100)
             .window(Duration::from_secs(60))
             .build();
-        
+
         // If we get here without panicking, the builder works
         let _ = auth;
     }
@@ -23,7 +23,7 @@ mod security_tests {
             .max_requests(100)
             .window(Duration::from_secs(60))
             .build();
-        
+
         // If we get here without panicking, the builder works
         let _ = limiter;
     }

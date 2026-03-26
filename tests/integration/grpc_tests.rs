@@ -1,9 +1,7 @@
 #[cfg(feature = "grpc")]
 mod grpc_tests {
-    use sdforge::grpc::{
-        SdForgeGrpcService, GrpcRoute, GrpcRouteRegistration, GrpcServerConfig,
-    };
     use sdforge::core::ApiMetadata;
+    use sdforge::grpc::{GrpcRoute, GrpcRouteRegistration, GrpcServerConfig, SdForgeGrpcService};
 
     #[test]
     fn test_sdforge_grpc_service_default() {
@@ -38,7 +36,7 @@ mod grpc_tests {
             );
             GrpcRoute::new("reg_test".to_string(), metadata)
         }
-        
+
         let registration = GrpcRouteRegistration::new("reg_test", create_route);
         // Verify it can be created
         let _ = registration;

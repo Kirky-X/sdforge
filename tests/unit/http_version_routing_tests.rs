@@ -1,13 +1,13 @@
 #[cfg(feature = "http")]
 mod version_routing_tests {
-    use sdforge::http::version_routing::{
-        build_version_router, version_redirect_middleware, VersionRouterConfig, VersionedRoute,
-    };
     use axum::{
         body::Body,
         http::{Request, StatusCode},
         routing::get,
         Router,
+    };
+    use sdforge::http::version_routing::{
+        build_version_router, version_redirect_middleware, VersionRouterConfig, VersionedRoute,
     };
     use tower::ServiceExt;
 
@@ -52,7 +52,10 @@ mod version_routing_tests {
         };
 
         assert!(config.deprecated_versions.contains_key("v1"));
-        assert_eq!(config.deprecated_versions.get("v1"), Some(&"2025-01-01".to_string()));
+        assert_eq!(
+            config.deprecated_versions.get("v1"),
+            Some(&"2025-01-01".to_string())
+        );
     }
 
     #[test]
@@ -86,7 +89,10 @@ mod version_routing_tests {
             .expect("Failed to handle request");
 
         assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
-        let location = response.headers().get("location").expect("Location header missing");
+        let location = response
+            .headers()
+            .get("location")
+            .expect("Location header missing");
         assert_eq!(location, "/api/v1/test");
     }
 
@@ -161,12 +167,7 @@ mod version_routing_tests {
             .layer(axum::middleware::from_fn(version_redirect_middleware));
 
         let response = router
-            .oneshot(
-                Request::builder()
-                    .uri("/api/")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri("/api/").body(Body::empty()).unwrap())
             .await
             .unwrap();
 
