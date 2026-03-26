@@ -13,6 +13,7 @@
 
 pub mod error;
 pub mod json;
+pub mod regex_cache;
 pub mod registration;
 pub mod response;
 pub mod str;
@@ -22,6 +23,7 @@ pub mod validation;
 // Re-export types from submodules for convenience
 pub use error::ApiError;
 pub use json::{api_metadata_response, error_response, paginated_response, success_response};
+pub use regex_cache::{common, get_regex, RegexCache, RegexCacheStats};
 pub use registration::Registration;
 pub use response::{ServiceError, ServiceResponse};
 pub use str::{

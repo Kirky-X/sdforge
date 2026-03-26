@@ -4,8 +4,8 @@
 //! This module provides a centralized way to configure and apply HTTP security headers.
 //! All security headers are defined in one place for consistency.
 
-use axum::{Router};
 use axum::http::{header::*, HeaderName, HeaderValue};
+use axum::Router;
 use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::config::defaults::security_headers as defaults;
