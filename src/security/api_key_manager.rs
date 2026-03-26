@@ -1,0 +1,444 @@
+// Copyright (c) 2026 Kirky.X
+//! Enhanced API key management with versioning, LRU eviction, and rotation support
+//!
+//! This module provides advanced API key management features:
+//! - Key versioning for smooth rotation
+//! - LRU cache eviction to prevent memory growth
+//! - Automatic key rotation with grace period
+
+use crate::cache::SharedCache;
+use crate::security::types::{deserialize_permissions, serialize_permissions, CacheNamespace};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+/// API key version information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyVersion {
+    /// Version identifier (v1, v2, etc.)
+    pub version: String,
+    /// Key hash
+    pub key_hash: String,
+    /// Permissions for this version
+    pub permissions: Vec<String>,
+    /// Creation timestamp
+    pub created_at: Instant,
+    /// Expiration timestamp (None = no expiration)
+    pub expires_at: Option<Instant>,
+    /// Whether this version is active
+    pub is_active: bool,
+}
+
+impl ApiKeyVersion {
+    /// Create a new API key version
+    pub fn new(
+        version: String,
+        key_hash: String,
+        permissions: Vec<String>,
+        ttl: Option<Duration>,
+    ) -> Self {
+        let created_at = Instant::now();
+        let expires_at = ttl.map(|duration| created_at + duration);
+
+        Self {
+            version,
+            key_hash,
+            permissions,
+            created_at,
+            expires_at,
+            is_active: true,
+        }
+    }
+
+    /// Check if this version is expired
+    pub fn is_expired(&self) -> bool {
+        if let Some(expires_at) = self.expires_at {
+            Instant::now() > expires_at
+        } else {
+            false
+        }
+    }
+
+    /// Deactivate this version
+    pub fn deactivate(&mut self) {
+        self.is_active = false;
+    }
+}
+
+/// API key metadata with versioning support
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyMetadata {
+    /// Key identifier (unique ID for this API key)
+    pub key_id: String,
+    /// All versions of this key
+    pub versions: Vec<ApiKeyVersion>,
+    /// Current active version index
+    pub active_version_index: Option<usize>,
+    /// Creation timestamp of the key
+    pub created_at: Instant,
+    /// Key description
+    pub description: Option<String>,
+}
+
+impl ApiKeyMetadata {
+    /// Create new API key metadata
+    pub fn new(key_id: String, description: Option<String>) -> Self {
+        Self {
+            key_id,
+            versions: Vec::new(),
+            active_version_index: None,
+            created_at: Instant::now(),
+            description,
+        }
+    }
+
+    /// Add a new version to this key
+    pub fn add_version(&mut self, version: ApiKeyVersion) {
+        self.versions.push(version);
+        // Set as active if it's the first version or explicitly marked active
+        if self.active_version_index.is_none() || version.is_active {
+            self.active_version_index = Some(self.versions.len() - 1);
+        }
+    }
+
+    /// Get the active version
+    pub fn get_active_version(&self) -> Option<&ApiKeyVersion> {
+        self.active_version_index
+            .and_then(|idx| self.versions.get(idx))
+            .filter(|v| v.is_active && !v.is_expired())
+    }
+
+    /// Rotate to a new version
+    pub fn rotate_to_version(&mut self, version_index: usize) -> Result<(), String> {
+        if version_index >= self.versions.len() {
+            return Err(format!("Version {} does not exist", version_index));
+        }
+
+        // Deactivate current version
+        if let Some(current_idx) = self.active_version_index {
+            if let Some(current) = self.versions.get_mut(current_idx) {
+                current.deactivate();
+            }
+        }
+
+        // Activate new version
+        if let Some(new_version) = self.versions.get_mut(version_index) {
+            new_version.is_active = true;
+            self.active_version_index = Some(version_index);
+            Ok(())
+        } else {
+            Err(format!("Version {} not found", version_index))
+        }
+    }
+
+    /// Clean up expired and old versions
+    pub fn cleanup_versions(&mut self, keep_last_n: usize) {
+        let now = Instant::now();
+        let active_idx = self.active_version_index;
+
+        // Remove expired versions that are not the active one
+        self.versions
+            .retain(|v| !v.is_expired() || active_idx == Some(self.versions.len() - 1));
+
+        // Keep only the last N versions
+        if self.versions.len() > keep_last_n {
+            let active = self.get_active_version();
+            let active_version_name = active.map(|v| v.version.clone());
+
+            self.versions = self
+                .versions
+                .into_iter()
+                .rev()
+                .take(keep_last_n)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+
+            // Update active index
+            if let Some(ref version_name) = active_version_name {
+                self.active_version_index = self
+                    .versions
+                    .iter()
+                    .position(|v| &v.version == version_name);
+            }
+        }
+    }
+
+    /// Get all non-expired versions
+    pub fn get_valid_versions(&self) -> Vec<&ApiKeyVersion> {
+        self.versions.iter().filter(|v| !v.is_expired()).collect()
+    }
+}
+
+/// LRU configuration for cache eviction
+#[derive(Debug, Clone)]
+pub struct LruConfig {
+    /// Maximum number of entries to cache
+    pub max_entries: usize,
+    /// Time-to-live for cache entries
+    pub ttl: Duration,
+}
+
+impl Default for LruConfig {
+    fn default() -> Self {
+        Self {
+            max_entries: 1000,
+            ttl: Duration::from_secs(3600), // 1 hour
+        }
+    }
+}
+
+/// LRU cache entry with timestamp
+#[derive(Debug, Clone)]
+struct LruEntry<T> {
+    data: T,
+    last_accessed: Instant,
+    created_at: Instant,
+}
+
+impl<T> LruEntry<T> {
+    fn new(data: T) -> Self {
+        let now = Instant::now();
+        Self {
+            data,
+            last_accessed: now,
+            created_at: now,
+        }
+    }
+
+    fn touch(&mut self) {
+        self.last_accessed = Instant::now();
+    }
+
+    fn is_expired(&self, ttl: Duration) -> bool {
+        self.last_accessed.elapsed() > ttl
+    }
+}
+
+/// LRU cache wrapper for SharedCache
+///
+/// Provides LRU eviction on top of SharedCache to prevent unlimited memory growth.
+/// This is a simplified implementation that tracks metadata separately.
+pub struct LruCacheManager {
+    cache: SharedCache,
+    access_times: Arc<tokio::sync::RwLock<HashMap<String, Instant>>>,
+    config: LruConfig,
+}
+
+impl LruCacheManager {
+    /// Create new LRU cache manager
+    pub fn new(cache: SharedCache, config: LruConfig) -> Self {
+        Self {
+            cache,
+            access_times: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            config,
+        }
+    }
+
+    /// Get value and update access time
+    pub fn get(&self, key: &str) -> Option<Vec<u8>> {
+        let value = self.cache.get(key)?;
+
+        // Update access time in background (non-blocking)
+        let access_times = self.access_times.clone();
+        let key = key.to_string();
+        tokio::spawn(async move {
+            let mut times = access_times.write().await;
+            times.insert(key, Instant::now());
+        });
+
+        Some(value)
+    }
+
+    /// Set value and track access time
+    pub fn set(&self, key: &str, value: Vec<u8>) {
+        // Check if we need to evict entries
+        self.check_and_evict();
+
+        self.cache.set(key, value);
+
+        // Track access time
+        let access_times = self.access_times.clone();
+        let key = key.to_string();
+        tokio::spawn(async move {
+            let mut times = access_times.write().await;
+            times.insert(key, Instant::now());
+        });
+    }
+
+    /// Delete value
+    pub fn delete(&self, key: &str) {
+        self.cache.delete(key);
+
+        let access_times = self.access_times.clone();
+        let key = key.to_string();
+        tokio::spawn(async move {
+            let mut times = access_times.write().await;
+            times.remove(&key);
+        });
+    }
+
+    /// Check and evict old entries if needed
+    fn check_and_evict(&self) {
+        let access_times = self.access_times.clone();
+        let config = self.config;
+
+        tokio::spawn(async move {
+            let mut times = access_times.write().await;
+            let now = Instant::now();
+
+            // Remove expired entries
+            times.retain(|_, &mut last_accessed| now.duration_since(last_accessed) <= config.ttl);
+
+            // If still too many entries, remove oldest
+            if times.len() > config.max_entries {
+                let mut entries: Vec<_> = times.iter().map(|(k, v)| (k.clone(), *v)).collect();
+                entries.sort_by_key(|&(_, time)| std::cmp::Reverse(time));
+
+                let to_remove = entries.len() - config.max_entries;
+                for (key, _) in entries.into_iter().take(to_remove) {
+                    times.remove(&key);
+                }
+            }
+        });
+    }
+
+    /// Get cache statistics
+    pub async fn stats(&self) -> LruStats {
+        let times = self.access_times.read().await;
+        LruStats {
+            total_entries: times.len(),
+            max_entries: self.config.max_entries,
+            ttl: self.config.ttl,
+        }
+    }
+}
+
+/// LRU cache statistics
+#[derive(Debug, Clone)]
+pub struct LruStats {
+    pub total_entries: usize,
+    pub max_entries: usize,
+    pub ttl: Duration,
+}
+
+/// Key rotation configuration
+#[derive(Debug, Clone)]
+pub struct RotationConfig {
+    /// Automatically rotate keys after this duration
+    pub rotation_interval: Duration,
+    /// Grace period before old keys become invalid
+    pub grace_period: Duration,
+    /// Number of old versions to keep
+    pub keep_versions: usize,
+}
+
+impl Default for RotationConfig {
+    fn default() -> Self {
+        Self {
+            rotation_interval: Duration::from_secs(86400 * 30), // 30 days
+            grace_period: Duration::from_secs(86400 * 7),       // 7 days
+            keep_versions: 3,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_api_key_version_creation() {
+        let version = ApiKeyVersion::new(
+            "v1".to_string(),
+            "hash123".to_string(),
+            vec!["read".to_string()],
+            Some(Duration::from_secs(3600)),
+        );
+
+        assert_eq!(version.version, "v1");
+        assert_eq!(version.key_hash, "hash123");
+        assert!(version.is_active);
+        assert!(!version.is_expired());
+    }
+
+    #[test]
+    fn test_api_key_version_expiration() {
+        let version = ApiKeyVersion::new(
+            "v1".to_string(),
+            "hash123".to_string(),
+            vec![],
+            Some(Duration::from_millis(10)),
+        );
+
+        std::thread::sleep(Duration::from_millis(20));
+        assert!(version.is_expired());
+    }
+
+    #[test]
+    fn test_api_key_metadata_add_version() {
+        let mut metadata = ApiKeyMetadata::new("key1".to_string(), Some("Test key".to_string()));
+
+        let version1 = ApiKeyVersion::new(
+            "v1".to_string(),
+            "hash1".to_string(),
+            vec!["read".to_string()],
+            None,
+        );
+
+        metadata.add_version(version1);
+
+        assert_eq!(metadata.versions.len(), 1);
+        assert!(metadata.get_active_version().is_some());
+    }
+
+    #[test]
+    fn test_api_key_metadata_rotation() {
+        let mut metadata = ApiKeyMetadata::new("key1".to_string(), None);
+
+        let v1 = ApiKeyVersion::new("v1".to_string(), "hash1".to_string(), vec![], None);
+        let v2 = ApiKeyVersion::new("v2".to_string(), "hash2".to_string(), vec![], None);
+
+        metadata.add_version(v1);
+        metadata.add_version(v2);
+
+        // Rotate to v2
+        let result = metadata.rotate_to_version(1);
+        assert!(result.is_ok());
+
+        let active = metadata.get_active_version().unwrap();
+        assert_eq!(active.version, "v2");
+    }
+
+    #[test]
+    fn test_api_key_metadata_cleanup() {
+        let mut metadata = ApiKeyMetadata::new("key1".to_string(), None);
+
+        // Add multiple versions
+        for i in 1..=5 {
+            let version = ApiKeyVersion::new(format!("v{}", i), format!("hash{}", i), vec![], None);
+            metadata.add_version(version);
+        }
+
+        metadata.cleanup_versions(3);
+
+        assert!(metadata.versions.len() <= 3);
+    }
+
+    #[test]
+    fn test_lru_config_default() {
+        let config = LruConfig::default();
+        assert_eq!(config.max_entries, 1000);
+        assert_eq!(config.ttl, Duration::from_secs(3600));
+    }
+
+    #[test]
+    fn test_rotation_config_default() {
+        let config = RotationConfig::default();
+        assert_eq!(config.rotation_interval, Duration::from_secs(86400 * 30));
+        assert_eq!(config.grace_period, Duration::from_secs(86400 * 7));
+        assert_eq!(config.keep_versions, 3);
+    }
+}
