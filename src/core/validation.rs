@@ -4,6 +4,8 @@
 //! This module provides utilities for validating request parameters and
 //! converting between different types. Requires the `http` feature.
 
+#![allow(clippy::result_large_err)]
+
 #[cfg(feature = "http")]
 use serde::Deserialize;
 #[cfg(feature = "http")]
@@ -193,6 +195,7 @@ pub(crate) mod sanitizer {
     }
 
     /// Sanitize a string to prevent path traversal attacks
+    #[allow(clippy::result_large_err)]
     pub fn sanitize_path(input: &str) -> Result<String, ApiError> {
         // Remove null bytes
         let cleaned = input.replace('\0', "");
@@ -214,6 +217,7 @@ pub(crate) mod sanitizer {
     }
 
     /// Sanitize a filename to prevent path traversal and command injection
+    #[allow(clippy::result_large_err)]
     pub fn sanitize_filename(input: &str) -> Result<String, ApiError> {
         if input.is_empty() {
             return Err(ApiError::validation_error(

@@ -13,6 +13,7 @@ pub type RegistrationResult<T> = Result<T, crate::core::error::ApiError>;
 ///
 /// Implement this trait to provide a common interface for registering
 /// services across different protocols.
+#[allow(clippy::result_large_err)]
 pub trait Registration: Send + Sync {
     /// Get the protocol name (e.g., "http", "mcp", "websocket", "grpc")
     fn protocol(&self) -> &str;

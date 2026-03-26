@@ -11,21 +11,25 @@ categories = ["web-programming", "development-tools"]
 [workspace]
 
 [dependencies]
-sdforge = { path = "..", default-features = false }
+sdforge = { path = "..", features = ["full"] }
 tokio = { version = "1.41", features = ["rt", "rt-multi-thread", "macros"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
 anyhow = "1.0"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
 
 [features]
-default = ["http"]
-http = ["sdforge/http"]
-mcp = ["sdforge/mcp"]
-streaming = ["sdforge/streaming"]
-security = ["sdforge/security"]
-cache = ["sdforge/cache"]
-websocket = ["sdforge/websocket"]
-grpc = ["sdforge/grpc"]
-logging = ["sdforge/logging"]
-full = ["http", "mcp", "streaming", "security", "cache", "websocket", "grpc", "logging"]
+default = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "combined_examples"]
+http_examples = ["sdforge/http"]
+mcp_examples = ["sdforge/mcp"]
+websocket_examples = ["sdforge/websocket"]
+grpc_examples = ["sdforge/grpc"]
+streaming_examples = ["sdforge/streaming"]
+security_examples = ["sdforge/security"]
+cache_examples = ["sdforge/cache"]
+config_examples = ["sdforge/http", "sdforge/hot-reload"]
+logging_examples = ["sdforge/logging"]
+combined_examples = ["http_examples", "mcp_examples", "websocket_examples",
+                     "grpc_examples", "streaming_examples", "security_examples"]
