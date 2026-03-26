@@ -58,12 +58,33 @@ impl SyncCache for DashMapCache {
         self.inner.get(key).map(|v| v.clone())
     }
 
+    fn get_many(&self, keys: &[&str]) -> std::collections::HashMap<String, Vec<u8>> {
+        // Optimized implementation: single pass through keys
+        keys.iter()
+            .filter_map(|&key| self.inner.get(key).map(|v| (key.to_string(), v.clone())))
+            .collect()
+    }
+
     fn set(&self, key: &str, value: Vec<u8>) {
         self.inner.insert(key.to_string(), value);
     }
 
+    fn set_many(&self, items: &[(String, Vec<u8>)]) {
+        // Optimized implementation: batch insert
+        for (key, value) in items {
+            self.inner.insert(key.clone(), value.clone());
+        }
+    }
+
     fn delete(&self, key: &str) -> bool {
         self.inner.remove(key).is_some()
+    }
+
+    fn delete_many(&self, keys: &[&str]) -> usize {
+        // Optimized implementation: batch remove
+        keys.iter()
+            .filter(|&&key| self.inner.remove(key).is_some())
+            .count()
     }
 
     fn contains(&self, key: &str) -> bool {

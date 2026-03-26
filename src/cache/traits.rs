@@ -20,14 +20,57 @@ pub trait SyncCache: Send + Sync {
     /// `Some(bytes)` 如果存在，`None` 如果不存在
     fn get(&self, key: &str) -> Option<Vec<u8>>;
 
+    /// 批量获取多个键的值
+    ///
+    /// # Performance
+    /// 比单独调用 get() 更高效，减少锁竞争和系统调用
+    ///
+    /// # Arguments
+    /// * `keys` - 要获取的键列表
+    ///
+    /// # Returns
+    /// HashMap 包含所有找到的键值对
+    fn get_many(&self, keys: &[&str]) -> std::collections::HashMap<String, Vec<u8>> {
+        keys.iter()
+            .filter_map(|&key| self.get(key).map(|v| (key.to_string(), v)))
+            .collect()
+    }
+
     /// 设置值（无 TTL，由调用方管理生命周期）
     fn set(&self, key: &str, value: Vec<u8>);
+
+    /// 批量设置多个键值对
+    ///
+    /// # Performance
+    /// 比单独调用 set() 更高效，减少锁竞争和系统调用
+    ///
+    /// # Arguments
+    /// * `items` - 键值对切片
+    fn set_many(&self, items: &[(String, Vec<u8>)]) {
+        for (key, value) in items {
+            self.set(key, value.clone());
+        }
+    }
 
     /// 删除键
     ///
     /// # Returns
     /// `true` 如果键存在并被删除，`false` 如果不存在
     fn delete(&self, key: &str) -> bool;
+
+    /// 批量删除多个键
+    ///
+    /// # Performance
+    /// 比单独调用 delete() 更高效，减少锁竞争和系统调用
+    ///
+    /// # Arguments
+    /// * `keys` - 要删除的键列表
+    ///
+    /// # Returns
+    /// 被删除的键的数量
+    fn delete_many(&self, keys: &[&str]) -> usize {
+        keys.iter().filter(|&&key| self.delete(key)).count()
+    }
 
     /// 检查键是否存在
     fn contains(&self, key: &str) -> bool;

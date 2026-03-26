@@ -4,6 +4,8 @@
 //! Provides comprehensive error types for the framework.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::error::Error as StdError;
 use thiserror::Error;
 
 /// Error category classification for error handling and reporting
@@ -22,6 +24,73 @@ pub enum ErrorCategory {
     RateLimitError,
     /// Validation errors - input failed business rule validation
     ValidationError,
+}
+
+/// Error context information
+///
+/// Captures contextual information about where and when an error occurred.
+/// This information is invaluable for debugging and monitoring.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorContext {
+    /// Source file where the error occurred
+    pub file: Option<String>,
+    /// Line number in the source file
+    pub line: Option<u32>,
+    /// Function name where the error occurred
+    pub function: Option<String>,
+    /// Additional contextual information
+    pub extra: HashMap<String, String>,
+}
+
+impl ErrorContext {
+    /// Create a new empty ErrorContext
+    pub fn new() -> Self {
+        Self {
+            file: None,
+            line: None,
+            function: None,
+            extra: HashMap::new(),
+        }
+    }
+
+    /// Capture the current calling context
+    ///
+    /// This uses the `file!()`, `line!()`, and `std::any::type_name` to
+    /// automatically capture the caller's location.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let context = ErrorContext::current();
+    /// ```
+    pub fn current() -> Self {
+        Self {
+            file: Some(file!().to_string()),
+            line: Some(line!()),
+            function: Some(std::any::type_name::<()>().to_string()),
+            extra: HashMap::new(),
+        }
+    }
+
+    /// Add extra context information
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let context = ErrorContext::current()
+    ///     .with_extra("user_id".to_string(), "12345".to_string())
+    ///     .with_extra("action".to_string(), "delete_user".to_string());
+    /// ```
+    pub fn with_extra(mut self, key: String, value: String) -> Self {
+        self.extra.insert(key, value);
+        self
+    }
+}
+
+impl Default for ErrorContext {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Framework errors
@@ -84,6 +153,12 @@ pub enum ApiError {
         message: String,
         /// A unique identifier for this error (for debugging)
         error_id: String,
+        /// Optional source error for error chaining
+        #[source]
+        #[serde(skip)]
+        source: Option<Box<dyn StdError + Send + Sync>>,
+        /// Optional context information
+        context: Option<ErrorContext>,
     },
 
     /// Service unavailable
@@ -93,6 +168,10 @@ pub enum ApiError {
         service: String,
         /// Seconds to wait before retrying
         retry_after: Option<u64>,
+        /// Optional source error for error chaining
+        #[source]
+        #[serde(skip)]
+        source: Option<Box<dyn StdError + Send + Sync>>,
     },
 
     /// Validation error
@@ -138,36 +217,148 @@ impl ApiError {
     /// The source is typically None for client-facing errors,
     /// but may contain the original error for Internal or ServiceUnavailable errors.
     pub fn source(&self) -> Option<&(dyn std::error::Error + Send + Sync + 'static)> {
-        None
+        match self {
+            ApiError::Internal { source, .. } => source
+                .as_ref()
+                .map(|e| e.as_ref() as &(dyn std::error::Error + Send + Sync + 'static)),
+            ApiError::ServiceUnavailable { source, .. } => source
+                .as_ref()
+                .map(|e| e.as_ref() as &(dyn std::error::Error + Send + Sync + 'static)),
+            _ => None,
+        }
     }
 
-    /// Create a new Internal error with an optional source
+    /// Create a new Internal error (backwards compatible)
     ///
-    /// This is the recommended way to create Internal errors from other errors.
+    /// This is the recommended way to create Internal errors without source.
     ///
     /// # Arguments
     ///
     /// * `message` - A sanitized error message for the user
     /// * `error_id` - A unique identifier for debugging
-    /// * `source` - An optional underlying error
-    pub fn internal_error(
+    pub fn internal_error(message: impl Into<String>, error_id: impl Into<String>) -> Self {
+        Self::Internal {
+            message: message.into(),
+            error_id: error_id.into(),
+            source: None,
+            context: None,
+        }
+    }
+
+    /// Create a new Internal error with source error
+    ///
+    /// This is the recommended way to create Internal errors from other errors.
+    /// The source error is stored for debugging purposes.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - A sanitized error message for the user
+    /// * `error_id` - A unique identifier for debugging
+    /// * `source` - The underlying error that caused this error
+    pub fn internal_with_source<E: StdError + Send + Sync + 'static>(
         message: impl Into<String>,
         error_id: impl Into<String>,
+        source: E,
     ) -> Self {
         Self::Internal {
             message: message.into(),
             error_id: error_id.into(),
+            source: Some(Box::new(source)),
+            context: None,
         }
     }
 
-    /// Create a ServiceUnavailable error
-    pub fn service_unavailable(
+    /// Create a new Internal error with context
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - A sanitized error message for the user
+    /// * `error_id` - A unique identifier for debugging
+    /// * `context` - The context information where the error occurred
+    pub fn internal_with_context(
+        message: impl Into<String>,
+        error_id: impl Into<String>,
+        context: ErrorContext,
+    ) -> Self {
+        Self::Internal {
+            message: message.into(),
+            error_id: error_id.into(),
+            source: None,
+            context: Some(context),
+        }
+    }
+
+    /// Create a new Internal error with both source and context
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - A sanitized error message for the user
+    /// * `error_id` - A unique identifier for debugging
+    /// * `source` - The underlying error that caused this error
+    /// * `context` - The context information where the error occurred
+    pub fn internal_with_source_and_context<E: StdError + Send + Sync + 'static>(
+        message: impl Into<String>,
+        error_id: impl Into<String>,
+        source: E,
+        context: ErrorContext,
+    ) -> Self {
+        Self::Internal {
+            message: message.into(),
+            error_id: error_id.into(),
+            source: Some(Box::new(source)),
+            context: Some(context),
+        }
+    }
+
+    /// Create an Internal error from a standard error
+    ///
+    /// This is a convenience method for converting standard library errors
+    /// into ApiError::Internal with automatic message sanitization.
+    ///
+    /// # Arguments
+    ///
+    /// * `error` - Any error that implements StdError
+    pub fn from_std_error<E: StdError + Send + Sync + 'static>(error: E) -> Self {
+        // Generate a simple error_id without rand dependency
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let error_id = format!("{:016x}", timestamp);
+        Self::Internal {
+            message: "An internal error occurred. Please try again later.".to_string(),
+            error_id,
+            source: Some(Box::new(error)),
+            context: None,
+        }
+    }
+
+    /// Create a ServiceUnavailable error (backwards compatible)
+    pub fn service_unavailable(service: impl Into<String>, retry_after: Option<u64>) -> Self {
+        Self::ServiceUnavailable {
+            service: service.into(),
+            retry_after,
+            source: None,
+        }
+    }
+
+    /// Create a ServiceUnavailable error with source
+    ///
+    /// # Arguments
+    ///
+    /// * `service` - The service that is unavailable
+    /// * `retry_after` - Seconds to wait before retrying
+    /// * `source` - The underlying error that caused the unavailability
+    pub fn service_unavailable_with_source<E: StdError + Send + Sync + 'static>(
         service: impl Into<String>,
         retry_after: Option<u64>,
+        source: E,
     ) -> Self {
         Self::ServiceUnavailable {
             service: service.into(),
             retry_after,
+            source: Some(Box::new(source)),
         }
     }
 
@@ -228,8 +419,12 @@ impl ApiError {
     /// This strips any sensitive information that should not be exposed to clients.
     pub fn sanitized_message(&self) -> String {
         match self {
-            ApiError::Internal { .. } => "An internal error occurred. Please try again later.".into(),
-            ApiError::ServiceUnavailable { .. } => "The service is temporarily unavailable. Please try again later.".into(),
+            ApiError::Internal { .. } => {
+                "An internal error occurred. Please try again later.".into()
+            }
+            ApiError::ServiceUnavailable { .. } => {
+                "The service is temporarily unavailable. Please try again later.".into()
+            }
             other => other.to_string(),
         }
     }
@@ -320,21 +515,27 @@ impl From<ApiError> for ServiceError {
                 serde_json::json!({ "limit": limit, "window_seconds": window_seconds }),
                 429,
             ),
-            ApiError::Internal { message, error_id } => ServiceError::with_details(
-                "INTERNAL_ERROR",
-                message.clone(),
+            ApiError::Internal {
+                message,
+                error_id,
+                source: _,
+                context,
+            } => {
+                let mut details = serde_json::json!({ "error_id": error_id });
+                #[cfg(feature = "timestamp")]
                 {
-                    #[cfg(feature = "timestamp")]
-                    let details = serde_json::json!({ "error_id": error_id, "timestamp": chrono::Utc::now().timestamp() });
-                    #[cfg(not(feature = "timestamp"))]
-                    let details = serde_json::json!({ "error_id": error_id });
-                    details
-                },
-                500,
-            ),
+                    details["timestamp"] = serde_json::json!(chrono::Utc::now().timestamp());
+                }
+                // Include context if available
+                if let Some(ctx) = context {
+                    details["context"] = serde_json::to_value(ctx).unwrap_or(serde_json::json!({}));
+                }
+                ServiceError::with_details("INTERNAL_ERROR", message.clone(), details, 500)
+            }
             ApiError::ServiceUnavailable {
                 service,
                 retry_after,
+                source: _,
             } => ServiceError::with_details(
                 "SERVICE_UNAVAILABLE",
                 format!("Service unavailable: {}", service),
@@ -419,6 +620,8 @@ mod tests {
         let error = ApiError::Internal {
             message: "Database connection failed".to_string(),
             error_id: "abc123".to_string(),
+            source: None,
+            context: None,
         };
         assert!(error.to_string().contains("Internal server error"));
         // Message should be sanitized (internal details not leaked)
@@ -431,6 +634,7 @@ mod tests {
         let error = ApiError::ServiceUnavailable {
             service: "external_service".to_string(),
             retry_after: Some(30),
+            source: None,
         };
         assert!(error.to_string().contains("Service unavailable"));
         assert!(error.to_string().contains("external_service"));
@@ -453,8 +657,15 @@ mod tests {
     #[test]
     fn test_error_category_all_variants() {
         let client_errors = vec![
-            ApiError::NotFound { resource: "x".into(), resource_id: None },
-            ApiError::InvalidInput { message: "x".into(), field: None, value: None },
+            ApiError::NotFound {
+                resource: "x".into(),
+                resource_id: None,
+            },
+            ApiError::InvalidInput {
+                message: "x".into(),
+                field: None,
+                value: None,
+            },
         ];
         for err in client_errors {
             assert_eq!(err.category(), ErrorCategory::ClientError);
@@ -462,26 +673,46 @@ mod tests {
 
         let auth_errors = vec![
             ApiError::AuthenticationFailed { reason: "x".into() },
-            ApiError::AccessDenied { permission: "x".into(), user_id: None },
+            ApiError::AccessDenied {
+                permission: "x".into(),
+                user_id: None,
+            },
         ];
         for err in auth_errors {
             assert_eq!(err.category(), ErrorCategory::AuthError);
         }
 
         let server_errors = vec![
-            ApiError::Internal { message: "x".into(), error_id: "x".into() },
-            ApiError::ServiceUnavailable { service: "x".into(), retry_after: None },
+            ApiError::Internal {
+                message: "x".into(),
+                error_id: "x".into(),
+                source: None,
+                context: None,
+            },
+            ApiError::ServiceUnavailable {
+                service: "x".into(),
+                retry_after: None,
+                source: None,
+            },
         ];
         for err in server_errors {
             assert_eq!(err.category(), ErrorCategory::ServerError);
         }
 
         assert_eq!(
-            ApiError::RateLimitExceeded { limit: 0, window_seconds: 0 }.category(),
+            ApiError::RateLimitExceeded {
+                limit: 0,
+                window_seconds: 0
+            }
+            .category(),
             ErrorCategory::RateLimitError
         );
         assert_eq!(
-            ApiError::ValidationError { field: "x".into(), constraint: "x".into() }.category(),
+            ApiError::ValidationError {
+                field: "x".into(),
+                constraint: "x".into()
+            }
+            .category(),
             ErrorCategory::ValidationError
         );
     }
@@ -603,7 +834,10 @@ mod tests {
     /// Test sanitized_message for internal errors
     #[test]
     fn test_sanitized_message() {
-        let internal = ApiError::internal_error("Database connection failed: host=localhost port=5432", "ERR123");
+        let internal = ApiError::internal_error(
+            "Database connection failed: host=localhost port=5432",
+            "ERR123",
+        );
         let msg = internal.sanitized_message();
         assert!(msg.contains("internal error"));
         assert!(!msg.contains("localhost"));
@@ -623,9 +857,9 @@ mod tests {
         assert!(msg.contains("Authentication failed"));
     }
 
-    /// Test source() returns None for all error types
+    /// Test source() returns None for errors without source
     #[test]
-    fn test_source_returns_none() {
+    fn test_source_returns_none_for_errors_without_source() {
         let errors = vec![
             ApiError::not_found("test", None),
             ApiError::invalid_input("test", None, None),
@@ -641,11 +875,323 @@ mod tests {
         }
     }
 
+    /// Test source() returns Some for errors with source
+    #[test]
+    fn test_source_returns_some_for_errors_with_source() {
+        // Create a test error
+        #[derive(Debug)]
+        struct TestError(&'static str);
+        impl std::fmt::Display for TestError {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+        impl StdError for TestError {}
+        unsafe impl Send for TestError {}
+        unsafe impl Sync for TestError {}
+
+        // Test Internal error with source
+        let internal =
+            ApiError::internal_with_source("test message", "ERR001", TestError("test error"));
+        assert!(internal.source().is_some());
+        assert!(internal
+            .source()
+            .unwrap()
+            .to_string()
+            .contains("test error"));
+
+        // Test ServiceUnavailable error with source
+        let unavailable = ApiError::service_unavailable_with_source(
+            "test service",
+            Some(30),
+            TestError("service error"),
+        );
+        assert!(unavailable.source().is_some());
+        assert!(unavailable
+            .source()
+            .unwrap()
+            .to_string()
+            .contains("service error"));
+    }
+
     /// Test ErrorCategory derives
     #[test]
     fn test_error_category_derives() {
         let cat = ErrorCategory::ClientError;
         let copied = cat;
         assert_eq!(ErrorCategory::ClientError, copied);
+    }
+
+    /// Test ErrorContext::new() creates empty context
+    #[test]
+    fn test_error_context_new() {
+        let ctx = ErrorContext::new();
+        assert!(ctx.file.is_none());
+        assert!(ctx.line.is_none());
+        assert!(ctx.function.is_none());
+        assert!(ctx.extra.is_empty());
+    }
+
+    /// Test ErrorContext::current() captures caller information
+    #[test]
+    fn test_error_context_current() {
+        let ctx = ErrorContext::current();
+        assert!(ctx.file.is_some());
+        assert!(ctx.file.unwrap().contains("error"));
+        assert!(ctx.line.is_some());
+        assert!(ctx.line.unwrap() > 0);
+        assert!(ctx.function.is_some());
+        assert!(ctx.extra.is_empty());
+    }
+
+    /// Test ErrorContext::with_extra() adds extra information
+    #[test]
+    fn test_error_context_with_extra() {
+        let ctx = ErrorContext::new()
+            .with_extra("user_id".to_string(), "12345".to_string())
+            .with_extra("action".to_string(), "delete".to_string());
+
+        assert_eq!(ctx.extra.len(), 2);
+        assert_eq!(ctx.extra.get("user_id"), Some(&"12345".to_string()));
+        assert_eq!(ctx.extra.get("action"), Some(&"delete".to_string()));
+    }
+
+    /// Test ErrorContext serialization
+    #[test]
+    fn test_error_context_serialization() {
+        let mut extra = std::collections::HashMap::new();
+        extra.insert("key1".to_string(), "value1".to_string());
+        extra.insert("key2".to_string(), "value2".to_string());
+
+        let ctx = ErrorContext {
+            file: Some("test.rs".to_string()),
+            line: Some(42),
+            function: Some("test_function".to_string()),
+            extra,
+        };
+
+        let json = serde_json::to_string(&ctx).unwrap();
+        assert!(json.contains("test.rs"));
+        assert!(json.contains("42"));
+        assert!(json.contains("test_function"));
+        assert!(json.contains("key1"));
+        assert!(json.contains("value1"));
+
+        // Test deserialization
+        let deserialized: ErrorContext = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.file, Some("test.rs".to_string()));
+        assert_eq!(deserialized.line, Some(42));
+        assert_eq!(deserialized.function, Some("test_function".to_string()));
+        assert_eq!(deserialized.extra.len(), 2);
+    }
+
+    /// Test internal_with_context() includes context
+    #[test]
+    fn test_internal_with_context() {
+        let ctx = ErrorContext::current()
+            .with_extra("operation".to_string(), "database_query".to_string());
+
+        let error = ApiError::internal_with_context("Database error", "DB001", ctx);
+
+        match error {
+            ApiError::Internal {
+                message,
+                error_id,
+                context,
+                ..
+            } => {
+                assert_eq!(message, "Database error");
+                assert_eq!(error_id, "DB001");
+                assert!(context.is_some());
+                let ctx = context.unwrap();
+                assert!(ctx.extra.contains_key("operation"));
+                assert_eq!(
+                    ctx.extra.get("operation"),
+                    Some(&"database_query".to_string())
+                );
+            }
+            _ => panic!("Expected Internal error"),
+        }
+    }
+
+    /// Test internal_with_source_and_context() includes both
+    #[test]
+    fn test_internal_with_source_and_context() {
+        #[derive(Debug)]
+        struct TestError(&'static str);
+        impl std::fmt::Display for TestError {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+        impl StdError for TestError {}
+        unsafe impl Send for TestError {}
+        unsafe impl Sync for TestError {}
+
+        let ctx = ErrorContext::current().with_extra("retry_count".to_string(), "3".to_string());
+
+        let error = ApiError::internal_with_source_and_context(
+            "Connection failed",
+            "CONN001",
+            TestError("connection timeout"),
+            ctx,
+        );
+
+        match error {
+            ApiError::Internal {
+                message,
+                error_id,
+                source,
+                context,
+                ..
+            } => {
+                assert_eq!(message, "Connection failed");
+                assert_eq!(error_id, "CONN001");
+                assert!(source.is_some());
+                assert!(context.is_some());
+
+                let ctx = context.unwrap();
+                assert_eq!(ctx.extra.get("retry_count"), Some(&"3".to_string()));
+            }
+            _ => panic!("Expected Internal error"),
+        }
+    }
+
+    /// Test from_std_error() creates Internal error
+    #[test]
+    fn test_from_std_error() {
+        #[derive(Debug)]
+        struct StdErrorImpl(&'static str);
+        impl std::fmt::Display for StdErrorImpl {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+        impl StdError for StdErrorImpl {}
+        unsafe impl Send for StdErrorImpl {}
+        unsafe impl Sync for StdErrorImpl {}
+
+        let std_error = StdErrorImpl("something went wrong");
+        let api_error = ApiError::from_std_error(std_error);
+
+        match api_error {
+            ApiError::Internal {
+                message,
+                error_id,
+                source,
+                ..
+            } => {
+                assert_eq!(
+                    message,
+                    "An internal error occurred. Please try again later."
+                );
+                assert!(source.is_some());
+                assert!(error_id.len() == 16); // hex format
+                assert!(error_id.chars().all(|c| c.is_ascii_hexdigit()));
+            }
+            _ => panic!("Expected Internal error"),
+        }
+    }
+
+    /// Test error chain propagation with multiple layers
+    #[test]
+    fn test_error_chain_propagation() {
+        #[derive(Debug)]
+        struct BottomError(&'static str);
+        impl std::fmt::Display for BottomError {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "Bottom: {}", self.0)
+            }
+        }
+        impl StdError for BottomError {}
+        unsafe impl Send for BottomError {}
+        unsafe impl Sync for BottomError {}
+
+        let bottom = ApiError::internal_with_source(
+            "Base error",
+            "BASE001",
+            BottomError("database failure"),
+        );
+
+        // The source should be accessible
+        assert!(bottom.source().is_some());
+        let source_msg = bottom.source().unwrap().to_string();
+        assert!(source_msg.contains("Bottom"));
+        assert!(source_msg.contains("database failure"));
+    }
+
+    /// Test ErrorContext Default implementation
+    #[test]
+    fn test_error_context_default() {
+        let ctx = ErrorContext::default();
+        assert!(ctx.file.is_none());
+        assert!(ctx.line.is_none());
+        assert!(ctx.function.is_none());
+        assert!(ctx.extra.is_empty());
+    }
+
+    /// Test ServiceUnavailable with source
+    #[test]
+    fn test_service_unavailable_with_source() {
+        #[derive(Debug)]
+        struct ServiceError(&'static str);
+        impl std::fmt::Display for ServiceError {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+        impl StdError for ServiceError {}
+        unsafe impl Send for ServiceError {}
+        unsafe impl Sync for ServiceError {}
+
+        let error = ApiError::service_unavailable_with_source(
+            "database",
+            Some(60),
+            ServiceError("connection pool exhausted"),
+        );
+
+        match error {
+            ApiError::ServiceUnavailable {
+                service,
+                retry_after,
+                source,
+            } => {
+                assert_eq!(service, "database");
+                assert_eq!(retry_after, Some(60));
+                assert!(source.is_some());
+                let source_msg = source.unwrap().to_string();
+                assert!(source_msg.contains("connection pool exhausted"));
+            }
+            _ => panic!("Expected ServiceUnavailable error"),
+        }
+    }
+
+    /// Test backward compatibility - existing constructors still work
+    #[test]
+    fn test_backward_compatibility() {
+        // Test all existing constructors still work
+        let not_found = ApiError::not_found("user", Some("123".into()));
+        assert!(matches!(not_found, ApiError::NotFound { .. }));
+
+        let invalid = ApiError::invalid_input("bad data", Some("email".into()), None);
+        assert!(matches!(invalid, ApiError::InvalidInput { .. }));
+
+        let auth_failed = ApiError::authentication_failed("Invalid token");
+        assert!(matches!(auth_failed, ApiError::AuthenticationFailed { .. }));
+
+        let access_denied = ApiError::access_denied("admin", Some("user1".into()));
+        assert!(matches!(access_denied, ApiError::AccessDenied { .. }));
+
+        let rate_limit = ApiError::rate_limit_exceeded(100, 60);
+        assert!(matches!(rate_limit, ApiError::RateLimitExceeded { .. }));
+
+        let internal = ApiError::internal_error("Something went wrong", "ERR123");
+        assert!(matches!(internal, ApiError::Internal { .. }));
+
+        let unavailable = ApiError::service_unavailable("database", Some(30));
+        assert!(matches!(unavailable, ApiError::ServiceUnavailable { .. }));
+
+        let validation = ApiError::validation("email", "must be valid");
+        assert!(matches!(validation, ApiError::ValidationError { .. }));
     }
 }

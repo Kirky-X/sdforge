@@ -65,7 +65,8 @@ pub mod security_headers {
     /// Default Cache-Control header value
     pub const CACHE_CONTROL: &str = "no-store, no-cache, must-revalidate";
     /// Default Content-Security-Policy header value
-    pub const CONTENT_SECURITY_POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self'";
+    pub const CONTENT_SECURITY_POLICY: &str =
+        "default-src 'self'; script-src 'self'; style-src 'self'";
     /// Default Strict-Transport-Security header value
     pub const STRICT_TRANSPORT_SECURITY: &str = "max-age=31536000; includeSubDomains; preload";
     /// Default Referrer-Policy header value

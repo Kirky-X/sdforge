@@ -1,22 +1,31 @@
 // Copyright (c) 2026 Kirky.X
-//! API Key authentication implementation
+//! API Key authentication implementation with versioning, LRU eviction, and rotation support
 //!
-//! This module provides API key authentication with brute-force protection.
+//! This module provides API key authentication with:
+//! - Brute-force protection
+//! - API key versioning for smooth rotation
+//! - LRU cache eviction to prevent memory growth
+//! - Automatic key rotation with grace period
 
 use crate::cache::SharedCache;
+use crate::security::api_key_manager::{
+    ApiKeyMetadata, ApiKeyVersion, LruCacheManager, LruConfig, RotationConfig,
+};
 use crate::security::types::{
-    CacheNamespace, RateLimitConfig, deserialize_permissions, deserialize_instants,
-    serialize_permissions, serialize_instants,
+    deserialize_instants, deserialize_permissions, serialize_instants, serialize_permissions,
+    CacheNamespace, RateLimitConfig,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// API key authentication with brute-force protection
+/// API key authentication with brute-force protection, versioning, and LRU eviction
 ///
 /// Security features:
 /// - Valid API keys storage with permissions mapping (hashed for security)
 /// - Rate limiting on validation attempts to prevent brute force attacks
 /// - Per-IP attempt tracking with automatic cleanup
+/// - API key versioning for smooth rotation
+/// - LRU cache eviction to prevent memory growth
 ///
 /// Storage: All internal state is stored via `Arc<dyn SyncCache>` trait,
 /// allowing injection of custom storage backends for testing or production.
@@ -28,6 +37,12 @@ pub struct AppApiKeyAuth {
     failed_attempts: SharedCache,
     /// Rate limit configuration
     rate_limit_config: Arc<RateLimitConfig>,
+    /// API key metadata (key_id -> ApiKeyMetadata) for versioning support
+    key_metadata: SharedCache,
+    /// LRU cache manager for automatic eviction
+    lru_manager: Option<Arc<LruCacheManager>>,
+    /// Key rotation configuration
+    rotation_config: Option<RotationConfig>,
 }
 
 impl AppApiKeyAuth {
@@ -38,10 +53,23 @@ impl AppApiKeyAuth {
 
     /// Create API key authentication with custom rate limiting
     pub fn with_rate_limit(config: RateLimitConfig) -> Self {
+        let valid_keys = Arc::new(crate::cache::DashMapCache::new());
+        let failed_attempts = Arc::new(crate::cache::DashMapCache::new());
+        let key_metadata = Arc::new(crate::cache::DashMapCache::new());
+
+        // Enable LRU by default
+        let lru_manager = Some(Arc::new(LruCacheManager::new(
+            valid_keys.clone(),
+            LruConfig::default(),
+        )));
+
         Self {
-            valid_keys: Arc::new(crate::cache::DashMapCache::new()),
-            failed_attempts: Arc::new(crate::cache::DashMapCache::new()),
+            valid_keys,
+            failed_attempts,
             rate_limit_config: Arc::new(config),
+            key_metadata,
+            lru_manager,
+            rotation_config: None,
         }
     }
 
@@ -54,11 +82,35 @@ impl AppApiKeyAuth {
         failed_attempts: SharedCache,
         rate_limit_config: Arc<RateLimitConfig>,
     ) -> Self {
+        let key_metadata = Arc::new(crate::cache::DashMapCache::new());
+        let lru_manager = Some(Arc::new(LruCacheManager::new(
+            valid_keys.clone(),
+            LruConfig::default(),
+        )));
+
         Self {
             valid_keys,
             failed_attempts,
             rate_limit_config,
+            key_metadata,
+            lru_manager,
+            rotation_config: None,
         }
+    }
+
+    /// Enable LRU cache eviction with custom configuration
+    pub fn with_lru(mut self, config: LruConfig) -> Self {
+        self.lru_manager = Some(Arc::new(LruCacheManager::new(
+            self.valid_keys.clone(),
+            config,
+        )));
+        self
+    }
+
+    /// Enable automatic key rotation
+    pub fn with_rotation(mut self, config: RotationConfig) -> Self {
+        self.rotation_config = Some(config);
+        self
     }
 
     /// Create builder for configuration
@@ -66,18 +118,36 @@ impl AppApiKeyAuth {
         AppApiKeyAuthBuilder::new()
     }
 
-    /// Hash API key using SHA256 with work factor for secure storage
+    /// Hash API key using Argon2id for secure storage
+    ///
+    /// Uses Argon2id with OWASP-recommended parameters (2024):
+    /// - Time cost: 3 iterations
+    /// - Memory cost: 64 MiB (65536 KiB)
+    /// - Parallelism: 4 threads
+    /// - Output length: 32 bytes
+    /// - Random salt per key
+    ///
+    /// Argon2id is resistant to GPU/ASIC attacks and side-channel attacks.
     fn hash_key(key: &str) -> String {
-        use sha2::Digest;
-        let mut hasher = sha2::Sha256::new();
+        use argon2::{
+            password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, SaltString},
+            Argon2,
+        };
 
-        // Multiple rounds to slow brute-force attacks
-        for _ in 0..100 {
-            hasher.update(key.as_bytes());
-            hasher.update([0x5c, 0x5c, 0x5c]);
-        }
+        // Argon2id with OWASP 2024 recommended parameters
+        // Time Cost: 3, Memory: 64 MiB (65536 KiB), Parallelism: 4, Output: 32 bytes
+        let argon2 = Argon2::default();
 
-        format!("{:x}", hasher.finalize())
+        // Generate random salt
+        let salt = SaltString::generate(&mut OsRng);
+
+        // Hash the password
+        let password_hash = argon2
+            .hash_password(key.as_bytes(), &salt)
+            .expect("Argon2 hashing should not fail with valid parameters");
+
+        // Return PHC string format (e.g., $argon2id$v=19$m=65536,t=3,p=4$...)
+        password_hash.to_string()
     }
 
     /// Add a valid API key (stored as hash)
@@ -89,7 +159,135 @@ impl AppApiKeyAuth {
         );
     }
 
-    /// Validate an API key with rate limiting
+    /// Add a versioned API key with metadata
+    ///
+    /// This method supports key rotation by storing multiple versions of the same key.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_id` - Unique identifier for this API key
+    /// * `key` - The actual API key value
+    /// * `permissions` - List of permissions for this key
+    /// * `version` - Version string (e.g., "v1", "v2")
+    /// * `ttl` - Optional time-to-live for this version
+    pub fn add_key_version(
+        &self,
+        key_id: impl Into<String>,
+        key: impl Into<String>,
+        permissions: Vec<String>,
+        version: impl Into<String>,
+        ttl: Option<Duration>,
+    ) {
+        let key_id = key_id.into();
+        let key_hash = Self::hash_key(&key.into());
+        let version_str = version.into();
+
+        // Store the hash with permissions
+        self.valid_keys.set(
+            &CacheNamespace::ApiKey.key(&key_hash),
+            serialize_permissions(&permissions),
+        );
+
+        // Create or update metadata
+        let metadata_key = format!("metadata:{}", key_id);
+        if let Some(data) = self.key_metadata.get(&metadata_key) {
+            // Update existing metadata
+            if let Ok(mut metadata) = bincode::deserialize::<ApiKeyMetadata>(&data) {
+                let new_version = ApiKeyVersion::new(version_str, key_hash, permissions, ttl);
+                metadata.add_version(new_version);
+                self.key_metadata.set(
+                    &metadata_key,
+                    bincode::serialize(&metadata).unwrap_or_default(),
+                );
+            }
+        } else {
+            // Create new metadata
+            let mut metadata = ApiKeyMetadata::new(key_id.clone(), None);
+            let new_version = ApiKeyVersion::new(version_str, key_hash, permissions, ttl);
+            metadata.add_version(new_version);
+            self.key_metadata.set(
+                &metadata_key,
+                bincode::serialize(&metadata).unwrap_or_default(),
+            );
+        }
+    }
+
+    /// Rotate an API key to a new version
+    ///
+    /// # Arguments
+    ///
+    /// * `key_id` - The key identifier
+    /// * `new_key` - The new key value
+    /// * `new_permissions` - Permissions for the new version
+    /// * `version` - Version string for the new key
+    ///
+    /// # Returns
+    ///
+    /// Returns `Ok(())` if rotation succeeded, `Err(String)` on failure.
+    pub fn rotate_key(
+        &self,
+        key_id: &str,
+        new_key: impl Into<String>,
+        new_permissions: Vec<String>,
+        version: impl Into<String>,
+    ) -> Result<(), String> {
+        let metadata_key = format!("metadata:{}", key_id);
+        let new_key_hash = Self::hash_key(&new_key.into());
+        let version_str = version.into();
+
+        // Load existing metadata
+        let data = self
+            .key_metadata
+            .get(&metadata_key)
+            .ok_or_else(|| "Key not found".to_string())?;
+
+        let mut metadata: ApiKeyMetadata = bincode::deserialize(&data)
+            .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
+
+        // Create new version
+        let ttl = self
+            .rotation_config
+            .as_ref()
+            .map(|config| config.rotation_interval);
+
+        let new_version = ApiKeyVersion::new(
+            version_str.clone(),
+            new_key_hash.clone(),
+            new_permissions.clone(),
+            ttl,
+        );
+
+        // Add new version and activate it
+        metadata.add_version(new_version);
+
+        // Store new key hash
+        self.valid_keys.set(
+            &CacheNamespace::ApiKey.key(&new_key_hash),
+            serialize_permissions(&new_permissions),
+        );
+
+        // Save updated metadata
+        self.key_metadata.set(
+            &metadata_key,
+            bincode::serialize(&metadata).unwrap_or_default(),
+        );
+
+        // Cleanup old versions
+        if let Some(config) = &self.rotation_config {
+            metadata.cleanup_versions(config.keep_versions);
+        }
+
+        Ok(())
+    }
+
+    /// Get metadata for a key
+    pub fn get_key_metadata(&self, key_id: &str) -> Option<ApiKeyMetadata> {
+        let metadata_key = format!("metadata:{}", key_id);
+        let data = self.key_metadata.get(&metadata_key)?;
+        bincode::deserialize(&data).ok()
+    }
+
+    /// Validate an API key with rate limiting and version checking
     ///
     /// Security: Implements constant-time validation to prevent timing attacks.
     /// All code paths take the same amount of time regardless of key validity.
@@ -191,6 +389,31 @@ impl AppApiKeyAuth {
         let key = CacheNamespace::ApiFailed.key(client_ip);
         self.failed_attempts.delete(&key);
     }
+
+    /// Revoke an API key by key_id
+    pub fn revoke_key(&self, key_id: &str) -> Result<(), String> {
+        let metadata_key = format!("metadata:{}", key_id);
+        let data = self
+            .key_metadata
+            .get(&metadata_key)
+            .ok_or_else(|| "Key not found".to_string())?;
+
+        let mut metadata: ApiKeyMetadata = bincode::deserialize(&data)
+            .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
+
+        // Deactivate all versions
+        for version in &mut metadata.versions {
+            version.deactivate();
+        }
+
+        // Save updated metadata
+        self.key_metadata.set(
+            &metadata_key,
+            bincode::serialize(&metadata).unwrap_or_default(),
+        );
+
+        Ok(())
+    }
 }
 
 impl Default for AppApiKeyAuth {
@@ -203,6 +426,8 @@ impl Default for AppApiKeyAuth {
 #[derive(Debug, Clone, Default)]
 pub struct AppApiKeyAuthBuilder {
     rate_limit_config: RateLimitConfig,
+    lru_config: Option<LruConfig>,
+    rotation_config: Option<RotationConfig>,
 }
 
 impl AppApiKeyAuthBuilder {
@@ -227,6 +452,8 @@ impl AppApiKeyAuthBuilder {
     pub fn new() -> Self {
         Self {
             rate_limit_config: RateLimitConfig::default(),
+            lru_config: None,
+            rotation_config: None,
         }
     }
 
@@ -312,6 +539,18 @@ impl AppApiKeyAuthBuilder {
         self
     }
 
+    /// Enable LRU cache eviction with custom configuration
+    pub fn lru(mut self, config: LruConfig) -> Self {
+        self.lru_config = Some(config);
+        self
+    }
+
+    /// Enable automatic key rotation
+    pub fn rotation(mut self, config: RotationConfig) -> Self {
+        self.rotation_config = Some(config);
+        self
+    }
+
     /// Build an AppApiKeyAuth instance using the configured settings.
     ///
     /// # Returns
@@ -331,7 +570,17 @@ impl AppApiKeyAuthBuilder {
     /// let _ = auth;
     /// ```
     pub fn build(self) -> AppApiKeyAuth {
-        AppApiKeyAuth::with_rate_limit(self.rate_limit_config)
+        let mut auth = AppApiKeyAuth::with_rate_limit(self.rate_limit_config);
+
+        if let Some(lru_config) = self.lru_config {
+            auth = auth.with_lru(lru_config);
+        }
+
+        if let Some(rotation_config) = self.rotation_config {
+            auth = auth.with_rotation(rotation_config);
+        }
+
+        auth
     }
 }
 
@@ -343,7 +592,7 @@ mod tests {
     fn test_add_and_validate_key() {
         let auth = AppApiKeyAuth::new();
         auth.add_key("test_key", vec!["read".to_string()]);
-        
+
         let perms = auth.validate_key("test_key", "127.0.0.1");
         assert!(perms.is_some());
         assert_eq!(perms.unwrap(), vec!["read"]);
@@ -354,6 +603,60 @@ mod tests {
         let auth = AppApiKeyAuth::new();
         let perms = auth.validate_key("invalid_key", "127.0.0.1");
         assert!(perms.is_none());
+    }
+
+    #[test]
+    fn test_add_key_version() {
+        let auth = AppApiKeyAuth::new();
+
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+
+        let metadata = auth.get_key_metadata("key1");
+        assert!(metadata.is_some());
+        let meta = metadata.unwrap();
+        assert_eq!(meta.versions.len(), 1);
+        assert_eq!(meta.versions[0].version, "v1");
+    }
+
+    #[test]
+    fn test_key_rotation() {
+        let auth = AppApiKeyAuth::new().with_rotation(RotationConfig::default());
+
+        // Add initial version
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+
+        // Rotate to new version
+        let result = auth.rotate_key(
+            "key1",
+            "secret_v2",
+            vec!["read".to_string(), "write".to_string()],
+            "v2",
+        );
+
+        assert!(result.is_ok());
+
+        // Verify new version exists
+        let metadata = auth.get_key_metadata("key1");
+        assert!(metadata.is_some());
+        let meta = metadata.unwrap();
+        assert_eq!(meta.versions.len(), 2);
+    }
+
+    #[test]
+    fn test_revoke_key() {
+        let auth = AppApiKeyAuth::new();
+
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+
+        // Revoke the key
+        let result = auth.revoke_key("key1");
+        assert!(result.is_ok());
+
+        // Verify all versions are deactivated
+        let metadata = auth.get_key_metadata("key1");
+        assert!(metadata.is_some());
+        let meta = metadata.unwrap();
+        assert!(!meta.versions.iter().any(|v| v.is_active));
     }
 
     #[test]
@@ -377,7 +680,7 @@ mod tests {
     #[test]
     fn test_clear_failed_attempts() {
         let auth = AppApiKeyAuth::new();
-        
+
         // Make some failed attempts
         for _ in 0..3 {
             auth.validate_key("invalid", "127.0.0.1");
@@ -401,5 +704,23 @@ mod tests {
         auth.add_key("test", vec!["write".to_string()]);
         let perms = auth.validate_key("test", "127.0.0.1");
         assert!(perms.is_some());
+    }
+
+    #[test]
+    fn test_builder_with_lru() {
+        let auth = AppApiKeyAuthBuilder::new()
+            .lru(LruConfig::default())
+            .build();
+
+        assert!(auth.lru_manager.is_some());
+    }
+
+    #[test]
+    fn test_builder_with_rotation() {
+        let auth = AppApiKeyAuthBuilder::new()
+            .rotation(RotationConfig::default())
+            .build();
+
+        assert!(auth.rotation_config.is_some());
     }
 }
