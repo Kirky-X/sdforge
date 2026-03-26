@@ -6,8 +6,7 @@
 //!
 //! Performance: Uses simd-json for 2-10x faster JSON operations when available.
 
-use serde::{de::DeserializeOwned, Serialize};
-use serde_json::json;
+use serde::Serialize;
 
 /// Create a standardized error response JSON string.
 ///
@@ -139,10 +138,10 @@ pub fn simd_to_string<T: Serialize>(value: &T) -> Result<String, String> {
 /// This provides 2-5x faster JSON deserialization for most workloads.
 /// Automatically falls back to serde_json if simd-json is not available.
 #[cfg(feature = "simd-json")]
-pub fn simd_from_slice<'a, T: serde::de::Deserialize<'a>>(slice: &'a [u8]) -> Result<T, String> {
+pub fn simd_from_slice<T: serde::de::DeserializeOwned>(slice: &[u8]) -> Result<T, String> {
     use simd_json::serde::from_slice;
 
-    // Need mutable copy for simd-json
+    // simd-json requires mutable reference
     let mut owned = slice.to_vec();
     from_slice(&mut owned).map_err(|e| format!("JSON deserialization failed: {}", e))
 }
@@ -150,7 +149,10 @@ pub fn simd_from_slice<'a, T: serde::de::Deserialize<'a>>(slice: &'a [u8]) -> Re
 /// Deserialize from string using simd-json when available
 #[cfg(feature = "simd-json")]
 pub fn simd_from_str<T: serde::de::DeserializeOwned>(s: &str) -> Result<T, String> {
-    simd_from_slice(s.as_bytes())
+    use simd_json::serde::from_slice;
+
+    let mut owned = s.as_bytes().to_vec();
+    from_slice(&mut owned).map_err(|e| format!("JSON deserialization failed: {}", e))
 }
 
 // Stub implementations when simd-json feature is not enabled
@@ -160,7 +162,7 @@ pub fn simd_to_string<T: Serialize>(value: &T) -> Result<String, String> {
 }
 
 #[cfg(not(feature = "simd-json"))]
-pub fn simd_from_slice<'a, T: serde::de::Deserialize<'a>>(slice: &'a [u8]) -> Result<T, String> {
+pub fn simd_from_slice<T: serde::de::DeserializeOwned>(slice: &[u8]) -> Result<T, String> {
     serde_json::from_slice(slice).map_err(|e| format!("JSON deserialization failed: {}", e))
 }
 

@@ -202,6 +202,7 @@ impl AppAuditLogger {
     /// );
     /// let _ = logger;
     /// ```
+    #[allow(dead_code)]
     pub(crate) fn with_dependencies(
         logs: SharedCache,
         max_logs_per_user: usize,
@@ -248,7 +249,7 @@ impl AppAuditLogger {
                         let data = logs_clone.get(key);
                         let mut logs_vec: Vec<AuditLog> = data
                             .as_ref()
-                            .and_then(|d| Some(deserialize_audit_logs(d)))
+                            .map(|d| deserialize_audit_logs(d))
                             .unwrap_or_default();
                         logs_vec.extend(fallback);
                         if logs_vec.len() > max_logs_clone {
@@ -399,14 +400,14 @@ impl AppAuditLogger {
         let primary = self
             .logs
             .get(user_id)
-            .and_then(|data| Some(deserialize_audit_logs(&data)))
+            .map(|data| deserialize_audit_logs(&data))
             .unwrap_or_default();
 
         // Get logs from fallback storage
         let fallback = self
             .fallback_logs
             .get(user_id)
-            .and_then(|data| Some(deserialize_audit_logs(&data)))
+            .map(|data| deserialize_audit_logs(&data))
             .unwrap_or_default();
 
         // Merge and deduplicate (prefer primary logs if duplicates exist)
@@ -744,7 +745,7 @@ impl AppAuditLoggerBuilder {
                         let data = logs_clone.get(key);
                         let mut logs_vec: Vec<AuditLog> = data
                             .as_ref()
-                            .and_then(|d| Some(deserialize_audit_logs(d)))
+                            .map(|d| deserialize_audit_logs(d))
                             .unwrap_or_default();
                         logs_vec.extend(fallback);
                         if logs_vec.len() > max_logs_clone {
