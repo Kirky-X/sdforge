@@ -3,9 +3,7 @@
 
 #[cfg(feature = "websocket")]
 mod websocket_integration_tests {
-    use sdforge::websocket::{
-        AppState, ConnectionManager, RateLimitConfig, WebSocketConfig,
-    };
+    use sdforge::websocket::{AppState, ConnectionManager, RateLimitConfig, WebSocketConfig};
     use std::sync::Arc;
 
     #[test]
@@ -43,7 +41,7 @@ mod websocket_integration_tests {
         let config = WebSocketConfig::default();
         let manager = Arc::new(ConnectionManager::new());
         let state = AppState::new(manager);
-        
+
         // Basic verification - state was created successfully
         assert!(state.config.rate_limit.max_connections > 0);
     }
