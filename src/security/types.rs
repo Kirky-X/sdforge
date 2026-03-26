@@ -3,7 +3,6 @@
 //!
 //! This module contains all common types used across the security module.
 
-use crate::cache::SharedCache;
 use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
@@ -601,12 +600,4 @@ impl Serialize for AuditResult {
             }
         }
     }
-}
-
-/// Batch for audit log processing
-#[derive(Debug, Clone)]
-pub(crate) struct AuditLogBatch {
-    user_id: String,
-    #[allow(dead_code)]  // Used in queue transfer, field access not needed directly
-    log: AuditLog,
 }

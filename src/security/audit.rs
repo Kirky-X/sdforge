@@ -202,7 +202,7 @@ impl AppAuditLogger {
     /// );
     /// let _ = logger;
     /// ```
-    pub fn with_dependencies(
+    pub(crate) fn with_dependencies(
         logs: SharedCache,
         max_logs_per_user: usize,
         semaphore: Arc<tokio::sync::Semaphore>,

@@ -6,13 +6,16 @@
 #[cfg(feature = "grpc")]
 use serde_json;
 #[cfg(feature = "grpc")]
-use tonic::{service::interceptor, transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Status};
+#[cfg(all(feature = "grpc", feature = "security"))]
+use tonic::service::Interceptor;
+#[cfg(all(feature = "grpc", feature = "security"))]
 
 // Include generated proto code
 /// gRPC protocol buffer module
 #[cfg(feature = "grpc")]
 pub mod sdforge_v1 {
-    tonic::include_proto!("sdforge.v1");
+    include!("pb/sdforge.v1.rs");
 }
 
 #[cfg(feature = "grpc")]
@@ -160,7 +163,7 @@ pub async fn build_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> 
 /// in the `authorization` metadata header. Invalid tokens result in `UNAUTHENTICATED` status.
 pub async fn build_server_with_config(
     addr: &str,
-    config: GrpcServerConfig,
+    #[allow(unused_variables)] config: GrpcServerConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Security fix: Validate address format before parsing to prevent information disclosure
     let addr = match addr.parse::<std::net::SocketAddr>() {
@@ -177,10 +180,16 @@ pub async fn build_server_with_config(
     println!("gRPC server listening on {}", addr);
 
     // Build server with optional JWT auth interceptor
-    let auth_interceptor = make_auth_interceptor(config.auth.clone());
-    Server::builder()
-        .layer(interceptor(auth_interceptor))
-        .add_service(SdForgeServiceServer::new(service))
+    #[cfg(feature = "security")]
+    let mut builder = {
+        let auth_interceptor = make_auth_interceptor(config.auth.clone());
+        Server::builder().layer(tonic::service::InterceptorLayer::new(auth_interceptor))
+    };
+    #[cfg(not(feature = "security"))]
+    let mut builder = Server::builder();
+
+    builder
+        .add_service(SdForgeServiceServer::new(service).max_decoding_message_size(4 * 1024 * 1024))
         .serve(addr)
         .await?;
 
@@ -198,6 +207,7 @@ pub struct GrpcServerConfig {
     /// Optional JWT authentication.
     /// When `Some`, all gRPC requests must include a valid JWT bearer token
     /// in the `authorization` metadata header.
+    #[cfg(feature = "security")]
     pub auth: Option<crate::security::BearerAuth>,
 }
 
@@ -207,6 +217,7 @@ impl Default for GrpcServerConfig {
         Self {
             max_connections: 1000,
             timeout_seconds: 30,
+            #[cfg(feature = "security")]
             auth: None,
         }
     }
@@ -216,12 +227,24 @@ impl Default for GrpcServerConfig {
 ///
 /// When `auth` is `None`, returns `Ok(())` (no auth required).
 /// When `auth` is `Some`, validates the `authorization` metadata header as a bearer token.
-#[cfg(feature = "grpc")]
+#[cfg(all(feature = "grpc", feature = "security"))]
 fn make_auth_interceptor(
     auth: Option<crate::security::BearerAuth>,
-) -> impl FnMut(tonic::Request<()>) -> Result<tonic::Request<()>, Status> + Clone + Send + 'static {
-    move |req: tonic::Request<()>| {
-        let Some(ref bearer_auth) = auth else {
+) -> AuthGrpcInterceptor {
+    AuthGrpcInterceptor { auth }
+}
+
+/// gRPC authentication interceptor
+#[cfg(all(feature = "grpc", feature = "security"))]
+#[derive(Clone)]
+struct AuthGrpcInterceptor {
+    auth: Option<crate::security::BearerAuth>,
+}
+
+#[cfg(all(feature = "grpc", feature = "security"))]
+impl tonic::service::Interceptor for AuthGrpcInterceptor {
+    fn call(&mut self, req: tonic::Request<()>) -> Result<tonic::Request<()>, Status> {
+        let Some(ref bearer_auth) = self.auth else {
             return Ok(req);
         };
 
@@ -246,8 +269,7 @@ fn make_auth_interceptor(
     }
 }
 
-#[cfg(feature = "grpc")]
-#[cfg(test)]
+
 mod tests {
     use super::*;
 
@@ -356,7 +378,7 @@ mod tests {
         let mut req = tonic::Request::new(());
         req.metadata_mut().insert("authorization", auth_value);
 
-        let result = interceptor(req);
+        let result = interceptor.call(req);
         assert!(
             result.is_ok(),
             "Valid token should be accepted by interceptor"
@@ -372,7 +394,7 @@ mod tests {
 
         // Request without any authorization header
         let req = tonic::Request::new(());
-        let result = interceptor(req);
+        let result = interceptor.call(req);
 
         assert!(result.is_err(), "Missing auth header should be rejected");
         let status = result.unwrap_err();
@@ -402,7 +424,7 @@ mod tests {
         let mut req = tonic::Request::new(());
         req.metadata_mut().insert("authorization", auth_value);
 
-        let result = interceptor(req);
+        let result = interceptor.call(req);
         assert!(result.is_err(), "Invalid token should be rejected");
         let status = result.unwrap_err();
         assert_eq!(status.code(), tonic::Code::Unauthenticated);
@@ -429,7 +451,7 @@ mod tests {
         let mut req = tonic::Request::new(());
         req.metadata_mut().insert("authorization", auth_value);
 
-        let result = interceptor(req);
+        let result = interceptor.call(req);
         assert!(result.is_err(), "Expired token should be rejected");
         let status = result.unwrap_err();
         assert_eq!(status.code(), tonic::Code::Unauthenticated);
@@ -447,7 +469,7 @@ mod tests {
 
         // Even with an authorization header, when no auth is configured, it should pass
         let req = tonic::Request::new(());
-        let result = interceptor(req);
+        let result = interceptor.call(req);
         assert!(
             result.is_ok(),
             "When no auth is configured, interceptor should pass through all requests"
@@ -1583,7 +1605,7 @@ mod tests {
         let mut req = tonic::Request::new(());
         req.metadata_mut().insert("authorization", auth_value);
 
-        let result = interceptor(req);
+        let result = interceptor.call(req);
         assert!(result.is_err());
     }
 
@@ -1600,7 +1622,7 @@ mod tests {
         let mut req = tonic::Request::new(());
         req.metadata_mut().insert("authorization", auth_value);
 
-        let result = interceptor(req);
+        let result = interceptor.call(req);
         assert!(result.is_err());
     }
 
@@ -1616,7 +1638,7 @@ mod tests {
         let mut req = tonic::Request::new(());
         req.metadata_mut().insert("authorization", auth_value);
 
-        let result = interceptor(req);
+        let result = interceptor.call(req);
         assert!(result.is_err());
     }
 
@@ -1636,7 +1658,7 @@ mod tests {
         let mut req = tonic::Request::new(());
         req.metadata_mut().insert("authorization", auth_value);
 
-        let result = interceptor(req);
+        let result = interceptor.call(req);
         assert!(result.is_ok(), "Lowercase 'authorization' key should work");
     }
 

@@ -8,6 +8,8 @@ repository = "https://github.com/Kirky-X/sdforge"
 keywords = ["examples", "sdforge", "http", "mcp"]
 categories = ["web-programming", "development-tools"]
 
+[workspace]
+
 [dependencies]
 sdforge = { path = "..", default-features = false }
 tokio = { version = "1.41", features = ["rt", "rt-multi-thread", "macros"] }
