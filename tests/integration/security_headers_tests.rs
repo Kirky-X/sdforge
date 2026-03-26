@@ -3,10 +3,10 @@
 
 #[cfg(feature = "http")]
 mod security_headers_tests {
-    use axum::{routing::get, Router};
-    use axum::http::{Request, StatusCode};
-    use tower::ServiceExt;
     use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use axum::{routing::get, Router};
+    use tower::ServiceExt;
 
     /// Simple test handler
     async fn test_handler() -> &'static str {
@@ -23,16 +23,10 @@ mod security_headers_tests {
     #[tokio::test]
     async fn test_basic_router_with_security_headers() {
         // Test that a basic router works
-        let app = Router::new()
-            .route("/test", get(test_handler));
+        let app = Router::new().route("/test", get(test_handler));
 
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/test")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri("/test").body(Body::empty()).unwrap())
             .await
             .unwrap();
 

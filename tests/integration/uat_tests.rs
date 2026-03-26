@@ -70,7 +70,7 @@ mod uat_004_module_organization {
 #[cfg(feature = "http")]
 mod uat_007_nested_serialization {
     use sdforge::core::ServiceResponse;
-    use serde::{Serialize, Deserialize};
+    use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, Deserialize, Debug)]
     struct Customer {
@@ -88,7 +88,10 @@ mod uat_007_nested_serialization {
     fn test_nested_serialization() {
         let order = Order {
             id: 1,
-            customer: Customer { id: 100, name: "Alice".to_string() },
+            customer: Customer {
+                id: 100,
+                name: "Alice".to_string(),
+            },
         };
 
         let response = ServiceResponse::success(order);
@@ -107,9 +110,16 @@ mod uat_009_error_response {
     #[test]
     fn test_error_response_format() {
         let errors: Vec<ApiError> = vec![
-            ApiError::NotFound { resource: "User".to_string(), resource_id: Some("123".to_string()) },
+            ApiError::NotFound {
+                resource: "User".to_string(),
+                resource_id: Some("123".to_string()),
+            },
             ApiError::validation_error("email", "Invalid format"),
-            ApiError::InvalidInput { message: "Query cannot be empty".to_string(), field: Some("query".to_string()), value: None },
+            ApiError::InvalidInput {
+                message: "Query cannot be empty".to_string(),
+                field: Some("query".to_string()),
+                value: None,
+            },
         ];
 
         for error in errors {
@@ -151,8 +161,8 @@ mod uat_010_version_management {
 // UAT-011: Performance Target (3000 QPS)
 #[cfg(feature = "http")]
 mod uat_011_performance {
-    use std::time::Instant;
     use sdforge::core::ServiceResponse;
+    use std::time::Instant;
 
     #[test]
     fn test_response_creation_performance() {
@@ -163,6 +173,9 @@ mod uat_011_performance {
         }
 
         let duration = start.elapsed();
-        assert!(duration.as_millis() < 1000, "Response creation should be fast");
+        assert!(
+            duration.as_millis() < 1000,
+            "Response creation should be fast"
+        );
     }
 }

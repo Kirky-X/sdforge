@@ -1,8 +1,8 @@
 #[cfg(feature = "websocket")]
 mod websocket_tests {
     use sdforge::websocket::{
-        AppState, ConnectionManager, RateLimitConfig, WebSocketConfig, WebSocketMessage,
-        WebSocketConnection,
+        AppState, ConnectionManager, RateLimitConfig, WebSocketConfig, WebSocketConnection,
+        WebSocketMessage,
     };
     use serde_json;
     use std::sync::Arc;

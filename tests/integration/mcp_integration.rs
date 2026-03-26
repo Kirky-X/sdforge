@@ -14,9 +14,9 @@ mod mcp_tests {
 
 #[cfg(feature = "mcp")]
 mod mcp_registration_tests {
+    use mcp_sdk::tools::Tool;
     use sdforge::mcp::McpToolRegistration;
     use std::sync::Arc;
-    use mcp_sdk::tools::Tool;
 
     struct TestTool;
     impl Tool for TestTool {
@@ -49,12 +49,9 @@ mod mcp_registration_tests {
     #[test]
     fn test_mcp_tool_registration() {
         // Test that McpToolRegistration::new() works
-        let _registration = McpToolRegistration::new(
-            "test_tool",
-            "v1",
-            "A test tool",
-            || Arc::new(TestTool) as Arc<dyn Tool>,
-        );
+        let _registration = McpToolRegistration::new("test_tool", "v1", "A test tool", || {
+            Arc::new(TestTool) as Arc<dyn Tool>
+        });
 
         // Verify the registration was created successfully
         assert!(true, "MCP tool registration should succeed");

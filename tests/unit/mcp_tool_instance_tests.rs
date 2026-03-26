@@ -1,7 +1,7 @@
 #[cfg(feature = "mcp")]
 mod mcp_tool_instance_tests {
-    use sdforge::mcp::{get_mcp_tools, McpToolRegistration};
     use sdforge::core::ApiMetadata;
+    use sdforge::mcp::{get_mcp_tools, McpToolRegistration};
     use std::sync::Arc;
 
     fn create_echo_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
@@ -79,12 +79,8 @@ mod mcp_tool_instance_tests {
     #[test]
     fn test_mcp_tool_registration_new() {
         // Test that McpToolRegistration::new() works
-        let _registration = McpToolRegistration::new(
-            "test_tool",
-            "v1",
-            "A test tool",
-            create_echo_tool,
-        );
+        let _registration =
+            McpToolRegistration::new("test_tool", "v1", "A test tool", create_echo_tool);
         // Registration was successful if we reach here
         assert!(true, "Tool registration should succeed without panic");
     }
@@ -141,16 +137,23 @@ mod mcp_tool_instance_tests {
         fn create_text_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
             struct TextTool;
             impl mcp_sdk::tools::Tool for TextTool {
-                fn name(&self) -> String { "text".to_string() }
-                fn description(&self) -> String { "Text tool".to_string() }
+                fn name(&self) -> String {
+                    "text".to_string()
+                }
+                fn description(&self) -> String {
+                    "Text tool".to_string()
+                }
                 fn input_schema(&self) -> serde_json::Value {
                     serde_json::json!({"type": "object"})
                 }
-                fn call(&self, _: Option<serde_json::Value>) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                fn call(
+                    &self,
+                    _: Option<serde_json::Value>,
+                ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
                     Ok(mcp_sdk::types::CallToolResponse {
-                        content: vec![
-                            mcp_sdk::types::ToolResponseContent::Text { text: "Hello".to_string() }
-                        ],
+                        content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                            text: "Hello".to_string(),
+                        }],
                         is_error: None,
                         meta: None,
                     })

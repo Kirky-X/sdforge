@@ -1,8 +1,6 @@
 #[cfg(feature = "http")]
 mod config_tests {
-    use sdforge::config::{
-        AppConfig, AuthConfig, ServerConfig,
-    };
+    use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
 
     #[test]
     fn test_app_config_default() {
@@ -55,7 +53,10 @@ mod config_tests {
         };
 
         match config {
-            AuthConfig::ApiKey { header_name, prefix } => {
+            AuthConfig::ApiKey {
+                header_name,
+                prefix,
+            } => {
                 assert_eq!(header_name, "X-API-Key");
                 assert_eq!(prefix, "key1");
             }

@@ -1,9 +1,7 @@
 #[cfg(all(feature = "streaming", feature = "http"))]
 mod streaming_tests {
-    use sdforge::streaming::{
-        create_stream_channel, stream_to_sse, StreamEvent, StreamResponse,
-    };
     use futures_util::StreamExt;
+    use sdforge::streaming::{create_stream_channel, stream_to_sse, StreamEvent, StreamResponse};
     use tokio_stream::wrappers::ReceiverStream;
 
     #[test]
@@ -40,7 +38,7 @@ mod streaming_tests {
     #[tokio::test]
     async fn test_stream_to_sse_basic() {
         let (_tx, rx) = tokio::sync::mpsc::channel::<Result<String, String>>(10);
-        
+
         // Create SSE stream with a simple mapper function
         // stream_to_sse expects a closure returning StreamEvent (which defaults to StreamEvent<serde_json::Value>)
         let sse_stream = stream_to_sse(
@@ -64,7 +62,7 @@ mod streaming_tests {
             event_name: Some("message".to_string()),
             data: "test data".to_string(),
         };
-        
+
         // Verify serialization works
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("test data"));
