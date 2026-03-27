@@ -214,7 +214,7 @@ pub use oxcache;
 pub mod cache;
 
 #[cfg(feature = "cache")]
-pub use cache::{Cache, CacheKey, Cacheable, DashMapMemoryBackend, MemoryBackend};
+pub use cache::{Cache, CacheKey, Cacheable, DashMapCache, DashMapMemoryBackend, MemoryBackend, SharedCache, SyncCache};
 
 /// WebSocket support
 #[cfg(feature = "websocket")]
