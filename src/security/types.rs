@@ -18,8 +18,6 @@ use uuid::Uuid;
 pub enum CacheNamespace {
     /// API Key storage: `sdforge:apikey:{key_hash}`
     ApiKey,
-    /// API Key failure tracking: `sdforge:apifailed:{client_ip}`
-    ApiFailed,
     /// Bearer token blacklist: `sdforge:bearer:blacklist:{token}`
     BearerBlacklist,
     /// Bearer token valid cache: `sdforge:bearer:valid:{token}`
@@ -31,7 +29,6 @@ impl CacheNamespace {
     pub fn key(&self, suffix: &str) -> String {
         match self {
             CacheNamespace::ApiKey => format!("sdforge:apikey:{suffix}"),
-            CacheNamespace::ApiFailed => format!("sdforge:apifailed:{suffix}"),
             CacheNamespace::BearerBlacklist => format!("sdforge:bearer:blacklist:{suffix}"),
             CacheNamespace::BearerValid => format!("sdforge:bearer:valid:{suffix}"),
         }
@@ -53,12 +50,14 @@ pub(crate) fn deserialize_permissions(data: &[u8]) -> Vec<String> {
 }
 
 /// Serialize a list of Instants to bytes using bincode
+/// Used for token blacklist expiry tracking
 pub(crate) fn serialize_instants(insts: &[std::time::Instant]) -> Vec<u8> {
     let as_i64: Vec<i64> = insts.iter().map(|i| i.elapsed().as_secs() as i64).collect();
     bincode::serialize(&as_i64).unwrap_or_default()
 }
 
 /// Deserialize a list of Instants from bytes using bincode
+/// Used for token blacklist expiry tracking
 pub(crate) fn deserialize_instants(data: &[u8]) -> Vec<std::time::Instant> {
     let as_i64: Vec<i64> = match bincode::deserialize(data) {
         Ok(v) => v,
