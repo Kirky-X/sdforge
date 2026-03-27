@@ -96,8 +96,6 @@ mod integration_tests {
                 cors: None,
             },
             authentication: AuthConfig::None,
-            rate_limit: None,
-            request_size: None,
             timeout: None,
         };
 
