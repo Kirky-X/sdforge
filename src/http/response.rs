@@ -25,9 +25,7 @@ pub fn build_json_response<T: Serialize>(
             .header(http::header::CONTENT_TYPE, "application/json")
             .body(Body::from(body_bytes))
             .unwrap_or_else(|_| build_fallback_response(status, fallback_message)),
-        Err(_e) => {
-            build_fallback_response(status, fallback_message)
-        }
+        Err(_e) => build_fallback_response(status, fallback_message),
     }
 }
 
