@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Kirky.X
-//! Security module providing authentication, rate limiting, and audit logging
+//! Security module providing authentication and audit logging
 //!
 //! This module provides utilities for securing API endpoints.
 //! Requires the `http` feature.
@@ -11,8 +11,7 @@ pub use types::*;
 pub use api_key::{AppApiKeyAuth, AppApiKeyAuthBuilder};
 pub use audit::{AppAuditLogger, AppAuditLoggerBuilder};
 pub use bearer::{BearerAuth, BearerAuthBuilder};
-pub use middleware::{auth_middleware, rate_limit_middleware};
-pub use rate_limiter::{AppRateLimiter, AppRateLimiterBuilder};
+pub use middleware::auth_middleware;
 
 // Submodules
 mod api_key;
@@ -20,7 +19,6 @@ mod api_key_manager;
 mod audit;
 mod bearer;
 mod middleware;
-mod rate_limiter;
 mod traits;
 mod types;
 
@@ -37,16 +35,6 @@ impl traits::ApiKeyAuth for AppApiKeyAuth {
 
     fn add_key(&self, key: impl Into<String>, permissions: Vec<String>) {
         AppApiKeyAuth::add_key(self, key, permissions);
-    }
-}
-
-impl traits::RateLimiter for AppRateLimiter {
-    fn allow(&self, key: &str) -> bool {
-        AppRateLimiter::allow(self, key)
-    }
-
-    fn reset(&self, key: &str) {
-        AppRateLimiter::reset(self, key)
     }
 }
 
