@@ -52,6 +52,24 @@ pub(crate) fn deserialize_permissions(data: &[u8]) -> Vec<String> {
     bincode::deserialize(data).unwrap_or_default()
 }
 
+/// Serialize a list of Instants to bytes using bincode
+pub(crate) fn serialize_instants(insts: &[std::time::Instant]) -> Vec<u8> {
+    let as_i64: Vec<i64> = insts.iter().map(|i| i.elapsed().as_secs() as i64).collect();
+    bincode::serialize(&as_i64).unwrap_or_default()
+}
+
+/// Deserialize a list of Instants from bytes using bincode
+pub(crate) fn deserialize_instants(data: &[u8]) -> Vec<std::time::Instant> {
+    let as_i64: Vec<i64> = match bincode::deserialize(data) {
+        Ok(v) => v,
+        Err(_) => return Vec::new(),
+    };
+    as_i64
+        .iter()
+        .map(|&s| std::time::Instant::now() - std::time::Duration::from_secs(s as u64))
+        .collect()
+}
+
 /// Serialize AuthContext to bytes using bincode
 #[allow(dead_code)]
 pub(crate) fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {

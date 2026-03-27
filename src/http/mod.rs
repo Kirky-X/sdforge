@@ -246,8 +246,6 @@ pub fn build_with_redirect() -> Router {
 #[allow(dead_code)]
 pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, ConfigError> {
     #[cfg(feature = "security")]
-    use crate::security::{rate_limit_middleware, AppRateLimiter, RateLimitConfig};
-    #[cfg(feature = "security")]
     use std::sync::Arc;
 
     const DEFAULT_BODY_LIMIT: usize = 10 * 1024 * 1024;
@@ -294,16 +292,6 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
 
     // Apply security headers
     router = apply_security_headers(router);
-
-    // Apply rate limiting middleware
-    #[cfg(feature = "security")]
-    if let Some(rate_limit) = &config.rate_limit {
-        let rate_config: crate::security::RateLimitConfig =
-            RateLimitConfig::try_from(rate_limit.clone())?;
-        let limiter = Arc::new(AppRateLimiter::new(Some(rate_config)));
-        let middleware = rate_limit_middleware(limiter);
-        router = router.layer(axum::middleware::from_fn(middleware));
-    }
 
     // Apply authentication middleware
     #[cfg(feature = "security")]
@@ -488,8 +476,6 @@ mod tests {
             authentication: AuthConfig::Jwt {
                 secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
             },
-            rate_limit: None,
-            request_size: None,
             timeout: None,
         };
 
@@ -511,8 +497,6 @@ mod tests {
                 header_name: "X-API-Key".to_string(),
                 prefix: "key-".to_string(),
             },
-            rate_limit: None,
-            request_size: None,
             timeout: None,
         };
 
@@ -534,8 +518,6 @@ mod tests {
                 cors: None,
             },
             authentication: AuthConfig::None,
-            rate_limit: None,
-            request_size: None,
             timeout: None,
         };
 
@@ -560,8 +542,6 @@ mod tests {
             authentication: AuthConfig::Jwt {
                 secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
             },
-            rate_limit: None,
-            request_size: None,
             timeout: None,
         };
 
