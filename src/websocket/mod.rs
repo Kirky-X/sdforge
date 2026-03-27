@@ -289,8 +289,6 @@ impl ConnectionManager {
         let mut current = self.connection_count.load(Ordering::SeqCst);
         loop {
             if current >= config.max_connections {
-                #[cfg(feature = "logging")]
-                tracing::warn!(target: "websocket", "Max connections reached, rejecting new connection");
                 return true;
             }
             match self.connection_count.compare_exchange_weak(
@@ -341,11 +339,6 @@ impl ConnectionManager {
 
         if should_disconnect {
             self.connection_count.fetch_sub(1, Ordering::SeqCst);
-            #[cfg(feature = "logging")]
-            tracing::warn!(target: "websocket",
-                conn_id = %conn_id,
-                "Rate limit exceeded, disconnecting"
-            );
         }
 
         should_disconnect
@@ -678,13 +671,6 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
                 if let Ok(text) = msg.to_text() {
                     // Check message size early
                     if text.len() > MAX_MESSAGE_SIZE {
-                        #[cfg(feature = "logging")]
-                        tracing::warn!(target: "websocket",
-                            conn_id = %conn_id,
-                            msg_size = %text.len(),
-                            max_size = %MAX_MESSAGE_SIZE,
-                            "Message size exceeded limit, closing connection"
-                        );
                         // Close connection immediately to prevent DoS
                         let _ = socket.close().await;
                         return;
@@ -698,13 +684,7 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
                             // Use map_err to convert serialization errors to error messages
                             let response_json = match serde_json::to_string(&response) {
                                 Ok(json) => json,
-                                Err(_e) => {
-                                    #[cfg(feature = "logging")]
-                                    tracing::error!(target: "websocket",
-                                        conn_id = %conn_id,
-                                        error = %_e,
-                                        "Failed to serialize response"
-                                    );
+                                Err(_) => {
                                     // Send a generic error to the client
                                     let error_response = WebSocketMessage::Error {
                                         id: String::new(),
@@ -731,13 +711,7 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
                             // Use match instead of expect to handle serialization errors gracefully
                             let response_json = match serde_json::to_string(&error_msg) {
                                 Ok(json) => json,
-                                Err(_e) => {
-                                    #[cfg(feature = "logging")]
-                                    tracing::error!(target: "websocket",
-                                        conn_id = %conn_id,
-                                        error = %_e,
-                                        "Failed to serialize error message"
-                                    );
+                                Err(_) => {
                                     // Send a hardcoded fallback error message
                                     r#"{"type":"error","id":"","error":"Internal error processing request"}"#.to_string()
                                 }
@@ -749,8 +723,7 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
                     }
                 }
             }
-            Err(e) => {
-                eprintln!("WebSocket error: {:?}", e);
+            Err(_) => {
                 break;
             }
         }

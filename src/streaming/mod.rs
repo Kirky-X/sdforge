@@ -154,8 +154,6 @@ where
             let data = match serde_json::to_string(&event) {
                 Ok(data) => data,
                 Err(e) => {
-                    #[cfg(feature = "logging")]
-                    tracing::error!(error = %e, "Failed to serialize SSE event");
                     // Send error event instead of silently failing
                     serde_json::to_string(&StreamEvent::<()>::error(format!(
                         "Serialization error: {}",
