@@ -61,6 +61,7 @@ impl ErrorContext {
     /// # Example
     ///
     /// ```rust
+    /// use sdforge::core::error::ErrorContext;
     /// let context = ErrorContext::current();
     /// ```
     pub fn current() -> Self {
@@ -77,6 +78,7 @@ impl ErrorContext {
     /// # Example
     ///
     /// ```rust
+    /// use sdforge::core::error::ErrorContext;
     /// let context = ErrorContext::current()
     ///     .with_extra("user_id".to_string(), "12345".to_string())
     ///     .with_extra("action".to_string(), "delete_user".to_string());

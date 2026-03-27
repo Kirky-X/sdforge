@@ -49,7 +49,7 @@
 //! | `/stream/events` | 事件流 |
 //! | `/stream/progress` | 进度流 |
 
-use std::env;
+#![allow(unexpected_cfgs)]
 
 /// 主函数
 ///
@@ -57,6 +57,7 @@ use std::env;
 #[cfg(feature = "http_examples")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    use std::env;
     // 初始化所有注册的插件
     let counts = sdforge::init_all_plugins();
 
