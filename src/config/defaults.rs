@@ -14,16 +14,6 @@ pub mod server {
     pub const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 30;
 }
 
-/// Request size limits
-pub mod request_size {
-    /// Default maximum JSON request body size (1MB)
-    pub const MAX_JSON_SIZE: usize = 1024 * 1024;
-    /// Default maximum file upload size (100MB)
-    pub const MAX_FILE_SIZE: usize = 100 * 1024 * 1024;
-    /// Default maximum form data size (10MB)
-    pub const MAX_FORM_SIZE: usize = 10 * 1024 * 1024;
-}
-
 /// Timeout configuration defaults
 pub mod timeout {
     /// Default request timeout in seconds
@@ -32,16 +22,6 @@ pub mod timeout {
     pub const UPLOAD_TIMEOUT_SECS: u64 = 300;
     /// Route-specific timeout for exports (2 minutes)
     pub const EXPORT_TIMEOUT_SECS: u64 = 120;
-}
-
-/// Rate limiting defaults
-pub mod rate_limit {
-    /// Default maximum requests per window
-    pub const DEFAULT_REQUESTS: u32 = 100;
-    /// Default window duration in seconds
-    pub const DEFAULT_WINDOW_SECS: u64 = 60;
-    /// Maximum rate limit window (1 hour)
-    pub const MAX_WINDOW_SECS: u64 = 3600;
 }
 
 /// API key authentication defaults

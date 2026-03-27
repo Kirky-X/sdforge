@@ -1,25 +1,24 @@
 // Copyright (c) 2026 Kirky.X
-//! Middleware implementations for authentication and rate limiting
+//! Middleware implementations for authentication
 //!
-//! This module provides Axum middleware for authentication and rate limiting.
+//! This module provides Axum middleware for authentication.
 
-use crate::security::rate_limiter::AppRateLimiter;
 use crate::security::types::{AuthContext, AuthResult, TrustedProxyConfig};
 use axum::{
     body::Body,
-    http::{HeaderValue, Request, StatusCode},
+    http::{Request, StatusCode},
     middleware::Next,
     response::Response,
 };
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 
 /// Create authentication middleware
 pub fn auth_middleware<T: Clone + Send + Sync + 'static>(
-    _auth: Arc<T>,
+    _auth: T,
     extract_auth: impl Fn(&Request<Body>) -> AuthResult<AuthContext> + Clone + Send + 'static,
-) -> impl Fn(Request<Body>, Next) -> Pin<Box<dyn Future<Output = Response> + Send>> + Clone + Send {
+) -> impl Fn(Request<Body>, Next) -> Pin<Box<dyn Future<Output = Response> + Send>> + Clone + Send
+{
     move |mut req: Request<Body>, next: Next| {
         let extract_auth = extract_auth.clone();
         Box::pin(async move {
@@ -31,48 +30,6 @@ pub fn auth_middleware<T: Clone + Send + Sync + 'static>(
                 Err(_) => {
                     let mut response = Response::new(Body::from("Unauthorized"));
                     *response.status_mut() = StatusCode::UNAUTHORIZED;
-                    response
-                }
-            }
-        })
-    }
-}
-
-/// Create rate limiting middleware
-pub fn rate_limit_middleware(
-    limiter: Arc<AppRateLimiter>,
-) -> impl Fn(Request<Body>, Next) -> Pin<Box<dyn Future<Output = Response> + Send>> + Clone + Send {
-    move |req: Request<Body>, next: Next| {
-        let limiter = limiter.clone();
-        Box::pin(async move {
-            let client_ip = extract_client_ip_simple(&req);
-
-            match limiter.check(&client_ip) {
-                Ok(remaining) => {
-                    let mut response = next.run(req).await;
-                    if limiter.config.include_headers {
-                        response.headers_mut().insert(
-                            "X-RateLimit-Limit",
-                            HeaderValue::from(limiter.config.max_requests),
-                        );
-                        response
-                            .headers_mut()
-                            .insert("X-RateLimit-Remaining", HeaderValue::from(remaining));
-                    }
-                    response
-                }
-                Err(e) => {
-                    let mut response = Response::new(Body::from("Rate limit exceeded"));
-                    *response.status_mut() = StatusCode::TOO_MANY_REQUESTS;
-                    response
-                        .headers_mut()
-                        .insert("X-RateLimit-Limit", HeaderValue::from(e.limit));
-                    response
-                        .headers_mut()
-                        .insert("X-RateLimit-Remaining", HeaderValue::from(0));
-                    response
-                        .headers_mut()
-                        .insert("Retry-After", HeaderValue::from(e.retry_after));
                     response
                 }
             }
@@ -117,6 +74,7 @@ fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
 }
 
 /// Extract client IP from request with security validation
+#[allow(dead_code)]
 fn extract_client_ip_simple(req: &Request<Body>) -> String {
     // Use default trusted proxy configuration
     let proxy_config = TrustedProxyConfig::default();
