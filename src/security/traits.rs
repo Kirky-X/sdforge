@@ -2,7 +2,7 @@
 //! Trait definitions for the security module
 //!
 //! This module contains the feature layer trait interfaces that define
-//! the contracts for authentication, rate limiting, and audit logging.
+//! the contracts for authentication and audit logging.
 
 use crate::security::types::AuditLog;
 
@@ -29,29 +29,6 @@ pub trait ApiKeyAuth: Send + Sync {
     /// * `key` - The API key to add
     /// * `permissions` - List of permissions granted by this key
     fn add_key(&self, key: impl Into<String>, permissions: Vec<String>);
-}
-
-/// Feature layer trait for rate limiting.
-///
-/// Implement this trait to provide custom rate limiting logic while
-/// maintaining a consistent interface across the security module.
-pub trait RateLimiter: Send + Sync {
-    /// Check if a request is allowed under the rate limit.
-    ///
-    /// Returns `true` if the request is allowed, `false` if rate limited.
-    ///
-    /// # Arguments
-    /// * `key` - The rate limit key (typically client IP or user ID)
-    fn allow(&self, key: &str) -> bool;
-
-    /// Reset rate limit state for a key.
-    ///
-    /// Clears all rate limiting data for the given key, allowing
-    /// new requests to be processed without restriction.
-    ///
-    /// # Arguments
-    /// * `key` - The rate limit key to reset
-    fn reset(&self, key: &str);
 }
 
 /// Feature layer trait for audit logging.

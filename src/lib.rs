@@ -163,7 +163,6 @@ pub mod security;
 #[cfg(feature = "security")]
 pub use security::{
     auth_middleware,
-    rate_limit_middleware,
     // Trait interfaces (feature layer)
     ApiKeyAuth,
     // Concrete implementations (renamed structs)
@@ -171,8 +170,8 @@ pub use security::{
     AppApiKeyAuthBuilder,
     AppAuditLogger,
     AppAuditLoggerBuilder,
-    AppRateLimiter,
-    AppRateLimiterBuilder,
+    BearerAuth,
+    BearerAuthBuilder,
     AuditLog,
     AuditLogger,
     // Supporting types
@@ -182,11 +181,6 @@ pub use security::{
     AuthExtractor,
     AuthMetadata,
     AuthResult,
-    BearerAuth,
-    BearerAuthBuilder,
-    RateLimitConfig,
-    RateLimitError,
-    RateLimiter,
 };
 
 /// Configuration management
@@ -202,8 +196,8 @@ pub use confers::Config;
 
 #[cfg(feature = "http")]
 pub use config::{
-    ApiConfig, AppConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper, RateLimitConfigFile,
-    RateLimitEndpointConfig, ServerConfig, TlsConfig, TracingConfig,
+    ApiConfig, AppConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper,
+    ServerConfig, TlsConfig, TracingConfig,
 };
 
 #[cfg(feature = "hot-reload")]
@@ -215,12 +209,12 @@ pub use config::hot_reload::{
 #[cfg(feature = "cache")]
 pub use oxcache;
 
-/// 缓存抽象模块（功能组件的标准同步存储接口）
+/// 缓存模块（直接透传 oxcache 的缓存接口）
 #[cfg(feature = "cache")]
 pub mod cache;
 
 #[cfg(feature = "cache")]
-pub use cache::{DashMapCache, SharedCache, SyncCache};
+pub use cache::{Cache, CacheKey, Cacheable, DashMapMemoryBackend, MemoryBackend};
 
 /// WebSocket support
 #[cfg(feature = "websocket")]
@@ -251,8 +245,6 @@ pub use grpc::sdforge_v1::{
 #[cfg(feature = "http")]
 pub use http::version_routing::{build_version_router, VersionRouterConfig, VersionedRoute};
 
-/// 日志功能由 sdforge::inklog 统一管理（已移除内置日志实现）
-///
 /// 初始化所有已注册的插件，确保它们不会被链接器优化掉。
 ///
 /// This function must be called at least once to ensure that all inventory-based

@@ -5,7 +5,7 @@
 //! 提供 `SyncCache` trait 的内存实现。
 //! 内部使用 `dashmap::DashMap`，提供 O(1) 的并发读写性能。
 
-use crate::cache::traits::SyncCache;
+use crate::cache::SyncCache;
 use std::sync::Arc;
 
 /// 基于 DashMap 的同步内存缓存
@@ -15,11 +15,6 @@ use std::sync::Arc;
 /// - **同步**：所有操作立即返回，无需 async
 /// - **并发安全**：`DashMap` 无锁并发读写
 /// - **无 TTL**：TTL 由调用方管理（可通过定期清理实现）
-///
-/// # 与 oxcache 的关系
-///
-/// 此实现是 sdforge 功能组件的默认存储。
-/// 如需 TTL 支持，未来可通过包装 oxcache::DashMapMemoryBackend 实现。
 #[derive(Debug, Clone)]
 pub struct DashMapCache {
     /// 内部存储
