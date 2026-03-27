@@ -4,7 +4,6 @@
 //! This module contains all common types used across the security module.
 
 use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
-use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 // =============================================================================
@@ -25,10 +24,6 @@ pub enum CacheNamespace {
     BearerBlacklist,
     /// Bearer token valid cache: `sdforge:bearer:valid:{token}`
     BearerValid,
-    /// Rate limiting: `sdforge:rl:{key}`
-    RateLimit,
-    /// Idempotency key cache: `sdforge:idempotency:{key}`
-    Idempotency,
 }
 
 impl CacheNamespace {
@@ -39,50 +34,13 @@ impl CacheNamespace {
             CacheNamespace::ApiFailed => format!("sdforge:apifailed:{suffix}"),
             CacheNamespace::BearerBlacklist => format!("sdforge:bearer:blacklist:{suffix}"),
             CacheNamespace::BearerValid => format!("sdforge:bearer:valid:{suffix}"),
-            CacheNamespace::RateLimit => format!("sdforge:rl:{suffix}"),
-            CacheNamespace::Idempotency => format!("sdforge:idempotency:{suffix}"),
         }
     }
 }
 
 // =============================================================================
-// O(1) Rate Limiting State (Fixed Window Counter)
+// Serialization Helpers for Cache Storage
 // =============================================================================
-
-/// Window state for O(1) rate limiting
-///
-/// Uses fixed window counter algorithm instead of storing all timestamps.
-/// This provides O(1) check operations with a small accuracy trade-off
-/// at window boundaries.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub(crate) struct WindowState {
-    /// Current count of requests in this window
-    pub(crate) count: u64,
-    /// Window start time in seconds since an arbitrary epoch (using Instant::now().elapsed())
-    pub(crate) window_start_secs: u64,
-}
-
-// =============================================================================
-// Serialization Helpers for SyncCache Storage
-// =============================================================================
-
-/// Serialize a list of Instants to bytes using bincode
-pub(crate) fn serialize_instants(insts: &[Instant]) -> Vec<u8> {
-    let as_i64: Vec<i64> = insts.iter().map(|i| i.elapsed().as_secs() as i64).collect();
-    bincode::serialize(&as_i64).unwrap_or_default()
-}
-
-/// Deserialize a list of Instants from bytes using bincode
-pub(crate) fn deserialize_instants(data: &[u8]) -> Vec<Instant> {
-    let as_i64: Vec<i64> = match bincode::deserialize(data) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-    as_i64
-        .iter()
-        .map(|&s| Instant::now() - Duration::from_secs(s as u64))
-        .collect()
-}
 
 /// Serialize a list of permissions (Vec<String>) to bytes
 pub(crate) fn serialize_permissions(perms: &[String]) -> Vec<u8> {
@@ -92,16 +50,6 @@ pub(crate) fn serialize_permissions(perms: &[String]) -> Vec<u8> {
 /// Deserialize a list of permissions from bytes
 pub(crate) fn deserialize_permissions(data: &[u8]) -> Vec<String> {
     bincode::deserialize(data).unwrap_or_default()
-}
-
-/// Serialize WindowState to bytes
-pub(crate) fn serialize_window_state(state: &WindowState) -> Vec<u8> {
-    bincode::serialize(state).unwrap_or_default()
-}
-
-/// Deserialize WindowState from bytes
-pub(crate) fn deserialize_window_state(data: &[u8]) -> Option<WindowState> {
-    bincode::deserialize(data).ok()
 }
 
 /// Serialize AuthContext to bytes using bincode
@@ -410,41 +358,8 @@ pub enum AuthConfigError {
 }
 
 // =============================================================================
-// Rate Limiting Types
+// Trusted Proxy Configuration
 // =============================================================================
-
-/// Rate limit configuration
-#[derive(Debug, Clone)]
-pub struct RateLimitConfig {
-    /// Max requests per window
-    pub max_requests: u32,
-    /// Window duration
-    pub window: Duration,
-    /// Response headers
-    pub include_headers: bool,
-}
-
-impl Default for RateLimitConfig {
-    fn default() -> Self {
-        Self {
-            max_requests: 100,
-            window: Duration::from_secs(60),
-            include_headers: true,
-        }
-    }
-}
-
-impl TryFrom<crate::config::RateLimitConfigFile> for RateLimitConfig {
-    type Error = crate::config::ConfigError;
-
-    fn try_from(config: crate::config::RateLimitConfigFile) -> Result<Self, Self::Error> {
-        Ok(Self {
-            max_requests: config.requests,
-            window: Duration::from_secs(config.window_seconds),
-            include_headers: true,
-        })
-    }
-}
 
 /// Trusted proxy configuration for IP extraction
 #[allow(dead_code)]
@@ -468,29 +383,6 @@ impl Default for TrustedProxyConfig {
         }
     }
 }
-
-/// Rate limit error
-#[derive(Debug, Clone)]
-pub struct RateLimitError {
-    /// Rate limit
-    pub limit: u32,
-    /// Remaining requests
-    pub remaining: u32,
-    /// Retry after seconds
-    pub retry_after: u64,
-}
-
-impl std::fmt::Display for RateLimitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Rate limit exceeded. Try again in {} seconds",
-            self.retry_after
-        )
-    }
-}
-
-impl std::error::Error for RateLimitError {}
 
 // =============================================================================
 // Audit Types

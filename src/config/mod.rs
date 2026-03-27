@@ -8,8 +8,6 @@
 //! - `server` - ServerConfig, TlsConfig
 //! - `auth` - AuthConfig (ApiKey, JWT, None)
 //! - `cors` - CorsConfig, build_cors_layer()
-//! - `rate_limit` - RateLimitConfigFile, RateLimitEndpointConfig
-//! - `request_size` - RequestSizeConfig
 //! - `timeout` - TimeoutConfig
 //! - `api` - ApiConfig, TracingConfig, EnvHelper
 //! - `defaults` - Default values for all configuration types
@@ -25,9 +23,6 @@ pub use confers::Validate;
 pub mod api;
 pub mod auth;
 pub mod cors;
-pub mod rate_limit;
-pub mod request_size;
-pub mod server;
 pub mod timeout;
 
 pub mod defaults;
@@ -41,8 +36,6 @@ pub use hot_reload::{create_config_watcher, ConfigEvent, ConfigManager, ConfigWa
 pub use api::{ApiConfig, EnvHelper, TracingConfig};
 pub use auth::AuthConfig;
 pub use cors::{build_cors_layer, CorsConfig};
-pub use rate_limit::{RateLimitConfigFile, RateLimitEndpointConfig};
-pub use request_size::RequestSizeConfig;
 pub use server::{ServerConfig, TlsConfig};
 pub use timeout::TimeoutConfig;
 
@@ -97,10 +90,6 @@ pub struct AppConfig {
     #[serde(alias = "auth")]
     #[config(skip)]
     pub authentication: AuthConfig,
-    /// Rate limiting configuration
-    pub rate_limit: Option<RateLimitConfigFile>,
-    /// Request size configuration
-    pub request_size: Option<RequestSizeConfig>,
     /// Timeout configuration
     pub timeout: Option<TimeoutConfig>,
 }
@@ -119,26 +108,13 @@ impl AppConfig {
     /// # Errors
     ///
     /// Returns an error if:
-    /// - Rate limit requests is 0 but rate limiting is enabled
-    /// - Rate limit window is 0
     /// - Timeout values are inconsistent
-    /// - Request size limits are invalid
     pub fn validate(&self) -> Result<(), ConfigError> {
         // Validate server configuration
         self.server.validate()?;
 
         // Validate authentication configuration
         self.authentication.validate()?;
-
-        // Validate rate limiting configuration
-        if let Some(ref rate_limit) = self.rate_limit {
-            rate_limit.validate()?;
-        }
-
-        // Validate request size limits
-        if let Some(ref request_size) = self.request_size {
-            request_size.validate()?;
-        }
 
         // Validate timeout configuration
         if let Some(ref timeout) = self.timeout {
@@ -154,8 +130,6 @@ impl AppConfig {
 pub struct AppConfigBuilder {
     server: ServerConfig,
     authentication: AuthConfig,
-    rate_limit: Option<RateLimitConfigFile>,
-    request_size: Option<RequestSizeConfig>,
     timeout: Option<TimeoutConfig>,
 }
 
@@ -174,18 +148,6 @@ impl AppConfigBuilder {
     /// Set the authentication configuration for the application.
     pub fn authentication(mut self, authentication: AuthConfig) -> Self {
         self.authentication = authentication;
-        self
-    }
-
-    /// Set the rate limit configuration for the application.
-    pub fn rate_limit(mut self, rate_limit: RateLimitConfigFile) -> Self {
-        self.rate_limit = Some(rate_limit);
-        self
-    }
-
-    /// Set the request size configuration for the application.
-    pub fn request_size(mut self, request_size: RequestSizeConfig) -> Self {
-        self.request_size = Some(request_size);
         self
     }
 
@@ -221,8 +183,6 @@ impl AppConfigBuilder {
         AppConfig {
             server: self.server,
             authentication: self.authentication,
-            rate_limit: self.rate_limit,
-            request_size: self.request_size,
             timeout: self.timeout,
         }
     }
@@ -271,8 +231,6 @@ mod tests {
             authentication: AuthConfig::Jwt {
                 secret: "test".to_string(),
             },
-            rate_limit: None,
-            request_size: None,
             timeout: None,
         };
         // Just verify we can create the config
@@ -310,36 +268,6 @@ mod tests {
     }
 
     #[test]
-    fn test_app_config_builder_with_rate_limit() {
-        let config = AppConfig::builder()
-            .rate_limit(RateLimitConfigFile {
-                requests: 1000,
-                window_seconds: 60,
-            })
-            .build();
-        assert!(config.rate_limit.is_some());
-        let rl = config.rate_limit.unwrap();
-        assert_eq!(rl.requests, 1000);
-        assert_eq!(rl.window_seconds, 60);
-    }
-
-    #[test]
-    fn test_app_config_builder_with_request_size() {
-        let config = AppConfig::builder()
-            .request_size(RequestSizeConfig {
-                max_json_size: 2048,
-                max_file_size: 4096,
-                max_form_size: 1024,
-            })
-            .build();
-        assert!(config.request_size.is_some());
-        let rs = config.request_size.unwrap();
-        assert_eq!(rs.max_json_size, 2048);
-        assert_eq!(rs.max_file_size, 4096);
-        assert_eq!(rs.max_form_size, 1024);
-    }
-
-    #[test]
     fn test_app_config_builder_with_timeout() {
         let config = AppConfig::builder()
             .timeout(TimeoutConfig {
@@ -364,17 +292,10 @@ mod tests {
                 header_name: "X-Auth".to_string(),
                 prefix: "token-".to_string(),
             })
-            .rate_limit(RateLimitConfigFile {
-                requests: 500,
-                window_seconds: 30,
-            })
-            .request_size(RequestSizeConfig::default())
             .timeout(TimeoutConfig::default())
             .build();
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 8080);
-        assert!(config.rate_limit.is_some());
-        assert!(config.request_size.is_some());
         assert!(config.timeout.is_some());
     }
 
@@ -390,18 +311,12 @@ mod tests {
             authentication: AuthConfig::Jwt {
                 secret: "test-secret".to_string(),
             },
-            rate_limit: Some(RateLimitConfigFile {
-                requests: 200,
-                window_seconds: 45,
-            }),
-            request_size: Some(RequestSizeConfig::default()),
             timeout: Some(TimeoutConfig::default()),
         };
         let json = serde_json::to_string(&original).unwrap();
         let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.server.host, "127.0.0.1");
         assert_eq!(deserialized.server.port, 4000);
-        assert!(deserialized.rate_limit.is_some());
     }
 
     /// Test ConfigError variants
@@ -452,11 +367,6 @@ mod tests {
                 header_name: "X-API-Key".to_string(),
                 prefix: "sk-".to_string(),
             },
-            rate_limit: Some(RateLimitConfigFile {
-                requests: 100,
-                window_seconds: 60,
-            }),
-            request_size: Some(RequestSizeConfig::default()),
             timeout: Some(TimeoutConfig::default()),
         };
         assert!(config.validate().is_ok());
@@ -472,8 +382,6 @@ mod tests {
                 cors: None,
             },
             authentication: AuthConfig::None,
-            rate_limit: None,
-            request_size: None,
             timeout: None,
         };
         assert!(config.validate().is_err());
@@ -492,8 +400,6 @@ mod tests {
                 header_name: "X-API-Key".to_string(),
                 prefix: "".to_string(),
             },
-            rate_limit: None,
-            request_size: None,
             timeout: None,
         };
         assert!(config.validate().is_err());
