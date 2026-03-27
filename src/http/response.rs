@@ -26,9 +26,6 @@ pub fn build_json_response<T: Serialize>(
             .body(Body::from(body_bytes))
             .unwrap_or_else(|_| build_fallback_response(status, fallback_message)),
         Err(_e) => {
-            #[cfg(feature = "logging")]
-            tracing::error!("Failed to serialize response");
-
             build_fallback_response(status, fallback_message)
         }
     }

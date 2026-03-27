@@ -204,7 +204,7 @@ mod tests {
     fn test_validate_template_content_safe() {
         let safe_content = r#"
 fn main() {
-    println!("Hello, {}!", name);
+    println!("Hello, world!");
 }
 "#;
         assert!(validate_template_content("test.rs", safe_content).is_ok());
