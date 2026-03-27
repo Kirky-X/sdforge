@@ -174,8 +174,6 @@ pub(crate) fn render_templates(
 
         // Render and write template
         render_single_template(&mut tera, path, &output_path, &tera_context)?;
-
-        println!("  Created: {}", output_path.display());
     }
 
     Ok(())
@@ -241,8 +239,6 @@ pub fn generate_from_template(
     // Write output
     fs::write(&output_path, rendered)
         .map_err(|e| GeneratorError::WriteFileError(output_path.to_path_buf(), e.to_string()))?;
-
-    println!("✓ Generated: {}", output_path.display());
 
     Ok(())
 }

@@ -6,8 +6,6 @@
 
 use std::path::Path;
 
-use tracing::{warn, Level};
-
 use crate::cli::generator::error::GeneratorResult;
 
 /// Initialize a git repository with security checks.
@@ -32,35 +30,17 @@ pub fn initialize_git(project_dir: &Path) -> GeneratorResult<()> {
     // Security: Validate and normalize the project directory path
     let canonical_path = match project_dir.canonicalize() {
         Ok(path) => path,
-        Err(e) => {
-            warn!(
-                target: "generator",
-                ?e,
-                "Failed to canonicalize project directory path, skipping git init"
-            );
-            return Ok(()); // Continue without git init
-        }
+        Err(_) => return Ok(()), // Continue without git init
     };
 
     // Security: Ensure the path is within an allowed directory (prevent path traversal)
     // Allow only paths that don't escape the current working directory
     let current_dir = match std::env::current_dir() {
         Ok(dir) => dir,
-        Err(e) => {
-            warn!(
-                target: "generator",
-                ?e,
-                "Failed to get current directory, skipping git init"
-            );
-            return Ok(()); // Continue without git init
-        }
+        Err(_) => return Ok(()), // Continue without git init
     };
 
     if !canonical_path.starts_with(&current_dir) {
-        warn!(
-            target: "generator",
-            "Project directory path escapes current directory, skipping git init"
-        );
         return Ok(()); // Continue without git init
     }
 
@@ -73,22 +53,11 @@ pub fn initialize_git(project_dir: &Path) -> GeneratorResult<()> {
     match git_init_result {
         Ok(output) => {
             if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                warn!(
-                    target: "generator",
-                    ?stderr,
-                    "Git init failed for project directory"
-                );
-            } else {
-                tracing::event!(Level::INFO, "Git repository initialized");
+                // Silently continue if git init fails
             }
         }
-        Err(e) => {
-            warn!(
-                target: "generator",
-                ?e,
-                "Failed to run git init"
-            );
+        Err(_) => {
+            // Silently continue if git init fails
         }
     }
 

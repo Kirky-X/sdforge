@@ -222,10 +222,6 @@ pub mod cache;
 #[cfg(feature = "cache")]
 pub use cache::{DashMapCache, SharedCache, SyncCache};
 
-/// 直接透传 inklog 库（日志功能由 inklog 统一提供）
-#[cfg(feature = "logging")]
-pub use inklog;
-
 /// WebSocket support
 #[cfg(feature = "websocket")]
 pub mod websocket;
@@ -272,8 +268,6 @@ pub use http::version_routing::{build_version_router, VersionRouterConfig, Versi
 ///
 /// fn main() {
 ///     let counts = sdforge::init_all_plugins();
-///     println!("Routes: {}, MCP: {}, WS: {}, gRPC: {}",
-///         counts.routes, counts.mcp_tools, counts.ws_routes, counts.grpc_routes);
 /// }
 /// ```
 #[cfg(any(

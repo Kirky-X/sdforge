@@ -119,9 +119,5 @@ fn main() -> Result<()> {
 /// When `cli` feature is disabled, running this binary does nothing.
 #[cfg(not(feature = "cli"))]
 fn main() {
-    eprintln!("Error: CLI feature is not enabled.");
-    eprintln!("To use the SDForge CLI, enable the `cli` feature:");
-    eprintln!("  cargo build --features cli");
-    eprintln!("  cargo run --features cli -- --help");
-    std::process::exit(1);
+    panic!("CLI feature is not enabled. To use the SDForge CLI, enable the `cli` feature with: cargo build --features cli");
 }
