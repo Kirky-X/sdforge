@@ -365,25 +365,14 @@ impl AppAuditLogger {
         // Try non-blocking send — primary storage is already complete above
         match sender.try_send(log_batch) {
             Ok(()) => {
-                #[cfg(feature = "logging")]
-                tracing::debug!(target: "audit", "Audit log queued for user: {}", user_id);
+                // Audit log queued successfully
             }
             Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => {
                 // Channel is full — primary storage already done above (synchronous path)
-                #[cfg(feature = "logging")]
-                tracing::warn!(target: "audit",
-                    "Audit log channel full for user: {}, primary storage succeeded",
-                    user_id
-                );
                 // dropped_log_count is NOT incremented since we stored successfully
             }
             Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
                 // Channel closed — primary storage already done above
-                #[cfg(feature = "logging")]
-                tracing::error!(target: "audit",
-                    "Audit log channel closed for user: {}, primary storage succeeded",
-                    user_id
-                );
             }
         }
 
@@ -476,11 +465,7 @@ impl AppAuditLogger {
 
         // Log warning periodically (every 100th drop)
         if count > 0 && count.is_multiple_of(100) {
-            #[cfg(feature = "logging")]
-            tracing::warn!(target: "audit",
-                "High audit log drop rate: {} logs dropped due to channel congestion",
-                count + 1
-            );
+            // High audit log drop rate detected
         }
     }
 

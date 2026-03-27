@@ -61,11 +61,6 @@ oxcache = { version = "0.2", path = "/home/dev/projects/oxcache", features = ["r
 http = "~1.4"
 bincode = "~1.3"
 
-# 日志依赖
-tracing = "~0.1"
-tracing-subscriber = { version = "~0.3", features = ["json"] }
-inklog = { path = "/home/dev/projects/inklog" }
-
 # WebSocket 依赖
 tokio-tungstenite = "~0.29"
 axum-extra = { version = "~0.12", features = ["typed-header"] }
@@ -174,11 +169,6 @@ bincode = { workspace = true, optional = true }
 # SIMD-accelerated JSON (optional, requires SIMD support)
 simd-json = { version = "~0.14", optional = true }
 
-# Logging - inklog 完全接管（tracing 作为公共接口保留，由 inklog 内部使用）
-tracing = { workspace = true, optional = true }
-tracing-subscriber = { version = "0.3", optional = true, features = ["json"] }
-inklog = { path = "/home/dev/projects/inklog", optional = true }
-
 # CLI dependencies (按特性导入)
 clap = { workspace = true, optional = true }
 tera = { workspace = true, optional = true }
@@ -228,9 +218,14 @@ streaming = ["http", "tokio-stream", "futures-util", "chrono"]
 # Timestamp 特性
 timestamp = ["chrono"]
 
-# Logging 特性 - inklog 完全接管，tracing 作为公共接口由 inklog 内部管理
-logging = ["tracing", "tracing-subscriber", "inklog"]
-
+# CLI 特性
+cli = [
+    "clap",
+    "anyhow",
+    "tera",
+    "walkdir",
+    "confers/cli",
+]
 # Security 特性
 security = [
     "http",
@@ -276,26 +271,12 @@ cache = ["dep:http", "oxcache/rate-limiting", "async-trait"]
 # SIMD JSON 特性 - 使用 SIMD 加速的 JSON 序列化/反序列化
 simd-json = ["dep:simd-json"]
 
-
-# CLI 特性 - 日志由 inklog 管理
-cli = [
-    "clap",
-    "anyhow",
-    "tera",
-    "walkdir",
-    "tracing",
-    "tracing-subscriber",
-    "inklog",
-    "confers/cli",
-]
-
 # Full 特性
 full = [
     "http",
     "mcp",
     "streaming",
     "timestamp",
-    "logging",
     "security",
     "hot-reload",
     "cache",
@@ -421,6 +402,10 @@ debug = true
 
 [profile.dev.package."*"]
 opt-level = 2
+
+
+
+
 
 
 

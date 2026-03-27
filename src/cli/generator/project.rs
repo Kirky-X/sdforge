@@ -105,15 +105,6 @@ pub fn generate_project(
     // Initialize git repository
     initialize_git(&output_dir)?;
 
-    println!("✓ Project '{}' created successfully!", project_name);
-    println!("  Template: {}", template);
-    println!("  Protocol: {}", protocol);
-    println!("  Features: {}", features_str);
-    println!("\nNext steps:");
-    println!("  cd {}", project_name);
-    println!("  cargo build");
-    println!("  cargo run");
-
     Ok(())
 }
 

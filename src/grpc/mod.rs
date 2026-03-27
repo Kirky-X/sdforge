@@ -145,8 +145,6 @@ pub async fn build_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> 
     };
     let service = SdForgeGrpcService::default();
 
-    println!("gRPC server listening on {}", addr);
-
     // Limit request size to 4MB to prevent large message attacks
     Server::builder()
         .add_service(SdForgeServiceServer::new(service).max_decoding_message_size(4 * 1024 * 1024))
@@ -176,8 +174,6 @@ pub async fn build_server_with_config(
         }
     };
     let service = SdForgeGrpcService::default();
-
-    println!("gRPC server listening on {}", addr);
 
     // Build server with optional JWT auth interceptor
     #[cfg(feature = "security")]
