@@ -34,6 +34,7 @@ mod http_protocol_tests {
     }
 
     /// Test data structure for query parameters
+    #[allow(dead_code)]
     #[derive(Debug, Deserialize)]
     struct PaginationParams {
         page: Option<u32>,
@@ -43,6 +44,7 @@ mod http_protocol_tests {
     }
 
     /// Test data structure for form data
+    #[allow(dead_code)]
     #[derive(Debug, Deserialize)]
     struct LoginForm {
         username: String,
@@ -50,6 +52,7 @@ mod http_protocol_tests {
     }
 
     /// Query params for search
+    #[allow(dead_code)]
     #[derive(Debug, Deserialize)]
     struct SearchQuery {
         search: String,
@@ -183,6 +186,7 @@ mod http_protocol_tests {
     /// Verifies that PATCH request correctly handles partial updates.
     #[tokio::test]
     async fn test_http_patch_request() {
+        #[allow(dead_code)]
         #[derive(Debug, Deserialize)]
         struct PatchUser {
             name: Option<String>,
