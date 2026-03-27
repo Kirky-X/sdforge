@@ -2,7 +2,7 @@
 //! Security Authentication Integration Tests
 //!
 //! This module contains comprehensive integration tests for the security module.
-//! Tests cover API Key authentication, Bearer Token authentication, rate limiting,
+//! Tests cover API Key authentication, Bearer Token authentication,
 //! IP validation, and audit logging.
 //!
 //! All tests are integration tests and use real functionality without mocks.
@@ -11,9 +11,8 @@
 mod security_tests {
     use hmac::{Hmac, Mac};
     use sdforge::security::{
-        ApiKeyMetadata, AppApiKeyAuth, AppApiKeyAuthBuilder, AppAuditLogger, AppRateLimiter,
-        AppRateLimiterBuilder, AuditResult, AuthContext, AuthMetadata, BearerAuth,
-        BearerAuthBuilder, LruConfig, RateLimitConfig, RotationConfig,
+        ApiKeyMetadata, AppApiKeyAuth, AppApiKeyAuthBuilder, AppAuditLogger, AppAuditLoggerBuilder,
+        AuditResult, AuthContext, AuthMetadata, BearerAuth, BearerAuthBuilder, LruConfig, RotationConfig,
     };
     use sha2::Sha256;
     use std::time::Duration;
@@ -267,13 +266,10 @@ mod security_tests {
 
     /// Test: API key auth builder configuration
     ///
-    /// Verifies that the builder correctly configures rate limiting parameters.
+    /// Verifies that the builder correctly configures LRU and rotation parameters.
     #[tokio::test]
     async fn test_api_key_auth_builder_configuration() {
         let auth = AppApiKeyAuthBuilder::new()
-            .max_requests(200)
-            .window(Duration::from_secs(120))
-            .include_headers(true)
             .lru(LruConfig::default())
             .rotation(RotationConfig::default())
             .build();
@@ -575,220 +571,6 @@ mod security_tests {
     }
 
     // ============================================================================
-    // Rate Limiting Tests
-    // ============================================================================
-
-    /// Test: Rate limiter allows requests within limit
-    ///
-    /// Verifies that requests within the rate limit are allowed.
-    #[tokio::test]
-    async fn test_rate_limit_allowed_requests() {
-        let limiter = AppRateLimiter::new(Some(RateLimitConfig {
-            max_requests: 10,
-            window: Duration::from_secs(60),
-            include_headers: false,
-        }));
-
-        // First 10 requests should succeed
-        for i in 1..=10 {
-            let result = limiter.check("test_client");
-            assert!(result.is_ok(), "Request {} should be allowed", i);
-            assert_eq!(result.unwrap(), 10 - i as u32);
-        }
-    }
-
-    /// Test: Rate limiter blocks requests exceeding limit
-    ///
-    /// Verifies that requests exceeding the rate limit are blocked.
-    #[tokio::test]
-    async fn test_rate_limit_exceeded() {
-        let limiter = AppRateLimiter::new(Some(RateLimitConfig {
-            max_requests: 3,
-            window: Duration::from_secs(60),
-            include_headers: false,
-        }));
-
-        // Use up the limit
-        for _ in 0..3 {
-            assert!(limiter.check("test_client").is_ok());
-        }
-
-        // Next request should fail
-        let result = limiter.check("test_client");
-        assert!(result.is_err());
-
-        let error = result.unwrap_err();
-        assert_eq!(error.limit, 3);
-        assert_eq!(error.remaining, 0);
-    }
-
-    /// Test: Rate limiter window reset
-    ///
-    /// Verifies that rate limit counters can be reset manually.
-    /// Note: Automatic window reset is tested via reset() functionality.
-    #[tokio::test]
-    async fn test_rate_limit_window_reset() {
-        // Use a standard window for testing
-        let limiter = AppRateLimiter::new(Some(RateLimitConfig {
-            max_requests: 5,
-            window: Duration::from_secs(60),
-            include_headers: false,
-        }));
-
-        // Use up the limit
-        for _ in 0..5 {
-            assert!(limiter.check("test_client").is_ok());
-        }
-
-        // Should be limited
-        assert!(limiter.check("test_client").is_err());
-
-        // Manually reset the counter (simulates window reset)
-        limiter.reset("test_client");
-
-        // Should be allowed again
-        let result = limiter.check("test_client");
-        assert!(result.is_ok());
-    }
-
-    /// Test: Rate limiter per-client tracking
-    ///
-    /// Verifies that rate limits are tracked per client identifier.
-    #[tokio::test]
-    async fn test_rate_limit_per_ip_tracking() {
-        let limiter = AppRateLimiter::new(Some(RateLimitConfig {
-            max_requests: 3,
-            window: Duration::from_secs(60),
-            include_headers: false,
-        }));
-
-        // Use up limit for client 1
-        for _ in 0..3 {
-            assert!(limiter.check("192.168.1.1").is_ok());
-        }
-
-        // Client 1 should be limited
-        assert!(limiter.check("192.168.1.1").is_err());
-
-        // Client 2 should still be allowed
-        let result = limiter.check("192.168.1.2");
-        assert!(result.is_ok());
-    }
-
-    /// Test: Rate limiter with different identifiers
-    ///
-    /// Verifies that rate limits work with various identifier types.
-    #[tokio::test]
-    async fn test_rate_limit_different_identifiers() {
-        let limiter = AppRateLimiter::builder()
-            .max_requests(2)
-            .window(Duration::from_secs(60))
-            .build();
-
-        // Test with IP address
-        assert!(limiter.check("192.168.1.100").is_ok());
-        assert!(limiter.check("192.168.1.100").is_ok());
-        assert!(limiter.check("192.168.1.100").is_err());
-
-        // Test with user ID
-        assert!(limiter.check("user:12345").is_ok());
-        assert!(limiter.check("user:12345").is_ok());
-        assert!(limiter.check("user:12345").is_err());
-
-        // Test with API key
-        assert!(limiter.check("api_key:abc123").is_ok());
-        assert!(limiter.check("api_key:abc123").is_ok());
-        assert!(limiter.check("api_key:abc123").is_err());
-    }
-
-    /// Test: Rate limiter builder configuration
-    ///
-    /// Verifies that the rate limiter builder correctly configures all parameters.
-    #[tokio::test]
-    async fn test_rate_limiter_builder_configuration() {
-        let limiter = AppRateLimiterBuilder::new()
-            .max_requests(200)
-            .window(Duration::from_secs(120))
-            .include_headers(true)
-            .max_concurrent(500)
-            .build();
-
-        // Verify by checking functionality
-        // Test with 200 requests
-        for _ in 0..200 {
-            assert!(limiter.check("builder_test").is_ok());
-        }
-        assert!(limiter.check("builder_test").is_err());
-    }
-
-    /// Test: Rate limiter remaining requests
-    ///
-    /// Verifies that remaining request count is correctly calculated.
-    #[tokio::test]
-    async fn test_rate_limit_remaining_calculation() {
-        let limiter = AppRateLimiter::new(Some(RateLimitConfig {
-            max_requests: 10,
-            window: Duration::from_secs(60),
-            include_headers: false,
-        }));
-
-        assert_eq!(limiter.remaining("test_client"), 10);
-
-        let _ = limiter.check("test_client");
-        assert_eq!(limiter.remaining("test_client"), 9);
-
-        let _ = limiter.check("test_client");
-        assert_eq!(limiter.remaining("test_client"), 8);
-
-        let _ = limiter.check("test_client");
-        assert_eq!(limiter.remaining("test_client"), 7);
-    }
-
-    /// Test: Rate limiter allow method
-    ///
-    /// Verifies that the allow() method returns correct boolean values.
-    #[tokio::test]
-    async fn test_rate_limit_allow_method() {
-        let limiter = AppRateLimiter::new(Some(RateLimitConfig {
-            max_requests: 2,
-            window: Duration::from_secs(60),
-            include_headers: false,
-        }));
-
-        // Should allow first two requests
-        assert!(limiter.allow("test_key"));
-        assert!(limiter.allow("test_key"));
-        // Should deny third request
-        assert!(!limiter.allow("test_key"));
-    }
-
-    /// Test: Rate limiter reset functionality
-    ///
-    /// Verifies that reset correctly clears rate limit state.
-    #[tokio::test]
-    async fn test_rate_limit_reset() {
-        let limiter = AppRateLimiter::new(Some(RateLimitConfig {
-            max_requests: 3,
-            window: Duration::from_secs(60),
-            include_headers: false,
-        }));
-
-        // Use up the limit
-        for _ in 0..3 {
-            assert!(limiter.check("reset_test").is_ok());
-        }
-
-        // Should be limited
-        assert!(limiter.check("reset_test").is_err());
-
-        // Reset
-        limiter.reset("reset_test");
-
-        // Should work again
-        assert!(limiter.check("reset_test").is_ok());
-    }
-
-    // ============================================================================
     // Audit Logging Tests
     // ============================================================================
 
@@ -845,31 +627,6 @@ mod security_tests {
             }
             _ => panic!("Expected failure result"),
         }
-    }
-
-    /// Test: Audit log rate limit exceeded
-    ///
-    /// Verifies that rate limit events are logged correctly.
-    #[tokio::test]
-    async fn test_audit_log_rate_limit_exceeded() {
-        let logger = AppAuditLogger::with_limit(100);
-        let context = create_test_context(Some("abuser"));
-
-        // Log rate limit exceeded event
-        logger
-            .log(
-                &context,
-                "rate_limit.exceeded",
-                "/api/data",
-                false,
-                Some("Rate limit exceeded: 100 requests per minute".to_string()),
-            )
-            .await;
-
-        // Verify log
-        let logs = logger.get_logs("abuser");
-        assert_eq!(logs.len(), 1);
-        assert_eq!(logs[0].action(), "rate_limit.exceeded");
     }
 
     /// Test: Audit log with multiple entries
@@ -995,33 +752,6 @@ mod security_tests {
     // Integration Tests with Real Components
     // ============================================================================
 
-    /// Test: Combined API Key and Rate Limiting
-    ///
-    /// Verifies that API key authentication and rate limiting can work together.
-    #[tokio::test]
-    async fn test_api_key_with_rate_limiting() {
-        let auth = AppApiKeyAuth::new();
-        let limiter = AppRateLimiter::builder()
-            .max_requests(5)
-            .window(Duration::from_secs(60))
-            .build();
-
-        // Add API key
-        auth.add_key("integration_key", vec!["read".to_string()]);
-
-        // Simulate multiple requests from same IP with valid key
-        for _ in 0..5 {
-            let auth_result = auth.validate_key("integration_key", "192.168.1.100");
-            assert!(auth_result.is_some());
-
-            let rate_result = limiter.check("192.168.1.100");
-            assert!(rate_result.is_ok());
-        }
-
-        // Next request should be rate limited
-        assert!(limiter.check("192.168.1.100").is_err());
-    }
-
     /// Test: Bearer Token with Audit Logging
     ///
     /// Verifies that Bearer token validation can be combined with audit logging.
@@ -1043,14 +773,10 @@ mod security_tests {
 
     /// Test: End-to-end security flow simulation
     ///
-    /// Simulates a complete security flow: rate limiting -> authentication -> logging.
+    /// Simulates a complete security flow: authentication -> logging.
     #[tokio::test]
     async fn test_end_to_end_security_flow() {
         let auth = AppApiKeyAuth::new();
-        let limiter = AppRateLimiter::builder()
-            .max_requests(10)
-            .window(Duration::from_secs(60))
-            .build();
         let logger = AppAuditLogger::with_limit(100);
 
         // Setup
@@ -1059,10 +785,6 @@ mod security_tests {
 
         // Simulate 10 valid requests
         for i in 1..=10 {
-            // Check rate limit
-            let rate_result = limiter.check("192.168.1.100");
-            assert!(rate_result.is_ok(), "Request {} should be rate allowed", i);
-
             // Authenticate
             let auth_result = auth.validate_key("e2e_test_key", "192.168.1.100");
             assert!(auth_result.is_some(), "Request {} auth should succeed", i);
@@ -1072,9 +794,6 @@ mod security_tests {
                 .log(&context, "e2e.request", "/api/test", true, None)
                 .await;
         }
-
-        // 11th request should be rate limited
-        assert!(limiter.check("192.168.1.100").is_err());
 
         // Verify audit logs
         let logs = logger.get_logs("e2e_user");
@@ -1126,57 +845,6 @@ mod security_tests {
         let result = auth.validate_key("empty_perms_key", "192.168.1.100");
         // Empty permissions should return None (treated as invalid)
         assert!(result.is_none());
-    }
-
-    /// Test: Rate limiter with zero limit
-    ///
-    /// Verifies that rate limiter handles zero limit correctly.
-    #[tokio::test]
-    async fn test_rate_limit_zero_limit() {
-        let limiter = AppRateLimiter::new(Some(RateLimitConfig {
-            max_requests: 0,
-            window: Duration::from_secs(60),
-            include_headers: false,
-        }));
-
-        // Zero limit means no requests allowed
-        let result = limiter.check("test_client");
-        assert!(result.is_err());
-    }
-
-    /// Test: Concurrent rate limit checks
-    ///
-    /// Verifies that concurrent rate limit checks are handled correctly.
-    #[tokio::test]
-    async fn test_concurrent_rate_limit_checks() {
-        let limiter = AppRateLimiter::builder()
-            .max_requests(100)
-            .window(Duration::from_secs(60))
-            .build();
-
-        // Spawn multiple concurrent requests
-        let handles: Vec<_> = (0..50)
-            .map(|_| {
-                let limiter = limiter.clone();
-                tokio::spawn(async move { limiter.check("concurrent_client") })
-            })
-            .collect();
-
-        // Collect results
-        let mut success_count = 0;
-        let mut failure_count = 0;
-        for handle in handles {
-            let result = handle.await.unwrap();
-            if result.is_ok() {
-                success_count += 1;
-            } else {
-                failure_count += 1;
-            }
-        }
-
-        // All should succeed since we have 100 limit and only 50 requests
-        assert_eq!(success_count, 50);
-        assert_eq!(failure_count, 0);
     }
 
     /// Test: API key metadata structure
@@ -1246,34 +914,6 @@ mod security_tests {
             let result = auth.validate_key(test_key, ip);
             assert!(result.is_some(), "Valid key should work with IP {}", ip);
         }
-    }
-
-    /// Test: API key authentication rate limiting per IP
-    ///
-    /// Verifies that failed authentication attempts are tracked per IP.
-    #[tokio::test]
-    async fn test_api_key_rate_limit_per_ip() {
-        // Use strict rate limiting for testing
-        let auth = AppApiKeyAuth::with_rate_limit(RateLimitConfig {
-            max_requests: 3,
-            window: Duration::from_secs(60),
-            include_headers: false,
-        });
-
-        // Make multiple failed attempts with IP1
-        let ip1 = "203.0.113.10";
-        for _ in 0..5 {
-            let _ = auth.validate_key("invalid_key_1", ip1);
-        }
-
-        // The rate limit tracking should work (no panic)
-        // Even if rate limited, validate_key returns None
-        let result = auth.validate_key("invalid_key_1", ip1);
-        assert!(result.is_none());
-
-        // Different IP should also return None for invalid key
-        let result2 = auth.validate_key("invalid_key_2", "203.0.113.20");
-        assert!(result2.is_none());
     }
 
     /// Test: API key missing header (simulated)
@@ -1372,31 +1012,6 @@ mod security_tests {
         let perms1 = result1.unwrap();
         assert!(perms1.contains(&"read".to_string()));
         assert!(!perms1.contains(&"write".to_string()));
-    }
-
-    /// Test: Rate limiter idempotency
-    ///
-    /// Verifies that idempotency checks work correctly.
-    #[tokio::test]
-    async fn test_rate_limit_idempotency() {
-        let limiter = AppRateLimiter::builder()
-            .max_requests(10)
-            .window(Duration::from_secs(60))
-            .build();
-
-        let idempotency_key = "unique-request-123";
-
-        // First request should not be duplicate
-        let is_duplicate1 = limiter.check_idempotency(idempotency_key);
-        assert!(!is_duplicate1);
-
-        // Immediate repeat should be duplicate
-        let is_duplicate2 = limiter.check_idempotency(idempotency_key);
-        assert!(is_duplicate2);
-
-        // Different key should not be duplicate
-        let is_duplicate3 = limiter.check_idempotency("different-key");
-        assert!(!is_duplicate3);
     }
 
     /// Test: Audit log with metadata
