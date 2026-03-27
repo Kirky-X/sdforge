@@ -11,9 +11,7 @@ use crate::cache::SharedCache;
 use crate::security::api_key_manager::{
     ApiKeyMetadata, ApiKeyVersion, LruCacheManager, LruConfig, RotationConfig,
 };
-use crate::security::types::{
-    deserialize_permissions, serialize_permissions, CacheNamespace,
-};
+use crate::security::types::{deserialize_permissions, serialize_permissions, CacheNamespace};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -63,13 +61,9 @@ impl AppApiKeyAuth {
     ///
     /// Accepts `Arc<dyn SyncCache>` for storage, enabling custom backends
     /// (e.g., distributed cache, persistent storage) for production use.
-    pub fn with_dependencies(
-        valid_keys: SharedCache,
-        _key_metadata: Option<SharedCache>,
-    ) -> Self {
-        let key_metadata = _key_metadata.unwrap_or_else(|| {
-            Arc::new(crate::cache::DashMapCache::new())
-        });
+    pub fn with_dependencies(valid_keys: SharedCache, _key_metadata: Option<SharedCache>) -> Self {
+        let key_metadata =
+            _key_metadata.unwrap_or_else(|| Arc::new(crate::cache::DashMapCache::new()));
         let lru_manager = Some(Arc::new(LruCacheManager::new(
             valid_keys.clone(),
             LruConfig::default(),

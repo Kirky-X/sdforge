@@ -170,8 +170,6 @@ pub use security::{
     AppApiKeyAuthBuilder,
     AppAuditLogger,
     AppAuditLoggerBuilder,
-    BearerAuth,
-    BearerAuthBuilder,
     AuditLog,
     AuditLogger,
     // Supporting types
@@ -181,6 +179,8 @@ pub use security::{
     AuthExtractor,
     AuthMetadata,
     AuthResult,
+    BearerAuth,
+    BearerAuthBuilder,
 };
 
 /// Configuration management
@@ -196,8 +196,8 @@ pub use confers::Config;
 
 #[cfg(feature = "http")]
 pub use config::{
-    ApiConfig, AppConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper,
-    ServerConfig, TlsConfig, TracingConfig,
+    ApiConfig, AppConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper, ServerConfig, TlsConfig,
+    TracingConfig,
 };
 
 #[cfg(feature = "hot-reload")]
@@ -214,7 +214,10 @@ pub use oxcache;
 pub mod cache;
 
 #[cfg(feature = "cache")]
-pub use cache::{Cache, CacheKey, Cacheable, DashMapCache, DashMapMemoryBackend, MemoryBackend, SharedCache, SyncCache};
+pub use cache::{
+    Cache, CacheKey, Cacheable, DashMapCache, DashMapMemoryBackend, MemoryBackend, SharedCache,
+    SyncCache,
+};
 
 /// WebSocket support
 #[cfg(feature = "websocket")]
