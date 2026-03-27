@@ -17,8 +17,7 @@ use std::pin::Pin;
 pub fn auth_middleware<T: Clone + Send + Sync + 'static>(
     _auth: T,
     extract_auth: impl Fn(&Request<Body>) -> AuthResult<AuthContext> + Clone + Send + 'static,
-) -> impl Fn(Request<Body>, Next) -> Pin<Box<dyn Future<Output = Response> + Send>> + Clone + Send
-{
+) -> impl Fn(Request<Body>, Next) -> Pin<Box<dyn Future<Output = Response> + Send>> + Clone + Send {
     move |mut req: Request<Body>, next: Next| {
         let extract_auth = extract_auth.clone();
         Box::pin(async move {
