@@ -157,16 +157,28 @@ pub fn simd_from_str<T: serde::de::DeserializeOwned>(s: &str) -> Result<T, Strin
 
 // Stub implementations when simd-json feature is not enabled
 #[cfg(not(feature = "simd-json"))]
+/// Serialize using serde_json (fallback when simd-json is not available)
+///
+/// This provides standard JSON serialization using serde_json.
+/// Enable the simd-json feature for 2-10x faster serialization.
 pub fn simd_to_string<T: Serialize>(value: &T) -> Result<String, String> {
     serde_json::to_string(value).map_err(|e| format!("JSON serialization failed: {}", e))
 }
 
 #[cfg(not(feature = "simd-json"))]
+/// Deserialize using serde_json (fallback when simd-json is not available)
+///
+/// This provides standard JSON deserialization using serde_json.
+/// Enable the simd-json feature for 2-5x faster deserialization.
 pub fn simd_from_slice<T: serde::de::DeserializeOwned>(slice: &[u8]) -> Result<T, String> {
     serde_json::from_slice(slice).map_err(|e| format!("JSON deserialization failed: {}", e))
 }
 
 #[cfg(not(feature = "simd-json"))]
+/// Deserialize from string using serde_json (fallback when simd-json is not available)
+///
+/// This provides standard JSON deserialization from string using serde_json.
+/// Enable the simd-json feature for improved performance.
 pub fn simd_from_str<T: serde::de::DeserializeOwned>(s: &str) -> Result<T, String> {
     serde_json::from_str(s).map_err(|e| format!("JSON deserialization failed: {}", e))
 }
