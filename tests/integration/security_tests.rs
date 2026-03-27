@@ -12,7 +12,8 @@ mod security_tests {
     use hmac::{Hmac, Mac};
     use sdforge::security::{
         ApiKeyMetadata, AppApiKeyAuth, AppApiKeyAuthBuilder, AppAuditLogger, AppAuditLoggerBuilder,
-        AuditResult, AuthContext, AuthMetadata, BearerAuth, BearerAuthBuilder, LruConfig, RotationConfig,
+        AuditResult, AuthContext, AuthMetadata, BearerAuth, BearerAuthBuilder, LruConfig,
+        RotationConfig,
     };
     use sha2::Sha256;
     use std::time::Duration;
