@@ -13,10 +13,35 @@ use crate::security::api_key_manager::{
 };
 use crate::security::types::{
     deserialize_instants, deserialize_permissions, serialize_instants, serialize_permissions,
-    CacheNamespace, RateLimitConfig,
+    CacheNamespace,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+/// Rate limit configuration for API key authentication (internal use)
+///
+/// This is used to prevent brute-force attacks on API key validation,
+/// not for general request rate limiting.
+#[derive(Debug, Clone)]
+pub(crate) struct RateLimitConfig {
+    /// Maximum attempts per time window
+    pub(crate) max_requests: u32,
+    /// Time window duration
+    pub(crate) window: Duration,
+    /// Whether to include rate limit headers in responses (not used for API key auth)
+    #[allow(dead_code)]
+    pub(crate) include_headers: bool,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            max_requests: 5,
+            window: Duration::from_secs(60),
+            include_headers: false,
+        }
+    }
+}
 
 /// API key authentication with brute-force protection, versioning, and LRU eviction
 ///
