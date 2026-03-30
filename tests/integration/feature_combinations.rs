@@ -15,7 +15,10 @@ mod http_only_tests {
 mod mcp_only_tests {
     #[test]
     fn test_mcp_feature_enabled() {
-        assert!(true);
+        // Verify MCP module is available and can be imported
+        use sdforge::mcp;
+        // Basic sanity check - ensure the module exists
+        assert!(std::mem::size_of::<mcp::server::Server>() > 0);
     }
 
     #[tokio::test]
