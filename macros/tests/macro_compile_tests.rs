@@ -24,7 +24,9 @@ mod tests {
     #[test]
     fn test_macro_compilation() {
         // This test verifies that the macros compile correctly
-        let _ = test_basic_macro;
-        let _ = test_module::test_fn();
+        let _result = test_basic_macro;
+        let _result2 = test_module::test_fn();
+        // If we reach here, macros compiled successfully
+        assert!(true, "Macros should compile without errors");
     }
 }
