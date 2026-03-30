@@ -16,8 +16,9 @@ mod security_headers_tests {
     #[test]
     fn test_http_build_with_security() {
         // Build HTTP server - security headers are applied internally
-        let _app = sdforge::http::build();
-        // If we get here without panicking, the build succeeded
+        let app = sdforge::http::build();
+        // Verify the build succeeded
+        assert!(!std::ptr::eq(&app, &std::ptr::null()), "HTTP build with security should succeed");
     }
 
     #[tokio::test]
