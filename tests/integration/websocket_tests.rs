@@ -1,6 +1,5 @@
 #[cfg(feature = "websocket")]
 mod websocket_tests {
-    use base64::Engine;
     use sdforge::websocket::{
         parse_websocket_message, AppState, ConnectionManager, RateLimitConfig, WebSocketConfig,
         WebSocketConnection, WebSocketMessage,
