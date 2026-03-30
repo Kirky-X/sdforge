@@ -156,7 +156,7 @@ async fn rate_limited_standard() -> Result<serde_json::Value, ApiError> {
     description = "严格速率限制端点"
 )]
 async fn rate_limited_strict(
-    data: serde_json::Value,
+    data: Json<serde_json::Value>,
 ) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "message": "请求已处理",
@@ -200,7 +200,7 @@ async fn rate_limited_strict(
     tool_name = "auth_login",
     description = "带速率限制的登录端点"
 )]
-async fn auth_login(_request: LoginRequest) -> Result<serde_json::Value, ApiError> {
+async fn auth_login(_request: Json<LoginRequest>) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "message": "登录尝试已记录",
         "rate_limited": "per IP"
@@ -326,9 +326,9 @@ pub struct BatchRequest {
     tool_name = "batch_request",
     description = "批量请求端点"
 )]
-async fn batch_request(request: BatchRequest) -> Result<serde_json::Value, ApiError> {
+async fn batch_request(request: Json<BatchRequest>) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "results": request.operations,
+        "results": request.operations.clone(),
         "operations_count": request.operations.len(),
         "rate_limited": true
     }))
