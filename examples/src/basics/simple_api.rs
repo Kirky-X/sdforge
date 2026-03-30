@@ -254,7 +254,7 @@ async fn get_user(id: u64) -> Result<UserResponse, ApiError> {
     tool_name = "create_user",
     description = "创建新用户"
 )]
-async fn create_user(user: UserRequest) -> Result<UserResponse, ApiError> {
+async fn create_user(user: Json<UserRequest>) -> Result<UserResponse, ApiError> {
     // 使用请求中的数据构造响应
     let user = UserResponse {
         id: user.id,
@@ -323,7 +323,7 @@ async fn get_user_post(user_id: u64, post_id: u64) -> Result<String, ApiError> {
     tool_name = "post_echo",
     description = "回显请求体内容"
 )]
-async fn post_echo(body: EchoRequest) -> Result<EchoResponse, ApiError> {
+async fn post_echo(body: Json<EchoRequest>) -> Result<EchoResponse, ApiError> {
     Ok(EchoResponse {
         received: body.data,
     })

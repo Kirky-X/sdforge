@@ -266,9 +266,9 @@ async fn get_full_user(id: u64) -> Result<User, ApiError> {
     tool_name = "create_full_user",
     description = "创建新用户 (支持日志)"
 )]
-async fn create_full_user(request: CreateUserRequest) -> Result<serde_json::Value, ApiError> {
+async fn create_full_user(request: Json<CreateUserRequest>) -> Result<serde_json::Value, ApiError> {
     let user_id = 456;
-    let role = request.role.unwrap_or_else(|| "user".to_string());
+    let role = request.role.clone().unwrap_or_else(|| "user".to_string());
 
     Ok(serde_json::json!({
         "id": user_id,
@@ -318,7 +318,7 @@ async fn create_full_user(request: CreateUserRequest) -> Result<serde_json::Valu
 )]
 async fn update_full_user(
     id: u64,
-    request: UpdateUserRequest,
+    request: Json<UpdateUserRequest>,
 ) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "id": id,

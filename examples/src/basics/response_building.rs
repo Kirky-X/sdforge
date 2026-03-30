@@ -330,7 +330,7 @@ pub struct CreateItemRequest {
     tool_name = "create_item",
     description = "创建新数据项"
 )]
-async fn create_item(request: CreateItemRequest) -> Result<StatusResponse, ApiError> {
+async fn create_item(request: Json<CreateItemRequest>) -> Result<StatusResponse, ApiError> {
     // 模拟创建操作
     Ok(StatusResponse {
         operation: "create_item".to_string(),
@@ -366,12 +366,12 @@ pub struct UpdateItemRequest {
 )]
 async fn update_item(
     id: u64,
-    request: UpdateItemRequest,
+    request: Json<UpdateItemRequest>,
 ) -> Result<ApiResponse<DataItem>, ApiError> {
     let item = DataItem {
         id,
-        name: request.name,
-        description: request.description,
+        name: request.name.clone(),
+        description: request.description.clone(),
         enabled: request.enabled,
     };
 
