@@ -10,10 +10,8 @@ use serde_json;
 use tonic::service::Interceptor;
 #[cfg(feature = "grpc")]
 use tonic::{transport::Server, Request, Response, Status};
-#[cfg(all(feature = "grpc", feature = "security"))]
-// Include generated proto code
-/// gRPC protocol buffer module
 #[cfg(feature = "grpc")]
+/// gRPC protocol buffer module
 pub mod sdforge_v1 {
     include!("pb/sdforge.v1.rs");
 }
@@ -263,6 +261,7 @@ impl tonic::service::Interceptor for AuthGrpcInterceptor {
     }
 }
 
+#[cfg(all(test, feature = "grpc"))]
 mod tests {
     use super::*;
 
@@ -275,6 +274,7 @@ mod tests {
     }
 
     /// Test GrpcServerConfig with auth configured
+    #[cfg(feature = "security")]
     #[test]
     fn test_grpc_server_config_with_auth() {
         let auth =
@@ -293,6 +293,7 @@ mod tests {
     // ============================================================================
 
     /// Generate a valid JWT for testing with the given secret and expiration timestamp
+    #[cfg(feature = "security")]
     #[allow(dead_code)]
     fn make_test_jwt(secret: &str, exp_timestamp: i64) -> String {
         use hmac::{Hmac, Mac};
@@ -815,7 +816,6 @@ mod tests {
         let config = GrpcServerConfig {
             max_connections: 100,
             timeout_seconds: 0,
-            auth: None,
         };
 
         assert_eq!(config.timeout_seconds, 0);
@@ -827,7 +827,6 @@ mod tests {
         let config = GrpcServerConfig {
             max_connections: 100000,
             timeout_seconds: 30,
-            auth: None,
         };
 
         assert_eq!(config.max_connections, 100000);
@@ -838,13 +837,11 @@ mod tests {
         let config1 = GrpcServerConfig {
             max_connections: 1,
             timeout_seconds: 1,
-            auth: None,
         };
 
         let config2 = GrpcServerConfig {
             max_connections: usize::MAX,
             timeout_seconds: u64::MAX,
-            auth: None,
         };
 
         assert_eq!(config1.max_connections, 1);
