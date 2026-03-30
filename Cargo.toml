@@ -178,6 +178,7 @@ base64 = "0.22.1"
 
 [dev-dependencies]
 tokio = { workspace = true }
+tokio-stream = { workspace = true }
 once_cell = { workspace = true }
 sdforge-macros = { version = "0.1.0", path = "./macros" }
 tempfile = { workspace = true }
