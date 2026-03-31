@@ -1,268 +1,226 @@
 // Copyright (c) 2026 Kirky.X
-//! Unified registration trait for protocol implementations
+//! Unified registration system for eliminating code duplication across protocols
 //!
-//! This module provides a common interface for registering routes, services,
-//! and handlers across different protocols (HTTP, MCP, WebSocket, gRPC).
+//! This module provides a trait-based abstraction for protocol registration,
+//! allowing HTTP, MCP, WebSocket, and gRPC to share a common registration pattern.
+//!
+//! # Design Goals
+//!
+//! - Eliminate ~200+ lines of duplicate registration code
+//! - Provide type-safe abstraction through traits
+//! - Support future protocol extensions
+//! - Maintain backward compatibility
+//!
+//! # Usage
+//!
+//! ```rust,ignore
+//! use sdforge::core::registration::{Registration, define_registration};
+//!
+//! // Use the macro to define a registration type
+//! define_registration!(RouteRegistration, HttpRoute, ApiMetadata);
+//! ```
 
-use crate::core::ApiMetadata;
-
-/// Registration result type
-pub type RegistrationResult<T> = Result<T, crate::core::error::ApiError>;
-
-/// Unified trait for protocol registrations
+/// Core trait for all protocol registrations
 ///
-/// Implement this trait to provide a common interface for registering
-/// services across different protocols.
-#[allow(clippy::result_large_err)]
-pub trait Registration: Send + Sync {
-    /// Get the protocol name (e.g., "http", "mcp", "websocket", "grpc")
-    fn protocol(&self) -> &str;
-
-    /// Get the API metadata
-    fn metadata(&self) -> &ApiMetadata;
-
-    /// Register the service
-    fn register(&self) -> RegistrationResult<()>;
-
-    /// Get the number of registered routes/endpoints
-    fn route_count(&self) -> usize;
+/// This trait abstracts the common pattern used by HTTP routes, MCP tools,
+/// WebSocket handlers, and gRPC services. Each protocol implements this trait
+/// with their specific instance and metadata types.
+///
+/// # Type Parameters
+///
+/// - `Instance`: The concrete type created by this registration (e.g., `HttpRoute`, `Arc<dyn Tool>`)
+/// - `Metadata`: Metadata associated with the registration (typically `ApiMetadata`)
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// impl Registration for RouteRegistration {
+///     type Instance = HttpRoute;
+///     type Metadata = ApiMetadata;
+///
+///     fn name(&self) -> &str { self.name }
+///     fn version(&self) -> &str { self.version }
+///     fn create(&self) -> Self::Instance { (self.create_fn)() }
+///     fn metadata(&self) -> Self::Metadata { (self.metadata_fn)() }
+/// }
+/// ```
+pub trait Registration: 'static + Send + Sync {
+    /// The concrete instance type created by this registration
+    type Instance;
+    
+    /// The metadata type associated with this registration
+    type Metadata;
+    
+    /// Get the API name
+    fn name(&self) -> &str;
+    
+    /// Get the API version
+    fn version(&self) -> &str;
+    
+    /// Create a new instance
+    fn create(&self) -> Self::Instance;
+    
+    /// Get the metadata
+    fn metadata(&self) -> Self::Metadata;
 }
 
-/// HTTP route registration
-pub mod http {
-    use super::*;
-    use crate::http::RouteRegistration;
-
-    /// HTTP-specific registration
-    #[derive(Debug, Clone)]
-    pub struct HttpRegistration {
-        routes: Vec<RouteRegistration>,
-        metadata: ApiMetadata,
-    }
-
-    impl HttpRegistration {
-        /// Create new HTTP registration
-        pub fn new(metadata: ApiMetadata) -> Self {
-            Self {
-                routes: Vec::new(),
-                metadata,
+/// Macro for defining registration types
+///
+/// This macro generates the boilerplate code for implementing the `Registration` trait.
+/// It creates a struct with the necessary fields and implements the trait automatically.
+///
+/// # Syntax
+///
+/// ```rust,ignore
+/// define_registration!(RegistrationTypeName, InstanceType, MetadataType);
+/// ```
+///
+/// # Arguments
+///
+/// - `$name`: Name of the registration struct to create
+/// - `$instance`: The instance type (e.g., `HttpRoute`, `Arc<dyn Tool>`)
+/// - `$metadata`: The metadata type (e.g., `ApiMetadata`)
+///
+/// # Generated Code
+///
+/// The macro generates:
+/// - A struct with `name`, `version`, `create_fn`, and `metadata_fn` fields
+/// - Implementation of the `Registration` trait
+/// - `inventory::collect!` call for automatic registration
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// // Define HTTP route registration
+/// define_registration!(RouteRegistration, HttpRoute, ApiMetadata);
+///
+/// // Define MCP tool registration
+/// define_registration!(McpToolRegistration, Arc<dyn Tool>, ApiMetadata);
+///
+/// // Define WebSocket route registration
+/// define_registration!(WebSocketRouteRegistration, WebSocketHandler, ApiMetadata);
+///
+/// // Define gRPC service registration
+/// define_registration!(GrpcServiceRegistration, GrpcService, ApiMetadata);
+/// ```
+#[macro_export]
+macro_rules! define_registration {
+    ($name:ident, $instance:ty, $metadata:ty) => {
+        #[derive(Debug, Clone, Copy)]
+        pub struct $name {
+            /// API name
+            pub name: &'static str,
+            /// API version
+            pub version: &'static str,
+            /// Function that creates the instance at runtime
+            pub create_fn: fn() -> $instance,
+            /// Function that creates the metadata at runtime
+            pub metadata_fn: fn() -> $metadata,
+        }
+        
+        impl $name {
+            /// Create a new registration instance
+            ///
+            /// # Arguments
+            ///
+            /// * `name` - API name
+            /// * `version` - API version
+            /// * `create_fn` - Function to create the instance
+            /// * `metadata_fn` - Function to create the metadata
+            #[allow(dead_code)]
+            pub const fn new(
+                name: &'static str,
+                version: &'static str,
+                create_fn: fn() -> $instance,
+                metadata_fn: fn() -> $metadata,
+            ) -> Self {
+                Self {
+                    name,
+                    version,
+                    create_fn,
+                    metadata_fn,
+                }
             }
         }
-
-        /// Add a route
-        pub fn add_route(&mut self, route: RouteRegistration) {
-            self.routes.push(route);
+        
+        impl $crate::core::registration::Registration for $name {
+            type Instance = $instance;
+            type Metadata = $metadata;
+            
+            fn name(&self) -> &str { self.name }
+            fn version(&self) -> &str { self.version }
+            fn create(&self) -> Self::Instance { (self.create_fn)() }
+            fn metadata(&self) -> Self::Metadata { (self.metadata_fn)() }
         }
-    }
-
-    impl Registration for HttpRegistration {
-        fn protocol(&self) -> &str {
-            "http"
-        }
-
-        fn metadata(&self) -> &ApiMetadata {
-            &self.metadata
-        }
-
-        fn register(&self) -> RegistrationResult<()> {
-            // HTTP registration logic would go here
-            Ok(())
-        }
-
-        fn route_count(&self) -> usize {
-            self.routes.len()
-        }
-    }
-}
-
-/// MCP protocol registration
-pub mod mcp {
-    use super::*;
-
-    /// MCP-specific registration
-    #[derive(Debug, Clone)]
-    pub struct McpRegistration {
-        tools_count: usize,
-        resources_count: usize,
-        metadata: ApiMetadata,
-    }
-
-    impl McpRegistration {
-        /// Create new MCP registration
-        pub fn new(metadata: ApiMetadata) -> Self {
-            Self {
-                tools_count: 0,
-                resources_count: 0,
-                metadata,
-            }
-        }
-
-        /// Set tools count
-        pub fn with_tools(mut self, count: usize) -> Self {
-            self.tools_count = count;
-            self
-        }
-
-        /// Set resources count
-        pub fn with_resources(mut self, count: usize) -> Self {
-            self.resources_count = count;
-            self
-        }
-    }
-
-    impl Registration for McpRegistration {
-        fn protocol(&self) -> &str {
-            "mcp"
-        }
-
-        fn metadata(&self) -> &ApiMetadata {
-            &self.metadata
-        }
-
-        fn register(&self) -> RegistrationResult<()> {
-            Ok(())
-        }
-
-        fn route_count(&self) -> usize {
-            self.tools_count + self.resources_count
-        }
-    }
-}
-
-/// WebSocket protocol registration
-pub mod websocket {
-    use super::*;
-
-    /// WebSocket-specific registration
-    #[derive(Debug, Clone)]
-    pub struct WsRegistration {
-        handlers_count: usize,
-        metadata: ApiMetadata,
-    }
-
-    impl WsRegistration {
-        /// Create new WebSocket registration
-        pub fn new(metadata: ApiMetadata) -> Self {
-            Self {
-                handlers_count: 0,
-                metadata,
-            }
-        }
-
-        /// Set handlers count
-        pub fn with_handlers(mut self, count: usize) -> Self {
-            self.handlers_count = count;
-            self
-        }
-    }
-
-    impl Registration for WsRegistration {
-        fn protocol(&self) -> &str {
-            "websocket"
-        }
-
-        fn metadata(&self) -> &ApiMetadata {
-            &self.metadata
-        }
-
-        fn register(&self) -> RegistrationResult<()> {
-            Ok(())
-        }
-
-        fn route_count(&self) -> usize {
-            self.handlers_count
-        }
-    }
-}
-
-/// gRPC protocol registration
-pub mod grpc {
-    use super::*;
-
-    /// gRPC-specific registration
-    #[derive(Debug, Clone)]
-    pub struct GrpcRegistration {
-        services_count: usize,
-        metadata: ApiMetadata,
-    }
-
-    impl GrpcRegistration {
-        /// Create new gRPC registration
-        pub fn new(metadata: ApiMetadata) -> Self {
-            Self {
-                services_count: 0,
-                metadata,
-            }
-        }
-
-        /// Set services count
-        pub fn with_services(mut self, count: usize) -> Self {
-            self.services_count = count;
-            self
-        }
-    }
-
-    impl Registration for GrpcRegistration {
-        fn protocol(&self) -> &str {
-            "grpc"
-        }
-
-        fn metadata(&self) -> &ApiMetadata {
-            &self.metadata
-        }
-
-        fn register(&self) -> RegistrationResult<()> {
-            Ok(())
-        }
-
-        fn route_count(&self) -> usize {
-            self.services_count
-        }
-    }
+        
+        // Register with inventory for automatic collection
+        inventory::collect!($name);
+    };
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::ApiMetadata;
-
-    fn test_metadata() -> ApiMetadata {
-        ApiMetadata::new(
-            "test".to_string(),
-            "v1".to_string(),
-            "Test API".to_string(),
-            None,
-            false,
-        )
+    
+    // Mock types for testing
+    pub struct MockInstance {
+        pub _data: String,
     }
-
-    #[test]
-    fn test_http_registration() {
-        let reg = http::HttpRegistration::new(test_metadata());
-        assert_eq!(reg.protocol(), "http");
-        assert_eq!(reg.route_count(), 0);
+    
+    pub struct MockMetadata {
+        pub _name: String,
     }
-
+    
+    // Test the macro-generated code
+    define_registration!(TestRegistration, MockInstance, MockMetadata);
+    
+    /// Test that Registration trait methods work correctly
     #[test]
-    fn test_mcp_registration() {
-        let reg = mcp::McpRegistration::new(test_metadata())
-            .with_tools(3)
-            .with_resources(2);
-        assert_eq!(reg.protocol(), "mcp");
-        assert_eq!(reg.route_count(), 5);
+    fn test_registration_trait_methods() {
+        let reg = TestRegistration::new(
+            "test_api",
+            "v1",
+            || MockInstance { _data: "test".to_string() },
+            || MockMetadata { _name: "test".to_string() },
+        );
+        
+        assert_eq!(reg.name(), "test_api");
+        assert_eq!(reg.version(), "v1");
+        
+        let instance = reg.create();
+        assert!(instance._data == "test");
+        
+        let metadata = reg.metadata();
+        assert!(metadata._name == "test");
     }
-
+    
+    /// Test that Registration trait bounds are satisfied
     #[test]
-    fn test_websocket_registration() {
-        let reg = websocket::WsRegistration::new(test_metadata()).with_handlers(5);
-        assert_eq!(reg.protocol(), "websocket");
-        assert_eq!(reg.route_count(), 5);
+    fn test_registration_trait_bounds() {
+        fn requires_send_sync<T: Send + Sync>() {}
+        fn requires_static<T: 'static>() {}
+        
+        // Should compile without errors
+        requires_send_sync::<TestRegistration>();
+        requires_static::<TestRegistration>();
     }
-
+    
+    /// Test multiple registration instances
     #[test]
-    fn test_grpc_registration() {
-        let reg = grpc::GrpcRegistration::new(test_metadata()).with_services(4);
-        assert_eq!(reg.protocol(), "grpc");
-        assert_eq!(reg.route_count(), 4);
+    fn test_multiple_registrations() {
+        define_registration!(TestReg1, MockInstance, MockMetadata);
+        define_registration!(TestReg2, MockInstance, MockMetadata);
+        
+        let reg1 = TestReg1::new("api1", "v1", 
+            || MockInstance { _data: "1".to_string() },
+            || MockMetadata { _name: "1".to_string() });
+        
+        let reg2 = TestReg2::new("api2", "v2",
+            || MockInstance { _data: "2".to_string() },
+            || MockMetadata { _name: "2".to_string() });
+        
+        assert_eq!(reg1.name(), "api1");
+        assert_eq!(reg2.name(), "api2");
+        assert_ne!(reg1.name(), reg2.name());
     }
 }

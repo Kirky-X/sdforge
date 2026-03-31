@@ -24,6 +24,7 @@ pub mod validation;
 pub use error::{
     ApiError, ErrorCategory, ErrorContext, LocalizedError, Locale, SdForgeError, TranslationStore,
 };
+pub use registration::Registration;
 pub use validation::{
     MAX_API_KEY_LENGTH, MAX_EMAIL_LENGTH, MAX_HEADER_COUNT, MAX_HEADER_NAME_LENGTH,
     MAX_HEADER_VALUE_LENGTH, MAX_JSON_ARRAY_LENGTH, MAX_JSON_DEPTH, MAX_JSON_FIELD_NAME_LENGTH,
@@ -32,7 +33,6 @@ pub use validation::{
 };
 pub use json::{api_metadata_response, error_response, paginated_response, success_response};
 pub use regex_cache::{common, get_regex, RegexCache, RegexCacheStats};
-pub use registration::Registration;
 pub use response::{ServiceError, ServiceResponse};
 pub use str::{
     format_empty_error, format_env_key, format_invalid_error, format_not_found, format_range_error,

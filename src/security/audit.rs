@@ -5,7 +5,7 @@
 
 use crate::cache::SharedCache;
 use crate::security::types::{
-    deserialize_audit_logs, serialize_audit_logs, AuditLog, AuditResult, AuthContext,
+    deserialize_audit_logs, serialize_audit_logs, AuditLog, AuditResult, AuthContext, AuthMetadata,
 };
 use once_cell::sync::Lazy;
 use std::sync::Arc;
@@ -354,21 +354,18 @@ impl AppAuditLogger {
 
         // Generate cryptographic signature for tamper detection (if enabled)
         // In production, you should configure a signing key via secure configuration
-        if cfg!(feature = "audit-signing") {
-            // Load signing key from environment or configuration
-            // Security: Use a cryptographically secure random key of at least 32 bytes
-            if let Ok(signing_key_str) = std::env::var("SDFORGE_AUDIT_SIGNING_KEY") {
-                if !signing_key_str.is_empty() {
-                    // Convert string to bytes and use as HMAC key
-                    log.generate_signature(signing_key_str.as_bytes());
-                } else {
-                    eprintln!("⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY is empty. Audit logs will not be signed.");
-                }
+        // Security: Use a cryptographically secure random key of at least 32 bytes
+        if let Ok(signing_key_str) = std::env::var("SDFORGE_AUDIT_SIGNING_KEY") {
+            if !signing_key_str.is_empty() {
+                // Convert string to bytes and use as HMAC key
+                log.generate_signature(signing_key_str.as_bytes());
             } else {
-                eprintln!("⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY not set. Audit logs will not be signed.");
-                eprintln!("   For production, set this environment variable to a secure random value (min 32 bytes).");
-                eprintln!("   Example: export SDFORGE_AUDIT_SIGNING_KEY=$(openssl rand -hex 32)");
+                eprintln!("⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY is empty. Audit logs will not be signed.");
             }
+        } else {
+            eprintln!("⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY not set. Audit logs will not be signed.");
+            eprintln!("   For production, set this environment variable to a secure random value (min 32 bytes).");
+            eprintln!("   Example: export SDFORGE_AUDIT_SIGNING_KEY=$(openssl rand -hex 32)");
         }
 
         let user_id = context
@@ -471,6 +468,44 @@ impl AppAuditLogger {
     /// Clear logs for a user (admin function)
     pub fn clear_logs(&self, user_id: &str) {
         self.logs.delete(user_id);
+    }
+
+    /// Log an API key rotation event.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_id` - The ID of the API key being rotated
+    /// * `old_version` - The version being rotated from
+    /// * `new_version` - The version being rotated to
+    /// * `success` - Whether the rotation was successful
+    /// * `message` - Optional message with additional details
+    pub async fn log_key_rotation(
+        &self,
+        _key_id: &str,
+        _old_version: &str,
+        _new_version: &str,
+        success: bool,
+        message: Option<String>,
+    ) {
+        let context = AuthContext {
+            user_id: Some("system".to_string()),
+            permissions: vec![], // System rotation has no specific permissions
+            metadata: AuthMetadata {
+                client_ip: None,
+                user_agent: None,
+                request_id: format!("rotation_{}", chrono::Utc::now().timestamp()),
+                timestamp: chrono::Utc::now().timestamp(),
+            },
+        };
+
+        self.log(
+            &context,
+            "key_rotation",
+            "api_key",
+            success,
+            message,
+        )
+        .await;
     }
 
     /// Get total log count (for monitoring)

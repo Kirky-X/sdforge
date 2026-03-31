@@ -66,6 +66,8 @@ impl SdForgeService for SdForgeGrpcService {
 
 #[cfg(feature = "grpc")]
 use crate::core::ApiMetadata;
+#[cfg(feature = "grpc")]
+use crate::define_registration;
 
 #[cfg(feature = "grpc")]
 /// gRPC route registration
@@ -98,35 +100,7 @@ impl GrpcRoute {
 }
 
 #[cfg(feature = "grpc")]
-#[allow(missing_docs)]
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
-pub struct GrpcRouteRegistration {
-    name: &'static str,
-    create_fn: fn() -> GrpcRoute,
-}
-
-#[cfg(feature = "grpc")]
-#[allow(dead_code)]
-impl GrpcRouteRegistration {
-    #[allow(missing_docs)]
-    pub const fn new(name: &'static str, create_fn: fn() -> GrpcRoute) -> Self {
-        Self { name, create_fn }
-    }
-
-    #[allow(missing_docs)]
-    pub(crate) fn name(&self) -> &str {
-        self.name
-    }
-
-    #[allow(missing_docs)]
-    pub(crate) fn create(&self) -> GrpcRoute {
-        (self.create_fn)()
-    }
-}
-
-#[cfg(feature = "grpc")]
-inventory::collect!(GrpcRouteRegistration);
+define_registration!(GrpcRouteRegistration, GrpcRoute, ApiMetadata);
 
 #[cfg(feature = "grpc")]
 /// Build gRPC server
@@ -1168,7 +1142,15 @@ mod tests {
             GrpcRoute::new("test_registration_service".to_string(), metadata)
         }
 
-        let registration = GrpcRouteRegistration::new("test_route", create_test_route);
+        let registration = GrpcRouteRegistration::new("test_route", "v1", create_test_route, || {
+            ApiMetadata {
+                name: "test".to_string(),
+                version: "v1".to_string(),
+                description: "Test route".to_string(),
+                cache_ttl: None,
+                is_streaming: false,
+            }
+        });
 
         assert_eq!(registration.name(), "test_route");
     }
@@ -1179,7 +1161,9 @@ mod tests {
             GrpcRoute::new("service".to_string(), crate::core::ApiMetadata::default())
         }
 
-        let registration = GrpcRouteRegistration::new("unique_name", create_route);
+        let registration = GrpcRouteRegistration::new("unique_name", "v1", create_route, || {
+            ApiMetadata::default()
+        });
 
         assert_eq!(registration.name(), "unique_name");
     }
@@ -1199,7 +1183,15 @@ mod tests {
             GrpcRoute::new("factory_service".to_string(), metadata)
         }
 
-        let registration = GrpcRouteRegistration::new("factory_route", factory_route);
+        let registration = GrpcRouteRegistration::new("factory_route", "v1", factory_route, || {
+            ApiMetadata {
+                name: "factory_api".to_string(),
+                version: "v1".to_string(),
+                description: "Factory created".to_string(),
+                cache_ttl: Some(300),
+                is_streaming: false,
+            }
+        });
         let route = registration.create();
 
         assert_eq!(route.service_name(), "factory_service");
@@ -1215,7 +1207,9 @@ mod tests {
             )
         }
 
-        let registration = GrpcRouteRegistration::new("multi", create_route);
+        let registration = GrpcRouteRegistration::new("multi", "v1", create_route, || {
+            ApiMetadata::default()
+        });
 
         let route1 = registration.create();
         let route2 = registration.create();
@@ -1232,7 +1226,9 @@ mod tests {
             )
         }
 
-        let registration = GrpcRouteRegistration::new("", create_route);
+        let registration = GrpcRouteRegistration::new("", "v1", create_route, || {
+            ApiMetadata::default()
+        });
 
         assert_eq!(registration.name(), "");
     }
@@ -1246,7 +1242,9 @@ mod tests {
             )
         }
 
-        let registration = GrpcRouteRegistration::new("debug_test", create_route);
+        let registration = GrpcRouteRegistration::new("debug_test", "v1", create_route, || {
+            ApiMetadata::default()
+        });
         let debug_str = format!("{:?}", registration);
 
         assert!(debug_str.contains("debug_test"));
@@ -1261,7 +1259,9 @@ mod tests {
             )
         }
 
-        let registration = GrpcRouteRegistration::new("clone_test", create_route);
+        let registration = GrpcRouteRegistration::new("clone_test", "v1", create_route, || {
+            ApiMetadata::default()
+        });
         let cloned = registration;
 
         assert_eq!(registration.name(), cloned.name());

@@ -3,6 +3,7 @@
 //!
 //! This module contains all common types used across the security module.
 
+use base64::Engine;
 use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
 use uuid::Uuid;
 
@@ -605,7 +606,7 @@ impl AuditLog {
         let result = mac.finalize();
         
         // Encode to base64
-        let signature = base64::encode(result.into_bytes());
+        let signature = base64::engine::general_purpose::STANDARD.encode(result.into_bytes());
         
         // Store and return
         self.signature = Some(signature.clone());
@@ -661,7 +662,7 @@ impl AuditLog {
             .expect("HMAC can take key of any size");
         mac.update(canonical.as_bytes());
         let result = mac.finalize();
-        let expected_signature = base64::encode(result.into_bytes());
+        let expected_signature = base64::engine::general_purpose::STANDARD.encode(result.into_bytes());
         
         // Constant-time comparison to prevent timing attacks
         Ok(stored_sig == &expected_signature)
