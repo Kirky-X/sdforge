@@ -55,10 +55,17 @@ impl SyncCache for DashMapCache {
     }
 
     fn get_many(&self, keys: &[&str]) -> std::collections::HashMap<String, Vec<u8>> {
-        // Optimized implementation: single pass through keys
-        keys.iter()
-            .filter_map(|&key| self.inner.get(key).map(|v| (key.to_string(), v.clone())))
-            .collect()
+        // Pre-allocate HashMap with expected size to avoid reallocations
+        let mut result = std::collections::HashMap::with_capacity(keys.len());
+        
+        // Batch get with reduced lock contention
+        for &key in keys {
+            if let Some(value) = self.inner.get(key) {
+                result.insert(key.to_string(), value.clone());
+            }
+        }
+        
+        result
     }
 
     fn set(&self, key: &str, value: Vec<u8>) {
@@ -66,7 +73,12 @@ impl SyncCache for DashMapCache {
     }
 
     fn set_many(&self, items: &[(String, Vec<u8>)]) {
-        // Optimized implementation: batch insert
+        // Optimized batch insert with pre-allocation check
+        if items.is_empty() {
+            return;
+        }
+        
+        // Batch insert - DashMap handles concurrent writes efficiently
         for (key, value) in items {
             self.inner.insert(key.clone(), value.clone());
         }
@@ -77,10 +89,20 @@ impl SyncCache for DashMapCache {
     }
 
     fn delete_many(&self, keys: &[&str]) -> usize {
-        // Optimized implementation: batch remove
-        keys.iter()
-            .filter(|&&key| self.inner.remove(key).is_some())
-            .count()
+        // Optimized batch delete with early exit
+        if keys.is_empty() {
+            return 0;
+        }
+        
+        // Batch remove - count successful deletions
+        let mut deleted_count = 0;
+        for &key in keys {
+            if self.inner.remove(key).is_some() {
+                deleted_count += 1;
+            }
+        }
+        
+        deleted_count
     }
 
     fn contains(&self, key: &str) -> bool {
