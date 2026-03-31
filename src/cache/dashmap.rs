@@ -7,7 +7,7 @@
 
 use crate::cache::SyncCache;
 use once_cell::sync::Lazy;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 /// 基于 DashMap 的同步内存缓存
@@ -17,6 +17,8 @@ use std::sync::{Arc, Mutex};
 /// - **同步**：所有操作立即返回，无需 async
 /// - **并发安全**：`DashMap` 无锁并发读写
 /// - **无 TTL**：TTL 由调用方管理（可通过定期清理实现）
+/// - **可选 LRU**：使用 `with_capacity()` 启用 LRU 驱逐
+/// - **前缀索引**：自动维护前缀索引加速模式匹配
 #[derive(Debug, Clone)]
 pub struct DashMapCache {
     /// 内部存储
@@ -25,6 +27,8 @@ pub struct DashMapCache {
     lru_queue: Option<Arc<Mutex<VecDeque<String>>>>,
     /// 最大容量限制
     max_capacity: Option<usize>,
+    /// 前缀索引：加速前缀匹配查找
+    prefix_index: Arc<Mutex<HashMap<String, Vec<String>>>>,
 }
 
 impl DashMapCache {
@@ -34,6 +38,7 @@ impl DashMapCache {
             inner: Arc::new(dashmap::DashMap::new()),
             lru_queue: None,
             max_capacity: None,
+            prefix_index: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -45,6 +50,7 @@ impl DashMapCache {
                 capacity,
             )))),
             max_capacity: Some(capacity),
+            prefix_index: Arc::new(Mutex::new(HashMap::with_capacity(capacity / 10))),
         }
     }
 
@@ -61,6 +67,27 @@ impl DashMapCache {
     /// 检查缓存是否为空
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
+    }
+
+    /// 提取前缀（用于索引）
+    fn extract_prefix(key: &str) -> Option<&str> {
+        key.split(':').next()
+    }
+
+    /// 更新前缀索引
+    fn update_prefix_index(&self, key: &str, add: bool) {
+        if let Some(prefix) = Self::extract_prefix(key) {
+            if let Ok(mut index) = self.prefix_index.lock() {
+                let keys = index.entry(prefix.to_string()).or_insert_with(Vec::new);
+                if add {
+                    keys.push(key.to_string());
+                } else {
+                    if let Some(pos) = keys.iter().position(|k| k == key) {
+                        keys.remove(pos);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -108,13 +135,15 @@ impl SyncCache for DashMapCache {
                     while queue.len() > max_cap {
                         if let Some(oldest_key) = queue.pop_back() {
                             self.inner.remove(&oldest_key);
+                            self.update_prefix_index(&oldest_key, false);
                         }
                     }
                 }
             }
         }
         
-        self.inner.insert(key_string, value);
+        self.inner.insert(key_string.clone(), value);
+        self.update_prefix_index(&key_string, true);
     }
 
     fn set_many(&self, items: &[(String, Vec<u8>)]) {
@@ -130,7 +159,11 @@ impl SyncCache for DashMapCache {
     }
 
     fn delete(&self, key: &str) -> bool {
-        self.inner.remove(key).is_some()
+        let result = self.inner.remove(key).is_some();
+        if result {
+            self.update_prefix_index(key, false);
+        }
+        result
     }
 
     fn delete_many(&self, keys: &[&str]) -> usize {
@@ -143,6 +176,7 @@ impl SyncCache for DashMapCache {
         let mut deleted_count = 0;
         for &key in keys {
             if self.inner.remove(key).is_some() {
+                self.update_prefix_index(key, false);
                 deleted_count += 1;
             }
         }
@@ -167,16 +201,42 @@ impl SyncCache for DashMapCache {
     }
 
     fn find_keys_by_pattern(&self, pattern: &str) -> Vec<String> {
-        // Convert glob-like pattern to regex with caching
+        // Check if it's a simple prefix pattern (e.g., "user:*")
+        if let Some(prefix_end) = pattern.find('*') {
+            let prefix_part = &pattern[..prefix_end];
+            
+            // If prefix contains no other wildcards, use prefix index
+            if !prefix_part.contains(['*', '?']) && prefix_part.ends_with(':') {
+                let prefix_key = &prefix_part[..prefix_part.len() - 1];
+                
+                if let Ok(index) = self.prefix_index.lock() {
+                    if let Some(matching_keys) = index.get(prefix_key) {
+                        // Filter matching keys with the full pattern
+                        let regex_pattern = pattern
+                            .replace('*', ".*")
+                            .replace('?', ".");
+                        
+                        let re = regex::Regex::new(&format!("^{}$", regex_pattern))
+                            .expect("Invalid regex pattern");
+                        
+                        return matching_keys
+                            .iter()
+                            .filter(|key| re.is_match(key))
+                            .cloned()
+                            .collect();
+                    }
+                }
+            }
+        }
+        
+        // Fallback to full scan with regex caching
         let regex_pattern = pattern
             .replace('*', ".*")
             .replace('?', ".");
         
-        // Use a static cache for compiled regex patterns
         static REGEX_CACHE: Lazy<dashmap::DashMap<String, regex::Regex>> = 
             Lazy::new(|| dashmap::DashMap::new());
         
-        // Get or compile the regex
         let re = REGEX_CACHE
             .entry(regex_pattern.clone())
             .or_insert_with(|| {
