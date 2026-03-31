@@ -298,7 +298,7 @@ impl AppAuditLogger {
             }
         };
 
-        let log = AuditLog {
+        let mut log = AuditLog {
             id: Uuid::new_v4().to_string(),
             timestamp: chrono::Utc::now().timestamp(),
             user_id: context.user_id.clone(),
@@ -315,7 +315,16 @@ impl AppAuditLogger {
                 }
             },
             metadata: context.metadata.clone(),
+            signature: None, // Will be signed if a signing key is configured
         };
+
+        // Generate cryptographic signature for tamper detection (if enabled)
+        // In production, you should configure a signing key via environment or config
+        if cfg!(feature = "audit-signing") {
+            // TODO: Load signing key from secure configuration
+            // For now, skip signing until key management is implemented
+            // log.generate_signature(signing_key);
+        }
 
         let user_id = context
             .user_id

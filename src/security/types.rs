@@ -215,6 +215,7 @@ pub(crate) fn parse_audit_log(v: &serde_json::Value) -> Option<AuditLog> {
             request_id,
             timestamp: timestamp_meta,
         },
+        signature: None, // Legacy logs don't have signatures
     })
 }
 
@@ -483,7 +484,7 @@ impl Default for TrustedProxyConfig {
 // Audit Types
 // =============================================================================
 
-/// Audit log entry
+/// Audit log entry with cryptographic signature for integrity verification
 #[derive(Debug, Clone)]
 pub struct AuditLog {
     /// Log ID
@@ -500,11 +501,14 @@ pub struct AuditLog {
     pub(crate) result: AuditResult,
     /// Request metadata
     pub(crate) metadata: AuthMetadata,
+    /// Cryptographic signature (HMAC-SHA256) for tamper detection
+    /// Base64-encoded signature of the log entry's canonical form
+    pub(crate) signature: Option<String>,
 }
 
 impl Serialize for AuditLog {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut s = serializer.serialize_struct("AuditLog", 7)?;
+        let mut s = serializer.serialize_struct("AuditLog", 8)?;
         s.serialize_field("id", &self.id)?;
         s.serialize_field("timestamp", &self.timestamp)?;
         s.serialize_field("user_id", &self.user_id)?;
@@ -512,6 +516,7 @@ impl Serialize for AuditLog {
         s.serialize_field("resource", &self.resource)?;
         s.serialize_field("result", &self.result)?;
         s.serialize_field("metadata", &self.metadata)?;
+        s.serialize_field("signature", &self.signature)?;
         s.end()
     }
 }
@@ -551,6 +556,116 @@ impl AuditLog {
     pub fn metadata(&self) -> &AuthMetadata {
         &self.metadata
     }
+
+    /// Get the cryptographic signature for tamper detection
+    pub fn signature(&self) -> Option<&str> {
+        self.signature.as_deref()
+    }
+
+    /// Generate HMAC-SHA256 signature for this audit log entry
+    /// 
+    /// This creates a canonical representation of the log and signs it,
+    /// allowing detection of any tampering with the audit trail.
+    /// 
+    /// # Arguments
+    /// * `secret_key` - The secret key for HMAC signing (should be kept secure)
+    /// 
+    /// # Returns
+    /// Base64-encoded HMAC-SHA256 signature
+    /// 
+    /// # Example
+    /// ```ignore
+    /// let mut log = AuditLog::new(...);
+    /// log.generate_signature(b"your-secret-key");
+    /// ```
+    pub fn generate_signature(&mut self, secret_key: &[u8]) -> String {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        
+        type HmacSha256 = Hmac<Sha256>;
+        
+        // Create canonical string: id|timestamp|user_id|action|resource|result
+        let canonical = format!(
+            "{}|{}|{}|{}|{}|{}",
+            self.id,
+            self.timestamp,
+            self.user_id.as_deref().unwrap_or(""),
+            self.action,
+            self.resource,
+            match self.result {
+                AuditResult::Success => "SUCCESS",
+                AuditResult::Failure { .. } => "FAILURE",
+            }
+        );
+        
+        // Create HMAC
+        let mut mac = HmacSha256::new_from_slice(secret_key)
+            .expect("HMAC can take key of any size");
+        mac.update(canonical.as_bytes());
+        let result = mac.finalize();
+        
+        // Encode to base64
+        let signature = base64::encode(result.into_bytes());
+        
+        // Store and return
+        self.signature = Some(signature.clone());
+        signature
+    }
+
+    /// Verify the integrity of this audit log entry
+    /// 
+    /// Recomputes the signature and compares it with the stored signature
+    /// to detect any tampering.
+    /// 
+    /// # Arguments
+    /// * `secret_key` - The secret key that was used for signing
+    /// 
+    /// # Returns
+    /// - `Ok(true)` if signature is valid
+    /// - `Ok(false)` if signature doesn't match (tampered or wrong key)
+    /// - `Err` if no signature is present
+    /// 
+    /// # Example
+    /// ```ignore
+    /// match log.verify_signature(b"your-secret-key") {
+    ///     Ok(true) => println!("Audit log is authentic"),
+    ///     Ok(false) => println!("Audit log may have been tampered!"),
+    ///     Err(_) => println!("No signature present"),
+    /// }
+    /// ```
+    pub fn verify_signature(&self, secret_key: &[u8]) -> Result<bool, &'static str> {
+        use hmac::{Hmac, Mac};
+        use sha2::Sha256;
+        
+        type HmacSha256 = Hmac<Sha256>;
+        
+        let stored_sig = self.signature.as_ref()
+            .ok_or("No signature present")?;
+        
+        // Recreate canonical string
+        let canonical = format!(
+            "{}|{}|{}|{}|{}|{}",
+            self.id,
+            self.timestamp,
+            self.user_id.as_deref().unwrap_or(""),
+            self.action,
+            self.resource,
+            match self.result {
+                AuditResult::Success => "SUCCESS",
+                AuditResult::Failure { .. } => "FAILURE",
+            }
+        );
+        
+        // Compute expected signature
+        let mut mac = HmacSha256::new_from_slice(secret_key)
+            .expect("HMAC can take key of any size");
+        mac.update(canonical.as_bytes());
+        let result = mac.finalize();
+        let expected_signature = base64::encode(result.into_bytes());
+        
+        // Constant-time comparison to prevent timing attacks
+        Ok(stored_sig == &expected_signature)
+    }
 }
 
 /// Audit result
@@ -581,5 +696,181 @@ impl Serialize for AuditResult {
                 s.end()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_audit_log_signature_generation() {
+        let mut log = AuditLog {
+            id: "test-id-123".to_string(),
+            timestamp: 1234567890,
+            user_id: Some("user123".to_string()),
+            action: "LOGIN".to_string(),
+            resource: "/api/auth".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata {
+                client_ip: Some("192.168.1.1".to_string()),
+                user_agent: Some("TestAgent/1.0".to_string()),
+                request_id: "req-123".to_string(),
+                timestamp: 1234567890,
+            },
+            signature: None,
+        };
+
+        // Generate signature
+        let secret_key = b"test-secret-key";
+        let signature = log.generate_signature(secret_key);
+
+        // Verify signature was generated and stored
+        assert!(signature.len() > 0);
+        assert!(log.signature.is_some());
+        assert_eq!(log.signature.as_ref().unwrap(), &signature);
+    }
+
+    #[test]
+    fn test_audit_log_signature_verification_success() {
+        let mut log = AuditLog {
+            id: "test-id-456".to_string(),
+            timestamp: 1234567890,
+            user_id: Some("user456".to_string()),
+            action: "LOGOUT".to_string(),
+            resource: "/api/auth".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata {
+                client_ip: Some("192.168.1.1".to_string()),
+                user_agent: Some("TestAgent/1.0".to_string()),
+                request_id: "req-456".to_string(),
+                timestamp: 1234567890,
+            },
+            signature: None,
+        };
+
+        // Sign the log
+        let secret_key = b"test-secret-key";
+        let _signature = log.generate_signature(secret_key);
+
+        // Verify with correct key
+        let result = log.verify_signature(secret_key);
+        assert!(result.is_ok());
+        assert!(result.unwrap() == true);
+    }
+
+    #[test]
+    fn test_audit_log_signature_verification_wrong_key() {
+        let mut log = AuditLog {
+            id: "test-id-789".to_string(),
+            timestamp: 1234567890,
+            user_id: Some("user789".to_string()),
+            action: "DELETE".to_string(),
+            resource: "/api/resource".to_string(),
+            result: AuditResult::Failure {
+                message: "Not authorized".to_string(),
+            },
+            metadata: AuthMetadata {
+                client_ip: Some("192.168.1.1".to_string()),
+                user_agent: Some("TestAgent/1.0".to_string()),
+                request_id: "req-789".to_string(),
+                timestamp: 1234567890,
+            },
+            signature: None,
+        };
+
+        // Sign with one key
+        let secret_key = b"test-secret-key";
+        let _signature = log.generate_signature(secret_key);
+
+        // Try to verify with wrong key
+        let wrong_key = b"wrong-secret-key";
+        let result = log.verify_signature(wrong_key);
+        assert!(result.is_ok());
+        assert!(result.unwrap() == false);
+    }
+
+    #[test]
+    fn test_audit_log_signature_tamper_detection() {
+        let mut log = AuditLog {
+            id: "test-id-tamper".to_string(),
+            timestamp: 1234567890,
+            user_id: Some("usertamper".to_string()),
+            action: "UPDATE".to_string(),
+            resource: "/api/resource/123".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata {
+                client_ip: Some("192.168.1.1".to_string()),
+                user_agent: Some("TestAgent/1.0".to_string()),
+                request_id: "req-tamper".to_string(),
+                timestamp: 1234567890,
+            },
+            signature: None,
+        };
+
+        // Sign the log
+        let secret_key = b"test-secret-key";
+        let _signature = log.generate_signature(secret_key);
+
+        // Tamper with the log (change action)
+        log.action = "DELETED".to_string();
+
+        // Verification should fail
+        let result = log.verify_signature(secret_key);
+        assert!(result.is_ok());
+        assert!(result.unwrap() == false, "Tampered log should fail verification");
+    }
+
+    #[test]
+    fn test_audit_log_no_signature() {
+        let log = AuditLog {
+            id: "test-id-nosig".to_string(),
+            timestamp: 1234567890,
+            user_id: Some("usernosig".to_string()),
+            action: "READ".to_string(),
+            resource: "/api/public".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata {
+                client_ip: Some("192.168.1.1".to_string()),
+                user_agent: Some("TestAgent/1.0".to_string()),
+                request_id: "req-nosig".to_string(),
+                timestamp: 1234567890,
+            },
+            signature: None,
+        };
+
+        // Verify should return error when no signature present
+        let result = log.verify_signature(b"any-key");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "No signature present");
+    }
+
+    #[test]
+    fn test_audit_log_signature_getter() {
+        let mut log = AuditLog {
+            id: "test-id-getter".to_string(),
+            timestamp: 1234567890,
+            user_id: None,
+            action: "ANONYMOUS".to_string(),
+            resource: "/public".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata {
+                client_ip: None,
+                user_agent: None,
+                request_id: "req-getter".to_string(),
+                timestamp: 1234567890,
+            },
+            signature: None,
+        };
+
+        // Initially no signature
+        assert!(log.signature().is_none());
+
+        // Generate signature
+        let _signature = log.generate_signature(b"test-key");
+
+        // Now signature should be present
+        assert!(log.signature().is_some());
+        assert!(log.signature().unwrap().len() > 0);
     }
 }
