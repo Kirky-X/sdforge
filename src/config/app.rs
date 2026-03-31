@@ -50,8 +50,6 @@ impl AppConfig {
 #[cfg(feature = "validation")]
 impl crate::config::ValidateConfig for AppConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
-        use crate::config::ConfigError;
-        
         // Validate all sub-configs
         self.server.validate()?;
         self.authentication.validate()?;
