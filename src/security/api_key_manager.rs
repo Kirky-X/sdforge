@@ -271,13 +271,16 @@ pub struct LruConfig {
     pub max_entries: usize,
     /// Time-to-live for cache entries
     pub ttl: Duration,
+    /// Eviction threshold (percentage of max_entries at which to start eviction)
+    pub eviction_threshold: f64,
 }
 
 impl Default for LruConfig {
     fn default() -> Self {
         Self {
-            max_entries: 1000,
+            max_entries: 10_000, // Increased from 1000 to 10000
             ttl: Duration::from_secs(3600), // 1 hour
+            eviction_threshold: 0.8, // Start eviction at 80% capacity
         }
     }
 }
@@ -383,15 +386,20 @@ impl LruCacheManager {
             let mut times = access_times.write().await;
             let now = Instant::now();
 
-            // Remove expired entries
+            // First, remove expired entries (TTL-based)
             times.retain(|_, &mut last_accessed| now.duration_since(last_accessed) <= config.ttl);
 
-            // If still too many entries, remove oldest
-            if times.len() > config.max_entries {
-                let mut entries: Vec<_> = times.iter().map(|(k, v)| (k.clone(), *v)).collect();
-                entries.sort_by_key(|&(_, time)| std::cmp::Reverse(time));
+            // Calculate eviction threshold (80% of max_entries by default)
+            let threshold = (config.max_entries as f64 * config.eviction_threshold) as usize;
 
-                let to_remove = entries.len() - config.max_entries;
+            // If over threshold, start evicting oldest entries
+            if times.len() > threshold {
+                // Sort by access time (oldest first)
+                let mut entries: Vec<_> = times.iter().map(|(k, v)| (k.clone(), *v)).collect();
+                entries.sort_by_key(|&(_, time)| time);
+
+                // Remove oldest entries to get back under threshold
+                let to_remove = entries.len().saturating_sub(threshold);
                 for (key, _) in entries.into_iter().take(to_remove) {
                     times.remove(&key);
                 }
@@ -527,8 +535,22 @@ mod tests {
     #[test]
     fn test_lru_config_default() {
         let config = LruConfig::default();
-        assert_eq!(config.max_entries, 1000);
+        assert_eq!(config.max_entries, 10_000);
         assert_eq!(config.ttl, Duration::from_secs(3600));
+        assert!((config.eviction_threshold - 0.8).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_lru_eviction_threshold() {
+        // Test that eviction threshold is respected
+        let config = LruConfig {
+            max_entries: 100,
+            ttl: Duration::from_secs(3600),
+            eviction_threshold: 0.5, // 50% threshold for testing
+        };
+
+        assert_eq!(config.max_entries, 100);
+        assert!((config.eviction_threshold - 0.5).abs() < f64::EPSILON);
     }
 
     #[test]
