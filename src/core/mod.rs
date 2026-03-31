@@ -21,7 +21,7 @@ pub mod types;
 pub mod validation;
 
 // Re-export types from submodules for convenience
-pub use error::ApiError;
+pub use error::{ApiError, ErrorCategory, ErrorContext, SdForgeError};
 pub use json::{api_metadata_response, error_response, paginated_response, success_response};
 pub use regex_cache::{common, get_regex, RegexCache, RegexCacheStats};
 pub use registration::Registration;
