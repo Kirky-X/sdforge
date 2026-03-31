@@ -22,6 +22,10 @@ pub enum CacheNamespace {
     BearerBlacklist,
     /// Bearer token valid cache: `sdforge:bearer:valid:{token}`
     BearerValid,
+    /// Rate limiting: `sdforge:rl:{key}`
+    RateLimit,
+    /// Idempotency key cache: `sdforge:idempotency:{key}`
+    Idempotency,
 }
 
 impl CacheNamespace {
@@ -31,8 +35,81 @@ impl CacheNamespace {
             CacheNamespace::ApiKey => format!("sdforge:apikey:{suffix}"),
             CacheNamespace::BearerBlacklist => format!("sdforge:bearer:blacklist:{suffix}"),
             CacheNamespace::BearerValid => format!("sdforge:bearer:valid:{suffix}"),
+            CacheNamespace::RateLimit => format!("sdforge:rl:{suffix}"),
+            CacheNamespace::Idempotency => format!("sdforge:idempotency:{suffix}"),
         }
     }
+}
+
+// =============================================================================
+// Rate Limiting Types
+// =============================================================================
+
+/// Rate limit configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateLimitConfig {
+    /// Maximum number of requests within the rate limit window
+    pub max_requests: u32,
+    /// Time window for rate limiting
+    pub window: std::time::Duration,
+    /// Whether to include rate limit headers in responses
+    pub include_headers: bool,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            max_requests: 100,
+            window: std::time::Duration::from_secs(60),
+            include_headers: true,
+        }
+    }
+}
+
+/// Window state for O(1) rate limiting
+///
+/// Uses fixed window counter algorithm instead of storing all timestamps.
+/// This provides O(1) check operations with a small accuracy trade-off
+/// at window boundaries.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct WindowState {
+    /// Current count of requests in this window
+    pub count: u64,
+    /// Window start time in seconds since an arbitrary epoch
+    pub window_start_secs: u64,
+}
+
+/// Rate limit error
+#[derive(Debug, Clone)]
+pub struct RateLimitError {
+    /// Rate limit
+    pub limit: u32,
+    /// Remaining requests
+    pub remaining: u32,
+    /// Retry after seconds
+    pub retry_after: u64,
+}
+
+impl std::fmt::Display for RateLimitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Rate limit exceeded. Try again in {} seconds",
+            self.retry_after
+        )
+    }
+}
+
+impl std::error::Error for RateLimitError {}
+
+/// Serialize WindowState to bytes
+pub(crate) fn serialize_window_state(state: &WindowState) -> Vec<u8> {
+    bincode::serialize(state).unwrap_or_default()
+}
+
+/// Deserialize WindowState from bytes
+pub(crate) fn deserialize_window_state(data: &[u8]) -> Option<WindowState> {
+    bincode::deserialize(data).ok()
 }
 
 // =============================================================================
