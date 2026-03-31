@@ -706,14 +706,17 @@ pub enum SdForgeError {
     Api(#[from] ApiError),
 
     /// Authentication error
+    #[cfg(feature = "security")]
     #[error(transparent)]
     Auth(#[from] crate::security::AuthError),
 
     /// JWT error
+    #[cfg(feature = "security")]
     #[error(transparent)]
     Jwt(#[from] crate::security::JwtError),
 
     /// Authentication configuration error
+    #[cfg(feature = "security")]
     #[error(transparent)]
     AuthConfig(#[from] crate::security::AuthConfigError),
 
@@ -727,6 +730,7 @@ pub enum SdForgeError {
     Generator(#[from] crate::cli::generator::error::GeneratorError),
 
     /// Rate limit error from security module
+    #[cfg(feature = "security")]
     #[error(transparent)]
     RateLimit(#[from] crate::security::RateLimitError),
 
@@ -745,11 +749,14 @@ impl SdForgeError {
     pub fn category(&self) -> ErrorCategory {
         match self {
             SdForgeError::Api(err) => err.category(),
+            #[cfg(feature = "security")]
             SdForgeError::Auth(_) | SdForgeError::Jwt(_) => ErrorCategory::AuthError,
+            #[cfg(feature = "security")]
             SdForgeError::AuthConfig(_) => ErrorCategory::AuthError,
             SdForgeError::Config(_) => ErrorCategory::ClientError,
             #[cfg(feature = "cli")]
             SdForgeError::Generator(_) => ErrorCategory::ClientError,
+            #[cfg(feature = "security")]
             SdForgeError::RateLimit(_) => ErrorCategory::RateLimitError,
             SdForgeError::Internal(_) => ErrorCategory::ServerError,
         }
@@ -821,18 +828,21 @@ impl SdForgeError {
                     ),
                 }
             }
+            #[cfg(feature = "security")]
             SdForgeError::Auth(e) => ServiceError::with_details(
                 "AUTH_ERROR",
                 e.to_string(),
                 serde_json::json!({ "type": "auth" }),
                 401,
             ),
+            #[cfg(feature = "security")]
             SdForgeError::Jwt(e) => ServiceError::with_details(
                 "JWT_ERROR",
                 e.to_string(),
                 serde_json::json!({ "type": "jwt" }),
                 401,
             ),
+            #[cfg(feature = "security")]
             SdForgeError::AuthConfig(e) => ServiceError::with_details(
                 "AUTH_CONFIG_ERROR",
                 e.to_string(),
@@ -852,6 +862,7 @@ impl SdForgeError {
                 serde_json::json!({ "type": "generator" }),
                 500,
             ),
+            #[cfg(feature = "security")]
             SdForgeError::RateLimit(e) => ServiceError::with_details(
                 "RATE_LIMIT_ERROR",
                 e.to_string(),

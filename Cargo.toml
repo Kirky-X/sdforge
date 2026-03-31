@@ -269,6 +269,9 @@ grpc = ["http", "tonic", "prost", "tonic-prost"]
 # Cache 特性 - oxcache 提供缓存抽象，rate-limiting 提供 TokenBucket
 cache = ["dep:http", "oxcache/rate-limiting", "async-trait"]
 
+# Logging 特性
+logging = ["chrono", "tokio"]
+
 # SIMD JSON 特性 - 使用 SIMD 加速的 JSON 序列化/反序列化
 simd-json = ["dep:simd-json"]
 
@@ -283,6 +286,7 @@ full = [
     "cache",
     "websocket",
     "grpc",
+    "logging",
 ]
 hex = ["dep:hex"]
 

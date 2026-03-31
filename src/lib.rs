@@ -239,6 +239,15 @@ pub use grpc::{
     build_server, build_server_with_config, GrpcRoute, GrpcServerConfig, SdForgeGrpcService,
 };
 
+/// Structured logging utilities
+#[cfg(feature = "logging")]
+pub mod logging;
+
+#[cfg(feature = "logging")]
+pub use logging::{
+    get_global_logger, init_global_logger, LogEntry, LogLevel, LoggerConfig, StructuredLogger,
+};
+
 #[cfg(feature = "grpc")]
 pub use grpc::sdforge_v1::{
     sd_forge_service_server::SdForgeServiceServer, CallRequest, CallResponse, InfoRequest,
