@@ -204,8 +204,7 @@ fn write_log_entry<W: Write>(
 ) -> io::Result<()> {
     match format {
         LogFormat::Json => {
-            let json = serde_json::to_string(entry)
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            let json = serde_json::to_string(entry)?;
             
             if colored {
                 let color = get_level_color(entry.level);

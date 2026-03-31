@@ -113,7 +113,7 @@ tower = { workspace = true, optional = true }
 tower-http = { version = "0.6.8", optional = true, features = ["cors", "limit", "timeout", "set-header", "compression-gzip", "compression-deflate"] }
 inventory = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
-axum-extra = { version = "0.10", optional = true, features = ["typed-header"] }
+axum-extra = { workspace = true, optional = true, features = ["typed-header"] }
 futures = { workspace = true, optional = true }
 
 # MCP dependencies

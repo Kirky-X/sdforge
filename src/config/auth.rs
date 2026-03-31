@@ -69,7 +69,44 @@ impl AuthConfig {
                     ));
                 }
             }
-            AuthConfig::None | AuthConfig::Jwt { .. } => {}
+            AuthConfig::None => {}
+        }
+        Ok(())
+    }
+}
+
+#[cfg(feature = "validation")]
+impl crate::config::ValidateConfig for AuthConfig {
+    fn validate(&self) -> Result<(), crate::config::ConfigError> {
+        use crate::config::ConfigError;
+        
+        match self {
+            AuthConfig::ApiKey { prefix, .. } => {
+                if prefix.is_empty() {
+                    return Err(ConfigError::ValidationError(
+                        "API key prefix cannot be empty: an empty prefix allows any key to match"
+                            .into(),
+                    ));
+                }
+            }
+            AuthConfig::Jwt { secret } => {
+                // Validate JWT secret strength
+                if secret.is_empty() {
+                    return Err(ConfigError::ValidationError(
+                        "JWT secret cannot be empty".into(),
+                    ));
+                }
+                
+                // Check for obviously weak secrets
+                let lower = secret.to_lowercase();
+                if lower == "secret" || lower == "password" || lower == "key" || lower == "jwt_secret" {
+                    return Err(ConfigError::ValidationError(
+                        "JWT secret is too weak. Avoid using common words like 'secret', \
+                         'password', 'key', or 'jwt_secret'. Use a randomly generated value.".into(),
+                    ));
+                }
+            }
+            AuthConfig::None => {}
         }
         Ok(())
     }

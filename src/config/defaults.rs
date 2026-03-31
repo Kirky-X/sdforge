@@ -70,3 +70,23 @@ pub mod api {
     /// Default API version
     pub const DEFAULT_VERSION: &str = "v1";
 }
+
+/// Cache configuration defaults
+pub mod cache {
+    /// Default cache TTL in seconds (5 minutes)
+    pub const DEFAULT_TTL_SECS: u64 = 300;
+    /// Default maximum cache items
+    pub const DEFAULT_MAX_ITEMS: usize = 10_000;
+    /// Enable cache by default
+    pub const DEFAULT_ENABLED: bool = true;
+    /// Track cache statistics by default
+    pub const DEFAULT_TRACK_STATS: bool = true;
+}
+
+/// Rate limiting defaults
+pub mod rate_limit {
+    /// Default maximum requests per window
+    pub const DEFAULT_MAX_REQUESTS: u32 = 100;
+    /// Default rate limit window in seconds (1 minute)
+    pub const DEFAULT_WINDOW_SECS: u64 = 60;
+}
