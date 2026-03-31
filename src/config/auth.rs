@@ -57,11 +57,7 @@ impl AuthConfig {
                 // Warn if secret is too short (less than 32 characters)
                 // A strong JWT secret should be at least 256 bits (32 bytes)
                 if secret.len() < 32 {
-                    eprintln!(
-                        "⚠️  WARNING: JWT secret is only {} characters long. For production use, \
-                         recommend at least 32 characters (256 bits) for security.",
-                        secret.len()
-                    );
+                    eprintln!("⚠️  WARNING: JWT secret is only {} characters long. For production use, consider using a stronger secret (32+ bytes).", secret.len());
                 }
                 
                 // Check for obviously weak secrets
