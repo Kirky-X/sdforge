@@ -66,17 +66,18 @@ impl Default for RateLimitConfig {
     }
 }
 
-/// Window state for O(1) rate limiting
+/// Window state for sliding window rate limiting
 ///
-/// Uses fixed window counter algorithm instead of storing all timestamps.
-/// This provides O(1) check operations with a small accuracy trade-off
-/// at window boundaries.
+/// Uses sliding window counter algorithm for better accuracy at window boundaries.
+/// Stores both current and previous window counts to calculate weighted average.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct WindowState {
     /// Current count of requests in this window
     pub count: u64,
     /// Window start time in seconds since an arbitrary epoch
     pub window_start_secs: u64,
+    /// Previous window count (for sliding window calculation)
+    pub previous_count: u64,
 }
 
 /// Rate limit error
