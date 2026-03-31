@@ -69,7 +69,7 @@ pub mod axum {
 
     /// Extractor utilities for HTTP requests
     pub mod extract {
-        pub use axum::extract::{Form, Json, Path, Query};
+        pub use axum::extract::{Extension, Form, Json, Path, Query};
         pub use axum_extra::TypedHeader;
     }
 
