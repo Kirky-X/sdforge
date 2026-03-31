@@ -353,11 +353,22 @@ impl AppAuditLogger {
         };
 
         // Generate cryptographic signature for tamper detection (if enabled)
-        // In production, you should configure a signing key via environment or config
+        // In production, you should configure a signing key via secure configuration
         if cfg!(feature = "audit-signing") {
-            // TODO: Load signing key from secure configuration
-            // For now, skip signing until key management is implemented
-            // log.generate_signature(signing_key);
+            // Load signing key from environment or configuration
+            // Security: Use a cryptographically secure random key of at least 32 bytes
+            if let Ok(signing_key_str) = std::env::var("SDFORGE_AUDIT_SIGNING_KEY") {
+                if !signing_key_str.is_empty() {
+                    // Convert string to bytes and use as HMAC key
+                    log.generate_signature(signing_key_str.as_bytes());
+                } else {
+                    eprintln!("⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY is empty. Audit logs will not be signed.");
+                }
+            } else {
+                eprintln!("⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY not set. Audit logs will not be signed.");
+                eprintln!("   For production, set this environment variable to a secure random value (min 32 bytes).");
+                eprintln!("   Example: export SDFORGE_AUDIT_SIGNING_KEY=$(openssl rand -hex 32)");
+            }
         }
 
         let user_id = context
