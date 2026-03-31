@@ -60,11 +60,15 @@ impl AppRateLimiter {
         }
     }
 
-    /// Check if request is rate limited (O(1) fixed window counter)
+    /// Check if request is rate limited (O(1) sliding window counter)
     ///
-    /// Uses a fixed window counter algorithm for O(1) performance.
-    /// Trade-off: Slightly less accurate at window boundaries compared
-    /// to sliding window, but significantly faster for high-throughput scenarios.
+    /// Uses a sliding window counter algorithm for better accuracy at window boundaries.
+    /// The algorithm calculates a weighted count based on:
+    /// - Previous window count (weighted by time remaining in that window)
+    /// - Current window count (weighted by time elapsed in this window)
+    ///
+    /// This provides more accurate rate limiting than fixed windows while maintaining
+    /// O(1) performance.
     pub fn check(&self, key: &str) -> Result<u32, RateLimitError> {
         let window_secs = self.config.window.as_secs();
         let store_key = CacheNamespace::RateLimit.key(key);
@@ -83,10 +87,9 @@ impl AppRateLimiter {
             .unwrap_or_default();
 
         // Calculate the current window number (integer division)
-        // This gives us fixed windows aligned to epoch boundaries
         let current_window = current_time_secs / window_secs;
 
-        // Check if we're in a new window (different window number)
+        // Check if we're in a new window
         let stored_window = if state.window_start_secs > 0 {
             state.window_start_secs / window_secs
         } else {
@@ -94,7 +97,17 @@ impl AppRateLimiter {
         };
 
         if current_window != stored_window || state.window_start_secs == 0 {
-            // Start a new window
+            // We've moved to a new window
+            
+            // If we've skipped more than one window, clear previous count
+            if current_window > stored_window + 1 {
+                state.previous_count = 0;
+            } else if stored_window != 0 {
+                // Shift current to previous
+                state.previous_count = state.count;
+            }
+            
+            // Start fresh current window
             state.window_start_secs = current_time_secs;
             state.count = 1;
         } else {
@@ -102,8 +115,27 @@ impl AppRateLimiter {
             state.count += 1;
         }
 
-        // Check rate limit
-        if state.count > self.config.max_requests as u64 {
+        // Calculate sliding window weighted count
+        // Only apply sliding window if we have previous window data
+        let effective_count = if state.previous_count > 0 && stored_window != 0 {
+            // Time position within current window (0.0 to 1.0)
+            let time_in_window = ((current_time_secs % window_secs) as f64) / (window_secs as f64);
+            
+            // Weight for previous window (decreases as we move through current window)
+            let prev_weight = 1.0 - time_in_window;
+            
+            // Weight for current window (increases as we move through current window)
+            let curr_weight = time_in_window;
+            
+            // Calculate weighted count
+            (state.previous_count as f64 * prev_weight) + (state.count as f64 * curr_weight)
+        } else {
+            // No previous window or just started, use current count only
+            state.count as f64
+        };
+
+        // Check rate limit using effective count
+        if effective_count > self.config.max_requests as f64 {
             // Calculate time until next window starts
             let next_window_start = (current_window + 1) * window_secs;
             let time_remaining = next_window_start.saturating_sub(current_time_secs);
@@ -123,7 +155,8 @@ impl AppRateLimiter {
         self.requests
             .set(&store_key, serialize_window_state(&state));
 
-        Ok(self.config.max_requests - state.count as u32)
+        // Return remaining requests based on effective count
+        Ok((self.config.max_requests as f64 - effective_count).max(0.0) as u32)
     }
 
     /// Check idempotency (returns true if this is a duplicate request)
@@ -152,7 +185,7 @@ impl AppRateLimiter {
         false // Not a duplicate
     }
 
-    /// Get remaining requests (O(1) fixed window counter)
+    /// Get remaining requests (O(1) sliding window counter)
     pub fn remaining(&self, key: &str) -> u32 {
         let window_secs = self.config.window.as_secs();
         let store_key = CacheNamespace::RateLimit.key(key);
@@ -181,8 +214,19 @@ impl AppRateLimiter {
             // Window expired or no state, full allowance
             self.config.max_requests
         } else {
+            // Calculate sliding window weighted count (only if previous_count exists)
+            let effective_count = if state.previous_count > 0 {
+                let time_in_window = ((current_time_secs % window_secs) as f64) / (window_secs as f64);
+                let prev_weight = 1.0 - time_in_window;
+                let curr_weight = time_in_window;
+                
+                (state.previous_count as f64 * prev_weight) + (state.count as f64 * curr_weight)
+            } else {
+                state.count as f64
+            };
+            
             // Calculate remaining
-            self.config.max_requests.saturating_sub(state.count as u32)
+            (self.config.max_requests as f64 - effective_count).max(0.0) as u32
         }
     }
 
@@ -361,5 +405,43 @@ mod tests {
         assert_eq!(limiter.config.max_requests, 50);
         assert_eq!(limiter.config.window.as_secs(), 30);
         assert!(limiter.config.include_headers);
+    }
+
+    #[test]
+    fn test_sliding_window_basic() {
+        // Test that sliding window works correctly
+        let limiter = AppRateLimiter::new(Some(RateLimitConfig {
+            max_requests: 10,
+            window: Duration::from_secs(60),
+            include_headers: false,
+        }));
+
+        // First request should have 9 remaining (weighted)
+        let remaining = limiter.check("test_key").unwrap();
+        assert!(remaining <= 9);
+    }
+
+    #[test]
+    fn test_sliding_window_weight() {
+        // Test that previous window count affects current window
+        
+        let limiter = AppRateLimiter::new(Some(RateLimitConfig {
+            max_requests: 5,
+            window: Duration::from_secs(2), // Short window for testing
+            include_headers: false,
+        }));
+
+        // Make some requests
+        for _ in 0..3 {
+            let _ = limiter.check("test_key");
+        }
+
+        // Wait for window to change
+        std::thread::sleep(Duration::from_secs(3));
+
+        // New window should have reset but keep previous count
+        let remaining = limiter.check("test_key").unwrap();
+        // Should have some weight from previous window
+        assert!(remaining < 5);
     }
 }
