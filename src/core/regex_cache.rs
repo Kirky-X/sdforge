@@ -125,6 +125,25 @@ pub struct RegexCacheStats {
 }
 
 /// Global shared regex cache instance
+/// 
+/// # Design Rationale
+/// 
+/// This is a thread-safe, immutable (after initialization) global cache for compiled
+/// regular expressions. Using `Lazy` initialization provides several benefits:
+/// 
+/// - **Performance**: Regex patterns are compiled only once on first use
+/// - **Memory Efficiency**: Shared across all callers via Arc
+/// - **Thread Safety**: Lazy<T> ensures safe concurrent access
+/// - **No Mutable State**: The cache itself is immutable after initialization
+/// 
+/// # Why Not Dependency Injection?
+/// 
+/// While dependency injection is preferred for mutable state, this global cache is
+/// appropriate because:
+/// 1. It's a pure optimization (no business logic)
+/// 2. All methods are idempotent (get_or_compile always returns same result)
+/// 3. No configuration or customization needed
+/// 4. Follows the "Cache" pattern from Rust best practices
 static GLOBAL_REGEX_CACHE: Lazy<RegexCache> = Lazy::new(RegexCache::new);
 
 /// Get or compile a regex pattern using the global cache
@@ -367,6 +386,51 @@ mod tests {
 
         assert!(regex1.is_match("123"));
         assert!(Arc::ptr_eq(&regex1, &regex2));
+    }
+
+    // ============================================================================
+    // Global State Design Verification Tests
+    // ============================================================================
+
+    #[test]
+    fn test_global_regex_cache_is_thread_safe() {
+        // Verify the global cache can be safely accessed from multiple threads
+        use std::thread;
+
+        let handles: Vec<_> = (0..10)
+            .map(|i| {
+                thread::spawn(move || {
+                    let pattern = format!(r"\d{{{}}}", i + 1);
+                    let regex = get_regex(&pattern).unwrap();
+                    regex.is_match(&"1".repeat(i + 1))
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            assert!(handle.join().unwrap());
+        }
+    }
+
+    #[test]
+    fn test_global_regex_cache_caching_behavior() {
+        // First call should compile and cache
+        let regex1 = get_regex(r"test_pattern_\d+").unwrap();
+        
+        // Second call should return cached version (same Arc pointer)
+        let regex2 = get_regex(r"test_pattern_\d+").unwrap();
+        
+        assert!(Arc::ptr_eq(&regex1, &regex2), "Cached patterns should share the same Arc");
+    }
+
+    #[test]
+    fn test_common_regex_functions_are_cached() {
+        // Verify common regex functions return the same cached instance
+        let email1 = common::email();
+        let email2 = common::email();
+        
+        // They should be the same static reference (pointer equality)
+        assert!(std::ptr::eq(email1, email2), "Common regex functions should return the same cached instance");
     }
 
     #[test]
