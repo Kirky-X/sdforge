@@ -2,6 +2,12 @@
 //! Framework error types
 //!
 //! Provides comprehensive error types for the framework.
+//! 
+//! # Internationalization (i18n) Support
+//! 
+//! Error messages can be localized by implementing the `LocalizedError` trait
+//! and providing translations for different locales. See `ApiError::localized_message()`
+//! for usage.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -92,6 +98,120 @@ impl ErrorContext {
 impl Default for ErrorContext {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// =============================================================================
+// Internationalization (i18n) Support
+// =============================================================================
+
+/// Locale identifier (e.g., "en", "zh-CN", "fr-FR")
+pub type Locale = String;
+
+/// Localization trait for error messages
+/// 
+/// This trait allows errors to provide localized messages for different locales.
+/// Implement this trait for error types that need internationalization support.
+pub trait LocalizedError {
+    /// Get a localized message for the given locale
+    /// 
+    /// # Arguments
+    /// * `locale` - The locale identifier (e.g., "en", "zh-CN")
+    /// 
+    /// # Returns
+    /// A localized error message, or English fallback if translation not available
+    fn localized_message(&self, locale: &Locale) -> String;
+    
+    /// Get the default (English) message
+    fn default_message(&self) -> String;
+}
+
+/// Simple translation store for error messages
+/// 
+/// In production, you would load these from JSON/YAML files or a database.
+/// For now, we provide a simple in-memory implementation.
+#[derive(Debug, Clone, Default)]
+pub struct TranslationStore {
+    translations: HashMap<Locale, HashMap<String, String>>,
+}
+
+impl TranslationStore {
+    /// Create a new empty TranslationStore
+    pub fn new() -> Self {
+        Self {
+            translations: HashMap::new(),
+        }
+    }
+    
+    /// Add a translation for a specific locale
+    /// 
+    /// # Arguments
+    /// * `locale` - The locale identifier (e.g., "en", "zh-CN")
+    /// * `key` - The translation key (usually the English message)
+    /// * `translation` - The translated message
+    pub fn add_translation(&mut self, locale: Locale, key: String, translation: String) {
+        self.translations
+            .entry(locale)
+            .or_insert_with(HashMap::new)
+            .insert(key, translation);
+    }
+    
+    /// Get a translation for a specific locale
+    /// 
+    /// # Arguments
+    /// * `locale` - The locale identifier
+    /// * `key` - The translation key
+    /// 
+    /// # Returns
+    /// The translated message, or None if not found
+    pub fn get(&self, locale: &Locale, key: &str) -> Option<&String> {
+        self.translations
+            .get(locale)
+            .and_then(|translations| translations.get(key))
+    }
+    
+    /// Load translations from a JSON file
+    /// 
+    /// Expected JSON format:
+    /// ```json
+    /// {
+    ///   "zh-CN": {
+    ///     "Resource not found: {resource}": "资源未找到：{resource}",
+    ///     "Invalid input: {message}": "无效输入：{message}"
+    ///   },
+    ///   "fr-FR": {
+    ///     "Resource not found: {resource}": "Ressource introuvable: {resource}",
+    ///     "Invalid input: {message}": "Entrée invalide: {message}"
+    ///   }
+    /// }
+    /// ```
+    /// 
+    /// # Arguments
+    /// * `json_path` - Path to the JSON file containing translations
+    /// 
+    /// # Errors
+    /// Returns an error if the file cannot be read or parsed
+    pub fn load_from_json(&mut self, json_path: &str) -> Result<(), Box<dyn StdError>> {
+        let content = std::fs::read_to_string(json_path)?;
+        let json_value: serde_json::Value = serde_json::from_str(&content)?;
+        
+        if let Some(obj) = json_value.as_object() {
+            for (locale, translations) in obj {
+                if let Some(trans_obj) = translations.as_object() {
+                    for (key, value) in trans_obj {
+                        if let Some(value_str) = value.as_str() {
+                            self.add_translation(
+                                locale.clone(),
+                                key.clone(),
+                                value_str.to_string(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(())
     }
 }
 
@@ -466,6 +586,110 @@ impl ApiError {
         .unwrap_or_else(|_| {
             format!(r#"{{"success":false,"error":{{"code":"{code}","message":"{message}"}}}}"#)
         })
+    }
+}
+
+// =============================================================================
+// Internationalization (i18n) Implementation for ApiError
+// =============================================================================
+
+impl LocalizedError for ApiError {
+    fn localized_message(&self, locale: &Locale) -> String {
+        // In production, you would use a global TranslationStore loaded from files
+        // For now, we provide built-in translations for common locales
+        
+        match locale.as_str() {
+            // Chinese (Simplified)
+            "zh" | "zh-CN" | "zh-Hans" => match self {
+                ApiError::NotFound { resource, .. } => {
+                    format!("资源未找到：{}", resource)
+                }
+                ApiError::InvalidInput { message, .. } => {
+                    format!("无效输入：{}", message)
+                }
+                ApiError::AuthenticationFailed { reason } => {
+                    format!("认证失败：{}", reason)
+                }
+                ApiError::AccessDenied { permission, .. } => {
+                    format!("访问被拒绝：{}", permission)
+                }
+                ApiError::RateLimitExceeded { limit, window_seconds } => {
+                    format!("请求频率超限：{} 次 / {} 秒", limit, window_seconds)
+                }
+                ApiError::Internal { message, .. } => {
+                    format!("内部错误：{}", message)
+                }
+                ApiError::ServiceUnavailable { service, .. } => {
+                    format!("服务不可用：{}", service)
+                }
+                ApiError::ValidationError { field, constraint } => {
+                    format!("验证失败：{} - {}", field, constraint)
+                }
+            },
+            
+            // French
+            "fr" | "fr-FR" => match self {
+                ApiError::NotFound { resource, .. } => {
+                    format!("Ressource introuvable: {}", resource)
+                }
+                ApiError::InvalidInput { message, .. } => {
+                    format!("Entrée invalide: {}", message)
+                }
+                ApiError::AuthenticationFailed { reason } => {
+                    format!("Échec de l'authentification: {}", reason)
+                }
+                ApiError::AccessDenied { permission, .. } => {
+                    format!("Accès refusé: {}", permission)
+                }
+                ApiError::RateLimitExceeded { limit, window_seconds } => {
+                    format!("Limite de débit dépassée: {} requêtes / {} secondes", limit, window_seconds)
+                }
+                ApiError::Internal { message, .. } => {
+                    format!("Erreur interne: {}", message)
+                }
+                ApiError::ServiceUnavailable { service, .. } => {
+                    format!("Service indisponible: {}", service)
+                }
+                ApiError::ValidationError { field, constraint } => {
+                    format!("Erreur de validation: {} - {}", field, constraint)
+                }
+            },
+            
+            // Spanish
+            "es" | "es-ES" => match self {
+                ApiError::NotFound { resource, .. } => {
+                    format!("Recurso no encontrado: {}", resource)
+                }
+                ApiError::InvalidInput { message, .. } => {
+                    format!("Entrada inválida: {}", message)
+                }
+                ApiError::AuthenticationFailed { reason } => {
+                    format!("Autenticación fallida: {}", reason)
+                }
+                ApiError::AccessDenied { permission, .. } => {
+                    format!("Acceso denegado: {}", permission)
+                }
+                ApiError::RateLimitExceeded { limit, window_seconds } => {
+                    format!("Límite de tasa excedido: {} solicitudes / {} segundos", limit, window_seconds)
+                }
+                ApiError::Internal { message, .. } => {
+                    format!("Error interno: {}", message)
+                }
+                ApiError::ServiceUnavailable { service, .. } => {
+                    format!("Servicio no disponible: {}", service)
+                }
+                ApiError::ValidationError { field, constraint } => {
+                    format!("Error de validación: {} - {}", field, constraint)
+                }
+            },
+            
+            // Default to English for unknown locales
+            _ => self.default_message(),
+        }
+    }
+    
+    fn default_message(&self) -> String {
+        self.to_string()
     }
 }
 
@@ -1422,5 +1646,104 @@ mod tests {
         
         // Should preserve the error details
         assert!(service_err.code == "NOT_FOUND" || service_err.code.contains("NOT_FOUND"));
+    }
+
+    // ============================================================================
+    // Internationalization (i18n) Tests
+    // ============================================================================
+
+    #[test]
+    fn test_localized_error_english_default() {
+        let error = ApiError::NotFound {
+            resource: "user".to_string(),
+            resource_id: Some("123".to_string()),
+        };
+        
+        // English is the default (to_string())
+        assert_eq!(error.default_message(), "Resource not found: user");
+    }
+
+    #[test]
+    fn test_localized_error_chinese() {
+        let error = ApiError::NotFound {
+            resource: "user".to_string(),
+            resource_id: Some("123".to_string()),
+        };
+        
+        let zh_message = error.localized_message(&"zh-CN".to_string());
+        assert!(zh_message.contains("资源未找到"));
+        assert!(zh_message.contains("user"));
+    }
+
+    #[test]
+    fn test_localized_error_french() {
+        let error = ApiError::InvalidInput {
+            message: "Invalid email format".to_string(),
+            field: Some("email".to_string()),
+            value: None,
+        };
+        
+        let fr_message = error.localized_message(&"fr-FR".to_string());
+        assert!(fr_message.contains("Entrée invalide"));
+        assert!(fr_message.contains("Invalid email format"));
+    }
+
+    #[test]
+    fn test_localized_error_spanish() {
+        let error = ApiError::AuthenticationFailed {
+            reason: "Invalid credentials".to_string(),
+        };
+        
+        let es_message = error.localized_message(&"es-ES".to_string());
+        assert!(es_message.contains("Autenticación fallida"));
+        assert!(es_message.contains("Invalid credentials"));
+    }
+
+    #[test]
+    fn test_localized_error_unknown_locale_fallback() {
+        let error = ApiError::AccessDenied {
+            permission: "admin".to_string(),
+            user_id: Some("user123".to_string()),
+        };
+        
+        // Unknown locale should fallback to English
+        let de_message = error.localized_message(&"de-DE".to_string());
+        assert_eq!(de_message, error.default_message());
+    }
+
+    #[test]
+    fn test_translation_store_basic() {
+        let mut store = TranslationStore::new();
+        
+        store.add_translation(
+            "zh-CN".to_string(),
+            "Hello".to_string(),
+            "你好".to_string(),
+        );
+        
+        assert_eq!(
+            store.get(&"zh-CN".to_string(), "Hello"),
+            Some(&"你好".to_string())
+        );
+        
+        assert_eq!(store.get(&"en".to_string(), "Hello"), None);
+    }
+
+    #[test]
+    fn test_rate_limit_exceeded_localization() {
+        let error = ApiError::RateLimitExceeded {
+            limit: 100,
+            window_seconds: 60,
+        };
+        
+        let zh_message = error.localized_message(&"zh-CN".to_string());
+        assert!(zh_message.contains("100"));
+        assert!(zh_message.contains("60"));
+        assert!(zh_message.contains("请求频率超限"));
+        
+        let fr_message = error.localized_message(&"fr-FR".to_string());
+        assert!(fr_message.contains("100"));
+        assert!(fr_message.contains("60"));
+        assert!(fr_message.contains("Limite de débit"));
     }
 }
