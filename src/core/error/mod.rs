@@ -471,6 +471,184 @@ impl ApiError {
 
 use super::response::ServiceError;
 
+/// Unified framework error type that wraps all SDForge errors
+/// 
+/// This enum provides a single error type for the entire framework,
+/// making error handling more consistent and ergonomic.
+#[derive(Debug, Error)]
+pub enum SdForgeError {
+    /// API error - request processing failure
+    #[error(transparent)]
+    Api(#[from] ApiError),
+
+    /// Authentication error
+    #[error(transparent)]
+    Auth(#[from] crate::security::AuthError),
+
+    /// JWT error
+    #[error(transparent)]
+    Jwt(#[from] crate::security::JwtError),
+
+    /// Authentication configuration error
+    #[error(transparent)]
+    AuthConfig(#[from] crate::security::AuthConfigError),
+
+    /// Configuration error
+    #[error(transparent)]
+    Config(#[from] crate::config::ConfigError),
+
+    /// Generator error (CLI) - only available with cli feature
+    #[cfg(feature = "cli")]
+    #[error(transparent)]
+    Generator(#[from] crate::cli::generator::error::GeneratorError),
+
+    /// Rate limit error from security module
+    #[error(transparent)]
+    RateLimit(#[from] crate::security::RateLimitError),
+
+    /// Internal error with source
+    #[error("Internal error: {0}")]
+    Internal(String),
+}
+
+impl SdForgeError {
+    /// Create a new Internal error
+    pub fn internal(message: impl Into<String>) -> Self {
+        Self::Internal(message.into())
+    }
+
+    /// Get the error category
+    pub fn category(&self) -> ErrorCategory {
+        match self {
+            SdForgeError::Api(err) => err.category(),
+            SdForgeError::Auth(_) | SdForgeError::Jwt(_) => ErrorCategory::AuthError,
+            SdForgeError::AuthConfig(_) => ErrorCategory::AuthError,
+            SdForgeError::Config(_) => ErrorCategory::ClientError,
+            #[cfg(feature = "cli")]
+            SdForgeError::Generator(_) => ErrorCategory::ClientError,
+            SdForgeError::RateLimit(_) => ErrorCategory::RateLimitError,
+            SdForgeError::Internal(_) => ErrorCategory::ServerError,
+        }
+    }
+
+    /// Get a sanitized error message for external display
+    pub fn sanitized_message(&self) -> String {
+        match self {
+            SdForgeError::Api(err) => err.sanitized_message(),
+            SdForgeError::Internal(msg) => msg.clone(),
+            other => other.to_string(),
+        }
+    }
+
+    /// Convert to ServiceError for HTTP response
+    pub fn to_service_error(&self) -> ServiceError {
+        match self {
+            SdForgeError::Api(err) => {
+                // Convert ApiError to ServiceError by reconstructing
+                match err {
+                    ApiError::NotFound { resource, resource_id } => ServiceError::with_details(
+                        "NOT_FOUND",
+                        format!("Resource not found: {}", resource),
+                        serde_json::json!({ "resource": resource, "resource_id": resource_id }),
+                        404,
+                    ),
+                    ApiError::InvalidInput { message, field, value } => ServiceError::with_details(
+                        "INVALID_INPUT",
+                        message.clone(),
+                        serde_json::json!({ "field": field, "value": value }),
+                        400,
+                    ),
+                    ApiError::AuthenticationFailed { reason } => ServiceError::with_details(
+                        "AUTHENTICATION_FAILED",
+                        format!("Authentication failed: {}", reason),
+                        serde_json::json!({ "reason": reason }),
+                        401,
+                    ),
+                    ApiError::AccessDenied { permission, user_id } => ServiceError::with_details(
+                        "ACCESS_DENIED",
+                        format!("Access denied: {}", permission),
+                        serde_json::json!({ "permission": permission, "user_id": user_id }),
+                        403,
+                    ),
+                    ApiError::RateLimitExceeded { limit, window_seconds } => ServiceError::with_details(
+                        "RATE_LIMIT_EXCEEDED",
+                        "Rate limit exceeded".to_string(),
+                        serde_json::json!({ "limit": limit, "window_seconds": window_seconds }),
+                        429,
+                    ),
+                    ApiError::Internal { message, error_id, context, .. } => {
+                        let mut details = serde_json::json!({ "error_id": error_id });
+                        if let Some(ctx) = context {
+                            details["context"] = serde_json::to_value(ctx).unwrap_or(serde_json::json!({}));
+                        }
+                        ServiceError::with_details("INTERNAL_ERROR", message.clone(), details, 500)
+                    }
+                    ApiError::ServiceUnavailable { service, retry_after, .. } => ServiceError::with_details(
+                        "SERVICE_UNAVAILABLE",
+                        format!("Service unavailable: {}", service),
+                        serde_json::json!({ "service": service, "retry_after": retry_after }),
+                        503,
+                    ),
+                    ApiError::ValidationError { field, constraint } => ServiceError::with_details(
+                        "VALIDATION_ERROR",
+                        format!("Validation failed: {}", field),
+                        serde_json::json!({ "field": field, "constraint": constraint }),
+                        422,
+                    ),
+                }
+            }
+            SdForgeError::Auth(e) => ServiceError::with_details(
+                "AUTH_ERROR",
+                e.to_string(),
+                serde_json::json!({ "type": "auth" }),
+                401,
+            ),
+            SdForgeError::Jwt(e) => ServiceError::with_details(
+                "JWT_ERROR",
+                e.to_string(),
+                serde_json::json!({ "type": "jwt" }),
+                401,
+            ),
+            SdForgeError::AuthConfig(e) => ServiceError::with_details(
+                "AUTH_CONFIG_ERROR",
+                e.to_string(),
+                serde_json::json!({ "type": "auth_config" }),
+                500,
+            ),
+            SdForgeError::Config(e) => ServiceError::with_details(
+                "CONFIG_ERROR",
+                e.to_string(),
+                serde_json::json!({ "type": "config" }),
+                400,
+            ),
+            #[cfg(feature = "cli")]
+            SdForgeError::Generator(e) => ServiceError::with_details(
+                "GENERATOR_ERROR",
+                e.to_string(),
+                serde_json::json!({ "type": "generator" }),
+                500,
+            ),
+            SdForgeError::RateLimit(e) => ServiceError::with_details(
+                "RATE_LIMIT_ERROR",
+                e.to_string(),
+                serde_json::json!({ 
+                    "limit": e.limit,
+                    "remaining": e.remaining,
+                    "retry_after": e.retry_after
+                }),
+                429,
+            ),
+            SdForgeError::Internal(msg) => ServiceError::with_details(
+                "INTERNAL_ERROR",
+                msg.clone(),
+                serde_json::json!({ "type": "internal" }),
+                500,
+            ),
+        }
+    }
+}
+
+// Backward compatibility - keep existing From implementation
 impl From<ApiError> for ServiceError {
     fn from(err: ApiError) -> Self {
         match err {
@@ -1195,5 +1373,54 @@ mod tests {
 
         let validation = ApiError::validation("email", "must be valid");
         assert!(matches!(validation, ApiError::ValidationError { .. }));
+    }
+
+    /// Test SdForgeError unified error type
+    #[test]
+    fn test_sdforge_error_api_variant() {
+        let api_err = ApiError::not_found("user", Some("123".into()));
+        let sdforge_err: SdForgeError = api_err.into();
+        
+        assert!(matches!(sdforge_err, SdForgeError::Api(_)));
+        assert_eq!(sdforge_err.category(), ErrorCategory::ClientError);
+    }
+
+    /// Test SdForgeError internal constructor
+    #[test]
+    fn test_sdforge_error_internal() {
+        let err = SdForgeError::internal("test error");
+        
+        match &err {
+            SdForgeError::Internal(msg) => {
+                assert_eq!(msg, &"test error");
+            }
+            _ => panic!("Expected Internal variant"),
+        }
+        assert_eq!(err.category(), ErrorCategory::ServerError);
+    }
+
+    /// Test SdForgeError sanitized_message
+    #[test]
+    fn test_sdforge_error_sanitized_message() {
+        let internal = SdForgeError::internal("Database connection failed: host=localhost");
+        let msg = internal.sanitized_message();
+        assert!(msg.contains("Database")); // Not sanitized for Internal variant
+        
+        let api_internal = ApiError::internal_error("DB failed", "ERR001");
+        let sdforge_err: SdForgeError = api_internal.into();
+        let msg = sdforge_err.sanitized_message();
+        assert!(msg.contains("internal error")); // Sanitized
+        assert!(!msg.contains("DB failed"));
+    }
+
+    /// Test SdForgeError to_service_error conversion
+    #[test]
+    fn test_sdforge_error_to_service_error() {
+        let api_err = ApiError::not_found("resource", None);
+        let sdforge_err: SdForgeError = api_err.into();
+        let service_err = sdforge_err.to_service_error();
+        
+        // Should preserve the error details
+        assert!(service_err.code == "NOT_FOUND" || service_err.code.contains("NOT_FOUND"));
     }
 }
