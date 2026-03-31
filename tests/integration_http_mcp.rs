@@ -126,7 +126,7 @@ mod integration_tests {
 
         let server = build().await;
         // Server built successfully - verify it's not null
-        assert!(!std::ptr::eq(&server, &std::ptr::null()));
+        assert!(!std::ptr::eq(&server, std::ptr::null()));
     }
 
     // ============================================================================

@@ -9,14 +9,14 @@ mod http_tests {
     async fn test_http_server_builds() {
         let app = build();
         // Verify the app is not null and has expected structure
-        assert!(!std::ptr::eq(&app, &std::ptr::null()), "HTTP app should build successfully");
+        assert!(!std::ptr::eq(&app, std::ptr::null()), "HTTP app should build successfully");
     }
 
     #[test]
     fn test_http_build_sync() {
         let app = build();
         // Verify the app builds without panic
-        assert!(!std::ptr::eq(&app, &std::ptr::null()), "HTTP sync build should succeed");
+        assert!(!std::ptr::eq(&app, std::ptr::null()), "HTTP sync build should succeed");
     }
 }
 
@@ -27,7 +27,7 @@ mod timestamp_tests {
     #[test]
     fn test_timestamp_feature_enabled() {
         let app = build();
-        assert!(!std::ptr::eq(&app, &std::ptr::null()), "HTTP app with timestamp should build");
+        assert!(!std::ptr::eq(&app, std::ptr::null()), "HTTP app with timestamp should build");
     }
 }
 
@@ -38,7 +38,7 @@ mod no_timestamp_tests {
     #[test]
     fn test_timestamp_feature_disabled() {
         let app = build();
-        assert!(!std::ptr::eq(&app, &std::ptr::null()), "HTTP app without timestamp should build");
+        assert!(!std::ptr::eq(&app, std::ptr::null()), "HTTP app without timestamp should build");
     }
 }
 
@@ -49,6 +49,6 @@ mod streaming_tests {
     #[test]
     fn test_streaming_feature_enabled() {
         let app = build();
-        assert!(!std::ptr::eq(&app, &std::ptr::null()), "HTTP app with streaming should build");
+        assert!(!std::ptr::eq(&app, std::ptr::null()), "HTTP app with streaming should build");
     }
 }
