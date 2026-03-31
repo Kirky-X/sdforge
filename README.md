@@ -75,6 +75,21 @@
 
 </div>
 
+### 🆕 Phase 1 Architecture Improvements (v0.1.0)
+
+Recent architectural enhancements include:
+
+- **🔄 Unified Registration System** - Eliminated 95+ lines of duplicate code across HTTP, MCP, WebSocket, and gRPC modules using trait-based abstraction and procedural macros
+- **⚙️ Modular Configuration Management** - Refactored configuration into dedicated modules (app, cache, security) with centralized defaults and Builder pattern support
+- **🔐 Enhanced Security Module** - API Key versioning, LRU caching, key rotation with audit logging, and comprehensive security headers configuration
+- **💾 Advanced Caching** - Pattern-based cache invalidation, key normalization, batch operations, and statistics tracking
+
+📚 **Learn more**: 
+- [Migration Guide](docs/MIGRATION_GUIDE_PHASE1.md)
+- [Usage Examples](docs/EXAMPLES_PHASE1.md)
+- [Phase 2 Report](docs/PHASE2_REPORT.md) - Configuration validation & performance benchmarks
+- [Phase 3 Plan](docs/PHASE3_PLAN.md) - Code quality zeroing & optimization
+
 ---
 
 ## <span id="installation">📦 Installation</span>

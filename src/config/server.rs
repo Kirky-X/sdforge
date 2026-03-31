@@ -52,6 +52,40 @@ impl ServerConfig {
     }
 }
 
+#[cfg(feature = "validation")]
+impl crate::config::ValidateConfig for ServerConfig {
+    fn validate(&self) -> Result<(), crate::config::ConfigError> {
+        use crate::config::ConfigError;
+        
+        // Validate port range
+        if self.port == 0 {
+            return Err(ConfigError::ValidationError(
+                "Server port cannot be 0".into(),
+            ));
+        }
+
+        // Validate timeout is reasonable
+        if self.request_timeout_secs == 0 {
+            return Err(ConfigError::ValidationError(
+                "Server request_timeout_secs cannot be 0".into(),
+            ));
+        }
+
+        if self.request_timeout_secs > 86400 {
+            return Err(ConfigError::ValidationError(
+                "Server request_timeout_secs should not exceed 86400 seconds (24 hours)".into(),
+            ));
+        }
+
+        // Validate CORS if present
+        if let Some(ref cors) = self.cors {
+            cors.validate()?;
+        }
+
+        Ok(())
+    }
+}
+
 /// TLS configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Config)]
 pub struct TlsConfig {

@@ -152,7 +152,7 @@ impl TranslationStore {
     pub fn add_translation(&mut self, locale: Locale, key: String, translation: String) {
         self.translations
             .entry(locale)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .insert(key, translation);
     }
     
@@ -724,11 +724,6 @@ pub enum SdForgeError {
     #[error(transparent)]
     Config(#[from] crate::config::ConfigError),
 
-    /// Generator error (CLI) - only available with cli feature
-    #[cfg(feature = "cli")]
-    #[error(transparent)]
-    Generator(#[from] crate::cli::generator::error::GeneratorError),
-
     /// Rate limit error from security module
     #[cfg(feature = "security")]
     #[error(transparent)]
@@ -754,8 +749,6 @@ impl SdForgeError {
             #[cfg(feature = "security")]
             SdForgeError::AuthConfig(_) => ErrorCategory::AuthError,
             SdForgeError::Config(_) => ErrorCategory::ClientError,
-            #[cfg(feature = "cli")]
-            SdForgeError::Generator(_) => ErrorCategory::ClientError,
             #[cfg(feature = "security")]
             SdForgeError::RateLimit(_) => ErrorCategory::RateLimitError,
             SdForgeError::Internal(_) => ErrorCategory::ServerError,
@@ -854,13 +847,6 @@ impl SdForgeError {
                 e.to_string(),
                 serde_json::json!({ "type": "config" }),
                 400,
-            ),
-            #[cfg(feature = "cli")]
-            SdForgeError::Generator(e) => ServiceError::with_details(
-                "GENERATOR_ERROR",
-                e.to_string(),
-                serde_json::json!({ "type": "generator" }),
-                500,
             ),
             #[cfg(feature = "security")]
             SdForgeError::RateLimit(e) => ServiceError::with_details(

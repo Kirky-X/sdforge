@@ -207,6 +207,11 @@ impl ApiKeyMetadata {
             return Err(format!("Version {} does not exist", version_index));
         }
 
+        let _old_version = self.active_version_index
+            .and_then(|idx| self.versions.get(idx))
+            .map(|v| v.version.clone())
+            .unwrap_or_else(|| "none".to_string());
+
         // Deactivate current version
         if let Some(current_idx) = self.active_version_index {
             if let Some(current) = self.versions.get_mut(current_idx) {
@@ -218,6 +223,15 @@ impl ApiKeyMetadata {
         if let Some(new_version) = self.versions.get_mut(version_index) {
             new_version.is_active = true;
             self.active_version_index = Some(version_index);
+            
+            // Log rotation event (tracing will be added when feature is enabled)
+            // tracing::info!(
+            //     key_id = %self.key_id,
+            //     old_version = %old_version,
+            //     new_version = %new_version_name,
+            //     "API key rotated to new version"
+            // );
+            
             Ok(())
         } else {
             Err(format!("Version {} not found", version_index))
