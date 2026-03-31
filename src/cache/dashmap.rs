@@ -97,6 +97,31 @@ impl SyncCache for DashMapCache {
     fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
+
+    fn find_keys_by_pattern(&self, pattern: &str) -> Vec<String> {
+        // Convert glob-like pattern to regex
+        let regex_pattern = pattern
+            .replace('*', ".*")
+            .replace('?', ".");
+        
+        let re = match regex::Regex::new(&format!("^{}$", regex_pattern)) {
+            Ok(re) => re,
+            Err(_) => return vec![],
+        };
+
+        self.inner
+            .iter()
+            .filter(|item| re.is_match(item.key()))
+            .map(|item| item.key().clone())
+            .collect()
+    }
+
+    fn get_stats(&self) -> std::collections::HashMap<String, u64> {
+        let mut stats = std::collections::HashMap::new();
+        stats.insert("total_keys".to_string(), self.len() as u64);
+        stats.insert("capacity".to_string(), u64::MAX); // DashMap doesn't expose capacity
+        stats
+    }
 }
 
 #[cfg(test)]

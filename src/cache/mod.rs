@@ -38,6 +38,29 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 // =============================================================================
+// 键规范化函数
+// =============================================================================
+
+/// 规范化缓存键，确保一致的格式
+///
+/// # Arguments
+/// * `key` - 原始键
+///
+/// # Returns
+/// 规范化后的键字符串
+///
+/// # Examples
+/// ```
+/// use sdforge::cache::canonicalize_cache_key;
+///
+/// let normalized = canonicalize_cache_key("  user:123  ");
+/// assert_eq!(normalized, "user:123");
+/// ```
+pub fn canonicalize_cache_key(key: &str) -> String {
+    key.trim().to_lowercase()
+}
+
+// =============================================================================
 // 同步缓存 Trait（用于 security 模块等需要同步操作的场景）
 // =============================================================================
 
@@ -117,6 +140,41 @@ pub trait SyncCache: Send + Sync {
 
     /// 检查是否为空
     fn is_empty(&self) -> bool;
+
+    /// 根据模式删除匹配的键
+    ///
+    /// # Arguments
+    /// * `pattern` - 匹配模式（支持通配符 * 和前缀匹配）
+    ///
+    /// # Returns
+    /// 被删除的键的数量
+    ///
+    /// # Examples
+    /// ```ignore
+    /// cache.invalidate("user:*"); // 删除所有 user: 开头的键
+    /// cache.invalidate("*session*"); // 删除包含 session 的键
+    /// ```
+    fn invalidate(&self, pattern: &str) -> usize {
+        let keys = self.find_keys_by_pattern(pattern);
+        self.delete_many(&keys.iter().map(|s| s.as_str()).collect::<Vec<_>>())
+    }
+
+    /// 根据模式查找匹配的键（不删除）
+    ///
+    /// # Arguments
+    /// * `pattern` - 匹配模式
+    ///
+    /// # Returns
+    /// 匹配的键列表
+    fn find_keys_by_pattern(&self, pattern: &str) -> Vec<String>;
+
+    /// 获取缓存统计信息
+    ///
+    /// # Returns
+    /// 包含命中数、未命中数、命中率等的 HashMap
+    fn get_stats(&self) -> HashMap<String, u64> {
+        HashMap::new()
+    }
 }
 
 /// SyncCache 的 Arc 智能指针别名

@@ -416,33 +416,12 @@ impl WebSocketHandler for DefaultWebSocketHandler {
 }
 
 #[cfg(feature = "websocket")]
-/// WebSocket route registration
-pub struct WebSocketRoute {
-    /// The WebSocket route path
-    path: &'static str,
-    /// The WebSocket handler for this route
-    create_fn: fn() -> Arc<dyn WebSocketHandler>,
-}
-
-impl WebSocketRoute {
-    #[allow(missing_docs)]
-    pub const fn new(path: &'static str, create_fn: fn() -> Arc<dyn WebSocketHandler>) -> Self {
-        Self { path, create_fn }
-    }
-
-    #[allow(missing_docs)]
-    pub fn path(&self) -> &str {
-        self.path
-    }
-
-    #[allow(missing_docs)]
-    pub fn handler(&self) -> Arc<dyn WebSocketHandler> {
-        (self.create_fn)()
-    }
-}
+use crate::core::ApiMetadata;
+#[cfg(feature = "websocket")]
+use crate::define_registration;
 
 #[cfg(feature = "websocket")]
-inventory::collect!(WebSocketRoute);
+define_registration!(WebSocketRoute, Arc<dyn WebSocketHandler>, ApiMetadata);
 /// Custom WebSocket upgrade extractor that validates JWT auth before upgrade.
 ///
 /// This type handles the entire WebSocket upgrade lifecycle:
@@ -750,8 +729,10 @@ pub fn build() -> Router {
     let state = Arc::new(AppState::new(manager));
 
     for route in inventory::iter::<WebSocketRoute> {
+        // Use the registration name to construct the path
+        let path = format!("/{}", route.name);
         router = router.route(
-            route.path,
+            &path,
             axum::routing::get(websocket_upgrade).with_state(state.clone()),
         );
     }
@@ -1119,9 +1100,18 @@ mod tests {
             Arc::new(MockHandler) as Arc<dyn WebSocketHandler>
         }
 
-        let route = WebSocketRoute::new("/ws", create_mock_handler);
+        let route = WebSocketRoute::new("/ws", "v1", create_mock_handler, || {
+            ApiMetadata {
+                name: "/ws".to_string(),
+                version: "v1".to_string(),
+                description: "WebSocket handler".to_string(),
+                cache_ttl: None,
+                is_streaming: true,
+            }
+        });
 
-        assert_eq!(route.path(), "/ws");
+        assert_eq!(route.name(), "/ws");
+        assert_eq!(route.version(), "v1");
     }
 
     /// Test WebSocketConfig default has no auth configured

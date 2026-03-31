@@ -13,16 +13,33 @@
 //! - `defaults` - Default values for all configuration types
 //! - `hot_reload` - Hot reload support (feature-gated)
 
-use serde::{Deserialize, Serialize};
 
 pub use confers::Config;
 #[cfg(feature = "validation")]
 pub use confers::Validate;
 
+/// Validation trait for configuration types
+/// 
+/// This trait provides a standard interface for validating configuration values.
+/// Implementors should check that their configuration is valid and return
+/// descriptive errors if not.
+#[cfg(feature = "validation")]
+pub trait ValidateConfig {
+    /// Validate the configuration
+    /// 
+    /// # Returns
+    /// - `Ok(())` if the configuration is valid
+    /// - `Err(ConfigError)` if validation fails
+    fn validate(&self) -> Result<(), ConfigError>;
+}
+
 // Configuration submodules
 pub mod api;
+pub mod app;
 pub mod auth;
+pub mod cache;
 pub mod cors;
+pub mod security;
 pub mod server;
 pub mod timeout;
 
@@ -35,8 +52,11 @@ pub use hot_reload::{create_config_watcher, ConfigEvent, ConfigManager, ConfigWa
 
 // Re-export all configuration types
 pub use api::{ApiConfig, EnvHelper, TracingConfig};
+pub use app::{AppConfig, AppConfigBuilder};
 pub use auth::AuthConfig;
+pub use cache::CacheConfig;
 pub use cors::{build_cors_layer, CorsConfig};
+pub use security::SecurityConfig;
 pub use server::{ServerConfig, TlsConfig};
 pub use timeout::TimeoutConfig;
 
@@ -79,114 +99,6 @@ pub enum ConfigError {
     /// Unknown error
     #[error("Unknown error: {0}")]
     Unknown(String),
-}
-
-/// Application configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Config)]
-#[serde(default)]
-pub struct AppConfig {
-    /// Server configuration
-    pub server: ServerConfig,
-    /// Authentication configuration
-    #[serde(alias = "auth")]
-    #[config(skip)]
-    pub authentication: AuthConfig,
-    /// Timeout configuration
-    pub timeout: Option<TimeoutConfig>,
-}
-
-impl AppConfig {
-    /// Create builder for configuration
-    pub fn builder() -> AppConfigBuilder {
-        AppConfigBuilder::new()
-    }
-
-    /// Validate configuration with cross-field validation
-    ///
-    /// This method performs validation that requires access to multiple fields
-    /// and cannot be done at the individual field level.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - Timeout values are inconsistent
-    pub fn validate(&self) -> Result<(), ConfigError> {
-        // Validate server configuration
-        self.server.validate()?;
-
-        // Validate authentication configuration
-        self.authentication.validate()?;
-
-        // Validate timeout configuration
-        if let Some(ref timeout) = self.timeout {
-            timeout.validate()?;
-        }
-
-        Ok(())
-    }
-}
-
-/// Builder for AppConfig
-#[derive(Debug, Clone, Default)]
-pub struct AppConfigBuilder {
-    server: ServerConfig,
-    authentication: AuthConfig,
-    timeout: Option<TimeoutConfig>,
-}
-
-impl AppConfigBuilder {
-    /// Create a new AppConfigBuilder with default configuration values.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Set the server configuration for the application.
-    pub fn server(mut self, server: ServerConfig) -> Self {
-        self.server = server;
-        self
-    }
-
-    /// Set the authentication configuration for the application.
-    pub fn authentication(mut self, authentication: AuthConfig) -> Self {
-        self.authentication = authentication;
-        self
-    }
-
-    /// Set the timeout configuration for the application.
-    ///
-    /// # Arguments
-    ///
-    /// * `timeout` - Timeout configuration value.
-    ///
-    /// # Returns
-    ///
-    /// Returns the updated builder instance.
-    ///
-    /// # Errors
-    ///
-    /// This function does not return errors.
-    ///
-    /// # Examples
-    ///
-    /// ```rust
-    /// use sdforge::config::{AppConfigBuilder, TimeoutConfig};
-    ///
-    /// let builder = AppConfigBuilder::new().timeout(TimeoutConfig::default());
-    /// let _ = builder;
-    /// ```
-    pub fn timeout(mut self, timeout: TimeoutConfig) -> Self {
-        self.timeout = Some(timeout);
-        self
-    }
-
-    /// Build an AppConfig instance from the current builder state.
-    pub fn build(self) -> AppConfig {
-        AppConfig {
-            server: self.server,
-            authentication: self.authentication,
-            timeout: self.timeout,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -263,26 +175,43 @@ mod tests {
             })
             .authentication(AuthConfig::None)
             .build();
-
+        
+        // With validation feature, build() returns Result
+        #[cfg(feature = "validation")]
+        let config = config.expect("Failed to build config");
+        
         assert_eq!(config.server.host, "localhost");
         assert_eq!(config.server.port, 8080);
     }
 
     #[test]
     fn test_app_config_builder_with_timeout() {
-        let config = AppConfig::builder()
+        let result = AppConfig::builder()
+            .server(ServerConfig {
+                host: "0.0.0.0".to_string(),
+                port: 8080,
+                request_timeout_secs: 30, // Must be > 0 for validation
+                cors: None,
+            })
             .timeout(TimeoutConfig {
                 default_timeout_secs: 60,
                 route_timeouts: std::collections::HashMap::new(),
             })
             .build();
+        
+        #[cfg(feature = "validation")]
+        let config = result.expect("Failed to build config");
+        
+        #[cfg(not(feature = "validation"))]
+        let config = result;
+        
         assert!(config.timeout.is_some());
         assert_eq!(config.timeout.unwrap().default_timeout_secs, 60);
     }
 
     #[test]
     fn test_app_config_builder_full() {
-        let config = AppConfig::builder()
+        let result = AppConfig::builder()
             .server(ServerConfig {
                 host: "0.0.0.0".to_string(),
                 port: 8080,
@@ -295,6 +224,13 @@ mod tests {
             })
             .timeout(TimeoutConfig::default())
             .build();
+        
+        #[cfg(feature = "validation")]
+        let config = result.expect("Failed to build config");
+        
+        #[cfg(not(feature = "validation"))]
+        let config = result;
+        
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 8080);
         assert!(config.timeout.is_some());
@@ -356,6 +292,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "validation")]
     fn test_app_config_validate_valid() {
         let config = AppConfig {
             server: ServerConfig {
@@ -374,6 +311,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "validation")]
     fn test_app_config_validate_invalid_server_port() {
         let config = AppConfig {
             server: ServerConfig {
@@ -389,6 +327,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "validation")]
     fn test_app_config_validate_invalid_auth_prefix() {
         let config = AppConfig {
             server: ServerConfig {
