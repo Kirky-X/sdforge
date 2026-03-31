@@ -21,10 +21,36 @@ pub(crate) struct AuditLogBatch {
     log: AuditLog,
 }
 
+// =============================================================================
+// Global State - Pre-compiled Regex Patterns for Sanitization
+// =============================================================================
+// These are immutable, thread-safe, pre-compiled regex patterns.
+// Using Lazy initialization ensures they are compiled only once at first use,
+// providing optimal performance while maintaining safety guarantees.
+//
+// Design Rationale:
+// - Immutable after initialization (no mutable global state)
+// - Thread-safe access via once_cell::Lazy
+// - Performance optimization (avoid re-compilation on each call)
+// - No dependency injection needed (these are pure functions with no side effects)
+// =============================================================================
+
+/// Pattern to match JWT tokens (three base64url-encoded segments separated by dots)
+/// 
+/// Used to detect and redact JWT tokens from error messages to prevent token leakage.
+/// Format: header.payload.signature (each segment is base64url encoded)
 static JWT_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
     regex::Regex::new(r#"eyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+"#).unwrap()
 });
 
+/// Pattern to match sensitive key-value pairs (passwords, secrets, tokens, keys)
+/// 
+/// Matches patterns like:
+/// - `password=secret123`
+/// - `token: abcdef`
+/// - `api_key: xyz789`
+/// 
+/// Limited repetition (1-100 chars) prevents ReDoS attacks.
 static SECRET_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
     // Limited repetition to prevent ReDoS attacks
     // Maximum 100 characters after the separator
@@ -32,6 +58,14 @@ static SECRET_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
         .unwrap()
 });
 
+/// Pattern to match certificate/key file paths
+/// 
+/// Matches paths ending with common certificate extensions:
+/// - `.pem` - Privacy Enhanced Mail certificate
+/// - `.key` - Private key file
+/// - `.crt` - Certificate file
+/// - `.p12` - PKCS#12 archive
+/// - `.jks` - Java KeyStore
 static PATH_PATTERN: Lazy<regex::Regex> =
     Lazy::new(|| regex::Regex::new(r#"/[a-zA-Z0-9/_.-]+\.(pem|key|crt|p12|jks)"#).unwrap());
 
@@ -774,6 +808,66 @@ mod tests {
         let sanitized = sanitize_error_message(message);
         assert!(!sanitized.contains("eyJ"));
         assert!(sanitized.contains("[REDACTED_JWT]"));
+    }
+
+    #[test]
+    fn test_sanitize_error_message_removes_secrets() {
+        // Test secret pattern removal
+        let message = "Failed with password=secret123 and token: abc456";
+        let sanitized = sanitize_error_message(message);
+        assert!(sanitized.contains("password=[REDACTED]"));
+        assert!(sanitized.contains("token=[REDACTED]"));
+    }
+
+    #[test]
+    fn test_sanitize_error_message_removes_api_keys() {
+        // Test API key removal (20+ characters)
+        // Note: API keys are caught by the secret pattern first, then by API key pattern
+        let message = "API key: sk_live_REDACTED_TEST_KEY_PLACEHOLDER";
+        let sanitized = sanitize_error_message(message);
+        // The key should be redacted (either as [REDACTED] or [REDACTED_API_KEY])
+        assert!(!sanitized.contains("sk_live_"), "API key should be redacted, got: {}", sanitized);
+    }
+
+    #[test]
+    fn test_sanitize_error_message_removes_credit_cards() {
+        // Test credit card number removal
+        let message = "Card number: 1234-5678-9012-3456";
+        let sanitized = sanitize_error_message(message);
+        assert!(sanitized.contains("[REDACTED_CREDIT_CARD]"));
+    }
+
+    #[test]
+    fn test_sanitize_error_message_removes_ssn() {
+        // Test SSN removal
+        let message = "SSN: 123-45-6789";
+        let sanitized = sanitize_error_message(message);
+        assert!(sanitized.contains("[REDACTED_SSN]"));
+    }
+
+    #[test]
+    fn test_sanitize_error_message_removes_certificate_paths() {
+        // Test certificate path removal
+        let message = "Cannot load /etc/ssl/certs/server.pem";
+        let sanitized = sanitize_error_message(message);
+        assert!(sanitized.contains("[REDACTED_PATH]"));
+    }
+
+    #[test]
+    fn test_sanitize_error_message_truncation() {
+        // Test truncation of long messages
+        let long_message = "x".repeat(1000);
+        let sanitized = sanitize_error_message(&long_message);
+        assert!(sanitized.len() <= 520); // 500 + "...[TRUNCATED]"
+        assert!(sanitized.ends_with("...[TRUNCATED]"));
+    }
+
+    #[test]
+    fn test_global_regex_patterns_are_initialized() {
+        // Verify global regex patterns are properly initialized
+        assert!(JWT_PATTERN.is_match("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxw"));
+        assert!(SECRET_PATTERN.is_match("password=secret123"));
+        assert!(PATH_PATTERN.is_match("/path/to/cert.pem"));
     }
 
     #[tokio::test]
