@@ -7,7 +7,8 @@
 
 use crate::cache::SyncCache;
 use once_cell::sync::Lazy;
-use std::sync::Arc;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 /// 基于 DashMap 的同步内存缓存
 ///
@@ -20,6 +21,10 @@ use std::sync::Arc;
 pub struct DashMapCache {
     /// 内部存储
     inner: Arc<dashmap::DashMap<String, Vec<u8>>>,
+    /// 可选：LRU 队列用于驱逐 (Some 时启用)
+    lru_queue: Option<Arc<Mutex<VecDeque<String>>>>,
+    /// 最大容量限制
+    max_capacity: Option<usize>,
 }
 
 impl DashMapCache {
@@ -27,19 +32,35 @@ impl DashMapCache {
     pub fn new() -> Self {
         Self {
             inner: Arc::new(dashmap::DashMap::new()),
+            lru_queue: None,
+            max_capacity: None,
         }
     }
 
-    /// 创建指定容量的缓存
+    /// 创建指定容量的缓存（带 LRU 驱逐）
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: Arc::new(dashmap::DashMap::with_capacity(capacity)),
+            lru_queue: Some(Arc::new(Mutex::new(VecDeque::with_capacity(
+                capacity,
+            )))),
+            max_capacity: Some(capacity),
         }
     }
 
     /// 获取底层 DashMap 的 Arc 引用（用于高级操作）
     pub fn inner(&self) -> &Arc<dashmap::DashMap<String, Vec<u8>>> {
         &self.inner
+    }
+
+    /// 获取当前缓存大小
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// 检查缓存是否为空
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
     }
 }
 
@@ -69,7 +90,31 @@ impl SyncCache for DashMapCache {
     }
 
     fn set(&self, key: &str, value: Vec<u8>) {
-        self.inner.insert(key.to_string(), value);
+        let key_string = key.to_string();
+        
+        // If LRU is enabled, update the queue
+        if let Some(ref lru_queue) = self.lru_queue {
+            if let Ok(mut queue) = lru_queue.lock() {
+                // Remove existing entry if it exists
+                if let Some(pos) = queue.iter().position(|k| k == &key_string) {
+                    queue.remove(pos);
+                }
+                
+                // Add to front (most recently used)
+                queue.push_front(key_string.clone());
+                
+                // Evict oldest if over capacity
+                if let Some(max_cap) = self.max_capacity {
+                    while queue.len() > max_cap {
+                        if let Some(oldest_key) = queue.pop_back() {
+                            self.inner.remove(&oldest_key);
+                        }
+                    }
+                }
+            }
+        }
+        
+        self.inner.insert(key_string, value);
     }
 
     fn set_many(&self, items: &[(String, Vec<u8>)]) {
