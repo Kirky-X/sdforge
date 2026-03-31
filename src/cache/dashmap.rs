@@ -6,6 +6,7 @@
 //! 内部使用 `dashmap::DashMap`，提供 O(1) 的并发读写性能。
 
 use crate::cache::SyncCache;
+use once_cell::sync::Lazy;
 use std::sync::Arc;
 
 /// 基于 DashMap 的同步内存缓存
@@ -99,15 +100,24 @@ impl SyncCache for DashMapCache {
     }
 
     fn find_keys_by_pattern(&self, pattern: &str) -> Vec<String> {
-        // Convert glob-like pattern to regex
+        // Convert glob-like pattern to regex with caching
         let regex_pattern = pattern
             .replace('*', ".*")
             .replace('?', ".");
         
-        let re = match regex::Regex::new(&format!("^{}$", regex_pattern)) {
-            Ok(re) => re,
-            Err(_) => return vec![],
-        };
+        // Use a static cache for compiled regex patterns
+        static REGEX_CACHE: Lazy<dashmap::DashMap<String, regex::Regex>> = 
+            Lazy::new(|| dashmap::DashMap::new());
+        
+        // Get or compile the regex
+        let re = REGEX_CACHE
+            .entry(regex_pattern.clone())
+            .or_insert_with(|| {
+                regex::Regex::new(&format!("^{}$", regex_pattern))
+                    .expect("Invalid regex pattern")
+            })
+            .value()
+            .clone();
 
         self.inner
             .iter()
