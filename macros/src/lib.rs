@@ -10,6 +10,21 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_macro_input, FnArg, ItemFn, ItemMod, Pat};
 
+/// Remove #[state] and #[param] attributes from function parameters.
+/// These attributes are only used by the macro for parameter kind inference
+/// and should not appear in the output function.
+fn clean_function_attributes(mut input: ItemFn) -> ItemFn {
+    for arg in &mut input.sig.inputs {
+        if let FnArg::Typed(pat_type) = arg {
+            pat_type.attrs.retain(|attr| {
+                // Keep all attributes except #[state] and #[param]
+                !attr.path().is_ident("state") && !attr.path().is_ident("param")
+            });
+        }
+    }
+    input
+}
+
 /// Type alias for service_api arguments parsing result
 type ServiceApiArgs = Result<
     (
@@ -23,6 +38,7 @@ type ServiceApiArgs = Result<
         Option<u64>,
         Option<String>,
         Option<String>,
+        Option<bool>, // no_prefix option
     ),
     syn::Error,
 >;
@@ -67,12 +83,22 @@ fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Erro
 
         let mut value = String::new();
         if let Some(&'"') = chars.peek() {
+            // Quoted string value
             chars.next();
             for c in chars.by_ref() {
                 if c == '"' {
                     break;
                 }
                 value.push(c);
+            }
+        } else {
+            // Unquoted value (boolean, number, etc.)
+            while let Some(&c) = chars.peek() {
+                if c == ',' || c.is_whitespace() {
+                    break;
+                }
+                value.push(c);
+                chars.next();
             }
         }
 
@@ -236,6 +262,7 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
     let mut cache_ttl = None;
     let mut ws_path = None;
     let mut grpc_method = None;
+    let mut no_prefix = None;
 
     for (key, value) in pairs {
         match key.as_str() {
@@ -271,6 +298,14 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
             }
             "ws_path" => ws_path = Some(value),
             "grpc_method" => grpc_method = Some(value),
+            "no_prefix" => {
+                no_prefix = Some(value.parse::<bool>().map_err(|_| {
+                    syn::Error::new(
+                        proc_macro2::Span::call_site(),
+                        format!("Invalid boolean value for 'no_prefix': {}", value),
+                    )
+                })?)
+            }
             _ => {
                 return Err(syn::Error::new(
                     proc_macro2::Span::call_site(),
@@ -304,6 +339,7 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
         cache_ttl,
         ws_path,
         grpc_method,
+        no_prefix,
     ))
 }
 
@@ -341,6 +377,12 @@ enum ParamKind {
     Cookie,
     Form,
     Body,
+    /// Extension state injection (extracted via Extension<T>)
+    /// Use #[param(kind = "extension")] or #[state] attribute
+    State,
+    /// Extension state injection with explicit kind annotation
+    /// Use #[param(kind = "extension")] attribute
+    Extension,
 }
 
 impl std::fmt::Display for ParamKind {
@@ -352,6 +394,8 @@ impl std::fmt::Display for ParamKind {
             ParamKind::Cookie => write!(f, "cookie"),
             ParamKind::Form => write!(f, "form"),
             ParamKind::Body => write!(f, "body"),
+            ParamKind::State => write!(f, "state"),
+            ParamKind::Extension => write!(f, "extension"),
         }
     }
 }
@@ -374,6 +418,9 @@ struct ParamInfo {
     inner_type: String,
     /// Explicit parameter annotation (if any)
     explicit_annotation: Option<ParamKind>,
+    /// Whether this parameter should be excluded from MCP schema
+    /// Extension/State parameters are runtime state, not input parameters
+    skip_mcp_schema: bool,
 }
 
 impl ParamInfo {
@@ -434,6 +481,9 @@ impl ParamInfo {
                 (false, false, ty_str_trimmed.clone())
             };
 
+            // Extension/State parameters should be excluded from MCP schema
+            let skip_mcp_schema = matches!(param_kind, ParamKind::State | ParamKind::Extension);
+
             Some(Self {
                 name,
                 ty,
@@ -442,15 +492,21 @@ impl ParamInfo {
                 is_vec,
                 inner_type,
                 explicit_annotation,
+                skip_mcp_schema,
             })
         } else {
             None
         }
     }
 
-    /// Extract explicit #[param(kind = "...")] attribute from function argument
+    /// Extract explicit #[param(kind = "...")] or #[state] attribute from function argument
     fn extract_param_annotation(pat_type: &syn::PatType) -> Option<ParamKind> {
         for attr in &pat_type.attrs {
+            // Check for #[state] attribute (Extension state injection)
+            if attr.path().is_ident("state") {
+                return Some(ParamKind::State);
+            }
+
             if attr.path().is_ident("param") {
                 // Parse the attribute: #[param(kind = "path")]
                 if let Ok(meta) = attr.parse_args_with(
@@ -471,6 +527,8 @@ impl ParamInfo {
                                         "cookie" => Some(ParamKind::Cookie),
                                         "form" => Some(ParamKind::Form),
                                         "body" => Some(ParamKind::Body),
+                                        "state" => Some(ParamKind::State),
+                                        "extension" => Some(ParamKind::Extension),
                                         _ => None,
                                     };
                                 }
@@ -536,6 +594,9 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     };
     let input = parse_macro_input!(input as ItemFn);
 
+    // Create a cleaned version of the function without #[state] and #[param] attributes
+    let cleaned_input = clean_function_attributes(input.clone());
+
     let (
         name,
         version,
@@ -547,6 +608,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         cache_ttl,
         ws_path,
         grpc_method,
+        no_prefix,
     ) = args;
     let fn_name = &input.sig.ident;
     let _fn_vis = &input.vis; // Currently unused but kept for future use
@@ -591,7 +653,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         .collect();
 
     // Check if there are any parameters
-    let has_params = !params.is_empty();
+    let _has_params = !params.is_empty();
 
     // Generate HTTP code - define is_streaming early (before param_patterns)
     let is_streaming = stream.unwrap_or(false);
@@ -619,6 +681,14 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                         quote! { #name_ident: sdforge::axum::extract::Json<#ty> }
                     }
                 }
+                ParamKind::State => {
+                    // State parameters use Extension extractor for dependency injection
+                    quote! { #name_ident: sdforge::axum::extract::Extension<#ty> }
+                }
+                ParamKind::Extension => {
+                    // Extension parameters use Extension extractor for state injection
+                    quote! { #name_ident: sdforge::axum::extract::Extension<#ty> }
+                }
             }
         })
         .collect();
@@ -645,19 +715,23 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    let param_names: Vec<_> = params
+    let _param_names: Vec<_> = params
         .iter()
         .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
         .collect();
 
     // Collect parameter types for MCP tool struct generation
-    let param_types: Vec<_> = params.iter().map(|p| &p.ty).collect();
+    let _param_types: Vec<_> = params.iter().map(|p| &p.ty).collect();
 
-    // Build MCP input schema
-    let mcp_schema_props: Vec<String> = params.iter().map(|p| p.to_json_schema()).collect();
+    // Build MCP input schema (exclude Extension/State parameters)
+    let mcp_schema_props: Vec<String> = params
+        .iter()
+        .filter(|p| !p.skip_mcp_schema)
+        .map(|p| p.to_json_schema())
+        .collect();
     let mcp_schema_required: Vec<String> = params
         .iter()
-        .filter(|p| !p.is_option)
+        .filter(|p| !p.skip_mcp_schema && !p.is_option)
         .map(|p| format!("\"{}\"", p.name))
         .collect();
 
@@ -719,7 +793,12 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let path_str = path.as_ref().cloned().unwrap_or_default();
     let axum_path = convert_axum_path(&path_str);
-    let http_path = format!("/api/{}{}", version, axum_path);
+    // If no_prefix is true, use the path as-is; otherwise prefix with /api/{version}
+    let http_path = if no_prefix.unwrap_or(false) {
+        axum_path.clone()
+    } else {
+        format!("/api/{}{}", version, axum_path)
+    };
 
     // Build HTTP method
     let http_method_upper = method.as_ref().unwrap_or(&"GET".to_string()).to_uppercase();
@@ -767,6 +846,9 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                     let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
                     match p.param_kind {
                         ParamKind::Body => quote! { #name_ident },
+                        // State/Extension use Extension extractor, extract .0 for inner type
+                        ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
+                        // Path, Query, Form, Header, Cookie need .0 extraction
                         _ => quote! { #name_ident.0 },
                     }
                 })
@@ -815,12 +897,27 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                 syn::ReturnType::Default => false,
             };
 
+            // Build parameter call arguments with proper extraction
+            let param_call_args: Vec<_> = params
+                .iter()
+                .map(|p| {
+                    let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+                    match p.param_kind {
+                        ParamKind::Body => quote! { #name_ident },
+                        // State/Extension use Extension extractor, extract .0 for inner type
+                        ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
+                        // Path, Query, Form, Header, Cookie need .0 extraction
+                        _ => quote! { #name_ident.0 },
+                    }
+                })
+                .collect();
+
             let handler_closure = if is_result {
                 quote! {
                     |#(#param_patterns),*| {
                         async move {
                             use sdforge::prelude::*;
-                            match #fn_name(#(#param_names.0),*).await {
+                            match #fn_name(#(#param_call_args),*).await {
                                 Ok(value) => sdforge::axum::extract::Json(value).into_response(),
                                 Err(e) => e.into_response(),
                             }
@@ -832,7 +929,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                     |#(#param_patterns),*| {
                         async move {
                             use sdforge::prelude::*;
-                            let result = #fn_name(#(#param_names.0),*).await;
+                            let result = #fn_name(#(#param_call_args),*).await;
                             sdforge::axum::extract::Json(result).into_response()
                         }
                     }
@@ -890,11 +987,29 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let mcp_code = if let Some(ref tool_name) = tool_name {
-        let mcp_call_logic = if has_params {
+        // Check if any parameter is State or Extension type - MCP tools cannot use state injection
+        let has_state_param = params
+            .iter()
+            .any(|p| matches!(p.param_kind, ParamKind::State | ParamKind::Extension));
+
+        // Filter out State and Extension parameters for MCP tool generation
+        let mcp_params: Vec<_> = params
+            .iter()
+            .filter(|p| !matches!(p.param_kind, ParamKind::State | ParamKind::Extension))
+            .collect();
+
+        let mcp_param_names: Vec<_> = mcp_params
+            .iter()
+            .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
+            .collect();
+
+        let mcp_param_types: Vec<_> = mcp_params.iter().map(|p| &p.ty).collect();
+
+        let mcp_call_logic = if !mcp_params.is_empty() {
             quote! {
                 #[derive(serde::Deserialize)]
                 struct Params {
-                    #(pub #param_names: #param_types),*
+                    #(pub #mcp_param_names: #mcp_param_types),*
                 }
 
                 let params: Params = match input {
@@ -905,13 +1020,72 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 };
 
-                let result = #fn_name(#(params.#param_names),*).await;
+                let result = #fn_name(#(params.#mcp_param_names),*).await;
                 Ok(result)
             }
         } else {
             quote! {
                 let result = #fn_name().await;
                 Ok(result)
+            }
+        };
+
+        // Only generate MCP tool if no State parameters (State requires HTTP Extension injection)
+        let mcp_tool_impl = if has_state_param {
+            // MCP tools with State parameters are not supported - generate a stub that returns error
+            quote! {
+                fn call(&self, _input: Option<serde_json::Value>) -> anyhow::Result<sdforge::mcp_sdk::types::CallToolResponse> {
+                    Err(anyhow::anyhow!("MCP tool with State parameters is not supported. Use HTTP API instead."))
+                }
+            }
+        } else {
+            quote! {
+                fn call(&self, input: Option<serde_json::Value>) -> anyhow::Result<sdforge::mcp_sdk::types::CallToolResponse> {
+                    use sdforge::prelude::*;
+                    use tokio::runtime::Runtime;
+
+                    let rt = Runtime::new().map_err(|e| anyhow::anyhow!("Failed to create runtime: {}", e))?;
+                    let inner_result: Result<Result<_, ApiError>, anyhow::Error> = rt.block_on(async {
+                        #mcp_call_logic
+                    });
+                    let result = inner_result?;
+
+                    match result {
+                        Ok(response) => {
+                            let response_json = serde_json::to_value(response)
+                                .map_err(|e| anyhow::anyhow!("Failed to serialize response: {}", e))?;
+                            Ok(sdforge::mcp_sdk::types::CallToolResponse {
+                                content: vec![sdforge::mcp_sdk::types::ToolResponseContent::Text {
+                                    text: serde_json::to_string(&response_json)
+                                        .map_err(|e| anyhow::anyhow!("Failed to stringify response: {}", e))?,
+                                }],
+                                is_error: Some(false),
+                                meta: None,
+                            })
+                        }
+                        Err(e) => {
+                            let error_json = serde_json::to_value(e)
+                                .map_err(|e| anyhow::anyhow!("Failed to serialize error"))
+                                .unwrap_or_else(|_| {
+                                    serde_json::json!({
+                                        "success": false,
+                                        "error": {
+                                            "code": "UNKNOWN_ERROR",
+                                            "message": "An unknown error occurred"
+                                        }
+                                    })
+                                });
+                            Ok(sdforge::mcp_sdk::types::CallToolResponse {
+                                content: vec![sdforge::mcp_sdk::types::ToolResponseContent::Text {
+                                    text: serde_json::to_string(&error_json)
+                                        .map_err(|e| anyhow::anyhow!("Failed to stringify error: {}", e))?,
+                                }],
+                                is_error: Some(true),
+                                meta: None,
+                            })
+                        }
+                    }
+                }
             }
         };
 
@@ -956,52 +1130,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                     })
                 }
 
-                fn call(&self, input: Option<serde_json::Value>) -> anyhow::Result<sdforge::mcp_sdk::types::CallToolResponse> {
-                    use sdforge::prelude::*;
-                    use tokio::runtime::Runtime;
-
-                    let rt = Runtime::new().map_err(|e| anyhow::anyhow!("Failed to create runtime: {}", e))?;
-                    let inner_result: Result<Result<_, ApiError>, anyhow::Error> = rt.block_on(async {
-                        #mcp_call_logic
-                    });
-                    let result = inner_result?;
-
-                    match result {
-                        Ok(response) => {
-                            let response_json = serde_json::to_value(response)
-                                .map_err(|e| anyhow::anyhow!("Failed to serialize response: {}", e))?;
-                            Ok(sdforge::mcp_sdk::types::CallToolResponse {
-                                content: vec![sdforge::mcp_sdk::types::ToolResponseContent::Text {
-                                    text: serde_json::to_string(&response_json)
-                                        .map_err(|e| anyhow::anyhow!("Failed to stringify response: {}", e))?,
-                                }],
-                                is_error: Some(false),
-                                meta: None,
-                            })
-                        }
-                        Err(e) => {
-                            let error_json = serde_json::to_value(e)
-                                .map_err(|e| anyhow::anyhow!("Failed to serialize error: {}", e))
-                                .unwrap_or_else(|_| {
-                                    serde_json::json!({
-                                        "success": false,
-                                        "error": {
-                                            "code": "UNKNOWN_ERROR",
-                                            "message": "An unknown error occurred"
-                                        }
-                                    })
-                                });
-                            Ok(sdforge::mcp_sdk::types::CallToolResponse {
-                                content: vec![sdforge::mcp_sdk::types::ToolResponseContent::Text {
-                                    text: serde_json::to_string(&error_json)
-                                        .map_err(|e| anyhow::anyhow!("Failed to stringify error: {}", e))?,
-                                }],
-                                is_error: Some(true),
-                                meta: None,
-                            })
-                        }
-                    }
-                }
+                #mcp_tool_impl
             }
 
             #[cfg(feature = "mcp")]
@@ -1060,7 +1189,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let generated = quote! {
-        #input
+        #cleaned_input
         #http_code
         #mcp_code
         #ws_code
