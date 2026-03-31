@@ -19,10 +19,15 @@ use tokio::sync::mpsc;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
+    /// Trace level - most detailed debugging information
     Trace,
+    /// Debug level - detailed debugging information
     Debug,
+    /// Info level - general informational messages
     Info,
+    /// Warn level - warning messages
     Warn,
+    /// Error level - error messages
     Error,
 }
 
@@ -115,7 +120,9 @@ impl Default for LoggerConfig {
 /// Log output format
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogFormat {
+    /// JSON format - structured logging for production environments
     Json,
+    /// Text format - human-readable logging for development
     Text,
 }
 
@@ -282,6 +289,7 @@ pub fn get_global_logger() -> Option<Arc<StructuredLogger>> {
 /// Logger initialization error
 #[derive(Debug, thiserror::Error)]
 pub enum LoggerError {
+    /// Error when attempting to initialize an already-initialized logger
     #[error("Logger already initialized")]
     AlreadyInitialized,
 }
@@ -298,6 +306,7 @@ macro_rules! log_info {
     }};
 }
 
+/// Convenience macro for error logging
 #[macro_export]
 macro_rules! log_error {
     ($target:expr, $msg:expr $(, $key:expr => $val:expr)* $(,)?) => {{
@@ -309,6 +318,7 @@ macro_rules! log_error {
     }};
 }
 
+/// Convenience macro for debug logging
 #[macro_export]
 macro_rules! log_debug {
     ($target:expr, $msg:expr $(, $key:expr => $val:expr)* $(,)?) => {{
