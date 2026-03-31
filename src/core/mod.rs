@@ -21,7 +21,9 @@ pub mod types;
 pub mod validation;
 
 // Re-export types from submodules for convenience
-pub use error::{ApiError, ErrorCategory, ErrorContext, SdForgeError};
+pub use error::{
+    ApiError, ErrorCategory, ErrorContext, LocalizedError, Locale, SdForgeError, TranslationStore,
+};
 pub use validation::{
     MAX_API_KEY_LENGTH, MAX_EMAIL_LENGTH, MAX_HEADER_COUNT, MAX_HEADER_NAME_LENGTH,
     MAX_HEADER_VALUE_LENGTH, MAX_JSON_ARRAY_LENGTH, MAX_JSON_DEPTH, MAX_JSON_FIELD_NAME_LENGTH,
