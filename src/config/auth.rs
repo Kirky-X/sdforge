@@ -46,6 +46,33 @@ impl AuthConfig {
                     ));
                 }
             }
+            AuthConfig::Jwt { secret } => {
+                // Validate JWT secret strength
+                if secret.is_empty() {
+                    return Err(crate::config::ConfigError::ValidationError(
+                        "JWT secret cannot be empty".into(),
+                    ));
+                }
+                
+                // Warn if secret is too short (less than 32 characters)
+                // A strong JWT secret should be at least 256 bits (32 bytes)
+                if secret.len() < 32 {
+                    eprintln!(
+                        "⚠️  WARNING: JWT secret is only {} characters long. For production use, \
+                         recommend at least 32 characters (256 bits) for security.",
+                        secret.len()
+                    );
+                }
+                
+                // Check for obviously weak secrets
+                let lower = secret.to_lowercase();
+                if lower == "secret" || lower == "password" || lower == "key" || lower == "jwt_secret" {
+                    return Err(crate::config::ConfigError::ValidationError(
+                        "JWT secret is too weak. Avoid using common words like 'secret', \
+                         'password', 'key', or 'jwt_secret'. Use a randomly generated value.".into(),
+                    ));
+                }
+            }
             AuthConfig::None | AuthConfig::Jwt { .. } => {}
         }
         Ok(())
@@ -132,7 +159,7 @@ mod tests {
     #[test]
     fn test_auth_config_validate_jwt() {
         let config = AuthConfig::Jwt {
-            secret: "secret".to_string(),
+            secret: "this_is_a_strong_secret_key_1234567890".to_string(), // 32+ chars
         };
         assert!(config.validate().is_ok());
     }
@@ -190,5 +217,88 @@ mod tests {
         let b = AuthConfig::None;
         assert!(matches!(a, AuthConfig::None));
         assert!(matches!(b, AuthConfig::None));
+    }
+
+    // ============================================================================
+    // Enhanced JWT Security Validation Tests
+    // ============================================================================
+
+    /// Test JWT validation rejects empty secret
+    #[test]
+    fn test_jwt_validate_empty_secret() {
+        let config = AuthConfig::Jwt {
+            secret: "".to_string(),
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("empty"));
+    }
+
+    /// Test JWT validation warns about short secrets (but still accepts)
+    #[test]
+    fn test_jwt_validate_short_secret_accepted_with_warning() {
+        let config = AuthConfig::Jwt {
+            secret: "short".to_string(),
+        };
+        // Short secrets are accepted but should log a warning in production
+        let result = config.validate();
+        assert!(result.is_ok());
+    }
+
+    /// Test JWT validation rejects weak common secrets
+    #[test]
+    fn test_jwt_validate_rejects_weak_secrets() {
+        let weak_secrets = vec![
+            "secret",
+            "SECRET",
+            "Secret",
+            "password",
+            "PASSWORD",
+            "key",
+            "KEY",
+            "jwt_secret",
+            "JWT_SECRET",
+        ];
+
+        for weak_secret in weak_secrets {
+            let config = AuthConfig::Jwt {
+                secret: weak_secret.to_string(),
+            };
+            let result = config.validate();
+            assert!(
+                result.is_err(),
+                "Expected weak secret '{}' to be rejected",
+                weak_secret
+            );
+            let err = result.unwrap_err();
+            assert!(
+                err.to_string().contains("weak"),
+                "Error should mention 'weak': {}",
+                err
+            );
+        }
+    }
+
+    /// Test JWT validation accepts strong secrets
+    #[test]
+    fn test_jwt_validate_accepts_strong_secrets() {
+        let strong_secrets = vec![
+            "this_is_a_very_long_and_random_secret_key_12345",
+            "xK9#mP2$vL5@nQ8*wR3&jT6^yU1!iO4",
+            "0123456789abcdef0123456789abcdef", // 32 hex chars = 128 bits
+        ];
+
+        for strong_secret in strong_secrets {
+            let config = AuthConfig::Jwt {
+                secret: strong_secret.to_string(),
+            };
+            let result = config.validate();
+            assert!(
+                result.is_ok(),
+                "Expected strong secret '{}' to be accepted",
+                strong_secret
+            );
+        }
     }
 }
