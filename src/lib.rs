@@ -328,6 +328,36 @@ pub fn init_all_plugins() -> PluginCounts {
 }
 
 /// Counts of registered plugins after initialization
+/// 
+/// This struct provides visibility into which protocol implementations
+/// have been registered via inventory and are available at runtime.
+/// 
+/// # Usage
+/// 
+/// ```ignore
+/// use sdforge::init_all_plugins;
+/// 
+/// fn main() {
+///     let counts = init_all_plugins();
+///     
+///     println!("Registered:");
+///     println!("  HTTP routes: {}", counts.routes);
+///     #[cfg(feature = "mcp")]
+///     println!("  MCP tools: {}", counts.mcp_tools);
+///     #[cfg(feature = "websocket")]
+///     println!("  WebSocket routes: {}", counts.ws_routes);
+///     #[cfg(feature = "grpc")]
+///     println!("  gRPC routes: {}", counts.grpc_routes);
+/// }
+/// ```
+/// 
+/// # Feature Flags
+/// 
+/// Fields are conditionally compiled based on features:
+/// - `routes`: Always present when any protocol feature is enabled
+/// - `mcp_tools`: Only with `mcp` feature
+/// - `ws_routes`: Only with `websocket` feature  
+/// - `grpc_routes`: Only with `grpc` feature
 #[cfg(any(
     feature = "http",
     feature = "mcp",
