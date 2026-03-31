@@ -816,6 +816,8 @@ mod tests {
         let config = GrpcServerConfig {
             max_connections: 100,
             timeout_seconds: 0,
+            #[cfg(feature = "security")]
+            auth: None,
         };
 
         assert_eq!(config.timeout_seconds, 0);
@@ -827,6 +829,8 @@ mod tests {
         let config = GrpcServerConfig {
             max_connections: 100000,
             timeout_seconds: 30,
+            #[cfg(feature = "security")]
+            auth: None,
         };
 
         assert_eq!(config.max_connections, 100000);
@@ -837,11 +841,15 @@ mod tests {
         let config1 = GrpcServerConfig {
             max_connections: 1,
             timeout_seconds: 1,
+            #[cfg(feature = "security")]
+            auth: None,
         };
 
         let config2 = GrpcServerConfig {
             max_connections: usize::MAX,
             timeout_seconds: u64::MAX,
+            #[cfg(feature = "security")]
+            auth: None,
         };
 
         assert_eq!(config1.max_connections, 1);
