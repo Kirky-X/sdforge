@@ -18,6 +18,99 @@ mod security_tests {
         let auth = AppApiKeyAuth::new();
         assert!(!std::ptr::eq(&auth, std::ptr::null()), "API Key Auth new() should create an instance");
     }
+
+    // ============================================================================
+    // Advanced Security Tests - Performance and Concurrency
+    // ============================================================================
+
+    /// Test: API key validation performance
+    #[test]
+    fn test_api_key_validation_performance() {
+        use sdforge::security::{ApiKeyMetadata, AppApiKeyAuth};
+        
+        let auth = AppApiKeyAuth::new();
+        let metadata = ApiKeyMetadata::new("perf-test-key".to_string(), None);
+        
+        let start = std::time::Instant::now();
+        
+        // Validate the same key multiple times
+        for _ in 0..1000 {
+            let _ = auth.validate_key("perf-test-key", "127.0.0.1");
+        }
+
+        let elapsed = start.elapsed();
+        // Should validate 1000 keys in less than 50ms
+        assert!(elapsed < std::time::Duration::from_millis(50));
+    }
+
+    /// Test: Concurrent API key validation
+    #[tokio::test]
+    async fn test_concurrent_api_key_validation() {
+        use std::sync::Arc;
+        use sdforge::security::{ApiKeyMetadata, AppApiKeyAuth};
+        
+        let auth = Arc::new(AppApiKeyAuth::new());
+        let mut handles = vec![];
+
+        // Spawn 10 concurrent validation tasks
+        for i in 0..10 {
+            let auth_clone = Arc::clone(&auth);
+            let handle = tokio::spawn(async move {
+                let key = format!("key-{}", i);
+                auth_clone.validate_key(&key, "127.0.0.1")
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to complete
+        for handle in handles {
+            let result = handle.await.unwrap();
+            // All validations should complete (may fail, but shouldn't panic)
+            let _ = result;
+        }
+    }
+
+    /// Test: Multiple API keys stress test
+    #[test]
+    fn test_multiple_api_keys_stress() {
+        use sdforge::security::{ApiKeyMetadata, AppApiKeyAuth};
+        
+        let auth = AppApiKeyAuth::new();
+        
+        // Create and validate many different keys
+        for i in 0..100 {
+            let key = format!("stress-test-key-{}", i);
+            let _metadata = ApiKeyMetadata::new(key.clone(), Some(format!("Key {}", i)));
+            let _ = auth.validate_key(&key, "127.0.0.1");
+        }
+
+        // Should complete without issues
+    }
+
+    /// Test: API key with edge case inputs
+    #[test]
+    fn test_api_key_edge_cases() {
+        use sdforge::security::AppApiKeyAuth;
+        
+        let auth = AppApiKeyAuth::new();
+        
+        // Empty key
+        let _ = auth.validate_key("", "127.0.0.1");
+        
+        // Very long key
+        let long_key = "k".repeat(10000);
+        let _ = auth.validate_key(&long_key, "127.0.0.1");
+        
+        // Unicode key
+        let unicode_key = "密钥🔑";
+        let _ = auth.validate_key(unicode_key, "127.0.0.1");
+        
+        // Special characters
+        let special_key = "!@#$%^&*()_+-=[]{}|;':\",./<>?";
+        let _ = auth.validate_key(special_key, "127.0.0.1");
+        
+        // Should not panic on any input
+    }
 }
 
 // Enhanced Security Middleware tests

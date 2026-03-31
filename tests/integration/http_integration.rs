@@ -106,6 +106,132 @@ mod http_tests {
 
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
+
+    // ============================================================================
+    // Advanced HTTP Tests - Performance and Concurrency
+    // ============================================================================
+
+    /// Test: HTTP request handling performance
+    #[tokio::test]
+    async fn test_http_request_performance() {
+        use axum::{body::Body, http::{Request, StatusCode}, routing::get, Router};
+        use tower::ServiceExt;
+
+        async fn handler() -> &'static str { "OK" }
+        let app = Router::new().route("/perf", get(handler));
+
+        let start = std::time::Instant::now();
+
+        // Handle 1000 requests
+        for _ in 0..1000 {
+            let response = app
+                .clone()
+                .oneshot(Request::builder().uri("/perf").body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+
+        let elapsed = start.elapsed();
+        // Should handle 1000 requests in less than 500ms
+        assert!(elapsed < std::time::Duration::from_millis(500));
+    }
+
+    /// Test: Concurrent HTTP requests
+    #[tokio::test]
+    async fn test_concurrent_http_requests() {
+        use axum::{body::Body, http::{Request, StatusCode}, routing::get, Router};
+        use std::sync::Arc;
+        use tower::ServiceExt;
+
+        async fn handler() -> &'static str { "Concurrent OK" }
+        let app = Arc::new(Router::new().route("/concurrent", get(handler)));
+
+        let mut handles = vec![];
+
+        // Spawn 20 concurrent requests
+        for i in 0..20 {
+            let app_clone = Arc::clone(&app);
+            let handle = tokio::spawn(async move {
+                let response = app_clone
+                    .oneshot(Request::builder().uri("/concurrent").body(Body::empty()).unwrap())
+                    .await
+                    .unwrap();
+                (i, response.status())
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks and verify responses
+        for handle in handles {
+            let (idx, status) = handle.await.unwrap();
+            assert_eq!(status, StatusCode::OK, "Request {} should succeed", idx);
+        }
+    }
+
+    /// Test: Large response body handling
+    #[tokio::test]
+    async fn test_large_response_body() {
+        use axum::{body::Body, http::{Request, StatusCode}, routing::get, Router};
+        use tower::ServiceExt;
+
+        async fn handler() -> String {
+            "x".repeat(100_000) // 100KB response
+        }
+
+        let app = Router::new().route("/large", get(handler));
+
+        let response = app
+            .oneshot(Request::builder().uri("/large").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(response.into_body(), 200_000).await.unwrap();
+        assert_eq!(body.len(), 100_000);
+    }
+
+    /// Test: Multiple route patterns stress test
+    #[tokio::test]
+    async fn test_multiple_route_patterns() {
+        use axum::{body::Body, http::{Request, StatusCode}, routing::get, Router};
+        use tower::ServiceExt;
+
+        async fn h1() -> &'static str { "Route 1" }
+        async fn h2() -> &'static str { "Route 2" }
+        async fn h3() -> &'static str { "Route 3" }
+        async fn h4() -> &'static str { "Route 4" }
+        async fn h5() -> &'static str { "Route 5" }
+
+        let app = Router::new()
+            .route("/api/v1/resource1", get(h1))
+            .route("/api/v1/resource2", get(h2))
+            .route("/api/v2/resource1", get(h3))
+            .route("/api/v2/resource2", get(h4))
+            .route("/health", get(h5));
+
+        // Test all routes
+        let routes = vec![
+            ("/api/v1/resource1", "Route 1"),
+            ("/api/v1/resource2", "Route 2"),
+            ("/api/v2/resource1", "Route 3"),
+            ("/api/v2/resource2", "Route 4"),
+            ("/health", "Route 5"),
+        ];
+
+        for (path, expected) in routes {
+            let response = app
+                .clone()
+                .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+            assert_eq!(&body[..], expected.as_bytes());
+        }
+    }
 }
 
 #[cfg(all(feature = "http", feature = "timestamp"))]

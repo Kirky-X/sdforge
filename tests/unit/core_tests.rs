@@ -90,6 +90,78 @@ mod core_tests {
         assert_eq!(metadata.name(), "");
         assert_eq!(metadata.version(), "");
     }
+
+    // ============================================================================
+    // Advanced Error Handling Tests
+    // ============================================================================
+
+    /// Test: Error chain with multiple sources
+    #[test]
+    fn test_error_chain_with_sources() {
+        use sdforge::core::error::{ErrorCategory, ErrorContext};
+        
+        let ctx = ErrorContext::new()
+            .with_category(ErrorCategory::Validation)
+            .with_extra("field".to_string(), "email".to_string())
+            .with_extra("value".to_string(), "invalid".to_string());
+
+        assert_eq!(ctx.category(), ErrorCategory::Validation);
+        assert_eq!(ctx.extra.get("field"), Some(&"email".to_string()));
+    }
+
+    /// Test: ApiError serialization roundtrip
+    #[test]
+    fn test_api_error_serialization() {
+        use serde_json;
+
+        let error = ApiError::not_found("User", Some("123"));
+        let json = serde_json::to_string(&error).expect("Failed to serialize");
+        
+        // Verify it can be deserialized (as Value since we don't have Deserialize)
+        let value: serde_json::Value = serde_json::from_str(&json).expect("Invalid JSON");
+        assert!(value.get("code").is_some());
+        assert!(value.get("message").is_some());
+    }
+
+    // ============================================================================
+    // Performance and Stress Tests
+    // ============================================================================
+
+    /// Test: Rapid error creation performance
+    #[test]
+    fn test_rapid_error_creation_performance() {
+        let start = std::time::Instant::now();
+        
+        for i in 0..10000 {
+            let _error = ApiError::internal_error(&format!("Error {}", i), "PERF_TEST");
+        }
+
+        let elapsed = start.elapsed();
+        // Should create 10000 errors in less than 100ms
+        assert!(elapsed < std::time::Duration::from_millis(100));
+    }
+
+    /// Test: ServiceResponse with large data
+    #[test]
+    fn test_service_response_with_large_data() {
+        let large_data = "x".repeat(1_000_000); // 1MB string
+        let response = ServiceResponse::success(large_data.clone());
+        
+        assert_eq!(response.data().unwrap().len(), 1_000_000);
+    }
+
+    /// Test: Deeply nested error context
+    #[test]
+    fn test_deeply_nested_error_context() {
+        use sdforge::core::error::ErrorContext;
+        
+        let mut ctx = ErrorContext::new();
+        for i in 0..50 {
+            ctx = ctx.with_extra(format!("key_{}", i), format!("value_{}", i));
+        }
+
+        assert_eq!(ctx.extra.len(), 50);
+    }
 }
 
 #[cfg(test)]
