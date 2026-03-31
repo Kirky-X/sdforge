@@ -9,7 +9,7 @@ mod uat_001_http_integration {
     #[test]
     fn test_quick_http_integration() {
         let app = build();
-        assert!(!std::ptr::eq(&app, &std::ptr::null()), "HTTP quick integration should succeed");
+        assert!(!std::ptr::eq(&app, std::ptr::null()), "HTTP quick integration should succeed");
     }
 }
 
@@ -21,7 +21,7 @@ mod uat_002_mcp_service {
     #[tokio::test]
     async fn test_mcp_service_creation() {
         let server = build().await;
-        assert!(!std::ptr::eq(&server, &std::ptr::null()), "MCP service should build successfully");
+        assert!(!std::ptr::eq(&server, std::ptr::null()), "MCP service should build successfully");
     }
 }
 
@@ -35,8 +35,8 @@ mod uat_003_dual_protocol {
     async fn test_dual_protocol_build() {
         let http_result = http_build();
         let mcp_result = mcp_build().await;
-        assert!(!std::ptr::eq(&http_result, &std::ptr::null()), "HTTP build should succeed");
-        assert!(!std::ptr::eq(&mcp_result, &std::ptr::null()), "MCP build should succeed");
+        assert!(!std::ptr::eq(&http_result, std::ptr::null()), "HTTP build should succeed");
+        assert!(!std::ptr::eq(&mcp_result, std::ptr::null()), "MCP build should succeed");
     }
 }
 
