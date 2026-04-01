@@ -149,12 +149,14 @@ pub(crate) fn deserialize_instants(data: &[u8]) -> Vec<std::time::Instant> {
 }
 
 /// Serialize AuthContext to bytes using bincode
-#[allow(dead_code)]
 pub(crate) fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {
     bincode::serialize(ctx).unwrap_or_default()
 }
 
-/// Deserialize AuthContext from bytes using bincode
+/// Deserialize AuthContext from bytes using bincode.
+///
+/// **Reserved as the serialization pair for `serialize_auth_context`.**
+/// Kept for future use when AuthContext deserialization from cache is needed.
 #[allow(dead_code)]
 pub(crate) fn deserialize_auth_context(data: &[u8]) -> Option<AuthContext> {
     bincode::deserialize(data).ok()
@@ -564,16 +566,16 @@ impl AuditLog {
     }
 
     /// Generate HMAC-SHA256 signature for this audit log entry
-    /// 
+    ///
     /// This creates a canonical representation of the log and signs it,
     /// allowing detection of any tampering with the audit trail.
-    /// 
+    ///
     /// # Arguments
     /// * `secret_key` - The secret key for HMAC signing (should be kept secure)
-    /// 
+    ///
     /// # Returns
     /// Base64-encoded HMAC-SHA256 signature
-    /// 
+    ///
     /// # Example
     /// ```ignore
     /// let mut log = AuditLog::new(...);
@@ -582,9 +584,9 @@ impl AuditLog {
     pub fn generate_signature(&mut self, secret_key: &[u8]) -> String {
         use hmac::{Hmac, Mac};
         use sha2::Sha256;
-        
+
         type HmacSha256 = Hmac<Sha256>;
-        
+
         // Create canonical string: id|timestamp|user_id|action|resource|result
         let canonical = format!(
             "{}|{}|{}|{}|{}|{}",
@@ -598,34 +600,34 @@ impl AuditLog {
                 AuditResult::Failure { .. } => "FAILURE",
             }
         );
-        
+
         // Create HMAC
-        let mut mac = HmacSha256::new_from_slice(secret_key)
-            .expect("HMAC can take key of any size");
+        let mut mac =
+            HmacSha256::new_from_slice(secret_key).expect("HMAC can take key of any size");
         mac.update(canonical.as_bytes());
         let result = mac.finalize();
-        
+
         // Encode to base64
         let signature = base64::engine::general_purpose::STANDARD.encode(result.into_bytes());
-        
+
         // Store and return
         self.signature = Some(signature.clone());
         signature
     }
 
     /// Verify the integrity of this audit log entry
-    /// 
+    ///
     /// Recomputes the signature and compares it with the stored signature
     /// to detect any tampering.
-    /// 
+    ///
     /// # Arguments
     /// * `secret_key` - The secret key that was used for signing
-    /// 
+    ///
     /// # Returns
     /// - `Ok(true)` if signature is valid
     /// - `Ok(false)` if signature doesn't match (tampered or wrong key)
     /// - `Err` if no signature is present
-    /// 
+    ///
     /// # Example
     /// ```ignore
     /// match log.verify_signature(b"your-secret-key") {
@@ -637,12 +639,11 @@ impl AuditLog {
     pub fn verify_signature(&self, secret_key: &[u8]) -> Result<bool, &'static str> {
         use hmac::{Hmac, Mac};
         use sha2::Sha256;
-        
+
         type HmacSha256 = Hmac<Sha256>;
-        
-        let stored_sig = self.signature.as_ref()
-            .ok_or("No signature present")?;
-        
+
+        let stored_sig = self.signature.as_ref().ok_or("No signature present")?;
+
         // Recreate canonical string
         let canonical = format!(
             "{}|{}|{}|{}|{}|{}",
@@ -656,14 +657,15 @@ impl AuditLog {
                 AuditResult::Failure { .. } => "FAILURE",
             }
         );
-        
+
         // Compute expected signature
-        let mut mac = HmacSha256::new_from_slice(secret_key)
-            .expect("HMAC can take key of any size");
+        let mut mac =
+            HmacSha256::new_from_slice(secret_key).expect("HMAC can take key of any size");
         mac.update(canonical.as_bytes());
         let result = mac.finalize();
-        let expected_signature = base64::engine::general_purpose::STANDARD.encode(result.into_bytes());
-        
+        let expected_signature =
+            base64::engine::general_purpose::STANDARD.encode(result.into_bytes());
+
         // Constant-time comparison to prevent timing attacks
         Ok(stored_sig == &expected_signature)
     }
@@ -819,7 +821,10 @@ mod tests {
         // Verification should fail
         let result = log.verify_signature(secret_key);
         assert!(result.is_ok());
-        assert!(result.unwrap() == false, "Tampered log should fail verification");
+        assert!(
+            result.unwrap() == false,
+            "Tampered log should fail verification"
+        );
     }
 
     #[test]

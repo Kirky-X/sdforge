@@ -46,9 +46,7 @@ impl DashMapCache {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             inner: Arc::new(dashmap::DashMap::with_capacity(capacity)),
-            lru_queue: Some(Arc::new(Mutex::new(VecDeque::with_capacity(
-                capacity,
-            )))),
+            lru_queue: Some(Arc::new(Mutex::new(VecDeque::with_capacity(capacity)))),
             max_capacity: Some(capacity),
             prefix_index: Arc::new(Mutex::new(HashMap::with_capacity(capacity / 10))),
         }
@@ -81,10 +79,8 @@ impl DashMapCache {
                 let keys = index.entry(prefix.to_string()).or_insert_with(Vec::new);
                 if add {
                     keys.push(key.to_string());
-                } else {
-                    if let Some(pos) = keys.iter().position(|k| k == key) {
-                        keys.remove(pos);
-                    }
+                } else if let Some(pos) = keys.iter().position(|k| k == key) {
+                    keys.remove(pos);
                 }
             }
         }
@@ -105,20 +101,20 @@ impl SyncCache for DashMapCache {
     fn get_many(&self, keys: &[&str]) -> std::collections::HashMap<String, Vec<u8>> {
         // Pre-allocate HashMap with expected size to avoid reallocations
         let mut result = std::collections::HashMap::with_capacity(keys.len());
-        
+
         // Batch get with reduced lock contention
         for &key in keys {
             if let Some(value) = self.inner.get(key) {
                 result.insert(key.to_string(), value.clone());
             }
         }
-        
+
         result
     }
 
     fn set(&self, key: &str, value: Vec<u8>) {
         let key_string = key.to_string();
-        
+
         // If LRU is enabled, update the queue
         if let Some(ref lru_queue) = self.lru_queue {
             if let Ok(mut queue) = lru_queue.lock() {
@@ -126,10 +122,10 @@ impl SyncCache for DashMapCache {
                 if let Some(pos) = queue.iter().position(|k| k == &key_string) {
                     queue.remove(pos);
                 }
-                
+
                 // Add to front (most recently used)
                 queue.push_front(key_string.clone());
-                
+
                 // Evict oldest if over capacity
                 if let Some(max_cap) = self.max_capacity {
                     while queue.len() > max_cap {
@@ -141,7 +137,7 @@ impl SyncCache for DashMapCache {
                 }
             }
         }
-        
+
         self.inner.insert(key_string.clone(), value);
         self.update_prefix_index(&key_string, true);
     }
@@ -151,7 +147,7 @@ impl SyncCache for DashMapCache {
         if items.is_empty() {
             return;
         }
-        
+
         // Batch insert - DashMap handles concurrent writes efficiently
         for (key, value) in items {
             self.inner.insert(key.clone(), value.clone());
@@ -171,7 +167,7 @@ impl SyncCache for DashMapCache {
         if keys.is_empty() {
             return 0;
         }
-        
+
         // Batch remove - count successful deletions
         let mut deleted_count = 0;
         for &key in keys {
@@ -180,7 +176,7 @@ impl SyncCache for DashMapCache {
                 deleted_count += 1;
             }
         }
-        
+
         deleted_count
     }
 
@@ -204,21 +200,19 @@ impl SyncCache for DashMapCache {
         // Check if it's a simple prefix pattern (e.g., "user:*")
         if let Some(prefix_end) = pattern.find('*') {
             let prefix_part = &pattern[..prefix_end];
-            
+
             // If prefix contains no other wildcards, use prefix index
             if !prefix_part.contains(['*', '?']) && prefix_part.ends_with(':') {
                 let prefix_key = &prefix_part[..prefix_part.len() - 1];
-                
+
                 if let Ok(index) = self.prefix_index.lock() {
                     if let Some(matching_keys) = index.get(prefix_key) {
                         // Filter matching keys with the full pattern
-                        let regex_pattern = pattern
-                            .replace('*', ".*")
-                            .replace('?', ".");
-                        
+                        let regex_pattern = pattern.replace('*', ".*").replace('?', ".");
+
                         let re = regex::Regex::new(&format!("^{}$", regex_pattern))
                             .expect("Invalid regex pattern");
-                        
+
                         return matching_keys
                             .iter()
                             .filter(|key| re.is_match(key))
@@ -228,20 +222,17 @@ impl SyncCache for DashMapCache {
                 }
             }
         }
-        
+
         // Fallback to full scan with regex caching
-        let regex_pattern = pattern
-            .replace('*', ".*")
-            .replace('?', ".");
-        
-        static REGEX_CACHE: Lazy<dashmap::DashMap<String, regex::Regex>> = 
-            Lazy::new(|| dashmap::DashMap::new());
-        
+        let regex_pattern = pattern.replace('*', ".*").replace('?', ".");
+
+        static REGEX_CACHE: Lazy<dashmap::DashMap<String, regex::Regex>> =
+            Lazy::new(dashmap::DashMap::new);
+
         let re = REGEX_CACHE
             .entry(regex_pattern.clone())
             .or_insert_with(|| {
-                regex::Regex::new(&format!("^{}$", regex_pattern))
-                    .expect("Invalid regex pattern")
+                regex::Regex::new(&format!("^{}$", regex_pattern)).expect("Invalid regex pattern")
             })
             .value()
             .clone();

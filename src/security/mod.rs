@@ -10,7 +10,7 @@ pub use types::*;
 
 pub use api_key::{AppApiKeyAuth, AppApiKeyAuthBuilder};
 pub use audit::{AppAuditLogger, AppAuditLoggerBuilder};
-pub use bearer::{BearerAuth, BearerAuthBuilder, generate_secure_jwt_secret};
+pub use bearer::{generate_secure_jwt_secret, BearerAuth, BearerAuthBuilder};
 pub use middleware::auth_middleware;
 pub use rate_limiter::{AppRateLimiter, AppRateLimiterBuilder};
 

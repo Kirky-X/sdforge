@@ -56,7 +56,7 @@ impl ServerConfig {
 impl crate::config::ValidateConfig for ServerConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
         use crate::config::ConfigError;
-        
+
         // Validate port range
         if self.port == 0 {
             return Err(ConfigError::ValidationError(
