@@ -33,7 +33,8 @@ mod http_protocol_tests {
         email: String,
     }
 
-    /// Test data structure for query parameters
+    /// Test data structure for query parameters.
+    /// Reserved for pagination-related test scenarios (e.g., offset/limit patterns, cursor-based pagination).
     #[allow(dead_code)]
     #[derive(Debug, Deserialize)]
     struct PaginationParams {
@@ -43,7 +44,8 @@ mod http_protocol_tests {
         tags: Vec<String>,
     }
 
-    /// Test data structure for form data
+    /// Test data structure for form data.
+    /// Reserved for form-based authentication/ login test scenarios.
     #[allow(dead_code)]
     #[derive(Debug, Deserialize)]
     struct LoginForm {
@@ -51,7 +53,8 @@ mod http_protocol_tests {
         password: String,
     }
 
-    /// Query params for search
+    /// Query params for search operations.
+    /// Reserved for full-text search and filtering test scenarios.
     #[allow(dead_code)]
     #[derive(Debug, Deserialize)]
     struct SearchQuery {
@@ -184,8 +187,13 @@ mod http_protocol_tests {
     /// Test: PATCH request for partial update
     ///
     /// Verifies that PATCH request correctly handles partial updates.
+    /// Test: PATCH request for partial update
+    ///
+    /// Verifies that PATCH request correctly handles partial updates.
     #[tokio::test]
     async fn test_http_patch_request() {
+        // Test struct for PATCH body parsing.
+        // Defined locally to avoid polluting module scope with test-only types.
         #[allow(dead_code)]
         #[derive(Debug, Deserialize)]
         struct PatchUser {
