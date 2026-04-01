@@ -178,7 +178,6 @@ impl From<ValidationErrorsWrapper> for super::ApiError {
 }
 
 #[cfg(feature = "http")]
-#[allow(dead_code)] // Validators are reserved for future use
 /// Common validation helpers
 pub mod validators {
     use super::*;
