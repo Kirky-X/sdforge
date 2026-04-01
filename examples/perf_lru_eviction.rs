@@ -19,21 +19,24 @@ fn main() {
         lru_cache.set(&format!("key_{}", i), format!("value_{}", i).into_bytes());
     }
     let elapsed = start.elapsed();
-    
+
     println!("  ⏱️  Insert 200 items (cap={}): {:?}", CAPACITY, elapsed);
     println!("  📦 Final cache size: {}", lru_cache.len());
-    println!("  ✅ LRU eviction working: {} items evicted", 200 - lru_cache.len());
+    println!(
+        "  ✅ LRU eviction working: {} items evicted",
+        200 - lru_cache.len()
+    );
 
     // Verify oldest items were evicted
     let oldest_key = "key_0";
     let newest_key = "key_199";
-    
+
     if lru_cache.get(oldest_key).is_none() {
         println!("  ✅ Oldest key '{}' correctly evicted", oldest_key);
     } else {
         println!("  ❌ Oldest key '{}' still present", oldest_key);
     }
-    
+
     if lru_cache.get(newest_key).is_some() {
         println!("  ✅ Newest key '{}' correctly retained", newest_key);
     } else {
@@ -43,20 +46,20 @@ fn main() {
     // Test 2: Access pattern affects eviction order
     println!("\n📊 Testing access pattern impact:");
     let lru_cache2 = Arc::new(DashMapCache::with_capacity(50));
-    
+
     // Insert 50 items
     for i in 0..50 {
         lru_cache2.set(&format!("item_{}", i), b"value".to_vec());
     }
-    
+
     // Re-access item_0 to make it recently used
     lru_cache2.get("item_0");
-    
+
     // Insert 50 more items (should evict all except item_0)
     for i in 50..100 {
         lru_cache2.set(&format!("item_{}", i), b"value".to_vec());
     }
-    
+
     if lru_cache2.get("item_0").is_some() {
         println!("  ✅ Re-accessed 'item_0' survived eviction");
     } else {
@@ -65,7 +68,7 @@ fn main() {
 
     // Test 3: Performance comparison
     println!("\n📊 Performance Comparison:");
-    
+
     // Without LRU (no capacity limit)
     let no_lru_cache = Arc::new(DashMapCache::new());
     let start = Instant::now();
@@ -83,7 +86,7 @@ fn main() {
     }
     let lru_time = start.elapsed();
     println!("  ⏱️  With LRU (1000 inserts, cap=100): {:?}", lru_time);
-    
+
     let overhead = (lru_time.as_secs_f64() / no_lru_time.as_secs_f64() - 1.0) * 100.0;
     println!("  📊 LRU overhead: {:.1}%", overhead.max(0.0));
     println!("  ⚠️  Note: High overhead due to Mutex lock on every insert");
@@ -102,6 +105,9 @@ fn main() {
     println!("   - Automatic cleanup of stale entries");
     println!("   - Recently accessed items prioritized");
     println!("⚠️  Trade-offs:");
-    println!("   - Small performance overhead (~{}%)", overhead.max(0.0) as i32);
+    println!(
+        "   - Small performance overhead (~{}%)",
+        overhead.max(0.0) as i32
+    );
     println!("   - Additional memory for LRU queue");
 }

@@ -53,19 +53,24 @@ impl AuthConfig {
                         "JWT secret cannot be empty".into(),
                     ));
                 }
-                
+
                 // Warn if secret is too short (less than 32 characters)
                 // A strong JWT secret should be at least 256 bits (32 bytes)
                 if secret.len() < 32 {
                     eprintln!("⚠️  WARNING: JWT secret is only {} characters long. For production use, consider using a stronger secret (32+ bytes).", secret.len());
                 }
-                
+
                 // Check for obviously weak secrets
                 let lower = secret.to_lowercase();
-                if lower == "secret" || lower == "password" || lower == "key" || lower == "jwt_secret" {
+                if lower == "secret"
+                    || lower == "password"
+                    || lower == "key"
+                    || lower == "jwt_secret"
+                {
                     return Err(crate::config::ConfigError::ValidationError(
                         "JWT secret is too weak. Avoid using common words like 'secret', \
-                         'password', 'key', or 'jwt_secret'. Use a randomly generated value.".into(),
+                         'password', 'key', or 'jwt_secret'. Use a randomly generated value."
+                            .into(),
                     ));
                 }
             }
@@ -79,7 +84,7 @@ impl AuthConfig {
 impl crate::config::ValidateConfig for AuthConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
         use crate::config::ConfigError;
-        
+
         match self {
             AuthConfig::ApiKey { prefix, .. } => {
                 if prefix.is_empty() {
@@ -96,13 +101,18 @@ impl crate::config::ValidateConfig for AuthConfig {
                         "JWT secret cannot be empty".into(),
                     ));
                 }
-                
+
                 // Check for obviously weak secrets
                 let lower = secret.to_lowercase();
-                if lower == "secret" || lower == "password" || lower == "key" || lower == "jwt_secret" {
+                if lower == "secret"
+                    || lower == "password"
+                    || lower == "key"
+                    || lower == "jwt_secret"
+                {
                     return Err(ConfigError::ValidationError(
                         "JWT secret is too weak. Avoid using common words like 'secret', \
-                         'password', 'key', or 'jwt_secret'. Use a randomly generated value.".into(),
+                         'password', 'key', or 'jwt_secret'. Use a randomly generated value."
+                            .into(),
                     ));
                 }
             }

@@ -332,10 +332,7 @@ mod core_edge_case_tests {
         assert!(truncated.ends_with("..."));
 
         // Use in error context
-        let ctx = ErrorContext::new().with_extra(
-            "long_value".to_string(),
-            truncated.clone(),
-        );
+        let ctx = ErrorContext::new().with_extra("long_value".to_string(), truncated.clone());
 
         assert_eq!(ctx.extra.get("long_value"), Some(&truncated));
     }

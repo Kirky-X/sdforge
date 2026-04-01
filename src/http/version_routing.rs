@@ -6,18 +6,28 @@
 
 use axum::{body::Body, extract::Request, response::Response, routing::MethodRouter, Router};
 
-#[allow(missing_docs)]
-#[allow(dead_code)]
+/// Versioned route structure for API version management
+///
+/// This structure represents a single API route with its associated version.
+/// Routes are registered via `inventory::submit!` and collected by `build_version_router()`.
 #[derive(Debug, Clone)]
 pub struct VersionedRoute {
     version: String,
     path: String,
+    /// HTTP method for this route (reserved for future method-based routing)
+    #[allow(dead_code)]
     method: axum::http::Method,
     handler: MethodRouter,
 }
 
-#[allow(missing_docs)]
 impl VersionedRoute {
+    /// Create a new versioned route
+    ///
+    /// # Arguments
+    /// * `version` - API version (e.g., "v1")
+    /// * `path` - Route path (e.g., "/users/:id")
+    /// * `method` - HTTP method
+    /// * `handler` - Route handler
     pub fn new(
         version: String,
         path: String,
@@ -32,14 +42,17 @@ impl VersionedRoute {
         }
     }
 
+    /// Get the API version
     pub fn version(&self) -> &str {
         &self.version
     }
 
+    /// Get the route path
     pub fn path(&self) -> &str {
         &self.path
     }
 
+    /// Get the route handler
     pub fn handler(&self) -> &MethodRouter {
         &self.handler
     }
