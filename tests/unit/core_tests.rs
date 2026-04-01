@@ -99,7 +99,7 @@ mod core_tests {
     #[test]
     fn test_error_chain_with_sources() {
         use sdforge::core::error::{ErrorCategory, ErrorContext};
-        
+
         let ctx = ErrorContext::new()
             .with_category(ErrorCategory::Validation)
             .with_extra("field".to_string(), "email".to_string())
@@ -116,7 +116,7 @@ mod core_tests {
 
         let error = ApiError::not_found("User", Some("123"));
         let json = serde_json::to_string(&error).expect("Failed to serialize");
-        
+
         // Verify it can be deserialized (as Value since we don't have Deserialize)
         let value: serde_json::Value = serde_json::from_str(&json).expect("Invalid JSON");
         assert!(value.get("code").is_some());
@@ -131,7 +131,7 @@ mod core_tests {
     #[test]
     fn test_rapid_error_creation_performance() {
         let start = std::time::Instant::now();
-        
+
         for i in 0..10000 {
             let _error = ApiError::internal_error(&format!("Error {}", i), "PERF_TEST");
         }
@@ -146,7 +146,7 @@ mod core_tests {
     fn test_service_response_with_large_data() {
         let large_data = "x".repeat(1_000_000); // 1MB string
         let response = ServiceResponse::success(large_data.clone());
-        
+
         assert_eq!(response.data().unwrap().len(), 1_000_000);
     }
 
@@ -154,7 +154,7 @@ mod core_tests {
     #[test]
     fn test_deeply_nested_error_context() {
         use sdforge::core::error::ErrorContext;
-        
+
         let mut ctx = ErrorContext::new();
         for i in 0..50 {
             ctx = ctx.with_extra(format!("key_{}", i), format!("value_{}", i));
@@ -348,7 +348,7 @@ mod api_metadata_enhanced_tests {
         let default = ApiMetadata::default();
         assert_eq!(default.name(), "");
         assert_eq!(default.version(), "");
-        assert_eq!(default.description(), "");  // Default is empty string, not "SDForge API"
+        assert_eq!(default.description(), ""); // Default is empty string, not "SDForge API"
         assert_eq!(default.cache_ttl(), None);
         assert!(!default.is_streaming());
     }
@@ -463,8 +463,7 @@ mod service_response_enhanced_tests {
         let original = ServiceResponse::success("test data".to_string());
 
         let json = serde_json::to_string(&original).unwrap();
-        let deserialized: ServiceResponse<String> =
-            serde_json::from_str(&json).unwrap();
+        let deserialized: ServiceResponse<String> = serde_json::from_str(&json).unwrap();
 
         assert_eq!(original.is_success(), deserialized.is_success());
         assert_eq!(original.data(), deserialized.data());

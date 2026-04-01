@@ -68,7 +68,7 @@ impl CacheConfig {
 impl crate::config::ValidateConfig for CacheConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
         use crate::config::ConfigError;
-        
+
         // Validate TTL is positive
         if self.default_ttl_secs == 0 {
             return Err(ConfigError::ValidationError(
