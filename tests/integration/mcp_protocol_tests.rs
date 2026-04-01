@@ -8,6 +8,7 @@ mod mcp_protocol_tests {
     use mcp_sdk::tools::Tool;
     use mcp_sdk::transport::{JsonRpcRequest, JsonRpcResponse, JsonRpcVersion};
     use mcp_sdk::types::{CallToolResponse, Resource, ToolResponseContent};
+    use sdforge::core::ApiMetadata;
     use sdforge::mcp::{build, get_mcp_tools, McpToolRegistration};
     use serde_json::Value;
     use std::sync::Arc;
@@ -763,8 +764,12 @@ mod mcp_protocol_tests {
     #[tokio::test]
     async fn test_mcp_server_build_with_tools() {
         // Register multiple tools temporarily
-        let _reg1 = McpToolRegistration::new("test_tool_1", "v1", "Test tool 1", create_echo_tool);
-        let _reg2 = McpToolRegistration::new("test_tool_2", "v1", "Test tool 2", create_math_tool);
+        let _reg1 = McpToolRegistration::new("test_tool_1", "v1", create_echo_tool, || {
+            ApiMetadata::default()
+        });
+        let _reg2 = McpToolRegistration::new("test_tool_2", "v1", create_math_tool, || {
+            ApiMetadata::default()
+        });
 
         let _server = build().await;
         assert!(true, "MCP server should build with multiple tools");
@@ -851,12 +856,10 @@ mod mcp_protocol_tests {
     /// Verifies that tool registrations can be created
     #[tokio::test]
     async fn test_mcp_tool_registration_creation() {
-        let _registration = McpToolRegistration::new(
-            "integration_test_tool",
-            "v1.0.0",
-            "Integration test tool",
-            create_echo_tool,
-        );
+        let _registration =
+            McpToolRegistration::new("integration_test_tool", "v1.0.0", create_echo_tool, || {
+                ApiMetadata::default()
+            });
 
         // Registration creation should succeed without panic
         assert!(true, "Registration creation should succeed");
