@@ -278,14 +278,14 @@ criterion_main!(benches);
 #[cfg(feature = "security")]
 fn benchmark_rate_limiter(c: &mut Criterion) {
     use sdforge::security::{RateLimiter, RateLimiterConfig};
-    
+
     let config = RateLimiterConfig::new(100, 60); // 100 requests per minute
     let limiter = RateLimiter::with_config(config);
-    
+
     c.bench_function("rate_limiter_check_first_request", |b| {
         b.iter(|| limiter.check("test_key_1"))
     });
-    
+
     c.bench_function("rate_limiter_check_existing_key", |b| {
         // Pre-populate the key
         let _ = limiter.check("existing_key");
@@ -297,23 +297,20 @@ fn benchmark_rate_limiter(c: &mut Criterion) {
 #[cfg(feature = "security")]
 fn benchmark_api_key_validation(c: &mut Criterion) {
     use sdforge::security::{ApiKeyManager, ApiKeyMetadata};
-    
+
     let manager = ApiKeyManager::new();
     let api_key = "testkey_test_1234567890abcdef";
-    
+
     // Add a test key
-    let metadata = ApiKeyMetadata::new(
-        "test_key".to_string(),
-        Some("Test API Key".to_string()),
-    );
-    
+    let metadata = ApiKeyMetadata::new("test_key".to_string(), Some("Test API Key".to_string()));
+
     c.bench_function("api_key_validate_valid", |b| {
         b.iter(|| {
             manager.add_key(api_key.to_string(), metadata.clone());
             manager.validate(api_key)
         })
     });
-    
+
     c.bench_function("api_key_validate_invalid", |b| {
         b.iter(|| manager.validate("invalid_key"))
     });
@@ -322,14 +319,14 @@ fn benchmark_api_key_validation(c: &mut Criterion) {
 /// Benchmark for JWT token operations
 #[cfg(feature = "security")]
 fn benchmark_jwt_operations(c: &mut Criterion) {
-    use sdforge::security::{BearerAuth, generate_secure_jwt_secret};
-    
+    use sdforge::security::{generate_secure_jwt_secret, BearerAuth};
+
     let secret = generate_secure_jwt_secret();
-    
+
     c.bench_function("jwt_secret_generation", |b| {
         b.iter(|| generate_secure_jwt_secret())
     });
-    
+
     c.bench_function("jwt_secret_validation", |b| {
         b.iter(|| {
             let test_secret = generate_secure_jwt_secret();
@@ -342,19 +339,19 @@ fn benchmark_jwt_operations(c: &mut Criterion) {
 #[cfg(feature = "security")]
 fn benchmark_error_sanitization(c: &mut Criterion) {
     use sdforge::security::audit::sanitize_error_message;
-    
+
     let clean_message = "Operation failed";
     let sensitive_message = "Failed with password=secret123 and token=abc456";
     let long_message = "x".repeat(1000);
-    
+
     c.bench_function("sanitize_clean_message", |b| {
         b.iter(|| sanitize_error_message(clean_message))
     });
-    
+
     c.bench_function("sanitize_sensitive_message", |b| {
         b.iter(|| sanitize_error_message(sensitive_message))
     });
-    
+
     c.bench_function("sanitize_long_message", |b| {
         b.iter(|| sanitize_error_message(&long_message))
     });
@@ -365,22 +362,22 @@ fn benchmark_error_sanitization(c: &mut Criterion) {
 fn benchmark_cache_operations(c: &mut Criterion) {
     use sdforge::cache::{Cache, DashMapCache, SyncCache};
     use std::sync::Arc;
-    
+
     let cache = Arc::new(DashMapCache::new());
-    
+
     c.bench_function("cache_set_simple", |b| {
         b.iter(|| cache.set("key", "value".to_string()))
     });
-    
+
     c.bench_function("cache_get_hit", |b| {
         cache.set("existing_key", "value".to_string());
         b.iter(|| cache.get("existing_key"))
     });
-    
+
     c.bench_function("cache_get_miss", |b| {
         b.iter(|| cache.get::<String>("nonexistent_key"))
     });
-    
+
     c.bench_function("cache_delete", |b| {
         cache.set("to_delete", "value".to_string());
         b.iter(|| cache.delete("to_delete"))
@@ -391,19 +388,17 @@ fn benchmark_cache_operations(c: &mut Criterion) {
 #[cfg(feature = "http")]
 fn benchmark_regex_caching(c: &mut Criterion) {
     use sdforge::core::regex_cache::{get_regex, RegexCache};
-    
+
     let pattern = r"^\d{3}-\d{3}-\d{4}$";
-    
-    c.bench_function("regex_first_compile", |b| {
-        b.iter(|| get_regex(pattern))
-    });
-    
+
+    c.bench_function("regex_first_compile", |b| b.iter(|| get_regex(pattern)));
+
     c.bench_function("regex_cached_lookup", |b| {
         // First call to cache it
         let _ = get_regex(pattern);
         b.iter(|| get_regex(pattern))
     });
-    
+
     c.bench_function("regex_is_match", |b| {
         let regex = get_regex(pattern).unwrap();
         b.iter(|| regex.is_match("123-456-7890"))
@@ -448,5 +443,9 @@ criterion_main!(benches, cache_benches);
 #[cfg(all(not(feature = "security"), not(feature = "cache"), feature = "http"))]
 criterion_main!(benches, http_benches);
 
-#[cfg(all(not(feature = "security"), not(feature = "cache"), not(feature = "http")))]
+#[cfg(all(
+    not(feature = "security"),
+    not(feature = "cache"),
+    not(feature = "http")
+))]
 criterion_main!(benches);

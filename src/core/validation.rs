@@ -11,83 +11,83 @@
 // =============================================================================
 
 /// Maximum request body size in bytes (10 MB)
-/// 
+///
 /// This limit prevents denial-of-service attacks through large payload submission.
 /// Adjust based on your application's needs, but always set some reasonable limit.
 pub const MAX_REQUEST_BODY_SIZE: usize = 10 * 1024 * 1024; // 10 MB
 
 /// Maximum header name length in characters (128)
-/// 
+///
 /// Prevents header-based attacks and excessive memory usage.
 pub const MAX_HEADER_NAME_LENGTH: usize = 128;
 
 /// Maximum header value length in bytes (8 KB)
-/// 
+///
 /// Limits individual header sizes to prevent buffer exhaustion.
 pub const MAX_HEADER_VALUE_LENGTH: usize = 8 * 1024; // 8 KB
 
 /// Maximum URI path length in characters (2048)
-/// 
+///
 /// Standard limit for most web servers. Longer paths may indicate attacks.
 pub const MAX_URI_PATH_LENGTH: usize = 2048;
 
 /// Maximum query string length in bytes (8 KB)
-/// 
+///
 /// Prevents excessive query parameter processing.
 pub const MAX_QUERY_STRING_LENGTH: usize = 8 * 1024; // 8 KB
 
 /// Maximum number of headers per request (100)
-/// 
+///
 /// Limits header count to prevent header flooding attacks.
 pub const MAX_HEADER_COUNT: usize = 100;
 
 /// Maximum API key length in characters (512)
-/// 
+///
 /// API keys should be reasonably sized. Longer keys may indicate attacks.
 pub const MAX_API_KEY_LENGTH: usize = 512;
 
 /// Maximum JWT token length in characters (4096)
-/// 
+///
 /// JWT tokens have a practical maximum size based on claims.
 pub const MAX_JWT_TOKEN_LENGTH: usize = 4096;
 
 /// Maximum username length in characters (256)
-/// 
+///
 /// Prevents username-based attacks and database field overflow.
 pub const MAX_USERNAME_LENGTH: usize = 256;
 
 /// Maximum email length in characters (320)
-/// 
+///
 /// RFC 5322 specifies maximum email length as 320 characters.
 pub const MAX_EMAIL_LENGTH: usize = 320;
 
 /// Maximum password length in characters (1024)
-/// 
+///
 /// While passwords shouldn't be this long, we set a reasonable limit.
 pub const MAX_PASSWORD_LENGTH: usize = 1024;
 
 /// Minimum password length in characters (8)
-/// 
+///
 /// Security best practice for password policies.
 pub const MIN_PASSWORD_LENGTH: usize = 8;
 
 /// Maximum description or text field length (10 KB)
-/// 
+///
 /// For general text fields that don't need article-length content.
 pub const MAX_TEXT_FIELD_LENGTH: usize = 10 * 1024; // 10 KB
 
 /// Maximum JSON field name length in characters (256)
-/// 
+///
 /// Prevents excessively long field names in JSON payloads.
 pub const MAX_JSON_FIELD_NAME_LENGTH: usize = 256;
 
 /// Maximum array length in JSON payloads (10000)
-/// 
+///
 /// Prevents array-based DoS attacks.
 pub const MAX_JSON_ARRAY_LENGTH: usize = 10_000;
 
 /// Maximum nesting depth for JSON objects (100)
-/// 
+///
 /// Prevents deeply nested JSON parsing attacks.
 pub const MAX_JSON_DEPTH: usize = 100;
 
@@ -1349,22 +1349,22 @@ mod tests {
     #[test]
     fn test_security_limits_reasonable_values() {
         // Verify limits are within reasonable ranges
-        
+
         // Request body: 1MB - 100MB is reasonable
         assert!(MAX_REQUEST_BODY_SIZE >= 1024 * 1024); // At least 1MB
         assert!(MAX_REQUEST_BODY_SIZE <= 100 * 1024 * 1024); // At most 100MB
-        
+
         // Password limits
         assert!(MIN_PASSWORD_LENGTH >= 6); // Minimum 6 characters
         assert!(MAX_PASSWORD_LENGTH >= 128); // At least 128 characters supported
-        
+
         // Email per RFC 5322
         assert_eq!(MAX_EMAIL_LENGTH, 320);
-        
+
         // Header limits
         assert!(MAX_HEADER_NAME_LENGTH >= 64);
         assert!(MAX_HEADER_VALUE_LENGTH >= 1024);
-        
+
         // JSON limits
         assert!(MAX_JSON_ARRAY_LENGTH >= 1000);
         assert!(MAX_JSON_DEPTH >= 50);
@@ -1374,7 +1374,7 @@ mod tests {
     fn test_password_length_validation() {
         // Test password length constraints
         assert!(MIN_PASSWORD_LENGTH < MAX_PASSWORD_LENGTH);
-        
+
         // Typical passwords should be within range
         assert!("password123".len() >= MIN_PASSWORD_LENGTH);
         assert!("password123".len() <= MAX_PASSWORD_LENGTH);

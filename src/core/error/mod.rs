@@ -2,9 +2,9 @@
 //! Framework error types
 //!
 //! Provides comprehensive error types for the framework.
-//! 
+//!
 //! # Internationalization (i18n) Support
-//! 
+//!
 //! Error messages can be localized by implementing the `LocalizedError` trait
 //! and providing translations for different locales. See `ApiError::localized_message()`
 //! for usage.
@@ -109,25 +109,25 @@ impl Default for ErrorContext {
 pub type Locale = String;
 
 /// Localization trait for error messages
-/// 
+///
 /// This trait allows errors to provide localized messages for different locales.
 /// Implement this trait for error types that need internationalization support.
 pub trait LocalizedError {
     /// Get a localized message for the given locale
-    /// 
+    ///
     /// # Arguments
     /// * `locale` - The locale identifier (e.g., "en", "zh-CN")
-    /// 
+    ///
     /// # Returns
     /// A localized error message, or English fallback if translation not available
     fn localized_message(&self, locale: &Locale) -> String;
-    
+
     /// Get the default (English) message
     fn default_message(&self) -> String;
 }
 
 /// Simple translation store for error messages
-/// 
+///
 /// In production, you would load these from JSON/YAML files or a database.
 /// For now, we provide a simple in-memory implementation.
 #[derive(Debug, Clone, Default)]
@@ -142,9 +142,9 @@ impl TranslationStore {
             translations: HashMap::new(),
         }
     }
-    
+
     /// Add a translation for a specific locale
-    /// 
+    ///
     /// # Arguments
     /// * `locale` - The locale identifier (e.g., "en", "zh-CN")
     /// * `key` - The translation key (usually the English message)
@@ -155,13 +155,13 @@ impl TranslationStore {
             .or_default()
             .insert(key, translation);
     }
-    
+
     /// Get a translation for a specific locale
-    /// 
+    ///
     /// # Arguments
     /// * `locale` - The locale identifier
     /// * `key` - The translation key
-    /// 
+    ///
     /// # Returns
     /// The translated message, or None if not found
     pub fn get(&self, locale: &Locale, key: &str) -> Option<&String> {
@@ -169,9 +169,9 @@ impl TranslationStore {
             .get(locale)
             .and_then(|translations| translations.get(key))
     }
-    
+
     /// Load translations from a JSON file
-    /// 
+    ///
     /// Expected JSON format:
     /// ```json
     /// {
@@ -185,16 +185,16 @@ impl TranslationStore {
     ///   }
     /// }
     /// ```
-    /// 
+    ///
     /// # Arguments
     /// * `json_path` - Path to the JSON file containing translations
-    /// 
+    ///
     /// # Errors
     /// Returns an error if the file cannot be read or parsed
     pub fn load_from_json(&mut self, json_path: &str) -> Result<(), Box<dyn StdError>> {
         let content = std::fs::read_to_string(json_path)?;
         let json_value: serde_json::Value = serde_json::from_str(&content)?;
-        
+
         if let Some(obj) = json_value.as_object() {
             for (locale, translations) in obj {
                 if let Some(trans_obj) = translations.as_object() {
@@ -210,7 +210,7 @@ impl TranslationStore {
                 }
             }
         }
-        
+
         Ok(())
     }
 }
@@ -597,7 +597,7 @@ impl LocalizedError for ApiError {
     fn localized_message(&self, locale: &Locale) -> String {
         // In production, you would use a global TranslationStore loaded from files
         // For now, we provide built-in translations for common locales
-        
+
         match locale.as_str() {
             // Chinese (Simplified)
             "zh" | "zh-CN" | "zh-Hans" => match self {
@@ -613,7 +613,10 @@ impl LocalizedError for ApiError {
                 ApiError::AccessDenied { permission, .. } => {
                     format!("访问被拒绝：{}", permission)
                 }
-                ApiError::RateLimitExceeded { limit, window_seconds } => {
+                ApiError::RateLimitExceeded {
+                    limit,
+                    window_seconds,
+                } => {
                     format!("请求频率超限：{} 次 / {} 秒", limit, window_seconds)
                 }
                 ApiError::Internal { message, .. } => {
@@ -626,7 +629,7 @@ impl LocalizedError for ApiError {
                     format!("验证失败：{} - {}", field, constraint)
                 }
             },
-            
+
             // French
             "fr" | "fr-FR" => match self {
                 ApiError::NotFound { resource, .. } => {
@@ -641,8 +644,14 @@ impl LocalizedError for ApiError {
                 ApiError::AccessDenied { permission, .. } => {
                     format!("Accès refusé: {}", permission)
                 }
-                ApiError::RateLimitExceeded { limit, window_seconds } => {
-                    format!("Limite de débit dépassée: {} requêtes / {} secondes", limit, window_seconds)
+                ApiError::RateLimitExceeded {
+                    limit,
+                    window_seconds,
+                } => {
+                    format!(
+                        "Limite de débit dépassée: {} requêtes / {} secondes",
+                        limit, window_seconds
+                    )
                 }
                 ApiError::Internal { message, .. } => {
                     format!("Erreur interne: {}", message)
@@ -654,7 +663,7 @@ impl LocalizedError for ApiError {
                     format!("Erreur de validation: {} - {}", field, constraint)
                 }
             },
-            
+
             // Spanish
             "es" | "es-ES" => match self {
                 ApiError::NotFound { resource, .. } => {
@@ -669,8 +678,14 @@ impl LocalizedError for ApiError {
                 ApiError::AccessDenied { permission, .. } => {
                     format!("Acceso denegado: {}", permission)
                 }
-                ApiError::RateLimitExceeded { limit, window_seconds } => {
-                    format!("Límite de tasa excedido: {} solicitudes / {} segundos", limit, window_seconds)
+                ApiError::RateLimitExceeded {
+                    limit,
+                    window_seconds,
+                } => {
+                    format!(
+                        "Límite de tasa excedido: {} solicitudes / {} segundos",
+                        limit, window_seconds
+                    )
                 }
                 ApiError::Internal { message, .. } => {
                     format!("Error interno: {}", message)
@@ -682,12 +697,12 @@ impl LocalizedError for ApiError {
                     format!("Error de validación: {} - {}", field, constraint)
                 }
             },
-            
+
             // Default to English for unknown locales
             _ => self.default_message(),
         }
     }
-    
+
     fn default_message(&self) -> String {
         self.to_string()
     }
@@ -696,7 +711,7 @@ impl LocalizedError for ApiError {
 use super::response::ServiceError;
 
 /// Unified framework error type that wraps all SDForge errors
-/// 
+///
 /// This enum provides a single error type for the entire framework,
 /// making error handling more consistent and ergonomic.
 #[derive(Debug, Error)]
@@ -770,13 +785,20 @@ impl SdForgeError {
             SdForgeError::Api(err) => {
                 // Convert ApiError to ServiceError by reconstructing
                 match err {
-                    ApiError::NotFound { resource, resource_id } => ServiceError::with_details(
+                    ApiError::NotFound {
+                        resource,
+                        resource_id,
+                    } => ServiceError::with_details(
                         "NOT_FOUND",
                         format!("Resource not found: {}", resource),
                         serde_json::json!({ "resource": resource, "resource_id": resource_id }),
                         404,
                     ),
-                    ApiError::InvalidInput { message, field, value } => ServiceError::with_details(
+                    ApiError::InvalidInput {
+                        message,
+                        field,
+                        value,
+                    } => ServiceError::with_details(
                         "INVALID_INPUT",
                         message.clone(),
                         serde_json::json!({ "field": field, "value": value }),
@@ -788,26 +810,42 @@ impl SdForgeError {
                         serde_json::json!({ "reason": reason }),
                         401,
                     ),
-                    ApiError::AccessDenied { permission, user_id } => ServiceError::with_details(
+                    ApiError::AccessDenied {
+                        permission,
+                        user_id,
+                    } => ServiceError::with_details(
                         "ACCESS_DENIED",
                         format!("Access denied: {}", permission),
                         serde_json::json!({ "permission": permission, "user_id": user_id }),
                         403,
                     ),
-                    ApiError::RateLimitExceeded { limit, window_seconds } => ServiceError::with_details(
+                    ApiError::RateLimitExceeded {
+                        limit,
+                        window_seconds,
+                    } => ServiceError::with_details(
                         "RATE_LIMIT_EXCEEDED",
                         "Rate limit exceeded".to_string(),
                         serde_json::json!({ "limit": limit, "window_seconds": window_seconds }),
                         429,
                     ),
-                    ApiError::Internal { message, error_id, context, .. } => {
+                    ApiError::Internal {
+                        message,
+                        error_id,
+                        context,
+                        ..
+                    } => {
                         let mut details = serde_json::json!({ "error_id": error_id });
                         if let Some(ctx) = context {
-                            details["context"] = serde_json::to_value(ctx).unwrap_or(serde_json::json!({}));
+                            details["context"] =
+                                serde_json::to_value(ctx).unwrap_or(serde_json::json!({}));
                         }
                         ServiceError::with_details("INTERNAL_ERROR", message.clone(), details, 500)
                     }
-                    ApiError::ServiceUnavailable { service, retry_after, .. } => ServiceError::with_details(
+                    ApiError::ServiceUnavailable {
+                        service,
+                        retry_after,
+                        ..
+                    } => ServiceError::with_details(
                         "SERVICE_UNAVAILABLE",
                         format!("Service unavailable: {}", service),
                         serde_json::json!({ "service": service, "retry_after": retry_after }),
@@ -852,7 +890,7 @@ impl SdForgeError {
             SdForgeError::RateLimit(e) => ServiceError::with_details(
                 "RATE_LIMIT_ERROR",
                 e.to_string(),
-                serde_json::json!({ 
+                serde_json::json!({
                     "limit": e.limit,
                     "remaining": e.remaining,
                     "retry_after": e.retry_after
@@ -1601,7 +1639,7 @@ mod tests {
     fn test_sdforge_error_api_variant() {
         let api_err = ApiError::not_found("user", Some("123".into()));
         let sdforge_err: SdForgeError = api_err.into();
-        
+
         assert!(matches!(sdforge_err, SdForgeError::Api(_)));
         assert_eq!(sdforge_err.category(), ErrorCategory::ClientError);
     }
@@ -1610,7 +1648,7 @@ mod tests {
     #[test]
     fn test_sdforge_error_internal() {
         let err = SdForgeError::internal("test error");
-        
+
         match &err {
             SdForgeError::Internal(msg) => {
                 assert_eq!(msg, &"test error");
@@ -1626,7 +1664,7 @@ mod tests {
         let internal = SdForgeError::internal("Database connection failed: host=localhost");
         let msg = internal.sanitized_message();
         assert!(msg.contains("Database")); // Not sanitized for Internal variant
-        
+
         let api_internal = ApiError::internal_error("DB failed", "ERR001");
         let sdforge_err: SdForgeError = api_internal.into();
         let msg = sdforge_err.sanitized_message();
@@ -1640,7 +1678,7 @@ mod tests {
         let api_err = ApiError::not_found("resource", None);
         let sdforge_err: SdForgeError = api_err.into();
         let service_err = sdforge_err.to_service_error();
-        
+
         // Should preserve the error details
         assert!(service_err.code == "NOT_FOUND" || service_err.code.contains("NOT_FOUND"));
     }
@@ -1655,7 +1693,7 @@ mod tests {
             resource: "user".to_string(),
             resource_id: Some("123".to_string()),
         };
-        
+
         // English is the default (to_string())
         assert_eq!(error.default_message(), "Resource not found: user");
     }
@@ -1666,7 +1704,7 @@ mod tests {
             resource: "user".to_string(),
             resource_id: Some("123".to_string()),
         };
-        
+
         let zh_message = error.localized_message(&"zh-CN".to_string());
         assert!(zh_message.contains("资源未找到"));
         assert!(zh_message.contains("user"));
@@ -1679,7 +1717,7 @@ mod tests {
             field: Some("email".to_string()),
             value: None,
         };
-        
+
         let fr_message = error.localized_message(&"fr-FR".to_string());
         assert!(fr_message.contains("Entrée invalide"));
         assert!(fr_message.contains("Invalid email format"));
@@ -1690,7 +1728,7 @@ mod tests {
         let error = ApiError::AuthenticationFailed {
             reason: "Invalid credentials".to_string(),
         };
-        
+
         let es_message = error.localized_message(&"es-ES".to_string());
         assert!(es_message.contains("Autenticación fallida"));
         assert!(es_message.contains("Invalid credentials"));
@@ -1702,7 +1740,7 @@ mod tests {
             permission: "admin".to_string(),
             user_id: Some("user123".to_string()),
         };
-        
+
         // Unknown locale should fallback to English
         let de_message = error.localized_message(&"de-DE".to_string());
         assert_eq!(de_message, error.default_message());
@@ -1711,18 +1749,14 @@ mod tests {
     #[test]
     fn test_translation_store_basic() {
         let mut store = TranslationStore::new();
-        
-        store.add_translation(
-            "zh-CN".to_string(),
-            "Hello".to_string(),
-            "你好".to_string(),
-        );
-        
+
+        store.add_translation("zh-CN".to_string(), "Hello".to_string(), "你好".to_string());
+
         assert_eq!(
             store.get(&"zh-CN".to_string(), "Hello"),
             Some(&"你好".to_string())
         );
-        
+
         assert_eq!(store.get(&"en".to_string(), "Hello"), None);
     }
 
@@ -1732,12 +1766,12 @@ mod tests {
             limit: 100,
             window_seconds: 60,
         };
-        
+
         let zh_message = error.localized_message(&"zh-CN".to_string());
         assert!(zh_message.contains("100"));
         assert!(zh_message.contains("60"));
         assert!(zh_message.contains("请求频率超限"));
-        
+
         let fr_message = error.localized_message(&"fr-FR".to_string());
         assert!(fr_message.contains("100"));
         assert!(fr_message.contains("60"));
