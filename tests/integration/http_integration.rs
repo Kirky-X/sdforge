@@ -3,27 +3,33 @@
 
 #[cfg(feature = "http")]
 mod http_tests {
-    use sdforge::http::build;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
         routing::get,
         Router,
     };
+    use sdforge::http::build;
     use tower::ServiceExt;
 
     #[tokio::test]
     async fn test_http_server_builds() {
         let app = build();
         // Verify the app is not null and has expected structure
-        assert!(!std::ptr::eq(&app, std::ptr::null()), "HTTP app should build successfully");
+        assert!(
+            !std::ptr::eq(&app, std::ptr::null()),
+            "HTTP app should build successfully"
+        );
     }
 
     #[test]
     fn test_http_build_sync() {
         let app = build();
         // Verify the app builds without panic
-        assert!(!std::ptr::eq(&app, std::ptr::null()), "HTTP sync build should succeed");
+        assert!(
+            !std::ptr::eq(&app, std::ptr::null()),
+            "HTTP sync build should succeed"
+        );
     }
 
     /// Test: Basic router with GET endpoint
@@ -36,17 +42,12 @@ mod http_tests {
         let app = Router::new().route("/test", get(handler));
 
         let response = app
-            .oneshot(
-                Request::builder()
-                    .uri("/test")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(Request::builder().uri("/test").body(Body::empty()).unwrap())
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = axum::body::to_bytes(response.into_body(), 1024)
             .await
             .unwrap();
@@ -56,8 +57,12 @@ mod http_tests {
     /// Test: Multiple routes in same router
     #[tokio::test]
     async fn test_multiple_routes() {
-        async fn hello() -> &'static str { "Hello" }
-        async fn world() -> &'static str { "World" }
+        async fn hello() -> &'static str {
+            "Hello"
+        }
+        async fn world() -> &'static str {
+            "World"
+        }
 
         let app = Router::new()
             .route("/hello", get(hello))
@@ -114,10 +119,17 @@ mod http_tests {
     /// Test: HTTP request handling performance
     #[tokio::test]
     async fn test_http_request_performance() {
-        use axum::{body::Body, http::{Request, StatusCode}, routing::get, Router};
+        use axum::{
+            body::Body,
+            http::{Request, StatusCode},
+            routing::get,
+            Router,
+        };
         use tower::ServiceExt;
 
-        async fn handler() -> &'static str { "OK" }
+        async fn handler() -> &'static str {
+            "OK"
+        }
         let app = Router::new().route("/perf", get(handler));
 
         let start = std::time::Instant::now();
@@ -140,11 +152,18 @@ mod http_tests {
     /// Test: Concurrent HTTP requests
     #[tokio::test]
     async fn test_concurrent_http_requests() {
-        use axum::{body::Body, http::{Request, StatusCode}, routing::get, Router};
+        use axum::{
+            body::Body,
+            http::{Request, StatusCode},
+            routing::get,
+            Router,
+        };
         use std::sync::Arc;
         use tower::ServiceExt;
 
-        async fn handler() -> &'static str { "Concurrent OK" }
+        async fn handler() -> &'static str {
+            "Concurrent OK"
+        }
         let app = Arc::new(Router::new().route("/concurrent", get(handler)));
 
         let mut handles = vec![];
@@ -154,7 +173,12 @@ mod http_tests {
             let app_clone = Arc::clone(&app);
             let handle = tokio::spawn(async move {
                 let response = app_clone
-                    .oneshot(Request::builder().uri("/concurrent").body(Body::empty()).unwrap())
+                    .oneshot(
+                        Request::builder()
+                            .uri("/concurrent")
+                            .body(Body::empty())
+                            .unwrap(),
+                    )
                     .await
                     .unwrap();
                 (i, response.status())
@@ -172,7 +196,12 @@ mod http_tests {
     /// Test: Large response body handling
     #[tokio::test]
     async fn test_large_response_body() {
-        use axum::{body::Body, http::{Request, StatusCode}, routing::get, Router};
+        use axum::{
+            body::Body,
+            http::{Request, StatusCode},
+            routing::get,
+            Router,
+        };
         use tower::ServiceExt;
 
         async fn handler() -> String {
@@ -182,27 +211,49 @@ mod http_tests {
         let app = Router::new().route("/large", get(handler));
 
         let response = app
-            .oneshot(Request::builder().uri("/large").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/large")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = axum::body::to_bytes(response.into_body(), 200_000).await.unwrap();
+        let body = axum::body::to_bytes(response.into_body(), 200_000)
+            .await
+            .unwrap();
         assert_eq!(body.len(), 100_000);
     }
 
     /// Test: Multiple route patterns stress test
     #[tokio::test]
     async fn test_multiple_route_patterns() {
-        use axum::{body::Body, http::{Request, StatusCode}, routing::get, Router};
+        use axum::{
+            body::Body,
+            http::{Request, StatusCode},
+            routing::get,
+            Router,
+        };
         use tower::ServiceExt;
 
-        async fn h1() -> &'static str { "Route 1" }
-        async fn h2() -> &'static str { "Route 2" }
-        async fn h3() -> &'static str { "Route 3" }
-        async fn h4() -> &'static str { "Route 4" }
-        async fn h5() -> &'static str { "Route 5" }
+        async fn h1() -> &'static str {
+            "Route 1"
+        }
+        async fn h2() -> &'static str {
+            "Route 2"
+        }
+        async fn h3() -> &'static str {
+            "Route 3"
+        }
+        async fn h4() -> &'static str {
+            "Route 4"
+        }
+        async fn h5() -> &'static str {
+            "Route 5"
+        }
 
         let app = Router::new()
             .route("/api/v1/resource1", get(h1))
@@ -228,7 +279,9 @@ mod http_tests {
                 .unwrap();
 
             assert_eq!(response.status(), StatusCode::OK);
-            let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+            let body = axum::body::to_bytes(response.into_body(), 1024)
+                .await
+                .unwrap();
             assert_eq!(&body[..], expected.as_bytes());
         }
     }
@@ -241,7 +294,10 @@ mod timestamp_tests {
     #[test]
     fn test_timestamp_feature_enabled() {
         let app = build();
-        assert!(!std::ptr::eq(&app, std::ptr::null()), "HTTP app with timestamp should build");
+        assert!(
+            !std::ptr::eq(&app, std::ptr::null()),
+            "HTTP app with timestamp should build"
+        );
     }
 }
 
@@ -252,7 +308,10 @@ mod no_timestamp_tests {
     #[test]
     fn test_timestamp_feature_disabled() {
         let app = build();
-        assert!(!std::ptr::eq(&app, std::ptr::null()), "HTTP app without timestamp should build");
+        assert!(
+            !std::ptr::eq(&app, std::ptr::null()),
+            "HTTP app without timestamp should build"
+        );
     }
 }
 
@@ -263,6 +322,9 @@ mod streaming_tests {
     #[test]
     fn test_streaming_feature_enabled() {
         let app = build();
-        assert!(!std::ptr::eq(&app, std::ptr::null()), "HTTP app with streaming should build");
+        assert!(
+            !std::ptr::eq(&app, std::ptr::null()),
+            "HTTP app with streaming should build"
+        );
     }
 }

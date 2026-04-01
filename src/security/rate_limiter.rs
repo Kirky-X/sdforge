@@ -98,7 +98,7 @@ impl AppRateLimiter {
 
         if current_window != stored_window || state.window_start_secs == 0 {
             // We've moved to a new window
-            
+
             // If we've skipped more than one window, clear previous count
             if current_window > stored_window + 1 {
                 state.previous_count = 0;
@@ -106,7 +106,7 @@ impl AppRateLimiter {
                 // Shift current to previous
                 state.previous_count = state.count;
             }
-            
+
             // Start fresh current window
             state.window_start_secs = current_time_secs;
             state.count = 1;
@@ -120,13 +120,13 @@ impl AppRateLimiter {
         let effective_count = if state.previous_count > 0 && stored_window != 0 {
             // Time position within current window (0.0 to 1.0)
             let time_in_window = ((current_time_secs % window_secs) as f64) / (window_secs as f64);
-            
+
             // Weight for previous window (decreases as we move through current window)
             let prev_weight = 1.0 - time_in_window;
-            
+
             // Weight for current window (increases as we move through current window)
             let curr_weight = time_in_window;
-            
+
             // Calculate weighted count
             (state.previous_count as f64 * prev_weight) + (state.count as f64 * curr_weight)
         } else {
@@ -216,15 +216,16 @@ impl AppRateLimiter {
         } else {
             // Calculate sliding window weighted count (only if previous_count exists)
             let effective_count = if state.previous_count > 0 {
-                let time_in_window = ((current_time_secs % window_secs) as f64) / (window_secs as f64);
+                let time_in_window =
+                    ((current_time_secs % window_secs) as f64) / (window_secs as f64);
                 let prev_weight = 1.0 - time_in_window;
                 let curr_weight = time_in_window;
-                
+
                 (state.previous_count as f64 * prev_weight) + (state.count as f64 * curr_weight)
             } else {
                 state.count as f64
             };
-            
+
             // Calculate remaining
             (self.config.max_requests as f64 - effective_count).max(0.0) as u32
         }
@@ -424,7 +425,7 @@ mod tests {
     #[test]
     fn test_sliding_window_weight() {
         // Test that previous window count affects current window
-        
+
         let limiter = AppRateLimiter::new(Some(RateLimitConfig {
             max_requests: 5,
             window: Duration::from_secs(2), // Short window for testing

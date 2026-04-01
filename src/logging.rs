@@ -61,11 +61,7 @@ pub struct LogEntry {
 
 impl LogEntry {
     /// Create a new log entry
-    pub fn new(
-        level: LogLevel,
-        target: impl Into<String>,
-        message: impl Into<String>,
-    ) -> Self {
+    pub fn new(level: LogLevel, target: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             timestamp: chrono::Utc::now().to_rfc3339(),
             level,
@@ -76,7 +72,11 @@ impl LogEntry {
     }
 
     /// Add a field to the log entry
-    pub fn with_field(mut self, key: impl Into<String>, value: impl Into<serde_json::Value>) -> Self {
+    pub fn with_field(
+        mut self,
+        key: impl Into<String>,
+        value: impl Into<serde_json::Value>,
+    ) -> Self {
         self.fields.insert(key.into(), value.into());
         self
     }
@@ -156,7 +156,13 @@ impl StructuredLogger {
     }
 
     /// Log a message at the specified level
-    pub fn log(&self, level: LogLevel, target: &str, message: &str, fields: Vec<(String, serde_json::Value)>) {
+    pub fn log(
+        &self,
+        level: LogLevel,
+        target: &str,
+        message: &str,
+        fields: Vec<(String, serde_json::Value)>,
+    ) {
         if level >= self.config.min_level {
             let entry = LogEntry::new(level, target, message).with_fields(fields);
             let _ = self.tx.try_send(entry);
@@ -212,7 +218,7 @@ fn write_log_entry<W: Write>(
     match format {
         LogFormat::Json => {
             let json = serde_json::to_string(entry)?;
-            
+
             if colored {
                 let color = get_level_color(entry.level);
                 write!(writer, "{}", color)?;
@@ -230,7 +236,7 @@ fn write_log_entry<W: Write>(
                 write!(writer, "\x1b[0m")?;
                 write!(writer, " [{}]", entry.target)?;
                 write!(writer, " {}", entry.message)?;
-                
+
                 if !entry.fields.is_empty() {
                     write!(writer, " {{")?;
                     for (i, (k, v)) in entry.fields.iter().enumerate() {
@@ -242,8 +248,12 @@ fn write_log_entry<W: Write>(
                     write!(writer, "}}")?;
                 }
             } else {
-                write!(writer, "{} {:<5} [{}] {}", entry.timestamp, entry.level, entry.target, entry.message)?;
-                
+                write!(
+                    writer,
+                    "{} {:<5} [{}] {}",
+                    entry.timestamp, entry.level, entry.target, entry.message
+                )?;
+
                 if !entry.fields.is_empty() {
                     write!(writer, " {{")?;
                     for (i, (k, v)) in entry.fields.iter().enumerate() {
@@ -263,21 +273,24 @@ fn write_log_entry<W: Write>(
 /// Get ANSI color code for log level
 fn get_level_color(level: LogLevel) -> &'static str {
     match level {
-        LogLevel::Trace => "\x1b[90m",      // Bright Black
-        LogLevel::Debug => "\x1b[36m",      // Cyan
-        LogLevel::Info => "\x1b[32m",       // Green
-        LogLevel::Warn => "\x1b[33m",       // Yellow
-        LogLevel::Error => "\x1b[31m",      // Red
+        LogLevel::Trace => "\x1b[90m", // Bright Black
+        LogLevel::Debug => "\x1b[36m", // Cyan
+        LogLevel::Info => "\x1b[32m",  // Green
+        LogLevel::Warn => "\x1b[33m",  // Yellow
+        LogLevel::Error => "\x1b[31m", // Red
     }
 }
 
 /// Global logger instance
-static GLOBAL_LOGGER: once_cell::sync::OnceCell<Arc<StructuredLogger>> = once_cell::sync::OnceCell::new();
+static GLOBAL_LOGGER: once_cell::sync::OnceCell<Arc<StructuredLogger>> =
+    once_cell::sync::OnceCell::new();
 
 /// Initialize the global logger
 pub fn init_global_logger(config: LoggerConfig) -> Result<(), LoggerError> {
     let logger = Arc::new(StructuredLogger::new(config));
-    GLOBAL_LOGGER.set(logger).map_err(|_| LoggerError::AlreadyInitialized)?;
+    GLOBAL_LOGGER
+        .set(logger)
+        .map_err(|_| LoggerError::AlreadyInitialized)?;
     Ok(())
 }
 
@@ -374,16 +387,33 @@ mod tests {
         };
 
         let logger = StructuredLogger::new(config);
-        
-        logger.info("app", "Application started", vec![
-            ("version".to_string(), serde_json::Value::String("0.1.0".to_string())),
-            ("env".to_string(), serde_json::Value::String("test".to_string())),
-        ]);
 
-        logger.error("db", "Connection failed", vec![
-            ("host".to_string(), serde_json::Value::String("localhost".to_string())),
-            ("port".to_string(), serde_json::Value::Number(5432.into())),
-        ]);
+        logger.info(
+            "app",
+            "Application started",
+            vec![
+                (
+                    "version".to_string(),
+                    serde_json::Value::String("0.1.0".to_string()),
+                ),
+                (
+                    "env".to_string(),
+                    serde_json::Value::String("test".to_string()),
+                ),
+            ],
+        );
+
+        logger.error(
+            "db",
+            "Connection failed",
+            vec![
+                (
+                    "host".to_string(),
+                    serde_json::Value::String("localhost".to_string()),
+                ),
+                ("port".to_string(), serde_json::Value::Number(5432.into())),
+            ],
+        );
 
         logger.flush().await;
         logger.shutdown().await;

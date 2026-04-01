@@ -40,7 +40,8 @@ impl Default for SecurityConfig {
             frame_options: defaults::security_headers::FRAME_OPTIONS.to_string(),
             xss_protection: defaults::security_headers::XSS_PROTECTION.to_string(),
             cache_control: defaults::security_headers::CACHE_CONTROL.to_string(),
-            content_security_policy: defaults::security_headers::CONTENT_SECURITY_POLICY.to_string(),
+            content_security_policy: defaults::security_headers::CONTENT_SECURITY_POLICY
+                .to_string(),
             strict_transport_security: defaults::security_headers::STRICT_TRANSPORT_SECURITY
                 .to_string(),
             referrer_policy: defaults::security_headers::REFERRER_POLICY.to_string(),
