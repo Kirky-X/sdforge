@@ -207,7 +207,8 @@ impl ApiKeyMetadata {
             return Err(format!("Version {} does not exist", version_index));
         }
 
-        let _old_version = self.active_version_index
+        let _old_version = self
+            .active_version_index
             .and_then(|idx| self.versions.get(idx))
             .map(|v| v.version.clone())
             .unwrap_or_else(|| "none".to_string());
@@ -223,7 +224,7 @@ impl ApiKeyMetadata {
         if let Some(new_version) = self.versions.get_mut(version_index) {
             new_version.is_active = true;
             self.active_version_index = Some(version_index);
-            
+
             // Log rotation event (tracing will be added when feature is enabled)
             // tracing::info!(
             //     key_id = %self.key_id,
@@ -231,7 +232,7 @@ impl ApiKeyMetadata {
             //     new_version = %new_version_name,
             //     "API key rotated to new version"
             // );
-            
+
             Ok(())
         } else {
             Err(format!("Version {} not found", version_index))
@@ -292,14 +293,19 @@ pub struct LruConfig {
 impl Default for LruConfig {
     fn default() -> Self {
         Self {
-            max_entries: 10_000, // Increased from 1000 to 10000
+            max_entries: 10_000,            // Increased from 1000 to 10000
             ttl: Duration::from_secs(3600), // 1 hour
-            eviction_threshold: 0.8, // Start eviction at 80% capacity
+            eviction_threshold: 0.8,        // Start eviction at 80% capacity
         }
     }
 }
 
-/// LRU cache entry with timestamp (reserved for future use)
+/// LRU cache entry with timestamp.
+///
+/// **Reserved for future LRU implementation.**
+/// Currently, LruCacheManager uses a simpler HashMap-based approach for tracking
+/// access times. This struct is kept for potential future use when a more
+/// sophisticated LRU implementation with entry-level metadata is needed.
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct LruEntry<T> {
@@ -308,6 +314,10 @@ struct LruEntry<T> {
     created_at: Instant,
 }
 
+/// LRU cache entry implementation.
+///
+/// **Reserved for future LRU implementation.**
+/// These methods will be used when the full LRU entry system is activated.
 #[allow(dead_code)]
 impl<T> LruEntry<T> {
     fn new(data: T) -> Self {

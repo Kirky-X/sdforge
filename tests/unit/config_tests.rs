@@ -220,7 +220,10 @@ mod config_enhanced_tests {
             prefix: "Bearer".to_string(),
         };
         match &standard {
-            AuthConfig::ApiKey { header_name, prefix } => {
+            AuthConfig::ApiKey {
+                header_name,
+                prefix,
+            } => {
                 assert_eq!(header_name, "Authorization");
                 assert_eq!(prefix, "Bearer");
             }
@@ -298,10 +301,18 @@ mod config_enhanced_tests {
             prefix: "key".to_string(),
         };
         let cloned = api_key.clone();
-        
+
         match (&api_key, &cloned) {
-            (AuthConfig::ApiKey { header_name: h1, prefix: p1 }, 
-             AuthConfig::ApiKey { header_name: h2, prefix: p2 }) => {
+            (
+                AuthConfig::ApiKey {
+                    header_name: h1,
+                    prefix: p1,
+                },
+                AuthConfig::ApiKey {
+                    header_name: h2,
+                    prefix: p2,
+                },
+            ) => {
                 assert_eq!(h1, h2);
                 assert_eq!(p1, p2);
             }
@@ -312,7 +323,7 @@ mod config_enhanced_tests {
             secret: "secret".to_string(),
         };
         let jwt_cloned = jwt.clone();
-        
+
         match (&jwt, &jwt_cloned) {
             (AuthConfig::Jwt { secret: s1 }, AuthConfig::Jwt { secret: s2 }) => {
                 assert_eq!(s1, s2);
@@ -335,9 +346,7 @@ mod config_enhanced_tests {
             cors: None,
         };
 
-        let config = AppConfig::builder()
-            .server(server)
-            .build();
+        let config = AppConfig::builder().server(server).build();
 
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 8080);
@@ -348,12 +357,12 @@ mod config_enhanced_tests {
     #[test]
     fn test_app_config_default_implementation() {
         let default = AppConfig::default();
-        
+
         // Verify we can access all major fields
         let _ = &default.server;
         let _ = &default.authentication;
         let _ = &default.timeout;
-        
+
         // Verify it's not None or invalid
         assert!(true);
     }
@@ -395,7 +404,10 @@ mod config_enhanced_tests {
             prefix: "".to_string(),
         };
         match &auth_empty {
-            AuthConfig::ApiKey { header_name, prefix } => {
+            AuthConfig::ApiKey {
+                header_name,
+                prefix,
+            } => {
                 assert_eq!(header_name, "");
                 assert_eq!(prefix, "");
             }
@@ -421,7 +433,10 @@ mod config_enhanced_tests {
             prefix: "令牌".to_string(),
         };
         match &auth_unicode {
-            AuthConfig::ApiKey { header_name, prefix } => {
+            AuthConfig::ApiKey {
+                header_name,
+                prefix,
+            } => {
                 assert_eq!(header_name, "认证头");
                 assert_eq!(prefix, "令牌");
             }
@@ -447,7 +462,10 @@ mod config_enhanced_tests {
             prefix: "Bearer'token".to_string(),
         };
         match &auth_special {
-            AuthConfig::ApiKey { header_name, prefix } => {
+            AuthConfig::ApiKey {
+                header_name,
+                prefix,
+            } => {
                 assert_eq!(header_name, "X-API-<Key>&Test\"Quote");
                 assert_eq!(prefix, "Bearer'token");
             }
