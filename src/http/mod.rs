@@ -144,7 +144,6 @@ fn preserve_grpc_inventory() {
 /// # Note
 /// This is the simplest router building function. For production use,
 /// consider using `build_with_config()` for middleware support.
-#[allow(dead_code)]
 pub fn build() -> Router {
     // Force inventory collection to prevent linker optimization
     // Using inline(never) functions to ensure symbols are preserved
@@ -196,7 +195,6 @@ pub fn build() -> Router {
 ///
 /// # Note
 /// Use this when you want automatic version fallback for unversioned API requests.
-#[allow(dead_code)]
 pub fn build_with_redirect() -> Router {
     let router = build();
     router.layer(axum::middleware::from_fn(version_redirect_middleware))
@@ -216,7 +214,6 @@ pub fn build_with_redirect() -> Router {
 /// # Note
 /// This is the recommended function for production use. It applies security headers,
 /// CORS, rate limiting, compression, and timeout middleware based on the config.
-#[allow(dead_code)]
 pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, ConfigError> {
     #[cfg(feature = "security")]
     use std::sync::Arc;
@@ -396,7 +393,6 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
 ///     Ok(())
 /// }
 /// ```
-#[allow(dead_code)]
 #[cfg(feature = "hot-reload")]
 pub async fn build_with_hot_reload(
     config_path: &std::path::Path,
@@ -571,7 +567,9 @@ mod tests {
     #[test]
     fn test_route_registration() {
         async fn test_handler() {}
-        let registration = RouteRegistration::new("test", "v1", 
+        let registration = RouteRegistration::new(
+            "test",
+            "v1",
             || {
                 HttpRoute::new(
                     "/test".to_string(),
@@ -586,14 +584,12 @@ mod tests {
                     None,
                 )
             },
-            || {
-                crate::core::ApiMetadata {
-                    name: "test".to_string(),
-                    version: "v1".to_string(),
-                    description: "".to_string(),
-                    cache_ttl: None,
-                    is_streaming: false,
-                }
+            || crate::core::ApiMetadata {
+                name: "test".to_string(),
+                version: "v1".to_string(),
+                description: "".to_string(),
+                cache_ttl: None,
+                is_streaming: false,
             },
         );
 
