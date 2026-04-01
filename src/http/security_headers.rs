@@ -134,12 +134,6 @@ impl SecurityHeaders {
     }
 }
 
-/// Apply security headers to a router (legacy function)
-#[deprecated(note = "Use SecurityHeaders::default().apply(router) instead")]
-pub fn apply_security_headers(router: Router) -> Router {
-    SecurityHeaders::default().apply(router)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

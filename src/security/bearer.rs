@@ -765,10 +765,10 @@ mod tests {
     #[test]
     fn test_generate_secure_jwt_secret() {
         let secret = generate_secure_jwt_secret();
-        
+
         // Check length (base64 encoded 32 bytes = 44 characters)
         assert_eq!(secret.len(), 44);
-        
+
         // Check it can be used to create BearerAuth
         let result = BearerAuth::try_new(&secret);
         assert!(result.is_ok());
@@ -778,35 +778,35 @@ mod tests {
     fn test_generate_multiple_secrets_are_different() {
         let secret1 = generate_secure_jwt_secret();
         let secret2 = generate_secure_jwt_secret();
-        
+
         // Ensure uniqueness
         assert_ne!(secret1, secret2);
     }
 }
 
 /// Generate a cryptographically secure JWT secret
-/// 
+///
 /// This function generates a random 32-byte value and encodes it in base64,
 /// producing a 44-character string suitable for use as a JWT signing secret.
-/// 
+///
 /// The generated secret includes:
 /// - Uppercase letters (A-Z)
 /// - Lowercase letters (a-z)  
 /// - Digits (0-9)
 /// - Special characters (+, /)
-/// 
+///
 /// # Returns
-/// 
+///
 /// Returns a base64-encoded 32-byte random string.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust
 /// use sdforge::security::bearer::generate_secure_jwt_secret;
-/// 
+///
 /// let secret = generate_secure_jwt_secret();
 /// println!("Generated secure JWT secret: {}", secret);
-/// 
+///
 /// // Use with BearerAuth
 /// let auth = BearerAuth::try_new(&secret)
 ///     .expect("Generated secret should be valid");

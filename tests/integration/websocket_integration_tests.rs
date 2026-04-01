@@ -3,7 +3,9 @@
 
 #[cfg(feature = "websocket")]
 mod websocket_integration_tests {
-    use sdforge::websocket::{AppState, ConnectionManager, RateLimitConfig, WebSocketConfig, WebSocketConnection};
+    use sdforge::websocket::{
+        AppState, ConnectionManager, RateLimitConfig, WebSocketConfig, WebSocketConnection,
+    };
     use std::sync::Arc;
 
     #[test]
@@ -60,7 +62,7 @@ mod websocket_enhanced_integration_tests {
     #[tokio::test]
     async fn test_websocket_connection_creation() {
         let (conn, _rx) = WebSocketConnection::new("test-conn-1".to_string());
-        
+
         assert_eq!(conn.id(), "test-conn-1");
     }
 
@@ -68,17 +70,17 @@ mod websocket_enhanced_integration_tests {
     #[tokio::test]
     async fn test_connection_manager_multiple_connections() {
         let manager = Arc::new(ConnectionManager::new());
-        
+
         // Create and add multiple connections
         for i in 0..3 {
             let conn_id = format!("integration-conn-{}", i);
             let (conn, _rx) = WebSocketConnection::new(conn_id.clone());
             manager.add_connection(conn_id, conn).await;
         }
-        
+
         // Verify connection count
         assert_eq!(manager.connection_count().await, 3);
-        
+
         // Verify we can retrieve connections
         let conn = manager.get_connection("integration-conn-1").await;
         assert!(conn.is_some());
@@ -89,16 +91,18 @@ mod websocket_enhanced_integration_tests {
     #[tokio::test]
     async fn test_connection_removal() {
         let manager = Arc::new(ConnectionManager::new());
-        
+
         // Add connection
         let (conn, _rx) = WebSocketConnection::new("remove-test".to_string());
-        manager.add_connection("remove-test".to_string(), conn).await;
+        manager
+            .add_connection("remove-test".to_string(), conn)
+            .await;
         assert_eq!(manager.connection_count().await, 1);
-        
+
         // Remove connection
         manager.remove_connection("remove-test").await;
         assert_eq!(manager.connection_count().await, 0);
-        
+
         // Verify connection no longer exists
         let conn = manager.get_connection("remove-test").await;
         assert!(conn.is_none());
@@ -115,7 +119,7 @@ mod websocket_enhanced_integration_tests {
             rate_limit_window_seconds: 1,
         };
         assert!(valid_config.validate().is_ok());
-        
+
         // Invalid config - zero max_connections
         let invalid_config = RateLimitConfig {
             max_connections: 0,

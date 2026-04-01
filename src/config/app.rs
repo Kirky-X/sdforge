@@ -6,9 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::{AuthConfig, ServerConfig, TimeoutConfig};
 #[cfg(feature = "validation")]
 use crate::config::ConfigError;
+use crate::config::{AuthConfig, ServerConfig, TimeoutConfig};
 
 /// Application configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,7 +53,7 @@ impl crate::config::ValidateConfig for AppConfig {
         // Validate all sub-configs
         self.server.validate()?;
         self.authentication.validate()?;
-        
+
         // Validate timeout if present
         if let Some(ref timeout) = self.timeout {
             timeout.validate()?;
@@ -62,7 +62,7 @@ impl crate::config::ValidateConfig for AppConfig {
         // Cross-field validation
         // Example: Ensure rate limiting is configured if security is enabled
         // This can be expanded based on business requirements
-        
+
         Ok(())
     }
 }
@@ -112,10 +112,10 @@ impl AppConfigBuilder {
             authentication: self.authentication.unwrap_or_default(),
             timeout: self.timeout,
         };
-        
+
         // Validate the built configuration
         config.validate()?;
-        
+
         Ok(config)
     }
 
@@ -140,7 +140,7 @@ mod tests {
         // ServerConfig uses derive(Config) which provides empty string for host and 0 for port
         assert_eq!(config.server.host, ""); // Default String is empty
         assert_eq!(config.server.port, 0); // Default u16 is 0
-        
+
         // Verify other fields have proper defaults
         assert!(config.timeout.is_some());
         assert_eq!(config.timeout.as_ref().unwrap().default_timeout_secs, 30);
@@ -156,11 +156,11 @@ mod tests {
                 cors: None,
             })
             .build();
-        
+
         // With validation feature, build() returns Result
         #[cfg(feature = "validation")]
         let config = result.expect("Failed to build config");
-        
+
         #[cfg(not(feature = "validation"))]
         let config = result;
 

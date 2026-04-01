@@ -13,20 +13,19 @@
 //! - `defaults` - Default values for all configuration types
 //! - `hot_reload` - Hot reload support (feature-gated)
 
-
 pub use confers::Config;
 #[cfg(feature = "validation")]
 pub use confers::Validate;
 
 /// Validation trait for configuration types
-/// 
+///
 /// This trait provides a standard interface for validating configuration values.
 /// Implementors should check that their configuration is valid and return
 /// descriptive errors if not.
 #[cfg(feature = "validation")]
 pub trait ValidateConfig {
     /// Validate the configuration
-    /// 
+    ///
     /// # Returns
     /// - `Ok(())` if the configuration is valid
     /// - `Err(ConfigError)` if validation fails
@@ -175,11 +174,11 @@ mod tests {
             })
             .authentication(AuthConfig::None)
             .build();
-        
+
         // With validation feature, build() returns Result
         #[cfg(feature = "validation")]
         let config = config.expect("Failed to build config");
-        
+
         assert_eq!(config.server.host, "localhost");
         assert_eq!(config.server.port, 8080);
     }
@@ -198,13 +197,13 @@ mod tests {
                 route_timeouts: std::collections::HashMap::new(),
             })
             .build();
-        
+
         #[cfg(feature = "validation")]
         let config = result.expect("Failed to build config");
-        
+
         #[cfg(not(feature = "validation"))]
         let config = result;
-        
+
         assert!(config.timeout.is_some());
         assert_eq!(config.timeout.unwrap().default_timeout_secs, 60);
     }
@@ -224,13 +223,13 @@ mod tests {
             })
             .timeout(TimeoutConfig::default())
             .build();
-        
+
         #[cfg(feature = "validation")]
         let config = result.expect("Failed to build config");
-        
+
         #[cfg(not(feature = "validation"))]
         let config = result;
-        
+
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 8080);
         assert!(config.timeout.is_some());

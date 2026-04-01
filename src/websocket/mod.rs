@@ -515,8 +515,27 @@ const MAX_MESSAGE_SIZE: usize = 1_048_576;
 /// Maximum nesting depth for JSON parsing (prevents stack overflow from deeply nested JSON)
 const MAX_JSON_DEPTH: usize = 16;
 
-/// Maximum length for string fields in WebSocket messages
-#[allow(dead_code)]
+/// Maximum length for string fields in WebSocket messages (64KB).
+///
+/// # Security Purpose
+///
+/// This constant defines a reasonable upper bound for string field lengths to prevent:
+/// - Memory exhaustion attacks via oversized string fields
+/// - Buffer overflow vulnerabilities in downstream processing  
+/// - Performance degradation from processing extremely large strings
+///
+/// # Future Use
+///
+/// While not currently enforced in parsing logic, this constant serves as:
+/// - A reference for implementing future validation checks
+/// - A best practice reminder for secure WebSocket message handling
+/// - A potential configuration parameter for custom validation rules
+///
+/// # Recommendation
+///
+/// Implementers should consider validating string field lengths against this limit
+/// when processing WebSocket messages, especially in production environments.
+#[allow(dead_code)] // Reserved for future WebSocket message size validation
 const MAX_STRING_LENGTH: usize = 64 * 1024; // 64KB
 
 #[cfg(feature = "websocket")]
@@ -607,7 +626,10 @@ fn calculate_value_depth(value: &serde_json::Value, current_depth: &mut usize) -
 
 /// Calculate actual JSON nesting depth by parsing the structure
 /// Returns the maximum nesting level encountered
-#[allow(dead_code)]
+///
+/// This function is kept for testing purposes only.
+/// Production code uses `calculate_value_depth` which operates on parsed JSON values.
+#[cfg(test)]
 fn calculate_json_depth(text: &str) -> usize {
     let mut depth = 0;
     let mut max_depth = 0;
@@ -743,6 +765,7 @@ pub fn build() -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::registration::Registration;
     use futures_util::FutureExt;
 
     /// Test WebSocketMessage serialization and deserialization
@@ -1100,14 +1123,12 @@ mod tests {
             Arc::new(MockHandler) as Arc<dyn WebSocketHandler>
         }
 
-        let route = WebSocketRoute::new("/ws", "v1", create_mock_handler, || {
-            ApiMetadata {
-                name: "/ws".to_string(),
-                version: "v1".to_string(),
-                description: "WebSocket handler".to_string(),
-                cache_ttl: None,
-                is_streaming: true,
-            }
+        let route = WebSocketRoute::new("/ws", "v1", create_mock_handler, || ApiMetadata {
+            name: "/ws".to_string(),
+            version: "v1".to_string(),
+            description: "WebSocket handler".to_string(),
+            cache_ttl: None,
+            is_streaming: true,
         });
 
         assert_eq!(route.name(), "/ws");

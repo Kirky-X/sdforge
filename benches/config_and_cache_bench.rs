@@ -100,7 +100,10 @@ fn benchmark_cache_pattern_matching(c: &mut Criterion) {
     let cache = Arc::new(DashMapCache::new());
     for i in 0..100 {
         cache.set(&format!("user:{}", i), format!("data_{}", i).into_bytes());
-        cache.set(&format!("session:{}", i), format!("session_{}", i).into_bytes());
+        cache.set(
+            &format!("session:{}", i),
+            format!("session_{}", i).into_bytes(),
+        );
     }
 
     group.bench_function("invalidate_user_pattern", |b| {
@@ -136,25 +139,19 @@ fn benchmark_cache_data_sizes(c: &mut Criterion) {
     let small_value = vec![0u8; 10];
     cache.set("small", small_value.clone());
 
-    group.bench_function("get_small_value", |b| {
-        b.iter(|| cache.get("small"))
-    });
+    group.bench_function("get_small_value", |b| b.iter(|| cache.get("small")));
 
     // Medium value (1KB)
     let medium_value = vec![0u8; 1024];
     cache.set("medium", medium_value.clone());
 
-    group.bench_function("get_medium_value", |b| {
-        b.iter(|| cache.get("medium"))
-    });
+    group.bench_function("get_medium_value", |b| b.iter(|| cache.get("medium")));
 
     // Large value (10KB)
     let large_value = vec![0u8; 10240];
     cache.set("large", large_value.clone());
 
-    group.bench_function("get_large_value", |b| {
-        b.iter(|| cache.get("large"))
-    });
+    group.bench_function("get_large_value", |b| b.iter(|| cache.get("large")));
 
     group.finish();
 }
@@ -192,7 +189,7 @@ fn benchmark_concurrent_cache_access(c: &mut Criterion) {
 
     for num_threads in [1, 2, 4, 8].iter() {
         let cache: Arc<DashMapCache> = Arc::new(DashMapCache::new());
-        
+
         // Pre-populate cache
         for i in 0..100 {
             cache.set(&format!("key_{}", i), format!("value_{}", i).into_bytes());
@@ -203,19 +200,19 @@ fn benchmark_concurrent_cache_access(c: &mut Criterion) {
             num_threads,
             |b, &num_threads| {
                 let barrier = Arc::new(Barrier::new(num_threads));
-                
+
                 b.iter(|| {
                     let cache_clone = Arc::clone(&cache);
                     let barrier_clone = Arc::clone(&barrier);
-                    
+
                     let handles: Vec<_> = (0..num_threads)
                         .map(|i| {
                             let cache = Arc::clone(&cache_clone);
                             let barrier = Arc::clone(&barrier_clone);
-                            
+
                             thread::spawn(move || {
                                 barrier.wait();
-                                
+
                                 // Each thread performs multiple operations
                                 for j in 0..10 {
                                     let key = format!("key_{}", (i * 10 + j) % 100);
@@ -245,7 +242,7 @@ fn benchmark_cache_statistics(c: &mut Criterion) {
     let mut group = c.benchmark_group("cache_statistics");
 
     let cache: Arc<DashMapCache> = Arc::new(DashMapCache::new());
-    
+
     // Populate cache
     for i in 0..1000 {
         cache.set(&format!("key_{}", i), format!("value_{}", i).into_bytes());
@@ -255,9 +252,7 @@ fn benchmark_cache_statistics(c: &mut Criterion) {
         b.iter(|| cache.get_stats())
     });
 
-    group.bench_function("len_operation", |b| {
-        b.iter(|| cache.len())
-    });
+    group.bench_function("len_operation", |b| b.iter(|| cache.len()));
 
     group.finish();
 }
@@ -294,16 +289,14 @@ criterion_main!(
 );
 
 #[cfg(all(feature = "validation", feature = "http", not(feature = "cache")))]
-criterion_main!(
-    config_benches,
-    cache_pattern_benches,
-);
+criterion_main!(config_benches, cache_pattern_benches,);
 
 #[cfg(all(not(feature = "validation"), not(feature = "http"), feature = "cache"))]
-criterion_main!(
-    cache_pattern_benches,
-    cache_concurrent_benches,
-);
+criterion_main!(cache_pattern_benches, cache_concurrent_benches,);
 
-#[cfg(all(not(feature = "validation"), not(feature = "http"), not(feature = "cache")))]
+#[cfg(all(
+    not(feature = "validation"),
+    not(feature = "http"),
+    not(feature = "cache")
+))]
 fn main() {} // Empty main when no features enabled
