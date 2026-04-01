@@ -72,9 +72,11 @@ fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
     None
 }
 
-/// Extract client IP from request with security validation
-#[allow(dead_code)]
-fn extract_client_ip_simple(req: &Request<Body>) -> String {
+/// Extract client IP from request with security validation.
+///
+/// Provides a simplified interface with default trusted proxy configuration.
+/// Use this when you don't need custom proxy settings.
+pub fn extract_client_ip_simple(req: &Request<Body>) -> String {
     // Use default trusted proxy configuration
     let proxy_config = TrustedProxyConfig::default();
     extract_client_ip_with_config(req, &proxy_config)
