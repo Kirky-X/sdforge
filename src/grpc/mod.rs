@@ -5,9 +5,7 @@
 
 #[cfg(feature = "grpc")]
 use serde_json;
-#[cfg(all(feature = "grpc", feature = "security"))]
-#[allow(unused_imports)]
-use tonic::service::Interceptor;
+
 #[cfg(feature = "grpc")]
 use tonic::{transport::Server, Request, Response, Status};
 #[cfg(feature = "grpc")]
@@ -75,9 +73,9 @@ use crate::define_registration;
 #[derive(Debug, Clone)]
 pub struct GrpcRoute {
     /// The gRPC service name
-    service_name: String,
+    pub(crate) service_name: String,
     /// API metadata
-    metadata: ApiMetadata,
+    pub(crate) metadata: ApiMetadata,
 }
 
 #[allow(dead_code)]
@@ -133,7 +131,7 @@ pub async fn build_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> 
 /// in the `authorization` metadata header. Invalid tokens result in `UNAUTHENTICATED` status.
 pub async fn build_server_with_config(
     addr: &str,
-    #[allow(unused_variables)] config: GrpcServerConfig,
+    config: GrpcServerConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Security fix: Validate address format before parsing to prevent information disclosure
     let addr = match addr.parse::<std::net::SocketAddr>() {
@@ -154,7 +152,10 @@ pub async fn build_server_with_config(
         Server::builder().layer(tonic::service::InterceptorLayer::new(auth_interceptor))
     };
     #[cfg(not(feature = "security"))]
-    let mut builder = Server::builder();
+    let mut builder = {
+        let _ = &config; // Acknowledge unused config in non-security builds
+        Server::builder()
+    };
 
     builder
         .add_service(SdForgeServiceServer::new(service).max_decoding_message_size(4 * 1024 * 1024))
@@ -238,6 +239,9 @@ impl tonic::service::Interceptor for AuthGrpcInterceptor {
 #[cfg(all(test, feature = "grpc"))]
 mod tests {
     use super::*;
+    use crate::core::registration::Registration;
+    #[cfg(feature = "security")]
+    use tonic::service::Interceptor;
 
     /// Test GrpcServerConfig default values
     #[test]
@@ -268,7 +272,6 @@ mod tests {
 
     /// Generate a valid JWT for testing with the given secret and expiration timestamp
     #[cfg(feature = "security")]
-    #[allow(dead_code)]
     fn make_test_jwt(secret: &str, exp_timestamp: i64) -> String {
         use hmac::{Hmac, Mac};
         use sha2::Sha256;
@@ -299,7 +302,7 @@ mod tests {
 
     /// Base64url encode (no padding) for JWT encoding.
     /// Standard base64 uses `+/=`; base64url uses `-_` with no padding.
-    #[allow(dead_code)]
+    #[cfg(feature = "security")]
     fn base64url_encode(input: &[u8]) -> String {
         const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
         let mut result = String::new();
@@ -332,6 +335,7 @@ mod tests {
     }
 
     /// Test: valid token → interceptor returns Ok
+    #[cfg(feature = "security")]
     #[test]
     fn test_auth_interceptor_valid_token() {
         let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -356,6 +360,7 @@ mod tests {
     }
 
     /// Test: missing authorization header → interceptor returns Err
+    #[cfg(feature = "security")]
     #[test]
     fn test_auth_interceptor_missing_auth_header() {
         let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -377,6 +382,7 @@ mod tests {
     }
 
     /// Test: invalid token (bad signature) → interceptor returns Err
+    #[cfg(feature = "security")]
     #[test]
     fn test_auth_interceptor_invalid_token() {
         let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -406,6 +412,7 @@ mod tests {
     }
 
     /// Test: expired token → interceptor returns Err
+    #[cfg(feature = "security")]
     #[test]
     fn test_auth_interceptor_expired_token() {
         let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -433,6 +440,7 @@ mod tests {
     }
 
     /// Test: no auth configured → interceptor allows all requests (pass-through)
+    #[cfg(feature = "security")]
     #[test]
     fn test_auth_interceptor_no_auth_configured() {
         let mut interceptor = make_auth_interceptor(None);
@@ -1142,15 +1150,14 @@ mod tests {
             GrpcRoute::new("test_registration_service".to_string(), metadata)
         }
 
-        let registration = GrpcRouteRegistration::new("test_route", "v1", create_test_route, || {
-            ApiMetadata {
+        let registration =
+            GrpcRouteRegistration::new("test_route", "v1", create_test_route, || ApiMetadata {
                 name: "test".to_string(),
                 version: "v1".to_string(),
                 description: "Test route".to_string(),
                 cache_ttl: None,
                 is_streaming: false,
-            }
-        });
+            });
 
         assert_eq!(registration.name(), "test_route");
     }
@@ -1183,15 +1190,14 @@ mod tests {
             GrpcRoute::new("factory_service".to_string(), metadata)
         }
 
-        let registration = GrpcRouteRegistration::new("factory_route", "v1", factory_route, || {
-            ApiMetadata {
+        let registration =
+            GrpcRouteRegistration::new("factory_route", "v1", factory_route, || ApiMetadata {
                 name: "factory_api".to_string(),
                 version: "v1".to_string(),
                 description: "Factory created".to_string(),
                 cache_ttl: Some(300),
                 is_streaming: false,
-            }
-        });
+            });
         let route = registration.create();
 
         assert_eq!(route.service_name(), "factory_service");
@@ -1207,9 +1213,8 @@ mod tests {
             )
         }
 
-        let registration = GrpcRouteRegistration::new("multi", "v1", create_route, || {
-            ApiMetadata::default()
-        });
+        let registration =
+            GrpcRouteRegistration::new("multi", "v1", create_route, || ApiMetadata::default());
 
         let route1 = registration.create();
         let route2 = registration.create();
@@ -1226,9 +1231,8 @@ mod tests {
             )
         }
 
-        let registration = GrpcRouteRegistration::new("", "v1", create_route, || {
-            ApiMetadata::default()
-        });
+        let registration =
+            GrpcRouteRegistration::new("", "v1", create_route, || ApiMetadata::default());
 
         assert_eq!(registration.name(), "");
     }
@@ -1242,9 +1246,8 @@ mod tests {
             )
         }
 
-        let registration = GrpcRouteRegistration::new("debug_test", "v1", create_route, || {
-            ApiMetadata::default()
-        });
+        let registration =
+            GrpcRouteRegistration::new("debug_test", "v1", create_route, || ApiMetadata::default());
         let debug_str = format!("{:?}", registration);
 
         assert!(debug_str.contains("debug_test"));
@@ -1259,9 +1262,8 @@ mod tests {
             )
         }
 
-        let registration = GrpcRouteRegistration::new("clone_test", "v1", create_route, || {
-            ApiMetadata::default()
-        });
+        let registration =
+            GrpcRouteRegistration::new("clone_test", "v1", create_route, || ApiMetadata::default());
         let cloned = registration;
 
         assert_eq!(registration.name(), cloned.name());
@@ -1276,6 +1278,7 @@ mod tests {
         let config = GrpcServerConfig {
             max_connections: 500,
             timeout_seconds: 45,
+            #[cfg(feature = "security")]
             auth: None,
         };
 
@@ -1290,12 +1293,14 @@ mod tests {
         let config1 = GrpcServerConfig {
             max_connections: 100,
             timeout_seconds: 30,
+            #[cfg(feature = "security")]
             auth: None,
         };
 
         let config2 = GrpcServerConfig {
             max_connections: 100,
             timeout_seconds: 30,
+            #[cfg(feature = "security")]
             auth: None,
         };
 
@@ -1308,6 +1313,7 @@ mod tests {
         let config = GrpcServerConfig {
             max_connections: 1,
             timeout_seconds: 30,
+            #[cfg(feature = "security")]
             auth: None,
         };
 
@@ -1319,6 +1325,7 @@ mod tests {
         let config = GrpcServerConfig {
             max_connections: 100,
             timeout_seconds: 0,
+            #[cfg(feature = "security")]
             auth: None,
         };
 
@@ -1330,12 +1337,14 @@ mod tests {
         let short_timeout = GrpcServerConfig {
             max_connections: 100,
             timeout_seconds: 1,
+            #[cfg(feature = "security")]
             auth: None,
         };
 
         let long_timeout = GrpcServerConfig {
             max_connections: 100,
             timeout_seconds: 86400,
+            #[cfg(feature = "security")]
             auth: None,
         };
 
@@ -1343,6 +1352,7 @@ mod tests {
         assert_eq!(long_timeout.timeout_seconds, 86400);
     }
 
+    #[cfg(feature = "security")]
     #[test]
     fn test_grpc_server_config_auth_none() {
         let config = GrpcServerConfig {
@@ -1592,6 +1602,7 @@ mod tests {
     // Auth Interceptor Extended Tests
     // ============================================================================
 
+    #[cfg(feature = "security")]
     #[test]
     fn test_auth_interceptor_with_malformed_bearer_prefix() {
         let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -1609,6 +1620,7 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[cfg(feature = "security")]
     #[test]
     fn test_auth_interceptor_with_basic_auth_instead_of_bearer() {
         let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -1626,6 +1638,7 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[cfg(feature = "security")]
     #[test]
     fn test_auth_interceptor_with_empty_token() {
         let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -1642,6 +1655,7 @@ mod tests {
         assert!(result.is_err());
     }
 
+    #[cfg(feature = "security")]
     #[test]
     fn test_auth_interceptor_metadata_key_lowercase_required() {
         let secret = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
