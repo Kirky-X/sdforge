@@ -36,7 +36,7 @@ pub(crate) struct AuditLogBatch {
 // =============================================================================
 
 /// Pattern to match JWT tokens (three base64url-encoded segments separated by dots)
-/// 
+///
 /// Used to detect and redact JWT tokens from error messages to prevent token leakage.
 /// Format: header.payload.signature (each segment is base64url encoded)
 static JWT_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
@@ -44,12 +44,12 @@ static JWT_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
 });
 
 /// Pattern to match sensitive key-value pairs (passwords, secrets, tokens, keys)
-/// 
+///
 /// Matches patterns like:
 /// - `password=secret123`
 /// - `token: abcdef`
 /// - `api_key: xyz789`
-/// 
+///
 /// Limited repetition (1-100 chars) prevents ReDoS attacks.
 static SECRET_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
     // Limited repetition to prevent ReDoS attacks
@@ -59,7 +59,7 @@ static SECRET_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
 });
 
 /// Pattern to match certificate/key file paths
-/// 
+///
 /// Matches paths ending with common certificate extensions:
 /// - `.pem` - Privacy Enhanced Mail certificate
 /// - `.key` - Private key file
@@ -212,6 +212,9 @@ impl AppAuditLogger {
     /// worker task that processes logs from the channel. For most use cases,
     /// prefer `new()`, `with_limit()`, or `builder().build()`.
     ///
+    /// **Reserved for testing and advanced dependency injection scenarios.**
+    /// Most users should use `new()`, `with_limit()`, or `builder().build()` instead.
+    ///
     /// # Examples
     ///
     /// ```ignore
@@ -363,7 +366,9 @@ impl AppAuditLogger {
                 eprintln!("⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY is empty. Audit logs will not be signed.");
             }
         } else {
-            eprintln!("⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY not set. Audit logs will not be signed.");
+            eprintln!(
+                "⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY not set. Audit logs will not be signed."
+            );
             eprintln!("   For production, set this environment variable to a secure random value (min 32 bytes).");
             eprintln!("   Example: export SDFORGE_AUDIT_SIGNING_KEY=$(openssl rand -hex 32)");
         }
@@ -498,14 +503,8 @@ impl AppAuditLogger {
             },
         };
 
-        self.log(
-            &context,
-            "key_rotation",
-            "api_key",
-            success,
-            message,
-        )
-        .await;
+        self.log(&context, "key_rotation", "api_key", success, message)
+            .await;
     }
 
     /// Get total log count (for monitoring)
@@ -519,11 +518,12 @@ impl AppAuditLogger {
         0
     }
 
-    /// Store log in fallback storage (synchronous path)
+    /// Store log in fallback storage (synchronous path).
     ///
-    /// Security: This is used when the async channel is full, preventing
-    /// audit log loss during high load or potential DoS attempts.
-    #[allow(dead_code)] // Reserved for fallback handling when queue is full
+    /// **Reserved for fallback handling when the async queue is full.**
+    /// This method prevents audit log loss during high load or potential DoS attempts
+    /// by storing logs synchronously in a fallback cache when the async channel is congested.
+    #[allow(dead_code)]
     fn store_fallback_log(&self, user_id: &str, log: &AuditLog) {
         let count = self
             .dropped_log_count
@@ -872,7 +872,11 @@ mod tests {
         let message = "API key: sk_live_REDACTED_TEST_KEY_PLACEHOLDER";
         let sanitized = sanitize_error_message(message);
         // The key should be redacted (either as [REDACTED] or [REDACTED_API_KEY])
-        assert!(!sanitized.contains("sk_live_"), "API key should be redacted, got: {}", sanitized);
+        assert!(
+            !sanitized.contains("sk_live_"),
+            "API key should be redacted, got: {}",
+            sanitized
+        );
     }
 
     #[test]
