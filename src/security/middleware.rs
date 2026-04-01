@@ -76,6 +76,7 @@ fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
 ///
 /// Provides a simplified interface with default trusted proxy configuration.
 /// Use this when you don't need custom proxy settings.
+#[allow(dead_code)] // Reserved for future use in advanced IP validation scenarios
 pub fn extract_client_ip_simple(req: &Request<Body>) -> String {
     // Use default trusted proxy configuration
     let proxy_config = TrustedProxyConfig::default();
@@ -83,6 +84,7 @@ pub fn extract_client_ip_simple(req: &Request<Body>) -> String {
 }
 
 /// Extract client IP with trusted proxy configuration
+#[allow(dead_code)] // Reserved for future use in advanced IP validation scenarios
 fn extract_client_ip_with_config(req: &Request<Body>, proxy_config: &TrustedProxyConfig) -> String {
     if !proxy_config.enabled {
         // Proxy verification disabled, use connection IP
