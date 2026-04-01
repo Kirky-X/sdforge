@@ -79,10 +79,8 @@ impl DashMapCache {
                 let keys = index.entry(prefix.to_string()).or_insert_with(Vec::new);
                 if add {
                     keys.push(key.to_string());
-                } else {
-                    if let Some(pos) = keys.iter().position(|k| k == key) {
-                        keys.remove(pos);
-                    }
+                } else if let Some(pos) = keys.iter().position(|k| k == key) {
+                    keys.remove(pos);
                 }
             }
         }
