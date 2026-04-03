@@ -17,7 +17,7 @@ use uuid::Uuid;
 /// Internal struct used to pass user ID and log entry through the async channel.
 pub(crate) struct AuditLogBatch {
     user_id: String,
-    #[allow(dead_code)] // Used in queue transfer, field access not needed directly
+    #[allow(dead_code)] // Field used in queue transfer; direct read access not needed
     log: AuditLog,
 }
 
@@ -181,81 +181,6 @@ impl AppAuditLogger {
     /// ```
     pub fn builder() -> AppAuditLoggerBuilder {
         AppAuditLoggerBuilder::new()
-    }
-
-    /// Create an AppAuditLogger with all dependencies injected.
-    ///
-    /// This method is used for complete dependency injection, allowing
-    /// external control over all internal components. This is useful for
-    /// testing or advanced integration scenarios.
-    ///
-    /// # Arguments
-    ///
-    /// * `logs` - Pre-initialized logs storage (DashMap)
-    /// * `max_logs_per_user` - Maximum logs to retain per user
-    /// * `semaphore` - Semaphore for controlling concurrent operations
-    /// * `queue_sender` - Channel sender for async log processing
-    /// * `fallback_logs` - Fallback storage for high-load scenarios
-    /// * `dropped_log_count` - Counter for monitoring dropped logs
-    ///
-    /// # Returns
-    ///
-    /// Returns an AppAuditLogger instance configured with the provided dependencies.
-    ///
-    /// # Errors
-    ///
-    /// This function does not return errors.
-    ///
-    /// # Note
-    ///
-    /// When using this method, you are responsible for spawning the background
-    /// worker task that processes logs from the channel. For most use cases,
-    /// prefer `new()`, `with_limit()`, or `builder().build()`.
-    ///
-    /// **Reserved for testing and advanced dependency injection scenarios.**
-    /// Most users should use `new()`, `with_limit()`, or `builder().build()` instead.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// use sdforge::security::AppAuditLogger;
-    /// use sdforge::cache::DashMapCache;
-    /// use std::sync::Arc;
-    /// use std::sync::atomic::AtomicU64;
-    ///
-    /// let (sender, mut receiver) = tokio::sync::mpsc::channel(1000);
-    ///
-    /// // Create SharedCache instances
-    /// let logs = Arc::new(DashMapCache::default());
-    /// let fallback_logs = Arc::new(DashMapCache::default());
-    ///
-    /// let logger = AppAuditLogger::with_dependencies(
-    ///     logs,
-    ///     1000,
-    ///     Arc::new(tokio::sync::Semaphore::new(100)),
-    ///     Arc::new(sender),
-    ///     fallback_logs,
-    ///     Arc::new(AtomicU64::new(0)),
-    /// );
-    /// let _ = logger;
-    /// ```
-    #[allow(dead_code)]
-    pub(crate) fn with_dependencies(
-        logs: SharedCache,
-        max_logs_per_user: usize,
-        semaphore: Arc<tokio::sync::Semaphore>,
-        queue_sender: Arc<tokio::sync::mpsc::Sender<AuditLogBatch>>,
-        fallback_logs: SharedCache,
-        dropped_log_count: Arc<std::sync::atomic::AtomicU64>,
-    ) -> Self {
-        Self {
-            logs,
-            max_logs_per_user,
-            semaphore,
-            queue_sender,
-            fallback_logs,
-            dropped_log_count,
-        }
     }
 
     /// Create new audit logger with default limit
@@ -516,46 +441,6 @@ impl AppAuditLogger {
         // SyncCache doesn't support iteration; return 0 as approximation
         // For accurate counting, use dbnexus persistence or a separate counter
         0
-    }
-
-    /// Store log in fallback storage (synchronous path).
-    ///
-    /// **Reserved for fallback handling when the async queue is full.**
-    /// This method prevents audit log loss during high load or potential DoS attempts
-    /// by storing logs synchronously in a fallback cache when the async channel is congested.
-    #[allow(dead_code)]
-    fn store_fallback_log(&self, user_id: &str, log: &AuditLog) {
-        let count = self
-            .dropped_log_count
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-
-        // Load existing fallback logs
-        let data = self.fallback_logs.get(user_id);
-        let mut logs_vec: Vec<AuditLog> = data
-            .as_ref()
-            .and_then(|d| {
-                let v = deserialize_audit_logs(d);
-                if v.is_empty() {
-                    None
-                } else {
-                    Some(v)
-                }
-            })
-            .unwrap_or_default();
-
-        logs_vec.push(log.clone());
-
-        // Truncate if exceeding limit
-        if logs_vec.len() > self.max_logs_per_user {
-            logs_vec.truncate(self.max_logs_per_user);
-        }
-        self.fallback_logs
-            .set(user_id, serialize_audit_logs(&logs_vec));
-
-        // Log warning periodically (every 100th drop)
-        if count > 0 && count.is_multiple_of(100) {
-            // High audit log drop rate detected
-        }
     }
 
     /// Get count of dropped logs (for monitoring)
