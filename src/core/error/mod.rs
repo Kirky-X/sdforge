@@ -739,11 +739,6 @@ pub enum SdForgeError {
     #[error(transparent)]
     Config(#[from] crate::config::ConfigError),
 
-    /// Rate limit error from security module
-    #[cfg(feature = "security")]
-    #[error(transparent)]
-    RateLimit(#[from] crate::security::RateLimitError),
-
     /// Internal error with source
     #[error("Internal error: {0}")]
     Internal(String),
@@ -764,8 +759,6 @@ impl SdForgeError {
             #[cfg(feature = "security")]
             SdForgeError::AuthConfig(_) => ErrorCategory::AuthError,
             SdForgeError::Config(_) => ErrorCategory::ClientError,
-            #[cfg(feature = "security")]
-            SdForgeError::RateLimit(_) => ErrorCategory::RateLimitError,
             SdForgeError::Internal(_) => ErrorCategory::ServerError,
         }
     }
@@ -885,17 +878,6 @@ impl SdForgeError {
                 e.to_string(),
                 serde_json::json!({ "type": "config" }),
                 400,
-            ),
-            #[cfg(feature = "security")]
-            SdForgeError::RateLimit(e) => ServiceError::with_details(
-                "RATE_LIMIT_ERROR",
-                e.to_string(),
-                serde_json::json!({
-                    "limit": e.limit,
-                    "remaining": e.remaining,
-                    "retry_after": e.retry_after
-                }),
-                429,
             ),
             SdForgeError::Internal(msg) => ServiceError::with_details(
                 "INTERNAL_ERROR",
