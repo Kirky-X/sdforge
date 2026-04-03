@@ -244,3 +244,7 @@ docs/uat.md
 # =============================================================================
 .qoder/
 di.md
+
+# Git worktrees for isolated development
+.worktrees/
+.gitnexus
