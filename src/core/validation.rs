@@ -139,17 +139,19 @@ pub struct FieldValidationError {
 }
 
 #[cfg(feature = "http")]
-#[allow(dead_code)] // Reserved for future use
 /// Type for validated parameters
+///
+/// A marker trait for types that can be deserialized and validated.
+/// Used by [`extract_validated`] for JSON parameter extraction.
 pub trait ValidatedParam: for<'de> Deserialize<'de> + Validate {}
 
 #[cfg(feature = "http")]
-#[allow(dead_code)] // Reserved for future use
 impl<T: for<'de> Deserialize<'de> + Validate> ValidatedParam for T {}
 
 /// Validation result type
+///
+/// A result type for validation operations that can return multiple errors.
 #[cfg(feature = "http")]
-#[allow(dead_code)] // Reserved for future use
 pub type ValidationResult<T> = Result<T, ValidationErrorsWrapper>;
 
 #[cfg(feature = "http")]
@@ -259,8 +261,13 @@ pub mod validators {
 /// # Security Note
 /// For SQL operations, always use parameterized queries.
 /// String sanitization alone cannot prevent SQL injection.
+///
+/// # Reserved Status
+/// This module is reserved for future use in security-sensitive input handling.
+/// It provides basic sanitization but is not currently used in the main codebase.
+/// Consider using the `ammonia` crate for production HTML sanitization.
 #[cfg(feature = "http")]
-#[allow(dead_code)] // Reserved for future use
+#[allow(dead_code)] // Reserved for future security-sensitive input handling
 pub(crate) mod sanitizer {
     use crate::core::ApiError;
     use std::path::PathBuf;
@@ -421,8 +428,15 @@ pub(crate) mod sanitizer {
 }
 
 #[cfg(feature = "http")]
-#[allow(dead_code)] // Reserved for future use
 /// Extract validated parameters from JSON
+///
+/// Deserializes JSON into a type `T` and validates it using the [`Validate`] trait.
+/// Returns a [`ValidationResult`] containing either the validated type or validation errors.
+///
+/// # Example
+/// ```ignore
+/// let params: MyParams = extract_validated(&json).await?;
+/// ```
 pub async fn extract_validated<T>(json: &serde_json::Value) -> ValidationResult<T>
 where
     T: ValidatedParam + Send,
@@ -1326,6 +1340,7 @@ mod tests {
     // ============================================================================
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_security_limits_constants_defined() {
         // Verify all security limit constants are properly defined
         assert!(MAX_REQUEST_BODY_SIZE > 0);
