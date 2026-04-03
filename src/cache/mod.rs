@@ -196,7 +196,3 @@ pub use dashmap::DashMapCache;
 pub use oxcache::backend::{DashMapMemoryBackend, MemoryBackend, MokaMemoryBackend};
 pub use oxcache::cache::Cache;
 pub use oxcache::traits::{CacheKey, Cacheable};
-
-// 如果启用了 rate-limiting feature，也导出 oxcache 的限流组件
-#[cfg(feature = "cache")]
-pub use oxcache::rate_limiting::{ClientRateLimiter, RateLimitConfig, TokenBucket};

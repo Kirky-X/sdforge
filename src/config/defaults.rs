@@ -82,11 +82,3 @@ pub mod cache {
     /// Track cache statistics by default
     pub const DEFAULT_TRACK_STATS: bool = true;
 }
-
-/// Rate limiting defaults
-pub mod rate_limit {
-    /// Default maximum requests per window
-    pub const DEFAULT_MAX_REQUESTS: u32 = 100;
-    /// Default rate limit window in seconds (1 minute)
-    pub const DEFAULT_WINDOW_SECS: u64 = 60;
-}
