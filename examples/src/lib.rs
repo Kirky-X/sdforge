@@ -13,7 +13,7 @@
 //! | [`mcp`](mcp) | MCP 协议 | 工具定义、工具注册 |
 //! | [`websocket`](websocket) | WebSocket | 基础连接、聊天功能 |
 //! | [`streaming`](streaming) | 流式传输 | SSE 事件流 |
-//! | [`security`](security) | 安全功能 | API Key、速率限制 |
+//! | [`security`](security) | 安全功能 | API Key、审计日志 |
 //! | [`combined`](combined) | 组合示例 | 全功能集成 |
 //!
 //! ## 使用方式
@@ -98,7 +98,7 @@ pub mod streaming;
 ///
 /// 包含安全功能示例：
 /// - [`api_key`](security::api_key) - API Key 认证
-/// - [`rate_limiting`](security::rate_limiting) - 速率限制
+/// - [`comprehensive`](security::comprehensive) - 综合安全示例
 pub mod security;
 
 /// 组合示例模块
