@@ -31,29 +31,6 @@ pub trait ApiKeyAuth: Send + Sync {
     fn add_key(&self, key: impl Into<String>, permissions: Vec<String>);
 }
 
-/// Feature layer trait for rate limiting.
-///
-/// Implement this trait to provide custom rate limiting logic while
-/// maintaining a consistent interface across the security module.
-pub trait RateLimiter: Send + Sync {
-    /// Check if a request is allowed under the rate limit.
-    ///
-    /// Returns `true` if the request is allowed, `false` if rate limited.
-    ///
-    /// # Arguments
-    /// * `key` - The rate limit key (typically client IP or user ID)
-    fn allow(&self, key: &str) -> bool;
-
-    /// Reset rate limit state for a key.
-    ///
-    /// Clears all rate limiting data for the given key, allowing
-    /// new requests to be processed without restriction.
-    ///
-    /// # Arguments
-    /// * `key` - The rate limit key to reset
-    fn reset(&self, key: &str);
-}
-
 /// Feature layer trait for audit logging.
 ///
 /// Implement this trait to provide custom audit logging logic while
