@@ -14,8 +14,7 @@ use axum::{body::Body, extract::Request, response::Response, routing::MethodRout
 pub struct VersionedRoute {
     version: String,
     path: String,
-    /// HTTP method for this route (reserved for future method-based routing)
-    #[allow(dead_code)]
+    /// HTTP method for this route
     method: axum::http::Method,
     handler: MethodRouter,
 }
@@ -55,6 +54,11 @@ impl VersionedRoute {
     /// Get the route handler
     pub fn handler(&self) -> &MethodRouter {
         &self.handler
+    }
+
+    /// Get the HTTP method
+    pub fn method(&self) -> &axum::http::Method {
+        &self.method
     }
 }
 
