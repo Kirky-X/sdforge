@@ -222,6 +222,9 @@ docs/tdd.md
 docs/test.md
 docs/uat.md
 
+# Superpowers plans and specs
+docs/superpowers/
+
 # CI/CD local testing
 .github/workflows/tests/
 .github/workflows/local/
