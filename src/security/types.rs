@@ -82,7 +82,7 @@ pub(crate) fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {
 
 /// Deserialize AuthContext from bytes using bincode.
 ///
-/// **Reserved as the serialization pair for `serialize_auth_context`.**
+/// Reserved as the serialization pair for serialize_auth_context.
 /// Kept for future use when AuthContext deserialization from cache is needed.
 #[allow(dead_code)]
 pub(crate) fn deserialize_auth_context(data: &[u8]) -> Option<AuthContext> {
@@ -381,33 +381,6 @@ pub enum AuthConfigError {
         #[from]
         source: toml::de::Error,
     },
-}
-
-// =============================================================================
-// Trusted Proxy Configuration
-// =============================================================================
-
-/// Trusted proxy configuration for IP extraction
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-pub(crate) struct TrustedProxyConfig {
-    /// List of trusted proxy IP addresses
-    pub(crate) trusted_proxies: Vec<String>,
-    /// Whether proxy verification is enabled
-    pub(crate) enabled: bool,
-}
-
-impl Default for TrustedProxyConfig {
-    fn default() -> Self {
-        Self {
-            trusted_proxies: vec![
-                "127.0.0.1".to_string(),
-                "::1".to_string(),
-                "localhost".to_string(),
-            ],
-            enabled: true,
-        }
-    }
 }
 
 // =============================================================================

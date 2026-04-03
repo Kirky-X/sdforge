@@ -300,44 +300,6 @@ impl Default for LruConfig {
     }
 }
 
-/// LRU cache entry with timestamp.
-///
-/// **Reserved for future LRU implementation.**
-/// Currently, LruCacheManager uses a simpler HashMap-based approach for tracking
-/// access times. This struct is kept for potential future use when a more
-/// sophisticated LRU implementation with entry-level metadata is needed.
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-struct LruEntry<T> {
-    data: T,
-    last_accessed: Instant,
-    created_at: Instant,
-}
-
-/// LRU cache entry implementation.
-///
-/// **Reserved for future LRU implementation.**
-/// These methods will be used when the full LRU entry system is activated.
-#[allow(dead_code)]
-impl<T> LruEntry<T> {
-    fn new(data: T) -> Self {
-        let now = Instant::now();
-        Self {
-            data,
-            last_accessed: now,
-            created_at: now,
-        }
-    }
-
-    fn touch(&mut self) {
-        self.last_accessed = Instant::now();
-    }
-
-    fn is_expired(&self, ttl: Duration) -> bool {
-        self.last_accessed.elapsed() > ttl
-    }
-}
-
 /// LRU cache wrapper for SharedCache
 ///
 /// Provides LRU eviction on top of SharedCache to prevent unlimited memory growth.

@@ -3,7 +3,7 @@
 //!
 //! This module provides Axum middleware for authentication.
 
-use crate::security::types::{AuthContext, AuthResult, TrustedProxyConfig};
+use crate::security::types::{AuthContext, AuthResult};
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -70,55 +70,6 @@ fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
     }
 
     None
-}
-
-/// Extract client IP from request with security validation.
-///
-/// Provides a simplified interface with default trusted proxy configuration.
-/// Use this when you don't need custom proxy settings.
-#[allow(dead_code)] // Reserved for future use in advanced IP validation scenarios
-pub fn extract_client_ip_simple(req: &Request<Body>) -> String {
-    // Use default trusted proxy configuration
-    let proxy_config = TrustedProxyConfig::default();
-    extract_client_ip_with_config(req, &proxy_config)
-}
-
-/// Extract client IP with trusted proxy configuration
-#[allow(dead_code)] // Reserved for future use in advanced IP validation scenarios
-fn extract_client_ip_with_config(req: &Request<Body>, proxy_config: &TrustedProxyConfig) -> String {
-    if !proxy_config.enabled {
-        // Proxy verification disabled, use connection IP
-        if let Some(ip) = extract_client_ip_core(req) {
-            return ip;
-        }
-        return "unknown".to_string();
-    }
-
-    // Check X-Forwarded-For header
-    if let Some(header) = req.headers().get("X-Forwarded-For") {
-        if let Ok(value) = header.to_str() {
-            // X-Forwarded-For: client, proxy1, proxy2
-            // Take the leftmost IP as the client IP
-            if let Some(client_ip) = value.split(',').next().map(|s| s.trim()) {
-                // Validate the IP format
-                if is_valid_ip(client_ip) {
-                    return client_ip.to_string();
-                }
-            }
-        }
-    }
-
-    // Fallback to X-Real-IP
-    if let Some(header) = req.headers().get("X-Real-IP") {
-        if let Ok(ip) = header.to_str() {
-            if is_valid_ip(ip) {
-                return ip.to_string();
-            }
-        }
-    }
-
-    // Final fallback to connection IP
-    extract_client_ip_core(req).unwrap_or_else(|| "unknown".to_string())
 }
 
 /// Check if an IP is within a CIDR range
