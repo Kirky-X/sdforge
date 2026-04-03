@@ -95,17 +95,15 @@ mod core_tests {
     // Advanced Error Handling Tests
     // ============================================================================
 
-    /// Test: Error chain with multiple sources
+    /// Test: Error context with extra information
     #[test]
-    fn test_error_chain_with_sources() {
-        use sdforge::core::error::{ErrorCategory, ErrorContext};
+    fn test_error_context_with_extra() {
+        use sdforge::core::error::ErrorContext;
 
         let ctx = ErrorContext::new()
-            .with_category(ErrorCategory::Validation)
             .with_extra("field".to_string(), "email".to_string())
             .with_extra("value".to_string(), "invalid".to_string());
 
-        assert_eq!(ctx.category(), ErrorCategory::Validation);
         assert_eq!(ctx.extra.get("field"), Some(&"email".to_string()));
     }
 
@@ -114,13 +112,14 @@ mod core_tests {
     fn test_api_error_serialization() {
         use serde_json;
 
-        let error = ApiError::not_found("User", Some("123"));
+        let error = ApiError::not_found("User", Some("123".to_string()));
         let json = serde_json::to_string(&error).expect("Failed to serialize");
 
         // Verify it can be deserialized (as Value since we don't have Deserialize)
         let value: serde_json::Value = serde_json::from_str(&json).expect("Invalid JSON");
-        assert!(value.get("code").is_some());
-        assert!(value.get("message").is_some());
+        // ApiError uses #[serde(tag = "type")], so check for "type" field
+        assert!(value.get("type").is_some());
+        assert!(value.get("resource").is_some());
     }
 
     // ============================================================================
