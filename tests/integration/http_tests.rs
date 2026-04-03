@@ -34,8 +34,6 @@ mod http_protocol_tests {
     }
 
     /// Test data structure for query parameters.
-    /// Reserved for pagination-related test scenarios (e.g., offset/limit patterns, cursor-based pagination).
-    #[allow(dead_code)]
     #[derive(Debug, Deserialize)]
     struct PaginationParams {
         page: Option<u32>,
@@ -45,8 +43,6 @@ mod http_protocol_tests {
     }
 
     /// Test data structure for form data.
-    /// Reserved for form-based authentication/ login test scenarios.
-    #[allow(dead_code)]
     #[derive(Debug, Deserialize)]
     struct LoginForm {
         username: String,
@@ -54,17 +50,11 @@ mod http_protocol_tests {
     }
 
     /// Query params for search operations.
-    /// Reserved for full-text search and filtering test scenarios.
-    #[allow(dead_code)]
     #[derive(Debug, Deserialize)]
     struct SearchQuery {
         search: String,
         active: Option<bool>,
     }
-
-    // ============================================================================
-    // Request/Response Flow Tests
-    // ============================================================================
 
     /// Test: GET request and response flow
     ///
@@ -192,18 +182,9 @@ mod http_protocol_tests {
     /// Verifies that PATCH request correctly handles partial updates.
     #[tokio::test]
     async fn test_http_patch_request() {
-        // Test struct for PATCH body parsing.
-        // Defined locally to avoid polluting module scope with test-only types.
-        #[allow(dead_code)]
-        #[derive(Debug, Deserialize)]
-        struct PatchUser {
-            name: Option<String>,
-            email: Option<String>,
-        }
-
         async fn handler(
             Path(id): Path<u64>,
-            Json(_patch): Json<PatchUser>,
+            Json(_patch): Json<serde_json::Value>,
         ) -> (StatusCode, &'static str) {
             assert_eq!(id, 1);
             (StatusCode::OK, "PATCHED")
