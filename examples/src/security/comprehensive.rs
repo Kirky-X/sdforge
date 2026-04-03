@@ -15,7 +15,7 @@
 
 use sdforge::prelude::*;
 use sdforge::security::{
-    ApiKeyAuth, AppApiKeyAuth, AuditLogger, BearerAuth, RateLimiter, RateLimiterConfig,
+    ApiKeyAuth, AppApiKeyAuth, AuditLogger, BearerAuth,
 };
 use sdforge::cache::{Cache, DashMapCache, SyncCache};
 use serde::{Deserialize, Serialize};
@@ -70,7 +70,6 @@ pub struct UserResponse {
 /// Application state shared across handlers
 pub struct AppState {
     pub cache: Arc<DashMapCache>,
-    pub rate_limiter: RateLimiter,
     pub audit_logger: AuditLogger,
     pub users: Arc<tokio::sync::RwLock<Vec<User>>>,
 }
@@ -79,7 +78,6 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             cache: Arc::new(DashMapCache::new()),
-            rate_limiter: RateLimiter::with_config(RateLimiterConfig::new(100, 60)),
             audit_logger: AuditLogger::default(),
             users: Arc::new(tokio::sync::RwLock::new(vec![
                 User {
@@ -107,7 +105,6 @@ impl Default for AppState {
 /// 
 /// This endpoint demonstrates:
 /// - API Key authentication
-/// - Rate limiting
 /// - Input validation
 /// - Audit logging
 /// - Caching
@@ -117,22 +114,13 @@ impl Default for AppState {
     path = "/users/:id",
     method = "GET",
     tool_name = "get_user",
-    description = "Get user by ID with authentication and rate limiting"
+    description = "Get user by ID with authentication"
 )]
 async fn get_user(
     id: u64,
     state: &AppState,
 ) -> Result<UserResponse, ApiError> {
-    // 1. Rate limiting check
-    let client_key = format!("user:{}", id);
-    if !state.rate_limiter.check(&client_key) {
-        return Err(ApiError::RateLimitExceeded {
-            resource: "API".to_string(),
-            retry_after: Some(60),
-        });
-    }
-
-    // 2. Check cache first
+    // 1. Check cache first
     let cache_key = format!("user:{}", id);
     if let Some(cached) = state.cache.get(&cache_key) {
         state.audit_logger.log(
@@ -157,7 +145,7 @@ async fn get_user(
         });
     }
 
-    // 3. Fetch from "database"
+    // 2. Fetch from "database"
     let users = state.users.read().await;
     let user = users.iter()
         .find(|u| u.id == id)
@@ -169,14 +157,14 @@ async fn get_user(
     let user = user.clone();
     drop(users);
 
-    // 4. Cache for future requests
+    // 3. Cache for future requests
     let serialized = serde_json::to_vec(&user)
         .map_err(|e| ApiError::InternalError { 
             message: format!("Serialization failed: {}", e) 
         })?;
     state.cache.set(&cache_key, serialized);
 
-    // 5. Log successful access
+    // 4. Log successful access
     state.audit_logger.log(
         "user.get".to_string(),
         None,
@@ -426,19 +414,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[tokio::test]
-    async fn test_rate_limiter() {
-        let state = AppState::default();
-        
-        // First request should pass
-        assert!(state.rate_limiter.check("test_user"));
-        
-        // Multiple rapid requests might be rate limited
-        for _ in 0..50 {
-            state.rate_limiter.check("test_user");
-        }
-    }
 
     #[tokio::test]
     async fn test_cache_operations() {

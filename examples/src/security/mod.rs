@@ -7,7 +7,6 @@
 //! ## 安全功能
 //!
 //! - **API Key 认证** - 使用 API 密钥进行身份验证
-//! - **速率限制** - 控制 API 请求频率
 //! - **授权管理** - 权限和角色控制
 //! - **审计日志** - 记录操作日志
 //!
@@ -28,14 +27,6 @@
 //! ```bash
 //! curl -H "Authorization: Bearer your_token" http://localhost:3000/api/v1/protected/resource
 //! ```
-//!
-//! ## 速率限制
-//!
-//! | 级别 | 请求数/分钟 | 适用场景 |
-//! |------|------------|---------|
-//! | 标准 | 60 | 普通用户 |
-//! | 严格 | 10 | 敏感操作 |
-//! | 宽松 | 600 | API 用户 |
 
 pub mod api_key;
-pub mod rate_limiting;
+pub mod comprehensive;
