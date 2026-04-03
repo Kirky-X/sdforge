@@ -158,19 +158,18 @@ mod http_tests {
             routing::get,
             Router,
         };
-        use std::sync::Arc;
         use tower::ServiceExt;
 
         async fn handler() -> &'static str {
             "Concurrent OK"
         }
-        let app = Arc::new(Router::new().route("/concurrent", get(handler)));
+        let app = Router::new().route("/concurrent", get(handler));
 
         let mut handles = vec![];
 
         // Spawn 20 concurrent requests
         for i in 0..20 {
-            let app_clone = Arc::clone(&app);
+            let app_clone = app.clone();
             let handle = tokio::spawn(async move {
                 let response = app_clone
                     .oneshot(
