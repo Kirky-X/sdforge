@@ -736,6 +736,7 @@ pub enum SdForgeError {
     AuthConfig(#[from] crate::security::AuthConfigError),
 
     /// Configuration error
+    #[cfg(feature = "http")]
     #[error(transparent)]
     Config(#[from] crate::config::ConfigError),
 
@@ -758,6 +759,7 @@ impl SdForgeError {
             SdForgeError::Auth(_) | SdForgeError::Jwt(_) => ErrorCategory::AuthError,
             #[cfg(feature = "security")]
             SdForgeError::AuthConfig(_) => ErrorCategory::AuthError,
+            #[cfg(feature = "http")]
             SdForgeError::Config(_) => ErrorCategory::ClientError,
             SdForgeError::Internal(_) => ErrorCategory::ServerError,
         }
@@ -768,6 +770,7 @@ impl SdForgeError {
         match self {
             SdForgeError::Api(err) => err.sanitized_message(),
             SdForgeError::Internal(msg) => msg.clone(),
+            #[cfg(any(feature = "http", feature = "security"))]
             other => other.to_string(),
         }
     }
@@ -873,6 +876,7 @@ impl SdForgeError {
                 serde_json::json!({ "type": "auth_config" }),
                 500,
             ),
+            #[cfg(feature = "http")]
             SdForgeError::Config(e) => ServiceError::with_details(
                 "CONFIG_ERROR",
                 e.to_string(),
