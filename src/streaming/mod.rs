@@ -1136,4 +1136,106 @@ mod tests {
         assert!(result.is_some());
         assert_eq!(result.unwrap().unwrap(), 42);
     }
+
+    // ============================================================================
+    // StreamResponse new() Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_stream_response_new_not_final() {
+        let (_, rx) = mpsc::channel::<Result<String, String>>(10);
+        let response = StreamResponse::new(ReceiverStream::new(rx));
+        assert!(!response.is_final());
+    }
+
+    // ============================================================================
+    // stream_to_sse Edge Case Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_stream_to_sse_single_item() {
+        use futures_util::stream;
+
+        let input_stream = stream::iter(vec![42i64]);
+        let sse_stream =
+            stream_to_sse(input_stream, |n| StreamEvent::data(serde_json::json!({"value": n})));
+
+        let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
+
+        // Should have at least the data event and completion event
+        assert!(results.len() >= 1);
+        let has_data = results.iter().any(|r| r.contains(r#""type":"data""#));
+        assert!(has_data);
+    }
+
+    #[tokio::test]
+    async fn test_stream_to_sse_error_in_mapper() {
+        use futures_util::stream;
+
+        let input_stream = stream::iter(vec![()]);
+        // Mapper returns StreamEvent (default serde_json::Value type)
+        let sse_stream = stream_to_sse(input_stream, |_| {
+            StreamEvent::error("mapper error".to_string())
+        });
+
+        let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
+
+        assert!(results.len() >= 1);
+        assert!(results[0].contains(r#""type":"error""#));
+    }
+
+    // ============================================================================
+    // StreamResponse Debug Tests
+    // ============================================================================
+
+    #[test]
+    fn test_stream_response_debug() {
+        let (_, rx) = mpsc::channel::<Result<String, String>>(10);
+        let response: StreamResponse<String> = StreamResponse::new(ReceiverStream::new(rx));
+        let debug_str = format!("{:?}", response);
+        assert!(debug_str.contains("StreamResponse"));
+    }
+
+    // ============================================================================
+    // StreamEvent Debug Tests
+    // ============================================================================
+
+    #[test]
+    fn test_stream_event_debug_data() {
+        let event = StreamEvent::data("debug test");
+        let debug_str = format!("{:?}", event);
+        assert!(debug_str.contains("Data"));
+    }
+
+    #[test]
+    fn test_stream_event_debug_ping() {
+        let event: StreamEvent<()> = StreamEvent::ping();
+        let debug_str = format!("{:?}", event);
+        assert!(debug_str.contains("Ping"));
+    }
+
+    #[test]
+    fn test_stream_event_debug_error() {
+        let event: StreamEvent<()> = StreamEvent::error("debug error".to_string());
+        let debug_str = format!("{:?}", event);
+        assert!(debug_str.contains("Error"));
+    }
+
+    #[test]
+    fn test_stream_event_debug_complete() {
+        let event: StreamEvent<()> = StreamEvent::complete();
+        let debug_str = format!("{:?}", event);
+        assert!(debug_str.contains("Complete"));
+    }
+
+    // ============================================================================
+    // StreamResponse Clone Tests (derive)
+    // ============================================================================
+
+    #[test]
+    fn test_stream_response_struct_is_debug() {
+        // Verify StreamResponse derives Debug
+        fn assert_debug<T: std::fmt::Debug>() {}
+        assert_debug::<StreamResponse<String>>();
+    }
 }

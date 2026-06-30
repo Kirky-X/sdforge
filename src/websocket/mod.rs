@@ -1750,4 +1750,739 @@ mod tests {
             _ => panic!("Expected Notification"),
         }
     }
+
+    /// Test check_and_record allows first message within limits
+    #[test]
+    fn check_and_record_first_message_allowed() {
+        let manager = ConnectionManager::new();
+        let config = RateLimitConfig {
+            max_messages_per_second: 10,
+            max_connections: 100,
+            rate_limit_window_seconds: 1,
+            ..Default::default()
+        };
+        assert!(!manager.check_and_record("conn-1", &config));
+    }
+
+    /// Test check_and_record triggers rate limiting after exceeding limit
+    #[test]
+    fn check_and_record_exceeds_rate_limit() {
+        let manager = ConnectionManager::new();
+        let config = RateLimitConfig {
+            max_messages_per_second: 2,
+            max_connections: 100,
+            rate_limit_window_seconds: 10,
+            ..Default::default()
+        };
+        assert!(!manager.check_and_record("conn-rate", &config));
+        assert!(!manager.check_and_record("conn-rate", &config));
+        assert!(manager.check_and_record("conn-rate", &config));
+    }
+
+    /// Test check_and_record respects connection limit
+    #[test]
+    fn check_and_record_exceeds_connection_limit() {
+        let manager = ConnectionManager::new();
+        let config = RateLimitConfig {
+            max_messages_per_second: 100,
+            max_connections: 3,
+            rate_limit_window_seconds: 10,
+            ..Default::default()
+        };
+        assert!(!manager.check_and_record("conn-a", &config));
+        assert!(!manager.check_and_record("conn-b", &config));
+        assert!(!manager.check_and_record("conn-c", &config));
+        assert!(manager.check_and_record("conn-d", &config));
+    }
+
+    /// Test check_and_record tracks independent connections
+    #[test]
+    fn check_and_record_independent_connections() {
+        let manager = ConnectionManager::new();
+        let config = RateLimitConfig {
+            max_messages_per_second: 1,
+            max_connections: 100,
+            rate_limit_window_seconds: 10,
+            ..Default::default()
+        };
+        assert!(!manager.check_and_record("conn-x", &config));
+        assert!(!manager.check_and_record("conn-y", &config));
+        assert!(manager.check_and_record("conn-x", &config));
+        assert!(manager.check_and_record("conn-y", &config));
+    }
+
+    /// Test check_and_record with exact connection boundary
+    #[test]
+    fn check_and_record_exact_connection_boundary() {
+        let manager = ConnectionManager::new();
+        let config = RateLimitConfig {
+            max_messages_per_second: 100,
+            max_connections: 2,
+            rate_limit_window_seconds: 10,
+            ..Default::default()
+        };
+        assert!(!manager.check_and_record("conn-1", &config));
+        assert!(!manager.check_and_record("conn-2", &config));
+        assert!(manager.check_and_record("conn-3", &config));
+    }
+
+    /// Test check_and_record with exact message rate boundary
+    #[test]
+    fn check_and_record_exact_message_boundary() {
+        let manager = ConnectionManager::new();
+        let config = RateLimitConfig {
+            max_messages_per_second: 3,
+            max_connections: 100,
+            rate_limit_window_seconds: 10,
+            ..Default::default()
+        };
+        assert!(!manager.check_and_record("conn-msg", &config));
+        assert!(!manager.check_and_record("conn-msg", &config));
+        assert!(!manager.check_and_record("conn-msg", &config));
+        assert!(manager.check_and_record("conn-msg", &config));
+    }
+
+    /// Test check_and_record with concurrent connections
+    #[test]
+    fn check_and_record_concurrent_connections() {
+        use std::thread;
+        let manager = Arc::new(ConnectionManager::new());
+        let config = Arc::new(RateLimitConfig {
+            max_messages_per_second: 100,
+            max_connections: 10,
+            rate_limit_window_seconds: 10,
+            ..Default::default()
+        });
+        let mut handles = vec![];
+        for i in 0..5 {
+            let mgr = manager.clone();
+            let cfg = config.clone();
+            handles.push(thread::spawn(move || {
+                let conn_id = format!("thread-conn-{}", i);
+                mgr.check_and_record(&conn_id, &cfg)
+            }));
+        }
+        let results: Vec<bool> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        for result in &results {
+            assert!(!result, "All concurrent connections should be allowed");
+        }
+    }
+
+    /// Test ConnectionManager::remove_connection cleans up rate limit data
+    #[tokio::test]
+    async fn connection_manager_remove_cleans_up_rate_limit_data() {
+        let manager = ConnectionManager::new();
+        let config = RateLimitConfig::default();
+        let (conn, _) = WebSocketConnection::new("cleanup-test".to_string());
+        manager.add_connection("cleanup-test".to_string(), conn).await;
+        manager.check_and_record("cleanup-test", &config);
+        manager.remove_connection("cleanup-test").await;
+        assert!(manager.message_counts.get("cleanup-test").is_none());
+        assert!(manager.last_message_time.get("cleanup-test").is_none());
+    }
+
+    /// Test ConnectionManager::broadcast with empty connections
+    #[tokio::test]
+    async fn connection_manager_broadcast_empty() {
+        let manager = ConnectionManager::new();
+        let msg = Arc::new(WebSocketMessage::Notification {
+            event: "test".to_string(),
+            data: serde_json::json!({}),
+        });
+        manager.broadcast(&msg).await;
+        assert_eq!(manager.connection_count().await, 0);
+    }
+
+    /// Test ConnectionManager::broadcast with single connection
+    #[tokio::test]
+    async fn connection_manager_broadcast_single() {
+        let manager = ConnectionManager::new();
+        let (conn, mut rx) = WebSocketConnection::new("single-broadcast".to_string());
+        manager.add_connection("single-broadcast".to_string(), conn).await;
+        let msg = Arc::new(WebSocketMessage::Notification {
+            event: "single".to_string(),
+            data: serde_json::json!({"value": 1}),
+        });
+        manager.broadcast(&msg).await;
+        let received = rx.recv().await;
+        assert!(received.is_some());
+        if let Some(WebSocketMessage::Notification { event, data }) = received {
+            assert_eq!(event, "single");
+            assert_eq!(data["value"], 1);
+        } else {
+            panic!("Expected Notification");
+        }
+    }
+
+    /// Test calculate_value_depth with empty object
+    #[test]
+    fn calculate_value_depth_empty_object() {
+        let value = serde_json::json!({});
+        let mut depth = 0;
+        assert_eq!(calculate_value_depth(&value, &mut depth), 0);
+    }
+
+    /// Test calculate_value_depth with empty array
+    #[test]
+    fn calculate_value_depth_empty_array() {
+        let value = serde_json::json!([]);
+        let mut depth = 0;
+        assert_eq!(calculate_value_depth(&value, &mut depth), 0);
+    }
+
+    /// Test calculate_value_depth with boolean
+    #[test]
+    fn calculate_value_depth_boolean() {
+        let value_true = serde_json::json!(true);
+        let value_false = serde_json::json!(false);
+        let mut depth = 0;
+        assert_eq!(calculate_value_depth(&value_true, &mut depth), 0);
+        depth = 0;
+        assert_eq!(calculate_value_depth(&value_false, &mut depth), 0);
+    }
+
+    /// Test calculate_value_depth with null
+    #[test]
+    fn calculate_value_depth_null() {
+        let value = serde_json::json!(null);
+        let mut depth = 0;
+        assert_eq!(calculate_value_depth(&value, &mut depth), 0);
+    }
+
+    /// Test calculate_value_depth with float
+    #[test]
+    fn calculate_value_depth_float() {
+        let value = serde_json::json!(3.14159);
+        let mut depth = 0;
+        assert_eq!(calculate_value_depth(&value, &mut depth), 0);
+    }
+
+    /// Test calculate_value_depth with deeply nested mixed structure
+    #[test]
+    fn calculate_value_depth_deep_mixed() {
+        let value = serde_json::json!({
+            "level1": [
+                {"level2a": {"level3": "value"}},
+                [{"level2b": {"level3": [1, 2, {"level4": "deep"}]}}]
+            ]
+        });
+        let mut depth = 0;
+        let result = calculate_value_depth(&value, &mut depth);
+        assert!(result >= 4, "Expected depth >= 4, got {}", result);
+    }
+
+    /// Test parse_websocket_message with unknown type
+    #[test]
+    fn parse_websocket_message_unknown_type() {
+        let json = r#"{"type":"unknown_type","data":{}}"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_err());
+    }
+
+    /// Test parse_websocket_message with malformed JSON (trailing comma)
+    #[test]
+    fn parse_websocket_message_malformed_trailing_comma() {
+        let json = r#"{"type":"request","id":"123",}"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_err());
+    }
+
+    /// Test parse_websocket_message with incomplete JSON
+    #[test]
+    fn parse_websocket_message_incomplete_json() {
+        let json = r#"{"type":"request","id":"123""#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_err());
+    }
+
+    /// Test parse_websocket_message with array at top level
+    #[test]
+    fn parse_websocket_message_array_top_level() {
+        let json = r#"[1, 2, 3]"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_err());
+    }
+
+    /// Test parse_websocket_message with string at top level
+    #[test]
+    fn parse_websocket_message_string_top_level() {
+        let json = r#""just a string""#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_err());
+    }
+
+    /// Test parse_websocket_message with number at top level
+    #[test]
+    fn parse_websocket_message_number_top_level() {
+        let json = r#"42"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_err());
+    }
+
+    /// Test parse_websocket_message with boolean at top level
+    #[test]
+    fn parse_websocket_message_bool_top_level() {
+        let json = r#"true"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_err());
+    }
+
+    /// Test parse_websocket_message with null at top level
+    #[test]
+    fn parse_websocket_message_null_top_level() {
+        let json = r#"null"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_err());
+    }
+
+    /// Test parse_websocket_message with minimal valid request
+    #[test]
+    fn parse_websocket_message_minimal_request() {
+        let json = r#"{"type":"request","id":"","method":"","params":{}}"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            WebSocketMessage::Request { id, method, params } => {
+                assert!(id.is_empty());
+                assert!(method.is_empty());
+                assert!(params.is_object());
+            }
+            _ => panic!("Expected Request"),
+        }
+    }
+
+    /// Test parse_websocket_message with minimal valid notification
+    #[test]
+    fn parse_websocket_message_minimal_notification() {
+        let json = r#"{"type":"notification","event":"","data":null}"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            WebSocketMessage::Notification { event, data } => {
+                assert!(event.is_empty());
+                assert!(data.is_null());
+            }
+            _ => panic!("Expected Notification"),
+        }
+    }
+
+    /// Test parse_websocket_message with nested arrays in params
+    #[test]
+    fn parse_websocket_message_nested_arrays() {
+        let json = r#"{"type":"request","id":"arr","method":"test","params":{"matrix":[[1,2],[3,4]]}}"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_ok());
+        if let WebSocketMessage::Request { params, .. } = result.unwrap() {
+            assert!(params["matrix"].is_array());
+            assert_eq!(params["matrix"][0][0], 1);
+            assert_eq!(params["matrix"][1][1], 4);
+        }
+    }
+
+    /// Test parse_websocket_message with empty object params
+    #[test]
+    fn parse_websocket_message_empty_object_params() {
+        let json = r#"{"type":"request","id":"1","method":"test","params":{}}"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            WebSocketMessage::Request { params, .. } => {
+                assert!(params.is_object());
+                assert_eq!(params.as_object().unwrap().len(), 0);
+            }
+            _ => panic!("Expected Request"),
+        }
+    }
+
+    /// Test parse_websocket_message with empty array in result
+    #[test]
+    fn parse_websocket_message_empty_array_result() {
+        let json = r#"{"type":"response","id":"1","result":[]}"#;
+        let result = parse_websocket_message(json);
+        assert!(result.is_ok());
+        match result.unwrap() {
+            WebSocketMessage::Response { result, .. } => {
+                assert!(result.is_array());
+                assert_eq!(result.as_array().unwrap().len(), 0);
+            }
+            _ => panic!("Expected Response"),
+        }
+    }
+
+    /// Test parse_websocket_message roundtrip for all variants
+    #[test]
+    fn parse_websocket_message_roundtrip_request() {
+        let msg = WebSocketMessage::Request {
+            id: "roundtrip".to_string(),
+            method: "test_method".to_string(),
+            params: serde_json::json!({"key": "value"}),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed = parse_websocket_message(&json).unwrap();
+        match parsed {
+            WebSocketMessage::Request { id, method, params } => {
+                assert_eq!(id, "roundtrip");
+                assert_eq!(method, "test_method");
+                assert_eq!(params["key"], "value");
+            }
+            _ => panic!("Expected Request"),
+        }
+    }
+
+    #[test]
+    fn parse_websocket_message_roundtrip_response() {
+        let msg = WebSocketMessage::Response {
+            id: "roundtrip".to_string(),
+            result: serde_json::json!({"status": "success"}),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed = parse_websocket_message(&json).unwrap();
+        match parsed {
+            WebSocketMessage::Response { id, result } => {
+                assert_eq!(id, "roundtrip");
+                assert_eq!(result["status"], "success");
+            }
+            _ => panic!("Expected Response"),
+        }
+    }
+
+    #[test]
+    fn parse_websocket_message_roundtrip_error() {
+        let msg = WebSocketMessage::Error {
+            id: "roundtrip".to_string(),
+            error: "test error".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed = parse_websocket_message(&json).unwrap();
+        match parsed {
+            WebSocketMessage::Error { id, error } => {
+                assert_eq!(id, "roundtrip");
+                assert_eq!(error, "test error");
+            }
+            _ => panic!("Expected Error"),
+        }
+    }
+
+    #[test]
+    fn parse_websocket_message_roundtrip_notification() {
+        let msg = WebSocketMessage::Notification {
+            event: "roundtrip".to_string(),
+            data: serde_json::json!({"event_data": "test"}),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        let parsed = parse_websocket_message(&json).unwrap();
+        match parsed {
+            WebSocketMessage::Notification { event, data } => {
+                assert_eq!(event, "roundtrip");
+                assert_eq!(data["event_data"], "test");
+            }
+            _ => panic!("Expected Notification"),
+        }
+    }
+
+    /// Test calculate_json_depth with escaped quotes
+    #[test]
+    fn calculate_json_depth_escaped_quotes() {
+        assert_eq!(calculate_json_depth(r#"{"a":""nested""}"#), 1);
+    }
+
+    /// Test calculate_json_depth with braces in strings
+    #[test]
+    fn calculate_json_depth_braces_in_strings() {
+        assert_eq!(calculate_json_depth(r#"{"a":"{not depth}"}"#), 1);
+    }
+
+    /// Test calculate_json_depth with mixed nesting
+    #[test]
+    fn calculate_json_depth_mixed_nesting() {
+        assert_eq!(calculate_json_depth(r#"{"a":[1,{"b":2}]}"#), 3);
+    }
+
+    /// Test calculate_json_depth with whitespace
+    #[test]
+    fn calculate_json_depth_with_whitespace() {
+        let json = r#"{ "a": { "b": 1 } }"#;
+        assert_eq!(calculate_json_depth(json), 2);
+    }
+
+    /// Test AppState::new creates with default config
+    #[test]
+    fn app_state_new_creates_default_config() {
+        let manager = Arc::new(ConnectionManager::new());
+        let state = AppState::new(manager.clone());
+        assert!(state.config.auth.is_none());
+        assert_eq!(state.config.rate_limit.max_connections, 1000);
+    }
+
+    /// Test AppState::with_config preserves custom config
+    #[test]
+    fn app_state_with_config_preserves_settings() {
+        let manager = Arc::new(ConnectionManager::new());
+        let config = WebSocketConfig {
+            auth: None,
+            rate_limit: RateLimitConfig {
+                max_messages_per_second: 50,
+                max_message_size: 2048,
+                max_connections: 500,
+                rate_limit_window_seconds: 30,
+            },
+        };
+        let state = AppState::with_config(config, manager.clone());
+        assert_eq!(state.config.rate_limit.max_messages_per_second, 50);
+        assert_eq!(state.config.rate_limit.max_message_size, 2048);
+        assert_eq!(state.config.rate_limit.max_connections, 500);
+        assert_eq!(state.config.rate_limit.rate_limit_window_seconds, 30);
+    }
+
+    /// Test AppState clone shares underlying data
+    #[test]
+    fn app_state_clone_shares_data() {
+        let manager = Arc::new(ConnectionManager::new());
+        let state = AppState::new(manager.clone());
+        let cloned = state.clone();
+        assert!(Arc::ptr_eq(&state.manager, &cloned.manager));
+        assert!(Arc::ptr_eq(&state.config, &cloned.config));
+    }
+
+    /// Test AppState full config with auth
+    #[test]
+    fn app_state_full_config() {
+        let manager = Arc::new(ConnectionManager::new());
+        let auth = crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+            .expect("valid secret");
+        let config = WebSocketConfig {
+            auth: Some(auth),
+            rate_limit: RateLimitConfig {
+                max_messages_per_second: 200,
+                max_message_size: 2_097_152,
+                max_connections: 5000,
+                rate_limit_window_seconds: 60,
+            },
+        };
+        let state = AppState::with_config(config, manager);
+        assert!(state.config.auth.is_some());
+        assert_eq!(state.config.rate_limit.max_messages_per_second, 200);
+    }
+
+    /// Test build() creates router without panic
+    #[test]
+    fn build_router_creates_without_panic() {
+        let router = build();
+        drop(router);
+    }
+
+    /// Test WebSocketMessage Clone derive
+    #[test]
+    fn websocket_message_clone() {
+        let msg = WebSocketMessage::Request {
+            id: "clone".to_string(),
+            method: "test".to_string(),
+            params: serde_json::json!({"key": "value"}),
+        };
+        let cloned = msg.clone();
+        let json1 = serde_json::to_string(&msg).unwrap();
+        let json2 = serde_json::to_string(&cloned).unwrap();
+        assert_eq!(json1, json2);
+    }
+
+    /// Test WebSocketMessage Debug derive
+    #[test]
+    fn websocket_message_debug() {
+        let msg = WebSocketMessage::Request {
+            id: "debug".to_string(),
+            method: "test".to_string(),
+            params: serde_json::json!({}),
+        };
+        let debug_str = format!("{:?}", msg);
+        assert!(debug_str.contains("Request"));
+        assert!(debug_str.contains("debug"));
+    }
+
+    /// Test RateLimitConfig Debug output
+    #[test]
+    fn rate_limit_config_debug_output() {
+        let config = RateLimitConfig {
+            max_messages_per_second: 42,
+            max_message_size: 4096,
+            max_connections: 50,
+            rate_limit_window_seconds: 5,
+        };
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("42"));
+        assert!(debug_str.contains("4096"));
+    }
+
+    /// Test WebSocketConnection send with different message types
+    #[tokio::test]
+    async fn websocket_connection_send_request() {
+        let (conn, mut receiver) = WebSocketConnection::new("send-req".to_string());
+        let msg = WebSocketMessage::Request {
+            id: "send-req".to_string(),
+            method: "test".to_string(),
+            params: serde_json::json!({}),
+        };
+        conn.send(msg).await.unwrap();
+        let received = receiver.recv().await.unwrap();
+        assert!(matches!(received, WebSocketMessage::Request { .. }));
+    }
+
+    #[tokio::test]
+    async fn websocket_connection_send_response() {
+        let (conn, mut receiver) = WebSocketConnection::new("send-resp".to_string());
+        let msg = WebSocketMessage::Response {
+            id: "send-resp".to_string(),
+            result: serde_json::json!({"ok": true}),
+        };
+        conn.send(msg).await.unwrap();
+        let received = receiver.recv().await.unwrap();
+        assert!(matches!(received, WebSocketMessage::Response { .. }));
+    }
+
+    #[tokio::test]
+    async fn websocket_connection_send_error() {
+        let (conn, mut receiver) = WebSocketConnection::new("send-err".to_string());
+        let msg = WebSocketMessage::Error {
+            id: "send-err".to_string(),
+            error: "test error".to_string(),
+        };
+        conn.send(msg).await.unwrap();
+        let received = receiver.recv().await.unwrap();
+        assert!(matches!(received, WebSocketMessage::Error { .. }));
+    }
+
+    /// Test multiple sends on same connection
+    #[tokio::test]
+    async fn websocket_connection_multiple_sends() {
+        let (conn, mut receiver) = WebSocketConnection::new("multi-send".to_string());
+        for i in 0..5 {
+            let msg = WebSocketMessage::Notification {
+                event: format!("event-{}", i),
+                data: serde_json::json!({"index": i}),
+            };
+            conn.send(msg).await.unwrap();
+        }
+        for i in 0..5 {
+            let received = receiver.recv().await.unwrap();
+            if let WebSocketMessage::Notification { event, data } = received {
+                assert_eq!(event, format!("event-{}", i));
+                assert_eq!(data["index"], i);
+            } else {
+                panic!("Expected Notification");
+            }
+        }
+    }
+
+    /// Test DefaultWebSocketHandler with complex params
+    #[test]
+    fn default_handler_complex_params() {
+        let handler = DefaultWebSocketHandler;
+        let request = WebSocketMessage::Request {
+            id: "complex".to_string(),
+            method: "complex_method".to_string(),
+            params: serde_json::json!({
+                "nested": {"key": "value"},
+                "array": [1, 2, 3],
+                "bool": true,
+                "null": null
+            }),
+        };
+        let result = handler.handle(request).now_or_never().unwrap();
+        match result {
+            WebSocketMessage::Response { id, result } => {
+                assert_eq!(id, "complex");
+                assert_eq!(result["method"], "complex_method");
+                assert_eq!(result["status"], "ok");
+            }
+            _ => panic!("Expected Response"),
+        }
+    }
+
+    /// Test WebSocketRoute with custom handler
+    #[test]
+    fn websocket_route_custom_handler() {
+        use std::sync::Arc;
+        struct EchoHandler;
+        impl WebSocketHandler for EchoHandler {
+            fn handle(&self, message: WebSocketMessage) -> BoxFuture<'static, WebSocketMessage> {
+                Box::pin(async move { message })
+            }
+        }
+        let route = WebSocketRoute::new("/echo", "v2", || Arc::new(EchoHandler), || ApiMetadata {
+            name: "/echo".to_string(),
+            version: "v2".to_string(),
+            description: "Echo handler".to_string(),
+            cache_ttl: None,
+            is_streaming: false,
+        });
+        assert_eq!(route.name(), "/echo");
+        assert_eq!(route.version(), "v2");
+    }
+
+    /// Test parse_websocket_message with large valid params
+    #[test]
+    fn parse_websocket_message_large_valid_params() {
+        let large_params = serde_json::json!({
+            "array": (0..1000).collect::<Vec<_>>(),
+            "nested": {"deep": {"value": "test"}}
+        });
+        let msg = WebSocketMessage::Request {
+            id: "large-params".to_string(),
+            method: "test".to_string(),
+            params: large_params,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.len() < MAX_MESSAGE_SIZE);
+        let result = parse_websocket_message(&json);
+        assert!(result.is_ok());
+    }
+
+    /// Test RateLimitConfig validate with all maximum valid values
+    #[test]
+    fn rate_limit_config_all_max_valid() {
+        let config = RateLimitConfig {
+            max_messages_per_second: 1_000_000,
+            max_message_size: 100_000_000,
+            max_connections: 100_000,
+            rate_limit_window_seconds: 86400,
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    /// Test RateLimitConfig validate with all minimum valid values
+    #[test]
+    fn rate_limit_config_all_min_valid() {
+        let config = RateLimitConfig {
+            max_messages_per_second: 1,
+            max_message_size: 1,
+            max_connections: 1,
+            rate_limit_window_seconds: 1,
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    /// Test ConnectionManager::get_connection returns None for removed connection
+    #[tokio::test]
+    async fn connection_manager_get_removed_connection() {
+        let manager = ConnectionManager::new();
+        let (conn, _) = WebSocketConnection::new("removed-test".to_string());
+        manager.add_connection("removed-test".to_string(), conn).await;
+        manager.remove_connection("removed-test").await;
+        assert!(manager.get_connection("removed-test").await.is_none());
+    }
+
+    /// Test Constants
+    #[test]
+    fn max_message_size_constant() {
+        assert_eq!(MAX_MESSAGE_SIZE, 1_048_576);
+    }
+
+    #[test]
+    fn max_json_depth_constant() {
+        assert_eq!(MAX_JSON_DEPTH, 16);
+    }
+
+    #[test]
+    fn max_string_length_constant() {
+        assert_eq!(MAX_STRING_LENGTH, 64 * 1024);
+    }
 }
