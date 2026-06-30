@@ -18,7 +18,8 @@ mod config_tests {
                 request_timeout_secs: 30,
                 cors: None,
             })
-            .build();
+            .build()
+            .expect("Failed to build config");
 
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 3000);
@@ -346,7 +347,10 @@ mod config_enhanced_tests {
             cors: None,
         };
 
-        let config = AppConfig::builder().server(server).build();
+        let config = AppConfig::builder()
+            .server(server)
+            .build()
+            .expect("Failed to build config");
 
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 8080);
@@ -376,7 +380,8 @@ mod config_enhanced_tests {
                 request_timeout_secs: 30,
                 cors: None,
             })
-            .build();
+            .build()
+            .expect("Failed to build config1");
 
         let config2 = AppConfig::builder()
             .server(ServerConfig {
@@ -385,7 +390,8 @@ mod config_enhanced_tests {
                 request_timeout_secs: 60,
                 cors: None,
             })
-            .build();
+            .build()
+            .expect("Failed to build config2");
 
         assert_ne!(config1.server.port, config2.server.port);
         assert_ne!(config1.server.host, config2.server.host);

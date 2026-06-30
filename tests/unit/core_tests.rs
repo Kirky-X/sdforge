@@ -184,7 +184,8 @@ mod config_tests {
                 request_timeout_secs: 30,
                 cors: None,
             })
-            .build();
+            .build()
+            .expect("Failed to build config");
 
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 3000);
