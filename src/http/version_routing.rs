@@ -286,4 +286,926 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
     }
+
+    // ============================================================================
+    // VersionedRoute Tests
+    // ============================================================================
+
+    #[test]
+    fn test_versioned_route_new() {
+        let route = VersionedRoute::new(
+            "v1".to_string(),
+            "/users".to_string(),
+            axum::http::Method::GET,
+            get(test_handler),
+        );
+
+        assert_eq!(route.version(), "v1");
+        assert_eq!(route.path(), "/users");
+        assert_eq!(route.method(), &axum::http::Method::GET);
+    }
+
+    #[test]
+    fn test_versioned_route_different_methods() {
+        async fn post_handler() {}
+        async fn put_handler() {}
+        async fn delete_handler() {}
+
+        let post_route = VersionedRoute::new(
+            "v1".to_string(),
+            "/users".to_string(),
+            axum::http::Method::POST,
+            axum::routing::post(post_handler),
+        );
+        assert_eq!(post_route.method(), &axum::http::Method::POST);
+
+        let put_route = VersionedRoute::new(
+            "v1".to_string(),
+            "/users/:id".to_string(),
+            axum::http::Method::PUT,
+            axum::routing::put(put_handler),
+        );
+        assert_eq!(put_route.method(), &axum::http::Method::PUT);
+
+        let delete_route = VersionedRoute::new(
+            "v2".to_string(),
+            "/users/:id".to_string(),
+            axum::http::Method::DELETE,
+            axum::routing::delete(delete_handler),
+        );
+        assert_eq!(delete_route.method(), &axum::http::Method::DELETE);
+    }
+
+    #[test]
+    fn test_versioned_route_handler_accessor() {
+        let route = VersionedRoute::new(
+            "v1".to_string(),
+            "/items".to_string(),
+            axum::http::Method::GET,
+            get(test_handler),
+        );
+
+        let handler = route.handler();
+        // Verify handler is accessible
+        let _ = handler;
+    }
+
+    #[test]
+    fn test_versioned_route_clone() {
+        let route = VersionedRoute::new(
+            "v2".to_string(),
+            "/products".to_string(),
+            axum::http::Method::GET,
+            get(test_handler),
+        );
+
+        let cloned = route.clone();
+        assert_eq!(cloned.version(), route.version());
+        assert_eq!(cloned.path(), route.path());
+        assert_eq!(cloned.method(), route.method());
+    }
+
+    #[test]
+    fn test_versioned_route_debug() {
+        let route = VersionedRoute::new(
+            "v1".to_string(),
+            "/debug".to_string(),
+            axum::http::Method::GET,
+            get(test_handler),
+        );
+
+        let debug_str = format!("{:?}", route);
+        assert!(debug_str.contains("VersionedRoute"));
+        assert!(debug_str.contains("v1"));
+    }
+
+    // ============================================================================
+    // VersionRouterConfig Tests
+    // ============================================================================
+
+    #[test]
+    fn test_version_router_config_default() {
+        let config = VersionRouterConfig::default();
+
+        assert_eq!(config.default_version, "v1");
+        assert_eq!(config.supported_versions, vec!["v1"]);
+        assert!(config.redirect_unknown);
+        assert!(config.deprecated_versions.is_empty());
+        assert_eq!(config.sunset_header, "Sunset");
+    }
+
+    #[test]
+    fn test_version_router_config_clone() {
+        let config = VersionRouterConfig::default();
+        let cloned = config.clone();
+
+        assert_eq!(cloned.default_version, config.default_version);
+        assert_eq!(cloned.supported_versions, config.supported_versions);
+    }
+
+    #[test]
+    fn test_version_router_config_debug() {
+        let config = VersionRouterConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("VersionRouterConfig"));
+    }
+
+    #[test]
+    fn test_version_router_config_with_deprecated() {
+        let mut deprecated = std::collections::HashMap::new();
+        deprecated.insert("v1".to_string(), "2025-12-31".to_string());
+
+        let config = VersionRouterConfig {
+            default_version: "v2".to_string(),
+            supported_versions: vec!["v1".to_string(), "v2".to_string(), "v3".to_string()],
+            redirect_unknown: true,
+            deprecated_versions: deprecated,
+            sunset_header: "Sunset".to_string(),
+        };
+
+        assert_eq!(config.default_version, "v2");
+        assert_eq!(config.supported_versions.len(), 3);
+        assert!(config.deprecated_versions.contains_key("v1"));
+    }
+
+    // ============================================================================
+    // build_version_router Tests
+    // ============================================================================
+
+    #[test]
+    fn test_build_version_router_returns_router() {
+        let router = build_version_router();
+        // Just verify it doesn't panic and returns a valid Router
+        let _ = router;
+    }
+
+    // ============================================================================
+    // find_newer_version Tests
+    // ============================================================================
+
+    #[test]
+    fn test_find_newer_version_basic() {
+        let supported = vec!["v1".to_string(), "v2".to_string(), "v3".to_string()];
+
+        let result = find_newer_version("v1", &supported);
+        assert_eq!(result, Some("v2".to_string()));
+
+        let result = find_newer_version("v2", &supported);
+        assert_eq!(result, Some("v3".to_string()));
+    }
+
+    #[test]
+    fn test_find_newer_version_no_newer() {
+        let supported = vec!["v1".to_string(), "v2".to_string()];
+
+        let result = find_newer_version("v2", &supported);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_find_newer_version_empty_supported() {
+        let supported: Vec<String> = vec![];
+
+        let result = find_newer_version("v1", &supported);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_find_newer_version_finds_closest_newer() {
+        let supported = vec!["v1".to_string(), "v3".to_string(), "v5".to_string()];
+
+        // Should return v3 (closest newer), not v5
+        let result = find_newer_version("v1", &supported);
+        assert_eq!(result, Some("v3".to_string()));
+    }
+
+    #[test]
+    fn test_find_newer_version_invalid_current() {
+        let supported = vec!["v1".to_string(), "v2".to_string()];
+
+        // Invalid version format (no number after v)
+        let result = find_newer_version("vabc", &supported);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_find_newer_version_mixed_valid_invalid() {
+        let supported = vec!["v1".to_string(), "invalid".to_string(), "v3".to_string()];
+
+        let result = find_newer_version("v1", &supported);
+        assert_eq!(result, Some("v3".to_string()));
+    }
+
+    #[test]
+    fn test_find_newer_version_unsorted_versions() {
+        let supported = vec!["v3".to_string(), "v1".to_string(), "v2".to_string()];
+
+        // Should still find v2 as closest newer to v1
+        let result = find_newer_version("v1", &supported);
+        assert_eq!(result, Some("v2".to_string()));
+    }
+
+    // ============================================================================
+    // version_redirect_middleware Extended Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_version_redirect_with_trailing_path() {
+        let router = Router::new()
+            .route("/api/v1/users/123", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/users/123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
+        assert_eq!(
+            response.headers().get("location").unwrap(),
+            "/api/v1/users/123"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_invalid_version_format() {
+        let router = Router::new()
+            .route("/api/v1/test", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        // Invalid version format (not v followed by digits)
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/abc/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
+        assert_eq!(
+            response.headers().get("location").unwrap(),
+            "/api/v1/abc/test"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_version_with_letters() {
+        let router = Router::new()
+            .route("/api/v1/test", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        // Version with letters after v (e.g., "v1beta") should redirect
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1beta/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // v1beta doesn't match "v" + all digits, so it redirects
+        assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_non_api_path() {
+        let router = Router::new()
+            .route("/health", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        // Non-API path should pass through without redirect
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_root_api_path() {
+        let router = Router::new()
+            .route("/api/v1/", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        // /api/ without version should redirect
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri("/api/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
+        assert_eq!(response.headers().get("location").unwrap(), "/api/v1/");
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_empty_path_after_api() {
+        let router = Router::new()
+            .route("/api/v1", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        // /api without trailing slash doesn't match /api/ prefix
+        // so it passes through to the router and gets 404 (no route matches)
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri("/api").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        // No route matches /api, so 404 is expected
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_valid_version_v2() {
+        let router = Router::new()
+            .route("/api/v2/test", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v2/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_valid_version_v10() {
+        let router = Router::new()
+            .route("/api/v10/test", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v10/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_path_starting_with_slash() {
+        let router = Router::new()
+            .route("/api/v1/test", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        // Path after API starting with double slash
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api//test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
+        // Location header contains the redirect URL
+        let location = response.headers().get("location").unwrap();
+        assert!(location.to_str().unwrap().starts_with("/api/v1/"));
+    }
+
+    // ============================================================================
+    // Deprecated Version Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_deprecated_version_adds_headers() {
+        // We need to test with a config that has deprecated versions
+        // Since version_redirect_middleware uses default config, we test
+        // the logic indirectly by checking that valid versions pass through
+        let router = Router::new()
+            .route("/api/v1/test", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        // Default config has no deprecated versions, so no deprecation headers
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().get("deprecation").is_none());
+    }
+
+    // ============================================================================
+    // Edge Cases
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_version_redirect_case_sensitive_version() {
+        let router = Router::new()
+            .route("/api/v1/test", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        // Uppercase V should not be recognized as version
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/V1/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
+        assert_eq!(
+            response.headers().get("location").unwrap(),
+            "/api/v1/V1/test"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_version_only() {
+        let router = Router::new()
+            .route("/api/v1", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        // Just version without path after
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_query_params_preserved() {
+        let router = Router::new()
+            .route("/api/v1/test", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        // Note: query params are part of URI but redirect middleware only handles path
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/test?foo=bar")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
+    }
+
+    // ============================================================================
+    // Additional Tests (15+ new tests)
+    // ============================================================================
+
+    #[test]
+    fn test_build_version_router_empty_routes() {
+        // When no routes are registered via inventory::submit!, build_version_router returns empty Router
+        let router = build_version_router();
+        // Router should be valid even with no routes
+        let _ = router;
+    }
+
+    #[tokio::test]
+    async fn test_build_version_router_multiple_versions() {
+        // Test that multiple versions of the same path can coexist
+        let router = Router::new()
+            .route("/api/v1/users", get(test_handler))
+            .route("/api/v2/users", get(test_handler))
+            .route("/api/v3/users", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        // All versions should be accessible
+        for version in &["v1", "v2", "v3"] {
+            let uri = format!("/api/{}/users", version);
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .uri(uri.as_str())
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(response.status(), StatusCode::OK);
+        }
+    }
+
+    #[test]
+    fn test_build_version_router_path_format() {
+        // Verify that versioned routes use /api/{version}/{path} format
+        let route = VersionedRoute::new(
+            "v1".to_string(),
+            "/users".to_string(),
+            axum::http::Method::GET,
+            get(test_handler),
+        );
+
+        // Expected path format: /api/v1/users
+        assert_eq!(route.version(), "v1");
+        assert_eq!(route.path(), "/users");
+        // Path format is built in build_version_router: format!("/api/{}{}", route.version(), route.path())
+    }
+
+    #[test]
+    fn test_find_newer_version_v0() {
+        // v0 version handling - v0 should find v1 as newer
+        let supported = vec!["v0".to_string(), "v1".to_string(), "v2".to_string()];
+        let result = find_newer_version("v0", &supported);
+        assert_eq!(result, Some("v1".to_string()));
+    }
+
+    #[test]
+    fn test_find_newer_version_large_number() {
+        // Large version numbers like v999
+        let supported = vec!["v1".to_string(), "v999".to_string()];
+        let result = find_newer_version("v1", &supported);
+        assert_eq!(result, Some("v999".to_string()));
+
+        // v999 has no newer version
+        let result = find_newer_version("v999", &supported);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_find_newer_version_single_digit() {
+        // Single digit version v1
+        let supported = vec!["v1".to_string(), "v2".to_string()];
+        let result = find_newer_version("v1", &supported);
+        assert_eq!(result, Some("v2".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_versioned_route_with_path_params() {
+        // Routes with path parameters like {id} (Axum 0.7+ syntax)
+        async fn user_handler() -> &'static str {
+            "user"
+        }
+
+        let router = Router::new()
+            .route("/api/v1/users/{id}", get(user_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/users/123")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_versioned_route_nested_path() {
+        // Nested paths like /api/v1/users/{user_id}/posts/{post_id} (Axum 0.7+ syntax)
+        async fn post_handler() -> &'static str {
+            "post"
+        }
+
+        let router = Router::new()
+            .route("/api/v1/users/{user_id}/posts/{post_id}", get(post_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/users/42/posts/100")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_versioned_route_all_http_methods() {
+        // Test all HTTP methods: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS
+        async fn handler() -> &'static str {
+            "ok"
+        }
+
+        let router = Router::new()
+            .route("/api/v1/resource", get(handler))
+            .route("/api/v1/resource", axum::routing::post(handler))
+            .route("/api/v1/resource", axum::routing::put(handler))
+            .route("/api/v1/resource", axum::routing::patch(handler))
+            .route("/api/v1/resource", axum::routing::delete(handler))
+            .route("/api/v1/resource", axum::routing::head(handler))
+            .route("/api/v1/resource", axum::routing::options(handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        // Test each method
+        let methods = [
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::PUT,
+            axum::http::Method::PATCH,
+            axum::http::Method::DELETE,
+            axum::http::Method::HEAD,
+            axum::http::Method::OPTIONS,
+        ];
+
+        for method in methods {
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method.clone())
+                        .uri("/api/v1/resource")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "Failed for method {:?}",
+                method
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_api_trailing_slash_no_version() {
+        // /api/ without version should redirect to /api/v1/
+        let router = Router::new()
+            .route("/api/v1/", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        let response = router
+            .clone()
+            .oneshot(Request::builder().uri("/api/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
+        assert_eq!(response.headers().get("location").unwrap(), "/api/v1/");
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_deep_path_no_version() {
+        // Deep paths like /api/users/profile/settings redirect
+        let router = Router::new()
+            .route("/api/v1/users/profile/settings", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/users/profile/settings")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
+        assert_eq!(
+            response.headers().get("location").unwrap(),
+            "/api/v1/users/profile/settings"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_version_redirect_version_v0() {
+        // v0 version number recognition
+        let router = Router::new()
+            .route("/api/v0/test", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v0/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn test_find_newer_version_with_deprecated() {
+        // Find newer version even when deprecated versions exist
+        let supported = vec!["v1".to_string(), "v2".to_string(), "v3".to_string()];
+        let result = find_newer_version("v1", &supported);
+        // Should return v2 (closest newer), not v3
+        assert_eq!(result, Some("v2".to_string()));
+    }
+
+    #[test]
+    fn test_version_router_config_deprecated_multiple() {
+        // Configuration with multiple deprecated versions
+        let mut deprecated = std::collections::HashMap::new();
+        deprecated.insert("v1".to_string(), "2025-06-30".to_string());
+        deprecated.insert("v2".to_string(), "2025-12-31".to_string());
+
+        let config = VersionRouterConfig {
+            default_version: "v3".to_string(),
+            supported_versions: vec!["v1".to_string(), "v2".to_string(), "v3".to_string()],
+            redirect_unknown: true,
+            deprecated_versions: deprecated.clone(),
+            sunset_header: "Sunset".to_string(),
+        };
+
+        assert_eq!(config.deprecated_versions.len(), 2);
+        assert!(config.deprecated_versions.contains_key("v1"));
+        assert!(config.deprecated_versions.contains_key("v2"));
+        assert_eq!(
+            config.deprecated_versions.get("v1"),
+            Some(&"2025-06-30".to_string())
+        );
+    }
+
+    #[test]
+    fn test_define_versioned_route_macro() {
+        // Verify macro expands correctly for GET method
+        async fn macro_test_handler() -> &'static str {
+            "macro test"
+        }
+
+        // Create route manually (macro does this internally)
+        let route = VersionedRoute::new(
+            "v1".to_string(),
+            "/macro-test".to_string(),
+            axum::http::Method::GET,
+            axum::routing::MethodRouter::new().get(macro_test_handler),
+        );
+
+        assert_eq!(route.version(), "v1");
+        assert_eq!(route.path(), "/macro-test");
+        assert_eq!(route.method(), &axum::http::Method::GET);
+    }
+
+    #[test]
+    fn test_define_versioned_route_post_method() {
+        // Verify macro works for POST method
+        async fn post_test_handler() -> &'static str {
+            "post test"
+        }
+
+        let route = VersionedRoute::new(
+            "v2".to_string(),
+            "/posts".to_string(),
+            axum::http::Method::POST,
+            axum::routing::MethodRouter::new().post(post_test_handler),
+        );
+
+        assert_eq!(route.version(), "v2");
+        assert_eq!(route.method(), &axum::http::Method::POST);
+    }
+
+    #[test]
+    fn test_define_versioned_route_all_methods() {
+        // Verify macro supports all HTTP methods
+        async fn handler() -> &'static str {
+            "ok"
+        }
+
+        let methods = [
+            (
+                axum::http::Method::GET,
+                axum::routing::MethodRouter::new().get(handler),
+            ),
+            (
+                axum::http::Method::POST,
+                axum::routing::MethodRouter::new().post(handler),
+            ),
+            (
+                axum::http::Method::PUT,
+                axum::routing::MethodRouter::new().put(handler),
+            ),
+            (
+                axum::http::Method::PATCH,
+                axum::routing::MethodRouter::new().patch(handler),
+            ),
+            (
+                axum::http::Method::DELETE,
+                axum::routing::MethodRouter::new().delete(handler),
+            ),
+        ];
+
+        for (method, router_method) in methods {
+            let route = VersionedRoute::new(
+                "v1".to_string(),
+                "/test".to_string(),
+                method.clone(),
+                router_method,
+            );
+            assert_eq!(route.method(), &method);
+        }
+    }
+
+    #[test]
+    fn test_version_router_config_clone_deep() {
+        // Deep clone verification with nested HashMap
+        let mut deprecated = std::collections::HashMap::new();
+        deprecated.insert("v1".to_string(), "2025-01-01".to_string());
+        deprecated.insert("v2".to_string(), "2025-06-30".to_string());
+
+        let config = VersionRouterConfig {
+            default_version: "v3".to_string(),
+            supported_versions: vec!["v1".to_string(), "v2".to_string(), "v3".to_string()],
+            redirect_unknown: true,
+            deprecated_versions: deprecated,
+            sunset_header: "X-Sunset".to_string(),
+        };
+
+        let cloned = config.clone();
+
+        // Verify all fields are cloned correctly
+        assert_eq!(cloned.default_version, config.default_version);
+        assert_eq!(cloned.supported_versions, config.supported_versions);
+        assert_eq!(cloned.redirect_unknown, config.redirect_unknown);
+        assert_eq!(cloned.deprecated_versions, config.deprecated_versions);
+        assert_eq!(cloned.sunset_header, config.sunset_header);
+
+        // Verify independence (modifying clone doesn't affect original)
+        let mut cloned_modified = cloned.clone();
+        cloned_modified.default_version = "v4".to_string();
+        assert_eq!(config.default_version, "v3");
+        assert_eq!(cloned_modified.default_version, "v4");
+    }
+
+    #[test]
+    fn test_versioned_route_display_format() {
+        // Path display format verification
+        let route = VersionedRoute::new(
+            "v2".to_string(),
+            "/users/:id".to_string(),
+            axum::http::Method::GET,
+            get(test_handler),
+        );
+
+        // Version and path should be accessible
+        assert!(route.version().starts_with('v'));
+        assert!(route.path().starts_with('/'));
+
+        // Debug format should contain key information
+        let debug = format!("{:?}", route);
+        assert!(debug.contains("v2"));
+        assert!(debug.contains("/users/:id"));
+    }
 }

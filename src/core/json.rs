@@ -182,3 +182,138 @@ pub fn simd_from_slice<T: serde::de::DeserializeOwned>(slice: &[u8]) -> Result<T
 pub fn simd_from_str<T: serde::de::DeserializeOwned>(s: &str) -> Result<T, String> {
     serde_json::from_str(s).map_err(|e| format!("JSON deserialization failed: {}", e))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq)]
+    struct TestData {
+        name: String,
+        value: i32,
+    }
+
+    #[test]
+    fn test_error_response_structure() {
+        let json = error_response("NOT_FOUND", "Resource not found");
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert_eq!(parsed["error"]["code"], "NOT_FOUND");
+        assert_eq!(parsed["error"]["message"], "Resource not found");
+    }
+
+    #[test]
+    fn test_success_response_with_data() {
+        let data = TestData {
+            name: "test".to_string(),
+            value: 42,
+        };
+        let json = success_response(&data);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], true);
+        assert_eq!(parsed["data"]["name"], "test");
+        assert_eq!(parsed["data"]["value"], 42);
+    }
+
+    #[test]
+    fn test_paginated_response_basic() {
+        let items = vec!["item1", "item2", "item3"];
+        let json = paginated_response(&items, 1, 2, 5);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], true);
+        assert_eq!(parsed["data"]["pagination"]["page"], 1);
+        assert_eq!(parsed["data"]["pagination"]["page_size"], 2);
+        assert_eq!(parsed["data"]["pagination"]["total_items"], 5);
+        assert_eq!(parsed["data"]["pagination"]["total_pages"], 3);
+        assert_eq!(parsed["data"]["pagination"]["has_next"], true);
+        assert_eq!(parsed["data"]["pagination"]["has_previous"], false);
+    }
+
+    #[test]
+    fn test_paginated_response_last_page() {
+        let items = vec!["item5"];
+        let json = paginated_response(&items, 3, 2, 5);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["data"]["pagination"]["has_next"], false);
+        assert_eq!(parsed["data"]["pagination"]["has_previous"], true);
+    }
+
+    #[test]
+    fn test_paginated_response_zero_page_size() {
+        let items: Vec<&str> = vec![];
+        let json = paginated_response(&items, 1, 0, 0);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["data"]["pagination"]["total_pages"], 0);
+    }
+
+    #[test]
+    fn test_api_metadata_response_structure() {
+        let json = api_metadata_response("users", "v1", "User management API");
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], true);
+        assert_eq!(parsed["api"]["name"], "users");
+        assert_eq!(parsed["api"]["version"], "v1");
+        assert_eq!(parsed["api"]["description"], "User management API");
+    }
+
+    #[test]
+    fn test_simd_to_string_basic() {
+        let data = TestData {
+            name: "simd".to_string(),
+            value: 100,
+        };
+        let result = simd_to_string(&data);
+        assert!(result.is_ok());
+        let json = result.unwrap();
+        assert!(json.contains("simd"));
+    }
+
+    #[test]
+    fn test_simd_from_slice_basic() {
+        let json = br#"{"name":"test","value":42}"#;
+        let result: Result<TestData, _> = simd_from_slice(json);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+        assert_eq!(data.name, "test");
+        assert_eq!(data.value, 42);
+    }
+
+    #[test]
+    fn test_simd_from_slice_invalid() {
+        let result: Result<serde_json::Value, _> = simd_from_slice(b"not json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_simd_from_str_basic() {
+        let json = r#"{"name":"str-test","value":99}"#;
+        let result: Result<TestData, _> = simd_from_str(json);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().name, "str-test");
+    }
+
+    #[test]
+    fn test_simd_from_str_invalid() {
+        let result: Result<serde_json::Value, _> = simd_from_str("not json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_simd_roundtrip() {
+        let original = TestData {
+            name: "roundtrip".to_string(),
+            value: 777,
+        };
+        let json = simd_to_string(&original).unwrap();
+        let restored: TestData = simd_from_str(&json).unwrap();
+        assert_eq!(original, restored);
+    }
+
+    #[test]
+    fn test_simd_roundtrip_via_slice() {
+        let original = vec![1, 2, 3];
+        let json = simd_to_string(&original).unwrap();
+        let restored: Vec<i32> = simd_from_slice(json.as_bytes()).unwrap();
+        assert_eq!(original, restored);
+    }
+}

@@ -2414,4 +2414,919 @@ mod tests {
         assert!(serialized.contains("\"tool1\""));
         assert!(serialized.contains("\"tool2\""));
     }
+
+    // ============================================================================
+    // get_mcp_tools() Tests
+    // ============================================================================
+
+    #[test]
+    fn test_get_mcp_tools_returns_tools() {
+        let tools = get_mcp_tools();
+        for tool in &tools {
+            assert!(!tool.metadata().name().is_empty());
+            assert!(!tool.metadata().version().is_empty());
+        }
+    }
+
+    #[test]
+    fn test_get_mcp_tools_creates_valid_instances() {
+        fn create_greet_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+            struct GreetTool;
+            impl mcp_sdk::tools::Tool for GreetTool {
+                fn name(&self) -> String {
+                    "greet".to_string()
+                }
+                fn description(&self) -> String {
+                    "Greets a user".to_string()
+                }
+                fn input_schema(&self) -> serde_json::Value {
+                    serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"}
+                        }
+                    })
+                }
+                fn call(
+                    &self,
+                    input: Option<serde_json::Value>,
+                ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                    let name = input
+                        .as_ref()
+                        .and_then(|v| v["name"].as_str())
+                        .unwrap_or("World")
+                        .to_string();
+                    Ok(mcp_sdk::types::CallToolResponse {
+                        content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                            text: format!("Hello, {}!", name),
+                        }],
+                        is_error: None,
+                        meta: None,
+                    })
+                }
+            }
+            Arc::new(GreetTool) as Arc<dyn mcp_sdk::tools::Tool>
+        }
+
+        let reg = McpToolRegistration::new("greet", "v1", create_greet_tool, || ApiMetadata {
+            name: "greet".to_string(),
+            version: "v1".to_string(),
+            description: "Greets a user".to_string(),
+            cache_ttl: None,
+            is_streaming: false,
+        });
+
+        let tool = reg.create();
+        let instance = McpToolInstance {
+            tool,
+            metadata: ApiMetadata::new(
+                reg.name().to_string(),
+                reg.version().to_string(),
+                reg.metadata().description().to_string(),
+                None,
+                false,
+            ),
+        };
+
+        assert_eq!(instance.metadata().name(), "greet");
+        assert_eq!(instance.metadata().version(), "v1");
+        assert_eq!(instance.metadata().description(), "Greets a user");
+        assert_eq!(instance.tool().name(), "greet");
+    }
+
+    // ============================================================================
+    // build() Async Function Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_build_empty_server() {
+        let server = build().await;
+        drop(server);
+    }
+
+    #[tokio::test]
+    async fn test_build_server_metadata_from_tools() {
+        let server = build().await;
+        drop(server);
+    }
+
+    // ============================================================================
+    // McpToolInstance Comprehensive Tests
+    // ============================================================================
+
+    #[test]
+    fn test_mcp_tool_instance_tool_accessor() {
+        struct AccessorTool;
+        impl mcp_sdk::tools::Tool for AccessorTool {
+            fn name(&self) -> String {
+                "accessor".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(AccessorTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let metadata = ApiMetadata::new(
+            "accessor".to_string(),
+            "v2".to_string(),
+            "Accessor tool".to_string(),
+            Some(120),
+            true,
+        );
+        let instance = McpToolInstance { tool, metadata };
+
+        let tool_ref = instance.tool();
+        assert_eq!(tool_ref.name(), "accessor");
+        assert_eq!(tool_ref.description(), "desc");
+    }
+
+    #[test]
+    fn test_mcp_tool_instance_metadata_accessor() {
+        struct MetaTool2;
+        impl mcp_sdk::tools::Tool for MetaTool2 {
+            fn name(&self) -> String {
+                "meta2".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(MetaTool2) as Arc<dyn mcp_sdk::tools::Tool>;
+        let metadata = ApiMetadata::new(
+            "meta2".to_string(),
+            "v3.1".to_string(),
+            "Metadata test".to_string(),
+            Some(300),
+            false,
+        );
+        let instance = McpToolInstance { tool, metadata };
+
+        let meta_ref = instance.metadata();
+        assert_eq!(meta_ref.name(), "meta2");
+        assert_eq!(meta_ref.version(), "v3.1");
+        assert_eq!(meta_ref.description(), "Metadata test");
+        assert_eq!(meta_ref.cache_ttl(), Some(300));
+        assert!(!meta_ref.is_streaming());
+    }
+
+    // ============================================================================
+    // ArcToolWrapper Comprehensive Tests
+    // ============================================================================
+
+    #[test]
+    fn test_arc_tool_wrapper_all_methods() {
+        struct FullTool;
+        impl mcp_sdk::tools::Tool for FullTool {
+            fn name(&self) -> String {
+                "full_wrapper".to_string()
+            }
+            fn description(&self) -> String {
+                "Full wrapper test".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "input": {"type": "string"}
+                    }
+                })
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                let val = input
+                    .as_ref()
+                    .and_then(|v| v["input"].as_str())
+                    .unwrap_or("default");
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                        text: format!("processed: {}", val),
+                    }],
+                    is_error: None,
+                    meta: Some(serde_json::json!({"processed": true})),
+                })
+            }
+        }
+
+        let inner = Arc::new(FullTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner };
+
+        assert_eq!(wrapper.name(), "full_wrapper");
+        assert_eq!(wrapper.description(), "Full wrapper test");
+
+        let schema = wrapper.input_schema();
+        assert_eq!(schema["type"], "object");
+        assert!(schema["properties"]["input"].is_object());
+
+        let result = wrapper.call(Some(serde_json::json!({"input": "hello"})));
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response.content.len(), 1);
+        assert!(response.meta.is_some());
+        assert_eq!(response.meta.unwrap()["processed"], true);
+    }
+
+    #[test]
+    fn test_arc_tool_wrapper_with_none_input() {
+        struct NoneInputTool;
+        impl mcp_sdk::tools::Tool for NoneInputTool {
+            fn name(&self) -> String {
+                "none_input".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                        text: if input.is_none() {
+                            "no input"
+                        } else {
+                            "has input"
+                        }
+                        .to_string(),
+                    }],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let inner = Arc::new(NoneInputTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner };
+
+        let result = wrapper.call(None);
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        match &response.content[0] {
+            mcp_sdk::types::ToolResponseContent::Text { text } => {
+                assert_eq!(text, "no input");
+            }
+            _ => panic!("Expected text content"),
+        }
+    }
+
+    // ============================================================================
+    // McpToolRegistration Comprehensive Tests
+    // ============================================================================
+
+    #[test]
+    fn test_mcp_tool_registration_metadata_fn() {
+        fn create_meta_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+            struct MetaRegTool;
+            impl mcp_sdk::tools::Tool for MetaRegTool {
+                fn name(&self) -> String {
+                    "meta_reg".to_string()
+                }
+                fn description(&self) -> String {
+                    "desc".to_string()
+                }
+                fn input_schema(&self) -> serde_json::Value {
+                    serde_json::json!({"type": "object"})
+                }
+                fn call(
+                    &self,
+                    _input: Option<serde_json::Value>,
+                ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                    Ok(mcp_sdk::types::CallToolResponse {
+                        content: vec![],
+                        is_error: None,
+                        meta: None,
+                    })
+                }
+            }
+            Arc::new(MetaRegTool) as Arc<dyn mcp_sdk::tools::Tool>
+        }
+
+        let reg = McpToolRegistration::new("meta_reg", "v1", create_meta_tool, || ApiMetadata {
+            name: "meta_reg".to_string(),
+            version: "v1".to_string(),
+            description: "Metadata registration test".to_string(),
+            cache_ttl: Some(600),
+            is_streaming: true,
+        });
+
+        let metadata = reg.metadata();
+        assert_eq!(metadata.name(), "meta_reg");
+        assert_eq!(metadata.version(), "v1");
+        assert_eq!(metadata.description(), "Metadata registration test");
+        assert_eq!(metadata.cache_ttl(), Some(600));
+        assert!(metadata.is_streaming());
+    }
+
+    #[test]
+    fn test_mcp_tool_registration_send_sync_bounds() {
+        fn create_sync_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+            struct SyncTool;
+            impl mcp_sdk::tools::Tool for SyncTool {
+                fn name(&self) -> String {
+                    "sync".to_string()
+                }
+                fn description(&self) -> String {
+                    "desc".to_string()
+                }
+                fn input_schema(&self) -> serde_json::Value {
+                    serde_json::json!({"type": "object"})
+                }
+                fn call(
+                    &self,
+                    _input: Option<serde_json::Value>,
+                ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                    Ok(mcp_sdk::types::CallToolResponse {
+                        content: vec![],
+                        is_error: None,
+                        meta: None,
+                    })
+                }
+            }
+            Arc::new(SyncTool) as Arc<dyn mcp_sdk::tools::Tool>
+        }
+
+        let reg = McpToolRegistration::new("sync_tool", "v1", create_sync_tool, || ApiMetadata {
+            name: "sync".to_string(),
+            version: "v1".to_string(),
+            description: "Sync test".to_string(),
+            cache_ttl: None,
+            is_streaming: false,
+        });
+
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<McpToolRegistration>();
+
+        fn assert_static<T: 'static>() {}
+        assert_static::<McpToolRegistration>();
+
+        drop(reg);
+    }
+
+    // ============================================================================
+    // Integration: Registration -> Instance -> Wrapper Flow
+    // ============================================================================
+
+    #[test]
+    fn test_full_flow_registration_to_wrapper() {
+        fn create_flow_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+            struct FlowTool;
+            impl mcp_sdk::tools::Tool for FlowTool {
+                fn name(&self) -> String {
+                    "flow".to_string()
+                }
+                fn description(&self) -> String {
+                    "Full flow test".to_string()
+                }
+                fn input_schema(&self) -> serde_json::Value {
+                    serde_json::json!({"type": "object"})
+                }
+                fn call(
+                    &self,
+                    input: Option<serde_json::Value>,
+                ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                    Ok(mcp_sdk::types::CallToolResponse {
+                        content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                            text: format!("flow: {:?}", input),
+                        }],
+                        is_error: None,
+                        meta: None,
+                    })
+                }
+            }
+            Arc::new(FlowTool) as Arc<dyn mcp_sdk::tools::Tool>
+        }
+
+        let reg = McpToolRegistration::new("flow", "v1", create_flow_tool, || ApiMetadata {
+            name: "flow".to_string(),
+            version: "v1".to_string(),
+            description: "Full flow test".to_string(),
+            cache_ttl: None,
+            is_streaming: false,
+        });
+
+        let tool = reg.create();
+
+        let instance = McpToolInstance {
+            tool: tool.clone(),
+            metadata: ApiMetadata::new(
+                reg.name().to_string(),
+                reg.version().to_string(),
+                reg.metadata().description().to_string(),
+                None,
+                false,
+            ),
+        };
+
+        let wrapper = ArcToolWrapper {
+            inner: instance.tool().clone(),
+        };
+
+        assert_eq!(wrapper.name(), "flow");
+        assert_eq!(wrapper.description(), "Full flow test");
+        assert_eq!(instance.metadata().name(), "flow");
+        assert_eq!(instance.metadata().version(), "v1");
+
+        let result = wrapper.call(Some(serde_json::json!({"test": true})));
+        assert!(result.is_ok());
+    }
+
+    // ============================================================================
+    // ApiMetadata Default and Edge Cases
+    // ============================================================================
+
+    #[test]
+    fn test_api_metadata_default() {
+        let metadata = ApiMetadata::default();
+        assert_eq!(metadata.name(), "");
+        assert_eq!(metadata.version(), "");
+        assert_eq!(metadata.description(), "");
+        assert_eq!(metadata.cache_ttl(), None);
+        assert!(!metadata.is_streaming());
+    }
+
+    #[test]
+    fn test_api_metadata_clone() {
+        let metadata = ApiMetadata {
+            name: "clone_test".to_string(),
+            version: "v1".to_string(),
+            description: "Clone test".to_string(),
+            cache_ttl: Some(300),
+            is_streaming: false,
+        };
+
+        let cloned = metadata.clone();
+        assert_eq!(cloned.name(), "clone_test");
+        assert_eq!(cloned.version(), "v1");
+        assert_eq!(cloned.cache_ttl(), Some(300));
+    }
+
+    #[test]
+    fn test_api_metadata_equality() {
+        let meta1 = ApiMetadata {
+            name: "eq".to_string(),
+            version: "v1".to_string(),
+            description: "desc".to_string(),
+            cache_ttl: None,
+            is_streaming: false,
+        };
+        let meta2 = ApiMetadata {
+            name: "eq".to_string(),
+            version: "v1".to_string(),
+            description: "desc".to_string(),
+            cache_ttl: None,
+            is_streaming: false,
+        };
+        let meta3 = ApiMetadata {
+            name: "eq".to_string(),
+            version: "v2".to_string(),
+            description: "desc".to_string(),
+            cache_ttl: None,
+            is_streaming: false,
+        };
+
+        assert_eq!(meta1, meta2);
+        assert_ne!(meta1, meta3);
+    }
+
+    #[test]
+    fn test_api_metadata_debug_impl() {
+        let metadata = ApiMetadata {
+            name: "debug".to_string(),
+            version: "v1".to_string(),
+            description: "Debug test".to_string(),
+            cache_ttl: Some(100),
+            is_streaming: true,
+        };
+
+        let debug_str = format!("{:?}", metadata);
+        assert!(debug_str.contains("debug"));
+        assert!(debug_str.contains("v1"));
+    }
+
+    // ============================================================================
+    // Tool Response Content Types
+    // ============================================================================
+
+    #[test]
+    fn test_tool_response_content_variants() {
+        let text_content = mcp_sdk::types::ToolResponseContent::Text {
+            text: "test".to_string(),
+        };
+        match text_content {
+            mcp_sdk::types::ToolResponseContent::Text { text } => {
+                assert_eq!(text, "test");
+            }
+            _ => panic!("Expected Text variant"),
+        }
+    }
+
+    // ============================================================================
+    // JSON-RPC Version Tests
+    // ============================================================================
+
+    #[test]
+    fn test_json_rpc_version_default_is_2_0() {
+        use mcp_sdk::transport::JsonRpcVersion;
+
+        let version = JsonRpcVersion::default();
+        assert_eq!(version.as_str(), "2.0");
+    }
+
+    // ============================================================================
+    // Tool Call with Special JSON Values
+    // ============================================================================
+
+    #[test]
+    fn test_tool_call_with_boolean_input() {
+        struct BoolTool;
+        impl mcp_sdk::tools::Tool for BoolTool {
+            fn name(&self) -> String {
+                "bool".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "boolean"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                let val = input.unwrap_or(serde_json::json!(false));
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                        text: val.to_string(),
+                    }],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(BoolTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner: tool };
+
+        let result = wrapper.call(Some(serde_json::json!(true)));
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        match &response.content[0] {
+            mcp_sdk::types::ToolResponseContent::Text { text } => {
+                assert_eq!(text, "true");
+            }
+            _ => panic!("Expected text"),
+        }
+    }
+
+    #[test]
+    fn test_tool_call_with_numeric_input() {
+        struct NumberTool;
+        impl mcp_sdk::tools::Tool for NumberTool {
+            fn name(&self) -> String {
+                "number".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "number"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                let val = input.and_then(|v| v.as_f64()).unwrap_or(0.0);
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                        text: format!("num: {}", val),
+                    }],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(NumberTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner: tool };
+
+        let result = wrapper.call(Some(serde_json::json!(42.5)));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_tool_call_with_string_input() {
+        struct StringTool;
+        impl mcp_sdk::tools::Tool for StringTool {
+            fn name(&self) -> String {
+                "string".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "string"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                let val = input
+                    .as_ref()
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("default");
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                        text: val.to_string(),
+                    }],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(StringTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner: tool };
+
+        let result = wrapper.call(Some(serde_json::json!("hello world")));
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        match &response.content[0] {
+            mcp_sdk::types::ToolResponseContent::Text { text } => {
+                assert_eq!(text, "hello world");
+            }
+            _ => panic!("Expected text"),
+        }
+    }
+
+    // ============================================================================
+    // Concurrent Tool Execution Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_concurrent_tool_calls() {
+        struct ConcurrentTool;
+        impl mcp_sdk::tools::Tool for ConcurrentTool {
+            fn name(&self) -> String {
+                "concurrent".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                let val = input.unwrap_or(serde_json::json!({}));
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                        text: val.to_string(),
+                    }],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(ConcurrentTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner: tool };
+
+        let mut handles = vec![];
+        for i in 0..5 {
+            let w = ArcToolWrapper {
+                inner: wrapper.inner.clone(),
+            };
+            let handle = tokio::spawn(async move {
+                w.call(Some(serde_json::json!({"task": i})))
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            let result = handle.await.expect("task should not panic");
+            assert!(result.is_ok());
+        }
+    }
+
+    // ============================================================================
+    // McpToolInstance with Various Metadata Configurations
+    // ============================================================================
+
+    #[test]
+    fn test_mcp_tool_instance_with_streaming_metadata() {
+        struct StreamTool;
+        impl mcp_sdk::tools::Tool for StreamTool {
+            fn name(&self) -> String {
+                "stream".to_string()
+            }
+            fn description(&self) -> String {
+                "Streaming tool".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(StreamTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let metadata = ApiMetadata::new(
+            "stream".to_string(),
+            "v1".to_string(),
+            "Streaming tool".to_string(),
+            None,
+            true,
+        );
+        let instance = McpToolInstance { tool, metadata };
+
+        assert!(instance.metadata().is_streaming());
+        assert_eq!(instance.metadata().name(), "stream");
+    }
+
+    #[test]
+    fn test_mcp_tool_instance_with_cache_metadata() {
+        struct CacheTool;
+        impl mcp_sdk::tools::Tool for CacheTool {
+            fn name(&self) -> String {
+                "cache".to_string()
+            }
+            fn description(&self) -> String {
+                "Cached tool".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+
+        let tool = Arc::new(CacheTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let metadata = ApiMetadata::new(
+            "cache".to_string(),
+            "v1".to_string(),
+            "Cached tool".to_string(),
+            Some(3600),
+            false,
+        );
+        let instance = McpToolInstance { tool, metadata };
+
+        assert_eq!(instance.metadata().cache_ttl(), Some(3600));
+        assert!(!instance.metadata().is_streaming());
+    }
+
+    // ============================================================================
+    // build() with Registered Tools (simulated)
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_build_with_simulated_tools() {
+        let tools = get_mcp_tools();
+
+        for tool in &tools {
+            assert!(!tool.tool().name().is_empty());
+            assert!(!tool.metadata().name().is_empty());
+        }
+
+        let server = build().await;
+        drop(server);
+    }
+
+    // ============================================================================
+    // Error Edge Cases
+    // ============================================================================
+
+    #[test]
+    fn test_tool_call_with_malformed_json_input() {
+        struct MalformedTool;
+        impl mcp_sdk::tools::Tool for MalformedTool {
+            fn name(&self) -> String {
+                "malformed".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                match input {
+                    Some(v) if v.is_object() => Ok(mcp_sdk::types::CallToolResponse {
+                        content: vec![],
+                        is_error: None,
+                        meta: None,
+                    }),
+                    _ => Err(anyhow::anyhow!("Expected object, got something else")),
+                }
+            }
+        }
+
+        let tool = Arc::new(MalformedTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner: tool };
+
+        let result = wrapper.call(Some(serde_json::json!([1, 2, 3])));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Expected object"));
+    }
+
+    #[test]
+    fn test_tool_call_with_empty_object() {
+        struct EmptyObjTool;
+        impl mcp_sdk::tools::Tool for EmptyObjTool {
+            fn name(&self) -> String {
+                "empty_obj".to_string()
+            }
+            fn description(&self) -> String {
+                "desc".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                match input {
+                    Some(v) if v.as_object().map(|o| o.is_empty()).unwrap_or(false) => {
+                        Ok(mcp_sdk::types::CallToolResponse {
+                            content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                                text: "empty object".to_string(),
+                            }],
+                            is_error: None,
+                            meta: None,
+                        })
+                    }
+                    None => Ok(mcp_sdk::types::CallToolResponse {
+                        content: vec![mcp_sdk::types::ToolResponseContent::Text {
+                            text: "no input".to_string(),
+                        }],
+                        is_error: None,
+                        meta: None,
+                    }),
+                    _ => Err(anyhow::anyhow!("Expected empty object")),
+                }
+            }
+        }
+
+        let tool = Arc::new(EmptyObjTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        let wrapper = ArcToolWrapper { inner: tool };
+
+        let result = wrapper.call(Some(serde_json::json!({})));
+        assert!(result.is_ok());
+    }
 }

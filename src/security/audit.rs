@@ -847,4 +847,642 @@ mod tests {
         logger.clear_logs("test_user");
         assert_eq!(logger.get_logs("test_user").len(), 0);
     }
+
+    // ============================================================================
+    // AppAuditLoggerBuilder Tests
+    // ============================================================================
+
+    #[test]
+    fn test_builder_new_default_values() {
+        let builder = AppAuditLoggerBuilder::new();
+        assert_eq!(builder.max_logs_per_user, 1000);
+        assert_eq!(builder.max_concurrent_ops, 100);
+        assert_eq!(builder.queue_size, 1000);
+    }
+
+    #[test]
+    fn test_builder_default_trait() {
+        let builder = AppAuditLoggerBuilder::default();
+        assert_eq!(builder.max_logs_per_user, 1000);
+        assert_eq!(builder.max_concurrent_ops, 100);
+        assert_eq!(builder.queue_size, 1000);
+    }
+
+    #[test]
+    fn test_builder_max_logs_per_user() {
+        let builder = AppAuditLoggerBuilder::new().max_logs_per_user(500);
+        assert_eq!(builder.max_logs_per_user, 500);
+    }
+
+    #[test]
+    fn test_builder_max_concurrent_ops() {
+        let builder = AppAuditLoggerBuilder::new().max_concurrent_ops(50);
+        assert_eq!(builder.max_concurrent_ops, 50);
+    }
+
+    #[test]
+    fn test_builder_queue_size() {
+        let builder = AppAuditLoggerBuilder::new().queue_size(2000);
+        assert_eq!(builder.queue_size, 2000);
+    }
+
+    #[test]
+    fn test_builder_chaining() {
+        let builder = AppAuditLoggerBuilder::new()
+            .max_logs_per_user(500)
+            .max_concurrent_ops(50)
+            .queue_size(2000);
+        assert_eq!(builder.max_logs_per_user, 500);
+        assert_eq!(builder.max_concurrent_ops, 50);
+        assert_eq!(builder.queue_size, 2000);
+    }
+
+    #[tokio::test]
+    async fn test_builder_build() {
+        let logger = AppAuditLoggerBuilder::new()
+            .max_logs_per_user(500)
+            .max_concurrent_ops(50)
+            .queue_size(2000)
+            .build();
+        assert_eq!(logger.max_logs_per_user, 500);
+        assert_eq!(logger.dropped_log_count(), 0);
+    }
+
+    // ============================================================================
+    // AppAuditLogger::builder() Tests
+    // ============================================================================
+
+    #[test]
+    fn test_audit_logger_builder_method() {
+        let builder = AppAuditLogger::builder();
+        assert_eq!(builder.max_logs_per_user, 1000);
+        assert_eq!(builder.max_concurrent_ops, 100);
+        assert_eq!(builder.queue_size, 1000);
+    }
+
+    // ============================================================================
+    // AppAuditLogger::log_key_rotation Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_log_key_rotation_success() {
+        let logger = AppAuditLogger::with_limit(10);
+        logger
+            .log_key_rotation("key-123", "v1", "v2", true, None)
+            .await;
+
+        let logs = logger.get_logs("system");
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].action(), "key_rotation");
+        assert_eq!(logs[0].resource(), "api_key");
+    }
+
+    #[tokio::test]
+    async fn test_log_key_rotation_failure() {
+        let logger = AppAuditLogger::with_limit(10);
+        logger
+            .log_key_rotation(
+                "key-456",
+                "v1",
+                "v2",
+                false,
+                Some("Rotation failed".to_string()),
+            )
+            .await;
+
+        let logs = logger.get_logs("system");
+        assert_eq!(logs.len(), 1);
+        assert!(matches!(logs[0].result(), AuditResult::Failure { .. }));
+    }
+
+    // ============================================================================
+    // AppAuditLogger::total_log_count Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_total_log_count_returns_zero() {
+        let logger = AppAuditLogger::new();
+        assert_eq!(logger.total_log_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_total_log_count_after_logging() {
+        let logger = AppAuditLogger::with_limit(10);
+        let context = AuthContext {
+            user_id: Some("test_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+        logger
+            .log(&context, "action1", "resource1", true, None)
+            .await;
+        // total_log_count always returns 0 because SyncCache doesn't support iteration
+        assert_eq!(logger.total_log_count(), 0);
+    }
+
+    // ============================================================================
+    // AppAuditLogger::dropped_log_count Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_dropped_log_count_initial_value() {
+        let logger = AppAuditLogger::new();
+        assert_eq!(logger.dropped_log_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_dropped_log_count_after_logging() {
+        let logger = AppAuditLogger::with_limit(10);
+        let context = AuthContext {
+            user_id: Some("test_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+        logger.log(&context, "action", "resource", true, None).await;
+        // Channel is not full, so dropped count should still be 0
+        assert_eq!(logger.dropped_log_count(), 0);
+    }
+
+    // ============================================================================
+    // AppAuditLogger::log() with Failure + Error Sanitization Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_log_failure_with_message() {
+        let logger = AppAuditLogger::with_limit(10);
+        let context = AuthContext {
+            user_id: Some("test_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+
+        logger
+            .log(
+                &context,
+                "delete_resource",
+                "/api/resource/123",
+                false,
+                Some("Permission denied".to_string()),
+            )
+            .await;
+
+        let logs = logger.get_logs("test_user");
+        assert_eq!(logs.len(), 1);
+        match logs[0].result() {
+            AuditResult::Failure { message } => {
+                assert_eq!(message, "Permission denied");
+            }
+            _ => panic!("Expected Failure result"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_log_failure_sanitizes_sensitive_data() {
+        let logger = AppAuditLogger::with_limit(10);
+        let context = AuthContext {
+            user_id: Some("test_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+
+        // Error message with password should be sanitized
+        logger
+            .log(
+                &context,
+                "auth",
+                "/api/login",
+                false,
+                Some("Failed with password=secret123".to_string()),
+            )
+            .await;
+
+        let logs = logger.get_logs("test_user");
+        assert_eq!(logs.len(), 1);
+        match logs[0].result() {
+            AuditResult::Failure { message } => {
+                assert!(
+                    !message.contains("secret123"),
+                    "Password should be sanitized"
+                );
+                assert!(
+                    message.contains("[REDACTED]"),
+                    "Should contain redacted marker"
+                );
+            }
+            _ => panic!("Expected Failure result"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_log_failure_default_message() {
+        let logger = AppAuditLogger::with_limit(10);
+        let context = AuthContext {
+            user_id: Some("test_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+
+        logger
+            .log(&context, "action", "resource", false, None)
+            .await;
+
+        let logs = logger.get_logs("test_user");
+        match logs[0].result() {
+            AuditResult::Failure { message } => {
+                assert_eq!(message, "Unknown error");
+            }
+            _ => panic!("Expected Failure result"),
+        }
+    }
+
+    // ============================================================================
+    // AuditLogger Trait Implementation Tests
+    // ============================================================================
+
+    #[test]
+    fn test_audit_logger_trait_log() {
+        use crate::security::traits::AuditLogger;
+
+        // Use a runtime to ensure tokio tasks are properly scheduled
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let logger = AppAuditLogger::with_limit(10);
+            let log = AuditLog {
+                id: "trait-test-id".to_string(),
+                timestamp: chrono::Utc::now().timestamp(),
+                user_id: Some("trait_user".to_string()),
+                action: "trait_action".to_string(),
+                resource: "trait_resource".to_string(),
+                result: AuditResult::Success,
+                metadata: AuthMetadata::default(),
+                signature: None,
+            };
+
+            // Call the trait method - it spawns a background thread
+            AuditLogger::log(&logger, log);
+
+            // Give the background thread time to complete
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+            let logs = logger.get_logs("trait_user");
+            assert_eq!(logs.len(), 1);
+            assert_eq!(logs[0].action(), "trait_action");
+        });
+    }
+
+    #[test]
+    fn test_audit_logger_trait_log_failure() {
+        use crate::security::traits::AuditLogger;
+
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let logger = AppAuditLogger::with_limit(10);
+            let log = AuditLog {
+                id: "trait-fail-id".to_string(),
+                timestamp: chrono::Utc::now().timestamp(),
+                user_id: Some("trait_fail_user".to_string()),
+                action: "trait_fail_action".to_string(),
+                resource: "trait_fail_resource".to_string(),
+                result: AuditResult::Failure {
+                    message: "Trait test failure".to_string(),
+                },
+                metadata: AuthMetadata::default(),
+                signature: None,
+            };
+
+            AuditLogger::log(&logger, log);
+
+            // Give the background thread time to complete
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+            let logs = logger.get_logs("trait_fail_user");
+            assert_eq!(logs.len(), 1);
+            match logs[0].result() {
+                AuditResult::Failure { message } => {
+                    assert_eq!(message, "Trait test failure");
+                }
+                _ => panic!("Expected Failure result"),
+            }
+        });
+    }
+
+    // ============================================================================
+    // Multiple Log Entries and Truncation Tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_multiple_log_entries_per_user() {
+        let logger = AppAuditLogger::with_limit(10);
+        let context = AuthContext {
+            user_id: Some("multi_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+
+        for i in 0..5 {
+            logger
+                .log(
+                    &context,
+                    format!("action_{}", i),
+                    format!("resource_{}", i),
+                    true,
+                    None,
+                )
+                .await;
+        }
+
+        let logs = logger.get_logs("multi_user");
+        assert_eq!(logs.len(), 5);
+    }
+
+    #[tokio::test]
+    async fn test_log_truncation_when_exceeding_limit() {
+        let logger = AppAuditLogger::with_limit(3);
+        let context = AuthContext {
+            user_id: Some("trunc_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+
+        for i in 0..5 {
+            logger
+                .log(
+                    &context,
+                    format!("action_{}", i),
+                    format!("resource_{}", i),
+                    true,
+                    None,
+                )
+                .await;
+        }
+
+        let logs = logger.get_logs("trunc_user");
+        // Should be truncated to max_logs_per_user (3)
+        assert_eq!(logs.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_multiple_users_independent_logs() {
+        let logger = AppAuditLogger::with_limit(10);
+
+        let context1 = AuthContext {
+            user_id: Some("user_a".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+        let context2 = AuthContext {
+            user_id: Some("user_b".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+
+        logger
+            .log(&context1, "action_a", "resource_a", true, None)
+            .await;
+        logger
+            .log(&context2, "action_b", "resource_b", true, None)
+            .await;
+
+        let logs_a = logger.get_logs("user_a");
+        let logs_b = logger.get_logs("user_b");
+
+        assert_eq!(logs_a.len(), 1);
+        assert_eq!(logs_a[0].action(), "action_a");
+        assert_eq!(logs_b.len(), 1);
+        assert_eq!(logs_b[0].action(), "action_b");
+    }
+
+    #[tokio::test]
+    async fn test_log_with_anonymous_user() {
+        let logger = AppAuditLogger::with_limit(10);
+        let context = AuthContext {
+            user_id: None,
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+
+        logger
+            .log(&context, "anonymous_action", "resource", true, None)
+            .await;
+
+        let logs = logger.get_logs("anonymous");
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].action(), "anonymous_action");
+    }
+
+    #[tokio::test]
+    async fn test_default_audit_logger() {
+        let logger = AppAuditLogger::default();
+        assert_eq!(logger.max_logs_per_user, 1000);
+    }
+
+    // ============================================================================
+    // Additional Boundary Tests for sanitize_error_message
+    // ============================================================================
+
+    #[test]
+    fn test_sanitize_jwt_token() {
+        let message = "Authentication failed for JWT: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+        let sanitized = sanitize_error_message(message);
+        assert!(sanitized.contains("[REDACTED_JWT]"));
+        assert!(!sanitized.contains("eyJ"));
+    }
+
+    #[test]
+    fn test_sanitize_password_in_error() {
+        let message = "Connection failed: password=my_secret_123";
+        let sanitized = sanitize_error_message(message);
+        assert!(sanitized.contains("password=[REDACTED]"));
+        assert!(!sanitized.contains("my_secret_123"));
+    }
+
+    #[test]
+    fn test_sanitize_secret_in_json() {
+        let message = r#"Error: password="secret123" token="abc456""#;
+        let sanitized = sanitize_error_message(message);
+        assert!(
+            !sanitized.contains("secret123"),
+            "Password should be redacted, got: {}",
+            sanitized
+        );
+        assert!(
+            !sanitized.contains("abc456"),
+            "Token should be redacted, got: {}",
+            sanitized
+        );
+    }
+
+    #[test]
+    fn test_sanitize_certificate_path() {
+        let message = "Failed to load certificate from /etc/ssl/certs/server.pem";
+        let sanitized = sanitize_error_message(message);
+        assert!(sanitized.contains("[REDACTED_PATH]"));
+        assert!(!sanitized.contains("server.pem"));
+    }
+
+    #[test]
+    fn test_sanitize_multiple_secrets() {
+        let message = "Auth failed with password=secret123 and token: abcdef123456 and api_key: testkey_test_12345678901234567890";
+        let sanitized = sanitize_error_message(message);
+        assert!(sanitized.contains("password=[REDACTED]"));
+        assert!(sanitized.contains("token=[REDACTED]"));
+        assert!(!sanitized.contains("secret123"));
+        assert!(!sanitized.contains("abcdef123456"));
+    }
+
+    #[test]
+    fn test_sanitize_no_secrets() {
+        let message = "Database connection timeout after 30 seconds";
+        let sanitized = sanitize_error_message(message);
+        assert_eq!(sanitized, message);
+    }
+
+    #[test]
+    fn test_sanitize_empty_message() {
+        let message = "";
+        let sanitized = sanitize_error_message(message);
+        assert_eq!(sanitized, "");
+    }
+
+    #[test]
+    fn test_sanitize_bearer_token() {
+        let message = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0In0.signature validation failed";
+        let sanitized = sanitize_error_message(message);
+        assert!(sanitized.contains("[REDACTED_JWT]"));
+        assert!(!sanitized.contains("eyJ"));
+    }
+
+    // ============================================================================
+    // AuditLog Structure Tests
+    // ============================================================================
+
+    #[test]
+    fn test_audit_log_creation() {
+        let log = AuditLog {
+            id: "test-id-123".to_string(),
+            timestamp: 1234567890,
+            user_id: Some("user_123".to_string()),
+            action: "login".to_string(),
+            resource: "/auth/login".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata::default(),
+            signature: None,
+        };
+
+        assert_eq!(log.id(), "test-id-123");
+        assert_eq!(log.timestamp(), 1234567890);
+        assert_eq!(log.user_id(), Some("user_123"));
+        assert_eq!(log.action(), "login");
+        assert_eq!(log.resource(), "/auth/login");
+        assert!(matches!(log.result(), AuditResult::Success));
+    }
+
+    #[test]
+    fn test_audit_log_serialization() {
+        let log = AuditLog {
+            id: "test-id-456".to_string(),
+            timestamp: 1234567890,
+            user_id: Some("user_456".to_string()),
+            action: "logout".to_string(),
+            resource: "/auth/logout".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata::default(),
+            signature: None,
+        };
+
+        let json = serde_json::to_string(&log).unwrap();
+        assert!(json.contains("\"id\":\"test-id-456\""));
+        assert!(json.contains("\"action\":\"logout\""));
+        assert!(json.contains("\"status\":\"success\""));
+    }
+
+    #[test]
+    fn test_audit_log_deserialization() {
+        let json = r#"[{
+            "id": "test-id-789",
+            "timestamp": 1234567890,
+            "user_id": "user_789",
+            "action": "delete",
+            "resource": "/api/resource/123",
+            "result": {"status": "failure", "message": "Permission denied"},
+            "metadata": {
+                "client_ip": "192.168.1.1",
+                "user_agent": "Mozilla/5.0",
+                "request_id": "req-123",
+                "timestamp": 1234567890
+            },
+            "signature": null
+        }]"#;
+
+        let logs = deserialize_audit_logs(json.as_bytes());
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].id(), "test-id-789");
+        assert_eq!(logs[0].action(), "delete");
+        match logs[0].result() {
+            AuditResult::Failure { message } => {
+                assert_eq!(message, "Permission denied");
+            }
+            _ => panic!("Expected Failure result"),
+        }
+    }
+
+    #[test]
+    fn test_audit_log_serialization_roundtrip() {
+        let original = AuditLog {
+            id: "test-id-roundtrip".to_string(),
+            timestamp: 1234567890,
+            user_id: Some("user_roundtrip".to_string()),
+            action: "update".to_string(),
+            resource: "/api/resource/456".to_string(),
+            result: AuditResult::Failure {
+                message: "Validation failed".to_string(),
+            },
+            metadata: AuthMetadata {
+                client_ip: Some("10.0.0.1".to_string()),
+                user_agent: Some("TestClient/1.0".to_string()),
+                request_id: "req-456".to_string(),
+                timestamp: 1234567890,
+            },
+            signature: Some("test-signature".to_string()),
+        };
+
+        let serialized = serialize_audit_logs(&[original.clone()]);
+        let deserialized = deserialize_audit_logs(&serialized);
+
+        assert_eq!(deserialized.len(), 1);
+        let log = &deserialized[0];
+        assert_eq!(log.id(), original.id());
+        assert_eq!(log.timestamp(), original.timestamp());
+        assert_eq!(log.user_id(), original.user_id());
+        assert_eq!(log.action(), original.action());
+        assert_eq!(log.resource(), original.resource());
+        assert_eq!(log.metadata().request_id, original.metadata().request_id);
+    }
+
+    // ============================================================================
+    // Edge Case Tests for sanitize_error_message
+    // ============================================================================
+
+    #[test]
+    fn test_sanitize_very_long_jwt_token() {
+        let long_payload = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9".to_string()
+            + ".eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ"
+            + &"A".repeat(600)
+            + ".SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+
+        let message = format!("Auth error: {}", long_payload);
+        let sanitized = sanitize_error_message(&message);
+
+        assert!(sanitized.contains("[REDACTED_JWT]") || sanitized.contains("...[TRUNCATED]"));
+        assert!(!sanitized.contains("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"));
+    }
+
+    #[test]
+    fn test_sanitize_token_in_url() {
+        let message =
+            "Request failed: https://api.example.com/data?token=secret_token_123&user=test";
+        let sanitized = sanitize_error_message(message);
+        assert!(sanitized.contains("token=[REDACTED]"));
+        assert!(!sanitized.contains("secret_token_123"));
+    }
 }

@@ -183,6 +183,24 @@ mod tests {
         pub _name: String,
     }
 
+    // Additional test types
+    #[derive(Debug, Clone)]
+    pub struct InstanceTypeA {
+        pub value: i32,
+    }
+    #[derive(Debug, Clone)]
+    pub struct InstanceTypeB {
+        pub text: String,
+    }
+    #[derive(Debug, Clone)]
+    pub struct MetadataTypeA {
+        pub id: u64,
+    }
+    #[derive(Debug, Clone)]
+    pub struct MetadataTypeB {
+        pub tags: Vec<String>,
+    }
+
     // Test the macro-generated code
     define_registration!(TestRegistration, MockInstance, MockMetadata);
 
@@ -252,5 +270,336 @@ mod tests {
         assert_eq!(reg1.name(), "api1");
         assert_eq!(reg2.name(), "api2");
         assert_ne!(reg1.name(), reg2.name());
+    }
+
+    /// Test that macro-generated struct has correct fields
+    #[test]
+    fn test_define_registration_macro_generates_struct() {
+        let reg = TestRegistration::new(
+            "test_api",
+            "v1",
+            || MockInstance {
+                _data: "test".to_string(),
+            },
+            || MockMetadata {
+                _name: "test".to_string(),
+            },
+        );
+
+        // Verify struct fields exist and are accessible
+        assert_eq!(reg.name, "test_api");
+        assert_eq!(reg.version, "v1");
+        assert!(std::mem::size_of_val(&reg.create_fn) > 0);
+        assert!(std::mem::size_of_val(&reg.metadata_fn) > 0);
+    }
+
+    /// Test that new() is a const fn
+    #[test]
+    fn test_define_registration_macro_new_const_fn() {
+        const REG: TestRegistration = TestRegistration::new(
+            "const_api",
+            "v2",
+            || MockInstance {
+                _data: "const".to_string(),
+            },
+            || MockMetadata {
+                _name: "const".to_string(),
+            },
+        );
+
+        assert_eq!(REG.name, "const_api");
+        assert_eq!(REG.version, "v2");
+    }
+
+    /// Test Registration trait name() method
+    #[test]
+    fn test_registration_trait_name_method() {
+        let reg = TestRegistration::new(
+            "api_name_test",
+            "v1",
+            || MockInstance {
+                _data: "test".to_string(),
+            },
+            || MockMetadata {
+                _name: "test".to_string(),
+            },
+        );
+
+        let name = reg.name();
+        assert_eq!(name, "api_name_test");
+        assert!(!name.is_empty());
+    }
+
+    /// Test Registration trait version() method
+    #[test]
+    fn test_registration_trait_version_method() {
+        let reg = TestRegistration::new(
+            "test_api",
+            "v2.0.0",
+            || MockInstance {
+                _data: "test".to_string(),
+            },
+            || MockMetadata {
+                _name: "test".to_string(),
+            },
+        );
+
+        let version = reg.version();
+        assert_eq!(version, "v2.0.0");
+    }
+
+    /// Test Registration trait create() method
+    #[test]
+    fn test_registration_trait_create_method() {
+        let reg = TestRegistration::new(
+            "test_api",
+            "v1",
+            || MockInstance {
+                _data: "created_instance".to_string(),
+            },
+            || MockMetadata {
+                _name: "test".to_string(),
+            },
+        );
+
+        let instance = reg.create();
+        assert_eq!(instance._data, "created_instance");
+    }
+
+    /// Test Registration trait metadata() method
+    #[test]
+    fn test_registration_trait_metadata_method() {
+        let reg = TestRegistration::new(
+            "test_api",
+            "v1",
+            || MockInstance {
+                _data: "test".to_string(),
+            },
+            || MockMetadata {
+                _name: "metadata_value".to_string(),
+            },
+        );
+
+        let metadata = reg.metadata();
+        assert_eq!(metadata._name, "metadata_value");
+    }
+
+    /// Test Send + Sync + 'static bounds
+    #[test]
+    fn test_registration_send_sync_static_bounds() {
+        fn requires_send_sync<T: Send + Sync>() {}
+        fn requires_static<T: 'static>() {}
+
+        requires_send_sync::<TestRegistration>();
+        requires_static::<TestRegistration>();
+
+        // Also test the trait object
+        fn requires_registration<T: Registration>() {}
+        requires_registration::<TestRegistration>();
+    }
+
+    /// Test Clone and Copy trait
+    #[test]
+    fn test_registration_clone_copy_traits() {
+        let reg = TestRegistration::new(
+            "test_api",
+            "v1",
+            || MockInstance {
+                _data: "test".to_string(),
+            },
+            || MockMetadata {
+                _name: "test".to_string(),
+            },
+        );
+
+        // Test Copy
+        let reg_copy = reg;
+        assert_eq!(reg_copy.name(), "test_api");
+
+        // Test Clone
+        let reg_cloned = reg.clone();
+        assert_eq!(reg_cloned.name(), "test_api");
+        assert_eq!(reg_cloned.version(), "v1");
+
+        // Original should still be valid after clone
+        assert_eq!(reg.name(), "test_api");
+    }
+
+    /// Test Debug trait output
+    #[test]
+    fn test_registration_debug_trait() {
+        let reg = TestRegistration::new(
+            "debug_api",
+            "v1",
+            || MockInstance {
+                _data: "test".to_string(),
+            },
+            || MockMetadata {
+                _name: "test".to_string(),
+            },
+        );
+
+        let debug_output = format!("{:?}", reg);
+        assert!(debug_output.contains("debug_api"));
+        assert!(debug_output.contains("v1"));
+    }
+
+    /// Test empty name and version boundary cases
+    #[test]
+    fn test_registration_empty_name_and_version() {
+        let reg = TestRegistration::new(
+            "",
+            "",
+            || MockInstance {
+                _data: "test".to_string(),
+            },
+            || MockMetadata {
+                _name: "test".to_string(),
+            },
+        );
+
+        assert_eq!(reg.name(), "");
+        assert_eq!(reg.version(), "");
+        assert_eq!(reg.name, "");
+        assert_eq!(reg.version, "");
+    }
+
+    /// Test special characters in name/version
+    #[test]
+    fn test_registration_special_characters_name() {
+        let reg = TestRegistration::new(
+            "api-with-dashes_and_underscores",
+            "v1.0.0-alpha+build.123",
+            || MockInstance {
+                _data: "test".to_string(),
+            },
+            || MockMetadata {
+                _name: "test".to_string(),
+            },
+        );
+
+        assert_eq!(reg.name(), "api-with-dashes_and_underscores");
+        assert_eq!(reg.version(), "v1.0.0-alpha+build.123");
+    }
+
+    /// Test multiple define_registration! in same scope
+    #[test]
+    fn test_multiple_define_registration_same_scope() {
+        define_registration!(RegA, MockInstance, MockMetadata);
+        define_registration!(RegB, MockInstance, MockMetadata);
+        define_registration!(RegC, MockInstance, MockMetadata);
+
+        let a = RegA::new(
+            "a",
+            "v1",
+            || MockInstance { _data: "a".into() },
+            || MockMetadata { _name: "a".into() },
+        );
+        let b = RegB::new(
+            "b",
+            "v1",
+            || MockInstance { _data: "b".into() },
+            || MockMetadata { _name: "b".into() },
+        );
+        let c = RegC::new(
+            "c",
+            "v1",
+            || MockInstance { _data: "c".into() },
+            || MockMetadata { _name: "c".into() },
+        );
+
+        assert_eq!(a.name(), "a");
+        assert_eq!(b.name(), "b");
+        assert_eq!(c.name(), "c");
+    }
+
+    /// Test inventory collect macro registration mechanism
+    #[test]
+    fn test_registration_inventory_collect_macro() {
+        // inventory::collect! should register the type
+        // We verify this by checking the type is collectible
+        use std::any::TypeId;
+
+        let reg = TestRegistration::new(
+            "inventory_test",
+            "v1",
+            || MockInstance {
+                _data: "test".to_string(),
+            },
+            || MockMetadata {
+                _name: "test".to_string(),
+            },
+        );
+
+        // TypeId should be available
+        let _type_id = TypeId::of::<TestRegistration>();
+
+        // Registration should implement the trait
+        let _registration: &dyn Registration<Instance = MockInstance, Metadata = MockMetadata> =
+            &reg;
+    }
+
+    #[test]
+    fn test_registration_different_instance_types() {
+        define_registration!(RegWithInstanceA, InstanceTypeA, MockMetadata);
+        define_registration!(RegWithInstanceB, InstanceTypeB, MockMetadata);
+
+        let reg_a = RegWithInstanceA::new(
+            "instance_a",
+            "v1",
+            || InstanceTypeA { value: 42 },
+            || MockMetadata {
+                _name: "a".to_string(),
+            },
+        );
+
+        let reg_b = RegWithInstanceB::new(
+            "instance_b",
+            "v1",
+            || InstanceTypeB {
+                text: "hello".to_string(),
+            },
+            || MockMetadata {
+                _name: "b".to_string(),
+            },
+        );
+
+        let instance_a = reg_a.create();
+        let instance_b = reg_b.create();
+
+        assert_eq!(instance_a.value, 42);
+        assert_eq!(instance_b.text, "hello");
+    }
+
+    #[test]
+    fn test_registration_different_metadata_types() {
+        define_registration!(RegWithMetadataA, MockInstance, MetadataTypeA);
+        define_registration!(RegWithMetadataB, MockInstance, MetadataTypeB);
+
+        let reg_a = RegWithMetadataA::new(
+            "metadata_a",
+            "v1",
+            || MockInstance {
+                _data: "a".to_string(),
+            },
+            || MetadataTypeA { id: 100 },
+        );
+
+        let reg_b = RegWithMetadataB::new(
+            "metadata_b",
+            "v1",
+            || MockInstance {
+                _data: "b".to_string(),
+            },
+            || MetadataTypeB {
+                tags: vec!["tag1".to_string(), "tag2".to_string()],
+            },
+        );
+
+        let metadata_a = reg_a.metadata();
+        let metadata_b = reg_b.metadata();
+
+        assert_eq!(metadata_a.id, 100);
+        assert_eq!(metadata_b.tags.len(), 2);
     }
 }

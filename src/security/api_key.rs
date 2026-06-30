@@ -510,4 +510,315 @@ mod tests {
 
         assert!(auth.rotation_config.is_some());
     }
+
+    // ============================================================================
+    // Empty/Edge Case Tests
+    // ============================================================================
+
+    #[test]
+    fn test_validate_key_empty_string() {
+        let auth = AppApiKeyAuth::new();
+        let perms = auth.validate_key("", "127.0.0.1");
+        assert!(perms.is_none());
+    }
+
+    #[test]
+    fn test_add_key_empty_permissions() {
+        let auth = AppApiKeyAuth::new();
+        auth.add_key("test_key", vec![]);
+        let perms = auth.validate_key("test_key", "127.0.0.1");
+        assert!(perms.is_none());
+    }
+
+    #[test]
+    fn test_add_key_whitespace_only_key() {
+        let auth = AppApiKeyAuth::new();
+        auth.add_key("   ", vec!["read".to_string()]);
+        let perms = auth.validate_key("   ", "127.0.0.1");
+        assert!(perms.is_some());
+        assert_eq!(perms.unwrap(), vec!["read"]);
+    }
+
+    // ============================================================================
+    // Special Characters Tests
+    // ============================================================================
+
+    #[test]
+    fn test_add_key_unicode_characters() {
+        let auth = AppApiKeyAuth::new();
+        auth.add_key("密钥_测试", vec!["read".to_string()]);
+
+        let perms = auth.validate_key("密钥_测试", "127.0.0.1");
+        assert!(perms.is_some());
+        assert_eq!(perms.unwrap(), vec!["read"]);
+    }
+
+    #[test]
+    fn test_add_key_special_characters() {
+        let auth = AppApiKeyAuth::new();
+        auth.add_key("key!@#$%^&*()", vec!["admin".to_string()]);
+
+        let perms = auth.validate_key("key!@#$%^&*()", "127.0.0.1");
+        assert!(perms.is_some());
+        assert_eq!(perms.unwrap(), vec!["admin"]);
+    }
+
+    #[test]
+    fn test_add_key_very_long_key() {
+        let auth = AppApiKeyAuth::new();
+        let long_key = "x".repeat(1000);
+        auth.add_key(long_key.clone(), vec!["read".to_string()]);
+
+        let perms = auth.validate_key(&long_key, "127.0.0.1");
+        assert!(perms.is_some());
+        assert_eq!(perms.unwrap(), vec!["read"]);
+    }
+
+    #[test]
+    fn test_add_key_newline_characters() {
+        let auth = AppApiKeyAuth::new();
+        auth.add_key("key\nwith\nnewlines", vec!["write".to_string()]);
+
+        let perms = auth.validate_key("key\nwith\nnewlines", "127.0.0.1");
+        assert!(perms.is_some());
+        assert_eq!(perms.unwrap(), vec!["write"]);
+    }
+
+    // ============================================================================
+    // Permissions Tests
+    // ============================================================================
+
+    #[test]
+    fn test_add_key_duplicate_permissions() {
+        let auth = AppApiKeyAuth::new();
+        auth.add_key(
+            "dup_perm_key",
+            vec!["read".to_string(), "read".to_string(), "write".to_string()],
+        );
+        let perms = auth.validate_key("dup_perm_key", "127.0.0.1");
+        assert!(perms.is_some());
+        let perms = perms.unwrap();
+        assert_eq!(perms.len(), 3);
+    }
+
+    #[test]
+    fn test_add_key_special_char_permissions() {
+        let auth = AppApiKeyAuth::new();
+        auth.add_key(
+            "special_perm_key",
+            vec!["read:users".to_string(), "write:posts".to_string()],
+        );
+
+        let perms = auth.validate_key("special_perm_key", "127.0.0.1");
+        assert!(perms.is_some());
+        let perms = perms.unwrap();
+        assert_eq!(perms.len(), 2);
+        assert!(perms.contains(&"read:users".to_string()));
+        assert!(perms.contains(&"write:posts".to_string()));
+    }
+
+    // ============================================================================
+    // Duplicate/Override Tests
+    // ============================================================================
+
+    #[test]
+    fn test_add_same_key_twice() {
+        let auth = AppApiKeyAuth::new();
+        auth.add_key("duplicate_key", vec!["read".to_string()]);
+        auth.add_key("duplicate_key", vec!["write".to_string()]);
+        let perms = auth.validate_key("duplicate_key", "127.0.0.1");
+        assert!(perms.is_some());
+        let perms = perms.unwrap();
+        assert_eq!(perms, vec!["write"]);
+    }
+
+    #[test]
+    fn test_add_key_different_permissions_same_key() {
+        let auth = AppApiKeyAuth::new();
+        auth.add_key("update_key", vec!["read".to_string(), "write".to_string()]);
+        auth.add_key("update_key", vec!["admin".to_string()]);
+
+        let perms = auth.validate_key("update_key", "127.0.0.1");
+        assert!(perms.is_some());
+        let perms = perms.unwrap();
+        assert_eq!(perms, vec!["admin"]);
+    }
+
+    // ============================================================================
+    // Error Handling Tests
+    // ============================================================================
+
+    #[test]
+    fn test_rotate_key_nonexistent_key_id() {
+        let auth = AppApiKeyAuth::new().with_rotation(RotationConfig::default());
+        let result = auth.rotate_key(
+            "nonexistent_key",
+            "new_key_value",
+            vec!["read".to_string()],
+            "v2",
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Key not found"));
+    }
+
+    #[test]
+    fn test_rotate_key_empty_new_key() {
+        let auth = AppApiKeyAuth::new().with_rotation(RotationConfig::default());
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+        let result = auth.rotate_key("key1", "", vec!["write".to_string()], "v2");
+        assert!(result.is_ok());
+        let perms = auth.validate_key("", "127.0.0.1");
+        assert!(perms.is_some());
+        assert_eq!(perms.unwrap(), vec!["write"]);
+    }
+
+    #[test]
+    fn test_revoke_key_nonexistent_key_id() {
+        let auth = AppApiKeyAuth::new();
+        let result = auth.revoke_key("nonexistent_key");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Key not found"));
+    }
+
+    #[test]
+    fn test_revoke_key_then_validate() {
+        let auth = AppApiKeyAuth::new();
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+        let perms = auth.validate_key("secret_v1", "127.0.0.1");
+        assert!(perms.is_some());
+
+        let result = auth.revoke_key("key1");
+        assert!(result.is_ok());
+
+        let perms = auth.validate_key("secret_v1", "127.0.0.1");
+        assert!(perms.is_some());
+    }
+
+    #[test]
+    fn test_get_key_metadata_nonexistent() {
+        let auth = AppApiKeyAuth::new();
+        let metadata = auth.get_key_metadata("nonexistent_key");
+        assert!(metadata.is_none());
+    }
+
+    // ============================================================================
+    // Builder/Default Tests
+    // ============================================================================
+
+    #[test]
+    fn test_default_trait() {
+        let auth1 = AppApiKeyAuth::default();
+        let auth2 = AppApiKeyAuth::new();
+
+        assert!(auth1.lru_manager.is_some());
+        assert!(auth2.lru_manager.is_some());
+
+        assert!(auth1.rotation_config.is_none());
+        assert!(auth2.rotation_config.is_none());
+    }
+
+    #[test]
+    fn test_builder_chained_config() {
+        let lru_config = LruConfig {
+            max_entries: 500,
+            ttl: std::time::Duration::from_secs(1800),
+            eviction_threshold: 0.7,
+        };
+
+        let rotation_config = RotationConfig {
+            rotation_interval: std::time::Duration::from_secs(86400 * 7),
+            grace_period: std::time::Duration::from_secs(86400),
+            keep_versions: 5,
+        };
+
+        let auth = AppApiKeyAuth::builder()
+            .lru(lru_config.clone())
+            .rotation(rotation_config.clone())
+            .build();
+
+        assert!(auth.lru_manager.is_some());
+        assert!(auth.rotation_config.is_some());
+    }
+
+    #[test]
+    fn test_builder_with_both_lru_and_rotation() {
+        let auth = AppApiKeyAuthBuilder::new()
+            .lru(LruConfig::default())
+            .rotation(RotationConfig::default())
+            .build();
+
+        assert!(auth.lru_manager.is_some());
+        assert!(auth.rotation_config.is_some());
+    }
+
+    // ============================================================================
+    // Multi-Version Tests
+    // ============================================================================
+
+    #[test]
+    fn test_add_multiple_key_versions_same_id() {
+        let auth = AppApiKeyAuth::new();
+
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+        auth.add_key_version(
+            "key1",
+            "secret_v2",
+            vec!["read".to_string(), "write".to_string()],
+            "v2",
+            None,
+        );
+        auth.add_key_version("key1", "secret_v3", vec!["admin".to_string()], "v3", None);
+
+        let metadata = auth.get_key_metadata("key1");
+        assert!(metadata.is_some());
+        let meta = metadata.unwrap();
+        assert_eq!(meta.versions.len(), 3);
+
+        // All keys should validate
+        assert!(auth.validate_key("secret_v1", "127.0.0.1").is_some());
+        assert!(auth.validate_key("secret_v2", "127.0.0.1").is_some());
+        assert!(auth.validate_key("secret_v3", "127.0.0.1").is_some());
+    }
+
+    #[test]
+    fn test_validate_key_after_rotation() {
+        let auth = AppApiKeyAuth::new().with_rotation(RotationConfig::default());
+
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+
+        let result = auth.rotate_key(
+            "key1",
+            "secret_v2",
+            vec!["read".to_string(), "write".to_string()],
+            "v2",
+        );
+        assert!(result.is_ok());
+
+        let perms_v1 = auth.validate_key("secret_v1", "127.0.0.1");
+        let perms_v2 = auth.validate_key("secret_v2", "127.0.0.1");
+
+        assert!(perms_v1.is_some());
+        assert!(perms_v2.is_some());
+
+        assert_eq!(perms_v1.unwrap(), vec!["read"]);
+        assert_eq!(perms_v2.unwrap(), vec!["read", "write"]);
+    }
+
+    // ============================================================================
+    // with_dependencies Tests
+    // ============================================================================
+
+    #[test]
+    fn test_with_dependencies_custom_cache() {
+        use std::sync::Arc;
+
+        let custom_cache = Arc::new(crate::cache::DashMapCache::new());
+        let auth = AppApiKeyAuth::with_dependencies(custom_cache.clone(), None);
+
+        auth.add_key("custom_key", vec!["read".to_string()]);
+        let perms = auth.validate_key("custom_key", "127.0.0.1");
+
+        assert!(perms.is_some());
+        assert_eq!(perms.unwrap(), vec!["read"]);
+    }
 }
