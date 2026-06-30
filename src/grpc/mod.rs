@@ -72,8 +72,10 @@ use crate::define_registration;
 #[derive(Debug, Clone)]
 pub struct GrpcRoute {
     /// The gRPC service name
+    #[allow(dead_code)]
     pub(crate) service_name: String,
     /// API metadata
+    #[allow(dead_code)]
     pub(crate) metadata: ApiMetadata,
 }
 
@@ -86,10 +88,12 @@ impl GrpcRoute {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn service_name(&self) -> &str {
         &self.service_name
     }
 
+    #[cfg(test)]
     pub(crate) fn metadata(&self) -> &ApiMetadata {
         &self.metadata
     }
