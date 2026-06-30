@@ -767,6 +767,12 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         proc_macro2::Span::call_site(),
     );
 
+    // Generate unique metadata function name for RouteRegistration
+    let metadata_fn_name = syn::Ident::new(
+        &format!("__axiom_metadata_{}", fn_name_str),
+        proc_macro2::Span::call_site(),
+    );
+
     let ws_create_fn_name = syn::Ident::new(
         &format!("__create_{}_ws_handler", fn_name_str),
         proc_macro2::Span::call_site(),
@@ -961,13 +967,22 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
+        // Generate metadata function for RouteRegistration
+        let metadata_fn_decl = quote! {
+            fn #metadata_fn_name() -> sdforge::core::ApiMetadata {
+                #non_streaming_metadata
+            }
+        };
+
         // Combine route creation function and registration
         quote! {
             #route_creation
+            #metadata_fn_decl
             sdforge::inventory::submit!(sdforge::http::RouteRegistration::new(
                 #name,
                 #version,
                 #register_fn_name,
+                #metadata_fn_name,
             ));
         }
     } else {
