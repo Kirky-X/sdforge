@@ -1906,8 +1906,8 @@ mod tests {
 /// ```
 pub fn generate_secure_jwt_secret() -> String {
     use base64::Engine;
-    use rand::RngCore;
+    use rand::Rng;
     let mut bytes = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
+    rand::rng().fill_bytes(&mut bytes);
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }

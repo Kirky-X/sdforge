@@ -192,10 +192,10 @@ pub use dashmap::DashMapCache;
 // oxcache 异步缓存透传
 // =============================================================================
 
-// 直接透传 oxcache 库的缓存接口
-pub use oxcache::backend::{DashMapMemoryBackend, MemoryBackend, MokaMemoryBackend};
+// 直接透传 oxcache 库的缓存接口（oxcache 0.3 移除了 MemoryBackend 和 Cacheable）
+pub use oxcache::backend::{DashMapMemoryBackend, MokaMemoryBackend};
 pub use oxcache::cache::Cache;
-pub use oxcache::traits::{CacheKey, Cacheable};
+pub use oxcache::traits::CacheKey;
 
 #[cfg(test)]
 mod tests {
