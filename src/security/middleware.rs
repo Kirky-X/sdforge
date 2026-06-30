@@ -37,6 +37,7 @@ pub fn auth_middleware<T: Clone + Send + Sync + 'static>(
 }
 
 /// Common IP extraction logic (shared by both logging and non-logging versions)
+#[cfg(test)]
 #[inline]
 fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
     use axum::extract::connect_info::ConnectInfo;
@@ -73,6 +74,7 @@ fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
 }
 
 /// Check if an IP is within a CIDR range
+#[cfg(test)]
 fn is_ip_in_range(ip: &str, cidr: &str) -> bool {
     let parts: Vec<&str> = cidr.split('/').collect();
     if parts.len() != 2 {
@@ -107,16 +109,7 @@ fn is_ip_in_range(ip: &str, cidr: &str) -> bool {
 }
 
 /// Validate IP address format and security
-///
-/// Accepts:
-/// - IPv4: Public IPs only (rejects private ranges)
-/// - IPv6: Public IPs only (rejects loopback, link-local, etc)
-///
-/// Rejects:
-/// - Private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
-/// - Loopback (127.0.0.1, ::1)
-/// - Link-local (169.254.0.0/16)
-/// - Multicast (224.0.0.0/4)
+#[cfg(test)]
 fn is_valid_ip(ip: &str) -> bool {
     use std::net::IpAddr;
 
@@ -127,32 +120,24 @@ fn is_valid_ip(ip: &str) -> bool {
     if let Ok(IpAddr::V4(ipv4)) = ip.parse::<IpAddr>() {
         let octets = ipv4.octets();
 
-        // Check for private ranges
-        // 10.0.0.0/8
         if octets[0] == 10 {
             return false;
         }
-        // 172.16.0.0/12
         if octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31 {
             return false;
         }
-        // 192.168.0.0/16
         if octets[0] == 192 && octets[1] == 168 {
             return false;
         }
-        // 127.0.0.0/8 (loopback)
         if octets[0] == 127 {
             return false;
         }
-        // 169.254.0.0/16 (link-local)
         if octets[0] == 169 && octets[1] == 254 {
             return false;
         }
-        // 224.0.0.0/4 (multicast)
         if octets[0] >= 224 && octets[0] <= 239 {
             return false;
         }
-        // 0.0.0.0/8 (unspecified)
         if octets[0] == 0 {
             return false;
         }
@@ -161,23 +146,18 @@ fn is_valid_ip(ip: &str) -> bool {
     } else if let Ok(IpAddr::V6(ipv6)) = ip.parse::<IpAddr>() {
         let segments = ipv6.segments();
 
-        // ::1 (loopback)
         if segments == [0, 0, 0, 0, 0, 0, 0, 1] {
             return false;
         }
-        // fe80::/10 (link-local)
         if segments[0] & 0xffc0 == 0xfe80 {
             return false;
         }
-        // fc00::/7 (unique local)
         if segments[0] & 0xfe00 == 0xfc00 {
             return false;
         }
-        // ff00::/8 (multicast)
         if segments[0] & 0xff00 == 0xff00 {
             return false;
         }
-        // ::/128 (unspecified)
         if segments == [0, 0, 0, 0, 0, 0, 0, 0] {
             return false;
         }
