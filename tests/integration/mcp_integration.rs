@@ -15,6 +15,7 @@ mod mcp_tests {
 #[cfg(feature = "mcp")]
 mod mcp_registration_tests {
     use mcp_sdk::tools::Tool;
+    use sdforge::core::types::ApiMetadata;
     use sdforge::mcp::McpToolRegistration;
     use std::sync::Arc;
 
@@ -48,10 +49,20 @@ mod mcp_registration_tests {
 
     #[test]
     fn test_mcp_tool_registration() {
-        // Test that McpToolRegistration::new() works
-        let _registration = McpToolRegistration::new("test_tool", "v1", "A test tool", || {
-            Arc::new(TestTool) as Arc<dyn Tool>
-        });
+        // Test that McpToolRegistration::new() works with the new API
+        fn create_tool() -> Arc<dyn Tool> {
+            Arc::new(TestTool)
+        }
+        fn create_metadata() -> ApiMetadata {
+            ApiMetadata::new(
+                "test_tool".to_string(),
+                "v1".to_string(),
+                "A test tool".to_string(),
+                None,
+                false,
+            )
+        }
+        let _registration = McpToolRegistration::new("test_tool", "v1", create_tool, create_metadata);
 
         // Verify the registration was created successfully
         assert!(true, "MCP tool registration should succeed");

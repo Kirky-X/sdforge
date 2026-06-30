@@ -35,7 +35,7 @@ impl ConfigWatcherImpl {
     pub async fn new(path: PathBuf) -> Result<(Self, mpsc::Receiver<ConfigEvent>), ConfigError> {
         let (tx, rx) = mpsc::channel(1);
 
-        let mut watcher = confers::watcher::fs_watcher::FsWatcher::new(&path, 200)
+        let mut watcher = confers::watcher::FsWatcher::new(&path, 200)
             .await
             .map_err(|e| ConfigError::WatchError(e.to_string()))?;
 
