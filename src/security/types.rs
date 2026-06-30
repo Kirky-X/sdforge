@@ -57,6 +57,7 @@ pub(crate) fn deserialize_permissions(data: &[u8]) -> Vec<String> {
 
 /// Serialize a list of Instants to bytes using bincode
 /// Used for token blacklist expiry tracking
+#[allow(dead_code)]
 pub(crate) fn serialize_instants(insts: &[std::time::Instant]) -> Vec<u8> {
     let as_i64: Vec<i64> = insts.iter().map(|i| i.elapsed().as_secs() as i64).collect();
     bincode::serialize(&as_i64).unwrap_or_default()
@@ -64,6 +65,7 @@ pub(crate) fn serialize_instants(insts: &[std::time::Instant]) -> Vec<u8> {
 
 /// Deserialize a list of Instants from bytes using bincode
 /// Used for token blacklist expiry tracking
+#[allow(dead_code)]
 pub(crate) fn deserialize_instants(data: &[u8]) -> Vec<std::time::Instant> {
     let as_i64: Vec<i64> = match bincode::deserialize(data) {
         Ok(v) => v,

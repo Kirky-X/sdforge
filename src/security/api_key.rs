@@ -117,6 +117,16 @@ impl AppApiKeyAuth {
         hex::encode(result)
     }
 
+    /// Generate a safe, non-reversible identifier for an API key.
+    ///
+    /// Returns a truncated SHA256 hash prefix (`api_key:<first 16 hex chars>`)
+    /// suitable for use as `user_id` in audit logs and AuthContext without
+    /// exposing the raw API key to logs or responses.
+    pub fn key_id(key: &str) -> String {
+        let hash = Self::hash_key(key);
+        format!("api_key:{}", &hash[..hash.len().min(16)])
+    }
+
     /// Add a valid API key (stored as hash)
     pub fn add_key(&self, key: impl Into<String>, permissions: Vec<String>) {
         let key_hash = Self::hash_key(&key.into());
@@ -239,9 +249,19 @@ impl AppApiKeyAuth {
             bincode::serialize(&metadata).unwrap_or_default(),
         );
 
-        // Cleanup old versions
+        // Cleanup old versions and delete their key_hashes from valid_keys cache
+        // so rotated-out keys can no longer authenticate.
         if let Some(config) = &self.rotation_config {
+            let hashes_before: std::collections::HashSet<String> =
+                metadata.versions.iter().map(|v| v.key_hash.clone()).collect();
             metadata.cleanup_versions(config.keep_versions);
+            for hash in hashes_before {
+                let still_present = metadata.versions.iter().any(|v| v.key_hash == hash);
+                if !still_present {
+                    let store_key = CacheNamespace::ApiKey.key(&hash);
+                    self.valid_keys.delete(&store_key);
+                }
+            }
         }
 
         Ok(())
@@ -317,6 +337,13 @@ impl AppApiKeyAuth {
 
         let mut metadata: ApiKeyMetadata = bincode::deserialize(&data)
             .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
+
+        // Delete each version's key_hash from valid_keys cache so revoked keys
+        // can no longer authenticate (validate_key only checks valid_keys, not metadata).
+        for version in &metadata.versions {
+            let store_key = CacheNamespace::ApiKey.key(&version.key_hash);
+            self.valid_keys.delete(&store_key);
+        }
 
         // Deactivate all versions
         for version in &mut metadata.versions {
@@ -690,8 +717,11 @@ mod tests {
         let result = auth.revoke_key("key1");
         assert!(result.is_ok());
 
+        // After revocation, the key must no longer validate.
+        // Previously revoke_key only deactivated metadata without deleting from valid_keys cache,
+        // allowing revoked keys to continue authenticating. This is now fixed.
         let perms = auth.validate_key("secret_v1", "127.0.0.1");
-        assert!(perms.is_some());
+        assert!(perms.is_none(), "Revoked key must not validate");
     }
 
     #[test]
