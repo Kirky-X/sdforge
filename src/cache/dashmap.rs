@@ -210,8 +210,11 @@ impl SyncCache for DashMapCache {
                         // Filter matching keys with the full pattern
                         let regex_pattern = pattern.replace('*', ".*").replace('?', ".");
 
-                        let re = regex::Regex::new(&format!("^{}$", regex_pattern))
-                            .expect("Invalid regex pattern");
+                        // Fail safe: return empty Vec on invalid regex (prevents panic from user input)
+                        let re = match regex::Regex::new(&format!("^{}$", regex_pattern)) {
+                            Ok(re) => re,
+                            Err(_) => return Vec::new(),
+                        };
 
                         return matching_keys
                             .iter()
@@ -229,13 +232,14 @@ impl SyncCache for DashMapCache {
         static REGEX_CACHE: Lazy<dashmap::DashMap<String, regex::Regex>> =
             Lazy::new(dashmap::DashMap::new);
 
-        let re = REGEX_CACHE
-            .entry(regex_pattern.clone())
-            .or_insert_with(|| {
-                regex::Regex::new(&format!("^{}$", regex_pattern)).expect("Invalid regex pattern")
-            })
-            .value()
-            .clone();
+        // Fail safe: return empty Vec on invalid regex (prevents panic from user input)
+        let re = match regex::Regex::new(&format!("^{}$", regex_pattern)) {
+            Ok(re) => {
+                REGEX_CACHE.insert(regex_pattern.clone(), re.clone());
+                re
+            }
+            Err(_) => return Vec::new(),
+        };
 
         self.inner
             .iter()

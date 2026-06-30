@@ -467,7 +467,7 @@ impl crate::security::traits::AuditLogger for AppAuditLogger {
         let action = log.action.clone();
         let resource = log.resource.clone();
 
-        // Clone all Arc fields from self for use in the spawned thread
+        // Clone all Arc fields from self for use in the spawned task
         let logs = self.logs.clone();
         let max_logs_per_user = self.max_logs_per_user;
         let semaphore = self.semaphore.clone();
@@ -475,26 +475,34 @@ impl crate::security::traits::AuditLogger for AppAuditLogger {
         let fallback_logs = self.fallback_logs.clone();
         let dropped_log_count = self.dropped_log_count.clone();
 
-        // Spawn a background thread with its own runtime for the async log method
-        std::thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("Failed to build runtime for AuditLogger::log");
-            rt.block_on(async {
-                let logger = AppAuditLogger {
-                    logs,
-                    max_logs_per_user,
-                    semaphore,
-                    queue_sender,
-                    fallback_logs,
-                    dropped_log_count,
-                };
-                logger
-                    .log(&context, action, resource, result, message)
-                    .await;
-            });
-        });
+        // Reuse the current tokio runtime instead of spawning a new OS thread + runtime per log call.
+        // Previous implementation used std::thread::spawn + tokio::runtime::Builder which had
+        // unacceptable overhead (thread creation + runtime construction per audit log) and
+        // could panic the process on resource exhaustion.
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => {
+                handle.spawn(async move {
+                    let logger = AppAuditLogger {
+                        logs,
+                        max_logs_per_user,
+                        semaphore,
+                        queue_sender,
+                        fallback_logs,
+                        dropped_log_count,
+                    };
+                    logger
+                        .log(&context, action, resource, result, message)
+                        .await;
+                });
+            }
+            Err(_) => {
+                // No tokio runtime available — emit to stderr as fallback
+                // (better than silently dropping the audit log)
+                eprintln!(
+                    "[AuditLogger] WARNING: no tokio runtime available, audit log dropped for action={}"
+                , action);
+            }
+        }
     }
 }
 
