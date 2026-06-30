@@ -226,14 +226,18 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     router = router.layer(axum::middleware::from_fn(
         |mut req: axum::http::Request<Body>, next: axum::middleware::Next| async move {
             let request_id = get_or_generate_request_id(&req);
+            // Safely insert request ID header — fall back to a static placeholder
+            // if the value contains non-ASCII characters (prevents panic on malformed client input)
+            let header_value = axum::http::HeaderValue::from_str(&request_id)
+                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("invalid-request-id"));
             req.headers_mut().insert(
                 axum::http::header::HeaderName::from_static(X_REQUEST_ID),
-                axum::http::HeaderValue::from_str(&request_id).unwrap(),
+                header_value.clone(),
             );
             let mut response = next.run(req).await;
             response.headers_mut().insert(
                 axum::http::header::HeaderName::from_static(X_REQUEST_ID),
-                axum::http::HeaderValue::from_str(&request_id).unwrap(),
+                header_value,
             );
             response
         },
@@ -311,7 +315,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
                         let key = &header_value[prefix.len()..];
                         if let Some(permissions) = auth.validate_key(key, &client_ip) {
                             Ok(AuthContext {
-                                user_id: Some(key.to_string()),
+                                user_id: Some(AppApiKeyAuth::key_id(key)),
                                 permissions,
                                 metadata: crate::security::AuthMetadata::default(),
                             })

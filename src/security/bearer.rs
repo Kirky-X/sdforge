@@ -6,13 +6,11 @@
 
 use crate::cache::SharedCache;
 use crate::security::types::{
-    deserialize_instants, serialize_auth_context, serialize_instants, AuthConfigError, AuthContext,
-    AuthMetadata, CacheNamespace,
+    serialize_auth_context, AuthConfigError, AuthContext, AuthMetadata, CacheNamespace,
 };
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::sync::Arc;
-use std::time::Instant;
 
 /// Bearer token authentication
 ///
@@ -102,14 +100,8 @@ impl BearerAuth {
     /// # Panics
     /// Panics if the secret doesn't meet complexity requirements
     pub fn with_audience(secret: impl Into<String>, expected_audience: impl Into<String>) -> Self {
-        let cache = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
-        Self {
-            secret: secret.into().into_bytes(),
-            valid_tokens: cache.clone(),
-            blacklisted_tokens: cache,
-            expected_audience: Some(expected_audience.into()),
-            expected_issuer: None,
-        }
+        Self::try_new(secret).expect("Failed to create BearerAuth: invalid secret")
+            .with_audience_inner(expected_audience)
     }
 
     /// Create bearer authentication with full claim validation
@@ -123,14 +115,16 @@ impl BearerAuth {
         expected_audience: impl Into<String>,
         expected_issuer: impl Into<String>,
     ) -> Self {
-        let cache = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
-        Self {
-            secret: secret.into().into_bytes(),
-            valid_tokens: cache.clone(),
-            blacklisted_tokens: cache,
-            expected_audience: Some(expected_audience.into()),
-            expected_issuer: Some(expected_issuer.into()),
-        }
+        let mut auth = Self::try_new(secret).expect("Failed to create BearerAuth: invalid secret");
+        auth.expected_audience = Some(expected_audience.into());
+        auth.expected_issuer = Some(expected_issuer.into());
+        auth
+    }
+
+    /// Internal helper to set audience on an existing validated instance
+    fn with_audience_inner(mut self, expected_audience: impl Into<String>) -> Self {
+        self.expected_audience = Some(expected_audience.into());
+        self
     }
 
     /// Create with dependencies (for full DI mode)
@@ -375,15 +369,12 @@ impl BearerAuth {
 
     /// Validate a bearer token with proper JWT verification
     pub fn validate_token(&self, token: &str) -> Option<AuthContext> {
-        // Check if token is blacklisted
+        // Check if token is blacklisted — presence of the key means blocked unconditionally.
+        // The token's natural expiry is verified separately via verify_jwt below, so
+        // expired tokens are rejected regardless of blacklist state.
         let blacklist_key = CacheNamespace::BearerBlacklist.key(token);
-        if let Some(data) = self.blacklisted_tokens.get(&blacklist_key) {
-            let expiry = deserialize_instants(&data);
-            if let Some(&first) = expiry.first() {
-                if Instant::now() < first {
-                    return None; // Token is blacklisted
-                }
-            }
+        if self.blacklisted_tokens.get(&blacklist_key).is_some() {
+            return None; // Token is blacklisted
         }
 
         // Verify JWT signature and claims
@@ -420,10 +411,11 @@ impl BearerAuth {
 
     /// Invalidate a token (for logout)
     pub fn invalidate_token(&self, token: &str) {
-        // Invalidate immediately (could add grace period)
         let key = CacheNamespace::BearerBlacklist.key(token);
-        self.blacklisted_tokens
-            .set(&key, serialize_instants(&[Instant::now()]));
+        // Store a marker byte; presence of the key means the token is blacklisted.
+        // The token's natural expiry (verified in validate_token via verify_jwt)
+        // ensures expired tokens are rejected regardless of blacklist state.
+        self.blacklisted_tokens.set(&key, vec![1u8]);
     }
 
     /// Start a background task that periodically removes expired entries from the blacklist.
@@ -1261,11 +1253,10 @@ mod tests {
     }
 
     #[test]
-    fn test_invalidate_token_blacklist_expiry_passed() {
-        // Test that a blacklist entry with 0 elapsed time (i.e., just created)
-        // does NOT block the token because the comparison
-        // `Instant::now() < deserialized_instant` fails when the
-        // deserialized instant is `Instant::now() - 0 = nowish` (slightly past).
+    fn test_invalidate_token_blacklist_blocks_token() {
+        // Test that a blacklisted token is blocked unconditionally.
+        // Previously this test validated buggy behavior where the blacklist
+        // never blocked any token due to Instant::now().elapsed() ≈ 0.
         let secret = "MySecureSecret123!@#ABCDEFGHIJKLM";
         let valid_tokens = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
         let blacklisted_tokens = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
@@ -1286,16 +1277,17 @@ mod tests {
 
         let token = create_test_jwt(secret.as_bytes(), &payload);
 
-        // Insert a blacklist entry with 0 elapsed seconds (just now)
-        let key = CacheNamespace::BearerBlacklist.key(&token);
-        let zero_elapsed: Vec<i64> = vec![0];
-        let bytes = bincode::serialize(&zero_elapsed).unwrap();
-        blacklisted_tokens.set(&key, bytes);
-
-        // With 0 elapsed, the deserialized Instant is now - 0 = nowish (past)
-        // `Instant::now() < past_instant` is false, so the token should pass
-        // This tests that expired blacklist entries don't block
+        // Token should be valid initially
         assert!(auth.validate_token(&token).is_some());
+
+        // Blacklist the token
+        auth.invalidate_token(&token);
+
+        // Token should now be blocked
+        assert!(
+            auth.validate_token(&token).is_none(),
+            "Blacklisted token must be rejected"
+        );
     }
 
     #[test]

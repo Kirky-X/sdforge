@@ -45,9 +45,6 @@ use serde_json::Value;
 use std::sync::Arc;
 
 #[cfg(feature = "websocket")]
-use std::time::Instant;
-
-#[cfg(feature = "websocket")]
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 #[cfg(feature = "websocket")]
@@ -281,25 +278,20 @@ impl ConnectionManager {
 
     /// Check and record a message atomically for rate limiting
     /// Returns true if rate limited (should disconnect), false otherwise
+    ///
+    /// Note: This method checks per-connection message rate only.
+    /// Connection count is managed by `add_connection`/`remove_connection`.
     pub fn check_and_record(&self, conn_id: &str, config: &RateLimitConfig) -> bool {
-        let now = Instant::now();
-        let current_time = now.elapsed().as_secs();
+        // Use SystemTime (unix timestamp) for rate limit window calculation.
+        // Instant::now().elapsed() is always ~0 and was a bug that made rate limiting ineffective.
+        let current_time = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
 
-        // 使用 compare_exchange 实现原子检查和设置，避免竞态窗口
-        let mut current = self.connection_count.load(Ordering::SeqCst);
-        loop {
-            if current >= config.max_connections {
-                return true;
-            }
-            match self.connection_count.compare_exchange_weak(
-                current,
-                current + 1,
-                Ordering::SeqCst,
-                Ordering::SeqCst,
-            ) {
-                Ok(_) => break,
-                Err(new_current) => current = new_current,
-            }
+        // Check max_connections as a read-only pre-check (increment is in add_connection)
+        if self.connection_count.load(Ordering::SeqCst) >= config.max_connections {
+            return true;
         }
 
         // Check per-connection rate limit
@@ -317,7 +309,7 @@ impl ConnectionManager {
                     .unwrap_or(0);
 
                 // Reset counter if window has passed
-                if current_time - last_time >= config.rate_limit_window_seconds {
+                if current_time.saturating_sub(last_time) >= config.rate_limit_window_seconds {
                     count.store(0, Ordering::Relaxed);
                     if let Some(time_entry) = self.last_message_time.get_mut(conn_id) {
                         time_entry.value().store(current_time, Ordering::Relaxed);
@@ -335,10 +327,6 @@ impl ConnectionManager {
                 self.last_message_time
                     .insert(conn_id.to_string(), AtomicU64::new(current_time));
             }
-        }
-
-        if should_disconnect {
-            self.connection_count.fetch_sub(1, Ordering::SeqCst);
         }
 
         should_disconnect
@@ -1781,6 +1769,10 @@ mod tests {
     }
 
     /// Test check_and_record respects connection limit
+    ///
+    /// Note: `check_and_record` is a read-only pre-check; `connection_count` is
+    /// incremented by `add_connection`. This test simulates active connections
+    /// by directly setting `connection_count` to verify the limit check.
     #[test]
     fn check_and_record_exceeds_connection_limit() {
         let manager = ConnectionManager::new();
@@ -1790,9 +1782,11 @@ mod tests {
             rate_limit_window_seconds: 10,
             ..Default::default()
         };
+        // Under the limit: not rate limited
+        manager.connection_count.fetch_add(2, Ordering::SeqCst);
         assert!(!manager.check_and_record("conn-a", &config));
-        assert!(!manager.check_and_record("conn-b", &config));
-        assert!(!manager.check_and_record("conn-c", &config));
+        // At the limit: new connection check rejected
+        manager.connection_count.fetch_add(1, Ordering::SeqCst);
         assert!(manager.check_and_record("conn-d", &config));
     }
 
@@ -1813,6 +1807,10 @@ mod tests {
     }
 
     /// Test check_and_record with exact connection boundary
+    ///
+    /// Note: `check_and_record` is a read-only pre-check; `connection_count` is
+    /// incremented by `add_connection`. This test simulates active connections
+    /// by directly setting `connection_count` to verify the boundary check.
     #[test]
     fn check_and_record_exact_connection_boundary() {
         let manager = ConnectionManager::new();
@@ -1822,8 +1820,11 @@ mod tests {
             rate_limit_window_seconds: 10,
             ..Default::default()
         };
+        // Under the limit: not rate limited
+        manager.connection_count.fetch_add(1, Ordering::SeqCst);
         assert!(!manager.check_and_record("conn-1", &config));
-        assert!(!manager.check_and_record("conn-2", &config));
+        // At the limit: new connection check rejected
+        manager.connection_count.fetch_add(1, Ordering::SeqCst);
         assert!(manager.check_and_record("conn-3", &config));
     }
 
