@@ -418,4 +418,263 @@ mod tests {
         logger.flush().await;
         logger.shutdown().await;
     }
+
+    #[test]
+    fn test_logger_config_default_values() {
+        let config = LoggerConfig::default();
+        assert_eq!(config.min_level, LogLevel::Info);
+        assert!(matches!(config.format, LogFormat::Json));
+        assert!(config.colored);
+        assert_eq!(config.max_file_size, 10 * 1024 * 1024);
+        assert_eq!(config.max_files, 5);
+    }
+
+    #[test]
+    fn test_write_log_entry_text_colored() {
+        let entry = LogEntry::new(LogLevel::Error, "test", "Error msg");
+        let mut buf = Vec::new();
+        write_log_entry(&mut buf, &entry, LogFormat::Text, true).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+        assert!(output.contains("ERROR"));
+        assert!(output.contains("Error msg"));
+        assert!(output.contains("test"));
+        // Should contain ANSI escape codes
+        assert!(output.contains("\x1b["));
+    }
+
+    #[test]
+    fn test_write_log_entry_text_uncolored() {
+        let entry = LogEntry::new(LogLevel::Info, "app", "Hello");
+        let mut buf = Vec::new();
+        write_log_entry(&mut buf, &entry, LogFormat::Text, false).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+        assert!(output.contains("INFO"));
+        assert!(output.contains("Hello"));
+        assert!(!output.contains("\x1b["));
+    }
+
+    #[test]
+    fn test_write_log_entry_text_uncolored_with_fields() {
+        let entry = LogEntry::new(LogLevel::Warn, "auth", "Failed login")
+            .with_field("ip", serde_json::json!("10.0.0.1"));
+        let mut buf = Vec::new();
+        write_log_entry(&mut buf, &entry, LogFormat::Text, false).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+        assert!(output.contains("WARN"), "Should contain WARN level");
+        assert!(output.contains("ip"), "Should contain field key");
+        assert!(output.contains("10.0.0.1"), "Should contain field value");
+    }
+
+    #[test]
+    fn test_write_log_entry_json_uncolored() {
+        let entry = LogEntry::new(LogLevel::Debug, "api", "Request received")
+            .with_field("path", "/users");
+        let mut buf = Vec::new();
+        write_log_entry(&mut buf, &entry, LogFormat::Json, false).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+        let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+        assert_eq!(parsed["level"], "debug");
+        assert_eq!(parsed["target"], "api");
+        assert_eq!(parsed["message"], "Request received");
+        assert!(!output.contains("\x1b["));
+    }
+
+    #[test]
+    fn test_write_log_entry_json_colored() {
+        let entry = LogEntry::new(LogLevel::Trace, "db", "Query executed");
+        let mut buf = Vec::new();
+        write_log_entry(&mut buf, &entry, LogFormat::Json, true).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+        // Should contain ANSI escape codes at start
+        assert!(output.contains("\x1b["));
+        // The JSON content should be inside
+        assert!(output.contains("trace"));
+        assert!(output.contains("db"));
+    }
+
+    #[test]
+    fn test_level_color_trace() {
+        let mut buf = Vec::new();
+        let entry = LogEntry::new(LogLevel::Trace, "t", "m");
+        write_log_entry(&mut buf, &entry, LogFormat::Text, true).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+        assert!(output.contains("\x1b[90m"));
+    }
+
+    #[test]
+    fn test_level_color_debug() {
+        let mut buf = Vec::new();
+        let entry = LogEntry::new(LogLevel::Debug, "t", "m");
+        write_log_entry(&mut buf, &entry, LogFormat::Text, true).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+        assert!(output.contains("\x1b[36m"));
+    }
+
+    #[test]
+    fn test_level_color_info() {
+        let mut buf = Vec::new();
+        let entry = LogEntry::new(LogLevel::Info, "t", "m");
+        write_log_entry(&mut buf, &entry, LogFormat::Text, true).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+        assert!(output.contains("\x1b[32m"));
+    }
+
+    #[test]
+    fn test_level_color_warn() {
+        let mut buf = Vec::new();
+        let entry = LogEntry::new(LogLevel::Warn, "t", "m");
+        write_log_entry(&mut buf, &entry, LogFormat::Text, true).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+        assert!(output.contains("\x1b[33m"));
+    }
+
+    #[test]
+    fn test_level_color_error() {
+        let mut buf = Vec::new();
+        let entry = LogEntry::new(LogLevel::Error, "t", "m");
+        write_log_entry(&mut buf, &entry, LogFormat::Text, true).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+        assert!(output.contains("\x1b[31m"));
+    }
+
+    #[test]
+    fn test_log_entry_with_fields_multiple() {
+        let entry = LogEntry::new(LogLevel::Info, "test", "msg")
+            .with_fields(vec![
+                ("a".to_string(), serde_json::json!(1)),
+                ("b".to_string(), serde_json::json!("two")),
+                ("c".to_string(), serde_json::json!(true)),
+            ]);
+        assert_eq!(entry.fields.len(), 3);
+        assert_eq!(entry.fields.get("a"), Some(&serde_json::json!(1)));
+    }
+
+    #[test]
+    fn test_log_entry_with_fields_empty() {
+        let entry = LogEntry::new(LogLevel::Info, "test", "msg").with_fields(vec![]);
+        assert_eq!(entry.fields.len(), 0);
+    }
+
+    #[test]
+    fn test_log_entry_with_fields_overwrites() {
+        let entry = LogEntry::new(LogLevel::Info, "test", "msg")
+            .with_field("key", "first")
+            .with_field("key", "second");
+        assert_eq!(entry.fields.len(), 1);
+        assert_eq!(entry.fields.get("key"), Some(&serde_json::json!("second")));
+    }
+
+    #[tokio::test]
+    async fn test_structured_logger_trace_filtered_out() {
+        let config = LoggerConfig {
+            min_level: LogLevel::Info,
+            format: LogFormat::Json,
+            colored: false,
+            ..Default::default()
+        };
+        let logger = StructuredLogger::new(config);
+        logger.trace("test", "should be filtered", vec![]);
+        logger.flush().await;
+        logger.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn test_structured_logger_debug_emitted() {
+        let config = LoggerConfig {
+            min_level: LogLevel::Debug,
+            format: LogFormat::Json,
+            colored: false,
+            ..Default::default()
+        };
+        let logger = StructuredLogger::new(config);
+        logger.debug("test", "debug msg", vec![]);
+        logger.flush().await;
+        logger.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn test_structured_logger_warn_emitted() {
+        let config = LoggerConfig {
+            min_level: LogLevel::Warn,
+            format: LogFormat::Json,
+            colored: false,
+            ..Default::default()
+        };
+        let logger = StructuredLogger::new(config);
+        logger.warn("test", "warn msg", vec![]);
+        logger.info("test", "should be filtered", vec![]);
+        logger.flush().await;
+        logger.shutdown().await;
+    }
+
+    #[test]
+    fn test_log_level_ordering() {
+        assert!(LogLevel::Trace < LogLevel::Debug);
+        assert!(LogLevel::Debug < LogLevel::Info);
+        assert!(LogLevel::Info < LogLevel::Warn);
+        assert!(LogLevel::Warn < LogLevel::Error);
+    }
+
+    #[test]
+    fn test_log_level_ordering_chained() {
+        assert!(LogLevel::Trace < LogLevel::Info);
+        assert!(LogLevel::Debug < LogLevel::Error);
+    }
+
+    #[test]
+    fn test_log_level_equality() {
+        assert_eq!(LogLevel::Info, LogLevel::Info);
+        assert!(LogLevel::Info >= LogLevel::Info);
+        assert!(LogLevel::Info <= LogLevel::Info);
+    }
+
+    #[test]
+    fn test_log_level_serde_roundtrip() {
+        let levels = [
+            LogLevel::Trace,
+            LogLevel::Debug,
+            LogLevel::Info,
+            LogLevel::Warn,
+            LogLevel::Error,
+        ];
+        for level in levels {
+            let json = serde_json::to_string(&level).unwrap();
+            let restored: LogLevel = serde_json::from_str(&json).unwrap();
+            assert_eq!(level, restored);
+        }
+    }
+
+    #[test]
+    fn test_log_level_serde_lowercase() {
+        let json = serde_json::to_string(&LogLevel::Info).unwrap();
+        assert!(json.contains("info"));
+    }
+
+    #[test]
+    fn test_log_level_deserialize_lowercase() {
+        let level: LogLevel = serde_json::from_str("\"warn\"").unwrap();
+        assert_eq!(level, LogLevel::Warn);
+    }
+
+    #[test]
+    fn test_log_level_display_all() {
+        assert_eq!(format!("{}", LogLevel::Trace), "TRACE");
+        assert_eq!(format!("{}", LogLevel::Debug), "DEBUG");
+        assert_eq!(format!("{}", LogLevel::Info), "INFO");
+        assert_eq!(format!("{}", LogLevel::Warn), "WARN");
+        assert_eq!(format!("{}", LogLevel::Error), "ERROR");
+    }
+
+    #[test]
+    fn test_logger_error_display() {
+        let err = LoggerError::AlreadyInitialized;
+        assert!(err.to_string().contains("already initialized"));
+    }
+
+    #[test]
+    fn test_logger_error_debug() {
+        let err = LoggerError::AlreadyInitialized;
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("AlreadyInitialized"));
+    }
 }

@@ -546,4 +546,186 @@ mod tests {
         assert_eq!(config.grace_period, Duration::from_secs(86400 * 7));
         assert_eq!(config.keep_versions, 3);
     }
+
+    // ===== LruCacheManager Tests =====
+
+    #[tokio::test]
+    async fn test_lru_cache_manager_basic_creation() {
+        use crate::cache::DashMapCache;
+
+        let cache = DashMapCache::new();
+        let config = LruConfig::default();
+        let manager = LruCacheManager::new(Arc::new(cache), config);
+
+        let stats = manager.stats().await;
+        assert_eq!(stats.max_entries, 10_000);
+        assert_eq!(stats.ttl, Duration::from_secs(3600));
+    }
+
+    #[tokio::test]
+    async fn test_lru_cache_manager_eviction() {
+        use crate::cache::DashMapCache;
+
+        let cache = DashMapCache::with_capacity(10);
+        let config = LruConfig {
+            max_entries: 5,
+            ttl: Duration::from_secs(3600),
+            eviction_threshold: 0.8,
+        };
+        let manager = LruCacheManager::new(Arc::new(cache), config);
+
+        for i in 0..5 {
+            manager.set(&format!("key_{}", i), vec![i as u8]);
+        }
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let stats = manager.stats().await;
+        assert!(stats.total_entries <= 5);
+    }
+
+    #[tokio::test]
+    async fn test_lru_cache_manager_access_order() {
+        use crate::cache::DashMapCache;
+
+        let cache = DashMapCache::new();
+        let config = LruConfig::default();
+        let manager = LruCacheManager::new(Arc::new(cache), config);
+
+        manager.set("key1", b"value1".to_vec());
+        manager.set("key2", b"value2".to_vec());
+        manager.set("key3", b"value3".to_vec());
+
+        let _ = manager.get("key1");
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        assert_eq!(manager.get("key1"), Some(b"value1".to_vec()));
+    }
+
+    #[tokio::test]
+    async fn test_lru_cache_manager_custom_config() {
+        use crate::cache::DashMapCache;
+
+        let cache = DashMapCache::new();
+        let config = LruConfig {
+            max_entries: 500,
+            ttl: Duration::from_secs(1800),
+            eviction_threshold: 0.6,
+        };
+        let manager = LruCacheManager::new(Arc::new(cache), config);
+
+        let stats = manager.stats().await;
+        assert_eq!(stats.max_entries, 500);
+        assert_eq!(stats.ttl, Duration::from_secs(1800));
+    }
+
+    #[test]
+    fn test_lru_config_clone() {
+        let config = LruConfig {
+            max_entries: 5000,
+            ttl: Duration::from_secs(7200),
+            eviction_threshold: 0.9,
+        };
+
+        let cloned = config.clone();
+        assert_eq!(cloned.max_entries, 5000);
+        assert_eq!(cloned.ttl, Duration::from_secs(7200));
+        assert!((cloned.eviction_threshold - 0.9).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_rotation_config_clone() {
+        let config = RotationConfig {
+            rotation_interval: Duration::from_secs(86400 * 60),
+            grace_period: Duration::from_secs(86400 * 14),
+            keep_versions: 5,
+        };
+
+        let cloned = config.clone();
+        assert_eq!(cloned.rotation_interval, Duration::from_secs(86400 * 60));
+        assert_eq!(cloned.grace_period, Duration::from_secs(86400 * 14));
+        assert_eq!(cloned.keep_versions, 5);
+    }
+
+    #[test]
+    fn test_api_key_version_deactivate() {
+        let mut version = ApiKeyVersion::new(
+            "v1".to_string(),
+            "hash123".to_string(),
+            vec!["read".to_string()],
+            None,
+        );
+
+        assert!(version.is_active);
+
+        version.deactivate();
+
+        assert!(!version.is_active);
+    }
+
+    #[test]
+    fn test_api_key_version_clone() {
+        let version = ApiKeyVersion::new(
+            "v1".to_string(),
+            "hash123".to_string(),
+            vec!["read".to_string(), "write".to_string()],
+            Some(Duration::from_secs(3600)),
+        );
+
+        let cloned = version.clone();
+        assert_eq!(cloned.version, "v1");
+        assert_eq!(cloned.key_hash, "hash123");
+        assert_eq!(cloned.permissions.len(), 2);
+        assert!(cloned.is_active);
+    }
+
+    #[test]
+    fn test_api_key_metadata_cleanup_versions() {
+        let mut metadata = ApiKeyMetadata::new("key1".to_string(), None);
+
+        for i in 1..=5 {
+            let version = ApiKeyVersion::new(format!("v{}", i), format!("hash{}", i), vec![], None);
+            metadata.add_version(version);
+        }
+
+        metadata.cleanup_versions(2);
+
+        assert!(metadata.versions.len() <= 2);
+    }
+
+    #[test]
+    fn test_api_key_metadata_get_active_version() {
+        let mut metadata = ApiKeyMetadata::new("key1".to_string(), None);
+
+        let v1 = ApiKeyVersion::new("v1".to_string(), "hash1".to_string(), vec![], None);
+        let v2 = ApiKeyVersion::new("v2".to_string(), "hash2".to_string(), vec![], None);
+
+        metadata.add_version(v1);
+        metadata.add_version(v2);
+
+        let _ = metadata.rotate_to_version(1);
+
+        let active = metadata.get_active_version();
+        assert!(active.is_some());
+        assert_eq!(active.unwrap().version, "v2");
+    }
+
+    #[test]
+    fn test_api_key_metadata_clone() {
+        let mut metadata = ApiKeyMetadata::new("key1".to_string(), Some("Test key".to_string()));
+
+        let version = ApiKeyVersion::new(
+            "v1".to_string(),
+            "hash1".to_string(),
+            vec!["read".to_string()],
+            None,
+        );
+        metadata.add_version(version);
+
+        let cloned = metadata.clone();
+        assert_eq!(cloned.key_id, "key1");
+        assert_eq!(cloned.description, Some("Test key".to_string()));
+        assert_eq!(cloned.versions.len(), 1);
+    }
 }
