@@ -339,4 +339,357 @@ mod tests {
         // Clone shares the same inner Arc, so they share data
         assert_eq!(cache2.get("key"), Some(b"value".to_vec()));
     }
+
+    #[test]
+    fn test_set_overwrites_existing() {
+        let cache = DashMapCache::new();
+        cache.set("key1", b"value1".to_vec());
+        cache.set("key1", b"value2".to_vec());
+        assert_eq!(cache.get("key1"), Some(b"value2".to_vec()));
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn test_get_many() {
+        let cache = DashMapCache::new();
+        cache.set("key1", b"value1".to_vec());
+        cache.set("key2", b"value2".to_vec());
+        cache.set("key3", b"value3".to_vec());
+
+        let results = cache.get_many(&["key1", "key2", "nonexistent"]);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results.get("key1"), Some(&b"value1".to_vec()));
+        assert_eq!(results.get("key2"), Some(&b"value2".to_vec()));
+        assert!(!results.contains_key("nonexistent"));
+    }
+
+    #[test]
+    fn test_get_many_empty_keys() {
+        let cache = DashMapCache::new();
+        let results = cache.get_many(&[]);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_set_many() {
+        let cache = DashMapCache::new();
+        let items = vec![
+            ("key1".to_string(), b"value1".to_vec()),
+            ("key2".to_string(), b"value2".to_vec()),
+            ("key3".to_string(), b"value3".to_vec()),
+        ];
+        cache.set_many(&items);
+        assert_eq!(cache.len(), 3);
+        assert_eq!(cache.get("key1"), Some(b"value1".to_vec()));
+        assert_eq!(cache.get("key2"), Some(b"value2".to_vec()));
+        assert_eq!(cache.get("key3"), Some(b"value3".to_vec()));
+    }
+
+    #[test]
+    fn test_set_many_empty() {
+        let cache = DashMapCache::new();
+        cache.set_many(&[]);
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn test_delete_many() {
+        let cache = DashMapCache::new();
+        cache.set("key1", b"value1".to_vec());
+        cache.set("key2", b"value2".to_vec());
+        cache.set("key3", b"value3".to_vec());
+
+        let deleted = cache.delete_many(&["key1", "key2", "nonexistent"]);
+        assert_eq!(deleted, 2);
+        assert_eq!(cache.len(), 1);
+        assert!(!cache.contains("key1"));
+        assert!(!cache.contains("key2"));
+        assert!(cache.contains("key3"));
+    }
+
+    #[test]
+    fn test_delete_many_empty() {
+        let cache = DashMapCache::new();
+        let deleted = cache.delete_many(&[]);
+        assert_eq!(deleted, 0);
+    }
+
+    #[test]
+    fn test_lru_eviction() {
+        let cache = DashMapCache::with_capacity(3);
+        cache.set("key1", b"value1".to_vec());
+        cache.set("key2", b"value2".to_vec());
+        cache.set("key3", b"value3".to_vec());
+        assert_eq!(cache.len(), 3);
+
+        // Adding a 4th key should evict the oldest (key1)
+        cache.set("key4", b"value4".to_vec());
+        assert_eq!(cache.len(), 3);
+        assert!(cache.get("key1").is_none());
+        assert!(cache.contains("key2"));
+        assert!(cache.contains("key3"));
+        assert!(cache.contains("key4"));
+    }
+
+    #[test]
+    fn test_lru_updates_access_order() {
+        let cache = DashMapCache::with_capacity(3);
+        cache.set("key1", b"value1".to_vec());
+        cache.set("key2", b"value2".to_vec());
+        cache.set("key3", b"value3".to_vec());
+
+        // Re-access key1 to make it most recently used
+        cache.set("key1", b"value1".to_vec());
+
+        // Adding a 4th key should evict key2 (now the oldest)
+        cache.set("key4", b"value4".to_vec());
+        assert_eq!(cache.len(), 3);
+        assert!(cache.contains("key1"));
+        assert!(!cache.contains("key2"));
+        assert!(cache.contains("key3"));
+        assert!(cache.contains("key4"));
+    }
+
+    #[test]
+    fn test_inner_method() {
+        let cache = DashMapCache::new();
+        cache.set("key", b"value".to_vec());
+        let inner = cache.inner();
+        assert!(inner.contains_key("key"));
+    }
+
+    #[test]
+    fn test_concurrent_access() {
+        use std::thread;
+
+        let cache = Arc::new(DashMapCache::new());
+        let mut handles = vec![];
+
+        for i in 0..10 {
+            let cache_clone = cache.clone();
+            let handle = thread::spawn(move || {
+                let key = format!("key{}", i);
+                cache_clone.set(&key, vec![i as u8; 4]);
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        assert_eq!(cache.len(), 10);
+        for i in 0..10 {
+            let key = format!("key{}", i);
+            assert!(cache.contains(&key));
+        }
+    }
+
+    #[test]
+    fn test_concurrent_reads_and_writes() {
+        use std::thread;
+
+        let cache = Arc::new(DashMapCache::new());
+
+        // Write some initial data
+        for i in 0..5 {
+            cache.set(&format!("key{}", i), vec![i as u8; 4]);
+        }
+
+        let mut handles = vec![];
+
+        // Spawn reader threads
+        for i in 0..5 {
+            let cache_clone = cache.clone();
+            let handle = thread::spawn(move || {
+                let key = format!("key{}", i);
+                let _ = cache_clone.get(&key);
+            });
+            handles.push(handle);
+        }
+
+        // Spawn writer threads
+        for i in 5..10 {
+            let cache_clone = cache.clone();
+            let handle = thread::spawn(move || {
+                let key = format!("key{}", i);
+                cache_clone.set(&key, vec![i as u8; 4]);
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        assert_eq!(cache.len(), 10);
+    }
+
+    #[test]
+    fn test_key_collision_same_key() {
+        let cache = DashMapCache::new();
+        cache.set("key", b"first".to_vec());
+        cache.set("key", b"second".to_vec());
+        cache.set("key", b"third".to_vec());
+
+        assert_eq!(cache.get("key"), Some(b"third".to_vec()));
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn test_empty_cache_operations() {
+        let cache = DashMapCache::new();
+        assert!(cache.is_empty());
+        assert_eq!(cache.len(), 0);
+        assert_eq!(cache.get("any_key"), None);
+        assert!(!cache.delete("any_key"));
+        assert!(!cache.contains("any_key"));
+    }
+
+    #[test]
+    fn test_large_capacity() {
+        let cache = DashMapCache::with_capacity(10000);
+        for i in 0..100 {
+            cache.set(&format!("key{}", i), vec![i as u8; 8]);
+        }
+        assert_eq!(cache.len(), 100);
+    }
+
+    #[test]
+    fn test_binary_values() {
+        let cache = DashMapCache::new();
+        let binary_data = vec![0u8, 1, 2, 255, 254, 253];
+        cache.set("binary", binary_data.clone());
+        assert_eq!(cache.get("binary"), Some(binary_data));
+    }
+
+    #[test]
+    fn test_empty_string_key() {
+        let cache = DashMapCache::new();
+        cache.set("", b"empty_key".to_vec());
+        assert_eq!(cache.get(""), Some(b"empty_key".to_vec()));
+        assert!(cache.contains(""));
+        assert!(cache.delete(""));
+        assert_eq!(cache.get(""), None);
+    }
+
+    #[test]
+    fn test_find_keys_by_pattern_prefix() {
+        let cache = DashMapCache::new();
+        cache.set("user:1", b"v1".to_vec());
+        cache.set("user:2", b"v2".to_vec());
+        cache.set("user:3", b"v3".to_vec());
+        cache.set("session:1", b"s1".to_vec());
+
+        let keys = cache.find_keys_by_pattern("user:*");
+        assert_eq!(keys.len(), 3);
+        assert!(keys.contains(&"user:1".to_string()));
+        assert!(keys.contains(&"user:2".to_string()));
+        assert!(keys.contains(&"user:3".to_string()));
+    }
+
+    #[test]
+    fn test_find_keys_by_pattern_no_match() {
+        let cache = DashMapCache::new();
+        cache.set("user:1", b"v1".to_vec());
+        cache.set("user:2", b"v2".to_vec());
+
+        let keys = cache.find_keys_by_pattern("session:*");
+        assert!(keys.is_empty());
+    }
+
+    #[test]
+    fn test_find_keys_by_pattern_wildcard() {
+        let cache = DashMapCache::new();
+        cache.set("user:1", b"v1".to_vec());
+        cache.set("user:2", b"v2".to_vec());
+        cache.set("admin:1", b"a1".to_vec());
+
+        let keys = cache.find_keys_by_pattern("*:1");
+        assert_eq!(keys.len(), 2);
+        assert!(keys.contains(&"user:1".to_string()));
+        assert!(keys.contains(&"admin:1".to_string()));
+    }
+
+    #[test]
+    fn test_invalidate_pattern() {
+        let cache = DashMapCache::new();
+        cache.set("user:1", b"v1".to_vec());
+        cache.set("user:2", b"v2".to_vec());
+        cache.set("user:3", b"v3".to_vec());
+        cache.set("session:1", b"s1".to_vec());
+
+        let deleted = cache.invalidate("user:*");
+        assert_eq!(deleted, 3);
+        assert_eq!(cache.len(), 1);
+        assert!(cache.contains("session:1"));
+        assert!(!cache.contains("user:1"));
+    }
+
+    #[test]
+    fn test_get_stats() {
+        let cache = DashMapCache::new();
+        cache.set("key1", b"v1".to_vec());
+        cache.set("key2", b"v2".to_vec());
+        cache.set("key3", b"v3".to_vec());
+
+        let stats = cache.get_stats();
+        assert_eq!(stats.get("total_keys"), Some(&3u64));
+        assert!(stats.contains_key("capacity"));
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_async_access() {
+        let cache = Arc::new(DashMapCache::new());
+        let mut handles = vec![];
+
+        for i in 0..20 {
+            let cache_clone = cache.clone();
+            let handle = tokio::spawn(async move {
+                let key = format!("key{}", i);
+                cache_clone.set(&key, vec![i as u8; 4]);
+                cache_clone.get(&key)
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        assert_eq!(cache.len(), 20);
+    }
+
+    #[test]
+    fn test_lru_eviction_with_updates() {
+        let cache = DashMapCache::with_capacity(3);
+        cache.set("key1", b"v1".to_vec());
+        cache.set("key2", b"v2".to_vec());
+        cache.set("key3", b"v3".to_vec());
+
+        // Update key1 to make it most recently used
+        cache.set("key1", b"v1_updated".to_vec());
+
+        // Add key4, should evict key2
+        cache.set("key4", b"v4".to_vec());
+
+        assert_eq!(cache.len(), 3);
+        assert!(!cache.contains("key2"));
+        assert!(cache.contains("key1"));
+        assert!(cache.contains("key3"));
+        assert!(cache.contains("key4"));
+        assert_eq!(cache.get("key1"), Some(b"v1_updated".to_vec()));
+    }
+
+    #[test]
+    fn test_delete_updates_prefix_index() {
+        let cache = DashMapCache::new();
+        cache.set("user:1", b"v1".to_vec());
+        cache.set("user:2", b"v2".to_vec());
+        cache.delete("user:1");
+
+        let keys = cache.find_keys_by_pattern("user:*");
+        assert_eq!(keys.len(), 1);
+        assert!(keys.contains(&"user:2".to_string()));
+    }
 }

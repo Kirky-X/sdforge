@@ -196,3 +196,148 @@ pub use dashmap::DashMapCache;
 pub use oxcache::backend::{DashMapMemoryBackend, MemoryBackend, MokaMemoryBackend};
 pub use oxcache::cache::Cache;
 pub use oxcache::traits::{CacheKey, Cacheable};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cache::DashMapCache;
+
+    #[test]
+    fn test_canonicalize_cache_key_trims_whitespace() {
+        assert_eq!(canonicalize_cache_key("  user:123  "), "user:123");
+        assert_eq!(canonicalize_cache_key("key"), "key");
+        assert_eq!(canonicalize_cache_key("\tkey\n"), "key");
+    }
+
+    #[test]
+    fn test_canonicalize_cache_key_lowercase() {
+        assert_eq!(canonicalize_cache_key("USER:123"), "user:123");
+        assert_eq!(canonicalize_cache_key("MixedCase"), "mixedcase");
+        assert_eq!(canonicalize_cache_key("USER:ABC"), "user:abc");
+    }
+
+    #[test]
+    fn test_canonicalize_cache_key_combined() {
+        assert_eq!(canonicalize_cache_key("  USER:123  "), "user:123");
+        assert_eq!(canonicalize_cache_key("\tMIXED_CASE\n"), "mixed_case");
+    }
+
+    #[test]
+    fn test_synccache_trait_get_set() {
+        let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
+        cache.set("test_key", b"test_value".to_vec());
+        assert_eq!(cache.get("test_key"), Some(b"test_value".to_vec()));
+        assert!(cache.contains("test_key"));
+    }
+
+    #[test]
+    fn test_synccache_trait_delete() {
+        let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
+        cache.set("key1", b"value1".to_vec());
+        assert!(cache.delete("key1"));
+        assert!(!cache.contains("key1"));
+        assert_eq!(cache.get("key1"), None);
+    }
+
+    #[test]
+    fn test_synccache_trait_clear() {
+        let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
+        cache.set("key1", b"v1".to_vec());
+        cache.set("key2", b"v2".to_vec());
+        cache.clear();
+        assert!(cache.is_empty());
+        assert_eq!(cache.len(), 0);
+    }
+
+    #[test]
+    fn test_synccache_trait_len_and_is_empty() {
+        let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
+        assert!(cache.is_empty());
+        assert_eq!(cache.len(), 0);
+
+        cache.set("key1", b"v1".to_vec());
+        cache.set("key2", b"v2".to_vec());
+        assert!(!cache.is_empty());
+        assert_eq!(cache.len(), 2);
+    }
+
+    #[test]
+    fn test_synccache_trait_get_many() {
+        let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
+        cache.set("key1", b"v1".to_vec());
+        cache.set("key2", b"v2".to_vec());
+        cache.set("key3", b"v3".to_vec());
+
+        let results = cache.get_many(&["key1", "key2", "nonexistent"]);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results.get("key1"), Some(&b"v1".to_vec()));
+    }
+
+    #[test]
+    fn test_synccache_trait_set_many() {
+        let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
+        let items = vec![
+            ("k1".to_string(), b"v1".to_vec()),
+            ("k2".to_string(), b"v2".to_vec()),
+        ];
+        cache.set_many(&items);
+        assert_eq!(cache.len(), 2);
+        assert_eq!(cache.get("k1"), Some(b"v1".to_vec()));
+        assert_eq!(cache.get("k2"), Some(b"v2".to_vec()));
+    }
+
+    #[test]
+    fn test_synccache_trait_delete_many() {
+        let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
+        cache.set("k1", b"v1".to_vec());
+        cache.set("k2", b"v2".to_vec());
+        cache.set("k3", b"v3".to_vec());
+
+        let deleted = cache.delete_many(&["k1", "k3", "nonexistent"]);
+        assert_eq!(deleted, 2);
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn test_synccache_trait_invalidate() {
+        let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
+        cache.set("user:1", b"v1".to_vec());
+        cache.set("user:2", b"v2".to_vec());
+        cache.set("session:1", b"s1".to_vec());
+
+        let deleted = cache.invalidate("user:*");
+        assert_eq!(deleted, 2);
+        assert_eq!(cache.len(), 1);
+        assert!(cache.contains("session:1"));
+    }
+
+    #[test]
+    fn test_synccache_trait_find_keys_by_pattern() {
+        let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
+        cache.set("user:1", b"v1".to_vec());
+        cache.set("user:2", b"v2".to_vec());
+        cache.set("admin:1", b"a1".to_vec());
+
+        let keys = cache.find_keys_by_pattern("user:*");
+        assert_eq!(keys.len(), 2);
+        assert!(keys.contains(&"user:1".to_string()));
+        assert!(keys.contains(&"user:2".to_string()));
+    }
+
+    #[test]
+    fn test_synccache_trait_get_stats() {
+        let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
+        cache.set("k1", b"v1".to_vec());
+        cache.set("k2", b"v2".to_vec());
+
+        let stats = cache.get_stats();
+        assert!(stats.contains_key("total_keys"));
+    }
+
+    #[test]
+    fn test_shared_cache_type_alias() {
+        let cache: SharedCache = Arc::new(DashMapCache::new());
+        cache.set("key", b"value".to_vec());
+        assert!(cache.contains("key"));
+    }
+}
