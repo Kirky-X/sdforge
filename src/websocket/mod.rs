@@ -535,6 +535,7 @@ const MAX_JSON_DEPTH: usize = 16;
 ///
 /// Implementers should consider validating string field lengths against this limit
 /// when processing WebSocket messages, especially in production environments.
+#[cfg(test)]
 const MAX_STRING_LENGTH: usize = 64 * 1024; // 64KB
 
 #[cfg(feature = "websocket")]
