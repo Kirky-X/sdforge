@@ -215,7 +215,7 @@ pub mod cache;
 
 #[cfg(feature = "cache")]
 pub use cache::{
-    Cache, CacheKey, Cacheable, DashMapCache, DashMapMemoryBackend, MemoryBackend, SharedCache,
+    Cache, CacheKey, DashMapCache, DashMapMemoryBackend, MokaMemoryBackend, SharedCache,
     SyncCache,
 };
 
