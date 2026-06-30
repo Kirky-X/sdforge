@@ -13,6 +13,7 @@
 
 pub mod error;
 pub mod json;
+#[cfg(any(feature = "http", feature = "security"))]
 pub mod regex_cache;
 pub mod registration;
 pub mod response;
@@ -25,6 +26,7 @@ pub use error::{
     ApiError, ErrorCategory, ErrorContext, Locale, LocalizedError, SdForgeError, TranslationStore,
 };
 pub use json::{api_metadata_response, error_response, paginated_response, success_response};
+#[cfg(any(feature = "http", feature = "security"))]
 pub use regex_cache::{common, get_regex, RegexCache, RegexCacheStats};
 pub use registration::Registration;
 pub use response::{ServiceError, ServiceResponse};
