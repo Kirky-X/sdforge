@@ -76,11 +76,21 @@ mod mcp_tool_instance_tests {
         Arc::new(AddTool) as Arc<dyn mcp_sdk::tools::Tool>
     }
 
+    fn create_echo_metadata() -> ApiMetadata {
+        ApiMetadata::new(
+            "test_tool".to_string(),
+            "v1".to_string(),
+            "A test tool".to_string(),
+            None,
+            false,
+        )
+    }
+
     #[test]
     fn test_mcp_tool_registration_new() {
-        // Test that McpToolRegistration::new() works
+        // Test that McpToolRegistration::new() works with the new API
         let _registration =
-            McpToolRegistration::new("test_tool", "v1", "A test tool", create_echo_tool);
+            McpToolRegistration::new("test_tool", "v1", create_echo_tool, create_echo_metadata);
         // Registration was successful if we reach here
         assert!(true, "Tool registration should succeed without panic");
     }
