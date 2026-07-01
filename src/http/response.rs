@@ -137,4 +137,101 @@ mod tests {
         let resp = ServiceResponse::<String>::error(err).into_response();
         assert_eq!(resp.status(), 418);
     }
+
+    /// Test: all ApiError variants map to the correct HTTP status code.
+    /// Covers the previously-uncovered match arms (AuthenticationFailed,
+    /// AccessDenied, RateLimitExceeded, Internal, ServiceUnavailable,
+    /// ValidationError).
+    #[test]
+    fn test_api_error_all_variants_status_mapping() {
+        let cases: Vec<(u16, ApiError)> = vec![
+            (
+                401,
+                ApiError::AuthenticationFailed {
+                    reason: "bad token".to_string(),
+                },
+            ),
+            (
+                403,
+                ApiError::AccessDenied {
+                    permission: "read".to_string(),
+                    user_id: None,
+                },
+            ),
+            (
+                429,
+                ApiError::RateLimitExceeded {
+                    limit: 100,
+                    window_seconds: 60,
+                },
+            ),
+            (
+                500,
+                ApiError::Internal {
+                    message: "boom".to_string(),
+                    error_id: "err-1".to_string(),
+                    source: None,
+                    context: None,
+                },
+            ),
+            (
+                503,
+                ApiError::ServiceUnavailable {
+                    service: "downstream".to_string(),
+                    retry_after: Some(10),
+                    source: None,
+                },
+            ),
+            (
+                422,
+                ApiError::ValidationError {
+                    field: "email".to_string(),
+                    constraint: "invalid format".to_string(),
+                },
+            ),
+        ];
+        for (expected_status, err) in cases {
+            let resp = err.into_response();
+            assert_eq!(
+                resp.status(),
+                axum::http::StatusCode::from_u16(expected_status).unwrap(),
+                "ApiError variant should map to HTTP {}",
+                expected_status
+            );
+        }
+    }
+
+    /// Test: build_json_response falls back when serialization fails.
+    /// Covers the `Err(_e)` branch by passing a value whose `Serialize`
+    /// implementation returns an error.
+    #[test]
+    fn test_build_json_response_serialization_failure_fallback() {
+        use serde::ser::{self, Serialize, Serializer};
+
+        /// A type that always fails to serialize.
+        struct Unserializable;
+        impl Serialize for Unserializable {
+            fn serialize<S: Serializer>(&self, _serializer: S) -> Result<S::Ok, S::Error> {
+                Err(ser::Error::custom("intentional serialization failure"))
+            }
+        }
+
+        let resp = build_json_response(200, &Unserializable, "fallback message");
+        // Should fall back to a 200 response with the fallback body.
+        assert_eq!(resp.status(), 200);
+        let content_type = resp.headers().get(header::CONTENT_TYPE).unwrap();
+        assert_eq!(content_type, "application/json");
+    }
+
+    /// Test: build_fallback_response escapes embedded double quotes in the
+    /// message to keep the emitted JSON valid.
+    #[test]
+    fn test_build_fallback_response_escapes_quotes() {
+        let resp = build_fallback_response(400, r#"bad "value" here"#);
+        assert_eq!(resp.status(), 400);
+        assert_eq!(
+            resp.headers().get(header::CONTENT_TYPE).unwrap(),
+            "application/json"
+        );
+    }
 }

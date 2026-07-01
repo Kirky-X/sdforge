@@ -132,7 +132,7 @@ mod core_tests {
         let start = std::time::Instant::now();
 
         for i in 0..10000 {
-            let _error = ApiError::internal_error(&format!("Error {}", i), "PERF_TEST");
+            let _error = ApiError::internal_error(format!("Error {}", i), "PERF_TEST");
         }
 
         let elapsed = start.elapsed();
@@ -185,6 +185,9 @@ mod config_tests {
                 cors: None,
             })
             .build();
+
+        #[cfg(feature = "validation")]
+        let config = config.expect("build should succeed with valid config");
 
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 3000);

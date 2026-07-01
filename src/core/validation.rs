@@ -1362,6 +1362,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_security_limits_reasonable_values() {
         // Verify limits are within reasonable ranges
 
@@ -1386,6 +1387,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_password_length_validation() {
         // Test password length constraints
         assert!(MIN_PASSWORD_LENGTH < MAX_PASSWORD_LENGTH);

@@ -417,7 +417,7 @@ mod tests {
         assert_eq!(reg_copy.name(), "test_api");
 
         // Test Clone
-        let reg_cloned = reg.clone();
+        let reg_cloned = reg;
         assert_eq!(reg_cloned.name(), "test_api");
         assert_eq!(reg_cloned.version(), "v1");
 

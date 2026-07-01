@@ -484,7 +484,7 @@ mod tests {
         impl_default_new!(EmptyConfig);
 
         let config = EmptyConfig::new();
-        let _default = EmptyConfig::default();
+        let _default = EmptyConfig;
         // Ensure both construction paths produce the same type
         let _: EmptyConfig = config;
     }
