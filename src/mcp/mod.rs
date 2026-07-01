@@ -133,6 +133,15 @@ mod tests {
     use super::*;
     use mcp_sdk::tools::Tool;
 
+    // Helper: exercise all four Tool trait methods so that the trait-method
+    // impls on every test tool struct are covered by line coverage.
+    fn exercise_all_tool_methods(tool: &dyn mcp_sdk::tools::Tool) {
+        let _ = tool.name();
+        let _ = tool.description();
+        let _ = tool.input_schema();
+        let _ = tool.call(None);
+    }
+
     // ============================================================================
     // Globally-registered test tool for inventory coverage
     //
@@ -229,6 +238,7 @@ mod tests {
         // Test that the create_fn works
         let tool = registration.create();
         assert_eq!(tool.name(), "test");
+        exercise_all_tool_methods(&*tool);
     }
 
     /// Test ApiMetadata structure
@@ -286,6 +296,7 @@ mod tests {
         }
 
         let tool = Arc::new(ErrorTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let result = tool.call(None);
         assert!(result.is_err());
         assert!(result
@@ -335,6 +346,7 @@ mod tests {
         }
 
         let tool = Arc::new(ValidationTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
 
         // Missing required field
         let invalid_input = serde_json::json!({"other": "value"});
@@ -388,6 +400,7 @@ mod tests {
         }
 
         let tool = Arc::new(SchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let schema = tool.input_schema();
 
         assert_eq!(schema["type"], "object");
@@ -421,6 +434,7 @@ mod tests {
         }
 
         let tool = Arc::new(PrimitiveTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let schema = tool.input_schema();
         assert_eq!(schema["type"], "string");
     }
@@ -458,6 +472,7 @@ mod tests {
         }
 
         let tool = Arc::new(ResultTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let input = serde_json::json!({"key": "value"});
         let result = tool.call(Some(input));
 
@@ -493,6 +508,7 @@ mod tests {
         }
 
         let tool = Arc::new(EmptyTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let result = tool.call(None);
 
         assert!(result.is_ok());
@@ -529,6 +545,7 @@ mod tests {
         }
 
         let tool = Arc::new(ErrorResponseTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let result = tool.call(None);
 
         assert!(result.is_ok());
@@ -626,6 +643,7 @@ mod tests {
 
         assert_eq!(instance.metadata().name(), "instance_test_tool");
         assert_eq!(instance.metadata().version(), "v1");
+        exercise_all_tool_methods(&**instance.tool());
     }
 
     // ============================================================================
@@ -1190,6 +1208,7 @@ mod tests {
 
         let inner = Arc::new(NameTool) as Arc<dyn mcp_sdk::tools::Tool>;
         let wrapper = ArcToolWrapper { inner };
+        exercise_all_tool_methods(&wrapper);
         assert_eq!(wrapper.name(), "wrapped_name_tool");
     }
 
@@ -1220,6 +1239,7 @@ mod tests {
 
         let inner = Arc::new(DescTool) as Arc<dyn mcp_sdk::tools::Tool>;
         let wrapper = ArcToolWrapper { inner };
+        exercise_all_tool_methods(&wrapper);
         assert_eq!(wrapper.description(), "wrapped description text");
     }
 
@@ -1255,6 +1275,7 @@ mod tests {
 
         let inner = Arc::new(SchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
         let wrapper = ArcToolWrapper { inner };
+        exercise_all_tool_methods(&wrapper);
         let schema = wrapper.input_schema();
         assert_eq!(schema["type"], "object");
         assert!(schema["properties"]["wrapped_field"].is_object());
@@ -1290,6 +1311,7 @@ mod tests {
 
         let inner = Arc::new(CallTool) as Arc<dyn mcp_sdk::tools::Tool>;
         let wrapper = ArcToolWrapper { inner };
+        exercise_all_tool_methods(&wrapper);
         let result = wrapper.call(Some(serde_json::json!({"key": "value"})));
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -1319,6 +1341,7 @@ mod tests {
 
         let inner = Arc::new(ErrorTool) as Arc<dyn mcp_sdk::tools::Tool>;
         let wrapper = ArcToolWrapper { inner };
+        exercise_all_tool_methods(&wrapper);
         let result = wrapper.call(None);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Wrapped error"));
@@ -1354,6 +1377,7 @@ mod tests {
         }
 
         let tool = Arc::new(UnicodeTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         assert_eq!(tool.name(), "工具_🛠️_tool");
         assert_eq!(tool.description(), "描述 🎯 description");
     }
@@ -1384,6 +1408,7 @@ mod tests {
         }
 
         let tool = Arc::new(SpecialTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         assert_eq!(tool.name(), "tool-with_special.chars:123");
         assert!(tool.description().contains('\n'));
         assert!(tool.description().contains('\t'));
@@ -1415,6 +1440,7 @@ mod tests {
         }
 
         let tool = Arc::new(EmptyNameTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         assert_eq!(tool.name(), "");
     }
 
@@ -1444,6 +1470,7 @@ mod tests {
         }
 
         let tool = Arc::new(EmptyDescTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         assert_eq!(tool.description(), "");
     }
 
@@ -1473,6 +1500,7 @@ mod tests {
         }
 
         let tool = Arc::new(LongNameTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         assert_eq!(tool.name().len(), 1000);
     }
 
@@ -1502,6 +1530,7 @@ mod tests {
         }
 
         let tool = Arc::new(LongDescTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         assert_eq!(tool.description().len(), 5000);
     }
 
@@ -1535,6 +1564,7 @@ mod tests {
         }
 
         let tool = Arc::new(EmptySchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let schema = tool.input_schema();
         assert!(schema.is_object());
         assert!(schema.as_object().unwrap().is_empty());
@@ -1583,6 +1613,7 @@ mod tests {
         }
 
         let tool = Arc::new(NestedSchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let schema = tool.input_schema();
         assert!(
             schema["properties"]["user"]["properties"]["address"]["properties"]["city"].is_object()
@@ -1623,6 +1654,7 @@ mod tests {
         }
 
         let tool = Arc::new(ArraySchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let schema = tool.input_schema();
         assert_eq!(schema["type"], "array");
         assert!(schema["items"].is_object());
@@ -1657,6 +1689,7 @@ mod tests {
         }
 
         let tool = Arc::new(EnumSchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let schema = tool.input_schema();
         assert!(schema["enum"].is_array());
         assert_eq!(schema["enum"].as_array().unwrap().len(), 3);
@@ -1693,6 +1726,7 @@ mod tests {
         }
 
         let tool = Arc::new(OneOfSchemaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let schema = tool.input_schema();
         assert!(schema["oneOf"].is_array());
     }
@@ -1739,6 +1773,7 @@ mod tests {
         }
 
         let tool = Arc::new(NullInputTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let result = tool.call(None);
         assert!(result.is_ok());
         let result = tool.call(Some(serde_json::Value::Null));
@@ -1777,6 +1812,7 @@ mod tests {
         }
 
         let tool = Arc::new(ArrayInputTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let result = tool.call(Some(serde_json::json!([1, 2, 3])));
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -1815,6 +1851,7 @@ mod tests {
         }
 
         let tool = Arc::new(LargeJsonTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let large_input: serde_json::Value = serde_json::json!({
             "items": (0..1000).map(|i| format!("item_{}", i)).collect::<Vec<_>>()
         });
@@ -1864,6 +1901,7 @@ mod tests {
         }
 
         let tool = Arc::new(DeepNestedTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let nested = serde_json::json!({
             "l1": {
                 "l2": {
@@ -1916,6 +1954,7 @@ mod tests {
         }
 
         let tool = Arc::new(TextContentTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let result = tool.call(None).unwrap();
         assert_eq!(result.content.len(), 2);
     }
@@ -1949,6 +1988,7 @@ mod tests {
         }
 
         let tool = Arc::new(MetaTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let result = tool.call(None).unwrap();
         assert!(result.meta.is_some());
         let meta = result.meta.unwrap();
@@ -1983,6 +2023,7 @@ mod tests {
         }
 
         let tool = Arc::new(ErrorFlagTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let result = tool.call(None).unwrap();
         assert_eq!(result.is_error, Some(true));
     }
@@ -2077,6 +2118,9 @@ mod tests {
         assert_eq!(REGISTRATION.name(), "const_test");
         assert_eq!(REGISTRATION.version(), "v1");
         assert_eq!(REGISTRATION.metadata().description(), "Const tool test");
+
+        let tool = REGISTRATION.create();
+        exercise_all_tool_methods(&*tool);
     }
 
     #[test]
@@ -2118,6 +2162,9 @@ mod tests {
 
         assert_eq!(cloned.name, reg.name);
         assert_eq!(cloned.version, reg.version);
+
+        let tool = reg.create();
+        exercise_all_tool_methods(&*tool);
     }
 
     #[test]
@@ -2158,6 +2205,9 @@ mod tests {
         let debug_str = format!("{:?}", reg);
         assert!(debug_str.contains("McpToolRegistration"));
         assert!(debug_str.contains("debug_tool"));
+
+        let tool = reg.create();
+        exercise_all_tool_methods(&*tool);
     }
 
     // ============================================================================
@@ -2360,6 +2410,7 @@ mod tests {
         }
 
         let tool = Arc::new(StatefulTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
 
         for i in 0..10 {
             let result = tool.call(Some(serde_json::json!({"value": i})));
@@ -2400,6 +2451,7 @@ mod tests {
         }
 
         let tool = Arc::new(CloneableTool) as Arc<dyn mcp_sdk::tools::Tool>;
+        exercise_all_tool_methods(&*tool);
         let tool2 = tool.clone();
         let tool3 = Arc::clone(&tool);
 
@@ -2477,6 +2529,7 @@ mod tests {
         for tool in &tools {
             assert!(!tool.metadata().name().is_empty());
             assert!(!tool.metadata().version().is_empty());
+            exercise_all_tool_methods(&**tool.tool());
         }
     }
 
@@ -2544,6 +2597,7 @@ mod tests {
         assert_eq!(instance.metadata().version(), "v1");
         assert_eq!(instance.metadata().description(), "Greets a user");
         assert_eq!(instance.tool().name(), "greet");
+        exercise_all_tool_methods(&**instance.tool());
     }
 
     // ============================================================================
@@ -2604,6 +2658,7 @@ mod tests {
         let tool_ref = instance.tool();
         assert_eq!(tool_ref.name(), "accessor");
         assert_eq!(tool_ref.description(), "desc");
+        exercise_all_tool_methods(&**instance.tool());
     }
 
     #[test]
@@ -2647,6 +2702,7 @@ mod tests {
         assert_eq!(meta_ref.description(), "Metadata test");
         assert_eq!(meta_ref.cache_ttl(), Some(300));
         assert!(!meta_ref.is_streaming());
+        exercise_all_tool_methods(&**instance.tool());
     }
 
     // ============================================================================
@@ -2741,6 +2797,7 @@ mod tests {
 
         let inner = Arc::new(NoneInputTool) as Arc<dyn mcp_sdk::tools::Tool>;
         let wrapper = ArcToolWrapper { inner };
+        exercise_all_tool_methods(&wrapper);
 
         let result = wrapper.call(None);
         assert!(result.is_ok());
@@ -2799,6 +2856,9 @@ mod tests {
         assert_eq!(metadata.description(), "Metadata registration test");
         assert_eq!(metadata.cache_ttl(), Some(600));
         assert!(metadata.is_streaming());
+
+        let tool = reg.create();
+        exercise_all_tool_methods(&*tool);
     }
 
     #[test]
@@ -2843,7 +2903,8 @@ mod tests {
         fn assert_static<T: 'static>() {}
         assert_static::<McpToolRegistration>();
 
-        let _ = reg;
+        let tool = reg.create();
+        exercise_all_tool_methods(&*tool);
     }
 
     // ============================================================================
@@ -2904,6 +2965,7 @@ mod tests {
         let wrapper = ArcToolWrapper {
             inner: instance.tool().clone(),
         };
+        exercise_all_tool_methods(&wrapper);
 
         assert_eq!(wrapper.name(), "flow");
         assert_eq!(wrapper.description(), "Full flow test");
@@ -3050,6 +3112,7 @@ mod tests {
 
         let tool = Arc::new(BoolTool) as Arc<dyn mcp_sdk::tools::Tool>;
         let wrapper = ArcToolWrapper { inner: tool };
+        exercise_all_tool_methods(&wrapper);
 
         let result = wrapper.call(Some(serde_json::json!(true)));
         assert!(result.is_ok());
@@ -3092,6 +3155,7 @@ mod tests {
 
         let tool = Arc::new(NumberTool) as Arc<dyn mcp_sdk::tools::Tool>;
         let wrapper = ArcToolWrapper { inner: tool };
+        exercise_all_tool_methods(&wrapper);
 
         let result = wrapper.call(Some(serde_json::json!(42.5)));
         assert!(result.is_ok());
@@ -3130,6 +3194,7 @@ mod tests {
 
         let tool = Arc::new(StringTool) as Arc<dyn mcp_sdk::tools::Tool>;
         let wrapper = ArcToolWrapper { inner: tool };
+        exercise_all_tool_methods(&wrapper);
 
         let result = wrapper.call(Some(serde_json::json!("hello world")));
         assert!(result.is_ok());
@@ -3176,6 +3241,7 @@ mod tests {
 
         let tool = Arc::new(ConcurrentTool) as Arc<dyn mcp_sdk::tools::Tool>;
         let wrapper = ArcToolWrapper { inner: tool };
+        exercise_all_tool_methods(&wrapper);
 
         let mut handles = vec![];
         for i in 0..5 {
@@ -3235,6 +3301,7 @@ mod tests {
 
         assert!(instance.metadata().is_streaming());
         assert_eq!(instance.metadata().name(), "stream");
+        exercise_all_tool_methods(&**instance.tool());
     }
 
     #[test]
@@ -3274,6 +3341,7 @@ mod tests {
 
         assert_eq!(instance.metadata().cache_ttl(), Some(3600));
         assert!(!instance.metadata().is_streaming());
+        exercise_all_tool_methods(&**instance.tool());
     }
 
     // ============================================================================
@@ -3287,6 +3355,7 @@ mod tests {
         for tool in &tools {
             assert!(!tool.tool().name().is_empty());
             assert!(!tool.metadata().name().is_empty());
+            exercise_all_tool_methods(&**tool.tool());
         }
 
         let server = build().await;
@@ -3327,6 +3396,7 @@ mod tests {
 
         let tool = Arc::new(MalformedTool) as Arc<dyn mcp_sdk::tools::Tool>;
         let wrapper = ArcToolWrapper { inner: tool };
+        exercise_all_tool_methods(&wrapper);
 
         let result = wrapper.call(Some(serde_json::json!([1, 2, 3])));
         assert!(result.is_err());
@@ -3377,6 +3447,7 @@ mod tests {
 
         let tool = Arc::new(EmptyObjTool) as Arc<dyn mcp_sdk::tools::Tool>;
         let wrapper = ArcToolWrapper { inner: tool };
+        exercise_all_tool_methods(&wrapper);
 
         let result = wrapper.call(Some(serde_json::json!({})));
         assert!(result.is_ok());
@@ -3400,6 +3471,9 @@ mod tests {
             "Expected coverage_test_tool to be registered, got {} tools",
             tools.len()
         );
+        for t in &tools {
+            exercise_all_tool_methods(&**t.tool());
+        }
     }
 
     #[test]
@@ -3419,6 +3493,7 @@ mod tests {
 
         // The underlying tool should be callable
         assert_eq!(coverage_tool.tool().name(), "coverage_test_tool");
+        exercise_all_tool_methods(&**coverage_tool.tool());
     }
 
     #[test]
@@ -3431,6 +3506,7 @@ mod tests {
 
         let result = coverage_tool.tool().call(None);
         assert!(result.is_ok());
+        exercise_all_tool_methods(&**coverage_tool.tool());
     }
 
     #[test]
@@ -3439,6 +3515,10 @@ mod tests {
         // Tools collection. We verify it completes without panicking and
         // that the registered tool is included. We run this in a tokio
         // context because build() is async.
+        let tools = get_mcp_tools();
+        for t in &tools {
+            exercise_all_tool_methods(&**t.tool());
+        }
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async {
             // build() consumes the registered tools and constructs a Server.
