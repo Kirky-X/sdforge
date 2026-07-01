@@ -587,6 +587,95 @@ impl ApiError {
             format!(r#"{{"success":false,"error":{{"code":"{code}","message":"{message}"}}}}"#)
         })
     }
+
+    /// Convert this `ApiError` into a `ServiceError` for HTTP responses.
+    ///
+    /// This is the single source of truth for `ApiError` → `ServiceError`
+    /// conversion. Both `SdForgeError::to_service_error` and the
+    /// `From<ApiError> for ServiceError` impl delegate here to avoid
+    /// duplicating the ~80-line match (which previously diverged: the
+    /// `From` impl added a `timestamp` under the `timestamp` feature while
+    /// `to_service_error` did not).
+    pub fn to_service_error(&self) -> ServiceError {
+        match self {
+            ApiError::NotFound {
+                resource,
+                resource_id,
+            } => ServiceError::with_details(
+                "NOT_FOUND",
+                format!("Resource not found: {}", resource),
+                serde_json::json!({ "resource": resource, "resource_id": resource_id }),
+                404,
+            ),
+            ApiError::InvalidInput {
+                message,
+                field,
+                value,
+            } => ServiceError::with_details(
+                "INVALID_INPUT",
+                message.clone(),
+                serde_json::json!({ "field": field, "value": value }),
+                400,
+            ),
+            ApiError::AuthenticationFailed { reason } => ServiceError::with_details(
+                "AUTHENTICATION_FAILED",
+                format!("Authentication failed: {}", reason),
+                serde_json::json!({ "reason": reason }),
+                401,
+            ),
+            ApiError::AccessDenied {
+                permission,
+                user_id,
+            } => ServiceError::with_details(
+                "ACCESS_DENIED",
+                format!("Access denied: {}", permission),
+                serde_json::json!({ "permission": permission, "user_id": user_id }),
+                403,
+            ),
+            ApiError::RateLimitExceeded {
+                limit,
+                window_seconds,
+            } => ServiceError::with_details(
+                "RATE_LIMIT_EXCEEDED",
+                "Rate limit exceeded".to_string(),
+                serde_json::json!({ "limit": limit, "window_seconds": window_seconds }),
+                429,
+            ),
+            ApiError::Internal {
+                message,
+                error_id,
+                source: _,
+                context,
+            } => {
+                let mut details = serde_json::json!({ "error_id": error_id });
+                #[cfg(feature = "timestamp")]
+                {
+                    details["timestamp"] = serde_json::json!(chrono::Utc::now().timestamp());
+                }
+                if let Some(ctx) = context {
+                    details["context"] =
+                        serde_json::to_value(ctx).unwrap_or(serde_json::json!({}));
+                }
+                ServiceError::with_details("INTERNAL_ERROR", message.clone(), details, 500)
+            }
+            ApiError::ServiceUnavailable {
+                service,
+                retry_after,
+                source: _,
+            } => ServiceError::with_details(
+                "SERVICE_UNAVAILABLE",
+                format!("Service unavailable: {}", service),
+                serde_json::json!({ "service": service, "retry_after": retry_after }),
+                503,
+            ),
+            ApiError::ValidationError { field, constraint } => ServiceError::with_details(
+                "VALIDATION_ERROR",
+                format!("Validation failed: {}", field),
+                serde_json::json!({ "field": field, "constraint": constraint }),
+                422,
+            ),
+        }
+    }
 }
 
 // =============================================================================
@@ -778,83 +867,7 @@ impl SdForgeError {
     /// Convert to ServiceError for HTTP response
     pub fn to_service_error(&self) -> ServiceError {
         match self {
-            SdForgeError::Api(err) => {
-                // Convert ApiError to ServiceError by reconstructing
-                match err {
-                    ApiError::NotFound {
-                        resource,
-                        resource_id,
-                    } => ServiceError::with_details(
-                        "NOT_FOUND",
-                        format!("Resource not found: {}", resource),
-                        serde_json::json!({ "resource": resource, "resource_id": resource_id }),
-                        404,
-                    ),
-                    ApiError::InvalidInput {
-                        message,
-                        field,
-                        value,
-                    } => ServiceError::with_details(
-                        "INVALID_INPUT",
-                        message.clone(),
-                        serde_json::json!({ "field": field, "value": value }),
-                        400,
-                    ),
-                    ApiError::AuthenticationFailed { reason } => ServiceError::with_details(
-                        "AUTHENTICATION_FAILED",
-                        format!("Authentication failed: {}", reason),
-                        serde_json::json!({ "reason": reason }),
-                        401,
-                    ),
-                    ApiError::AccessDenied {
-                        permission,
-                        user_id,
-                    } => ServiceError::with_details(
-                        "ACCESS_DENIED",
-                        format!("Access denied: {}", permission),
-                        serde_json::json!({ "permission": permission, "user_id": user_id }),
-                        403,
-                    ),
-                    ApiError::RateLimitExceeded {
-                        limit,
-                        window_seconds,
-                    } => ServiceError::with_details(
-                        "RATE_LIMIT_EXCEEDED",
-                        "Rate limit exceeded".to_string(),
-                        serde_json::json!({ "limit": limit, "window_seconds": window_seconds }),
-                        429,
-                    ),
-                    ApiError::Internal {
-                        message,
-                        error_id,
-                        context,
-                        ..
-                    } => {
-                        let mut details = serde_json::json!({ "error_id": error_id });
-                        if let Some(ctx) = context {
-                            details["context"] =
-                                serde_json::to_value(ctx).unwrap_or(serde_json::json!({}));
-                        }
-                        ServiceError::with_details("INTERNAL_ERROR", message.clone(), details, 500)
-                    }
-                    ApiError::ServiceUnavailable {
-                        service,
-                        retry_after,
-                        ..
-                    } => ServiceError::with_details(
-                        "SERVICE_UNAVAILABLE",
-                        format!("Service unavailable: {}", service),
-                        serde_json::json!({ "service": service, "retry_after": retry_after }),
-                        503,
-                    ),
-                    ApiError::ValidationError { field, constraint } => ServiceError::with_details(
-                        "VALIDATION_ERROR",
-                        format!("Validation failed: {}", field),
-                        serde_json::json!({ "field": field, "constraint": constraint }),
-                        422,
-                    ),
-                }
-            }
+            SdForgeError::Api(err) => err.to_service_error(),
             #[cfg(feature = "security")]
             SdForgeError::Auth(e) => ServiceError::with_details(
                 "AUTH_ERROR",
@@ -896,84 +909,7 @@ impl SdForgeError {
 // Backward compatibility - keep existing From implementation
 impl From<ApiError> for ServiceError {
     fn from(err: ApiError) -> Self {
-        match err {
-            ApiError::NotFound {
-                resource,
-                resource_id,
-            } => ServiceError::with_details(
-                "NOT_FOUND",
-                format!("Resource not found: {}", resource),
-                serde_json::json!({ "resource": resource, "resource_id": resource_id }),
-                404,
-            ),
-            ApiError::InvalidInput {
-                message,
-                field,
-                value,
-            } => ServiceError::with_details(
-                "INVALID_INPUT",
-                message.clone(),
-                serde_json::json!({ "field": field, "value": value }),
-                400,
-            ),
-            ApiError::AuthenticationFailed { reason } => ServiceError::with_details(
-                "AUTHENTICATION_FAILED",
-                format!("Authentication failed: {}", reason),
-                serde_json::json!({ "reason": reason }),
-                401,
-            ),
-            ApiError::AccessDenied {
-                permission,
-                user_id,
-            } => ServiceError::with_details(
-                "ACCESS_DENIED",
-                format!("Access denied: {}", permission),
-                serde_json::json!({ "permission": permission, "user_id": user_id }),
-                403,
-            ),
-            ApiError::RateLimitExceeded {
-                limit,
-                window_seconds,
-            } => ServiceError::with_details(
-                "RATE_LIMIT_EXCEEDED",
-                "Rate limit exceeded".to_string(),
-                serde_json::json!({ "limit": limit, "window_seconds": window_seconds }),
-                429,
-            ),
-            ApiError::Internal {
-                message,
-                error_id,
-                source: _,
-                context,
-            } => {
-                let mut details = serde_json::json!({ "error_id": error_id });
-                #[cfg(feature = "timestamp")]
-                {
-                    details["timestamp"] = serde_json::json!(chrono::Utc::now().timestamp());
-                }
-                // Include context if available
-                if let Some(ctx) = context {
-                    details["context"] = serde_json::to_value(ctx).unwrap_or(serde_json::json!({}));
-                }
-                ServiceError::with_details("INTERNAL_ERROR", message.clone(), details, 500)
-            }
-            ApiError::ServiceUnavailable {
-                service,
-                retry_after,
-                source: _,
-            } => ServiceError::with_details(
-                "SERVICE_UNAVAILABLE",
-                format!("Service unavailable: {}", service),
-                serde_json::json!({ "service": service, "retry_after": retry_after }),
-                503,
-            ),
-            ApiError::ValidationError { field, constraint } => ServiceError::with_details(
-                "VALIDATION_ERROR",
-                format!("Validation failed: {}", field),
-                serde_json::json!({ "field": field, "constraint": constraint }),
-                422,
-            ),
-        }
+        err.to_service_error()
     }
 }
 
