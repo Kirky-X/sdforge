@@ -783,6 +783,21 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         proc_macro2::Span::call_site(),
     );
 
+    // Metadata function names for each protocol's Registration::new() 4th param.
+    // These return sdforge::core::ApiMetadata, matching the HTTP pattern (line 970-975).
+    let mcp_metadata_fn_name = syn::Ident::new(
+        &format!("__mcp_metadata_{}", fn_name_str),
+        proc_macro2::Span::call_site(),
+    );
+    let ws_metadata_fn_name = syn::Ident::new(
+        &format!("__ws_metadata_{}", fn_name_str),
+        proc_macro2::Span::call_site(),
+    );
+    let grpc_metadata_fn_name = syn::Ident::new(
+        &format!("__grpc_metadata_{}", fn_name_str),
+        proc_macro2::Span::call_site(),
+    );
+
     let convert_axum_path = |path_value: &str| {
         path_value
             .split('/')
@@ -1153,30 +1168,48 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                 #mcp_struct_name::create()
             }
 
+            // DECAY-1 fix: McpToolRegistration::new expects (name, version, create_fn, metadata_fn).
+            // The previous code passed description (&str) as create_fn and create_fn as metadata_fn,
+            // causing a compile-time type mismatch. Reuse #grpc_metadata (already-computed
+            // ApiMetadata tokens) for the metadata_fn body, matching the HTTP pattern.
+            #[cfg(feature = "mcp")]
+            fn #mcp_metadata_fn_name() -> sdforge::core::ApiMetadata {
+                #grpc_metadata
+            }
+
             #[cfg(feature = "mcp")]
             sdforge::inventory::submit!(sdforge::mcp::McpToolRegistration::new(
                 #mcp_tool_name,
                 #version,
-                #mcp_tool_description,
                 #mcp_create_fn_name,
+                #mcp_metadata_fn_name,
             ));
         }
     } else {
         quote! {}
     };
 
-    let ws_code = if let Some(ws_path_value) = ws_path.as_ref() {
-        let ws_axum_path = convert_axum_path(ws_path_value);
+    let ws_code = if ws_path.is_some() {
         quote! {
             #[cfg(feature = "websocket")]
             fn #ws_create_fn_name() -> std::sync::Arc<dyn sdforge::websocket::WebSocketHandler> {
                 #fn_name()
             }
 
+            // DECAY-1 fix: WebSocketRoute::new expects (name, version, create_fn, metadata_fn).
+            // The previous code only passed 2 params (path and create_fn), missing version
+            // and metadata_fn. The path is handled by the WebSocketHandler instance itself.
+            #[cfg(feature = "websocket")]
+            fn #ws_metadata_fn_name() -> sdforge::core::ApiMetadata {
+                #grpc_metadata
+            }
+
             #[cfg(feature = "websocket")]
             sdforge::inventory::submit!(sdforge::websocket::WebSocketRoute::new(
-                #ws_axum_path,
+                #name,
+                #version,
                 #ws_create_fn_name,
+                #ws_metadata_fn_name,
             ));
         }
     } else {
@@ -1193,10 +1226,20 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                 )
             }
 
+            // DECAY-1 fix: GrpcRouteRegistration::new expects (name, version, create_fn, metadata_fn).
+            // The previous code only passed 2 params (name and create_fn), missing version
+            // and metadata_fn.
+            #[cfg(feature = "grpc")]
+            fn #grpc_metadata_fn_name() -> sdforge::core::ApiMetadata {
+                #grpc_metadata
+            }
+
             #[cfg(feature = "grpc")]
             sdforge::inventory::submit!(sdforge::grpc::GrpcRouteRegistration::new(
                 #name,
+                #version,
                 #grpc_create_fn_name,
+                #grpc_metadata_fn_name,
             ));
         }
     } else {
