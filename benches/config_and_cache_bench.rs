@@ -7,6 +7,7 @@
 //! - LRU cache operations
 //! - Builder pattern overhead
 
+#[allow(unused_imports)]
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 /// Benchmark configuration validation performance

@@ -237,7 +237,7 @@ mod mcp_protocol_tests {
     async fn test_mcp_list_tools_endpoint() {
         // Verify that MCP server can be built
         let _server = build().await;
-        assert!(true, "MCP server build should succeed");
+        let _ = &_server; // construction without panic verifies success
 
         // Verify get_mcp_tools returns a vector
         let tools = get_mcp_tools();
@@ -736,8 +736,7 @@ mod mcp_protocol_tests {
         });
         let result = tool.call(Some(input));
         // Should either succeed with inf or fail gracefully
-        if result.is_ok() {
-            let response = result.unwrap();
+        if let Ok(response) = result {
             if let ToolResponseContent::Text { text } = &response.content[0] {
                 assert!(
                     text.contains("inf") || !text.is_empty(),
@@ -756,7 +755,7 @@ mod mcp_protocol_tests {
     #[tokio::test]
     async fn test_mcp_server_build_empty() {
         let _server = build().await;
-        assert!(true, "MCP server should build successfully");
+        let _ = &_server; // construction without panic verifies success
     }
 
     /// Test: MCP server build with multiple tools
@@ -772,7 +771,7 @@ mod mcp_protocol_tests {
         });
 
         let _server = build().await;
-        assert!(true, "MCP server should build with multiple tools");
+        let _ = &_server; // construction without panic verifies success
     }
 
     // ============================================================================
@@ -803,8 +802,6 @@ mod mcp_protocol_tests {
             // Streaming flag should be accessible
             let _streaming = metadata.is_streaming();
         }
-
-        assert!(true, "All metadata accessors should work");
     }
 
     /// Test: Tool instance tool access
@@ -825,8 +822,6 @@ mod mcp_protocol_tests {
             // Tool should have an input schema
             let _schema = tool.input_schema();
         }
-
-        assert!(true, "All tool accessors should work");
     }
 
     /// Test: Arc clone functionality
@@ -862,7 +857,7 @@ mod mcp_protocol_tests {
             });
 
         // Registration creation should succeed without panic
-        assert!(true, "Registration creation should succeed");
+        let _ = &_registration;
 
         // Verify by checking if we can get tools (the registration is collected via inventory)
         let tools = get_mcp_tools();

@@ -1216,7 +1216,7 @@ mod tests {
         }
 
         let registration =
-            GrpcRouteRegistration::new("multi", "v1", create_route, || ApiMetadata::default());
+            GrpcRouteRegistration::new("multi", "v1", create_route, ApiMetadata::default);
 
         let route1 = registration.create();
         let route2 = registration.create();
@@ -1234,7 +1234,7 @@ mod tests {
         }
 
         let registration =
-            GrpcRouteRegistration::new("", "v1", create_route, || ApiMetadata::default());
+            GrpcRouteRegistration::new("", "v1", create_route, ApiMetadata::default);
 
         assert_eq!(registration.name(), "");
     }
@@ -1249,7 +1249,7 @@ mod tests {
         }
 
         let registration =
-            GrpcRouteRegistration::new("debug_test", "v1", create_route, || ApiMetadata::default());
+            GrpcRouteRegistration::new("debug_test", "v1", create_route, ApiMetadata::default);
         let debug_str = format!("{:?}", registration);
 
         assert!(debug_str.contains("debug_test"));
@@ -1265,7 +1265,7 @@ mod tests {
         }
 
         let registration =
-            GrpcRouteRegistration::new("clone_test", "v1", create_route, || ApiMetadata::default());
+            GrpcRouteRegistration::new("clone_test", "v1", create_route, ApiMetadata::default);
         let cloned = registration;
 
         assert_eq!(registration.name(), cloned.name());
@@ -1902,5 +1902,32 @@ mod tests {
             let result = handle.await.unwrap();
             assert!(result.is_ok());
         }
+    }
+
+    /// Test build_server rejects invalid address format
+    #[tokio::test]
+    async fn test_build_server_invalid_address() {
+        let result = build_server("not_a_valid_address").await;
+        assert!(result.is_err(), "Should reject invalid address");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Invalid gRPC server address format"),
+            "Error should mention invalid address, got: {}",
+            err_msg
+        );
+    }
+
+    /// Test build_server_with_config rejects invalid address format
+    #[tokio::test]
+    async fn test_build_server_with_config_invalid_address() {
+        let config = GrpcServerConfig::default();
+        let result = build_server_with_config("invalid:addr:format", config).await;
+        assert!(result.is_err(), "Should reject invalid address");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Invalid gRPC server address format"),
+            "Error should mention invalid address, got: {}",
+            err_msg
+        );
     }
 }

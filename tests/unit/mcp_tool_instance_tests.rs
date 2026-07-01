@@ -92,7 +92,7 @@ mod mcp_tool_instance_tests {
         let _registration =
             McpToolRegistration::new("test_tool", "v1", create_echo_tool, create_echo_metadata);
         // Registration was successful if we reach here
-        assert!(true, "Tool registration should succeed without panic");
+        let _ = &_registration;
     }
 
     #[test]

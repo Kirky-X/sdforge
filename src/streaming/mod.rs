@@ -796,7 +796,7 @@ mod tests {
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
         assert!(results[0].contains(r#""type":"ping""#));
         assert!(results[0].contains("timestamp"));
     }
@@ -812,7 +812,7 @@ mod tests {
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
         assert!(results[0].contains(r#""type":"error""#));
         assert!(results[0].contains("test error"));
     }
@@ -826,7 +826,7 @@ mod tests {
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
         let has_complete = results.iter().any(|r| r.contains("complete"));
         assert!(has_complete);
     }
@@ -878,7 +878,7 @@ mod tests {
         use futures_util::stream;
 
         let input_stream = stream::iter(vec![serde_json::json!({"key": "value"})]);
-        let sse_stream = stream_to_sse(input_stream, |v| StreamEvent::data(v));
+        let sse_stream = stream_to_sse(input_stream, StreamEvent::data);
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
@@ -920,7 +920,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_stream_channel_with_zero_buffer() {
         let (tx, response) = create_stream_channel::<String>(1);
-        assert!(tx.is_closed() == false);
+        assert!(!tx.is_closed());
 
         drop(tx);
         use futures_util::StreamExt;
@@ -1163,7 +1163,7 @@ mod tests {
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
         // Should have at least the data event and completion event
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
         let has_data = results.iter().any(|r| r.contains(r#""type":"data""#));
         assert!(has_data);
     }
@@ -1180,7 +1180,7 @@ mod tests {
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
         assert!(results[0].contains(r#""type":"error""#));
     }
 

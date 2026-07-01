@@ -20,6 +20,9 @@ mod config_tests {
             })
             .build();
 
+        #[cfg(feature = "validation")]
+        let config = config.expect("build should succeed with valid config");
+
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 3000);
     }
@@ -350,6 +353,9 @@ mod config_enhanced_tests {
             .server(server)
             .build();
 
+        #[cfg(feature = "validation")]
+        let config = config.expect("build should succeed with valid config");
+
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 8080);
         assert_eq!(config.server.request_timeout_secs, 60);
@@ -388,6 +394,12 @@ mod config_enhanced_tests {
                 cors: None,
             })
             .build();
+
+        #[cfg(feature = "validation")]
+        let (config1, config2) = (
+            config1.expect("build1 should succeed"),
+            config2.expect("build2 should succeed"),
+        );
 
         assert_ne!(config1.server.port, config2.server.port);
         assert_ne!(config1.server.host, config2.server.host);
@@ -479,6 +491,7 @@ mod config_enhanced_tests {
 mod config_tests_placeholder {
     #[test]
     fn test_http_feature_required() {
-        assert!(true, "Config tests require http feature");
+        // Config tests require http feature; this stub exists to provide a test
+        // when http is disabled so the test binary still compiles and runs.
     }
 }
