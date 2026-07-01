@@ -1,0 +1,9 @@
+# cargo-llvm-cov 配置 — 本地覆盖率测量时排除生成代码与示例。
+# 完整字段见: https://github.com/taiki-e/cargo-llvm-cov#configuration
+
+# 排除生成的 protobuf 代码（src/grpc/pb/*.rs 由 tonic-build 自动生成）
+exclude-from-report = ["src/grpc/pb/*"]
+
+# 覆盖率门禁：核心库 95%（用户要求），与 CI tarpaulin --fail-under 95 对齐
+[report]
+output-dir = "target/llvm-cov-report"

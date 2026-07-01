@@ -82,7 +82,7 @@ simd-json = "~0.14"
 # 开发依赖
 tempfile = "~3.27"
 serial_test = "~3.4"
-axum-test = "19"
+axum-test = { version = "19", features = ["ws"] }
 reqwest = { version = "~0.13", features = ["json"] }
 criterion = "~0.8"
 trybuild = "~1.0"
