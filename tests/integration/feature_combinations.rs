@@ -19,7 +19,6 @@ mod mcp_only_tests {
         use sdforge::mcp;
         // Basic sanity check - ensure the module exists by calling build
         let _ = mcp::build;
-        assert!(true, "MCP module should be available");
     }
 
     #[tokio::test]

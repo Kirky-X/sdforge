@@ -4,7 +4,6 @@ mod websocket_tests {
         parse_websocket_message, AppState, ConnectionManager, RateLimitConfig, WebSocketConfig,
         WebSocketConnection, WebSocketMessage,
     };
-    use serde_json;
     use std::sync::{Arc, Mutex};
 
     // ============================================================================
@@ -186,7 +185,7 @@ mod websocket_tests {
             params: serde_json::json!({
                 "string": "hello",
                 "number": 42,
-                "float": 3.14,
+                "float": 1.5,
                 "boolean": true,
                 "null": null,
                 "array": [{"a": 1}, {"b": 2}],
@@ -203,7 +202,7 @@ mod websocket_tests {
         if let Some(WebSocketMessage::Request { params, .. }) = received {
             assert_eq!(params["string"], "hello");
             assert_eq!(params["number"], 42);
-            assert_eq!(params["float"], 3.14);
+            assert_eq!(params["float"], 1.5);
             assert_eq!(params["boolean"], true);
             assert!(params["null"].is_null());
             assert_eq!(params["array"].as_array().unwrap().len(), 2);
@@ -563,7 +562,7 @@ mod websocket_tests {
         let config = RateLimitConfig::default();
         let result = config.validate();
         // Validation should succeed for default config
-        assert!(result.is_ok() || true);
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -1370,7 +1369,7 @@ mod websocket_tests {
 
         // 连接数量可能保持为1（取决于实现）
         let count = manager.connection_count().await;
-        assert!(count >= 1 && count <= 2);
+        assert!((1..=2).contains(&count));
 
         // 获取连接应该能成功
         let retrieved = manager.get_connection(&conn_id).await;

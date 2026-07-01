@@ -268,63 +268,58 @@ fn criterion_benchmark(c: &mut Criterion) {
 }
 
 criterion_group!(benches, criterion_benchmark);
-criterion_main!(benches);
 
 // =============================================================================
 // Additional Performance Benchmarks for Security and Core Features
 // =============================================================================
 
-/// Benchmark for rate limiter performance
+/// Benchmark for API key auth rate limiting performance
 #[cfg(feature = "security")]
 fn benchmark_rate_limiter(c: &mut Criterion) {
-    use sdforge::security::{RateLimiter, RateLimiterConfig};
+    use sdforge::security::AppApiKeyAuth;
 
-    let config = RateLimiterConfig::new(100, 60); // 100 requests per minute
-    let limiter = RateLimiter::with_config(config);
+    let auth = AppApiKeyAuth::new();
 
-    c.bench_function("rate_limiter_check_first_request", |b| {
-        b.iter(|| limiter.check("test_key_1"))
+    c.bench_function("api_key_auth_validate_first", |b| {
+        b.iter(|| auth.validate_key("test_key_1", "127.0.0.1"))
     });
 
-    c.bench_function("rate_limiter_check_existing_key", |b| {
+    c.bench_function("api_key_auth_validate_existing", |b| {
         // Pre-populate the key
-        let _ = limiter.check("existing_key");
-        b.iter(|| limiter.check("existing_key"))
+        let _ = auth.validate_key("existing_key", "127.0.0.1");
+        b.iter(|| auth.validate_key("existing_key", "127.0.0.1"))
     });
 }
 
 /// Benchmark for API key validation
 #[cfg(feature = "security")]
 fn benchmark_api_key_validation(c: &mut Criterion) {
-    use sdforge::security::{ApiKeyManager, ApiKeyMetadata};
+    use sdforge::security::AppApiKeyAuth;
 
-    let manager = ApiKeyManager::new();
+    let auth = AppApiKeyAuth::new();
     let api_key = "sk_test_1234567890abcdef";
 
     // Add a test key
-    let metadata = ApiKeyMetadata::new("test_key".to_string(), Some("Test API Key".to_string()));
+    auth.add_key(api_key.to_string(), vec!["read".to_string()]);
 
     c.bench_function("api_key_validate_valid", |b| {
-        b.iter(|| {
-            manager.add_key(api_key.to_string(), metadata.clone());
-            manager.validate(api_key)
-        })
+        b.iter(|| auth.validate_key(api_key, "127.0.0.1"))
     });
 
     c.bench_function("api_key_validate_invalid", |b| {
-        b.iter(|| manager.validate("invalid_key"))
+        b.iter(|| auth.validate_key("invalid_key", "127.0.0.1"))
     });
 }
 
 /// Benchmark for JWT token operations
 #[cfg(feature = "security")]
 fn benchmark_jwt_operations(c: &mut Criterion) {
-    use sdforge::security::{generate_secure_jwt_secret, BearerAuth};
+    use sdforge::security::generate_secure_jwt_secret;
 
-    let secret = generate_secure_jwt_secret();
+    let _secret = generate_secure_jwt_secret();
 
     c.bench_function("jwt_secret_generation", |b| {
-        b.iter(|| generate_secure_jwt_secret())
+        b.iter(generate_secure_jwt_secret)
     });
 
     c.bench_function("jwt_secret_validation", |b| {
@@ -335,51 +330,29 @@ fn benchmark_jwt_operations(c: &mut Criterion) {
     });
 }
 
-/// Benchmark for error sanitization
-#[cfg(feature = "security")]
-fn benchmark_error_sanitization(c: &mut Criterion) {
-    use sdforge::security::audit::sanitize_error_message;
-
-    let clean_message = "Operation failed";
-    let sensitive_message = "Failed with password=secret123 and token=abc456";
-    let long_message = "x".repeat(1000);
-
-    c.bench_function("sanitize_clean_message", |b| {
-        b.iter(|| sanitize_error_message(clean_message))
-    });
-
-    c.bench_function("sanitize_sensitive_message", |b| {
-        b.iter(|| sanitize_error_message(sensitive_message))
-    });
-
-    c.bench_function("sanitize_long_message", |b| {
-        b.iter(|| sanitize_error_message(&long_message))
-    });
-}
-
 /// Benchmark for cache operations
 #[cfg(feature = "cache")]
 fn benchmark_cache_operations(c: &mut Criterion) {
-    use sdforge::cache::{Cache, DashMapCache, SyncCache};
+    use sdforge::cache::{DashMapCache, SyncCache};
     use std::sync::Arc;
 
     let cache = Arc::new(DashMapCache::new());
 
     c.bench_function("cache_set_simple", |b| {
-        b.iter(|| cache.set("key", "value".to_string()))
+        b.iter(|| cache.set("key", b"value".to_vec()))
     });
 
     c.bench_function("cache_get_hit", |b| {
-        cache.set("existing_key", "value".to_string());
+        cache.set("existing_key", b"value".to_vec());
         b.iter(|| cache.get("existing_key"))
     });
 
     c.bench_function("cache_get_miss", |b| {
-        b.iter(|| cache.get::<String>("nonexistent_key"))
+        b.iter(|| cache.get("nonexistent_key"))
     });
 
     c.bench_function("cache_delete", |b| {
-        cache.set("to_delete", "value".to_string());
+        cache.set("to_delete", b"value".to_vec());
         b.iter(|| cache.delete("to_delete"))
     });
 }
@@ -387,7 +360,7 @@ fn benchmark_cache_operations(c: &mut Criterion) {
 /// Benchmark for regex caching
 #[cfg(feature = "http")]
 fn benchmark_regex_caching(c: &mut Criterion) {
-    use sdforge::core::regex_cache::{get_regex, RegexCache};
+    use sdforge::core::regex_cache::get_regex;
 
     let pattern = r"^\d{3}-\d{3}-\d{4}$";
 
@@ -412,7 +385,6 @@ criterion_group!(
     benchmark_rate_limiter,
     benchmark_api_key_validation,
     benchmark_jwt_operations,
-    benchmark_error_sanitization,
 );
 
 #[cfg(feature = "cache")]

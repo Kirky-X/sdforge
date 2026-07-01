@@ -637,7 +637,7 @@ mod tests {
         let signature = log.generate_signature(secret_key);
 
         // Verify signature was generated and stored
-        assert!(signature.len() > 0);
+        assert!(!signature.is_empty());
         assert!(log.signature.is_some());
         assert_eq!(log.signature.as_ref().unwrap(), &signature);
     }
@@ -667,7 +667,7 @@ mod tests {
         // Verify with correct key
         let result = log.verify_signature(secret_key);
         assert!(result.is_ok());
-        assert!(result.unwrap() == true);
+        assert!(result.unwrap());
     }
 
     #[test]
@@ -698,7 +698,7 @@ mod tests {
         let wrong_key = b"wrong-secret-key";
         let result = log.verify_signature(wrong_key);
         assert!(result.is_ok());
-        assert!(result.unwrap() == false);
+        assert!(!result.unwrap());
     }
 
     #[test]
@@ -730,7 +730,7 @@ mod tests {
         let result = log.verify_signature(secret_key);
         assert!(result.is_ok());
         assert!(
-            result.unwrap() == false,
+            !result.unwrap(),
             "Tampered log should fail verification"
         );
     }
@@ -785,7 +785,7 @@ mod tests {
 
         // Now signature should be present
         assert!(log.signature().is_some());
-        assert!(log.signature().unwrap().len() > 0);
+        assert!(!log.signature().unwrap().is_empty());
     }
 
     // ============================================================================
@@ -1373,8 +1373,8 @@ mod tests {
     #[test]
     fn test_cache_namespace_clone() {
         let ns = CacheNamespace::BearerBlacklist;
-        let ns_clone = ns.clone();
-        assert_eq!(ns, ns_clone);
+        let ns_copy = ns;
+        assert_eq!(ns, ns_copy);
     }
 
     #[test]

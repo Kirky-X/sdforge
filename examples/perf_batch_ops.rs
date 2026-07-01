@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Kirky.X
 //! Performance verification for batch operations optimization
 
-use sdforge::cache::{Cache, DashMapCache, SyncCache};
+use sdforge::cache::{DashMapCache, SyncCache};
 use std::sync::Arc;
 use std::time::Instant;
 

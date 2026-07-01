@@ -1844,6 +1844,46 @@ mod tests {
         assert!(manager.check_and_record("conn-msg", &config));
     }
 
+    /// Test check_and_record resets the counter when the rate limit window elapses.
+    ///
+    /// Covers the window-reset branch (lines 313-315): when
+    /// `current_time - last_time >= rate_limit_window_seconds`, the message count
+    /// is reset to 0 and the last-message timestamp is refreshed, allowing a
+    /// previously rate-limited connection to send again.
+    #[test]
+    fn check_and_record_resets_after_window_elapsed() {
+        let manager = ConnectionManager::new();
+        let config = RateLimitConfig {
+            max_messages_per_second: 2,
+            max_connections: 100,
+            rate_limit_window_seconds: 10,
+            ..Default::default()
+        };
+
+        // Exhaust the per-connection message budget.
+        assert!(!manager.check_and_record("conn-reset", &config));
+        assert!(!manager.check_and_record("conn-reset", &config));
+        // Third message within the same window → rate limited.
+        assert!(manager.check_and_record("conn-reset", &config));
+
+        // Simulate the window having elapsed by backdating the last-message time.
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let backdated = now.saturating_sub(config.rate_limit_window_seconds + 1);
+        if let Some(entry) = manager.last_message_time.get_mut("conn-reset") {
+            entry.value().store(backdated, Ordering::Relaxed);
+        }
+
+        // After the window has elapsed, the counter resets and the connection
+        // is allowed to send again (not rate limited).
+        assert!(
+            !manager.check_and_record("conn-reset", &config),
+            "Connection should be allowed again after the rate limit window elapses"
+        );
+    }
+
     /// Test check_and_record with concurrent connections
     #[test]
     fn check_and_record_concurrent_connections() {
@@ -1954,7 +1994,7 @@ mod tests {
     /// Test calculate_value_depth with float
     #[test]
     fn calculate_value_depth_float() {
-        let value = serde_json::json!(3.14159);
+        let value = serde_json::json!(std::f64::consts::PI);
         let mut depth = 0;
         assert_eq!(calculate_value_depth(&value, &mut depth), 0);
     }

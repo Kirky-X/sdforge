@@ -1325,7 +1325,7 @@ mod tests {
             },
         );
 
-        let cloned = registration.clone();
+        let cloned = registration;
         assert_eq!(cloned.name, registration.name);
         assert_eq!(cloned.version, registration.version);
     }
