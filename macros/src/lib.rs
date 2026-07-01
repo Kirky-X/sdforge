@@ -866,7 +866,8 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                 .map(|p| {
                     let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
                     match p.param_kind {
-                        ParamKind::Body => quote! { #name_ident },
+                        // Body uses Json<T> extractor, extract .0 for inner type
+                        ParamKind::Body => quote! { #name_ident.0 },
                         // State/Extension use Extension extractor, extract .0 for inner type
                         ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
                         // Path, Query, Form, Header, Cookie need .0 extraction
@@ -924,7 +925,8 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                 .map(|p| {
                     let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
                     match p.param_kind {
-                        ParamKind::Body => quote! { #name_ident },
+                        // Body uses Json<T> extractor, extract .0 for inner type
+                        ParamKind::Body => quote! { #name_ident.0 },
                         // State/Extension use Extension extractor, extract .0 for inner type
                         ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
                         // Path, Query, Form, Header, Cookie need .0 extraction

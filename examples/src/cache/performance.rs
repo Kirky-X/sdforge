@@ -14,11 +14,22 @@
 //! cargo run --features "http cache" --example cache/performance
 //! ```
 
-use sdforge::cache::{Cache, CacheKey, Cacheable, DashMapCache, MemoryBackend, SyncCache};
+use sdforge::cache::{DashMapCache, SyncCache};
 use sdforge::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
+
+// =============================================================================
+// 本地 Cacheable trait
+// =============================================================================
+// oxcache 0.3 移除了全局 Cacheable trait（序列化职责交由调用方负责）。
+// 本示例直接使用 serde_json::to_vec / from_slice 进行序列化，
+// 通过 trait bound `T: Serialize + for<'de> Deserialize<'de>` 约束可缓存类型。
+
+/// 可缓存类型约定 — 实现 Serialize + Deserialize 即可
+pub trait Cacheable: Serialize + for<'de> Deserialize<'de> {}
+impl<T: Serialize + for<'de> Deserialize<'de>> Cacheable for T {}
 
 // =============================================================================
 // Data Models
@@ -34,32 +45,12 @@ pub struct Product {
     pub category: String,
 }
 
-impl Cacheable for Product {
-    fn serialize(&self) -> Result<Vec<u8>, String> {
-        serde_json::to_vec(self).map_err(|e| e.to_string())
-    }
-
-    fn deserialize(data: &[u8]) -> Result<Self, String> {
-        serde_json::from_slice(data).map_err(|e| e.to_string())
-    }
-}
-
 /// Expensive computation result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComputationResult {
     pub data: Vec<String>,
     pub computed_at: i64,
     pub ttl_seconds: u64,
-}
-
-impl Cacheable for ComputationResult {
-    fn serialize(&self) -> Result<Vec<u8>, String> {
-        serde_json::to_vec(self).map_err(|e| e.to_string())
-    }
-
-    fn deserialize(data: &[u8]) -> Result<Self, String> {
-        serde_json::from_slice(data).map_err(|e| e.to_string())
-    }
 }
 
 // =============================================================================
@@ -87,14 +78,14 @@ impl TwoLevelCache {
     pub async fn get<T: Cacheable>(&self, key: &str) -> Option<T> {
         // Try L1 first (fastest)
         if let Some(data) = self.l1_cache.get(key) {
-            return T::deserialize(&data).ok();
+            return serde_json::from_slice(&data).ok();
         }
 
         // Try L2
         if let Some(data) = self.l2_cache.get(key) {
             // Promote to L1
             self.l1_cache.set(key, data.clone());
-            return T::deserialize(&data).ok();
+            return serde_json::from_slice(&data).ok();
         }
 
         None
@@ -102,7 +93,7 @@ impl TwoLevelCache {
 
     /// Set value in both cache levels
     pub async fn set<T: Cacheable>(&self, key: &str, value: &T) {
-        if let Ok(serialized) = value.serialize() {
+        if let Ok(serialized) = serde_json::to_vec(value) {
             // Always set in L2
             self.l2_cache.set(key, serialized.clone());
             
@@ -160,7 +151,7 @@ impl CacheAsidePattern {
     {
         // Try cache first
         if let Some(data) = self.cache.get(key) {
-            if let Ok(value) = T::deserialize(&data) {
+            if let Ok(value) = serde_json::from_slice::<T>(&data) {
                 return value;
             }
         }
@@ -168,7 +159,7 @@ impl CacheAsidePattern {
         // Compute and cache
         let value = compute_fn().await;
         
-        if let Ok(serialized) = value.serialize() {
+        if let Ok(serialized) = serde_json::to_vec(&value) {
             self.cache.set(key, serialized);
         }
 
@@ -188,7 +179,7 @@ impl WriteThroughPattern {
 
     /// Write to cache (and would write to database in real app)
     pub async fn write<T: Cacheable>(&self, key: &str, value: &T) -> Result<(), String> {
-        let serialized = value.serialize()?;
+        let serialized = serde_json::to_vec(value).map_err(|e| e.to_string())?;
         self.cache.set(key, serialized);
         Ok(())
     }
@@ -201,6 +192,10 @@ impl WriteThroughPattern {
 
 // =============================================================================
 // API Endpoints
+//
+// NOTE: 下面的 handler 接受 `&TwoLevelCache` / `&CacheAsidePattern` 引用参数，
+// 不是有效的 axum extractor，因此不使用 `#[service_api]` 宏注册为 HTTP 端点。
+// 它们作为业务逻辑示例，展示缓存模式的集成方式。
 // =============================================================================
 
 /// Get product with intelligent caching
@@ -209,14 +204,6 @@ impl WriteThroughPattern {
 /// - Two-level caching
 /// - Cache promotion (L2 → L1)
 /// - Serialization/deserialization
-#[service_api(
-    name = "get_product",
-    version = "v1",
-    path = "/products/:id",
-    method = "GET",
-    tool_name = "get_product",
-    description = "Get product with two-level caching"
-)]
 async fn get_product(
     id: u64,
     cache: &TwoLevelCache,
@@ -258,14 +245,6 @@ async fn fetch_product_from_database(id: u64) -> Result<Product, ApiError> {
 /// - Cache-aside pattern
 /// - TTL-based caching
 /// - Expensive computation avoidance
-#[service_api(
-    name = "compute_analytics",
-    version = "v1",
-    path = "/analytics/compute",
-    method = "POST",
-    tool_name = "compute_analytics",
-    description = "Perform expensive computation with caching"
-)]
 async fn compute_analytics(
     request: AnalyticsRequest,
     cache_pattern: &CacheAsidePattern,
@@ -459,8 +438,8 @@ mod tests {
             category: "Test".to_string(),
         };
 
-        let serialized = product.serialize().unwrap();
-        let deserialized = Product::deserialize(&serialized).unwrap();
+        let serialized = serde_json::to_vec(&product).unwrap();
+        let deserialized: Product = serde_json::from_slice(&serialized).unwrap();
 
         assert_eq!(product.id, deserialized.id);
         assert_eq!(product.name, deserialized.name);
