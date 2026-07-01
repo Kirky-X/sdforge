@@ -21,7 +21,7 @@
 //!
 //! 将相关工具放在同一模块中：
 //!
-//! ```rust
+//! ```rust,ignore
 //! // calc.rs
 //! mod calculator {
 //!     pub fn add(request: ...) -> Result<...> { ... }

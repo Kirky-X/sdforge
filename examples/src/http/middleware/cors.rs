@@ -82,7 +82,7 @@ use sdforge::prelude::*;
 /// ```
 ///
 /// # CORS 头
-/// ```
+/// ```text
 /// Access-Control-Allow-Origin: *
 /// Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
 /// Access-Control-Allow-Headers: Content-Type, Authorization
@@ -151,7 +151,7 @@ async fn public_resources() -> Result<serde_json::Value, ApiError> {
 /// ```
 ///
 /// # 响应头
-/// ```
+/// ```text
 /// Access-Control-Allow-Origin: https://example.com
 /// ```
 #[service_api(
@@ -183,7 +183,7 @@ async fn cors_test_get() -> Result<serde_json::Value, ApiError> {
 /// ```
 ///
 /// # 响应头
-/// ```
+/// ```text
 /// Access-Control-Allow-Origin: https://example.com
 /// Access-Control-Allow-Methods: GET, POST
 /// ```

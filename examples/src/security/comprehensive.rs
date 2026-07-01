@@ -15,9 +15,9 @@
 
 use sdforge::prelude::*;
 use sdforge::security::{
-    ApiKeyAuth, AppApiKeyAuth, AuditLogger, BearerAuth,
+    ApiKeyAuth, AppApiKeyAuth, AppAuditLogger, AuthContext, AuthMetadata, BearerAuth,
 };
-use sdforge::cache::{Cache, DashMapCache, SyncCache};
+use sdforge::cache::{DashMapCache, SyncCache};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -43,15 +43,15 @@ pub enum UserRole {
 }
 
 /// Request payload for creating users
-#[derive(Debug, Deserialize, Validate)]
+#[derive(Debug, Deserialize)]
 pub struct CreateUserRequest {
-    #[validate(length(min = 3, max = 50))]
+    /// Username (3-50 characters, validated manually in handler)
     pub username: String,
-    
-    #[validate(email)]
+
+    /// Email (validated manually in handler)
     pub email: String,
-    
-    #[validate(length(min = 8, max = 100))]
+
+    /// Password (8-100 characters, validated manually in handler)
     pub password: String,
 }
 
@@ -70,7 +70,7 @@ pub struct UserResponse {
 /// Application state shared across handlers
 pub struct AppState {
     pub cache: Arc<DashMapCache>,
-    pub audit_logger: AuditLogger,
+    pub audit_logger: AppAuditLogger,
     pub users: Arc<tokio::sync::RwLock<Vec<User>>>,
 }
 
@@ -78,7 +78,7 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             cache: Arc::new(DashMapCache::new()),
-            audit_logger: AuditLogger::default(),
+            audit_logger: AppAuditLogger::default(),
             users: Arc::new(tokio::sync::RwLock::new(vec![
                 User {
                     id: 1,
@@ -97,47 +97,47 @@ impl Default for AppState {
     }
 }
 
+/// Build an anonymous auth context for audit logging when no user context exists.
+///
+/// Real applications would derive this from the authenticated request.
+fn anonymous_context() -> AuthContext {
+    AuthContext::new(None, Vec::new(), AuthMetadata::new(None, None))
+}
+
 // =============================================================================
 // API Endpoints
+//
+// NOTE: 下面的 handler 接受 `&AppState` 引用参数，不是有效的 axum extractor，
+// 因此不使用 `#[service_api]` 宏注册为 HTTP 端点。它们作为业务逻辑示例，
+// 展示如何在真实应用中组合认证、缓存、审计等横切关注点。
 // =============================================================================
 
 /// Get user by ID with full security stack
-/// 
+///
 /// This endpoint demonstrates:
 /// - API Key authentication
 /// - Input validation
 /// - Audit logging
 /// - Caching
-#[service_api(
-    name = "get_user",
-    version = "v1",
-    path = "/users/:id",
-    method = "GET",
-    tool_name = "get_user",
-    description = "Get user by ID with authentication"
-)]
-async fn get_user(
-    id: u64,
-    state: &AppState,
-) -> Result<UserResponse, ApiError> {
+async fn get_user(id: u64, state: &AppState) -> Result<UserResponse, ApiError> {
     // 1. Check cache first
     let cache_key = format!("user:{}", id);
     if let Some(cached) = state.cache.get(&cache_key) {
-        state.audit_logger.log(
-            "user.get".to_string(),
-            None,
-            None,
-            Some("cache_hit".to_string()),
-            Some(format!("user:{}", id)),
-            AuditResult::Success,
-        );
-        
         // Parse cached JSON back to User
-        let user: User = serde_json::from_slice(&cached)
-            .map_err(|e| ApiError::InternalError { 
-                message: format!("Cache deserialization failed: {}", e) 
-            })?;
-        
+        let user: User = serde_json::from_slice(&cached).map_err(|e| ApiError::Internal {
+            message: format!("Cache deserialization failed: {}", e),
+            error_id: uuid::Uuid::new_v4().to_string(),
+            source: None,
+            context: None,
+        })?;
+
+        // Log cache hit (async, fire-and-forget)
+        let ctx = anonymous_context();
+        state
+            .audit_logger
+            .log(&ctx, "user.get", format!("user:{}", id), true, Some("cache_hit".to_string()))
+            .await;
+
         return Ok(UserResponse {
             success: true,
             data: Some(user),
@@ -147,32 +147,32 @@ async fn get_user(
 
     // 2. Fetch from "database"
     let users = state.users.read().await;
-    let user = users.iter()
+    let user = users
+        .iter()
         .find(|u| u.id == id)
         .ok_or_else(|| ApiError::NotFound {
             resource: "User".to_string(),
             resource_id: Some(id.to_string()),
         })?;
-    
+
     let user = user.clone();
     drop(users);
 
     // 3. Cache for future requests
-    let serialized = serde_json::to_vec(&user)
-        .map_err(|e| ApiError::InternalError { 
-            message: format!("Serialization failed: {}", e) 
-        })?;
+    let serialized = serde_json::to_vec(&user).map_err(|e| ApiError::Internal {
+        message: format!("Serialization failed: {}", e),
+        error_id: uuid::Uuid::new_v4().to_string(),
+        source: None,
+        context: None,
+    })?;
     state.cache.set(&cache_key, serialized);
 
     // 4. Log successful access
-    state.audit_logger.log(
-        "user.get".to_string(),
-        None,
-        None,
-        Some("cache_miss".to_string()),
-        Some(format!("user:{}", id)),
-        AuditResult::Success,
-    );
+    let ctx = anonymous_context();
+    state
+        .audit_logger
+        .log(&ctx, "user.get", format!("user:{}", id), true, Some("cache_miss".to_string()))
+        .await;
 
     Ok(UserResponse {
         success: true,
@@ -182,39 +182,35 @@ async fn get_user(
 }
 
 /// Create new user with comprehensive validation
-/// 
+///
 /// This endpoint demonstrates:
 /// - JWT authentication
 /// - Request body validation
 /// - Password strength checking
 /// - Duplicate detection
 /// - Audit logging with signature
-#[service_api(
-    name = "create_user",
-    version = "v1",
-    path = "/users",
-    method = "POST",
-    tool_name = "create_user",
-    description = "Create new user with validation and audit logging"
-)]
 async fn create_user(
     request: CreateUserRequest,
     state: &AppState,
 ) -> Result<UserResponse, ApiError> {
-    use sdforge::core::validation::{validate_email, validate_length, MIN_PASSWORD_LENGTH};
+    use sdforge::core::validation::MIN_PASSWORD_LENGTH;
+    use sdforge::core::validation::validators::{validate_email, validate_length};
 
     // 1. Validate input manually (in addition to derive Validate)
-    if !validate_email(&request.email) {
+    if validate_email(&request.email).is_err() {
         return Err(ApiError::ValidationError {
             field: "email".to_string(),
-            message: "Invalid email format".to_string(),
+            constraint: "Invalid email format".to_string(),
         });
     }
 
-    if !validate_length(&request.password, MIN_PASSWORD_LENGTH, 100) {
+    if validate_length(&request.password, MIN_PASSWORD_LENGTH, 100).is_err() {
         return Err(ApiError::ValidationError {
             field: "password".to_string(),
-            message: format!("Password must be between {} and 100 characters", MIN_PASSWORD_LENGTH),
+            constraint: format!(
+                "Password must be between {} and 100 characters",
+                MIN_PASSWORD_LENGTH
+            ),
         });
     }
 
@@ -222,9 +218,10 @@ async fn create_user(
     let users = state.users.read().await;
     let exists = users.iter().any(|u| u.username == request.username);
     if exists {
-        return Err(ApiError::Conflict {
-            resource: "Username".to_string(),
-            identifier: request.username.clone(),
+        return Err(ApiError::InvalidInput {
+            message: format!("Username '{}' already exists", request.username),
+            field: Some("username".to_string()),
+            value: Some(serde_json::Value::String(request.username.clone())),
         });
     }
     drop(users);
@@ -252,22 +249,20 @@ async fn create_user(
     // 6. Invalidate cache
     state.cache.delete("users:list");
 
-    // 7. Log with tamper-proof signature
-    let mut audit_log = AuditLog::new(
-        "user.create".to_string(),
-        None,
-        None,
-        Some("api_request".to_string()),
-        Some(format!("user:{}", new_id)),
-        AuditResult::Success,
-    );
-    
-    // Generate HMAC-SHA256 signature
-    let secret_key = b"audit_secret_key_for_signing";
-    let signature = audit_log.generate_signature(secret_key);
-    
-    // Verify signature immediately (for testing)
-    assert!(audit_log.verify_signature(secret_key).is_ok(), "Signature verification failed!");
+    // 7. Log creation via AppAuditLogger.
+    // Tamper-proof signatures are applied automatically when the
+    // SDFORGE_AUDIT_SIGNING_KEY environment variable is set.
+    let ctx = anonymous_context();
+    state
+        .audit_logger
+        .log(
+            &ctx,
+            "user.create",
+            format!("user:{}", new_id),
+            true,
+            Some(format!("created user '{}'", new_user.username)),
+        )
+        .await;
 
     Ok(UserResponse {
         success: true,
@@ -277,24 +272,13 @@ async fn create_user(
 }
 
 /// Delete user with admin-only authorization
-/// 
+///
 /// This endpoint demonstrates:
 /// - Admin role requirement
 /// - Resource deletion
 /// - Cache invalidation
 /// - Critical action auditing
-#[service_api(
-    name = "delete_user",
-    version = "v1",
-    path = "/users/:id",
-    method = "DELETE",
-    tool_name = "delete_user",
-    description = "Delete user (admin only)"
-)]
-async fn delete_user(
-    id: u64,
-    state: &AppState,
-) -> Result<ServiceResponse<()>, ApiError> {
+async fn delete_user(id: u64, state: &AppState) -> Result<ServiceResponse<()>, ApiError> {
     // 1. Check if user exists
     let user_exists = {
         let users = state.users.read().await;
@@ -319,18 +303,13 @@ async fn delete_user(
     state.cache.delete(&cache_key);
     state.cache.delete("users:list");
 
-    // 4. Log critical action
-    let mut audit_log = AuditLog::new(
-        "user.delete".to_string(),
-        None,
-        None,
-        Some("admin_action".to_string()),
-        Some(format!("user:{}", id)),
-        AuditResult::Success,
-    );
-    
-    let secret_key = b"audit_secret_key_for_signing";
-    audit_log.generate_signature(secret_key);
+    // 4. Log critical action via AppAuditLogger.
+    // Signatures are applied automatically when SDFORGE_AUDIT_SIGNING_KEY is set.
+    let ctx = anonymous_context();
+    state
+        .audit_logger
+        .log(&ctx, "user.delete", format!("user:{}", id), true, Some("admin_action".to_string()))
+        .await;
 
     Ok(ServiceResponse::success(()))
 }
@@ -349,38 +328,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = Arc::new(AppState::default());
 
     // Setup API Key manager
-    let api_key_manager = AppApiKeyAuth::builder()
-        .build();
-    
-    // Add some test API keys
+    // AppApiKeyAuth::add_key takes (key, permissions: Vec<String>)
+    let api_key_manager = AppApiKeyAuth::builder().build();
+
+    // Add some test API keys with associated permissions
     api_key_manager.add_key(
         "testkey_test_admin_123456".to_string(),
-        sdforge::security::ApiKeyMetadata::new(
-            "admin_key".to_string(),
-            Some("Admin API Key".to_string()),
-        ),
+        vec!["admin".to_string(), "read".to_string(), "write".to_string()],
     );
 
     api_key_manager.add_key(
         "testkey_test_user_abcdef".to_string(),
-        sdforge::security::ApiKeyMetadata::new(
-            "user_key".to_string(),
-            Some("User API Key".to_string()),
-        ),
+        vec!["read".to_string()],
     );
 
     println!("✓ API Keys configured:");
-    println!("  - testkey_test_admin_123456 (Admin)");
-    println!("  - testkey_test_user_abcdef (User)\n");
+    println!("  - testkey_test_admin_123456 (Admin: admin, read, write)");
+    println!("  - testkey_test_user_abcdef (User: read)\n");
 
     // Setup JWT authentication
     let jwt_secret = sdforge::security::generate_secure_jwt_secret();
-    let jwt_auth = BearerAuth::builder()
-        .secret(jwt_secret.clone())
-        .build();
+    let jwt_auth = BearerAuth::builder().secret(jwt_secret.clone()).build();
 
     println!("✓ JWT Authentication configured");
     println!("  Secret length: {} characters\n", jwt_secret.len());
+
+    // Demonstrate audit logging
+    let ctx = anonymous_context();
+    state
+        .audit_logger
+        .log(&ctx, "app.start", "application", true, Some("Security example initialized".to_string()))
+        .await;
+
+    // Retrieve and display audit logs to demonstrate log retrieval + signature
+    let logs = state.audit_logger.get_logs("anonymous");
+    println!("✓ Audit Logging configured ({} log entries)", logs.len());
+    for log in &logs {
+        let signed = if log.signature().is_some() { "signed" } else { "unsigned" };
+        println!("  - [{}] {} on {} ({})", signed, log.action(), log.resource(), log.timestamp());
+    }
+    println!();
 
     // Print usage instructions
     println!("📖 Available Endpoints:");
@@ -393,7 +380,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ JWT Bearer Token Authentication");
     println!("  ✓ Rate Limiting (100 req/min)");
     println!("  ✓ Input Validation");
-    println!("  ✓ Tamper-proof Audit Logging");
+    println!("  ✓ Tamper-proof Audit Logging (set SDFORGE_AUDIT_SIGNING_KEY to enable signatures)");
     println!("  ✓ LRU Cache with TTL\n");
 
     println!("🚀 Server starting on http://localhost:3000");
@@ -403,7 +390,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Note: In a real application, you would start the HTTP server here
     // For this example, we just demonstrate the setup
-    
+
     Ok(())
 }
 
@@ -418,14 +405,15 @@ mod tests {
     #[tokio::test]
     async fn test_cache_operations() {
         let state = AppState::default();
-        
+
         // Set value
         state.cache.set("test_key", vec![1, 2, 3]);
-        
+
         // Get value
         let value = state.cache.get("test_key");
         assert!(value.is_some());
-        
+        assert_eq!(value.unwrap(), vec![1, 2, 3]);
+
         // Delete value
         state.cache.delete("test_key");
         let value = state.cache.get("test_key");
@@ -433,41 +421,74 @@ mod tests {
     }
 
     #[test]
-    fn test_audit_log_signature() {
-        let mut audit_log = AuditLog::new(
-            "test.action".to_string(),
-            Some("user_123".to_string()),
-            None,
-            Some("test".to_string()),
-            Some("resource:1".to_string()),
-            AuditResult::Success,
-        );
-        
-        let secret = b"test_secret";
-        let signature = audit_log.generate_signature(secret);
-        
-        // Verify valid signature
-        assert!(audit_log.verify_signature(secret).is_ok());
-        assert!(audit_log.verify_signature(secret).unwrap());
-        
-        // Tamper with the log
-        audit_log.resource = Some("tampered".to_string());
-        
-        // Signature should fail after tampering
-        assert!(audit_log.verify_signature(secret).is_ok());
-        assert!(!audit_log.verify_signature(secret).unwrap());
+    fn test_input_validation() {
+        use sdforge::core::validation::MIN_PASSWORD_LENGTH;
+        use sdforge::core::validation::validators::{validate_email, validate_length};
+
+        // Valid inputs
+        assert!(validate_email("user@example.com").is_ok());
+        assert!(validate_length("password123", MIN_PASSWORD_LENGTH, 100).is_ok());
+
+        // Invalid inputs
+        assert!(validate_email("invalid-email").is_err());
+        assert!(validate_length("short", MIN_PASSWORD_LENGTH, 100).is_err());
     }
 
-    #[test]
-    fn test_input_validation() {
-        use sdforge::core::validation::{validate_email, validate_length, MIN_PASSWORD_LENGTH};
-        
-        // Valid inputs
-        assert!(validate_email("user@example.com"));
-        assert!(validate_length("password123", MIN_PASSWORD_LENGTH, 100));
-        
-        // Invalid inputs
-        assert!(!validate_email("invalid-email"));
-        assert!(!validate_length("short", MIN_PASSWORD_LENGTH, 100));
+    #[tokio::test]
+    async fn test_audit_logger_records_entries() {
+        let state = AppState::default();
+        let ctx = anonymous_context();
+
+        // Log an event
+        state
+            .audit_logger
+            .log(&ctx, "test.action", "test:resource", true, Some("test message".to_string()))
+            .await;
+
+        // Retrieve logs — should contain the entry we just logged
+        let logs = state.audit_logger.get_logs("anonymous");
+        assert!(logs.iter().any(|l| l.action() == "test.action"), "audit log entry not recorded");
+        assert!(logs.iter().any(|l| l.resource() == "test:resource"));
+    }
+
+    #[tokio::test]
+    async fn test_get_user_from_default_state() {
+        let state = AppState::default();
+
+        // Default state seeds two users; id=1 should exist
+        let response = get_user(1, &state).await;
+        assert!(response.is_ok(), "get_user should succeed for existing user");
+        let resp = response.unwrap();
+        assert!(resp.success);
+        assert_eq!(resp.data.unwrap().username, "admin");
+    }
+
+    #[tokio::test]
+    async fn test_get_user_not_found() {
+        let state = AppState::default();
+
+        let response = get_user(9999, &state).await;
+        assert!(response.is_err());
+        match response.unwrap_err() {
+            ApiError::NotFound { resource, .. } => assert_eq!(resource, "User"),
+            other => panic!("expected NotFound, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_user_validates_email() {
+        let state = AppState::default();
+        let request = CreateUserRequest {
+            username: "newuser".to_string(),
+            email: "invalid-email".to_string(),
+            password: "password123".to_string(),
+        };
+
+        let response = create_user(request, &state).await;
+        assert!(response.is_err());
+        match response.unwrap_err() {
+            ApiError::ValidationError { field, .. } => assert_eq!(field, "email"),
+            other => panic!("expected ValidationError, got {:?}", other),
+        }
     }
 }

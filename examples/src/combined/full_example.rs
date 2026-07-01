@@ -266,7 +266,7 @@ async fn get_full_user(id: u64) -> Result<User, ApiError> {
     tool_name = "create_full_user",
     description = "创建新用户 (支持日志)"
 )]
-async fn create_full_user(request: Json<CreateUserRequest>) -> Result<serde_json::Value, ApiError> {
+async fn create_full_user(request: CreateUserRequest) -> Result<serde_json::Value, ApiError> {
     let user_id = 456;
     let role = request.role.clone().unwrap_or_else(|| "user".to_string());
 
@@ -318,7 +318,7 @@ async fn create_full_user(request: Json<CreateUserRequest>) -> Result<serde_json
 )]
 async fn update_full_user(
     id: u64,
-    request: Json<UpdateUserRequest>,
+    request: UpdateUserRequest,
 ) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "id": id,
@@ -382,7 +382,7 @@ async fn delete_full_user(id: u64) -> Result<serde_json::Value, ApiError> {
 /// 实时用户更新推送。
 ///
 /// # WebSocket URL
-/// ```
+/// ```text
 /// ws://localhost:3000/ws/full-example
 /// ```
 ///

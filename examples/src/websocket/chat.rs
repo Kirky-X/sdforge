@@ -110,7 +110,7 @@ pub struct MessageResponse {
 /// 实时聊天服务的主 WebSocket 端点。
 ///
 /// # WebSocket URL
-/// ```
+/// ```text
 /// ws://localhost:3000/ws/chat
 /// ```
 ///
