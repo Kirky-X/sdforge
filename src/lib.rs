@@ -398,3 +398,95 @@ pub fn get_mcp_tools() -> Vec<crate::mcp::McpToolInstance> {
 pub fn get_websocket_routes() -> Vec<&'static crate::websocket::WebSocketRoute> {
     inventory::iter::<crate::websocket::WebSocketRoute>().collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ============================================================================
+    // init_all_plugins tests
+    //
+    // init_all_plugins uses process-wide OnceLocks to cache inventory iterations,
+    // so the function is idempotent: the first call initializes the locks and
+    // subsequent calls return the same counts. We use #[serial] to ensure these
+    // tests don't run concurrently with any other test that may touch the same
+    // globals.
+    // ============================================================================
+
+    #[test]
+    #[serial_test::serial]
+    fn test_init_all_plugins_returns_counts() {
+        let counts = init_all_plugins();
+        // With the `full` feature, all protocol features are enabled. The exact
+        // counts depend on how many inventory items are registered in the test
+        // binary, so we only assert structural correctness here.
+        let _ = counts.routes;
+        #[cfg(feature = "mcp")]
+        let _ = counts.mcp_tools;
+        #[cfg(feature = "websocket")]
+        let _ = counts.ws_routes;
+        #[cfg(feature = "grpc")]
+        let _ = counts.grpc_routes;
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_init_all_plugins_is_idempotent() {
+        // Calling init_all_plugins twice should return consistent counts
+        // because the OnceLocks cache the inventory iteration results.
+        let first = init_all_plugins();
+        let second = init_all_plugins();
+        assert_eq!(first.routes, second.routes);
+        #[cfg(feature = "mcp")]
+        assert_eq!(first.mcp_tools, second.mcp_tools);
+        #[cfg(feature = "websocket")]
+        assert_eq!(first.ws_routes, second.ws_routes);
+        #[cfg(feature = "grpc")]
+        assert_eq!(first.grpc_routes, second.grpc_routes);
+    }
+
+    // ============================================================================
+    // get_mcp_tools tests
+    // ============================================================================
+
+    #[cfg(feature = "mcp")]
+    #[test]
+    fn test_get_mcp_tools_returns_vec() {
+        // get_mcp_tools collects inventory::iter::<McpToolRegistration> into
+        // a Vec<McpToolInstance>. The exact count depends on how many tools
+        // are registered in the test binary, so we only assert it returns
+        // without panicking.
+        let tools = get_mcp_tools();
+        let _ = tools.len();
+    }
+
+    // ============================================================================
+    // get_websocket_routes tests
+    // ============================================================================
+
+    #[cfg(feature = "websocket")]
+    #[test]
+    fn test_get_websocket_routes_returns_vec() {
+        // get_websocket_routes collects inventory::iter::<WebSocketRoute>
+        // into a Vec. The exact count depends on registrations in the test
+        // binary, so we only assert it returns without panicking.
+        let routes = get_websocket_routes();
+        let _ = routes.len();
+    }
+
+    // ============================================================================
+    // impl_default_new macro test
+    // ============================================================================
+
+    #[test]
+    fn test_impl_default_new_macro() {
+        struct EmptyConfig;
+        impl_default_new!(EmptyConfig);
+
+        let config = EmptyConfig::new();
+        let _default = EmptyConfig::default();
+        // Ensure both construction paths produce the same type
+        let _: EmptyConfig = config;
+    }
+}
+

@@ -677,4 +677,128 @@ mod tests {
         let debug_str = format!("{:?}", err);
         assert!(debug_str.contains("AlreadyInitialized"));
     }
+
+    // ============================================================================
+    // Text colored output WITH fields
+    //
+    // The existing test_write_log_entry_text_colored test uses an entry without
+    // fields, so the `if !entry.fields.is_empty()` branch inside the colored
+    // Text arm is not exercised. This test covers that branch.
+    // ============================================================================
+
+    #[test]
+    fn test_write_log_entry_text_colored_with_fields() {
+        let entry = LogEntry::new(LogLevel::Warn, "auth", "Failed login attempt")
+            .with_field("user", serde_json::json!("admin"))
+            .with_field("ip", serde_json::json!("10.0.0.1"));
+        let mut buf = Vec::new();
+        write_log_entry(&mut buf, &entry, LogFormat::Text, true).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+
+        // Colored output should contain ANSI escape codes
+        assert!(output.contains("\x1b[33m"), "Should contain warn color code");
+        assert!(output.contains("\x1b[0m"), "Should contain reset code");
+        // Should contain the fields in the {key=value} format
+        assert!(output.contains("user"), "Should contain field key 'user'");
+        assert!(output.contains("admin"), "Should contain field value 'admin'");
+        assert!(output.contains("ip"), "Should contain field key 'ip'");
+        assert!(output.contains("10.0.0.1"), "Should contain field value");
+        // Should contain the fields brace delimiter
+        assert!(output.contains("{"), "Should contain opening brace for fields");
+        assert!(output.contains("}"), "Should contain closing brace for fields");
+    }
+
+    #[test]
+    fn test_write_log_entry_text_colored_with_multiple_fields() {
+        // Test the loop iteration with multiple fields (i > 0 branch writes ", ")
+        let entry = LogEntry::new(LogLevel::Error, "db", "Query failed")
+            .with_field("query", serde_json::json!("SELECT *"))
+            .with_field("duration_ms", serde_json::json!(150))
+            .with_field("table", serde_json::json!("users"));
+        let mut buf = Vec::new();
+        write_log_entry(&mut buf, &entry, LogFormat::Text, true).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+
+        assert!(output.contains("\x1b[31m"), "Should contain error color code");
+        // Multiple fields should be comma-separated
+        assert!(output.contains(", "), "Should contain field separator");
+        assert!(output.contains("query"));
+        assert!(output.contains("duration_ms"));
+        assert!(output.contains("table"));
+    }
+
+    // ============================================================================
+    // Global logger tests (init_global_logger / get_global_logger)
+    //
+    // GLOBAL_LOGGER is a process-wide OnceCell that can only be set once. These
+    // tests use #[serial] to ensure they don't run concurrently with any other
+    // test touching the global logger. Because the OnceCell may already be set
+    // by another test, we handle both the "first init" and "already initialized"
+    // paths defensively.
+    // ============================================================================
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_global_logger_init_and_get() {
+        // Attempt to initialize the global logger. If this is the first test
+        // to call init_global_logger in this process, it will succeed and we
+        // can verify get_global_logger returns Some. If another test already
+        // initialized it, init will fail with AlreadyInitialized and we
+        // verify get_global_logger returns Some (set by the earlier test).
+        let config = LoggerConfig::default();
+        let init_result = init_global_logger(config);
+
+        match init_result {
+            Ok(()) => {
+                // First initialization succeeded — get_global_logger should
+                // now return Some.
+                assert!(
+                    get_global_logger().is_some(),
+                    "get_global_logger should return Some after successful init"
+                );
+            }
+            Err(LoggerError::AlreadyInitialized) => {
+                // Another test already initialized the logger —
+                // get_global_logger should still return Some.
+                assert!(
+                    get_global_logger().is_some(),
+                    "get_global_logger should return Some when already initialized"
+                );
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_global_logger_double_init_fails() {
+        // The global logger can only be initialized once per process. After
+        // the first successful init, subsequent calls must fail with
+        // AlreadyInitialized. We call init twice; at least the second call
+        // should fail (both fail if the logger was already set by a prior
+        // test).
+        let config = LoggerConfig::default();
+        let _first = init_global_logger(config.clone());
+        let second = init_global_logger(config);
+
+        // The second call must always fail — either because the first call
+        // succeeded, or because a prior test already initialized the logger.
+        assert!(
+            matches!(second, Err(LoggerError::AlreadyInitialized)),
+            "Second init_global_logger call should fail with AlreadyInitialized"
+        );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_get_global_logger_returns_some_after_init() {
+        // Ensure the logger is initialized (may already be set by prior test)
+        let _ = init_global_logger(LoggerConfig::default());
+        // get_global_logger should return Some regardless of which test
+        // performed the initialization.
+        let logger = get_global_logger();
+        assert!(
+            logger.is_some(),
+            "get_global_logger should return Some after initialization"
+        );
+    }
 }

@@ -1238,4 +1238,142 @@ mod tests {
         fn assert_debug<T: std::fmt::Debug>() {}
         assert_debug::<StreamResponse<String>>();
     }
+
+    // ============================================================================
+    // stream_to_sse normal data passthrough tests
+    //
+    // stream_to_sse serializes each StreamEvent<serde_json::Value> produced by
+    // the mapper and emits it as an SSE "data:" line, followed by a completion
+    // event when the source stream ends.
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_stream_to_sse_normal_data_passthrough() {
+        use futures_util::StreamExt;
+
+        // Verify that serializable items pass through the Ok branch.
+        let stream = futures_util::stream::iter(vec![1i32, 2i32, 3i32]);
+        let sse_stream = stream_to_sse(stream, |item| StreamEvent::data(serde_json::Value::from(item)));
+
+        let mut sse_stream = Box::pin(sse_stream);
+        let mut count = 0;
+        while let Some(item) = sse_stream.next().await {
+            let data = item.unwrap();
+            if data.contains("complete") {
+                break;
+            }
+            assert!(data.starts_with("data: "), "SSE should start with 'data: '");
+            count += 1;
+        }
+        assert_eq!(count, 3, "Should have received 3 data events");
+    }
+
+    // ============================================================================
+    // stream_to_sse send error (receiver dropped) tests
+    //
+    // When the ReceiverStream is dropped before the spawned task finishes,
+    // tx.send returns an error and the task breaks out of the loop (line 168).
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_stream_to_sse_send_error_when_receiver_dropped() {
+        // Create a stream that yields many items slowly. By dropping the
+        // ReceiverStream immediately, the spawned task's tx.send will fail
+        // and the loop will break.
+        let (tx_stream, rx_stream) = mpsc::channel::<i32>(100);
+        let stream = ReceiverStream::new(rx_stream);
+
+        let sse_stream = stream_to_sse(stream, |item| StreamEvent::data(serde_json::Value::from(item)));
+
+        // Drop the receiver side immediately to cause send errors.
+        drop(sse_stream);
+
+        // Feed items into the source stream; the spawned task will try to
+        // forward them via tx.send, which fails because the receiver was
+        // dropped. The task should break out of its loop gracefully.
+        for i in 0..10 {
+            // try_send may also fail once the receiver is gone; ignore errors
+            let _ = tx_stream.send(i).await;
+        }
+        drop(tx_stream);
+
+        // Give the spawned task time to observe the send error and break.
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        // If we reach here without hanging, the send-error break path
+        // executed successfully.
+    }
+
+    // ============================================================================
+    // IntoResponse impl tests
+    //
+    // StreamResponse<T> implements axum's IntoResponse trait to produce an
+    // SSE HTTP response. These tests cover the into_response() method.
+    // ============================================================================
+
+    #[cfg(feature = "http")]
+    #[tokio::test]
+    async fn test_stream_response_into_response_headers() {
+        use axum::response::IntoResponse;
+
+        let response = StreamResponse::single("test_item");
+        let http_response = response.into_response();
+
+        // Verify SSE headers are set correctly
+        assert_eq!(http_response.status(), 200);
+        let headers = http_response.headers();
+        assert_eq!(
+            headers.get("content-type").unwrap(),
+            "text/event-stream"
+        );
+        assert_eq!(headers.get("cache-control").unwrap(), "no-cache");
+        assert_eq!(headers.get("connection").unwrap(), "keep-alive");
+        assert_eq!(headers.get("x-accel-buffering").unwrap(), "no");
+    }
+
+    #[cfg(feature = "http")]
+    #[tokio::test]
+    async fn test_stream_response_into_response_with_error_item() {
+        use axum::response::IntoResponse;
+
+        // Build a stream that yields an error item to cover the
+        // StreamEvent::error branch in the IntoResponse mapper.
+        let (tx, rx) = mpsc::channel::<Result<String, String>>(10);
+        let stream = StreamResponse::new(ReceiverStream::new(rx));
+
+        tokio::spawn(async move {
+            let _ = tx.send(Err("test error".to_string())).await;
+        });
+
+        let http_response = stream.into_response();
+        assert_eq!(http_response.status(), 200);
+        // The response body is a stream; we just verify the response builds.
+    }
+
+    #[cfg(feature = "http")]
+    #[tokio::test]
+    async fn test_stream_response_into_response_collects_body() {
+        use axum::response::IntoResponse;
+
+        // Build a single-item stream and convert to response, then collect
+        // the body to verify the SSE data flows through.
+        let response = StreamResponse::single(serde_json::json!({"hello": "world"}));
+        let http_response = response.into_response();
+
+        assert_eq!(http_response.status(), 200);
+
+        // Collect the body stream to verify data flows through.
+        let body = http_response.into_body();
+        let bytes = axum::body::to_bytes(body, 1024 * 1024).await.unwrap();
+        let body_str = String::from_utf8_lossy(&bytes);
+        assert!(
+            body_str.contains("data: "),
+            "Body should contain SSE data prefix, got: {}",
+            body_str
+        );
+        assert!(
+            body_str.contains("hello"),
+            "Body should contain the JSON data, got: {}",
+            body_str
+        );
+    }
 }
