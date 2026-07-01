@@ -367,13 +367,29 @@ impl LruCacheManager {
     fn check_and_evict(&self) {
         let access_times = self.access_times.clone();
         let config = self.config.clone();
+        // Clone the cache reference so the spawned task can delete evicted entries.
+        // Without this, eviction only removed access-tracking metadata while the
+        // actual cached values remained — causing unbounded memory growth.
+        let cache = self.cache.clone();
 
         tokio::spawn(async move {
             let mut times = access_times.write().await;
             let now = Instant::now();
 
-            // First, remove expired entries (TTL-based)
-            times.retain(|_, &mut last_accessed| now.duration_since(last_accessed) <= config.ttl);
+            // First, remove expired entries (TTL-based). Collect keys to evict so we
+            // can also delete them from the backing cache (not just access metadata).
+            let mut expired_keys: Vec<String> = Vec::new();
+            times.retain(|k, &mut last_accessed| {
+                if now.duration_since(last_accessed) > config.ttl {
+                    expired_keys.push(k.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+            for key in &expired_keys {
+                cache.delete(key);
+            }
 
             // Calculate eviction threshold (80% of max_entries by default)
             let threshold = (config.max_entries as f64 * config.eviction_threshold) as usize;
@@ -384,10 +400,13 @@ impl LruCacheManager {
                 let mut entries: Vec<_> = times.iter().map(|(k, v)| (k.clone(), *v)).collect();
                 entries.sort_by_key(|&(_, time)| time);
 
-                // Remove oldest entries to get back under threshold
+                // Remove oldest entries to get back under threshold.
+                // Delete both the access-tracking entry AND the cached value
+                // to actually reclaim memory.
                 let to_remove = entries.len().saturating_sub(threshold);
                 for (key, _) in entries.into_iter().take(to_remove) {
                     times.remove(&key);
+                    cache.delete(&key);
                 }
             }
         });
@@ -842,5 +861,46 @@ mod tests {
         let stats = manager.stats().await;
         // Eviction logic should have been triggered (times.len() > threshold)
         assert!(stats.total_entries <= 3);
+    }
+
+    #[tokio::test]
+    async fn test_lru_eviction_deletes_cache_values() {
+        use crate::cache::DashMapCache;
+
+        // Regression test for H-2/H1: LruCacheManager eviction previously only
+        // removed access-tracking metadata while leaving the actual cached values
+        // in the backing cache — causing unbounded memory growth. This test
+        // verifies that evicted keys are deleted from the backing cache.
+        let cache: SharedCache = Arc::new(DashMapCache::with_capacity(100));
+        let config = LruConfig {
+            max_entries: 2,
+            ttl: Duration::from_secs(3600),
+            eviction_threshold: 0.5, // threshold = 1; evict once > 1 entry
+        };
+        // Keep a reference to the cache so we can inspect it after eviction.
+        let cache_ref = cache.clone();
+        let manager = LruCacheManager::new(cache, config);
+
+        manager.set("k1", b"v1".to_vec());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        manager.set("k2", b"v2".to_vec());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        manager.set("k3", b"v3".to_vec());
+        // Allow the async eviction task to run.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        // The backing cache should NOT contain all 3 entries forever.
+        // At least one entry must have been evicted from the cache itself
+        // (not just from access-tracking metadata).
+        let remaining = ["k1", "k2", "k3"]
+            .iter()
+            .filter(|k| cache_ref.get(k).is_some())
+            .count();
+        assert!(
+            remaining < 3,
+            "Eviction must delete cached values, not just access metadata. \
+             Still present: {}",
+            remaining
+        );
     }
 }
