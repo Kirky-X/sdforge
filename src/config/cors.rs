@@ -186,4 +186,34 @@ mod tests {
         assert_eq!(cloned.allowed_origins, config.allowed_origins);
         assert_eq!(cloned.allowed_methods, config.allowed_methods);
     }
+
+    #[test]
+    fn test_build_cors_layer_invalid_origin_format() {
+        let config = CorsConfig {
+            allowed_origins: vec!["localhost:3000".to_string()],
+            allowed_methods: vec!["GET".to_string()],
+            allowed_headers: vec![],
+        };
+        let result = build_cors_layer(&config);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid CORS origin"));
+    }
+
+    #[test]
+    fn test_build_cors_layer_no_valid_origins() {
+        // Origin starts with http:// (passes format check) but contains a
+        // newline (0x0A) which HeaderValue rejects (< 0x20 and != 0x09 HTAB),
+        // resulting in an empty origins list after filter_map.
+        let config = CorsConfig {
+            allowed_origins: vec!["http://\ninvalid".to_string()],
+            allowed_methods: vec!["GET".to_string()],
+            allowed_headers: vec![],
+        };
+        let result = build_cors_layer(&config);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No valid origins"));
+    }
 }

@@ -1208,4 +1208,15 @@ mod tests {
         assert!(debug.contains("v2"));
         assert!(debug.contains("/users/:id"));
     }
+
+    // ============================================================================
+    // build_version_router with inventory-registered routes
+    //
+    // NOTE: Lines 107-108 (the for-loop body in build_version_router) cannot be
+    // covered without modifying non-test code. `inventory::submit!` requires
+    // const-evaluable arguments on stable Rust, but `VersionedRoute::new` takes
+    // `String` (heap-allocated) and `MethodRouter` (not const-constructible),
+    // so it cannot be used in `inventory::submit!`. The empty-routes case is
+    // already covered by `test_build_version_router_empty_routes`.
+    // ============================================================================
 }

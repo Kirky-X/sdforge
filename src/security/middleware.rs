@@ -537,4 +537,72 @@ mod tests {
         let middleware = auth_middleware((), extract_auth);
         let _cloned = middleware.clone();
     }
+
+    // ============================================================================
+    // auth_middleware execution via real router (covers closure body)
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_auth_middleware_success_path_via_router() {
+        let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
+            Ok(AuthContext {
+                user_id: Some("test".to_string()),
+                permissions: vec![],
+                metadata: crate::security::types::AuthMetadata::default(),
+            })
+        };
+        let middleware = auth_middleware((), extract_auth);
+
+        let router = axum::Router::new()
+            .route("/test", axum::routing::get(|| async { "ok" }))
+            .layer(axum::middleware::from_fn(middleware));
+
+        let response = tower::ServiceExt::oneshot(
+            router,
+            Request::builder().uri("/test").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_auth_middleware_unauthorized_path_via_router() {
+        let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
+            Err(crate::security::types::AuthError::MissingAuth)
+        };
+        let middleware = auth_middleware((), extract_auth);
+
+        let router = axum::Router::new()
+            .route("/test", axum::routing::get(|| async { "ok" }))
+            .layer(axum::middleware::from_fn(middleware));
+
+        let response = tower::ServiceExt::oneshot(
+            router,
+            Request::builder().uri("/test").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    // ============================================================================
+    // is_ip_in_range edge case tests
+    // ============================================================================
+
+    #[test]
+    fn test_is_ip_in_range_non_ipv4_address() {
+        // IP that doesn't parse to 4 octets (covers the length check branch)
+        assert!(!is_ip_in_range("not-an-ip", "10.0.0.0/8"));
+        assert!(!is_ip_in_range("::1", "10.0.0.0/8"));
+    }
+
+    #[test]
+    fn test_is_ip_in_range_zero_mask_bits() {
+        // /0 mask means match everything (covers the mask_bits == 0 branch)
+        assert!(is_ip_in_range("8.8.8.8", "10.0.0.0/0"));
+        assert!(is_ip_in_range("1.2.3.4", "0.0.0.0/0"));
+    }
 }
