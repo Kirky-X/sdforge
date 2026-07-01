@@ -371,4 +371,125 @@ mod tests {
             .unwrap_err()
             .contains("JSON deserialization failed"));
     }
+
+    // ============================================================================
+    // Additional edge case tests
+    // ============================================================================
+
+    #[test]
+    fn test_paginated_response_single_page() {
+        // page=1, total_pages=1: has_next=false, has_previous=false
+        let items = vec!["only"];
+        let json = paginated_response(&items, 1, 10, 1);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["data"]["pagination"]["total_pages"], 1);
+        assert_eq!(parsed["data"]["pagination"]["has_next"], false);
+        assert_eq!(parsed["data"]["pagination"]["has_previous"], false);
+    }
+
+    #[test]
+    fn test_paginated_response_exact_multiple() {
+        // total_items exactly divisible by page_size (no partial last page)
+        let items = vec!["a", "b"];
+        let json = paginated_response(&items, 1, 2, 4);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["data"]["pagination"]["total_pages"], 2);
+        assert_eq!(parsed["data"]["pagination"]["has_next"], true);
+    }
+
+    #[test]
+    fn test_error_response_empty_strings() {
+        let json = error_response("", "");
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert_eq!(parsed["error"]["code"], "");
+        assert_eq!(parsed["error"]["message"], "");
+    }
+
+    #[test]
+    fn test_error_response_special_characters() {
+        // Special characters that would need escaping in JSON
+        let json = error_response("ERR_\"QUOTE\"", "Message with \"quotes\" and \\backslash");
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["error"]["code"], "ERR_\"QUOTE\"");
+        assert_eq!(
+            parsed["error"]["message"],
+            "Message with \"quotes\" and \\backslash"
+        );
+    }
+
+    #[test]
+    fn test_success_response_with_nested_data() {
+        #[derive(serde::Serialize)]
+        struct Nested {
+            inner: InnerData,
+        }
+        #[derive(serde::Serialize)]
+        struct InnerData {
+            value: i32,
+        }
+
+        let data = Nested {
+            inner: InnerData { value: 99 },
+        };
+        let json = success_response(&data);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], true);
+        assert_eq!(parsed["data"]["inner"]["value"], 99);
+    }
+
+    #[test]
+    fn test_success_response_with_empty_vec() {
+        let empty: Vec<i32> = vec![];
+        let json = success_response(&empty);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], true);
+        assert_eq!(parsed["data"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn test_api_metadata_response_empty_description() {
+        let json = api_metadata_response("api", "v2", "");
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["api"]["description"], "");
+    }
+
+    #[test]
+    fn test_paginated_response_empty_items() {
+        let items: Vec<&str> = vec![];
+        let json = paginated_response(&items, 1, 10, 100);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["data"]["items"], serde_json::json!([]));
+        assert_eq!(parsed["data"]["pagination"]["total_pages"], 10);
+        assert_eq!(parsed["data"]["pagination"]["has_next"], true);
+    }
+
+    #[test]
+    fn test_simd_to_string_simple_value() {
+        // Cover simd_to_string with a primitive value
+        let result = simd_to_string(&42i32);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "42");
+    }
+
+    #[test]
+    fn test_simd_to_string_string_value() {
+        let result = simd_to_string(&"hello world".to_string());
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("hello world"));
+    }
+
+    #[test]
+    fn test_simd_from_slice_empty_json() {
+        // Empty object should deserialize successfully
+        let result: Result<serde_json::Value, _> = simd_from_slice(b"{}");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), serde_json::json!({}));
+    }
+
+    #[test]
+    fn test_simd_from_str_empty_object() {
+        let result: Result<serde_json::Value, _> = simd_from_str("{}");
+        assert!(result.is_ok());
+    }
 }
