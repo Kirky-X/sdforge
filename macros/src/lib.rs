@@ -1074,12 +1074,25 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! {
                 fn call(&self, input: Option<serde_json::Value>) -> anyhow::Result<sdforge::mcp_sdk::types::CallToolResponse> {
                     use sdforge::prelude::*;
-                    use tokio::runtime::Runtime;
+                    use tokio::runtime::{Handle, Runtime};
 
-                    let rt = Runtime::new().map_err(|e| anyhow::anyhow!("Failed to create runtime: {}", e))?;
-                    let inner_result: Result<Result<_, ApiError>, anyhow::Error> = rt.block_on(async {
-                        #mcp_call_logic
-                    });
+                    // Detect whether we are already inside a tokio runtime.
+                    // Calling Runtime::new().block_on() from within an existing
+                    // runtime panics with "Cannot start a runtime from within a
+                    // runtime". Use block_in_place on the current handle instead.
+                    let inner_result: Result<Result<_, ApiError>, anyhow::Error> =
+                        match Handle::try_current() {
+                            Ok(handle) => {
+                                tokio::task::block_in_place(|| {
+                                    handle.block_on(async { #mcp_call_logic })
+                                })
+                            }
+                            Err(_) => {
+                                let rt = Runtime::new()
+                                    .map_err(|e| anyhow::anyhow!("Failed to create runtime: {}", e))?;
+                                rt.block_on(async { #mcp_call_logic })
+                            }
+                        };
                     let result = inner_result?;
 
                     match result {
@@ -1279,7 +1292,7 @@ pub fn service_module(args: TokenStream, input: TokenStream) -> TokenStream {
             if path.starts_with('/') {
                 format!("{}{}", MODULE_PREFIX, path)
             } else {
-                format!("{}{}", MODULE_PREFIX, path)
+                format!("{}/{}", MODULE_PREFIX, path)
             }
         }
     };

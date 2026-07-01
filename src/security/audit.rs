@@ -69,6 +69,20 @@ static SECRET_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
 static PATH_PATTERN: Lazy<regex::Regex> =
     Lazy::new(|| regex::Regex::new(r#"/[a-zA-Z0-9/_.-]+\.(pem|key|crt|p12|jks)"#).unwrap());
 
+/// Pattern to match API keys in error messages (case-insensitive key=value form)
+static API_KEY_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
+    regex::Regex::new(r#"(?i)(api[_-]?key|apikey)\s*[:=]\s*['\"]?[A-Za-z0-9]{20,}['\"]?"#)
+        .unwrap()
+});
+
+/// Pattern to match credit card numbers (16 digits, optional separators)
+static CREDIT_CARD_PATTERN: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r#"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b"#).unwrap());
+
+/// Pattern to match US Social Security Numbers
+static SSN_PATTERN: Lazy<regex::Regex> =
+    Lazy::new(|| regex::Regex::new(r#"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"#).unwrap());
+
 /// Sanitize error messages to remove sensitive information before logging.
 ///
 /// This function helps prevent sensitive data (tokens, passwords, keys) from
@@ -89,20 +103,17 @@ fn sanitize_error_message(message: &str) -> String {
         .to_string();
 
     // Remove API keys
-    result = regex::Regex::new(r#"(?i)(api[_-]?key|apikey)\s*[:=]\s*['\"]?[A-Za-z0-9]{20,}['\"]?"#)
-        .unwrap()
+    result = API_KEY_PATTERN
         .replace_all(&result, "[REDACTED_API_KEY]")
         .to_string();
 
     // Remove credit card numbers
-    result = regex::Regex::new(r#"\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b"#)
-        .unwrap()
+    result = CREDIT_CARD_PATTERN
         .replace_all(&result, "[REDACTED_CREDIT_CARD]")
         .to_string();
 
     // Remove SSN numbers
-    result = regex::Regex::new(r#"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"#)
-        .unwrap()
+    result = SSN_PATTERN
         .replace_all(&result, "[REDACTED_SSN]")
         .to_string();
 

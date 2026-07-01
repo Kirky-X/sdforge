@@ -3,7 +3,7 @@
 //!
 //! This crate provides the runtime types and service builders for the SDForge framework.
 
-#![doc(html_root_url = "https://docs.rs/sdforge/0.2.0")]
+#![doc(html_root_url = "https://docs.rs/sdforge/0.1.0")]
 #![warn(missing_docs)]
 
 /// Re-export macros from sdforge-macros for convenient use
