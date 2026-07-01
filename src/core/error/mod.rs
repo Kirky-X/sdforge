@@ -1763,4 +1763,853 @@ mod tests {
         assert!(fr_message.contains("60"));
         assert!(fr_message.contains("Limite de débit"));
     }
+
+    // ========================================================================
+    // to_mcp_json() comprehensive tests for all 8 ApiError variants
+    // ========================================================================
+
+    #[test]
+    fn test_to_mcp_json_not_found() {
+        let error = ApiError::NotFound {
+            resource: "user".to_string(),
+            resource_id: Some("123".to_string()),
+        };
+        let json = error.to_mcp_json();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert_eq!(parsed["error"]["code"], "NOT_FOUND");
+        assert!(parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("user"));
+    }
+
+    #[test]
+    fn test_to_mcp_json_invalid_input() {
+        let error = ApiError::InvalidInput {
+            message: "bad value".to_string(),
+            field: Some("email".to_string()),
+            value: None,
+        };
+        let json = error.to_mcp_json();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert_eq!(parsed["error"]["code"], "INVALID_INPUT");
+        assert_eq!(parsed["error"]["message"], "bad value");
+    }
+
+    #[test]
+    fn test_to_mcp_json_authentication_failed() {
+        let error = ApiError::AuthenticationFailed {
+            reason: "bad token".to_string(),
+        };
+        let json = error.to_mcp_json();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert_eq!(parsed["error"]["code"], "AUTHENTICATION_FAILED");
+        assert!(parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("bad token"));
+    }
+
+    #[test]
+    fn test_to_mcp_json_access_denied() {
+        let error = ApiError::AccessDenied {
+            permission: "admin.write".to_string(),
+            user_id: Some("user1".to_string()),
+        };
+        let json = error.to_mcp_json();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert_eq!(parsed["error"]["code"], "ACCESS_DENIED");
+        assert!(parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("admin.write"));
+    }
+
+    #[test]
+    fn test_to_mcp_json_rate_limit_exceeded() {
+        let error = ApiError::RateLimitExceeded {
+            limit: 100,
+            window_seconds: 60,
+        };
+        let json = error.to_mcp_json();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert_eq!(parsed["error"]["code"], "RATE_LIMIT_EXCEEDED");
+        assert_eq!(parsed["error"]["message"], "Rate limit exceeded");
+    }
+
+    #[test]
+    fn test_to_mcp_json_internal() {
+        let error = ApiError::Internal {
+            message: "db failure".to_string(),
+            error_id: "ERR001".to_string(),
+            source: None,
+            context: None,
+        };
+        let json = error.to_mcp_json();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert_eq!(parsed["error"]["code"], "INTERNAL_ERROR");
+        assert_eq!(parsed["error"]["message"], "db failure");
+    }
+
+    #[test]
+    fn test_to_mcp_json_service_unavailable() {
+        let error = ApiError::ServiceUnavailable {
+            service: "database".to_string(),
+            retry_after: Some(30),
+            source: None,
+        };
+        let json = error.to_mcp_json();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert_eq!(parsed["error"]["code"], "SERVICE_UNAVAILABLE");
+        assert!(parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("database"));
+    }
+
+    #[test]
+    fn test_to_mcp_json_validation_error() {
+        let error = ApiError::ValidationError {
+            field: "email".to_string(),
+            constraint: "required".to_string(),
+        };
+        let json = error.to_mcp_json();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert_eq!(parsed["error"]["code"], "VALIDATION_ERROR");
+        assert!(parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("email"));
+        assert!(parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("required"));
+    }
+
+    // ========================================================================
+    // localized_message() comprehensive tests for all locales x all variants
+    // ========================================================================
+
+    #[test]
+    fn test_localized_error_zh_all_variants() {
+        let locales = vec!["zh", "zh-CN", "zh-Hans"];
+        for locale in locales {
+            let locale = locale.to_string();
+
+            let not_found = ApiError::NotFound {
+                resource: "user".to_string(),
+                resource_id: None,
+            };
+            assert!(not_found.localized_message(&locale).contains("资源未找到"));
+            assert!(not_found.localized_message(&locale).contains("user"));
+
+            let invalid_input = ApiError::InvalidInput {
+                message: "bad".to_string(),
+                field: None,
+                value: None,
+            };
+            assert!(invalid_input.localized_message(&locale).contains("无效输入"));
+            assert!(invalid_input.localized_message(&locale).contains("bad"));
+
+            let auth_failed = ApiError::AuthenticationFailed {
+                reason: "token".to_string(),
+            };
+            assert!(auth_failed.localized_message(&locale).contains("认证失败"));
+            assert!(auth_failed.localized_message(&locale).contains("token"));
+
+            let access_denied = ApiError::AccessDenied {
+                permission: "admin".to_string(),
+                user_id: None,
+            };
+            assert!(access_denied.localized_message(&locale).contains("访问被拒绝"));
+            assert!(access_denied.localized_message(&locale).contains("admin"));
+
+            let rate_limit = ApiError::RateLimitExceeded {
+                limit: 100,
+                window_seconds: 60,
+            };
+            let msg = rate_limit.localized_message(&locale);
+            assert!(msg.contains("请求频率超限"));
+            assert!(msg.contains("100"));
+            assert!(msg.contains("60"));
+
+            let internal = ApiError::Internal {
+                message: "err".to_string(),
+                error_id: "id".to_string(),
+                source: None,
+                context: None,
+            };
+            assert!(internal.localized_message(&locale).contains("内部错误"));
+            assert!(internal.localized_message(&locale).contains("err"));
+
+            let unavailable = ApiError::ServiceUnavailable {
+                service: "db".to_string(),
+                retry_after: None,
+                source: None,
+            };
+            assert!(unavailable.localized_message(&locale).contains("服务不可用"));
+            assert!(unavailable.localized_message(&locale).contains("db"));
+
+            let validation = ApiError::ValidationError {
+                field: "email".to_string(),
+                constraint: "required".to_string(),
+            };
+            let msg = validation.localized_message(&locale);
+            assert!(msg.contains("验证失败"));
+            assert!(msg.contains("email"));
+            assert!(msg.contains("required"));
+        }
+    }
+
+    #[test]
+    fn test_localized_error_fr_all_variants() {
+        let locales = vec!["fr", "fr-FR"];
+        for locale in locales {
+            let locale = locale.to_string();
+
+            let not_found = ApiError::NotFound {
+                resource: "user".to_string(),
+                resource_id: None,
+            };
+            assert!(not_found
+                .localized_message(&locale)
+                .contains("Ressource introuvable"));
+            assert!(not_found.localized_message(&locale).contains("user"));
+
+            let invalid_input = ApiError::InvalidInput {
+                message: "bad".to_string(),
+                field: None,
+                value: None,
+            };
+            assert!(invalid_input
+                .localized_message(&locale)
+                .contains("Entrée invalide"));
+            assert!(invalid_input.localized_message(&locale).contains("bad"));
+
+            let auth_failed = ApiError::AuthenticationFailed {
+                reason: "token".to_string(),
+            };
+            assert!(auth_failed
+                .localized_message(&locale)
+                .contains("Échec de l'authentification"));
+            assert!(auth_failed.localized_message(&locale).contains("token"));
+
+            let access_denied = ApiError::AccessDenied {
+                permission: "admin".to_string(),
+                user_id: None,
+            };
+            assert!(access_denied
+                .localized_message(&locale)
+                .contains("Accès refusé"));
+            assert!(access_denied.localized_message(&locale).contains("admin"));
+
+            let rate_limit = ApiError::RateLimitExceeded {
+                limit: 100,
+                window_seconds: 60,
+            };
+            let msg = rate_limit.localized_message(&locale);
+            assert!(msg.contains("Limite de débit dépassée"));
+            assert!(msg.contains("100"));
+            assert!(msg.contains("60"));
+
+            let internal = ApiError::Internal {
+                message: "err".to_string(),
+                error_id: "id".to_string(),
+                source: None,
+                context: None,
+            };
+            assert!(internal.localized_message(&locale).contains("Erreur interne"));
+            assert!(internal.localized_message(&locale).contains("err"));
+
+            let unavailable = ApiError::ServiceUnavailable {
+                service: "db".to_string(),
+                retry_after: None,
+                source: None,
+            };
+            assert!(unavailable
+                .localized_message(&locale)
+                .contains("Service indisponible"));
+            assert!(unavailable.localized_message(&locale).contains("db"));
+
+            let validation = ApiError::ValidationError {
+                field: "email".to_string(),
+                constraint: "required".to_string(),
+            };
+            let msg = validation.localized_message(&locale);
+            assert!(msg.contains("Erreur de validation"));
+            assert!(msg.contains("email"));
+            assert!(msg.contains("required"));
+        }
+    }
+
+    #[test]
+    fn test_localized_error_es_all_variants() {
+        let locales = vec!["es", "es-ES"];
+        for locale in locales {
+            let locale = locale.to_string();
+
+            let not_found = ApiError::NotFound {
+                resource: "user".to_string(),
+                resource_id: None,
+            };
+            assert!(not_found
+                .localized_message(&locale)
+                .contains("Recurso no encontrado"));
+            assert!(not_found.localized_message(&locale).contains("user"));
+
+            let invalid_input = ApiError::InvalidInput {
+                message: "bad".to_string(),
+                field: None,
+                value: None,
+            };
+            assert!(invalid_input
+                .localized_message(&locale)
+                .contains("Entrada inválida"));
+            assert!(invalid_input.localized_message(&locale).contains("bad"));
+
+            let auth_failed = ApiError::AuthenticationFailed {
+                reason: "token".to_string(),
+            };
+            assert!(auth_failed
+                .localized_message(&locale)
+                .contains("Autenticación fallida"));
+            assert!(auth_failed.localized_message(&locale).contains("token"));
+
+            let access_denied = ApiError::AccessDenied {
+                permission: "admin".to_string(),
+                user_id: None,
+            };
+            assert!(access_denied
+                .localized_message(&locale)
+                .contains("Acceso denegado"));
+            assert!(access_denied.localized_message(&locale).contains("admin"));
+
+            let rate_limit = ApiError::RateLimitExceeded {
+                limit: 100,
+                window_seconds: 60,
+            };
+            let msg = rate_limit.localized_message(&locale);
+            assert!(msg.contains("Límite de tasa excedido"));
+            assert!(msg.contains("100"));
+            assert!(msg.contains("60"));
+
+            let internal = ApiError::Internal {
+                message: "err".to_string(),
+                error_id: "id".to_string(),
+                source: None,
+                context: None,
+            };
+            assert!(internal.localized_message(&locale).contains("Error interno"));
+            assert!(internal.localized_message(&locale).contains("err"));
+
+            let unavailable = ApiError::ServiceUnavailable {
+                service: "db".to_string(),
+                retry_after: None,
+                source: None,
+            };
+            assert!(unavailable
+                .localized_message(&locale)
+                .contains("Servicio no disponible"));
+            assert!(unavailable.localized_message(&locale).contains("db"));
+
+            let validation = ApiError::ValidationError {
+                field: "email".to_string(),
+                constraint: "required".to_string(),
+            };
+            let msg = validation.localized_message(&locale);
+            assert!(msg.contains("Error de validación"));
+            assert!(msg.contains("email"));
+            assert!(msg.contains("required"));
+        }
+    }
+
+    #[test]
+    fn test_localized_error_en_all_variants() {
+        // English and unknown locales fall back to default_message()
+        let locales = vec!["en", "en-US", "en-GB"];
+        for locale in locales {
+            let locale = locale.to_string();
+
+            let not_found = ApiError::NotFound {
+                resource: "user".to_string(),
+                resource_id: None,
+            };
+            assert_eq!(
+                not_found.localized_message(&locale),
+                not_found.default_message()
+            );
+            assert!(not_found.localized_message(&locale).contains("Resource not found"));
+
+            let invalid_input = ApiError::InvalidInput {
+                message: "bad".to_string(),
+                field: None,
+                value: None,
+            };
+            assert_eq!(
+                invalid_input.localized_message(&locale),
+                invalid_input.default_message()
+            );
+
+            let auth_failed = ApiError::AuthenticationFailed {
+                reason: "token".to_string(),
+            };
+            assert_eq!(
+                auth_failed.localized_message(&locale),
+                auth_failed.default_message()
+            );
+
+            let access_denied = ApiError::AccessDenied {
+                permission: "admin".to_string(),
+                user_id: None,
+            };
+            assert_eq!(
+                access_denied.localized_message(&locale),
+                access_denied.default_message()
+            );
+
+            let rate_limit = ApiError::RateLimitExceeded {
+                limit: 100,
+                window_seconds: 60,
+            };
+            assert_eq!(
+                rate_limit.localized_message(&locale),
+                rate_limit.default_message()
+            );
+
+            let internal = ApiError::Internal {
+                message: "err".to_string(),
+                error_id: "id".to_string(),
+                source: None,
+                context: None,
+            };
+            assert_eq!(
+                internal.localized_message(&locale),
+                internal.default_message()
+            );
+
+            let unavailable = ApiError::ServiceUnavailable {
+                service: "db".to_string(),
+                retry_after: None,
+                source: None,
+            };
+            assert_eq!(
+                unavailable.localized_message(&locale),
+                unavailable.default_message()
+            );
+
+            let validation = ApiError::ValidationError {
+                field: "email".to_string(),
+                constraint: "required".to_string(),
+            };
+            assert_eq!(
+                validation.localized_message(&locale),
+                validation.default_message()
+            );
+        }
+    }
+
+    #[test]
+    fn test_localized_error_unknown_locales_fallback() {
+        // Locales without translations (ja, ko, de, etc.) fall back to English
+        let locales = vec!["ja", "ja-JP", "ko", "ko-KR", "de", "de-DE", "it", "pt-BR"];
+        for locale in locales {
+            let locale = locale.to_string();
+
+            let not_found = ApiError::NotFound {
+                resource: "user".to_string(),
+                resource_id: None,
+            };
+            assert_eq!(
+                not_found.localized_message(&locale),
+                not_found.default_message()
+            );
+
+            let invalid_input = ApiError::InvalidInput {
+                message: "bad".to_string(),
+                field: None,
+                value: None,
+            };
+            assert_eq!(
+                invalid_input.localized_message(&locale),
+                invalid_input.default_message()
+            );
+
+            let auth_failed = ApiError::AuthenticationFailed {
+                reason: "token".to_string(),
+            };
+            assert_eq!(
+                auth_failed.localized_message(&locale),
+                auth_failed.default_message()
+            );
+
+            let access_denied = ApiError::AccessDenied {
+                permission: "admin".to_string(),
+                user_id: None,
+            };
+            assert_eq!(
+                access_denied.localized_message(&locale),
+                access_denied.default_message()
+            );
+
+            let rate_limit = ApiError::RateLimitExceeded {
+                limit: 100,
+                window_seconds: 60,
+            };
+            assert_eq!(
+                rate_limit.localized_message(&locale),
+                rate_limit.default_message()
+            );
+
+            let internal = ApiError::Internal {
+                message: "err".to_string(),
+                error_id: "id".to_string(),
+                source: None,
+                context: None,
+            };
+            assert_eq!(
+                internal.localized_message(&locale),
+                internal.default_message()
+            );
+
+            let unavailable = ApiError::ServiceUnavailable {
+                service: "db".to_string(),
+                retry_after: None,
+                source: None,
+            };
+            assert_eq!(
+                unavailable.localized_message(&locale),
+                unavailable.default_message()
+            );
+
+            let validation = ApiError::ValidationError {
+                field: "email".to_string(),
+                constraint: "required".to_string(),
+            };
+            assert_eq!(
+                validation.localized_message(&locale),
+                validation.default_message()
+            );
+        }
+    }
+
+    #[test]
+    fn test_default_message_all_variants() {
+        let not_found = ApiError::NotFound {
+            resource: "user".to_string(),
+            resource_id: None,
+        };
+        assert!(not_found.default_message().contains("Resource not found"));
+
+        let invalid_input = ApiError::InvalidInput {
+            message: "bad".to_string(),
+            field: None,
+            value: None,
+        };
+        assert!(invalid_input.default_message().contains("Invalid input"));
+
+        let auth_failed = ApiError::AuthenticationFailed {
+            reason: "token".to_string(),
+        };
+        assert!(auth_failed
+            .default_message()
+            .contains("Authentication failed"));
+
+        let access_denied = ApiError::AccessDenied {
+            permission: "admin".to_string(),
+            user_id: None,
+        };
+        assert!(access_denied.default_message().contains("Access denied"));
+
+        let rate_limit = ApiError::RateLimitExceeded {
+            limit: 100,
+            window_seconds: 60,
+        };
+        assert!(rate_limit.default_message().contains("Rate limit exceeded"));
+
+        let internal = ApiError::Internal {
+            message: "err".to_string(),
+            error_id: "id".to_string(),
+            source: None,
+            context: None,
+        };
+        assert!(internal.default_message().contains("Internal server error"));
+
+        let unavailable = ApiError::ServiceUnavailable {
+            service: "db".to_string(),
+            retry_after: None,
+            source: None,
+        };
+        assert!(unavailable.default_message().contains("Service unavailable"));
+
+        let validation = ApiError::ValidationError {
+            field: "email".to_string(),
+            constraint: "required".to_string(),
+        };
+        assert!(validation.default_message().contains("Validation failed"));
+    }
+
+    // ========================================================================
+    // TranslationStore::load_from_json() tests
+    // ========================================================================
+
+    #[test]
+    fn test_translation_store_load_from_json() {
+        use std::io::Write;
+
+        let json_content = r#"{
+            "zh-CN": {
+                "Hello": "你好",
+                "Goodbye": "再见"
+            },
+            "fr-FR": {
+                "Hello": "Bonjour",
+                "Goodbye": "Au revoir"
+            }
+        }"#;
+
+        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
+        temp_file.write_all(json_content.as_bytes()).unwrap();
+
+        let mut store = TranslationStore::new();
+        let result = store.load_from_json(temp_file.path().to_str().unwrap());
+        assert!(result.is_ok());
+
+        assert_eq!(
+            store.get(&"zh-CN".to_string(), "Hello"),
+            Some(&"你好".to_string())
+        );
+        assert_eq!(
+            store.get(&"zh-CN".to_string(), "Goodbye"),
+            Some(&"再见".to_string())
+        );
+        assert_eq!(
+            store.get(&"fr-FR".to_string(), "Hello"),
+            Some(&"Bonjour".to_string())
+        );
+        assert_eq!(
+            store.get(&"fr-FR".to_string(), "Goodbye"),
+            Some(&"Au revoir".to_string())
+        );
+        // Unloaded locale returns None
+        assert_eq!(store.get(&"en".to_string(), "Hello"), None);
+    }
+
+    #[test]
+    fn test_translation_store_load_from_json_nonexistent_file() {
+        let mut store = TranslationStore::new();
+        let result = store.load_from_json("/nonexistent/path/does/not/exist.json");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_translation_store_load_from_json_invalid_json() {
+        use std::io::Write;
+
+        let invalid_json = r#"this is not valid json"#;
+
+        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
+        temp_file.write_all(invalid_json.as_bytes()).unwrap();
+
+        let mut store = TranslationStore::new();
+        let result = store.load_from_json(temp_file.path().to_str().unwrap());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_translation_store_load_from_json_empty_object() {
+        use std::io::Write;
+
+        let empty_json = r#"{}"#;
+
+        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
+        temp_file.write_all(empty_json.as_bytes()).unwrap();
+
+        let mut store = TranslationStore::new();
+        let result = store.load_from_json(temp_file.path().to_str().unwrap());
+        assert!(result.is_ok());
+        // No translations loaded
+        assert_eq!(store.get(&"zh-CN".to_string(), "Hello"), None);
+    }
+
+    #[test]
+    fn test_translation_store_load_from_json_skips_non_string_values() {
+        use std::io::Write;
+
+        // JSON with non-object locale value and non-string translation values
+        // should be silently skipped (no panic, no error)
+        let json_content = r#"{
+            "zh-CN": {
+                "Hello": "你好",
+                "Count": 42
+            },
+            "not-an-object": "should-be-skipped"
+        }"#;
+
+        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
+        temp_file.write_all(json_content.as_bytes()).unwrap();
+
+        let mut store = TranslationStore::new();
+        let result = store.load_from_json(temp_file.path().to_str().unwrap());
+        assert!(result.is_ok());
+
+        // String value loaded
+        assert_eq!(
+            store.get(&"zh-CN".to_string(), "Hello"),
+            Some(&"你好".to_string())
+        );
+        // Non-string value (42) skipped
+        assert_eq!(store.get(&"zh-CN".to_string(), "Count"), None);
+    }
+
+    #[test]
+    fn test_translation_store_default() {
+        let store = TranslationStore::default();
+        // Default store has no translations
+        assert_eq!(store.get(&"en".to_string(), "Hello"), None);
+    }
+
+    // ========================================================================
+    // SdForgeError category()/sanitized_message() tests for security/http variants
+    // ========================================================================
+
+    #[test]
+    #[cfg(feature = "security")]
+    fn test_sdforge_error_category_auth_variants() {
+        let auth_err: SdForgeError = crate::security::AuthError::MissingAuth.into();
+        assert_eq!(auth_err.category(), ErrorCategory::AuthError);
+
+        let jwt_err: SdForgeError = crate::security::JwtError::InvalidFormat.into();
+        assert_eq!(jwt_err.category(), ErrorCategory::AuthError);
+
+        let auth_config_err: SdForgeError =
+            crate::security::AuthConfigError::InvalidSecret("too short".to_string()).into();
+        assert_eq!(auth_config_err.category(), ErrorCategory::AuthError);
+    }
+
+    #[test]
+    #[cfg(feature = "http")]
+    fn test_sdforge_error_category_config_variant() {
+        let config_err: SdForgeError = crate::config::ConfigError::FileNotFound {
+            path: "/missing.toml".to_string(),
+        }
+        .into();
+        assert_eq!(config_err.category(), ErrorCategory::ClientError);
+    }
+
+    #[test]
+    #[cfg(feature = "security")]
+    fn test_sdforge_error_sanitized_message_security_variants() {
+        let auth_err: SdForgeError = crate::security::AuthError::MissingAuth.into();
+        let msg = auth_err.sanitized_message();
+        // The `other` branch calls to_string() on the underlying error
+        assert!(msg.contains("authorization header"));
+
+        let jwt_err: SdForgeError = crate::security::JwtError::InvalidFormat.into();
+        let msg = jwt_err.sanitized_message();
+        assert!(!msg.is_empty());
+
+        let auth_config_err: SdForgeError =
+            crate::security::AuthConfigError::InvalidSecret("bad".to_string()).into();
+        let msg = auth_config_err.sanitized_message();
+        assert!(msg.contains("Invalid secret"));
+    }
+
+    #[test]
+    #[cfg(feature = "http")]
+    fn test_sdforge_error_sanitized_message_config_variant() {
+        let config_err: SdForgeError = crate::config::ConfigError::FileNotFound {
+            path: "/missing.toml".to_string(),
+        }
+        .into();
+        let msg = config_err.sanitized_message();
+        assert!(msg.contains("File not found"));
+        assert!(msg.contains("/missing.toml"));
+    }
+
+    #[test]
+    fn test_sdforge_error_to_service_error_all_api_variants() {
+        // Exercise to_service_error for each ApiError variant via SdForgeError
+        let errors: Vec<ApiError> = vec![
+            ApiError::not_found("user", Some("123".into())),
+            ApiError::invalid_input("bad", Some("email".into()), None),
+            ApiError::authentication_failed("bad token"),
+            ApiError::access_denied("admin", Some("u1".into())),
+            ApiError::rate_limit_exceeded(100, 60),
+            ApiError::internal_error("db fail", "ERR001"),
+            ApiError::service_unavailable("db", Some(30)),
+            ApiError::validation("email", "required"),
+        ];
+
+        let expected_codes = [
+            "NOT_FOUND",
+            "INVALID_INPUT",
+            "AUTHENTICATION_FAILED",
+            "ACCESS_DENIED",
+            "RATE_LIMIT_EXCEEDED",
+            "INTERNAL_ERROR",
+            "SERVICE_UNAVAILABLE",
+            "VALIDATION_ERROR",
+        ];
+
+        for (err, expected_code) in errors.into_iter().zip(expected_codes.iter()) {
+            let sdforge_err: SdForgeError = err.into();
+            let service_err = sdforge_err.to_service_error();
+            assert_eq!(
+                service_err.code, *expected_code,
+                "Expected code {} but got {}",
+                expected_code, service_err.code
+            );
+        }
+    }
+
+    #[test]
+    fn test_sdforge_error_to_service_error_internal_string() {
+        let err = SdForgeError::internal("custom internal failure");
+        let service_err = err.to_service_error();
+        assert_eq!(service_err.code, "INTERNAL_ERROR");
+    }
+
+    #[test]
+    fn test_api_error_to_service_error_from_all_variants() {
+        // Exercise the From<ApiError> for ServiceError impl for all variants
+        let not_found = ApiError::not_found("user", Some("123".into()));
+        let svc: ServiceError = not_found.into();
+        assert_eq!(svc.code, "NOT_FOUND");
+
+        let invalid = ApiError::invalid_input("bad", Some("email".into()), None);
+        let svc: ServiceError = invalid.into();
+        assert_eq!(svc.code, "INVALID_INPUT");
+
+        let auth = ApiError::authentication_failed("bad token");
+        let svc: ServiceError = auth.into();
+        assert_eq!(svc.code, "AUTHENTICATION_FAILED");
+
+        let access = ApiError::access_denied("admin", Some("u1".into()));
+        let svc: ServiceError = access.into();
+        assert_eq!(svc.code, "ACCESS_DENIED");
+
+        let rate = ApiError::rate_limit_exceeded(100, 60);
+        let svc: ServiceError = rate.into();
+        assert_eq!(svc.code, "RATE_LIMIT_EXCEEDED");
+
+        let internal = ApiError::internal_error("db fail", "ERR001");
+        let svc: ServiceError = internal.into();
+        assert_eq!(svc.code, "INTERNAL_ERROR");
+
+        let unavail = ApiError::service_unavailable("db", Some(30));
+        let svc: ServiceError = unavail.into();
+        assert_eq!(svc.code, "SERVICE_UNAVAILABLE");
+
+        let validation = ApiError::validation("email", "required");
+        let svc: ServiceError = validation.into();
+        assert_eq!(svc.code, "VALIDATION_ERROR");
+    }
 }

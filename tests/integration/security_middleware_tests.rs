@@ -35,7 +35,7 @@ mod security_tests {
         use sdforge::security::{ApiKeyMetadata, AppApiKeyAuth};
 
         let auth = AppApiKeyAuth::new();
-        let metadata = ApiKeyMetadata::new("perf-test-key".to_string(), None);
+        let _metadata = ApiKeyMetadata::new("perf-test-key".to_string(), None);
 
         let start = std::time::Instant::now();
 
@@ -52,7 +52,7 @@ mod security_tests {
     /// Test: Concurrent API key validation
     #[tokio::test]
     async fn test_concurrent_api_key_validation() {
-        use sdforge::security::{ApiKeyMetadata, AppApiKeyAuth};
+        use sdforge::security::AppApiKeyAuth;
         use std::sync::Arc;
 
         let auth = Arc::new(AppApiKeyAuth::new());

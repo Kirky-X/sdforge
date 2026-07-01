@@ -316,4 +316,59 @@ mod tests {
         let restored: Vec<i32> = simd_from_slice(json.as_bytes()).unwrap();
         assert_eq!(original, restored);
     }
+
+    // ============================================================================
+    // Serialization error path tests
+    //
+    // simd_to_string uses serde_json::to_string internally. When the value's
+    // Serialize impl fails, the map_err branch should produce a descriptive
+    // error message. These tests cover that error path.
+    // ============================================================================
+
+    /// A type whose Serialize impl always fails, to exercise the error
+    /// branch in simd_to_string.
+    struct FailingSerialize;
+
+    impl serde::Serialize for FailingSerialize {
+        fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            Err(serde::ser::Error::custom("intentional serialization failure"))
+        }
+    }
+
+    #[test]
+    fn test_simd_to_string_serialization_error() {
+        let result = simd_to_string(&FailingSerialize);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(
+            err_msg.contains("JSON serialization failed"),
+            "Error message should describe the failure, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_simd_from_slice_deserialization_error_type_mismatch() {
+        // Provide valid JSON that doesn't match the expected type to cover
+        // the map_err branch in simd_from_slice.
+        let result: Result<TestData, _> = simd_from_slice(br#"{"name":123}"#);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("JSON deserialization failed"));
+    }
+
+    #[test]
+    fn test_simd_from_str_deserialization_error_type_mismatch() {
+        // Provide valid JSON that doesn't match the expected type to cover
+        // the map_err branch in simd_from_str.
+        let result: Result<TestData, _> = simd_from_str(r#"{"name":true}"#);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("JSON deserialization failed"));
+    }
 }

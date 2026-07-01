@@ -35,6 +35,7 @@ mod http_protocol_tests {
 
     /// Test data structure for query parameters.
     #[derive(Debug, Deserialize)]
+    #[allow(dead_code)]
     struct PaginationParams {
         page: Option<u32>,
         limit: Option<u32>,
@@ -44,6 +45,7 @@ mod http_protocol_tests {
 
     /// Test data structure for form data.
     #[derive(Debug, Deserialize)]
+    #[allow(dead_code)]
     struct LoginForm {
         username: String,
         password: String,
@@ -51,6 +53,7 @@ mod http_protocol_tests {
 
     /// Query params for search operations.
     #[derive(Debug, Deserialize)]
+    #[allow(dead_code)]
     struct SearchQuery {
         search: String,
         active: Option<bool>,

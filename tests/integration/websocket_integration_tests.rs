@@ -3,9 +3,7 @@
 
 #[cfg(feature = "websocket")]
 mod websocket_integration_tests {
-    use sdforge::websocket::{
-        AppState, ConnectionManager, RateLimitConfig, WebSocketConfig, WebSocketConnection,
-    };
+    use sdforge::websocket::{AppState, ConnectionManager, RateLimitConfig, WebSocketConfig};
     use std::sync::Arc;
 
     #[test]
@@ -55,7 +53,7 @@ mod websocket_integration_tests {
 // Enhanced WebSocket Integration tests
 #[cfg(feature = "websocket")]
 mod websocket_enhanced_integration_tests {
-    use sdforge::websocket::{AppState, ConnectionManager, RateLimitConfig, WebSocketConnection};
+    use sdforge::websocket::{ConnectionManager, RateLimitConfig};
     use std::sync::Arc;
 
     /// Test 1: WebSocket connection creation and basic operations
