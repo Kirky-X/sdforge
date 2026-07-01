@@ -518,7 +518,10 @@ impl crate::security::traits::AuditLogger for AppAuditLogger {
             }
             Err(_) => {
                 // No tokio runtime available — emit to stderr as fallback
-                // (better than silently dropping the audit log)
+                // and increment the dropped-log counter so monitoring can
+                // detect the loss (previously the counter was never updated,
+                // making drops invisible to operators).
+                dropped_log_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 eprintln!(
                     "[AuditLogger] WARNING: no tokio runtime available, audit log dropped for action={}"
                 , action);

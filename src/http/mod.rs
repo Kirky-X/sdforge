@@ -161,7 +161,7 @@ pub fn build() -> Router {
     // First, collect registrations with function pointers
     let registrations: Vec<_> = inventory::iter::<RouteRegistration>().collect();
 
-    // Sort by name and version for deterministic order
+    // Map registrations to HttpRoute instances via their create functions
     let mut routes: Vec<_> = registrations
         .iter()
         .map(|registration| registration.create())
@@ -172,13 +172,29 @@ pub fn build() -> Router {
         routes.push(route.clone());
     }
 
-    // Sort routes by path for deterministic order
-    routes.sort_by_key(|r| r.path.clone());
-
-    // Build router with routes
+    // Compute the full path (with module prefix) for each route, then
+    // deduplicate by full path. Without this, registering the same path
+    // via both RouteRegistration and a direct HttpRoute (or twice within
+    // either source) would cause Axum to panic with "Cannot register
+    // duplicate route" at runtime.
+    //
+    // Resolution order: later registrations win. Direct HttpRoute entries
+    // are appended after RouteRegistration entries, so they take precedence
+    // — which matches the expectation that explicit registrations override
+    // macro-generated ones.
+    let mut seen: std::collections::HashMap<String, HttpRoute> =
+        std::collections::HashMap::with_capacity(routes.len());
     for route in routes {
         let prefix = route.module_prefix.as_deref();
         let full_path = resolve_route_path(&route.path, prefix);
+        seen.insert(full_path, route);
+    }
+
+    // Sort by full path for deterministic router construction order.
+    let mut deduped: Vec<_> = seen.into_iter().collect();
+    deduped.sort_by(|a, b| a.0.cmp(&b.0));
+
+    for (full_path, route) in deduped {
         router = router.route(&full_path, route.handler);
     }
 

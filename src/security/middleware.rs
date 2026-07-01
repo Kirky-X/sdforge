@@ -44,20 +44,48 @@ fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
 
     let trusted_proxies = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.1"];
 
-    if let Some(header) = req.headers().get("X-Forwarded-For") {
-        if let Ok(value) = header.to_str() {
-            if let Some(ip) = value.split(',').next().map(|s| s.trim()) {
-                if is_valid_ip(ip)
-                    && trusted_proxies
-                        .iter()
-                        .any(|range| is_ip_in_range(ip, range))
-                {
+    // Get the direct TCP peer IP first. This is the only unspoofable source.
+    let direct_ip = req
+        .extensions()
+        .get::<ConnectInfo<std::net::SocketAddr>>()
+        .map(|ci| ci.0.ip().to_string());
+
+    // Only trust forwarded headers (X-Forwarded-For / X-Real-IP) when the
+    // direct connection is from a trusted reverse proxy. Otherwise an
+    // attacker can spoof these headers to bypass IP-based checks.
+    let from_trusted_proxy = direct_ip
+        .as_deref()
+        .map(|ip| trusted_proxies.iter().any(|range| is_ip_in_range(ip, range)))
+        .unwrap_or(false);
+
+    if from_trusted_proxy {
+        // Trust X-Forwarded-For (leftmost = original client)
+        if let Some(header) = req.headers().get("X-Forwarded-For") {
+            if let Ok(value) = header.to_str() {
+                if let Some(ip) = value.split(',').next().map(|s| s.trim()) {
+                    if is_valid_ip(ip) {
+                        return Some(ip.to_string());
+                    }
+                }
+            }
+        }
+        // Trust X-Real-IP as secondary
+        if let Some(header) = req.headers().get("X-Real-IP") {
+            if let Ok(ip) = header.to_str() {
+                if is_valid_ip(ip) {
                     return Some(ip.to_string());
                 }
             }
         }
     }
 
+    // Return the direct connection IP (unspoofable).
+    if let Some(ip) = direct_ip {
+        return Some(ip);
+    }
+
+    // Last-resort fallback when no ConnectInfo is available (e.g., test
+    // environments without a real TCP connection): trust headers directly.
     if let Some(header) = req.headers().get("X-Real-IP") {
         if let Ok(ip) = header.to_str() {
             if is_valid_ip(ip) {
@@ -65,9 +93,14 @@ fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
             }
         }
     }
-
-    if let Some(remote) = req.extensions().get::<ConnectInfo<std::net::SocketAddr>>() {
-        return Some(remote.0.ip().to_string());
+    if let Some(header) = req.headers().get("X-Forwarded-For") {
+        if let Ok(value) = header.to_str() {
+            if let Some(ip) = value.split(',').next().map(|s| s.trim()) {
+                if is_valid_ip(ip) {
+                    return Some(ip.to_string());
+                }
+            }
+        }
     }
 
     None
@@ -370,19 +403,18 @@ mod tests {
 
     #[test]
     fn test_extract_client_ip_x_forwarded_for_single() {
-        // X-Forwarded-For with public IP (not in trusted proxies)
+        // No ConnectInfo: fallback path trusts X-Forwarded-For directly
         let mut req = Request::new(Body::empty());
         req.headers_mut()
             .insert("X-Forwarded-For", "8.8.8.8".parse().unwrap());
 
         let ip = extract_client_ip_core(&req);
-        // Returns None because 8.8.8.8 is not in trusted proxies
-        assert_eq!(ip, None);
+        assert_eq!(ip, Some("8.8.8.8".to_string()));
     }
 
     #[test]
     fn test_extract_client_ip_x_forwarded_for_multiple() {
-        // X-Forwarded-For with multiple IPs (first is public)
+        // No ConnectInfo: fallback path returns leftmost valid IP
         let mut req = Request::new(Body::empty());
         req.headers_mut().insert(
             "X-Forwarded-For",
@@ -390,8 +422,40 @@ mod tests {
         );
 
         let ip = extract_client_ip_core(&req);
-        // Returns None because first IP is not in trusted proxies
-        assert_eq!(ip, None);
+        assert_eq!(ip, Some("8.8.8.8".to_string()));
+    }
+
+    #[test]
+    fn test_extract_client_ip_trusted_proxy_trusts_x_forwarded_for() {
+        // Direct connection from trusted proxy (10.0.0.1) → trust X-Forwarded-For
+        use axum::extract::connect_info::ConnectInfo;
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+        let mut req = Request::new(Body::empty());
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 8080);
+        req.extensions_mut().insert(ConnectInfo(addr));
+        req.headers_mut()
+            .insert("X-Forwarded-For", "203.0.113.5".parse().unwrap());
+
+        let ip = extract_client_ip_core(&req);
+        assert_eq!(ip, Some("203.0.113.5".to_string()));
+    }
+
+    #[test]
+    fn test_extract_client_ip_non_trusted_proxy_ignores_headers() {
+        // Direct connection from non-trusted IP (8.8.8.8) → ignore spoofed headers,
+        // return direct IP (security: prevents header spoofing)
+        use axum::extract::connect_info::ConnectInfo;
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+        let mut req = Request::new(Body::empty());
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 8080);
+        req.extensions_mut().insert(ConnectInfo(addr));
+        req.headers_mut()
+            .insert("X-Forwarded-For", "1.2.3.4".parse().unwrap());
+
+        let ip = extract_client_ip_core(&req);
+        assert_eq!(ip, Some("8.8.8.8".to_string()));
     }
 
     #[test]

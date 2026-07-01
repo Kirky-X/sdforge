@@ -304,9 +304,16 @@ impl Default for LruConfig {
 ///
 /// Provides LRU eviction on top of SharedCache to prevent unlimited memory growth.
 /// This is a simplified implementation that tracks metadata separately.
+///
+/// All operations are synchronous. The backing `SharedCache` is itself non-async
+/// (it wraps a `DashMap`), so wrapping synchronous bookkeeping in `tokio::spawn`
+/// only added overhead, runtime-context requirements, and nondeterministic
+/// ordering (spawned tasks could race with subsequent `set`/`delete` calls,
+/// making eviction tests flaky). A `std::sync::Mutex` is the correct choice:
+/// the critical sections are tiny (HashMap insert/remove) and never await.
 pub struct LruCacheManager {
     cache: SharedCache,
-    access_times: Arc<tokio::sync::RwLock<HashMap<String, Instant>>>,
+    access_times: Arc<std::sync::Mutex<HashMap<String, Instant>>>,
     config: LruConfig,
 }
 
@@ -315,7 +322,7 @@ impl LruCacheManager {
     pub fn new(cache: SharedCache, config: LruConfig) -> Self {
         Self {
             cache,
-            access_times: Arc::new(tokio::sync::RwLock::new(HashMap::new())),
+            access_times: Arc::new(std::sync::Mutex::new(HashMap::new())),
             config,
         }
     }
@@ -324,13 +331,12 @@ impl LruCacheManager {
     pub fn get(&self, key: &str) -> Option<Vec<u8>> {
         let value = self.cache.get(key)?;
 
-        // Update access time in background (non-blocking)
-        let access_times = self.access_times.clone();
-        let key = key.to_string();
-        tokio::spawn(async move {
-            let mut times = access_times.write().await;
-            times.insert(key, Instant::now());
-        });
+        // Update access time synchronously. The critical section is a single
+        // HashMap insert and never awaits, so a blocking mutex is appropriate
+        // and avoids the runtime-context requirement of tokio::spawn.
+        if let Ok(mut times) = self.access_times.lock() {
+            times.insert(key.to_string(), Instant::now());
+        }
 
         Some(value)
     }
@@ -342,81 +348,75 @@ impl LruCacheManager {
 
         self.cache.set(key, value);
 
-        // Track access time
-        let access_times = self.access_times.clone();
-        let key = key.to_string();
-        tokio::spawn(async move {
-            let mut times = access_times.write().await;
-            times.insert(key, Instant::now());
-        });
+        // Track access time synchronously.
+        if let Ok(mut times) = self.access_times.lock() {
+            times.insert(key.to_string(), Instant::now());
+        }
     }
 
     /// Delete value
     pub fn delete(&self, key: &str) {
         self.cache.delete(key);
 
-        let access_times = self.access_times.clone();
-        let key = key.to_string();
-        tokio::spawn(async move {
-            let mut times = access_times.write().await;
-            times.remove(&key);
-        });
+        if let Ok(mut times) = self.access_times.lock() {
+            times.remove(key);
+        }
     }
 
     /// Check and evict old entries if needed
     fn check_and_evict(&self) {
-        let access_times = self.access_times.clone();
-        let config = self.config.clone();
-        // Clone the cache reference so the spawned task can delete evicted entries.
-        // Without this, eviction only removed access-tracking metadata while the
-        // actual cached values remained — causing unbounded memory growth.
-        let cache = self.cache.clone();
+        let Ok(mut times) = self.access_times.lock() else {
+            return;
+        };
+        let now = Instant::now();
+        let config = &self.config;
 
-        tokio::spawn(async move {
-            let mut times = access_times.write().await;
-            let now = Instant::now();
-
-            // First, remove expired entries (TTL-based). Collect keys to evict so we
-            // can also delete them from the backing cache (not just access metadata).
-            let mut expired_keys: Vec<String> = Vec::new();
-            times.retain(|k, &mut last_accessed| {
-                if now.duration_since(last_accessed) > config.ttl {
-                    expired_keys.push(k.clone());
-                    false
-                } else {
-                    true
-                }
-            });
-            for key in &expired_keys {
-                cache.delete(key);
-            }
-
-            // Calculate eviction threshold (80% of max_entries by default)
-            let threshold = (config.max_entries as f64 * config.eviction_threshold) as usize;
-
-            // If over threshold, start evicting oldest entries
-            if times.len() > threshold {
-                // Sort by access time (oldest first)
-                let mut entries: Vec<_> = times.iter().map(|(k, v)| (k.clone(), *v)).collect();
-                entries.sort_by_key(|&(_, time)| time);
-
-                // Remove oldest entries to get back under threshold.
-                // Delete both the access-tracking entry AND the cached value
-                // to actually reclaim memory.
-                let to_remove = entries.len().saturating_sub(threshold);
-                for (key, _) in entries.into_iter().take(to_remove) {
-                    times.remove(&key);
-                    cache.delete(&key);
-                }
+        // First, remove expired entries (TTL-based). Collect keys to evict so we
+        // can also delete them from the backing cache (not just access metadata).
+        // The `times` mutex and the backing cache's internal lock are distinct,
+        // so holding `times` while calling `cache.delete` cannot deadlock.
+        let mut expired_keys: Vec<String> = Vec::new();
+        times.retain(|k, &mut last_accessed| {
+            if now.duration_since(last_accessed) > config.ttl {
+                expired_keys.push(k.clone());
+                false
+            } else {
+                true
             }
         });
+        for key in &expired_keys {
+            self.cache.delete(key);
+        }
+
+        // Calculate eviction threshold (80% of max_entries by default)
+        let threshold = (config.max_entries as f64 * config.eviction_threshold) as usize;
+
+        // If over threshold, start evicting oldest entries
+        if times.len() > threshold {
+            // Sort by access time (oldest first)
+            let mut entries: Vec<_> = times.iter().map(|(k, v)| (k.clone(), *v)).collect();
+            entries.sort_by_key(|&(_, time)| time);
+
+            // Remove oldest entries to get back under threshold.
+            // Delete both the access-tracking entry AND the cached value
+            // to actually reclaim memory.
+            let to_remove = entries.len().saturating_sub(threshold);
+            for (key, _) in entries.into_iter().take(to_remove) {
+                times.remove(&key);
+                self.cache.delete(&key);
+            }
+        }
     }
 
     /// Get cache statistics
-    pub async fn stats(&self) -> LruStats {
-        let times = self.access_times.read().await;
+    pub fn stats(&self) -> LruStats {
+        let total_entries = self
+            .access_times
+            .lock()
+            .map(|times| times.len())
+            .unwrap_or(0);
         LruStats {
-            total_entries: times.len(),
+            total_entries,
             max_entries: self.config.max_entries,
             ttl: self.config.ttl,
         }
@@ -568,21 +568,21 @@ mod tests {
 
     // ===== LruCacheManager Tests =====
 
-    #[tokio::test]
-    async fn test_lru_cache_manager_basic_creation() {
+    #[test]
+    fn test_lru_cache_manager_basic_creation() {
         use crate::cache::DashMapCache;
 
         let cache = DashMapCache::new();
         let config = LruConfig::default();
         let manager = LruCacheManager::new(Arc::new(cache), config);
 
-        let stats = manager.stats().await;
+        let stats = manager.stats();
         assert_eq!(stats.max_entries, 10_000);
         assert_eq!(stats.ttl, Duration::from_secs(3600));
     }
 
-    #[tokio::test]
-    async fn test_lru_cache_manager_eviction() {
+    #[test]
+    fn test_lru_cache_manager_eviction() {
         use crate::cache::DashMapCache;
 
         let cache = DashMapCache::with_capacity(10);
@@ -597,14 +597,13 @@ mod tests {
             manager.set(&format!("key_{}", i), vec![i as u8]);
         }
 
-        tokio::time::sleep(Duration::from_millis(50)).await;
-
-        let stats = manager.stats().await;
+        // Operations are now synchronous — no sleep needed for spawned tasks.
+        let stats = manager.stats();
         assert!(stats.total_entries <= 5);
     }
 
-    #[tokio::test]
-    async fn test_lru_cache_manager_access_order() {
+    #[test]
+    fn test_lru_cache_manager_access_order() {
         use crate::cache::DashMapCache;
 
         let cache = DashMapCache::new();
@@ -617,13 +616,12 @@ mod tests {
 
         let _ = manager.get("key1");
 
-        tokio::time::sleep(Duration::from_millis(10)).await;
-
+        // Operations are now synchronous — no sleep needed for spawned tasks.
         assert_eq!(manager.get("key1"), Some(b"value1".to_vec()));
     }
 
-    #[tokio::test]
-    async fn test_lru_cache_manager_custom_config() {
+    #[test]
+    fn test_lru_cache_manager_custom_config() {
         use crate::cache::DashMapCache;
 
         let cache = DashMapCache::new();
@@ -634,7 +632,7 @@ mod tests {
         };
         let manager = LruCacheManager::new(Arc::new(cache), config);
 
-        let stats = manager.stats().await;
+        let stats = manager.stats();
         assert_eq!(stats.max_entries, 500);
         assert_eq!(stats.ttl, Duration::from_secs(1800));
     }
@@ -820,8 +818,8 @@ mod tests {
         assert_eq!(valid[0].version, "v2");
     }
 
-    #[tokio::test]
-    async fn test_lru_cache_manager_delete() {
+    #[test]
+    fn test_lru_cache_manager_delete() {
         use crate::cache::DashMapCache;
 
         let cache = DashMapCache::new();
@@ -829,16 +827,16 @@ mod tests {
         let manager = LruCacheManager::new(Arc::new(cache), config);
 
         manager.set("key1", b"value1".to_vec());
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        // Operations are now synchronous — no sleep needed.
         assert_eq!(manager.get("key1"), Some(b"value1".to_vec()));
 
         manager.delete("key1");
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        // Operations are now synchronous — no sleep needed.
         assert_eq!(manager.get("key1"), None);
     }
 
-    #[tokio::test]
-    async fn test_lru_cache_manager_eviction_threshold_triggers() {
+    #[test]
+    fn test_lru_cache_manager_eviction_threshold_triggers() {
         use crate::cache::DashMapCache;
 
         let cache = DashMapCache::with_capacity(100);
@@ -849,22 +847,18 @@ mod tests {
         };
         let manager = LruCacheManager::new(Arc::new(cache), config);
 
-        // Add entries with delays to ensure insert tasks complete between sets,
-        // so check_and_evict sees accumulated entries above the threshold.
+        // Operations are now synchronous — eviction happens inline during set().
         manager.set("key_0", vec![0]);
-        tokio::time::sleep(Duration::from_millis(20)).await;
         manager.set("key_1", vec![1]);
-        tokio::time::sleep(Duration::from_millis(20)).await;
         manager.set("key_2", vec![2]);
-        tokio::time::sleep(Duration::from_millis(100)).await;
 
-        let stats = manager.stats().await;
+        let stats = manager.stats();
         // Eviction logic should have been triggered (times.len() > threshold)
         assert!(stats.total_entries <= 3);
     }
 
-    #[tokio::test]
-    async fn test_lru_eviction_deletes_cache_values() {
+    #[test]
+    fn test_lru_eviction_deletes_cache_values() {
         use crate::cache::DashMapCache;
 
         // Regression test for H-2/H1: LruCacheManager eviction previously only
@@ -881,13 +875,10 @@ mod tests {
         let cache_ref = cache.clone();
         let manager = LruCacheManager::new(cache, config);
 
+        // Operations are now synchronous — eviction happens inline during set().
         manager.set("k1", b"v1".to_vec());
-        tokio::time::sleep(Duration::from_millis(20)).await;
         manager.set("k2", b"v2".to_vec());
-        tokio::time::sleep(Duration::from_millis(20)).await;
         manager.set("k3", b"v3".to_vec());
-        // Allow the async eviction task to run.
-        tokio::time::sleep(Duration::from_millis(150)).await;
 
         // The backing cache should NOT contain all 3 entries forever.
         // At least one entry must have been evicted from the cache itself

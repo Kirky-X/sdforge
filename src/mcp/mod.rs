@@ -81,14 +81,15 @@ pub fn get_mcp_tools() -> Vec<McpToolInstance> {
         .into_iter()
         .map(|reg| {
             let tool = (reg.create_fn)();
+            let reg_metadata = reg.metadata();
             McpToolInstance {
                 tool,
                 metadata: ApiMetadata::new(
                     reg.name().to_string(),
                     reg.version().to_string(),
                     reg.metadata().description().to_string(),
-                    None,
-                    false,
+                    reg_metadata.cache_ttl(),
+                    reg_metadata.is_streaming(),
                 ),
             }
         })

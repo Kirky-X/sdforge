@@ -503,10 +503,8 @@ fn benchmark_lru_cache(c: &mut Criterion) {
     use std::sync::Arc;
     use std::time::Duration;
 
-    // LruCacheManager uses tokio::spawn internally, so we need a runtime context.
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    let _guard = rt.enter();
-
+    // LruCacheManager operations are synchronous (std::sync::Mutex), so no
+    // tokio runtime context is needed.
     let cache: SharedCache = Arc::new(DashMapCache::new());
     let config = LruConfig {
         max_entries: 100,
