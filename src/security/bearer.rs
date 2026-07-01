@@ -699,6 +699,41 @@ impl BearerAuthBuilder {
     }
 }
 
+/// Generate a cryptographically secure JWT secret
+///
+/// This function generates a random 32-byte value and encodes it in base64,
+/// producing a 44-character string suitable for use as a JWT signing secret.
+///
+/// The generated secret includes:
+/// - Uppercase letters (A-Z)
+/// - Lowercase letters (a-z)
+/// - Digits (0-9)
+/// - Special characters (+, /)
+///
+/// # Returns
+///
+/// Returns a base64-encoded 32-byte random string.
+///
+/// # Example
+///
+/// ```rust
+/// use sdforge::security::bearer::generate_secure_jwt_secret;
+///
+/// let secret = generate_secure_jwt_secret();
+/// println!("Generated secure JWT secret: {}", secret);
+///
+/// // Use with BearerAuth
+/// let auth = BearerAuth::try_new(&secret)
+///     .expect("Generated secret should be valid");
+/// ```
+pub fn generate_secure_jwt_secret() -> String {
+    use base64::Engine;
+    use rand::Rng;
+    let mut bytes = [0u8; 32];
+    rand::rng().fill_bytes(&mut bytes);
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1869,37 +1904,3 @@ mod tests {
     }
 }
 
-/// Generate a cryptographically secure JWT secret
-///
-/// This function generates a random 32-byte value and encodes it in base64,
-/// producing a 44-character string suitable for use as a JWT signing secret.
-///
-/// The generated secret includes:
-/// - Uppercase letters (A-Z)
-/// - Lowercase letters (a-z)  
-/// - Digits (0-9)
-/// - Special characters (+, /)
-///
-/// # Returns
-///
-/// Returns a base64-encoded 32-byte random string.
-///
-/// # Example
-///
-/// ```rust
-/// use sdforge::security::bearer::generate_secure_jwt_secret;
-///
-/// let secret = generate_secure_jwt_secret();
-/// println!("Generated secure JWT secret: {}", secret);
-///
-/// // Use with BearerAuth
-/// let auth = BearerAuth::try_new(&secret)
-///     .expect("Generated secret should be valid");
-/// ```
-pub fn generate_secure_jwt_secret() -> String {
-    use base64::Engine;
-    use rand::Rng;
-    let mut bytes = [0u8; 32];
-    rand::rng().fill_bytes(&mut bytes);
-    base64::engine::general_purpose::STANDARD.encode(bytes)
-}

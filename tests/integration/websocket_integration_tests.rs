@@ -11,14 +11,14 @@ mod websocket_integration_tests {
         let config = WebSocketConfig::default();
         // Verify it can be created and cloned
         let _cloned = config.clone();
-        assert!(true, "WebSocketConfig should be creatable");
+        assert!(config.rate_limit.max_connections > 0);
     }
 
     #[test]
     fn test_connection_manager_new() {
-        let _manager = ConnectionManager::new();
-        // Verify it creates a valid instance
-        assert!(true, "ConnectionManager should be creatable");
+        let manager = ConnectionManager::new();
+        // Verify it creates a valid instance (construction without panic)
+        let _ = manager;
     }
 
     #[test]
@@ -26,7 +26,7 @@ mod websocket_integration_tests {
         let config = RateLimitConfig::default();
         // Verify it can be created and cloned
         let _cloned = config.clone();
-        assert!(true, "RateLimitConfig should be creatable");
+        assert!(config.validate().is_ok());
     }
 
     #[test]
@@ -35,7 +35,7 @@ mod websocket_integration_tests {
         let state = AppState::new(manager);
         // Verify state is created
         let _state_clone = state.clone();
-        assert!(true, "AppState should be creatable");
+        assert!(state.config.rate_limit.max_messages_per_second > 0);
     }
 
     #[test]

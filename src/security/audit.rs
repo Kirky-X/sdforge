@@ -1454,7 +1454,7 @@ mod tests {
             signature: Some("test-signature".to_string()),
         };
 
-        let serialized = serialize_audit_logs(&[original.clone()]);
+        let serialized = serialize_audit_logs(std::slice::from_ref(&original));
         let deserialized = deserialize_audit_logs(&serialized);
 
         assert_eq!(deserialized.len(), 1);
@@ -1624,7 +1624,7 @@ mod tests {
         };
         logger.fallback_logs.set(
             "merge_user",
-            serialize_audit_logs(&[fallback_log.clone()]),
+            serialize_audit_logs(std::slice::from_ref(&fallback_log)),
         );
 
         // Verify fallback was stored
@@ -1760,7 +1760,7 @@ mod tests {
         // Populate primary with the shared log
         logger
             .logs
-            .set("dedup_user", serialize_audit_logs(&[shared_log.clone()]));
+            .set("dedup_user", serialize_audit_logs(std::slice::from_ref(&shared_log)));
 
         // Populate fallback with both the shared log and the fallback-only log
         logger.fallback_logs.set(

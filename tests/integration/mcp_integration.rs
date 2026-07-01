@@ -64,8 +64,8 @@ mod mcp_registration_tests {
         }
         let _registration = McpToolRegistration::new("test_tool", "v1", create_tool, create_metadata);
 
-        // Verify the registration was created successfully
-        assert!(true, "MCP tool registration should succeed");
+        // Verify the registration was created successfully (construction without panic)
+        let _ = &_registration;
     }
 
     #[test]

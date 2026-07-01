@@ -18,7 +18,7 @@ mod streaming_tests {
         let (tx, response) = create_stream_channel::<String>(10);
 
         // Verify the channel was created successfully
-        assert!(tx.capacity() > 0 || true); // Just verify it doesn't panic
+        assert!(tx.capacity() > 0);
         let _ = response;
     }
 
@@ -103,7 +103,7 @@ mod streaming_tests {
         assert_eq!(data_events.len(), 5, "Should have 5 data events");
 
         // Verify SSE format: each event should start with "data: " and end with "\n\n"
-        for (_i, result) in results.iter().enumerate() {
+        for result in results.iter() {
             if result.contains(r#""type":"data""#) {
                 assert!(
                     result.starts_with("data: "),
@@ -544,11 +544,11 @@ mod streaming_tests {
         });
 
         let input_stream = stream::iter(vec![complex_data]);
-        let sse_stream = stream_to_sse(input_stream, |v| StreamEvent::data(v));
+        let sse_stream = stream_to_sse(input_stream, StreamEvent::data);
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
         let data_event = &results[0];
         assert!(data_event.contains(r#""type":"data""#));
         assert!(data_event.contains(r#""name":"Alice""#));
@@ -930,11 +930,11 @@ mod streaming_tests {
         });
 
         let input_stream = stream::iter(vec![large_data]);
-        let sse_stream = stream_to_sse(input_stream, |v| StreamEvent::data(v));
+        let sse_stream = stream_to_sse(input_stream, StreamEvent::data);
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
         // Verify the large payload is in the output
         assert!(results[0].contains("items"));
     }
@@ -945,7 +945,7 @@ mod streaming_tests {
     async fn test_sse_custom_event_types() {
         use futures_util::stream;
 
-        let custom_event_names = vec!["progress", "notification", "alert", "update", "status"];
+        let custom_event_names = ["progress", "notification", "alert", "update", "status"];
 
         let events: Vec<StreamEvent<serde_json::Value>> = custom_event_names
             .iter()
@@ -1103,11 +1103,11 @@ mod streaming_tests {
             serde_json::json!(0),
             serde_json::json!(-1),
             serde_json::json!(0.0),
-            serde_json::json!(-3.14),
+            serde_json::json!(-1.5),
         ];
 
         let input_stream = stream::iter(values);
-        let sse_stream = stream_to_sse(input_stream, |v| StreamEvent::data(v));
+        let sse_stream = stream_to_sse(input_stream, StreamEvent::data);
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
@@ -1142,11 +1142,11 @@ mod streaming_tests {
         });
 
         let input_stream = stream::iter(vec![nested_data]);
-        let sse_stream = stream_to_sse(input_stream, |v| StreamEvent::data(v));
+        let sse_stream = stream_to_sse(input_stream, StreamEvent::data);
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
         assert!(results[0].contains("matrix"));
         assert!(results[0].contains("nested"));
     }

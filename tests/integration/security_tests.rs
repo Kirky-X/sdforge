@@ -867,11 +867,13 @@ mod security_tests {
     /// Test: LRU configuration defaults
     ///
     /// Verifies that LRU configuration has sensible defaults.
+    /// Note: max_entries default was increased from 1000 to 10000 (see
+    /// `LruConfig::default` in `src/security/api_key_manager.rs`).
     #[tokio::test]
     async fn test_lru_config_defaults() {
         let config = LruConfig::default();
 
-        assert_eq!(config.max_entries, 1000);
+        assert_eq!(config.max_entries, 10_000);
         assert_eq!(config.ttl, Duration::from_secs(3600));
     }
 
