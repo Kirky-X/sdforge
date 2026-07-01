@@ -90,7 +90,7 @@ pub struct StatusUpdate {
 /// 建立基础的 WebSocket 连接。
 ///
 /// # WebSocket URL
-/// ```
+/// ```text
 /// ws://localhost:3000/ws/basic
 /// ```
 ///
@@ -128,7 +128,7 @@ async fn websocket_basic() -> Result<String, ApiError> {
 /// 需要在连接时提供认证信息。
 ///
 /// # WebSocket URL
-/// ```
+/// ```text
 /// ws://localhost:3000/ws/auth?token=your_token
 /// ```
 ///
@@ -164,7 +164,7 @@ async fn websocket_auth() -> Result<String, ApiError> {
 /// 订阅实时状态更新。
 ///
 /// # WebSocket URL
-/// ```
+/// ```text
 /// ws://localhost:3000/ws/subscribe
 /// ```
 ///

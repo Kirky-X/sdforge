@@ -113,7 +113,7 @@ async fn public_data() -> Result<serde_json::Value, ApiError> {
 /// 需要有效的 API Key 才能访问。
 ///
 /// # 请求头
-/// ```
+/// ```text
 /// X-API-Key: sk_live_your_api_key_here
 /// ```
 ///
@@ -159,7 +159,7 @@ async fn api_key_protected() -> Result<serde_json::Value, ApiError> {
 /// 使用 Bearer Token 进行认证。
 ///
 /// # 请求头
-/// ```
+/// ```text
 /// Authorization: Bearer your_jwt_token_here
 /// ```
 ///
@@ -202,8 +202,8 @@ async fn bearer_protected() -> Result<serde_json::Value, ApiError> {
 /// 支持多种认证方式的端点。
 ///
 /// # 支持的认证方式
-//! 1. API Key (X-API-Key header)
-//! 2. Bearer Token (Authorization header)
+/// 1. API Key (X-API-Key header)
+/// 2. Bearer Token (Authorization header)
 /// # HTTP 用法
 /// ```bash
 /// # 使用 API Key
