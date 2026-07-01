@@ -286,8 +286,16 @@ impl BearerAuth {
             return None;
         }
 
-        // Decode header
-        let _header = Self::base64url_decode(parts[0])?;
+        // Decode header and verify algorithm to prevent `alg` confusion attacks
+        // (e.g., `alg: "none"` or RS256 public key as HMAC key).
+        let header_bytes = Self::base64url_decode(parts[0])?;
+        let header_str = String::from_utf8_lossy(&header_bytes);
+        let header_value: serde_json::Value = serde_json::from_str(&header_str).ok()?;
+        let alg = header_value.get("alg").and_then(|v| v.as_str())?;
+        // Only HS256 (HMAC-SHA256) is supported; reject `none` and all other algorithms.
+        if alg != "HS256" {
+            return None;
+        }
 
         // Decode payload
         let payload = Self::base64url_decode(parts[1])?;
