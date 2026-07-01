@@ -170,4 +170,26 @@ mod tests {
         let router = Router::new();
         let _ = headers.apply(router);
     }
+
+    #[test]
+    fn test_security_headers_validate_invalid_content_type() {
+        let headers = SecurityHeaders {
+            content_type_options: "invalid",
+            ..SecurityHeaders::strict()
+        };
+        let result = headers.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid X-Content-Type-Options"));
+    }
+
+    #[test]
+    fn test_security_headers_validate_invalid_frame_options() {
+        let headers = SecurityHeaders {
+            frame_options: "invalid",
+            ..SecurityHeaders::strict()
+        };
+        let result = headers.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid X-Frame-Options"));
+    }
 }

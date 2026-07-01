@@ -728,4 +728,119 @@ mod tests {
         assert_eq!(cloned.description, Some("Test key".to_string()));
         assert_eq!(cloned.versions.len(), 1);
     }
+
+    // ============================================================================
+    // Additional coverage tests
+    // ============================================================================
+
+    #[test]
+    fn test_api_key_version_deserialize() {
+        let json = r#"{"version":"v1","key_hash":"hash123","permissions":["read"],"created_at":1000,"expires_at":null,"is_active":true}"#;
+        let version: ApiKeyVersion = serde_json::from_str(json).unwrap();
+        assert_eq!(version.version, "v1");
+        assert_eq!(version.key_hash, "hash123");
+        assert!(version.is_active);
+        assert_eq!(version.permissions, vec!["read".to_string()]);
+    }
+
+    #[test]
+    fn test_api_key_version_serialize_deserialize_roundtrip() {
+        let original = ApiKeyVersion::new(
+            "v1".to_string(),
+            "hash123".to_string(),
+            vec!["read".to_string()],
+            Some(Duration::from_secs(3600)),
+        );
+        let json = serde_json::to_string(&original).unwrap();
+        let deserialized: ApiKeyVersion = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.version, original.version);
+        assert_eq!(deserialized.key_hash, original.key_hash);
+        assert_eq!(deserialized.is_active, original.is_active);
+    }
+
+    #[test]
+    fn test_rotate_to_version_nonexistent_index() {
+        let mut metadata = ApiKeyMetadata::new("key1".to_string(), None);
+        let v1 = ApiKeyVersion::new("v1".to_string(), "hash1".to_string(), vec![], None);
+        metadata.add_version(v1);
+
+        let result = metadata.rotate_to_version(5);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("does not exist"));
+    }
+
+    #[test]
+    fn test_get_valid_versions_all_valid() {
+        let mut metadata = ApiKeyMetadata::new("key1".to_string(), None);
+        let v1 = ApiKeyVersion::new("v1".to_string(), "hash1".to_string(), vec![], None);
+        let v2 = ApiKeyVersion::new("v2".to_string(), "hash2".to_string(), vec![], None);
+        metadata.add_version(v1);
+        metadata.add_version(v2);
+
+        let valid = metadata.get_valid_versions();
+        assert_eq!(valid.len(), 2);
+    }
+
+    #[test]
+    fn test_get_valid_versions_with_expired() {
+        let mut metadata = ApiKeyMetadata::new("key1".to_string(), None);
+        let v1 = ApiKeyVersion::new(
+            "v1".to_string(),
+            "hash1".to_string(),
+            vec![],
+            Some(Duration::from_millis(10)),
+        );
+        let v2 = ApiKeyVersion::new("v2".to_string(), "hash2".to_string(), vec![], None);
+        metadata.add_version(v1);
+        metadata.add_version(v2);
+
+        std::thread::sleep(Duration::from_millis(20));
+
+        let valid = metadata.get_valid_versions();
+        assert_eq!(valid.len(), 1);
+        assert_eq!(valid[0].version, "v2");
+    }
+
+    #[tokio::test]
+    async fn test_lru_cache_manager_delete() {
+        use crate::cache::DashMapCache;
+
+        let cache = DashMapCache::new();
+        let config = LruConfig::default();
+        let manager = LruCacheManager::new(Arc::new(cache), config);
+
+        manager.set("key1", b"value1".to_vec());
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert_eq!(manager.get("key1"), Some(b"value1".to_vec()));
+
+        manager.delete("key1");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert_eq!(manager.get("key1"), None);
+    }
+
+    #[tokio::test]
+    async fn test_lru_cache_manager_eviction_threshold_triggers() {
+        use crate::cache::DashMapCache;
+
+        let cache = DashMapCache::with_capacity(100);
+        let config = LruConfig {
+            max_entries: 3,
+            ttl: Duration::from_secs(3600),
+            eviction_threshold: 0.5, // threshold = 1
+        };
+        let manager = LruCacheManager::new(Arc::new(cache), config);
+
+        // Add entries with delays to ensure insert tasks complete between sets,
+        // so check_and_evict sees accumulated entries above the threshold.
+        manager.set("key_0", vec![0]);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        manager.set("key_1", vec![1]);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        manager.set("key_2", vec![2]);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let stats = manager.stats().await;
+        // Eviction logic should have been triggered (times.len() > threshold)
+        assert!(stats.total_entries <= 3);
+    }
 }

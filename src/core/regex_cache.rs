@@ -456,4 +456,48 @@ mod tests {
         // Cache should still be bounded
         assert!(cache.stats().total_patterns <= 5);
     }
+
+    // ============================================================================
+    // Additional coverage tests
+    // ============================================================================
+
+    #[test]
+    fn test_regex_cache_clear() {
+        let cache = RegexCache::new();
+        cache.get_or_compile(r"\d+").unwrap();
+        cache.get_or_compile(r"[a-z]+").unwrap();
+        assert_eq!(cache.stats().total_patterns, 2);
+
+        cache.clear();
+
+        let stats = cache.stats();
+        assert_eq!(stats.total_patterns, 0);
+        assert_eq!(stats.max_capacity, MAX_CACHE_SIZE);
+    }
+
+    #[test]
+    fn test_regex_cache_default() {
+        let cache = RegexCache::default();
+        let regex = cache.get_or_compile(r"\d+").unwrap();
+        assert!(regex.is_match("123"));
+        assert_eq!(cache.stats().max_capacity, MAX_CACHE_SIZE);
+    }
+
+    #[test]
+    fn test_common_phone_regex() {
+        let regex = common::phone();
+        assert!(regex.is_match("+1234567890"));
+        assert!(regex.is_match("12345"));
+        assert!(!regex.is_match("+0123456789"));
+        assert!(!regex.is_match("abc"));
+    }
+
+    #[test]
+    fn test_common_password_strong_regex() {
+        let regex = common::password_strong();
+        assert!(regex.is_match("password123"));
+        assert!(regex.is_match("Abcdefgh!"));
+        assert!(!regex.is_match("short"));
+        assert!(!regex.is_match("1234567"));
+    }
 }
