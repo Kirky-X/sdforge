@@ -2,7 +2,7 @@
 //! Bearer token authentication implementation
 //!
 //! This module provides JWT-based bearer token authentication with
-// HMAC-SHA256 signature verification and claim validation.
+//! HMAC-SHA256 signature verification and claim validation.
 
 use crate::cache::SharedCache;
 use crate::security::types::{

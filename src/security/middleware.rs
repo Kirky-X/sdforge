@@ -99,6 +99,11 @@ fn is_ip_in_range(ip: &str, cidr: &str) -> bool {
         | (net_bytes[1] as u32) << 16
         | (net_bytes[2] as u32) << 8
         | net_bytes[3] as u32;
+    // Guard against mask_bits > 32 which would cause shift overflow panic
+    // (32 - mask_bits underflows for u32 when mask_bits > 32).
+    if mask_bits > 32 {
+        return false;
+    }
     let mask_val = if mask_bits == 0 {
         0
     } else {
@@ -284,6 +289,14 @@ mod tests {
         // /32 = exact match
         assert!(is_ip_in_range("10.0.0.1", "10.0.0.1/32"));
         assert!(!is_ip_in_range("10.0.0.2", "10.0.0.1/32"));
+    }
+
+    #[test]
+    fn test_is_ip_in_range_mask_bits_over_32_returns_false_no_panic() {
+        // Regression: mask_bits > 32 must not panic (previously shift overflow)
+        assert!(!is_ip_in_range("10.0.0.1", "10.0.0.0/33"));
+        assert!(!is_ip_in_range("10.0.0.1", "10.0.0.0/128"));
+        assert!(!is_ip_in_range("10.0.0.1", "10.0.0.0/255"));
     }
 
     #[test]
