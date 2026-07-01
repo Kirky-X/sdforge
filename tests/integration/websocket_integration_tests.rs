@@ -53,7 +53,7 @@ mod websocket_integration_tests {
 // Enhanced WebSocket Integration tests
 #[cfg(feature = "websocket")]
 mod websocket_enhanced_integration_tests {
-    use sdforge::websocket::{ConnectionManager, RateLimitConfig};
+    use sdforge::websocket::{ConnectionManager, RateLimitConfig, WebSocketConnection};
     use std::sync::Arc;
 
     /// Test 1: WebSocket connection creation and basic operations
