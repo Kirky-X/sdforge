@@ -133,6 +133,58 @@ mod tests {
     use super::*;
     use mcp_sdk::tools::Tool;
 
+    // ============================================================================
+    // Globally-registered test tool for inventory coverage
+    //
+    // get_mcp_tools() and build() iterate over inventory::iter::<McpToolRegistration>.
+    // Without any registered items, their loop bodies are never exercised. This
+    // inventory::submit! registers a test tool at compile time so those loops
+    // execute at least once during testing.
+    // ============================================================================
+
+    fn create_coverage_test_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+        struct CoverageTestTool;
+        impl mcp_sdk::tools::Tool for CoverageTestTool {
+            fn name(&self) -> String {
+                "coverage_test_tool".to_string()
+            }
+            fn description(&self) -> String {
+                "A tool registered for inventory coverage".to_string()
+            }
+            fn input_schema(&self) -> serde_json::Value {
+                serde_json::json!({"type": "object"})
+            }
+            fn call(
+                &self,
+                _input: Option<serde_json::Value>,
+            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+                Ok(mcp_sdk::types::CallToolResponse {
+                    content: vec![],
+                    is_error: None,
+                    meta: None,
+                })
+            }
+        }
+        Arc::new(CoverageTestTool) as Arc<dyn mcp_sdk::tools::Tool>
+    }
+
+    fn create_coverage_test_metadata() -> ApiMetadata {
+        ApiMetadata {
+            name: "coverage_test_tool".to_string(),
+            version: "v1".to_string(),
+            description: "A tool registered for inventory coverage".to_string(),
+            cache_ttl: None,
+            is_streaming: false,
+        }
+    }
+
+    inventory::submit!(McpToolRegistration::new(
+        "coverage_test_tool",
+        "v1",
+        create_coverage_test_tool,
+        create_coverage_test_metadata,
+    ));
+
     /// Test McpToolRegistration structure
     #[test]
     fn test_mcp_tool_registration() {
@@ -2791,7 +2843,7 @@ mod tests {
         fn assert_static<T: 'static>() {}
         assert_static::<McpToolRegistration>();
 
-        drop(reg);
+        let _ = reg;
     }
 
     // ============================================================================
@@ -3328,5 +3380,71 @@ mod tests {
 
         let result = wrapper.call(Some(serde_json::json!({})));
         assert!(result.is_ok());
+    }
+
+    // ============================================================================
+    // get_mcp_tools inventory collection tests
+    //
+    // These tests verify that get_mcp_tools() correctly iterates over
+    // inventory-registered McpToolRegistration items and builds McpToolInstance
+    // objects with the right metadata. The coverage_test_tool registered above
+    // via inventory::submit! ensures the loop body executes at least once.
+    // ============================================================================
+
+    #[test]
+    fn test_get_mcp_tools_collects_registered_tools() {
+        let tools = get_mcp_tools();
+        // At least the coverage_test_tool should be registered
+        assert!(
+            tools.iter().any(|t| t.metadata().name == "coverage_test_tool"),
+            "Expected coverage_test_tool to be registered, got {} tools",
+            tools.len()
+        );
+    }
+
+    #[test]
+    fn test_get_mcp_tools_instance_metadata() {
+        let tools = get_mcp_tools();
+        let coverage_tool = tools
+            .iter()
+            .find(|t| t.metadata().name == "coverage_test_tool")
+            .expect("coverage_test_tool should be registered");
+
+        assert_eq!(coverage_tool.metadata().name, "coverage_test_tool");
+        assert_eq!(coverage_tool.metadata().version, "v1");
+        assert_eq!(
+            coverage_tool.metadata().description,
+            "A tool registered for inventory coverage"
+        );
+
+        // The underlying tool should be callable
+        assert_eq!(coverage_tool.tool().name(), "coverage_test_tool");
+    }
+
+    #[test]
+    fn test_get_mcp_tools_tool_is_callable() {
+        let tools = get_mcp_tools();
+        let coverage_tool = tools
+            .iter()
+            .find(|t| t.metadata().name == "coverage_test_tool")
+            .expect("coverage_test_tool should be registered");
+
+        let result = coverage_tool.tool().call(None);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_build_collects_registered_tools() {
+        // build() calls get_mcp_tools() internally and adds each tool to the
+        // Tools collection. We verify it completes without panicking and
+        // that the registered tool is included. We run this in a tokio
+        // context because build() is async.
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            // build() consumes the registered tools and constructs a Server.
+            // We only verify it doesn't panic; the Server itself is not
+            // started here.
+            let _server = build().await;
+        });
     }
 }

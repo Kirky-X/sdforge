@@ -1394,4 +1394,155 @@ mod tests {
         assert!("password123".len() >= MIN_PASSWORD_LENGTH);
         assert!("password123".len() <= MAX_PASSWORD_LENGTH);
     }
+
+    // ============================================================================
+    // From<ValidationErrorsWrapper> for ApiError conversion tests
+    // ============================================================================
+
+    #[test]
+    fn test_from_validation_errors_wrapper_with_errors() {
+        // When errors are present, the first error's field and constraint
+        // should be propagated into the ApiError::ValidationError variant.
+        let errors = vec![FieldValidationError {
+            field: "email".to_string(),
+            constraints: vec!["email".to_string()],
+        }];
+        let wrapper = ValidationErrorsWrapper::new(errors);
+        let api_error: ApiError = wrapper.into();
+
+        match api_error {
+            ApiError::ValidationError { field, constraint } => {
+                assert_eq!(field, "email");
+                assert_eq!(constraint, "email");
+            }
+            _ => panic!("Expected ValidationError variant"),
+        }
+    }
+
+    #[test]
+    fn test_from_validation_errors_wrapper_with_empty_constraints() {
+        // When the first error has no constraints, the constraint should
+        // fall back to "invalid".
+        let errors = vec![FieldValidationError {
+            field: "name".to_string(),
+            constraints: vec![],
+        }];
+        let wrapper = ValidationErrorsWrapper::new(errors);
+        let api_error: ApiError = wrapper.into();
+
+        match api_error {
+            ApiError::ValidationError { field, constraint } => {
+                assert_eq!(field, "name");
+                assert_eq!(constraint, "invalid");
+            }
+            _ => panic!("Expected ValidationError variant"),
+        }
+    }
+
+    #[test]
+    fn test_from_validation_errors_wrapper_empty() {
+        // When there are no errors, the conversion should produce
+        // ApiError::InvalidInput with a generic message.
+        let wrapper = ValidationErrorsWrapper::new(vec![]);
+        let api_error: ApiError = wrapper.into();
+
+        match api_error {
+            ApiError::InvalidInput { message, field, value } => {
+                assert!(message.contains("Validation failed"));
+                assert!(field.is_none());
+                assert!(value.is_none());
+            }
+            _ => panic!("Expected InvalidInput variant"),
+        }
+    }
+
+    // ============================================================================
+    // validate_or_error tests
+    // ============================================================================
+
+    #[test]
+    fn test_validate_or_error_success() {
+        // When the validation closure succeeds, validate_or_error should
+        // return Ok(()).
+        let result: Result<(), ApiError> =
+            validators::validate_or_error(|| Ok(()), || {
+                ValidationErrorsWrapper::new(vec![]).into()
+            });
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_or_error_failure() {
+        // When the validation closure fails, validate_or_error should
+        // invoke the error mapper and return Err.
+        let result: Result<(), ApiError> =
+            validators::validate_or_error(|| Err(validator::ValidationError::new("test")), || {
+                ValidationErrorsWrapper::new(vec![]).into()
+            });
+        assert!(result.is_err());
+    }
+
+    // ============================================================================
+    // sanitize_filename edge case tests
+    // ============================================================================
+
+    #[test]
+    fn test_sanitize_filename_empty_input() {
+        // Empty filename should be rejected with INVALID_FILENAME error.
+        let result = sanitizer::sanitize_filename("");
+        assert!(result.is_err());
+        match result {
+            Err(ApiError::InvalidInput { message, .. }) => {
+                assert!(message.contains("cannot be empty"));
+            }
+            _ => panic!("Expected InvalidInput error for empty filename"),
+        }
+    }
+
+    #[test]
+    fn test_sanitize_filename_only_invalid_chars() {
+        // Input that becomes empty after filtering dangerous characters
+        // should be rejected.
+        let result = sanitizer::sanitize_filename("@#$%^&*()");
+        assert!(result.is_err());
+        match result {
+            Err(ApiError::InvalidInput { message, .. }) => {
+                assert!(message.contains("only invalid characters"));
+            }
+            _ => panic!("Expected InvalidInput error for all-invalid filename"),
+        }
+    }
+
+    #[test]
+    fn test_sanitize_filename_with_path_separators() {
+        // Path separators are filtered out (not in the allowed character set),
+        // so the filename is returned with separators stripped.
+        let result = sanitizer::sanitize_filename("valid/part");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "validpart");
+    }
+
+    #[test]
+    fn test_sanitize_filename_with_backslash_separator() {
+        // Backslash separators are also filtered out by the character filter.
+        let result = sanitizer::sanitize_filename("valid\\part");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "validpart");
+    }
+
+    #[test]
+    fn test_sanitize_filename_valid_input() {
+        // A simple valid filename should pass through unchanged.
+        let result = sanitizer::sanitize_filename("document.txt");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "document.txt");
+    }
+
+    #[test]
+    fn test_sanitize_filename_with_spaces_and_dashes() {
+        // Spaces, dashes, underscores, and dots are allowed.
+        let result = sanitizer::sanitize_filename("my-file_v1.2.pdf");
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "my-file_v1.2.pdf");
+    }
 }
