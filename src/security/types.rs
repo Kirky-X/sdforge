@@ -55,28 +55,6 @@ pub(crate) fn deserialize_permissions(data: &[u8]) -> Vec<String> {
     bincode::deserialize(data).unwrap_or_default()
 }
 
-/// Serialize a list of Instants to bytes using bincode
-/// Used for token blacklist expiry tracking
-#[allow(dead_code)]
-pub(crate) fn serialize_instants(insts: &[std::time::Instant]) -> Vec<u8> {
-    let as_i64: Vec<i64> = insts.iter().map(|i| i.elapsed().as_secs() as i64).collect();
-    bincode::serialize(&as_i64).unwrap_or_default()
-}
-
-/// Deserialize a list of Instants from bytes using bincode
-/// Used for token blacklist expiry tracking
-#[allow(dead_code)]
-pub(crate) fn deserialize_instants(data: &[u8]) -> Vec<std::time::Instant> {
-    let as_i64: Vec<i64> = match bincode::deserialize(data) {
-        Ok(v) => v,
-        Err(_) => return Vec::new(),
-    };
-    as_i64
-        .iter()
-        .map(|&s| std::time::Instant::now() - std::time::Duration::from_secs(s as u64))
-        .collect()
-}
-
 /// Serialize AuthContext to bytes using bincode
 pub(crate) fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {
     bincode::serialize(ctx).unwrap_or_default()
@@ -843,30 +821,6 @@ mod tests {
     }
 
     #[test]
-    fn test_serialize_deserialize_instants_roundtrip() {
-        let now = std::time::Instant::now();
-        let past = now - std::time::Duration::from_secs(60);
-        let instants = vec![now, past];
-        let bytes = serialize_instants(&instants);
-        let result = deserialize_instants(&bytes);
-        assert_eq!(result.len(), 2);
-    }
-
-    #[test]
-    fn test_serialize_deserialize_instants_empty() {
-        let instants: Vec<std::time::Instant> = vec![];
-        let bytes = serialize_instants(&instants);
-        let result = deserialize_instants(&bytes);
-        assert_eq!(result.len(), 0);
-    }
-
-    #[test]
-    fn test_deserialize_instants_invalid_data() {
-        let result = deserialize_instants(b"invalid data");
-        assert_eq!(result.len(), 0);
-    }
-
-    #[test]
     fn test_serialize_deserialize_auth_context_roundtrip() {
         let ctx = AuthContext {
             user_id: Some("user123".to_string()),
@@ -1473,14 +1427,6 @@ mod tests {
     // ============================================================================
     // Edge Case Tests for Serialization
     // ============================================================================
-
-    #[test]
-    fn test_serialize_instants_empty() {
-        let instants: Vec<std::time::Instant> = vec![];
-        let bytes = serialize_instants(&instants);
-        let result = deserialize_instants(&bytes);
-        assert_eq!(result.len(), 0);
-    }
 
     #[test]
     fn test_serialize_auth_context_empty() {

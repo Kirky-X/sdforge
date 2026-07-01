@@ -155,9 +155,21 @@ pub async fn build_server_with_config(
     };
     #[cfg(not(feature = "security"))]
     let mut builder = {
-        let _ = &config; // Acknowledge unused config in non-security builds
         Server::builder()
     };
+
+    // Apply concurrency limit from config (previously ignored — H-8/DEBT-6).
+    // tonic 0.14 exposes per-connection stream limits via concurrency_limit_per_connection;
+    // global connection caps require transport-level configuration.
+    if config.max_connections > 0 {
+        builder = builder.concurrency_limit_per_connection(config.max_connections);
+    }
+
+    // Apply request timeout from config (previously ignored — H-8/DEBT-6).
+    // Only apply when > 0 to avoid immediate-timeout behavior.
+    if config.timeout_seconds > 0 {
+        builder = builder.timeout(std::time::Duration::from_secs(config.timeout_seconds));
+    }
 
     builder
         .add_service(SdForgeServiceServer::new(service).max_decoding_message_size(4 * 1024 * 1024))
