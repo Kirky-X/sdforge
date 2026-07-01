@@ -107,7 +107,7 @@ pub struct ProgressUpdate {
 /// 建立 SSE 连接，接收实时事件流。
 ///
 /// # SSE URL
-/// ```
+/// ```text
 /// http://localhost:3000/api/v1/stream/events
 /// ```
 ///
@@ -174,7 +174,7 @@ async fn event_stream() -> Result<String, ApiError> {
 /// 实时推送任务进度更新。
 ///
 /// # SSE URL
-/// ```
+/// ```text
 /// http://localhost:3000/api/v1/stream/progress/:task_id
 /// ```
 ///
