@@ -142,14 +142,17 @@ pub async fn version_redirect_middleware(
                     // Add Deprecation header
                     response.headers_mut().insert(
                         axum::http::header::HeaderName::from_static("deprecation"),
-                        axum::http::HeaderValue::from_str("true").unwrap(),
+                        axum::http::HeaderValue::from_static("true"),
                     );
 
-                    // Add Sunset header with date
-                    response.headers_mut().insert(
-                        axum::http::header::HeaderName::from_static("Sunset"),
-                        axum::http::HeaderValue::from_str(sunset_date).unwrap(),
-                    );
+                    // Add Sunset header with date. Skip the header (rather than panicking)
+                    // if the configured sunset_date contains invalid header bytes.
+                    if let Ok(val) = axum::http::HeaderValue::from_str(sunset_date) {
+                        response.headers_mut().insert(
+                            axum::http::header::HeaderName::from_static("Sunset"),
+                            val,
+                        );
+                    }
 
                     // Add Link header to newer version
                     if let Some(newer_version) =
@@ -157,10 +160,10 @@ pub async fn version_redirect_middleware(
                     {
                         let link_header =
                             format!("</api/{}>; rel=\"successor-version\"", newer_version);
-                        response.headers_mut().insert(
-                            axum::http::header::LINK,
-                            axum::http::HeaderValue::from_str(&link_header).unwrap(),
-                        );
+                        if let Ok(val) = axum::http::HeaderValue::from_str(&link_header) {
+                            response.headers_mut()
+                                .insert(axum::http::header::LINK, val);
+                        }
                     }
                 }
 

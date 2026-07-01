@@ -37,7 +37,7 @@ pub fn auth_middleware<T: Clone + Send + Sync + 'static>(
 }
 
 /// Common IP extraction logic (shared by both logging and non-logging versions)
-#[cfg(test)]
+#[allow(dead_code)] // Security utility: available for production use; currently only test-invoked
 #[inline]
 fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
     use axum::extract::connect_info::ConnectInfo;
@@ -74,7 +74,7 @@ fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
 }
 
 /// Check if an IP is within a CIDR range
-#[cfg(test)]
+#[allow(dead_code)] // Security utility: available for production use; currently only test-invoked
 fn is_ip_in_range(ip: &str, cidr: &str) -> bool {
     let parts: Vec<&str> = cidr.split('/').collect();
     if parts.len() != 2 {
@@ -109,7 +109,7 @@ fn is_ip_in_range(ip: &str, cidr: &str) -> bool {
 }
 
 /// Validate IP address format and security
-#[cfg(test)]
+#[allow(dead_code)] // Security utility: available for production use; currently only test-invoked
 fn is_valid_ip(ip: &str) -> bool {
     use std::net::IpAddr;
 

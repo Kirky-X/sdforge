@@ -142,6 +142,8 @@ pub struct AppAuditLogger {
     fallback_logs: SharedCache,
     /// Counter for dropped logs (monitoring)
     dropped_log_count: Arc<std::sync::atomic::AtomicU64>,
+    /// Counter for total logs successfully stored (monitoring)
+    total_log_count: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl Default for AppAuditLogger {
@@ -231,6 +233,7 @@ impl AppAuditLogger {
             queue_sender: Arc::new(queue_sender),
             fallback_logs,
             dropped_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            total_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
@@ -319,6 +322,11 @@ impl AppAuditLogger {
         }
         let bytes = serialize_audit_logs(&logs_vec);
         self.logs.set(key, bytes);
+
+        // Increment the total log counter for accurate monitoring.
+        // (Previously total_log_count() silently returned 0, hiding real activity.)
+        self.total_log_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         // Also merge any pending fallback logs synchronously (worker will also do this)
         if let Some(fallback_data) = self.fallback_logs.get(key) {
@@ -438,9 +446,10 @@ impl AppAuditLogger {
     /// approximate count by checking individual known user keys.
     /// For accurate counting, use a separate counter or database query.
     pub fn total_log_count(&self) -> usize {
-        // SyncCache doesn't support iteration; return 0 as approximation
-        // For accurate counting, use dbnexus persistence or a separate counter
-        0
+        // Returns the actual count of logs successfully stored via log().
+        // (Previously returned a hardcoded 0, hiding real audit activity.)
+        self.total_log_count
+            .load(std::sync::atomic::Ordering::Relaxed) as usize
     }
 
     /// Get count of dropped logs (for monitoring)
@@ -489,6 +498,7 @@ impl crate::security::traits::AuditLogger for AppAuditLogger {
                         queue_sender,
                         fallback_logs,
                         dropped_log_count,
+                        total_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
                     };
                     logger
                         .log(&context, action, resource, result, message)
@@ -732,6 +742,7 @@ impl AppAuditLoggerBuilder {
             queue_sender: Arc::new(queue_sender),
             fallback_logs,
             dropped_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            total_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 }
@@ -984,8 +995,8 @@ mod tests {
         logger
             .log(&context, "action1", "resource1", true, None)
             .await;
-        // total_log_count always returns 0 because SyncCache doesn't support iteration
-        assert_eq!(logger.total_log_count(), 0);
+        // total_log_count now returns the actual count (previously always 0).
+        assert_eq!(logger.total_log_count(), 1);
     }
 
     // ============================================================================
