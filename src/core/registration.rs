@@ -270,6 +270,16 @@ mod tests {
         assert_eq!(reg1.name(), "api1");
         assert_eq!(reg2.name(), "api2");
         assert_ne!(reg1.name(), reg2.name());
+
+        // Exercise closures to cover their bodies
+        let i1 = reg1.create();
+        assert_eq!(i1._data, "1");
+        let m1 = reg1.metadata();
+        assert_eq!(m1._name, "1");
+        let i2 = reg2.create();
+        assert_eq!(i2._data, "2");
+        let m2 = reg2.metadata();
+        assert_eq!(m2._name, "2");
     }
 
     /// Test that macro-generated struct has correct fields
@@ -291,6 +301,12 @@ mod tests {
         assert_eq!(reg.version, "v1");
         assert!(std::mem::size_of_val(&reg.create_fn) > 0);
         assert!(std::mem::size_of_val(&reg.metadata_fn) > 0);
+
+        // Exercise closures to cover their bodies
+        let inst = reg.create();
+        assert_eq!(inst._data, "test");
+        let meta = reg.metadata();
+        assert_eq!(meta._name, "test");
     }
 
     /// Test that new() is a const fn
@@ -309,6 +325,12 @@ mod tests {
 
         assert_eq!(REG.name, "const_api");
         assert_eq!(REG.version, "v2");
+
+        // Exercise closures to cover their bodies
+        let inst = REG.create();
+        assert_eq!(inst._data, "const");
+        let meta = REG.metadata();
+        assert_eq!(meta._name, "const");
     }
 
     /// Test Registration trait name() method
@@ -328,6 +350,12 @@ mod tests {
         let name = reg.name();
         assert_eq!(name, "api_name_test");
         assert!(!name.is_empty());
+
+        // Exercise closures to cover their bodies
+        let inst = reg.create();
+        assert_eq!(inst._data, "test");
+        let meta = reg.metadata();
+        assert_eq!(meta._name, "test");
     }
 
     /// Test Registration trait version() method
@@ -346,6 +374,12 @@ mod tests {
 
         let version = reg.version();
         assert_eq!(version, "v2.0.0");
+
+        // Exercise closures to cover their bodies
+        let inst = reg.create();
+        assert_eq!(inst._data, "test");
+        let meta = reg.metadata();
+        assert_eq!(meta._name, "test");
     }
 
     /// Test Registration trait create() method
@@ -364,6 +398,10 @@ mod tests {
 
         let instance = reg.create();
         assert_eq!(instance._data, "created_instance");
+
+        // Also exercise metadata closure
+        let meta = reg.metadata();
+        assert_eq!(meta._name, "test");
     }
 
     /// Test Registration trait metadata() method
@@ -382,6 +420,10 @@ mod tests {
 
         let metadata = reg.metadata();
         assert_eq!(metadata._name, "metadata_value");
+
+        // Also exercise create closure
+        let inst = reg.create();
+        assert_eq!(inst._data, "test");
     }
 
     /// Test Send + Sync + 'static bounds
@@ -423,6 +465,12 @@ mod tests {
 
         // Original should still be valid after clone
         assert_eq!(reg.name(), "test_api");
+
+        // Exercise closures to cover their bodies
+        let inst = reg.create();
+        assert_eq!(inst._data, "test");
+        let meta = reg.metadata();
+        assert_eq!(meta._name, "test");
     }
 
     /// Test Debug trait output
@@ -442,6 +490,12 @@ mod tests {
         let debug_output = format!("{:?}", reg);
         assert!(debug_output.contains("debug_api"));
         assert!(debug_output.contains("v1"));
+
+        // Exercise closures to cover their bodies
+        let inst = reg.create();
+        assert_eq!(inst._data, "test");
+        let meta = reg.metadata();
+        assert_eq!(meta._name, "test");
     }
 
     /// Test empty name and version boundary cases
@@ -462,6 +516,12 @@ mod tests {
         assert_eq!(reg.version(), "");
         assert_eq!(reg.name, "");
         assert_eq!(reg.version, "");
+
+        // Exercise closures to cover their bodies
+        let inst = reg.create();
+        assert_eq!(inst._data, "test");
+        let meta = reg.metadata();
+        assert_eq!(meta._name, "test");
     }
 
     /// Test special characters in name/version
@@ -480,6 +540,12 @@ mod tests {
 
         assert_eq!(reg.name(), "api-with-dashes_and_underscores");
         assert_eq!(reg.version(), "v1.0.0-alpha+build.123");
+
+        // Exercise closures to cover their bodies
+        let inst = reg.create();
+        assert_eq!(inst._data, "test");
+        let meta = reg.metadata();
+        assert_eq!(meta._name, "test");
     }
 
     /// Test multiple define_registration! in same scope
@@ -511,6 +577,20 @@ mod tests {
         assert_eq!(a.name(), "a");
         assert_eq!(b.name(), "b");
         assert_eq!(c.name(), "c");
+
+        // Exercise closures to cover their bodies
+        let ia = a.create();
+        assert_eq!(ia._data, "a");
+        let ma = a.metadata();
+        assert_eq!(ma._name, "a");
+        let ib = b.create();
+        assert_eq!(ib._data, "b");
+        let mb = b.metadata();
+        assert_eq!(mb._name, "b");
+        let ic = c.create();
+        assert_eq!(ic._data, "c");
+        let mc = c.metadata();
+        assert_eq!(mc._name, "c");
     }
 
     /// Test inventory collect macro registration mechanism
@@ -537,6 +617,12 @@ mod tests {
         // Registration should implement the trait
         let _registration: &dyn Registration<Instance = MockInstance, Metadata = MockMetadata> =
             &reg;
+
+        // Exercise closures to cover their bodies
+        let inst = reg.create();
+        assert_eq!(inst._data, "test");
+        let meta = reg.metadata();
+        assert_eq!(meta._name, "test");
     }
 
     #[test]
@@ -569,6 +655,12 @@ mod tests {
 
         assert_eq!(instance_a.value, 42);
         assert_eq!(instance_b.text, "hello");
+
+        // Also exercise metadata closures
+        let meta_a = reg_a.metadata();
+        assert_eq!(meta_a._name, "a");
+        let meta_b = reg_b.metadata();
+        assert_eq!(meta_b._name, "b");
     }
 
     #[test]
@@ -601,5 +693,11 @@ mod tests {
 
         assert_eq!(metadata_a.id, 100);
         assert_eq!(metadata_b.tags.len(), 2);
+
+        // Also exercise create closures
+        let inst_a = reg_a.create();
+        assert_eq!(inst_a._data, "a");
+        let inst_b = reg_b.create();
+        assert_eq!(inst_b._data, "b");
     }
 }

@@ -302,8 +302,8 @@ mod tests {
     // The middleware is tested indirectly through the http module's
     // build_with_config tests which apply the middleware to a real router.
 
-    #[test]
-    fn test_auth_middleware_is_clone_send_sync() {
+    #[tokio::test]
+    async fn test_auth_middleware_is_clone_send_sync() {
         // Verify the middleware function is Send + Sync (required for axum)
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
             Ok(AuthContext {
@@ -315,18 +315,40 @@ mod tests {
         let middleware = auth_middleware((), extract_auth);
         // Verify it's Send + Sync by assigning to a typed variable
         fn check<T: Send + Sync>(_: T) {}
-        check(middleware);
+        check(middleware.clone());
+
+        // Execute via router to exercise closure body
+        let router = axum::Router::new()
+            .route("/test", axum::routing::get(|| async { "ok" }))
+            .layer(axum::middleware::from_fn(middleware));
+        let response = tower::ServiceExt::oneshot(
+            router,
+            Request::builder().uri("/test").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
-    #[test]
-    fn test_auth_middleware_returns_closure() {
+    #[tokio::test]
+    async fn test_auth_middleware_returns_closure() {
         // Verify auth_middleware returns a callable closure
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
             Err(crate::security::types::AuthError::MissingAuth)
         };
         let middleware = auth_middleware((), extract_auth);
-        // Just verify it can be created without panicking
-        let _ = middleware;
+
+        // Execute via router to exercise closure body
+        let router = axum::Router::new()
+            .route("/test", axum::routing::get(|| async { "ok" }))
+            .layer(axum::middleware::from_fn(middleware));
+        let response = tower::ServiceExt::oneshot(
+            router,
+            Request::builder().uri("/test").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     // ============================================================================
@@ -399,12 +421,49 @@ mod tests {
         assert_eq!(ip, None);
     }
 
+    #[test]
+    fn test_extract_client_ip_x_real_ip_invalid_value() {
+        // X-Real-IP with invalid IP value — is_valid_ip returns false,
+        // falls through to ConnectInfo / None
+        let mut req = Request::new(Body::empty());
+        req.headers_mut()
+            .insert("X-Real-IP", "not-an-ip".parse().unwrap());
+
+        let ip = extract_client_ip_core(&req);
+        assert_eq!(ip, None);
+    }
+
+    #[test]
+    fn test_extract_client_ip_x_real_ip_private_rejected() {
+        // X-Real-IP with private IP — is_valid_ip rejects private ranges,
+        // falls through to None (no ConnectInfo extension present)
+        let mut req = Request::new(Body::empty());
+        req.headers_mut()
+            .insert("X-Real-IP", "10.0.0.1".parse().unwrap());
+
+        let ip = extract_client_ip_core(&req);
+        assert_eq!(ip, None);
+    }
+
+    #[test]
+    fn test_extract_client_ip_x_forwarded_for_private_rejected_by_is_valid_ip() {
+        // X-Forwarded-For with a private IP — even though it's in trusted_proxies,
+        // is_valid_ip rejects private ranges first, so returns None.
+        // This documents the current behavior (private IPs never pass is_valid_ip).
+        let mut req = Request::new(Body::empty());
+        req.headers_mut()
+            .insert("X-Forwarded-For", "10.0.0.1".parse().unwrap());
+
+        let ip = extract_client_ip_core(&req);
+        assert_eq!(ip, None);
+    }
+
     // ============================================================================
     // Auth Middleware Behavior Tests
     // ============================================================================
 
-    #[test]
-    fn test_auth_middleware_passes_with_valid_context() {
+    #[tokio::test]
+    async fn test_auth_middleware_passes_with_valid_context() {
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
             Ok(AuthContext {
                 user_id: Some("user123".to_string()),
@@ -413,31 +472,65 @@ mod tests {
             })
         };
 
-        let _middleware = auth_middleware((), extract_auth);
+        let middleware = auth_middleware((), extract_auth);
+        let router = axum::Router::new()
+            .route("/test", axum::routing::get(|| async { "ok" }))
+            .layer(axum::middleware::from_fn(middleware));
+
+        let response = tower::ServiceExt::oneshot(
+            router,
+            Request::builder().uri("/test").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
-    #[test]
-    fn test_auth_middleware_rejects_invalid_auth() {
+    #[tokio::test]
+    async fn test_auth_middleware_rejects_invalid_auth() {
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
             Err(crate::security::types::AuthError::InvalidToken)
         };
 
-        let _middleware = auth_middleware((), extract_auth);
+        let middleware = auth_middleware((), extract_auth);
+        let router = axum::Router::new()
+            .route("/test", axum::routing::get(|| async { "ok" }))
+            .layer(axum::middleware::from_fn(middleware));
+
+        let response = tower::ServiceExt::oneshot(
+            router,
+            Request::builder().uri("/test").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    #[test]
-    fn test_auth_middleware_missing_auth_header() {
+    #[tokio::test]
+    async fn test_auth_middleware_missing_auth_header() {
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
             Err(crate::security::types::AuthError::MissingAuth)
         };
 
-        let _middleware = auth_middleware((), extract_auth);
+        let middleware = auth_middleware((), extract_auth);
+        let router = axum::Router::new()
+            .route("/test", axum::routing::get(|| async { "ok" }))
+            .layer(axum::middleware::from_fn(middleware));
+
+        let response = tower::ServiceExt::oneshot(
+            router,
+            Request::builder().uri("/test").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
-    #[test]
-    fn test_auth_middleware_preserves_request_body() {
-        use axum::body::Body;
-
+    #[tokio::test]
+    async fn test_auth_middleware_preserves_request_body() {
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
             Ok(AuthContext {
                 user_id: Some("user".to_string()),
@@ -446,12 +539,34 @@ mod tests {
             })
         };
 
-        let _middleware = auth_middleware((), extract_auth);
+        let middleware = auth_middleware((), extract_auth);
+        let router = axum::Router::new()
+            .route(
+                "/test",
+                axum::routing::post(|body: Body| async move {
+                    let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+                    format!("len={}", bytes.len())
+                }),
+            )
+            .layer(axum::middleware::from_fn(middleware));
+
+        let response = tower::ServiceExt::oneshot(
+            router,
+            Request::builder()
+                .method("POST")
+                .uri("/test")
+                .body(Body::from("hello body"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
-    #[test]
-    fn test_auth_middleware_preserves_extensions() {
-        use axum::body::Body;
+    #[tokio::test]
+    async fn test_auth_middleware_preserves_extensions() {
+        use axum::extract::Request as ExtractRequest;
 
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
             Ok(AuthContext {
@@ -462,8 +577,25 @@ mod tests {
         };
 
         let middleware = auth_middleware((), extract_auth);
-        fn check<T: Send + Sync>(_: T) {}
-        check(middleware);
+        let router = axum::Router::new()
+            .route(
+                "/test",
+                axum::routing::get(|req: ExtractRequest| async move {
+                    let ctx = req.extensions().get::<AuthContext>();
+                    let user = ctx.and_then(|c| c.user_id.clone()).unwrap_or_default();
+                    format!("user={}", user)
+                }),
+            )
+            .layer(axum::middleware::from_fn(middleware));
+
+        let response = tower::ServiceExt::oneshot(
+            router,
+            Request::builder().uri("/test").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     // ============================================================================
@@ -524,8 +656,8 @@ mod tests {
         assert_eq!(ip, None);
     }
 
-    #[test]
-    fn test_auth_middleware_with_clone() {
+    #[tokio::test]
+    async fn test_auth_middleware_with_clone() {
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
             Ok(AuthContext {
                 user_id: Some("clone-test".to_string()),
@@ -535,7 +667,19 @@ mod tests {
         };
 
         let middleware = auth_middleware((), extract_auth);
-        let _cloned = middleware.clone();
+        let cloned = middleware.clone();
+        let router = axum::Router::new()
+            .route("/test", axum::routing::get(|| async { "ok" }))
+            .layer(axum::middleware::from_fn(cloned));
+
+        let response = tower::ServiceExt::oneshot(
+            router,
+            Request::builder().uri("/test").body(Body::empty()).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     // ============================================================================

@@ -234,4 +234,153 @@ mod tests {
             "application/json"
         );
     }
+
+    // ============================================================================
+    // Body content verification tests
+    //
+    // These tests verify the actual JSON body content of responses, not just
+    // status codes and headers.
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_build_json_response_body_content() {
+        #[derive(serde::Serialize)]
+        struct Payload {
+            name: String,
+            count: i32,
+        }
+
+        let resp = build_json_response(
+            201,
+            &Payload {
+                name: "test".to_string(),
+                count: 5,
+            },
+            "fallback",
+        );
+        assert_eq!(resp.status(), 201);
+
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed["name"], "test");
+        assert_eq!(parsed["count"], 5);
+    }
+
+    #[tokio::test]
+    async fn test_build_fallback_response_body_content() {
+        let resp = build_fallback_response(500, "something went wrong");
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert_eq!(parsed["error"]["code"], "SERIALIZATION_ERROR");
+        assert_eq!(parsed["error"]["message"], "something went wrong");
+    }
+
+    #[tokio::test]
+    async fn test_build_fallback_response_empty_message() {
+        let resp = build_fallback_response(400, "");
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed["error"]["message"], "");
+    }
+
+    #[tokio::test]
+    async fn test_build_fallback_response_escaped_body_valid_json() {
+        // Verify that escaped quotes produce valid JSON
+        let resp = build_fallback_response(400, r#"bad "value" here"#);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        // Should parse without error
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed["error"]["message"], r#"bad "value" here"#);
+    }
+
+    #[tokio::test]
+    async fn test_api_error_response_body_contains_error_info() {
+        let resp = ApiError::NotFound {
+            resource: "User".to_string(),
+            resource_id: Some("42".to_string()),
+        }
+        .into_response();
+
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        // The response should contain error information
+        assert!(parsed.is_object());
+    }
+
+    #[tokio::test]
+    async fn test_service_response_success_body_content() {
+        let resp = ServiceResponse::success("hello").into_response();
+        assert_eq!(resp.status(), 200);
+
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed["data"], "hello");
+        assert!(parsed.get("error").is_none() || parsed["error"].is_null());
+    }
+
+    #[tokio::test]
+    async fn test_service_response_error_body_content() {
+        let err = crate::core::ServiceError::with_details(
+            "CUSTOM_CODE",
+            "custom error message",
+            serde_json::json!({"detail": "info"}),
+            451,
+        );
+        let resp = ServiceResponse::<String>::error(err).into_response();
+        assert_eq!(resp.status(), 451);
+
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed["error"]["code"], "CUSTOM_CODE");
+    }
+
+    #[test]
+    fn test_build_json_response_with_various_status_codes() {
+        #[derive(serde::Serialize)]
+        struct Empty;
+        for status in [200u16, 201, 204, 301, 400, 401, 403, 404, 422, 429, 500, 503] {
+            let resp = build_json_response(status, &Empty, "fallback");
+            assert_eq!(
+                resp.status(),
+                axum::http::StatusCode::from_u16(status).unwrap(),
+                "Status code {} should be preserved",
+                status
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_build_json_response_serialization_failure_uses_fallback_message() {
+        use serde::ser::{self, Serialize, Serializer};
+
+        struct Unserializable;
+        impl Serialize for Unserializable {
+            fn serialize<S: Serializer>(&self, _serializer: S) -> Result<S::Ok, S::Error> {
+                Err(ser::Error::custom("intentional failure"))
+            }
+        }
+
+        let resp = build_json_response(422, &Unserializable, "custom fallback message");
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(parsed["error"]["message"], "custom fallback message");
+        assert_eq!(parsed["error"]["code"], "SERIALIZATION_ERROR");
+    }
 }
