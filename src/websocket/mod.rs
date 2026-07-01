@@ -2527,4 +2527,216 @@ mod tests {
     fn max_string_length_constant() {
         assert_eq!(MAX_STRING_LENGTH, 64 * 1024);
     }
+
+    // ========================================================================
+    // broadcast() error cleanup path
+    // ========================================================================
+
+    /// Test broadcast cleans up connections whose receiver has been dropped.
+    ///
+    /// Covers the `failed_connections` cleanup path in `broadcast()`: when
+    /// `conn.send()` returns an error (because the receiver was dropped),
+    /// the failed connection is removed from the manager.
+    #[tokio::test]
+    async fn broadcast_cleans_up_failed_connections() {
+        let manager = ConnectionManager::new();
+        let (doomed, rx) = WebSocketConnection::new("doomed-conn".to_string());
+        let (healthy, mut rx2) = WebSocketConnection::new("healthy-conn".to_string());
+        manager.add_connection("doomed-conn".to_string(), doomed).await;
+        manager.add_connection("healthy-conn".to_string(), healthy).await;
+        assert_eq!(manager.connection_count().await, 2);
+
+        // Drop the receiver so sends to "doomed-conn" fail.
+        drop(rx);
+
+        let msg = Arc::new(WebSocketMessage::Notification {
+            event: "cleanup-test".to_string(),
+            data: serde_json::json!({}),
+        });
+        manager.broadcast(&msg).await;
+
+        // The healthy connection should still receive the message.
+        assert!(rx2.recv().await.is_some());
+        // The doomed connection should have been cleaned up.
+        assert_eq!(manager.connection_count().await, 1);
+        assert!(manager.get_connection("doomed-conn").await.is_none());
+        assert!(manager.get_connection("healthy-conn").await.is_some());
+    }
+
+    // ========================================================================
+    // handle_socket() message loop tests (via TestServer WebSocket)
+    // ========================================================================
+
+    /// Helper: build a test server with the websocket_upgrade handler (no auth).
+    fn build_ws_test_server() -> axum_test::TestServer {
+        let app = Router::new().route("/ws", axum::routing::get(websocket_upgrade));
+        axum_test::TestServer::builder()
+            .http_transport()
+            .build(app)
+    }
+
+    /// Test handle_socket processes a Request and returns a Response.
+    ///
+    /// Covers the main message-loop path: parse → DefaultWebSocketHandler →
+    /// serialize → send. Also exercises `IntoResponse` and `websocket_upgrade`.
+    #[tokio::test]
+    async fn handle_socket_processes_request_and_returns_response() {
+        let server = build_ws_test_server();
+        let mut ws = server
+            .get_websocket("/ws")
+            .await
+            .into_websocket()
+            .await;
+
+        let request = WebSocketMessage::Request {
+            id: "req-1".to_string(),
+            method: "get_data".to_string(),
+            params: serde_json::json!({"key": "value"}),
+        };
+        ws.send_json(&request).await;
+
+        let response: WebSocketMessage = ws.receive_json().await;
+        match response {
+            WebSocketMessage::Response { id, result } => {
+                assert_eq!(id, "req-1");
+                assert_eq!(result["status"], "ok");
+                assert_eq!(result["method"], "get_data");
+            }
+            _ => panic!("Expected Response, got {:?}", response),
+        }
+    }
+
+    /// Test handle_socket returns an Error message for invalid JSON.
+    ///
+    /// Covers the `Err(e)` branch of `parse_websocket_message` in the
+    /// message loop, which sends a `WebSocketMessage::Error` back.
+    #[tokio::test]
+    async fn handle_socket_handles_invalid_json() {
+        let server = build_ws_test_server();
+        let mut ws = server
+            .get_websocket("/ws")
+            .await
+            .into_websocket()
+            .await;
+
+        ws.send_text("not valid json").await;
+
+        let response: WebSocketMessage = ws.receive_json().await;
+        match response {
+            WebSocketMessage::Error { error, .. } => {
+                assert!(error.contains("Invalid JSON"));
+            }
+            _ => panic!("Expected Error, got {:?}", response),
+        }
+    }
+
+    /// Test handle_socket echoes non-Request messages (Notification).
+    ///
+    /// Covers the `_ => message` passthrough branch of
+    /// `DefaultWebSocketHandler::handle`.
+    #[tokio::test]
+    async fn handle_socket_echoes_notification_messages() {
+        let server = build_ws_test_server();
+        let mut ws = server
+            .get_websocket("/ws")
+            .await
+            .into_websocket()
+            .await;
+
+        let notification = WebSocketMessage::Notification {
+            event: "test_event".to_string(),
+            data: serde_json::json!({"value": 42}),
+        };
+        ws.send_json(&notification).await;
+
+        let response: WebSocketMessage = ws.receive_json().await;
+        match response {
+            WebSocketMessage::Notification { event, data } => {
+                assert_eq!(event, "test_event");
+                assert_eq!(data["value"], 42);
+            }
+            _ => panic!("Expected Notification, got {:?}", response),
+        }
+    }
+
+    // ========================================================================
+    // ValidatedWebSocketUpgrade FromRequest extractor tests
+    // ========================================================================
+
+    /// Test the extractor accepts a WebSocket upgrade when no auth is configured.
+    ///
+    /// Covers the path where `app_state` is `None` (no AppState in extensions),
+    /// skipping the auth block and creating a default ConnectionManager
+    /// via the `unwrap_or_else` branch.
+    #[tokio::test]
+    async fn validated_websocket_upgrade_accepts_without_auth() {
+        let app = Router::new().route("/ws", axum::routing::get(websocket_upgrade));
+        let server = axum_test::TestServer::builder()
+            .http_transport()
+            .build(app);
+
+        // A successful WS connect means the extractor accepted the request.
+        let mut ws = server
+            .get_websocket("/ws")
+            .await
+            .into_websocket()
+            .await;
+        // Send a request to confirm the connection is functional.
+        let request = WebSocketMessage::Request {
+            id: "no-auth-1".to_string(),
+            method: "ping".to_string(),
+            params: serde_json::json!({}),
+        };
+        ws.send_json(&request).await;
+        let response: WebSocketMessage = ws.receive_json().await;
+        assert!(matches!(response, WebSocketMessage::Response { .. }));
+    }
+
+    /// Helper: build a test server with auth configured via Extension layer.
+    fn build_ws_test_server_with_auth() -> axum_test::TestServer {
+        let auth =
+            crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+                .expect("valid secret");
+        let config = WebSocketConfig {
+            auth: Some(auth),
+            rate_limit: RateLimitConfig::default(),
+        };
+        let manager = Arc::new(ConnectionManager::new());
+        let app_state = Arc::new(AppState::with_config(config, manager));
+        let app = Router::new()
+            .route("/ws", axum::routing::get(websocket_upgrade))
+            .layer(axum::Extension(app_state));
+        axum_test::TestServer::builder()
+            .http_transport()
+            .build(app)
+    }
+
+    /// Test the extractor rejects with 401 when auth is configured but no
+    /// Authorization header is present.
+    ///
+    /// Covers `bearer_token.ok_or(StatusCode::UNAUTHORIZED)?` — the missing
+    /// token rejection path.
+    #[tokio::test]
+    async fn validated_websocket_upgrade_rejects_missing_token_with_auth() {
+        let server = build_ws_test_server_with_auth();
+
+        let response = server.get("/ws").await;
+        response.assert_status(StatusCode::UNAUTHORIZED);
+    }
+
+    /// Test the extractor rejects with 401 when auth is configured and an
+    /// invalid bearer token is provided.
+    ///
+    /// Covers `auth.validate_token(&token).ok_or(StatusCode::UNAUTHORIZED)?`
+    /// — the invalid token rejection path.
+    #[tokio::test]
+    async fn validated_websocket_upgrade_rejects_invalid_token_with_auth() {
+        let server = build_ws_test_server_with_auth();
+
+        let response = server
+            .get("/ws")
+            .add_header(AUTHORIZATION, "Bearer invalid-token-value")
+            .await;
+        response.assert_status(StatusCode::UNAUTHORIZED);
+    }
 }

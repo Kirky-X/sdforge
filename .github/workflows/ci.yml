@@ -198,7 +198,7 @@ jobs:
 
   # 代码覆盖率检查
   coverage:
-    name: Code Coverage (60% Gate)
+    name: Code Coverage (95% Gate)
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -242,11 +242,12 @@ jobs:
             --out xml \
             --out html \
             --output-dir coverage-report \
-            --fail-under 80 \
+            --fail-under 95 \
             --exclude-files "target/*" \
             --exclude-files "examples/*" \
             --exclude-files "temp/*" \
-            --exclude-files "macros/tests/*"
+            --exclude-files "macros/tests/*" \
+            --exclude-files "src/grpc/pb/*"
 
       - name: Upload coverage to Codecov
         if: always()
