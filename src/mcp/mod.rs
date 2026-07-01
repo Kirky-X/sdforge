@@ -2290,8 +2290,9 @@ mod tests {
             "id": "string-id-123"
         }"#;
 
-        let result: Result<JsonRpcRequest, _> = serde_json::from_str(json_str);
-        assert!(result.is_ok() || result.is_err());
+        let result: JsonRpcRequest = serde_json::from_str(json_str)
+            .expect("JSON-RPC request with string id must parse successfully");
+        assert_eq!(result.method, "test");
     }
 
     // ============================================================================

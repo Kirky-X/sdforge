@@ -148,9 +148,10 @@ impl SyncCache for DashMapCache {
             return;
         }
 
-        // Batch insert - DashMap handles concurrent writes efficiently
+        // Delegate to set() to maintain LRU queue and prefix index invariants.
+        // Direct inner.insert would bypass eviction and leave prefix index stale.
         for (key, value) in items {
-            self.inner.insert(key.clone(), value.clone());
+            self.set(key, value.clone());
         }
     }
 
@@ -186,6 +187,15 @@ impl SyncCache for DashMapCache {
 
     fn clear(&self) {
         self.inner.clear();
+        // Maintain invariants: clear LRU queue and prefix index too
+        if let Some(ref lru_queue) = self.lru_queue {
+            if let Ok(mut queue) = lru_queue.lock() {
+                queue.clear();
+            }
+        }
+        if let Ok(mut index) = self.prefix_index.lock() {
+            index.clear();
+        }
     }
 
     fn len(&self) -> usize {
@@ -695,5 +705,63 @@ mod tests {
         let keys = cache.find_keys_by_pattern("user:*");
         assert_eq!(keys.len(), 1);
         assert!(keys.contains(&"user:2".to_string()));
+    }
+
+    #[test]
+    fn test_clear_resets_lru_queue_and_prefix_index() {
+        // Regression: clear() must also clear LRU queue and prefix index,
+        // otherwise stale entries cause incorrect eviction / pattern matches.
+        let cache = DashMapCache::with_capacity(3);
+        cache.set("user:1", b"v1".to_vec());
+        cache.set("user:2", b"v2".to_vec());
+        cache.set("user:3", b"v3".to_vec());
+        assert_eq!(cache.len(), 3);
+
+        cache.clear();
+        assert!(cache.is_empty());
+
+        // After clear, filling to capacity must not evict phantom keys
+        cache.set("a", b"va".to_vec());
+        cache.set("b", b"vb".to_vec());
+        cache.set("c", b"vc".to_vec());
+        assert_eq!(cache.len(), 3);
+
+        // Adding one more should evict exactly one (a), not phantom user:1
+        cache.set("d", b"vd".to_vec());
+        assert_eq!(cache.len(), 3);
+        assert!(!cache.contains("a"));
+        assert!(cache.contains("b"));
+        assert!(cache.contains("c"));
+        assert!(cache.contains("d"));
+
+        // Prefix index must be empty after clear (no stale user:* matches)
+        assert!(cache.find_keys_by_pattern("user:*").is_empty());
+    }
+
+    #[test]
+    fn test_set_many_respects_lru_eviction_and_prefix_index() {
+        // Regression: set_many must maintain LRU eviction and prefix index,
+        // not bypass them with raw inner.insert.
+        let cache = DashMapCache::with_capacity(3);
+        let items = vec![
+            ("user:1".to_string(), b"v1".to_vec()),
+            ("user:2".to_string(), b"v2".to_vec()),
+            ("user:3".to_string(), b"v3".to_vec()),
+        ];
+        cache.set_many(&items);
+        assert_eq!(cache.len(), 3);
+
+        // set_many over capacity should evict oldest (user:1)
+        let extra = vec![("user:4".to_string(), b"v4".to_vec())];
+        cache.set_many(&extra);
+        assert_eq!(cache.len(), 3);
+        assert!(!cache.contains("user:1"));
+        assert!(cache.contains("user:2"));
+        assert!(cache.contains("user:3"));
+        assert!(cache.contains("user:4"));
+
+        // Prefix index must reflect the new keys
+        let keys = cache.find_keys_by_pattern("user:*");
+        assert_eq!(keys.len(), 3);
     }
 }

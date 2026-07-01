@@ -552,8 +552,17 @@ impl AuditLog {
         let expected_signature =
             base64::engine::general_purpose::STANDARD.encode(result.into_bytes());
 
-        // Constant-time comparison to prevent timing attacks
-        Ok(stored_sig == &expected_signature)
+        // Constant-time comparison to prevent timing attacks.
+        // NOTE: `==` on &str/&String short-circuits on the first differing byte
+        // and leaks timing information. Use subtle::ConstantTimeEq on the bytes.
+        use subtle::ConstantTimeEq;
+        let stored_bytes = stored_sig.as_bytes();
+        let expected_bytes = expected_signature.as_bytes();
+        // ct_eq requires equal length; mismatched length is a definitive mismatch.
+        // Signature length is fixed for HMAC-SHA256, so length leakage is acceptable.
+        let is_valid = stored_bytes.len() == expected_bytes.len()
+            && bool::from(stored_bytes.ct_eq(expected_bytes));
+        Ok(is_valid)
     }
 }
 
