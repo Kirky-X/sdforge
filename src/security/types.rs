@@ -134,6 +134,12 @@ pub(crate) fn parse_audit_log(v: &serde_json::Value) -> Option<AuditLog> {
         .and_then(|v| v.as_i64())
         .unwrap_or(0);
 
+    // Parse signature: present in signed logs, absent in legacy logs
+    let signature = obj
+        .get("signature")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
     Some(AuditLog {
         id,
         timestamp,
@@ -147,7 +153,7 @@ pub(crate) fn parse_audit_log(v: &serde_json::Value) -> Option<AuditLog> {
             request_id,
             timestamp: timestamp_meta,
         },
-        signature: None, // Legacy logs don't have signatures
+        signature,
     })
 }
 

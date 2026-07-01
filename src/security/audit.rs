@@ -1493,4 +1493,536 @@ mod tests {
         assert!(sanitized.contains("token=[REDACTED]"));
         assert!(!sanitized.contains("secret_token_123"));
     }
+
+    // ============================================================================
+    // Signing key environment variable tests
+    //
+    // The log() method checks SDFORGE_AUDIT_SIGNING_KEY env var to optionally
+    // sign audit logs. These tests use #[serial] to safely set/unset the env
+    // var without interfering with other tests.
+    // ============================================================================
+
+    fn make_test_audit_log(user_id: &str, action: &str) -> AuditLog {
+        AuditLog {
+            id: Uuid::new_v4().to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            user_id: Some(user_id.to_string()),
+            action: action.to_string(),
+            resource: "test_resource".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata::default(),
+            signature: None,
+        }
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_log_with_signing_key_generates_signature() {
+        // Set a non-empty signing key — log.generate_signature should be called
+        // and the resulting log should have a non-None signature.
+        std::env::set_var("SDFORGE_AUDIT_SIGNING_KEY", "test_signing_key_min_32_bytes_long!!!");
+
+        let logger = AppAuditLogger::with_limit(10);
+        let context = AuthContext {
+            user_id: Some("signing_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+
+        logger
+            .log(&context, "signed_action", "resource", true, None)
+            .await;
+
+        let logs = logger.get_logs("signing_user");
+        assert_eq!(logs.len(), 1);
+        assert!(
+            logs[0].signature.is_some(),
+            "Audit log should have a signature when signing key is set"
+        );
+
+        // Clean up
+        std::env::remove_var("SDFORGE_AUDIT_SIGNING_KEY");
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_log_with_empty_signing_key_warns() {
+        // Set an empty signing key — the empty-key warning branch should be
+        // taken and the log should NOT have a signature.
+        std::env::set_var("SDFORGE_AUDIT_SIGNING_KEY", "");
+
+        let logger = AppAuditLogger::with_limit(10);
+        let context = AuthContext {
+            user_id: Some("empty_key_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+
+        logger
+            .log(&context, "unsigned_action", "resource", true, None)
+            .await;
+
+        let logs = logger.get_logs("empty_key_user");
+        assert_eq!(logs.len(), 1);
+        assert!(
+            logs[0].signature.is_none(),
+            "Audit log should NOT have a signature when signing key is empty"
+        );
+
+        // Clean up
+        std::env::remove_var("SDFORGE_AUDIT_SIGNING_KEY");
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn test_log_without_signing_key_warns() {
+        // Ensure the env var is NOT set — the "not set" warning branch should
+        // be taken and the log should NOT have a signature.
+        std::env::remove_var("SDFORGE_AUDIT_SIGNING_KEY");
+
+        let logger = AppAuditLogger::with_limit(10);
+        let context = AuthContext {
+            user_id: Some("no_key_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+
+        logger
+            .log(&context, "unsigned_action", "resource", true, None)
+            .await;
+
+        let logs = logger.get_logs("no_key_user");
+        assert_eq!(logs.len(), 1);
+        assert!(
+            logs[0].signature.is_none(),
+            "Audit log should NOT have a signature when signing key is not set"
+        );
+    }
+
+    // ============================================================================
+    // log() fallback merge tests
+    //
+    // log() synchronously merges fallback logs into primary storage before
+    // sending to the queue. These tests manually populate fallback_logs to
+    // exercise that merge path (lines 324-333).
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_log_merges_fallback_logs_synchronously() {
+        let logger = AppAuditLogger::with_limit(100);
+
+        // Manually populate fallback_logs with a serialized AuditLog
+        let fallback_log = AuditLog {
+            id: "fallback-log-1".to_string(),
+            timestamp: chrono::Utc::now().timestamp() - 100,
+            user_id: Some("merge_user".to_string()),
+            action: "fallback_action".to_string(),
+            resource: "fallback_resource".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata::default(),
+            signature: None,
+        };
+        logger.fallback_logs.set(
+            "merge_user",
+            serialize_audit_logs(&[fallback_log.clone()]),
+        );
+
+        // Verify fallback was stored
+        assert!(logger.fallback_logs.get("merge_user").is_some());
+
+        // Now call log() for the same user — this should merge the fallback
+        // into primary storage and delete the fallback.
+        let context = AuthContext {
+            user_id: Some("merge_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+        logger
+            .log(&context, "new_action", "new_resource", true, None)
+            .await;
+
+        // The fallback should have been merged and deleted
+        assert!(
+            logger.fallback_logs.get("merge_user").is_none(),
+            "Fallback logs should be deleted after merge"
+        );
+
+        // Primary storage should contain both the fallback log and the new log
+        let logs = logger.get_logs("merge_user");
+        assert_eq!(logs.len(), 2, "Should have 2 logs after merge");
+
+        // Verify both logs are present
+        let actions: Vec<&str> = logs.iter().map(|l| l.action()).collect();
+        assert!(actions.contains(&"fallback_action"), "Fallback action should be present");
+        assert!(actions.contains(&"new_action"), "New action should be present");
+    }
+
+    #[tokio::test]
+    async fn test_log_fallback_merge_respects_max_logs() {
+        // When merging fallback + primary exceeds max_logs_per_user, the
+        // merged result should be truncated.
+        let logger = AppAuditLogger::with_limit(2); // Very small limit
+
+        // Populate primary with 1 log
+        let primary_log = AuditLog {
+            id: "primary-1".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            user_id: Some("trunc_user".to_string()),
+            action: "primary_action".to_string(),
+            resource: "res".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata::default(),
+            signature: None,
+        };
+        logger
+            .logs
+            .set("trunc_user", serialize_audit_logs(&[primary_log]));
+
+        // Populate fallback with 2 logs
+        let fallback_logs = vec![
+            AuditLog {
+                id: "fallback-1".to_string(),
+                timestamp: chrono::Utc::now().timestamp() - 200,
+                user_id: Some("trunc_user".to_string()),
+                action: "fb1".to_string(),
+                resource: "res".to_string(),
+                result: AuditResult::Success,
+                metadata: AuthMetadata::default(),
+                signature: None,
+            },
+            AuditLog {
+                id: "fallback-2".to_string(),
+                timestamp: chrono::Utc::now().timestamp() - 100,
+                user_id: Some("trunc_user".to_string()),
+                action: "fb2".to_string(),
+                resource: "res".to_string(),
+                result: AuditResult::Success,
+                metadata: AuthMetadata::default(),
+                signature: None,
+            },
+        ];
+        logger
+            .fallback_logs
+            .set("trunc_user", serialize_audit_logs(&fallback_logs));
+
+        // Call log() which merges fallback into primary
+        let context = AuthContext {
+            user_id: Some("trunc_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+        logger.log(&context, "new", "res", true, None).await;
+
+        // After merge + truncate, should have at most max_logs_per_user (2)
+        let logs = logger.get_logs("trunc_user");
+        assert!(
+            logs.len() <= 2,
+            "Logs should be truncated to max_logs_per_user (2), got {}",
+            logs.len()
+        );
+    }
+
+    // ============================================================================
+    // get_logs dedup tests
+    //
+    // get_logs merges primary and fallback, deduplicating by log ID.
+    // These tests populate both stores with overlapping IDs (lines 386-389).
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_get_logs_deduplicates_by_id() {
+        let logger = AppAuditLogger::with_limit(100);
+
+        // Create a log that appears in BOTH primary and fallback (same ID)
+        let shared_log = AuditLog {
+            id: "shared-id-1".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            user_id: Some("dedup_user".to_string()),
+            action: "shared_action".to_string(),
+            resource: "res".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata::default(),
+            signature: None,
+        };
+
+        // A log that only appears in fallback
+        let fallback_only = AuditLog {
+            id: "fallback-only-1".to_string(),
+            timestamp: chrono::Utc::now().timestamp() - 50,
+            user_id: Some("dedup_user".to_string()),
+            action: "fallback_only_action".to_string(),
+            resource: "res".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata::default(),
+            signature: None,
+        };
+
+        // Populate primary with the shared log
+        logger
+            .logs
+            .set("dedup_user", serialize_audit_logs(&[shared_log.clone()]));
+
+        // Populate fallback with both the shared log and the fallback-only log
+        logger.fallback_logs.set(
+            "dedup_user",
+            serialize_audit_logs(&[shared_log, fallback_only]),
+        );
+
+        // get_logs should deduplicate: shared log appears once, fallback-only appears once
+        let logs = logger.get_logs("dedup_user");
+        assert_eq!(
+            logs.len(),
+            2,
+            "Should have 2 logs after dedup (shared + fallback-only), got {}",
+            logs.len()
+        );
+
+        // Verify the shared log appears only once
+        let shared_count = logs.iter().filter(|l| l.id() == "shared-id-1").count();
+        assert_eq!(shared_count, 1, "Shared log should appear exactly once");
+
+        // Verify the fallback-only log appears
+        let fallback_count = logs.iter().filter(|l| l.id() == "fallback-only-1").count();
+        assert_eq!(fallback_count, 1, "Fallback-only log should appear once");
+    }
+
+    #[tokio::test]
+    async fn test_get_logs_with_only_fallback() {
+        let logger = AppAuditLogger::with_limit(100);
+
+        // Populate only fallback (no primary)
+        let fallback_log = AuditLog {
+            id: "fb-only-2".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            user_id: Some("fb_user".to_string()),
+            action: "fb_action".to_string(),
+            resource: "res".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata::default(),
+            signature: None,
+        };
+        logger
+            .fallback_logs
+            .set("fb_user", serialize_audit_logs(&[fallback_log]));
+
+        let logs = logger.get_logs("fb_user");
+        assert_eq!(logs.len(), 1, "Should return fallback log when primary is empty");
+        assert_eq!(logs[0].id(), "fb-only-2");
+    }
+
+    // ============================================================================
+    // Worker fallback merge tests
+    //
+    // The spawned worker task in with_limit() and build() drains the queue and
+    // merges any remaining fallback logs. Since log() already merges fallback
+    // synchronously, the worker's fallback merge is only triggered when
+    // fallback data exists at the time the worker processes a batch. These
+    // tests manually inject fallback data and send a batch to trigger the
+    // worker's merge path.
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_worker_merges_fallback_from_queue() {
+        let logger = AppAuditLogger::with_limit(100);
+
+        // Populate fallback_logs for "worker_user"
+        let fallback_log = AuditLog {
+            id: "worker-fb-1".to_string(),
+            timestamp: chrono::Utc::now().timestamp() - 100,
+            user_id: Some("worker_user".to_string()),
+            action: "worker_fb_action".to_string(),
+            resource: "res".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata::default(),
+            signature: None,
+        };
+        logger
+            .fallback_logs
+            .set("worker_user", serialize_audit_logs(&[fallback_log]));
+
+        // Populate primary with an existing log
+        let primary_log = AuditLog {
+            id: "worker-primary-1".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            user_id: Some("worker_user".to_string()),
+            action: "worker_primary_action".to_string(),
+            resource: "res".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata::default(),
+            signature: None,
+        };
+        logger
+            .logs
+            .set("worker_user", serialize_audit_logs(&[primary_log]));
+
+        // Send a batch to the queue to trigger the worker's fallback merge
+        let batch = AuditLogBatch {
+            user_id: "worker_user".to_string(),
+            log: make_test_audit_log("worker_user", "queued_action"),
+        };
+        let _ = logger.queue_sender.send(batch).await;
+
+        // Wait for the worker to process the batch
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+        // The worker should have merged the fallback into primary and deleted it
+        assert!(
+            logger.fallback_logs.get("worker_user").is_none(),
+            "Worker should have deleted fallback after merging"
+        );
+
+        // Primary should contain the merged logs (primary + fallback)
+        let logs = logger.get_logs("worker_user");
+        let actions: Vec<&str> = logs.iter().map(|l| l.action()).collect();
+        assert!(
+            actions.contains(&"worker_fb_action"),
+            "Merged logs should contain the fallback action"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_worker_no_fallback_does_nothing() {
+        // When there's no fallback data, the worker should just drain the
+        // queue without modifying primary storage.
+        let logger = AppAuditLogger::with_limit(100);
+
+        // Populate primary only (no fallback)
+        let primary_log = AuditLog {
+            id: "no-fb-primary".to_string(),
+            timestamp: chrono::Utc::now().timestamp(),
+            user_id: Some("no_fb_user".to_string()),
+            action: "primary_action".to_string(),
+            resource: "res".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata::default(),
+            signature: None,
+        };
+        logger
+            .logs
+            .set("no_fb_user", serialize_audit_logs(&[primary_log]));
+
+        // Send a batch
+        let batch = AuditLogBatch {
+            user_id: "no_fb_user".to_string(),
+            log: make_test_audit_log("no_fb_user", "queued"),
+        };
+        let _ = logger.queue_sender.send(batch).await;
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+        // Primary should be unchanged (worker found no fallback to merge)
+        let logs = logger.get_logs("no_fb_user");
+        assert_eq!(logs.len(), 1, "Primary should have 1 log (no merge occurred)");
+    }
+
+    // ============================================================================
+    // Builder build() worker tests
+    //
+    // AppAuditLoggerBuilder::build() also spawns a worker with the same
+    // fallback merge logic. This test exercises the builder's worker path.
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_builder_build_worker_merges_fallback() {
+        let logger = AppAuditLogger::builder()
+            .max_logs_per_user(100)
+            .max_concurrent_ops(10)
+            .queue_size(100)
+            .build();
+
+        // Populate fallback for the builder-created logger
+        let fallback_log = AuditLog {
+            id: "builder-fb-1".to_string(),
+            timestamp: chrono::Utc::now().timestamp() - 100,
+            user_id: Some("builder_user".to_string()),
+            action: "builder_fb_action".to_string(),
+            resource: "res".to_string(),
+            result: AuditResult::Success,
+            metadata: AuthMetadata::default(),
+            signature: None,
+        };
+        logger
+            .fallback_logs
+            .set("builder_user", serialize_audit_logs(&[fallback_log]));
+
+        // Send a batch to trigger the worker
+        let batch = AuditLogBatch {
+            user_id: "builder_user".to_string(),
+            log: make_test_audit_log("builder_user", "builder_queued"),
+        };
+        let _ = logger.queue_sender.send(batch).await;
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+        // Worker should have merged and deleted fallback
+        assert!(
+            logger.fallback_logs.get("builder_user").is_none(),
+            "Builder worker should have deleted fallback after merging"
+        );
+
+        let logs = logger.get_logs("builder_user");
+        let actions: Vec<&str> = logs.iter().map(|l| l.action()).collect();
+        assert!(
+            actions.contains(&"builder_fb_action"),
+            "Merged logs should contain the fallback action"
+        );
+    }
+
+    // ============================================================================
+    // AuditLogger trait no-runtime path test
+    //
+    // The AuditLogger trait impl's log() method checks for a tokio runtime. If
+    // none is available, it falls back to printing to stderr (lines 498-503).
+    // This test calls the trait method from a plain std::thread (no runtime).
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_audit_logger_trait_no_runtime_path() {
+        use crate::security::traits::AuditLogger as AuditLoggerTrait;
+
+        // with_limit() calls tokio::spawn(), so we need a runtime.
+        // The spawned thread below has NO runtime, testing the no-runtime fallback path.
+        let logger = AppAuditLogger::with_limit(10);
+        let log = make_test_audit_log("no_rt_user", "no_runtime_action");
+
+        // Spawn a plain OS thread with NO tokio runtime. The trait impl's
+        // log() should detect the missing runtime and print to stderr instead
+        // of panicking.
+        let logger_clone = logger.clone();
+        let handle = std::thread::spawn(move || {
+            // This calls the AuditLogger trait method, not the async log()
+            AuditLoggerTrait::log(&logger_clone, log);
+        });
+
+        // The thread should complete without panicking
+        handle.join().expect("Thread should not panic");
+
+        // No logs should be stored (they were dropped to stderr)
+        let logs = logger.get_logs("no_rt_user");
+        assert_eq!(
+            logs.len(),
+            0,
+            "No logs should be stored when no runtime is available"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_audit_logger_trait_with_runtime_spawns_task() {
+        use crate::security::traits::AuditLogger as AuditLoggerTrait;
+
+        let logger = AppAuditLogger::with_limit(10);
+        let log = make_test_audit_log("rt_user", "runtime_action");
+
+        // Call the trait method from within a tokio runtime — it should
+        // spawn a task that calls the async log() method.
+        AuditLoggerTrait::log(&logger, log);
+
+        // Wait for the spawned task to complete
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+
+        // The log should have been stored
+        let logs = logger.get_logs("rt_user");
+        assert_eq!(logs.len(), 1, "Log should be stored when runtime is available");
+        assert_eq!(logs[0].action(), "runtime_action");
+    }
 }

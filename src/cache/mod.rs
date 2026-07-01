@@ -340,4 +340,160 @@ mod tests {
         cache.set("key", b"value".to_vec());
         assert!(cache.contains("key"));
     }
+
+    // ============================================================================
+    // Default trait method coverage tests
+    //
+    // DashMapCache overrides get_many/set_many/delete_many/get_stats, so the
+    // default trait method implementations in SyncCache are not exercised by
+    // the tests above. The MinimalCache below deliberately only implements
+    // the required methods, leaving the default implementations in place so
+    // they get coverage.
+    // ============================================================================
+
+    /// Minimal SyncCache implementation that relies on the default trait
+    /// method implementations for batch operations and stats.
+    struct MinimalCache {
+        data: std::sync::Mutex<HashMap<String, Vec<u8>>>,
+    }
+
+    impl MinimalCache {
+        fn new() -> Self {
+            Self {
+                data: std::sync::Mutex::new(HashMap::new()),
+            }
+        }
+    }
+
+    impl SyncCache for MinimalCache {
+        fn get(&self, key: &str) -> Option<Vec<u8>> {
+            self.data.lock().unwrap().get(key).cloned()
+        }
+
+        fn set(&self, key: &str, value: Vec<u8>) {
+            self.data.lock().unwrap().insert(key.to_string(), value);
+        }
+
+        fn delete(&self, key: &str) -> bool {
+            self.data.lock().unwrap().remove(key).is_some()
+        }
+
+        fn contains(&self, key: &str) -> bool {
+            self.data.lock().unwrap().contains_key(key)
+        }
+
+        fn clear(&self) {
+            self.data.lock().unwrap().clear();
+        }
+
+        fn len(&self) -> usize {
+            self.data.lock().unwrap().len()
+        }
+
+        fn is_empty(&self) -> bool {
+            self.len() == 0
+        }
+
+        fn find_keys_by_pattern(&self, pattern: &str) -> Vec<String> {
+            let regex_pattern = pattern.replace('*', ".*").replace('?', ".");
+            let re = match regex::Regex::new(&format!("^{}$", regex_pattern)) {
+                Ok(re) => re,
+                Err(_) => return Vec::new(),
+            };
+            self.data
+                .lock()
+                .unwrap()
+                .keys()
+                .filter(|k| re.is_match(k))
+                .cloned()
+                .collect()
+        }
+    }
+
+    #[test]
+    fn test_default_get_many_implementation() {
+        let cache = MinimalCache::new();
+        cache.set("key1", b"v1".to_vec());
+        cache.set("key2", b"v2".to_vec());
+
+        let results = cache.get_many(&["key1", "key2", "missing"]);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results.get("key1"), Some(&b"v1".to_vec()));
+        assert_eq!(results.get("key2"), Some(&b"v2".to_vec()));
+        assert!(!results.contains_key("missing"));
+    }
+
+    #[test]
+    fn test_default_get_many_empty() {
+        let cache = MinimalCache::new();
+        let results = cache.get_many(&[]);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_default_set_many_implementation() {
+        let cache = MinimalCache::new();
+        let items = vec![
+            ("k1".to_string(), b"v1".to_vec()),
+            ("k2".to_string(), b"v2".to_vec()),
+            ("k3".to_string(), b"v3".to_vec()),
+        ];
+        cache.set_many(&items);
+        assert_eq!(cache.len(), 3);
+        assert_eq!(cache.get("k1"), Some(b"v1".to_vec()));
+        assert_eq!(cache.get("k2"), Some(b"v2".to_vec()));
+        assert_eq!(cache.get("k3"), Some(b"v3".to_vec()));
+    }
+
+    #[test]
+    fn test_default_set_many_empty() {
+        let cache = MinimalCache::new();
+        cache.set_many(&[]);
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn test_default_delete_many_implementation() {
+        let cache = MinimalCache::new();
+        cache.set("k1", b"v1".to_vec());
+        cache.set("k2", b"v2".to_vec());
+        cache.set("k3", b"v3".to_vec());
+
+        let deleted = cache.delete_many(&["k1", "k3", "missing"]);
+        assert_eq!(deleted, 2);
+        assert_eq!(cache.len(), 1);
+        assert!(cache.contains("k2"));
+    }
+
+    #[test]
+    fn test_default_delete_many_empty() {
+        let cache = MinimalCache::new();
+        let deleted = cache.delete_many(&[]);
+        assert_eq!(deleted, 0);
+    }
+
+    #[test]
+    fn test_default_get_stats_implementation() {
+        let cache = MinimalCache::new();
+        cache.set("k1", b"v1".to_vec());
+        cache.set("k2", b"v2".to_vec());
+
+        // Default get_stats returns an empty HashMap
+        let stats = cache.get_stats();
+        assert!(stats.is_empty());
+    }
+
+    #[test]
+    fn test_default_invalidate_implementation() {
+        let cache = MinimalCache::new();
+        cache.set("user:1", b"v1".to_vec());
+        cache.set("user:2", b"v2".to_vec());
+        cache.set("session:1", b"s1".to_vec());
+
+        // Default invalidate uses find_keys_by_pattern + delete_many
+        let deleted = cache.invalidate("user:*");
+        assert_eq!(deleted, 2);
+        assert_eq!(cache.len(), 1);
+        assert!(cache.contains("session:1"));
+    }
 }
