@@ -18,6 +18,7 @@
 //! | [`grpc`](grpc) | gRPC 协议 | `grpc_examples` |
 //! | [`config`](config) | 配置管理 | `http_examples` |
 //! | [`logging`](logging) | 结构化日志 | `logging_examples` |
+//! | [`openapi`](openapi) | OpenAPI 生成 | `openapi_examples` |
 //! | [`combined`](combined) | 组合示例 | `combined_examples` |
 //!
 //! ## 使用方式
@@ -52,8 +53,9 @@
 //! cache_examples = ["sdforge/cache", "sdforge/http"]
 //! grpc_examples = ["sdforge/grpc"]
 //! logging_examples = ["sdforge/logging"]
+//! openapi_examples = ["sdforge/openapi", "http_examples"]
 //! combined_examples = ["http_examples", "mcp_examples", "websocket_examples",
-//!                      "streaming_examples", "security_examples"]
+//!                      "streaming_examples", "security_examples", "openapi_examples"]
 //! ```
 
 //! # Crate 级 lint 配置
@@ -150,6 +152,13 @@ pub mod config;
 /// - [`structured`](logging::structured) - 结构化日志记录
 #[cfg(feature = "logging_examples")]
 pub mod logging;
+
+/// OpenAPI 自动生成示例模块
+///
+/// 包含 OpenAPI 功能示例：
+/// - [`basic`](openapi::basic) - OpenAPI 基础用法（默认规范生成、自定义 builder、手动注册路由）
+#[cfg(feature = "openapi_examples")]
+pub mod openapi;
 
 /// 组合示例模块
 ///

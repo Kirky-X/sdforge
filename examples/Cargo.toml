@@ -19,9 +19,11 @@ thiserror = "~2.0"
 anyhow = "1.0"
 uuid = { version = "~1.23", features = ["v4"] }
 chrono = { version = "~0.4", features = ["serde"] }
+# inventory: needed for manual OpenApiRouteInfo registration in openapi/basic.rs
+inventory = "0.3"
 
 [features]
-default = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "cache_examples", "grpc_examples", "logging_examples", "combined_examples"]
+default = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "cache_examples", "grpc_examples", "logging_examples", "openapi_examples", "combined_examples"]
 http_examples = ["sdforge/http"]
 mcp_examples = ["sdforge/mcp"]
 websocket_examples = ["sdforge/websocket"]
@@ -30,6 +32,7 @@ security_examples = ["sdforge/security"]
 cache_examples = ["sdforge/cache", "sdforge/http"]
 grpc_examples = ["sdforge/grpc"]
 logging_examples = ["sdforge/logging"]
+openapi_examples = ["sdforge/openapi", "http_examples"]
 combined_examples = ["http_examples", "mcp_examples", "websocket_examples",
                      "streaming_examples", "security_examples", "cache_examples",
-                     "grpc_examples", "logging_examples"]
+                     "grpc_examples", "logging_examples", "openapi_examples"]
