@@ -30,3 +30,4 @@
 
 pub mod api_key;
 pub mod comprehensive;
+pub mod auth_failures;
