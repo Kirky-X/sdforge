@@ -10,9 +10,9 @@
 
 #![cfg(feature = "openapi")]
 
+use sdforge::core::ApiError;
 use sdforge::openapi::{generate_openapi_spec, OpenApiBuilder};
 use sdforge::service_api;
-use sdforge::core::ApiError;
 
 // ============================================================================
 // Test fixtures: two `#[service_api]` endpoints.
@@ -138,9 +138,7 @@ fn custom_builder_preserves_routes_with_custom_metadata() {
     let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
     let paths_obj = paths_json.as_object().expect("paths is a JSON object");
     assert!(
-        paths_obj
-            .keys()
-            .any(|k| k == "/api/v1/users"),
+        paths_obj.keys().any(|k| k == "/api/v1/users"),
         "routes must still be collected with custom builder"
     );
 }

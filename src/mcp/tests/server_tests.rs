@@ -7,7 +7,10 @@ use rmcp::handler::server::ServerHandler;
 #[test]
 fn test_build_returns_server_with_tools() {
     let server = build();
-    assert!(server.tool_count() > 0, "server should have registered tools");
+    assert!(
+        server.tool_count() > 0,
+        "server should have registered tools"
+    );
 }
 
 #[test]

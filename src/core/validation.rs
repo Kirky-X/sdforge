@@ -1449,7 +1449,11 @@ mod tests {
         let api_error: ApiError = wrapper.into();
 
         match api_error {
-            ApiError::InvalidInput { message, field, value } => {
+            ApiError::InvalidInput {
+                message,
+                field,
+                value,
+            } => {
                 assert!(message.contains("Validation failed"));
                 assert!(field.is_none());
                 assert!(value.is_none());
@@ -1466,10 +1470,10 @@ mod tests {
     fn test_validate_or_error_success() {
         // When the validation closure succeeds, validate_or_error should
         // return Ok(()).
-        let result: Result<(), ApiError> =
-            validators::validate_or_error(|| Ok(()), || {
-                ValidationErrorsWrapper::new(vec![]).into()
-            });
+        let result: Result<(), ApiError> = validators::validate_or_error(
+            || Ok(()),
+            || ValidationErrorsWrapper::new(vec![]).into(),
+        );
         assert!(result.is_ok());
     }
 
@@ -1477,10 +1481,10 @@ mod tests {
     fn test_validate_or_error_failure() {
         // When the validation closure fails, validate_or_error should
         // invoke the error mapper and return Err.
-        let result: Result<(), ApiError> =
-            validators::validate_or_error(|| Err(validator::ValidationError::new("test")), || {
-                ValidationErrorsWrapper::new(vec![]).into()
-            });
+        let result: Result<(), ApiError> = validators::validate_or_error(
+            || Err(validator::ValidationError::new("test")),
+            || ValidationErrorsWrapper::new(vec![]).into(),
+        );
         assert!(result.is_err());
     }
 
@@ -1571,9 +1575,15 @@ mod tests {
         });
 
         let result = extract_validated::<TestParams>(&json).await;
-        assert!(result.is_err(), "Deserialization failure should produce Err");
+        assert!(
+            result.is_err(),
+            "Deserialization failure should produce Err"
+        );
         let errors = result.unwrap_err();
-        assert!(errors.errors.is_empty(), "Deserialization errors produce empty errors vec");
+        assert!(
+            errors.errors.is_empty(),
+            "Deserialization errors produce empty errors vec"
+        );
     }
 
     /// Test extract_validated returns Err when JSON is missing a required
@@ -1587,7 +1597,10 @@ mod tests {
         });
 
         let result = extract_validated::<TestParams>(&json).await;
-        assert!(result.is_err(), "Missing field should produce deserialization Err");
+        assert!(
+            result.is_err(),
+            "Missing field should produce deserialization Err"
+        );
     }
 
     /// Test extract_validated returns Err when JSON root is not an object
@@ -1597,6 +1610,9 @@ mod tests {
         let json = serde_json::json!([1, 2, 3]);
 
         let result = extract_validated::<TestParams>(&json).await;
-        assert!(result.is_err(), "Non-object JSON should produce deserialization Err");
+        assert!(
+            result.is_err(),
+            "Non-object JSON should produce deserialization Err"
+        );
     }
 }

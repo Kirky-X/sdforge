@@ -467,8 +467,8 @@ mod tests {
 
     #[test]
     fn test_write_log_entry_json_uncolored() {
-        let entry = LogEntry::new(LogLevel::Debug, "api", "Request received")
-            .with_field("path", "/users");
+        let entry =
+            LogEntry::new(LogLevel::Debug, "api", "Request received").with_field("path", "/users");
         let mut buf = Vec::new();
         write_log_entry(&mut buf, &entry, LogFormat::Json, false).unwrap();
         let output = String::from_utf8_lossy(&buf);
@@ -539,12 +539,11 @@ mod tests {
 
     #[test]
     fn test_log_entry_with_fields_multiple() {
-        let entry = LogEntry::new(LogLevel::Info, "test", "msg")
-            .with_fields(vec![
-                ("a".to_string(), serde_json::json!(1)),
-                ("b".to_string(), serde_json::json!("two")),
-                ("c".to_string(), serde_json::json!(true)),
-            ]);
+        let entry = LogEntry::new(LogLevel::Info, "test", "msg").with_fields(vec![
+            ("a".to_string(), serde_json::json!(1)),
+            ("b".to_string(), serde_json::json!("two")),
+            ("c".to_string(), serde_json::json!(true)),
+        ]);
         assert_eq!(entry.fields.len(), 3);
         assert_eq!(entry.fields.get("a"), Some(&serde_json::json!(1)));
     }
@@ -696,16 +695,28 @@ mod tests {
         let output = String::from_utf8_lossy(&buf);
 
         // Colored output should contain ANSI escape codes
-        assert!(output.contains("\x1b[33m"), "Should contain warn color code");
+        assert!(
+            output.contains("\x1b[33m"),
+            "Should contain warn color code"
+        );
         assert!(output.contains("\x1b[0m"), "Should contain reset code");
         // Should contain the fields in the {key=value} format
         assert!(output.contains("user"), "Should contain field key 'user'");
-        assert!(output.contains("admin"), "Should contain field value 'admin'");
+        assert!(
+            output.contains("admin"),
+            "Should contain field value 'admin'"
+        );
         assert!(output.contains("ip"), "Should contain field key 'ip'");
         assert!(output.contains("10.0.0.1"), "Should contain field value");
         // Should contain the fields brace delimiter
-        assert!(output.contains("{"), "Should contain opening brace for fields");
-        assert!(output.contains("}"), "Should contain closing brace for fields");
+        assert!(
+            output.contains("{"),
+            "Should contain opening brace for fields"
+        );
+        assert!(
+            output.contains("}"),
+            "Should contain closing brace for fields"
+        );
     }
 
     #[test]
@@ -719,7 +730,10 @@ mod tests {
         write_log_entry(&mut buf, &entry, LogFormat::Text, true).unwrap();
         let output = String::from_utf8_lossy(&buf);
 
-        assert!(output.contains("\x1b[31m"), "Should contain error color code");
+        assert!(
+            output.contains("\x1b[31m"),
+            "Should contain error color code"
+        );
         // Multiple fields should be comma-separated
         assert!(output.contains(", "), "Should contain field separator");
         assert!(output.contains("query"));
@@ -879,7 +893,10 @@ mod tests {
             .with_field("obj_val", serde_json::json!({"nested": "value"}));
         assert_eq!(entry.fields.len(), 5);
         assert_eq!(entry.fields.get("null_val"), Some(&serde_json::Value::Null));
-        assert_eq!(entry.fields.get("arr_val"), Some(&serde_json::json!([1, 2, 3])));
+        assert_eq!(
+            entry.fields.get("arr_val"),
+            Some(&serde_json::json!([1, 2, 3]))
+        );
     }
 
     /// Test LoggerConfig clone produces an independent copy with all fields.

@@ -1,13 +1,13 @@
 #![allow(unused_imports)]
-use crate::websocket::*;
-use crate::websocket::message::*;
+use crate::core::registration::Registration;
+use crate::websocket::broadcast::*;
 use crate::websocket::connection::*;
 use crate::websocket::handler::*;
-use crate::websocket::broadcast::*;
-use crate::core::registration::Registration;
+use crate::websocket::message::*;
+use crate::websocket::*;
 use futures_util::FutureExt;
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 /// Test WebSocketConnection creation
 #[test]
@@ -155,9 +155,8 @@ fn test_websocket_config_default_no_auth() {
 /// Test WebSocketConfig with BearerAuth configured
 #[test]
 fn test_websocket_config_with_auth() {
-    let auth =
-        crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-            .expect("valid secret");
+    let auth = crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        .expect("valid secret");
     let config = WebSocketConfig {
         auth: Some(auth),
         rate_limit: RateLimitConfig::default(),
@@ -170,9 +169,8 @@ fn test_websocket_config_with_auth() {
 fn test_app_state_with_config() {
     use std::sync::Arc;
     let manager = Arc::new(ConnectionManager::new());
-    let auth =
-        crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-            .expect("valid secret");
+    let auth = crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        .expect("valid secret");
     let config = WebSocketConfig {
         auth: Some(auth),
         rate_limit: RateLimitConfig::default(),
@@ -609,7 +607,9 @@ async fn connection_manager_remove_cleans_up_rate_limit_data() {
     let manager = ConnectionManager::new();
     let config = RateLimitConfig::default();
     let (conn, _) = WebSocketConnection::new("cleanup-test".to_string());
-    manager.add_connection("cleanup-test".to_string(), conn).await;
+    manager
+        .add_connection("cleanup-test".to_string(), conn)
+        .await;
     manager.check_and_record("cleanup-test", &config);
     manager.remove_connection("cleanup-test").await;
     assert!(manager.message_counts.get("cleanup-test").is_none());
@@ -633,7 +633,9 @@ async fn connection_manager_broadcast_empty() {
 async fn connection_manager_broadcast_single() {
     let manager = ConnectionManager::new();
     let (conn, mut rx) = WebSocketConnection::new("single-broadcast".to_string());
-    manager.add_connection("single-broadcast".to_string(), conn).await;
+    manager
+        .add_connection("single-broadcast".to_string(), conn)
+        .await;
     let msg = Arc::new(WebSocketMessage::Notification {
         event: "single".to_string(),
         data: serde_json::json!({"value": 1}),
@@ -811,7 +813,9 @@ fn rate_limit_config_all_min_valid() {
 async fn connection_manager_get_removed_connection() {
     let manager = ConnectionManager::new();
     let (conn, _) = WebSocketConnection::new("removed-test".to_string());
-    manager.add_connection("removed-test".to_string(), conn).await;
+    manager
+        .add_connection("removed-test".to_string(), conn)
+        .await;
     manager.remove_connection("removed-test").await;
     assert!(manager.get_connection("removed-test").await.is_none());
 }
@@ -830,8 +834,12 @@ async fn broadcast_cleans_up_failed_connections() {
     let manager = ConnectionManager::new();
     let (doomed, rx) = WebSocketConnection::new("doomed-conn".to_string());
     let (healthy, mut rx2) = WebSocketConnection::new("healthy-conn".to_string());
-    manager.add_connection("doomed-conn".to_string(), doomed).await;
-    manager.add_connection("healthy-conn".to_string(), healthy).await;
+    manager
+        .add_connection("doomed-conn".to_string(), doomed)
+        .await;
+    manager
+        .add_connection("healthy-conn".to_string(), healthy)
+        .await;
     assert_eq!(manager.connection_count().await, 2);
 
     // Drop the receiver so sends to "doomed-conn" fail.

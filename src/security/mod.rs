@@ -102,7 +102,8 @@ mod tests {
         <AppApiKeyAuth as ApiKeyAuth>::add_key(&auth2, "shared-key", perms);
 
         let inherent_result = auth1.validate_key("shared-key", "127.0.0.1");
-        let trait_result = <AppApiKeyAuth as ApiKeyAuth>::validate_key(&auth2, "shared-key", "127.0.0.1");
+        let trait_result =
+            <AppApiKeyAuth as ApiKeyAuth>::validate_key(&auth2, "shared-key", "127.0.0.1");
 
         assert_eq!(inherent_result, trait_result);
     }

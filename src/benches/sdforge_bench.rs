@@ -177,20 +177,24 @@ fn criterion_benchmark(c: &mut Criterion) {
     for size in [10, 100, 1000].iter() {
         group.throughput(Throughput::Elements(*size as u64));
 
-        group.bench_with_input(criterion::BenchmarkId::from_parameter(size), size, |b, &size| {
-            let mut map = HashMap::new();
-            for i in 0..size {
-                map.insert(i.to_string(), format!("value_{}", i));
-            }
-
-            b.iter(|| {
-                let mut sum = 0;
-                for (key, value) in &map {
-                    sum += key.len() + value.len();
+        group.bench_with_input(
+            criterion::BenchmarkId::from_parameter(size),
+            size,
+            |b, &size| {
+                let mut map = HashMap::new();
+                for i in 0..size {
+                    map.insert(i.to_string(), format!("value_{}", i));
                 }
-                sum
-            })
-        });
+
+                b.iter(|| {
+                    let mut sum = 0;
+                    for (key, value) in &map {
+                        sum += key.len() + value.len();
+                    }
+                    sum
+                })
+            },
+        );
     }
 
     group.finish();
@@ -297,7 +301,12 @@ fn benchmark_cache_operations(c: &mut Criterion) {
     c.bench_function("cache_set_many_100", |b| {
         let local = DashMapCache::new();
         let items: Vec<(String, Vec<u8>)> = (0..100)
-            .map(|i| (format!("batch_key_{}", i), format!("val_{}", i).into_bytes()))
+            .map(|i| {
+                (
+                    format!("batch_key_{}", i),
+                    format!("val_{}", i).into_bytes(),
+                )
+            })
             .collect();
         b.iter(|| local.set_many(&items))
     });
@@ -485,11 +494,7 @@ fn benchmark_bearer_auth(c: &mut Criterion) {
         b.iter(|| {
             auth2.register_token(
                 "new_token".to_string(),
-                AuthContext::new(
-                    Some("u".to_string()),
-                    vec![],
-                    AuthMetadata::default(),
-                ),
+                AuthContext::new(Some("u".to_string()), vec![], AuthMetadata::default()),
             )
         })
     });
@@ -604,9 +609,7 @@ fn benchmark_regex_caching(c: &mut Criterion) {
 fn benchmark_http_router_construction(c: &mut Criterion) {
     use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
 
-    c.bench_function("http_router_build", |b| {
-        b.iter(sdforge::http::build)
-    });
+    c.bench_function("http_router_build", |b| b.iter(sdforge::http::build));
 
     c.bench_function("http_router_build_with_redirect", |b| {
         b.iter(sdforge::http::build_with_redirect)
@@ -661,9 +664,7 @@ criterion_group!(
 /// Benchmark for MCP tool registration/collection (Task 3.6.2)
 #[cfg(feature = "mcp")]
 fn benchmark_mcp_tool_registration(c: &mut Criterion) {
-    c.bench_function("mcp_get_tools", |b| {
-        b.iter(sdforge::get_mcp_tools)
-    });
+    c.bench_function("mcp_get_tools", |b| b.iter(sdforge::get_mcp_tools));
 
     c.bench_function("mcp_init_all_plugins", |b| {
         b.iter(sdforge::init_all_plugins)

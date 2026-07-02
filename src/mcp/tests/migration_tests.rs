@@ -9,12 +9,8 @@ use crate::mcp::{get_mcp_tools, McpToolRegistration};
 
 #[test]
 fn test_mcp_tool_registration() {
-    let registration = McpToolRegistration::new(
-        "test_tool",
-        "v1",
-        create_test_tool,
-        create_test_metadata,
-    );
+    let registration =
+        McpToolRegistration::new("test_tool", "v1", create_test_tool, create_test_metadata);
     assert_eq!(registration.name, "test_tool");
     assert_eq!(registration.version, "v1");
     let tool = registration.create();
