@@ -234,10 +234,15 @@ jobs:
         run: cargo install --locked cargo-tarpaulin
 
       - name: Generate coverage
+        # Use `--features full --lib` instead of `--all-features --workspace` to
+        # avoid timeouts on the macros crate's trybuild integration tests, which
+        # spawn child processes that exceed tarpaulin's test-response timeout.
+        # The .tarpaulin.toml at the repo root already excludes
+        # `src/grpc/pb/*` (auto-generated protobuf) and `macros/*`.
         run: |
           cargo tarpaulin \
-            --all-features \
-            --workspace \
+            --features full \
+            --lib \
             --timeout 120 \
             --out xml \
             --out html \
@@ -246,7 +251,7 @@ jobs:
             --exclude-files "target/*" \
             --exclude-files "examples/*" \
             --exclude-files "temp/*" \
-            --exclude-files "macros/tests/*" \
+            --exclude-files "macros/*" \
             --exclude-files "src/grpc/pb/*"
 
       - name: Upload coverage to Codecov
