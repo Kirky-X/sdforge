@@ -1,0 +1,7 @@
+# Tarpaulin configuration for SDForge
+# Excludes auto-generated protobuf code and proc-macro crate from coverage measurement.
+#
+# Run: cargo tarpaulin --features full --lib
+
+[default_config]
+exclude-files = ["src/grpc/pb/*", "macros/*"]
