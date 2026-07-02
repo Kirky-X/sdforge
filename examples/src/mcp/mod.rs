@@ -45,3 +45,5 @@
 
 pub mod tool_definition;
 pub mod tool_registration;
+pub mod migration_2026;
+pub mod mrtr_example;
