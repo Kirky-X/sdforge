@@ -142,9 +142,18 @@ where
     let (tx, rx) = mpsc::channel(32);
     tokio::spawn(async move {
         let mut stream = Box::pin(stream);
+        // Track whether the loop exited due to idle timeout. Previously the
+        // 30s sleep timeout silently terminated the stream and the code below
+        // unconditionally emitted a `complete` event — making it impossible
+        // for clients to distinguish "source stream ended normally" from
+        // "source stream went idle for 30s and was force-closed".
+        let mut timed_out = false;
 
         while let Some(item) = tokio::select! {
-            _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => None,
+            _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
+                timed_out = true;
+                None
+            },
             next = stream.next() => next,
         } {
             let event = mapper(item);
@@ -166,6 +175,17 @@ where
 
             if tx.send(Ok(sse)).await.is_err() {
                 break;
+            }
+        }
+
+        // If the stream was terminated by the idle timeout, emit an Error
+        // event so clients can distinguish timeout from normal completion.
+        if timed_out {
+            let timeout_event = StreamEvent::<()>::error(
+                "Stream closed due to 30s idle timeout".to_string(),
+            );
+            if let Ok(payload) = serde_json::to_string(&timeout_event) {
+                let _ = tx.send(Ok(format!("data: {}\n\n", payload))).await;
             }
         }
 
@@ -1375,5 +1395,63 @@ mod tests {
             "Body should contain the JSON data, got: {}",
             body_str
         );
+    }
+
+    // ============================================================================
+    // stream_to_sse completion event tests
+    //
+    // The `Err` branch of `serde_json::to_string(&event)` in stream_to_sse
+    // (lines 156–163) is defensive code that handles the theoretical case where
+    // serialization fails. In practice, `stream_to_sse`'s mapper returns
+    // `StreamEvent<serde_json::Value>` (the default type parameter), and
+    // `serde_json::Value`'s `Serialize` implementation never returns `Err`.
+    // Therefore this branch is unreachable through the public API and cannot
+    // be covered by integration tests without modifying production code.
+    //
+    // The tests below verify the reachable behavior: the stream always
+    // terminates with a completion event after all data events.
+    // ============================================================================
+
+    /// Verify that stream_to_sse always emits a completion event as the last
+    /// SSE message, regardless of how many data items were in the input stream.
+    #[tokio::test]
+    async fn test_stream_to_sse_always_emits_completion_event() {
+        use futures_util::StreamExt;
+        use futures_util::stream;
+
+        let values = vec![
+            serde_json::json!(1),
+            serde_json::json!(2),
+            serde_json::json!(3),
+        ];
+        let input_stream = stream::iter(values);
+        let sse_stream = stream_to_sse(input_stream, StreamEvent::data);
+
+        let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
+
+        // Should have 3 data events + 1 completion event = 4 total.
+        assert_eq!(
+            results.len(),
+            4,
+            "Expected 4 events (3 data + 1 complete), got: {:?}",
+            results
+        );
+
+        // The last event should be the completion event.
+        let last = results.last().expect("should have at least one result");
+        assert!(
+            last.contains("complete"),
+            "Last event should be the completion event, got: {}",
+            last
+        );
+
+        // All prior events should be data events.
+        for data_event in &results[..results.len() - 1] {
+            assert!(
+                data_event.contains(r#""type":"data""#),
+                "Non-completion event should be a data event, got: {}",
+                data_event
+            );
+        }
     }
 }
