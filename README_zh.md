@@ -82,7 +82,7 @@
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["http"] }
+sdforge = { version = "0.1", features = ["http"] }
 ```
 
 ---
@@ -130,13 +130,12 @@ SDForge 使用 Cargo features 进行编译时协议选择和特性组合。
 | `mcp`        | MCP 协议 (mcp-sdk 0.0.3)                 | mcp-sdk                                       |
 | `streaming`  | SSE 流式传输支持                         | tokio-stream, futures-util                    |
 | `timestamp`  | 自动向响应添加时间戳                     | chrono                                        |
-| `logging`    | 结构化请求日志                           | tracing, tracing-subscriber, tracing-appender |
-| `security`   | 安全特性 (认证, 限流)                    | dashmap, uuid, hmac, sha2, secrecy           |
-| `hot-reload` | 配置热重载                               | notify                                        |
+| `logging`    | 结构化请求日志                           | chrono, tokio                                 |
+| `security`   | 安全特性 (认证, 限流)                    | dashmap, uuid, hmac, sha2, secrets           |
+| `hot-reload` | 配置热重载                               | http, confers                                 |
 | `websocket`  | WebSocket 支持                           | tokio-tungstenite, axum-extra                |
 | `grpc`       | gRPC 支持                                | tonic, prost                                 |
-| `cache`      | 缓存支持                                 | cached, cached_proc_macro                     |
-| `cache-redis`| Redis 缓存                               | redis                                         |
+| `cache`      | 缓存支持                                 | oxcache, async-trait                          |
 | `full`       | 启用所有特性                             | -                                             |
 
 ### 🔗 特性依赖
@@ -150,8 +149,7 @@ SDForge 使用 Cargo features 进行编译时协议选择和特性组合。
 - `hot-reload`: 需要 `http`
 - `websocket`: 需要 `http`, `streaming`
 - `grpc`: 需要 `http`
-- `cache`: 需要 `http`
-- `cache-redis`: 需要 `cache`
+- `cache`: 独立（使用 http crate 类型，不依赖 sdforge http 特性）
 
 ---
 
@@ -163,7 +161,7 @@ SDForge 使用 Cargo features 进行编译时协议选择和特性组合。
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["http"] }
+sdforge = { version = "0.1", features = ["http"] }
 ```
 
 ### 🤖 仅 MCP
@@ -172,7 +170,7 @@ sdforge = { version = "0.2", features = ["http"] }
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["mcp"] }
+sdforge = { version = "0.1", features = ["mcp"] }
 ```
 
 ### 🔄 双协议
@@ -181,7 +179,7 @@ sdforge = { version = "0.2", features = ["mcp"] }
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["http", "mcp"] }
+sdforge = { version = "0.1", features = ["http", "mcp"] }
 ```
 
 ### 🎯 全功能
@@ -190,7 +188,7 @@ sdforge = { version = "0.2", features = ["http", "mcp"] }
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["full"] }
+sdforge = { version = "0.1", features = ["full"] }
 ```
 
 ---
@@ -434,16 +432,13 @@ cargo clippy --all-features --all-targets
 ## <span id="documentation">📚 文档</span>
 
 - [📖 API 文档](https://docs.rs/sdforge)
-- [📋 API 参考](./docs/API_REFERENCE.md)
-- [🏗️ 架构文档](./docs/ARCHITECTURE.md)
-- [🤝 贡献指南](./docs/CONTRIBUTING.md)
 - [💡 示例](./examples/)
 
 ---
 
 ## <span id="contributing">🤝 贡献</span>
 
-我们欢迎贡献！在提交 Pull Request 之前，请阅读我们的[贡献指南](./docs/CONTRIBUTING.md)。
+我们欢迎贡献！请提交包含清晰变更说明的 Pull Request。
 
 ### 🛠️ 开发设置
 
@@ -506,7 +501,7 @@ sdforge/
 
 **注意**: CLI 二进制仅在启用 `cli` 特性时编译：
 ```toml
-sdforge = { version = "0.2", features = ["cli"] }
+sdforge = { version = "0.1", features = ["cli"] }
 ```
 
 ---
@@ -577,39 +572,29 @@ enabled = true
 ttl_seconds = 300
 max_size_mb = 100
 max_entries = 10000
-
-[cache.redis]
-url = "redis://localhost:6379"
-enabled = false
 ```
 
 ### 📊 内存管理
 
 ```rust
-use sdforge::cache::CacheConfig;
+use sdforge::config::CacheConfig;
 
 let cache_config = CacheConfig {
-    ttl_seconds: 600,
-    max_size_bytes: 50 * 1024 * 1024, // 50MB
-    max_entries: 5000,
-    cacheable_methods: vec!["GET".to_string(), "HEAD".to_string()],
-    cacheable_status_codes: vec![200, 203, 204, 206, 300, 301, 404, 410],
+    enabled: true,
+    default_ttl_secs: 600,
+    max_items: 5000,
+    track_stats: true,
 };
 ```
 
 ### ⚙️ 连接池
 
 ```rust
+use sdforge::config::AppConfig;
 use sdforge::http::build_with_config;
 
-let config = HttpConfig {
-    max_connections: 1000,
-    connection_timeout: Duration::from_secs(30),
-    keep_alive: Duration::from_secs(60),
-    ..Default::default()
-};
-
-let app = build_with_config(config);
+let config = AppConfig::default();
+let app = build_with_config(&config)?;
 ```
 
 ---
