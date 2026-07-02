@@ -7,17 +7,23 @@ This directory contains examples demonstrating how to use the SDForge framework.
 - `src/basics/` - Core API definitions and error handling
 - `src/http/` - HTTP protocol examples (routing, parameters, middleware, versioning)
 - `src/mcp/` - MCP protocol examples (tools, registration)
+  - `tool_definition.rs` - MCP tool definition patterns
+  - `tool_registration.rs` - MCP tool auto-registration via inventory
+  - `migration_2026.rs` - **NEW** MCP 2026-07-28 migration (rmcp 0.16, StatelessServerHandler)
+  - `mrtr_example.rs` - **NEW** Multi Round-Trip Requests (MRTR) session management
 - `src/security/` - Authentication, authorization, rate limiting, audit logging
   - `api_key.rs` - API Key authentication setup and usage
-  - `rate_limiting.rs` - Sliding window rate limiter implementation
-  - `comprehensive.rs` - **NEW** Complete security stack example (API Key + JWT + Rate Limiting + Audit + Cache)
-- `src/cache/` - Memory and Redis caching examples
-  - `performance.rs` - **NEW** Advanced caching patterns (Two-Level, Cache-Aside, Write-Through)
+  - `comprehensive.rs` - Complete security stack example (API Key + JWT + Rate Limiting + Audit + Cache)
+  - `auth_failures.rs` - **NEW** 401 Unauthorized and 403 Forbidden scenarios
+- `src/cache/` - In-memory caching examples (oxcache/dashmap, no external services)
+  - `performance.rs` - Advanced caching patterns (Two-Level, Cache-Aside, Write-Through)
 - `src/config/` - Configuration management and hot reload
 - `src/streaming/` - SSE streaming examples
 - `src/websocket/` - WebSocket examples
 - `src/grpc/` - gRPC examples
 - `src/logging/` - Structured logging examples
+- `src/openapi/` - **NEW** OpenAPI 3.1 spec generation examples
+  - `basic.rs` - OpenApiBuilder usage, generate_openapi_spec(), manual route registration
 - `src/combined/` - Full examples combining multiple features
 
 ## Running Examples
@@ -49,17 +55,18 @@ Some examples require external services:
 
 ## Feature Matrix
 
-| Module | Default | HTTP | MCP | Streaming | Security | Cache | WebSocket | gRPC | Logging |
-|--------|---------|------|-----|-----------|----------|-------|-----------|------|---------|
-| basic | ✓ | - | - | - | - | - | - | - | - |
-| http | - | ✓ | - | - | - | - | - | - | - |
-| mcp | - | - | ✓ | - | - | - | - | - | - |
-| security | - | - | - | - | ✓ | - | - | - | - |
-| cache | - | - | - | - | - | ✓ | - | - | - |
-| streaming | - | - | - | ✓ | - | - | - | - | - |
-| websocket | - | - | - | - | - | - | ✓ | - | - |
-| grpc | - | - | - | - | - | - | - | ✓ | - |
-| logging | - | - | - | - | - | - | - | - | ✓ |
+| Module | Default | HTTP | MCP | Streaming | Security | Cache | WebSocket | gRPC | Logging | OpenAPI |
+|--------|---------|------|-----|-----------|----------|-------|-----------|------|---------|---------|
+| basic | ✓ | - | - | - | - | - | - | - | - | - |
+| http | - | ✓ | - | - | - | - | - | - | - | - |
+| mcp | - | - | ✓ | - | - | - | - | - | - | - |
+| security | - | - | - | - | ✓ | - | - | - | - | - |
+| cache | - | - | - | - | - | ✓ | - | - | - | - |
+| streaming | - | - | - | ✓ | - | - | - | - | - | - |
+| websocket | - | - | - | - | - | - | ✓ | - | - | - |
+| grpc | - | - | - | - | - | - | - | ✓ | - | - |
+| logging | - | - | - | - | - | - | - | - | ✓ | - |
+| openapi | ✓ | ✓ | - | - | - | - | - | - | - | ✓ |
 
 ## Next Steps
 
