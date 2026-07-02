@@ -22,10 +22,7 @@ mod mcp_tool_instance_tests {
                     }
                 })
             }
-            fn call(
-                &self,
-                input: Option<serde_json::Value>,
-            ) -> Result<CallToolResult, McpError> {
+            fn call(&self, input: Option<serde_json::Value>) -> Result<CallToolResult, McpError> {
                 Ok(CallToolResult::success(vec![rmcp::model::Content::text(
                     input.map(|v| v.to_string()).unwrap_or_default(),
                 )]))
@@ -53,10 +50,7 @@ mod mcp_tool_instance_tests {
                     "required": ["a", "b"]
                 })
             }
-            fn call(
-                &self,
-                input: Option<serde_json::Value>,
-            ) -> Result<CallToolResult, McpError> {
+            fn call(&self, input: Option<serde_json::Value>) -> Result<CallToolResult, McpError> {
                 let val = input.unwrap_or_default();
                 let a = val.get("a").and_then(|v| v.as_f64()).unwrap_or(0.0);
                 let b = val.get("b").and_then(|v| v.as_f64()).unwrap_or(0.0);
@@ -149,10 +143,7 @@ mod mcp_tool_instance_tests {
                 fn input_schema(&self) -> serde_json::Value {
                     serde_json::json!({"type": "object"})
                 }
-                fn call(
-                    &self,
-                    _: Option<serde_json::Value>,
-                ) -> Result<CallToolResult, McpError> {
+                fn call(&self, _: Option<serde_json::Value>) -> Result<CallToolResult, McpError> {
                     Ok(CallToolResult::success(vec![rmcp::model::Content::text(
                         "Hello".to_string(),
                     )]))

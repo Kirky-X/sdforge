@@ -86,7 +86,8 @@ mod mcp_protocol_tests {
                 })
             }
             fn call(&self, input: Option<Value>) -> Result<CallToolResult, McpError> {
-                let input = input.ok_or_else(|| McpError::invalid_params("Input required", None))?;
+                let input =
+                    input.ok_or_else(|| McpError::invalid_params("Input required", None))?;
                 let a = input
                     .get("a")
                     .and_then(|v| v.as_f64())
@@ -455,9 +456,7 @@ mod mcp_protocol_tests {
         assert!(user_props.get("name").is_some());
         assert!(user_props.get("age").is_some());
 
-        let user_required = schema["properties"]["user"]["required"]
-            .as_array()
-            .unwrap();
+        let user_required = schema["properties"]["user"]["required"].as_array().unwrap();
         assert!(user_required.contains(&serde_json::json!("name")));
     }
 
@@ -584,12 +583,7 @@ mod mcp_protocol_tests {
         fn create_test_metadata() -> ApiMetadata {
             ApiMetadata::default()
         }
-        let reg = McpToolRegistration::new(
-            "echo",
-            "v1",
-            create_test_tool,
-            create_test_metadata,
-        );
+        let reg = McpToolRegistration::new("echo", "v1", create_test_tool, create_test_metadata);
         assert_eq!(reg.name, "echo");
         assert_eq!(reg.version, "v1");
 
@@ -612,12 +606,7 @@ mod mcp_protocol_tests {
                 false,
             )
         }
-        let reg = McpToolRegistration::new(
-            "math",
-            "v2",
-            create_test_tool,
-            create_test_metadata,
-        );
+        let reg = McpToolRegistration::new("math", "v2", create_test_tool, create_test_metadata);
 
         let metadata = reg.metadata();
         assert_eq!(metadata.name(), "math");

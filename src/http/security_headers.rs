@@ -179,7 +179,9 @@ mod tests {
         };
         let result = headers.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Invalid X-Content-Type-Options"));
+        assert!(result
+            .unwrap_err()
+            .contains("Invalid X-Content-Type-Options"));
     }
 
     #[test]

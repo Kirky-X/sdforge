@@ -436,8 +436,8 @@ fn test_error_context_serialization() {
 /// Test internal_with_context() includes context
 #[test]
 fn test_internal_with_context() {
-    let ctx = ErrorContext::current()
-        .with_extra("operation".to_string(), "database_query".to_string());
+    let ctx =
+        ErrorContext::current().with_extra("operation".to_string(), "database_query".to_string());
 
     let error = ApiError::internal_with_context("Database error", "DB001", ctx);
 
@@ -555,11 +555,8 @@ fn test_error_chain_propagation() {
     unsafe impl Send for BottomError {}
     unsafe impl Sync for BottomError {}
 
-    let bottom = ApiError::internal_with_source(
-        "Base error",
-        "BASE001",
-        BottomError("database failure"),
-    );
+    let bottom =
+        ApiError::internal_with_source("Base error", "BASE001", BottomError("database failure"));
 
     // The source should be accessible
     assert!(bottom.source().is_some());

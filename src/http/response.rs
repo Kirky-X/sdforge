@@ -353,7 +353,9 @@ mod tests {
     fn test_build_json_response_with_various_status_codes() {
         #[derive(serde::Serialize)]
         struct Empty;
-        for status in [200u16, 201, 204, 301, 400, 401, 403, 404, 422, 429, 500, 503] {
+        for status in [
+            200u16, 201, 204, 301, 400, 401, 403, 404, 422, 429, 500, 503,
+        ] {
             let resp = build_json_response(status, &Empty, "fallback");
             assert_eq!(
                 resp.status(),

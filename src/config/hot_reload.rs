@@ -281,7 +281,10 @@ mod tests {
             .await
             .expect("Watcher creation should succeed");
 
-        let config = watcher.get().await.expect("get() should parse valid config");
+        let config = watcher
+            .get()
+            .await
+            .expect("get() should parse valid config");
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 3000);
         assert_eq!(config.server.request_timeout_secs, 60);
@@ -300,10 +303,7 @@ mod tests {
             .expect("Watcher creation should succeed");
 
         let result = watcher.get().await;
-        assert!(
-            result.is_err(),
-            "get() should fail on invalid TOML content"
-        );
+        assert!(result.is_err(), "get() should fail on invalid TOML content");
     }
 
     #[tokio::test]
@@ -427,11 +427,7 @@ mod tests {
 
         // Wait for the watcher to detect the change and emit an event.
         // Use a timeout to avoid hanging if the watcher doesn't fire.
-        let event = tokio::time::timeout(
-            tokio::time::Duration::from_secs(3),
-            rx.recv(),
-        )
-        .await;
+        let event = tokio::time::timeout(tokio::time::Duration::from_secs(3), rx.recv()).await;
 
         let event_opt: Option<ConfigEvent> = event.unwrap_or_default();
         handle_watcher_event(event_opt, Some(("0.0.0.0", 9090)));
@@ -467,11 +463,7 @@ mod tests {
         // Overwrite with invalid TOML to trigger the Error branch (lines 50-51)
         std::fs::write(&config_path, "invalid toml content = = =").unwrap();
 
-        let event = tokio::time::timeout(
-            tokio::time::Duration::from_secs(3),
-            rx.recv(),
-        )
-        .await;
+        let event = tokio::time::timeout(tokio::time::Duration::from_secs(3), rx.recv()).await;
 
         let event_opt: Option<ConfigEvent> = event.unwrap_or_default();
         handle_watcher_event(event_opt, None);
@@ -483,11 +475,7 @@ mod tests {
     async fn test_watcher_event_timeout_arm() {
         let (_tx, mut rx) = mpsc::channel::<ConfigEvent>(1);
 
-        let event = tokio::time::timeout(
-            tokio::time::Duration::from_millis(10),
-            rx.recv(),
-        )
-        .await;
+        let event = tokio::time::timeout(tokio::time::Duration::from_millis(10), rx.recv()).await;
 
         let event_opt: Option<ConfigEvent> = event.unwrap_or_default();
         handle_watcher_event(event_opt, None);
@@ -525,11 +513,7 @@ mod tests {
         // event is emitted — the test just verifies no panic occurs.
         std::fs::write(&config_path, b"\xff\xfe\x00invalid utf8").unwrap();
 
-        let event = tokio::time::timeout(
-            tokio::time::Duration::from_secs(2),
-            rx.recv(),
-        )
-        .await;
+        let event = tokio::time::timeout(tokio::time::Duration::from_secs(2), rx.recv()).await;
 
         let event_opt: Option<ConfigEvent> = event.unwrap_or_default();
         // No event expected (read failure silently continues the loop).
@@ -572,12 +556,21 @@ mod tests {
         let config = AppConfig::default();
         let reloaded = ConfigEvent::Reloaded(Box::new(config));
         let debug_str = format!("{:?}", reloaded);
-        assert!(debug_str.contains("Reloaded"), "Debug should contain variant name");
+        assert!(
+            debug_str.contains("Reloaded"),
+            "Debug should contain variant name"
+        );
 
         let error = ConfigEvent::Error("test error".to_string());
         let debug_str = format!("{:?}", error);
-        assert!(debug_str.contains("Error"), "Debug should contain variant name");
-        assert!(debug_str.contains("test error"), "Debug should contain error message");
+        assert!(
+            debug_str.contains("Error"),
+            "Debug should contain variant name"
+        );
+        assert!(
+            debug_str.contains("test error"),
+            "Debug should contain error message"
+        );
     }
 
     /// Test ConfigEvent Clone produces an equal value. Covers the derived
@@ -616,7 +609,10 @@ mod tests {
         retrieved2.server.port = 9999;
 
         let retrieved3 = manager.get().await;
-        assert_eq!(retrieved3.server.port, 5000, "Manager state should be unchanged");
+        assert_eq!(
+            retrieved3.server.port, 5000,
+            "Manager state should be unchanged"
+        );
     }
 
     /// Test ConfigManager update() then get() returns the new config, and a
@@ -635,7 +631,10 @@ mod tests {
         manager.update(config2).await;
 
         let final_config = manager.get().await;
-        assert_eq!(final_config.server.host, "second.host", "Second update should win");
+        assert_eq!(
+            final_config.server.host, "second.host",
+            "Second update should win"
+        );
     }
 
     /// Test ConfigWatcherImpl::new succeeds with a directory path (not just
@@ -646,7 +645,11 @@ mod tests {
         let dir_path = temp_dir.path().to_path_buf();
 
         let result = ConfigWatcherImpl::new(dir_path).await;
-        assert!(result.is_ok(), "Watcher should be created for a directory: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Watcher should be created for a directory: {:?}",
+            result.err()
+        );
         let (watcher, _rx) = result.unwrap();
         assert!(watcher.path().is_dir(), "Path should be the directory");
     }

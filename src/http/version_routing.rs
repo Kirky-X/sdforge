@@ -154,10 +154,9 @@ pub async fn version_redirect_middleware(
                     // Add Sunset header with date. Skip the header (rather than panicking)
                     // if the configured sunset_date contains invalid header bytes.
                     if let Ok(val) = axum::http::HeaderValue::from_str(sunset_date) {
-                        response.headers_mut().insert(
-                            axum::http::header::HeaderName::from_static("Sunset"),
-                            val,
-                        );
+                        response
+                            .headers_mut()
+                            .insert(axum::http::header::HeaderName::from_static("Sunset"), val);
                     }
 
                     // Add Link header to newer version
@@ -167,8 +166,7 @@ pub async fn version_redirect_middleware(
                         let link_header =
                             format!("</api/{}>; rel=\"successor-version\"", newer_version);
                         if let Ok(val) = axum::http::HeaderValue::from_str(&link_header) {
-                            response.headers_mut()
-                                .insert(axum::http::header::LINK, val);
+                            response.headers_mut().insert(axum::http::header::LINK, val);
                         }
                     }
                 }
@@ -1294,11 +1292,7 @@ mod tests {
 
         let config = VersionRouterConfig {
             default_version: "v3".to_string(),
-            supported_versions: vec![
-                "v1".to_string(),
-                "v2".to_string(),
-                "v3".to_string(),
-            ],
+            supported_versions: vec!["v1".to_string(), "v2".to_string(), "v3".to_string()],
             redirect_unknown: true,
             deprecated_versions: deprecated,
             sunset_header: "Sunset".to_string(),
@@ -1336,12 +1330,7 @@ mod tests {
         for path in &["/healthz", "/metrics"] {
             let response = router
                 .clone()
-                .oneshot(
-                    Request::builder()
-                        .uri(*path)
-                        .body(Body::empty())
-                        .unwrap(),
-                )
+                .oneshot(Request::builder().uri(*path).body(Body::empty()).unwrap())
                 .await
                 .unwrap();
             assert_eq!(

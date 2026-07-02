@@ -14,7 +14,10 @@ pub(crate) const MAX_PROJECT_NAME_LENGTH: usize = 64;
 pub enum GeneratorError {
     /// Project name validation failed
     #[error("Project name validation failed: {0}")]
-    #[allow(dead_code, reason = "used in tests; production code uses more specific variants")]
+    #[allow(
+        dead_code,
+        reason = "used in tests; production code uses more specific variants"
+    )]
     InvalidProjectName(String),
 
     /// Project name is empty

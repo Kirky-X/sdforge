@@ -181,9 +181,8 @@ where
         // If the stream was terminated by the idle timeout, emit an Error
         // event so clients can distinguish timeout from normal completion.
         if timed_out {
-            let timeout_event = StreamEvent::<()>::error(
-                "Stream closed due to 30s idle timeout".to_string(),
-            );
+            let timeout_event =
+                StreamEvent::<()>::error("Stream closed due to 30s idle timeout".to_string());
             if let Ok(payload) = serde_json::to_string(&timeout_event) {
                 let _ = tx.send(Ok(format!("data: {}\n\n", payload))).await;
             }
@@ -1177,8 +1176,9 @@ mod tests {
         use futures_util::stream;
 
         let input_stream = stream::iter(vec![42i64]);
-        let sse_stream =
-            stream_to_sse(input_stream, |n| StreamEvent::data(serde_json::json!({"value": n})));
+        let sse_stream = stream_to_sse(input_stream, |n| {
+            StreamEvent::data(serde_json::json!({"value": n}))
+        });
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
@@ -1273,7 +1273,9 @@ mod tests {
 
         // Verify that serializable items pass through the Ok branch.
         let stream = futures_util::stream::iter(vec![1i32, 2i32, 3i32]);
-        let sse_stream = stream_to_sse(stream, |item| StreamEvent::data(serde_json::Value::from(item)));
+        let sse_stream = stream_to_sse(stream, |item| {
+            StreamEvent::data(serde_json::Value::from(item))
+        });
 
         let mut sse_stream = Box::pin(sse_stream);
         let mut count = 0;
@@ -1303,7 +1305,9 @@ mod tests {
         let (tx_stream, rx_stream) = mpsc::channel::<i32>(100);
         let stream = ReceiverStream::new(rx_stream);
 
-        let sse_stream = stream_to_sse(stream, |item| StreamEvent::data(serde_json::Value::from(item)));
+        let sse_stream = stream_to_sse(stream, |item| {
+            StreamEvent::data(serde_json::Value::from(item))
+        });
 
         // Drop the receiver side immediately to cause send errors.
         drop(sse_stream);
@@ -1341,10 +1345,7 @@ mod tests {
         // Verify SSE headers are set correctly
         assert_eq!(http_response.status(), 200);
         let headers = http_response.headers();
-        assert_eq!(
-            headers.get("content-type").unwrap(),
-            "text/event-stream"
-        );
+        assert_eq!(headers.get("content-type").unwrap(), "text/event-stream");
         assert_eq!(headers.get("cache-control").unwrap(), "no-cache");
         assert_eq!(headers.get("connection").unwrap(), "keep-alive");
         assert_eq!(headers.get("x-accel-buffering").unwrap(), "no");
@@ -1416,8 +1417,8 @@ mod tests {
     /// SSE message, regardless of how many data items were in the input stream.
     #[tokio::test]
     async fn test_stream_to_sse_always_emits_completion_event() {
-        use futures_util::StreamExt;
         use futures_util::stream;
+        use futures_util::StreamExt;
 
         let values = vec![
             serde_json::json!(1),

@@ -154,9 +154,7 @@ pub async fn build_server_with_config(
         Server::builder().layer(tonic::service::InterceptorLayer::new(auth_interceptor))
     };
     #[cfg(not(feature = "security"))]
-    let mut builder = {
-        Server::builder()
-    };
+    let mut builder = { Server::builder() };
 
     // Apply concurrency limit from config (previously ignored — H-8/DEBT-6).
     // tonic 0.14 exposes per-connection stream limits via concurrency_limit_per_connection;
@@ -1245,8 +1243,7 @@ mod tests {
             )
         }
 
-        let registration =
-            GrpcRouteRegistration::new("", "v1", create_route, ApiMetadata::default);
+        let registration = GrpcRouteRegistration::new("", "v1", create_route, ApiMetadata::default);
 
         assert_eq!(registration.name(), "");
     }
@@ -1956,11 +1953,8 @@ mod tests {
     async fn test_build_server_starts_serving_on_valid_address() {
         use std::time::Duration;
 
-        let result = tokio::time::timeout(
-            Duration::from_millis(200),
-            build_server("127.0.0.1:0"),
-        )
-        .await;
+        let result =
+            tokio::time::timeout(Duration::from_millis(200), build_server("127.0.0.1:0")).await;
 
         match result {
             Ok(Ok(())) => panic!("Server unexpectedly returned Ok before timeout"),

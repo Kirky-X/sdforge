@@ -336,20 +336,24 @@ mod tests {
     fn test_service_error_serialization_omits_details_when_none() {
         let error = ServiceError::new("CODE", "msg", 400);
         let json = serde_json::to_string(&error).unwrap();
-        assert!(!json.contains("details"), "details should be omitted when None: {}", json);
+        assert!(
+            !json.contains("details"),
+            "details should be omitted when None: {}",
+            json
+        );
     }
 
     /// Test ServiceError serialization includes details when Some.
     #[test]
     fn test_service_error_serialization_includes_details_when_some() {
-        let error = ServiceError::with_details(
-            "CODE",
-            "msg",
-            serde_json::json!({"key": "value"}),
-            400,
-        );
+        let error =
+            ServiceError::with_details("CODE", "msg", serde_json::json!({"key": "value"}), 400);
         let json = serde_json::to_string(&error).unwrap();
-        assert!(json.contains("details"), "details should be included when Some: {}", json);
+        assert!(
+            json.contains("details"),
+            "details should be included when Some: {}",
+            json
+        );
     }
 
     /// Test ServiceResponse::is_success returns false for error responses.

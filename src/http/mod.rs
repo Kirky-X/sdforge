@@ -1772,8 +1772,7 @@ mod tests {
             Hmac::<Sha256>::new_from_slice(secret).expect("HMAC can take key of any size");
         mac.update(signing_input.as_bytes());
         let signature = mac.finalize().into_bytes();
-        let signature_b64 =
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature);
+        let signature_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(signature);
 
         format!("{}.{}", signing_input, signature_b64)
     }
@@ -2169,7 +2168,11 @@ type = "none"
         };
 
         let result = build_with_config(&config);
-        assert!(result.is_ok(), "Minimal config should build: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Minimal config should build: {:?}",
+            result.err()
+        );
     }
 
     // ============================================================================
@@ -2195,9 +2198,7 @@ type = "none"
     /// x-request-id header is present.
     #[test]
     fn test_get_or_generate_request_id_generates_valid_uuid() {
-        let req = axum::http::Request::builder()
-            .body(Body::empty())
-            .unwrap();
+        let req = axum::http::Request::builder().body(Body::empty()).unwrap();
         let id = get_or_generate_request_id(&req);
         // Generated UUIDs are 36 chars (8-4-4-4-12) with hyphens.
         assert!(
