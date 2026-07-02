@@ -695,17 +695,9 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Build parameter unwrapping logic
     // All parameter types use the same unwrapping pattern: extract .0 field
-    let _param_unwraps: Vec<_> = params // Currently unused but kept for future use
-        .iter()
-        .map(|p| {
-            let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
-            // All parameter kinds use identical unwrapping: extract first element
-            quote! { let #name_ident = #name_ident.0; }
-        })
-        .collect();
-
-    // Build parameter unwrapping logic
-    // All parameter types use the same unwrapping pattern: extract .0 field
+    //
+    // Previously this block was duplicated verbatim (the second definition
+    // shadowed the first). The duplicate has been removed.
     let _param_unwraps: Vec<_> = params // Currently unused but kept for future use
         .iter()
         .map(|p| {
@@ -1001,6 +993,20 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                 #register_fn_name,
                 #metadata_fn_name,
             ));
+            // When the downstream crate enables the `openapi` feature, also
+            // register an `OpenApiRouteInfo` entry so `generate_openapi_spec`
+            // can emit this route. The path/method/description are sourced
+            // from the same macro arguments as the HTTP route above; tags is
+            // kept empty so users can group routes via the utoipa tag API.
+            #[cfg(feature = "openapi")]
+            sdforge::inventory::submit!(sdforge::openapi::OpenApiRouteInfo::new(
+                #http_path,
+                #http_method_upper,
+                #description_literal,
+                #description_literal,
+                #version,
+                &[],
+            ));
         }
     } else {
         quote! {}
@@ -1066,13 +1072,13 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         let mcp_tool_impl = if has_state_param {
             // MCP tools with State parameters are not supported - generate a stub that returns error
             quote! {
-                fn call(&self, _input: Option<serde_json::Value>) -> anyhow::Result<sdforge::mcp_sdk::types::CallToolResponse> {
-                    Err(anyhow::anyhow!("MCP tool with State parameters is not supported. Use HTTP API instead."))
+                fn call(&self, _input: Option<serde_json::Value>) -> Result<rmcp::model::CallToolResult, rmcp::model::ErrorData> {
+                    Err(rmcp::model::ErrorData::invalid_params("MCP tool with State parameters is not supported. Use HTTP API instead.", None))
                 }
             }
         } else {
             quote! {
-                fn call(&self, input: Option<serde_json::Value>) -> anyhow::Result<sdforge::mcp_sdk::types::CallToolResponse> {
+                fn call(&self, input: Option<serde_json::Value>) -> Result<rmcp::model::CallToolResult, rmcp::model::ErrorData> {
                     use sdforge::prelude::*;
                     use tokio::runtime::{Handle, Runtime};
 
@@ -1089,28 +1095,32 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                             }
                             Err(_) => {
                                 let rt = Runtime::new()
-                                    .map_err(|e| anyhow::anyhow!("Failed to create runtime: {}", e))?;
+                                    .map_err(|e| rmcp::model::ErrorData::internal_error(
+                                        format!("Failed to create runtime: {}", e), None))?;
                                 rt.block_on(async { #mcp_call_logic })
                             }
                         };
-                    let result = inner_result?;
+                    let result = inner_result
+                        .map_err(|e| rmcp::model::ErrorData::internal_error(format!("{}", e), None))?;
 
                     match result {
                         Ok(response) => {
                             let response_json = serde_json::to_value(response)
-                                .map_err(|e| anyhow::anyhow!("Failed to serialize response: {}", e))?;
-                            Ok(sdforge::mcp_sdk::types::CallToolResponse {
-                                content: vec![sdforge::mcp_sdk::types::ToolResponseContent::Text {
-                                    text: serde_json::to_string(&response_json)
-                                        .map_err(|e| anyhow::anyhow!("Failed to stringify response: {}", e))?,
-                                }],
-                                is_error: Some(false),
+                                .map_err(|e| rmcp::model::ErrorData::internal_error(
+                                    format!("Failed to serialize response: {}", e), None))?;
+                            Ok(rmcp::model::CallToolResult {
+                                content: vec![rmcp::model::Content::text(
+                                    serde_json::to_string(&response_json)
+                                        .map_err(|e| rmcp::model::ErrorData::internal_error(
+                                            format!("Failed to stringify response: {}", e), None))?,
+                                )],
+                                structured_content: None,
+                                is_error: None,
                                 meta: None,
                             })
                         }
                         Err(e) => {
                             let error_json = serde_json::to_value(e)
-                                .map_err(|e| anyhow::anyhow!("Failed to serialize error"))
                                 .unwrap_or_else(|_| {
                                     serde_json::json!({
                                         "success": false,
@@ -1120,11 +1130,13 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                                         }
                                     })
                                 });
-                            Ok(sdforge::mcp_sdk::types::CallToolResponse {
-                                content: vec![sdforge::mcp_sdk::types::ToolResponseContent::Text {
-                                    text: serde_json::to_string(&error_json)
-                                        .map_err(|e| anyhow::anyhow!("Failed to stringify error: {}", e))?,
-                                }],
+                            Ok(rmcp::model::CallToolResult {
+                                content: vec![rmcp::model::Content::text(
+                                    serde_json::to_string(&error_json)
+                                        .map_err(|e| rmcp::model::ErrorData::internal_error(
+                                            format!("Failed to stringify error: {}", e), None))?,
+                                )],
+                                structured_content: None,
                                 is_error: Some(true),
                                 meta: None,
                             })
@@ -1152,19 +1164,19 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
 
             #[cfg(feature = "mcp")]
             impl #mcp_struct_name {
-                fn create() -> std::sync::Arc<dyn sdforge::mcp_sdk::tools::Tool> {
-                    std::sync::Arc::new(Self) as std::sync::Arc<dyn sdforge::mcp_sdk::tools::Tool>
+                fn create() -> std::sync::Arc<dyn sdforge::mcp::SdForgeTool> {
+                    std::sync::Arc::new(Self) as std::sync::Arc<dyn sdforge::mcp::SdForgeTool>
                 }
             }
 
             #[cfg(feature = "mcp")]
-            impl sdforge::mcp_sdk::tools::Tool for #mcp_struct_name {
-                fn name(&self) -> String {
-                    #mcp_tool_name.to_string()
+            impl sdforge::mcp::SdForgeTool for #mcp_struct_name {
+                fn name(&self) -> &str {
+                    #mcp_tool_name
                 }
 
-                fn description(&self) -> String {
-                    #mcp_tool_description.to_string()
+                fn description(&self) -> &str {
+                    #mcp_tool_description
                 }
 
                 fn input_schema(&self) -> serde_json::Value {
@@ -1179,7 +1191,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #[cfg(feature = "mcp")]
-            fn #mcp_create_fn_name() -> std::sync::Arc<dyn sdforge::mcp_sdk::tools::Tool> {
+            fn #mcp_create_fn_name() -> std::sync::Arc<dyn sdforge::mcp::SdForgeTool> {
                 #mcp_struct_name::create()
             }
 

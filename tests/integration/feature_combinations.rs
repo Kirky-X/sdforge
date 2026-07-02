@@ -24,7 +24,7 @@ mod mcp_only_tests {
     #[tokio::test]
     async fn test_mcp_server_runs() {
         use sdforge::mcp::build;
-        let _server = build().await;
+        let _server = build();
         // If we get here without panicking, the build succeeded
     }
 }
@@ -37,7 +37,7 @@ mod http_mcp_tests {
         use sdforge::mcp::build as mcp_build;
 
         let _http_app = http_build();
-        let _mcp_server = mcp_build().await;
+        let _mcp_server = mcp_build();
         // If we get here without panicking, both builds succeeded
     }
 }
@@ -60,7 +60,7 @@ mod full_feature_tests {
         use sdforge::mcp::build as mcp_build;
 
         let _http_app = http_build();
-        let _mcp_server = mcp_build().await;
+        let _mcp_server = mcp_build();
         // If we get here without panicking, both builds succeeded
     }
 }
