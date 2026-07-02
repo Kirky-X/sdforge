@@ -302,19 +302,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=========================================\n");
 
     // Initialize two-level cache
-    let two_level_cache = TwoLevelCache::new(1000); // L1 max 1000 items
+    let _two_level_cache = TwoLevelCache::new(1000); // L1 max 1000 items
 
     println!("✓ Two-Level Cache initialized:");
     println!("  L1 Cache: Max {} items (fast access)", 1000);
     println!("  L2 Cache: Unlimited (slower access)\n");
 
     // Initialize cache-aside pattern
-    let cache_aside = CacheAsidePattern::new(Arc::new(DashMapCache::new()));
+    let _cache_aside = CacheAsidePattern::new(Arc::new(DashMapCache::new()));
 
     println!("✓ Cache-Aside Pattern configured\n");
 
     // Initialize write-through pattern
-    let write_through = WriteThroughPattern::new(Arc::new(DashMapCache::new()));
+    let _write_through = WriteThroughPattern::new(Arc::new(DashMapCache::new()));
 
     println!("✓ Write-Through Pattern configured\n");
 
