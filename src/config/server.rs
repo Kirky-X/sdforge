@@ -55,34 +55,9 @@ impl ServerConfig {
 #[cfg(feature = "validation")]
 impl crate::config::ValidateConfig for ServerConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
-        use crate::config::ConfigError;
-
-        // Validate port range
-        if self.port == 0 {
-            return Err(ConfigError::ValidationError(
-                "Server port cannot be 0".into(),
-            ));
-        }
-
-        // Validate timeout is reasonable
-        if self.request_timeout_secs == 0 {
-            return Err(ConfigError::ValidationError(
-                "Server request_timeout_secs cannot be 0".into(),
-            ));
-        }
-
-        if self.request_timeout_secs > 86400 {
-            return Err(ConfigError::ValidationError(
-                "Server request_timeout_secs should not exceed 86400 seconds (24 hours)".into(),
-            ));
-        }
-
-        // Validate CORS if present
-        if let Some(ref cors) = self.cors {
-            cors.validate()?;
-        }
-
-        Ok(())
+        // Delegate to inherent method to keep a single source of truth.
+        // Previously this body was a verbatim duplicate of the inherent impl.
+        ServerConfig::validate(self)
     }
 }
 
@@ -219,5 +194,98 @@ mod tests {
         let deserialized: TlsConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.cert_path(), "/path/to/cert.pem");
         assert_eq!(deserialized.key_path(), "/path/to/key.pem");
+    }
+
+    // ============================================================================
+    // validate() with Some(cors) branch coverage
+    //
+    // The `if let Some(ref cors) = self.cors { cors.validate()?; }` branch in
+    // ServerConfig::validate() was previously uncovered: test_server_config_with_cors
+    // constructs a config with CORS but never calls validate(), while the other
+    // validate tests use cors: None.
+    // ============================================================================
+
+    /// Test ServerConfig::validate() succeeds when a valid CorsConfig is
+    /// present. Covers the `if let Some(ref cors)` branch with a passing
+    /// cors.validate() call.
+    #[test]
+    fn test_server_config_validate_with_valid_cors() {
+        let config = ServerConfig {
+            host: "localhost".to_string(),
+            port: 8080,
+            request_timeout_secs: 30,
+            cors: Some(CorsConfig {
+                allowed_origins: vec!["http://localhost:3000".to_string()],
+                allowed_methods: vec!["GET".to_string()],
+                allowed_headers: vec!["Authorization".to_string()],
+            }),
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    /// Test ServerConfig::validate() propagates the error when the CorsConfig
+    /// is invalid (empty allowed_origins). Covers the `cors.validate()?` error
+    /// propagation path via the `?` operator.
+    #[test]
+    fn test_server_config_validate_propagates_cors_error() {
+        let config = ServerConfig {
+            host: "localhost".to_string(),
+            port: 8080,
+            request_timeout_secs: 30,
+            cors: Some(CorsConfig {
+                allowed_origins: vec![],
+                allowed_methods: vec!["GET".to_string()],
+                allowed_headers: vec![],
+            }),
+        };
+        let result = config.validate();
+        assert!(result.is_err(), "Invalid CORS should propagate validation error");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("empty"), "Error should mention empty origins: {}", err_msg);
+    }
+
+    /// Test ServerConfig::validate() propagates the error when the CorsConfig
+    /// has an invalid origin format (missing scheme). Covers the
+    /// `cors.validate()?` error propagation path for invalid origin format.
+    #[test]
+    fn test_server_config_validate_propagates_invalid_origin_error() {
+        let config = ServerConfig {
+            host: "localhost".to_string(),
+            port: 8080,
+            request_timeout_secs: 30,
+            cors: Some(CorsConfig {
+                allowed_origins: vec!["localhost:3000".to_string()],
+                allowed_methods: vec!["GET".to_string()],
+                allowed_headers: vec![],
+            }),
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid CORS origin"));
+    }
+
+    /// Test ServerConfig with boundary timeout value (exactly 86400) passes
+    /// validation. Covers the `>` boundary of the timeout check.
+    #[test]
+    fn test_server_config_validate_boundary_timeout_86400() {
+        let config = ServerConfig {
+            host: "localhost".to_string(),
+            port: 8080,
+            request_timeout_secs: 86400,
+            cors: None,
+        };
+        assert!(config.validate().is_ok(), "86400 seconds should be allowed (boundary)");
+    }
+
+    /// Test ServerConfig deserialization with serde(default) fills missing
+    /// fields. Covers the `#[serde(default)]` attribute behavior.
+    #[test]
+    fn test_server_config_deserialization_with_default_fields() {
+        let json = r#"{"host": "0.0.0.0", "port": 3000}"#;
+        let config: ServerConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.host, "0.0.0.0");
+        assert_eq!(config.port, 3000);
+        assert_eq!(config.request_timeout_secs, 0, "Missing field should use default");
+        assert!(config.cors.is_none(), "Missing cors should default to None");
     }
 }

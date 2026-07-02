@@ -279,4 +279,94 @@ mod tests {
         let err = response.error_ref().unwrap();
         assert_eq!(err.code(), "CODE");
     }
+
+    /// Test ServiceError::new produces an error with no details (None).
+    #[test]
+    fn test_service_error_new_has_no_details() {
+        let error = ServiceError::new("NOT_FOUND", "missing", 404);
+        assert!(error.details().is_none());
+        assert_eq!(error.details(), None);
+    }
+
+    /// Test ServiceError::with_details with null JSON value.
+    #[test]
+    fn test_service_error_with_null_details() {
+        let error = ServiceError::with_details("ERR", "msg", serde_json::Value::Null, 500);
+        assert_eq!(error.details(), Some(&serde_json::Value::Null));
+    }
+
+    /// Test ServiceResponse success then error_ref returns None.
+    #[test]
+    fn test_service_response_success_has_no_error() {
+        let response = ServiceResponse::success("data");
+        assert!(response.error_ref().is_none());
+    }
+
+    /// Test ServiceResponse error then data() returns None.
+    #[test]
+    fn test_service_response_error_has_no_data() {
+        let error = ServiceError::new("ERR", "msg", 500);
+        let response = ServiceResponse::<String>::error(error);
+        assert!(response.data().is_none());
+    }
+
+    /// Test ServiceError http_status() returns the configured status code.
+    #[test]
+    fn test_service_error_http_status_various_codes() {
+        for status in [200u16, 400, 401, 403, 404, 422, 429, 500, 503] {
+            let error = ServiceError::new("CODE", "msg", status);
+            assert_eq!(error.http_status(), status);
+        }
+    }
+
+    /// Test ServiceResponse with a complex generic type (Vec) serializes
+    /// correctly and the data field contains the array.
+    #[test]
+    fn test_service_response_with_vec_serialization() {
+        let response = ServiceResponse::success(vec![1, 2, 3]);
+        let json = serde_json::to_string(&response).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], true);
+        assert_eq!(parsed["data"], serde_json::json!([1, 2, 3]));
+    }
+
+    /// Test ServiceError serialization omits details when None (via
+    /// skip_serializing_if).
+    #[test]
+    fn test_service_error_serialization_omits_details_when_none() {
+        let error = ServiceError::new("CODE", "msg", 400);
+        let json = serde_json::to_string(&error).unwrap();
+        assert!(!json.contains("details"), "details should be omitted when None: {}", json);
+    }
+
+    /// Test ServiceError serialization includes details when Some.
+    #[test]
+    fn test_service_error_serialization_includes_details_when_some() {
+        let error = ServiceError::with_details(
+            "CODE",
+            "msg",
+            serde_json::json!({"key": "value"}),
+            400,
+        );
+        let json = serde_json::to_string(&error).unwrap();
+        assert!(json.contains("details"), "details should be included when Some: {}", json);
+    }
+
+    /// Test ServiceResponse::is_success returns false for error responses.
+    #[test]
+    fn test_service_response_is_success_false_for_error() {
+        let error = ServiceError::new("ERR", "msg", 500);
+        let response = ServiceResponse::<String>::error(error);
+        assert!(!response.is_success());
+    }
+
+    /// Test ServiceError Debug formatting contains the code and message.
+    #[test]
+    fn test_service_error_debug_format() {
+        let error = ServiceError::new("DEBUG_CODE", "debug message", 418);
+        let debug = format!("{:?}", error);
+        assert!(debug.contains("DEBUG_CODE"));
+        assert!(debug.contains("debug message"));
+        assert!(debug.contains("418"));
+    }
 }

@@ -1942,4 +1942,132 @@ mod tests {
             err_msg
         );
     }
+
+    // ============================================================================
+    // build_server / build_server_with_config Success Path Tests
+    // ============================================================================
+
+    /// Test build_server successfully starts serving on a valid address.
+    ///
+    /// Uses port 0 (OS-assigned) and a short timeout. A timeout means the server
+    /// started successfully and was still running — if it had failed to bind,
+    /// it would have returned Err before the timeout.
+    #[tokio::test]
+    async fn test_build_server_starts_serving_on_valid_address() {
+        use std::time::Duration;
+
+        let result = tokio::time::timeout(
+            Duration::from_millis(200),
+            build_server("127.0.0.1:0"),
+        )
+        .await;
+
+        match result {
+            Ok(Ok(())) => panic!("Server unexpectedly returned Ok before timeout"),
+            Ok(Err(e)) => panic!("Server failed to start: {}", e),
+            Err(_elapsed) => { /* Expected: server still running */ }
+        }
+    }
+
+    /// Test build_server_with_config with default config (max_connections > 0, timeout > 0).
+    ///
+    /// Verifies the success path including concurrency_limit and timeout application.
+    #[tokio::test]
+    async fn test_build_server_with_config_default_starts_serving() {
+        use std::time::Duration;
+
+        let config = GrpcServerConfig::default();
+        let result = tokio::time::timeout(
+            Duration::from_millis(200),
+            build_server_with_config("127.0.0.1:0", config),
+        )
+        .await;
+
+        match result {
+            Ok(Ok(())) => panic!("Server unexpectedly returned Ok before timeout"),
+            Ok(Err(e)) => panic!("Server with config failed to start: {}", e),
+            Err(_elapsed) => { /* Expected: server still running */ }
+        }
+    }
+
+    /// Test build_server_with_config with zero max_connections and zero timeout.
+    ///
+    /// Covers the false branches of the `if config.max_connections > 0` and
+    /// `if config.timeout_seconds > 0` conditionals, verifying the server
+    /// starts without applying concurrency_limit or timeout.
+    #[tokio::test]
+    async fn test_build_server_with_config_zero_values_starts_serving() {
+        use std::time::Duration;
+
+        let config = GrpcServerConfig {
+            max_connections: 0,
+            timeout_seconds: 0,
+            #[cfg(feature = "security")]
+            auth: None,
+        };
+        let result = tokio::time::timeout(
+            Duration::from_millis(200),
+            build_server_with_config("127.0.0.1:0", config),
+        )
+        .await;
+
+        match result {
+            Ok(Ok(())) => panic!("Server unexpectedly returned Ok before timeout"),
+            Ok(Err(e)) => panic!("Server with zero config failed to start: {}", e),
+            Err(_elapsed) => { /* Expected: server still running */ }
+        }
+    }
+
+    /// Test build_server_with_config with large max_connections and timeout values.
+    ///
+    /// Covers the true branches with non-default values for both config fields.
+    #[tokio::test]
+    async fn test_build_server_with_config_large_values_starts_serving() {
+        use std::time::Duration;
+
+        let config = GrpcServerConfig {
+            max_connections: 10000,
+            timeout_seconds: 300,
+            #[cfg(feature = "security")]
+            auth: None,
+        };
+        let result = tokio::time::timeout(
+            Duration::from_millis(200),
+            build_server_with_config("127.0.0.1:0", config),
+        )
+        .await;
+
+        match result {
+            Ok(Ok(())) => panic!("Server unexpectedly returned Ok before timeout"),
+            Ok(Err(e)) => panic!("Server with large config failed to start: {}", e),
+            Err(_elapsed) => { /* Expected: server still running */ }
+        }
+    }
+
+    /// Test build_server_with_config with minimal positive config values.
+    ///
+    /// Uses max_connections=1 and timeout_seconds=1 to cover the true branches
+    /// with minimum valid positive values.
+    #[tokio::test]
+    async fn test_build_server_with_config_minimal_positive_values() {
+        use std::time::Duration;
+
+        let config = GrpcServerConfig {
+            max_connections: 1,
+            timeout_seconds: 1,
+            #[cfg(feature = "security")]
+            auth: None,
+        };
+        let result = tokio::time::timeout(
+            Duration::from_millis(200),
+            build_server_with_config("127.0.0.1:0", config),
+        )
+        .await;
+
+        match result {
+            Ok(Ok(())) => panic!("Server unexpectedly returned Ok before timeout"),
+            Ok(Err(e)) => panic!("Server with minimal config failed to start: {}", e),
+            Err(_elapsed) => { /* Expected: server still running */ }
+        }
+    }
 }

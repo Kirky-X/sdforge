@@ -433,10 +433,7 @@ mod tests {
         )
         .await;
 
-        let event_opt = match event {
-            Ok(e) => e,
-            Err(_) => None,
-        };
+        let event_opt: Option<ConfigEvent> = event.unwrap_or_default();
         handle_watcher_event(event_opt, Some(("0.0.0.0", 9090)));
 
         // path() should still return the original path
@@ -476,10 +473,7 @@ mod tests {
         )
         .await;
 
-        let event_opt = match event {
-            Ok(e) => e,
-            Err(_) => None,
-        };
+        let event_opt: Option<ConfigEvent> = event.unwrap_or_default();
         handle_watcher_event(event_opt, None);
     }
 
@@ -495,10 +489,7 @@ mod tests {
         )
         .await;
 
-        let event_opt = match event {
-            Ok(e) => e,
-            Err(_) => None,
-        };
+        let event_opt: Option<ConfigEvent> = event.unwrap_or_default();
         handle_watcher_event(event_opt, None);
     }
 
@@ -540,12 +531,123 @@ mod tests {
         )
         .await;
 
-        let event_opt = match event {
-            Ok(e) => e,
-            Err(_) => None,
-        };
+        let event_opt: Option<ConfigEvent> = event.unwrap_or_default();
         // No event expected (read failure silently continues the loop).
         // We just verify no panic occurred.
         handle_watcher_event(event_opt, None);
+    }
+
+    // ============================================================================
+    // ConfigWatcherImpl::new error path coverage
+    //
+    // The `.map_err(|e| ConfigError::WatchError(e.to_string()))?` line in
+    // ConfigWatcherImpl::new (the FsWatcher::new error path) is triggered when
+    // FsWatcher::new returns an error. create_config_watcher checks for file
+    // existence first, so the error path is only reachable by calling
+    // ConfigWatcherImpl::new directly with a non-existent path.
+    // ============================================================================
+
+    /// Test ConfigWatcherImpl::new returns a WatchError when the path does not
+    /// exist. Covers the `FsWatcher::new` error mapping path in
+    /// ConfigWatcherImpl::new (line 40).
+    #[tokio::test]
+    async fn test_config_watcher_impl_new_nonexistent_path_returns_watch_error() {
+        let result = ConfigWatcherImpl::new(PathBuf::from("/nonexistent/path/config.toml")).await;
+        assert!(result.is_err(), "Non-existent path should produce an error");
+        match result {
+            Err(ConfigError::WatchError(msg)) => {
+                // FsWatcher::new returns FileNotFound, which gets mapped to
+                // WatchError with the error's string representation.
+                assert!(!msg.is_empty(), "WatchError should contain a message");
+            }
+            Err(other) => panic!("Expected WatchError, got {:?}", other),
+            Ok(_) => panic!("Expected error for non-existent path"),
+        }
+    }
+
+    /// Test ConfigEvent Debug formatting produces output containing the
+    /// variant name. Covers the derived Debug impl.
+    #[test]
+    fn test_config_event_debug_format() {
+        let config = AppConfig::default();
+        let reloaded = ConfigEvent::Reloaded(Box::new(config));
+        let debug_str = format!("{:?}", reloaded);
+        assert!(debug_str.contains("Reloaded"), "Debug should contain variant name");
+
+        let error = ConfigEvent::Error("test error".to_string());
+        let debug_str = format!("{:?}", error);
+        assert!(debug_str.contains("Error"), "Debug should contain variant name");
+        assert!(debug_str.contains("test error"), "Debug should contain error message");
+    }
+
+    /// Test ConfigEvent Clone produces an equal value. Covers the derived
+    /// Clone impl.
+    #[test]
+    fn test_config_event_clone_equality() {
+        let config = AppConfig::default();
+        let original = ConfigEvent::Reloaded(Box::new(config));
+        let cloned = original.clone();
+        // Both should be Reloaded variants with default configs
+        assert!(matches!(cloned, ConfigEvent::Reloaded(_)));
+
+        let original_err = ConfigEvent::Error("clone me".to_string());
+        let cloned_err = original_err.clone();
+        if let ConfigEvent::Error(msg) = &cloned_err {
+            assert_eq!(msg, "clone me");
+        } else {
+            panic!("Cloned Error variant should remain Error");
+        }
+    }
+
+    /// Test ConfigManager get() returns a clone of the stored config (not a
+    /// reference), so modifying the returned value doesn't affect the manager.
+    #[tokio::test]
+    async fn test_config_manager_get_returns_independent_clone() {
+        let mut config = AppConfig::default();
+        config.server.port = 5000;
+        let manager = ConfigManager::new(config);
+
+        let retrieved1 = manager.get().await;
+        assert_eq!(retrieved1.server.port, 5000);
+
+        // The retrieved value is an independent clone; mutating it must not
+        // affect the manager's internal state.
+        let mut retrieved2 = manager.get().await;
+        retrieved2.server.port = 9999;
+
+        let retrieved3 = manager.get().await;
+        assert_eq!(retrieved3.server.port, 5000, "Manager state should be unchanged");
+    }
+
+    /// Test ConfigManager update() then get() returns the new config, and a
+    /// second update replaces the first. Covers sequential update operations.
+    #[tokio::test]
+    async fn test_config_manager_sequential_updates() {
+        let config = AppConfig::default();
+        let manager = ConfigManager::new(config);
+
+        let mut config1 = AppConfig::default();
+        config1.server.host = "first.host".to_string();
+        manager.update(config1).await;
+
+        let mut config2 = AppConfig::default();
+        config2.server.host = "second.host".to_string();
+        manager.update(config2).await;
+
+        let final_config = manager.get().await;
+        assert_eq!(final_config.server.host, "second.host", "Second update should win");
+    }
+
+    /// Test ConfigWatcherImpl::new succeeds with a directory path (not just
+    /// files). FsWatcher supports watching directories.
+    #[tokio::test]
+    async fn test_config_watcher_impl_new_with_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir_path = temp_dir.path().to_path_buf();
+
+        let result = ConfigWatcherImpl::new(dir_path).await;
+        assert!(result.is_ok(), "Watcher should be created for a directory: {:?}", result.err());
+        let (watcher, _rx) = result.unwrap();
+        assert!(watcher.path().is_dir(), "Path should be the directory");
     }
 }

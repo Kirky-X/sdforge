@@ -801,4 +801,110 @@ mod tests {
             "get_global_logger should return Some after initialization"
         );
     }
+
+    // ============================================================================
+    // Text uncolored output WITH multiple fields
+    //
+    // The existing test_write_log_entry_text_uncolored_with_fields test uses a
+    // single field, so the `i > 0` separator branch (", ") inside the uncolored
+    // Text arm is never hit. This test covers that separator branch.
+    // ============================================================================
+
+    /// Test text format uncolored with multiple fields exercises the `i > 0`
+    /// separator branch (writes ", " between fields) in the uncolored Text
+    /// code path.
+    #[test]
+    fn test_write_log_entry_text_uncolored_with_multiple_fields() {
+        let entry = LogEntry::new(LogLevel::Info, "app", "multi fields")
+            .with_field("a", serde_json::json!(1))
+            .with_field("b", serde_json::json!("two"))
+            .with_field("c", serde_json::json!(true));
+        let mut buf = Vec::new();
+        write_log_entry(&mut buf, &entry, LogFormat::Text, false).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+
+        assert!(output.contains("INFO"), "Should contain level");
+        assert!(output.contains("app"), "Should contain target");
+        assert!(output.contains("multi fields"), "Should contain message");
+        assert!(output.contains(", "), "Should contain field separator");
+        assert!(output.contains("a=1"), "Should contain field a");
+        assert!(output.contains("b=\"two\""), "Should contain field b");
+        assert!(output.contains("c=true"), "Should contain field c");
+        assert!(!output.contains("\x1b["), "Should not contain ANSI codes");
+    }
+
+    /// Test text format colored with an empty entry (no fields) to verify the
+    /// `if !entry.fields.is_empty()` false branch is taken in the colored path.
+    #[test]
+    fn test_write_log_entry_text_colored_without_fields() {
+        let entry = LogEntry::new(LogLevel::Error, "db", "no fields here");
+        let mut buf = Vec::new();
+        write_log_entry(&mut buf, &entry, LogFormat::Text, true).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+
+        assert!(output.contains("\x1b[31m"), "Should contain error color");
+        assert!(output.contains("no fields here"), "Should contain message");
+        assert!(
+            !output.contains("{") || output.contains("\x1b[0m"),
+            "Should not emit fields block when empty"
+        );
+    }
+
+    /// Test JSON format uncolored with multiple fields verifies the fields
+    /// object is serialized correctly.
+    #[test]
+    fn test_write_log_entry_json_uncolored_with_multiple_fields() {
+        let entry = LogEntry::new(LogLevel::Warn, "api", "request")
+            .with_field("method", serde_json::json!("GET"))
+            .with_field("status", serde_json::json!(200))
+            .with_field("duration_ms", serde_json::json!(42));
+        let mut buf = Vec::new();
+        write_log_entry(&mut buf, &entry, LogFormat::Json, false).unwrap();
+        let output = String::from_utf8_lossy(&buf);
+        let parsed: serde_json::Value = serde_json::from_str(output.trim()).unwrap();
+        assert_eq!(parsed["fields"]["method"], "GET");
+        assert_eq!(parsed["fields"]["status"], 200);
+        assert_eq!(parsed["fields"]["duration_ms"], 42);
+    }
+
+    /// Test LogEntry with_field accepts various JSON value types and stores
+    /// them correctly in the fields BTreeMap.
+    #[test]
+    fn test_log_entry_with_field_various_value_types() {
+        let entry = LogEntry::new(LogLevel::Debug, "test", "msg")
+            .with_field("null_val", serde_json::Value::Null)
+            .with_field("bool_val", serde_json::json!(true))
+            .with_field("num_val", serde_json::json!(3.15))
+            .with_field("arr_val", serde_json::json!([1, 2, 3]))
+            .with_field("obj_val", serde_json::json!({"nested": "value"}));
+        assert_eq!(entry.fields.len(), 5);
+        assert_eq!(entry.fields.get("null_val"), Some(&serde_json::Value::Null));
+        assert_eq!(entry.fields.get("arr_val"), Some(&serde_json::json!([1, 2, 3])));
+    }
+
+    /// Test LoggerConfig clone produces an independent copy with all fields.
+    #[test]
+    fn test_logger_config_clone_independent() {
+        let config = LoggerConfig {
+            min_level: LogLevel::Debug,
+            format: LogFormat::Text,
+            colored: false,
+            max_file_size: 5 * 1024 * 1024,
+            max_files: 3,
+        };
+        let cloned = config.clone();
+        assert_eq!(cloned.min_level, config.min_level);
+        assert_eq!(cloned.format, config.format);
+        assert_eq!(cloned.colored, config.colored);
+        assert_eq!(cloned.max_file_size, config.max_file_size);
+        assert_eq!(cloned.max_files, config.max_files);
+    }
+
+    /// Test LogFormat equality and inequality.
+    #[test]
+    fn test_log_format_equality() {
+        assert_eq!(LogFormat::Json, LogFormat::Json);
+        assert_eq!(LogFormat::Text, LogFormat::Text);
+        assert_ne!(LogFormat::Json, LogFormat::Text);
+    }
 }

@@ -1547,4 +1547,56 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "my-file_v1.2.pdf");
     }
+
+    // ============================================================================
+    // extract_validated deserialization failure path
+    //
+    // The `serde_json::from_value(...).map_err(|_| ValidationErrorsWrapper::new(vec![]))`
+    // closure is exercised when the input JSON cannot be deserialized into T
+    // (e.g., wrong field types or missing required fields). Existing tests
+    // only feed JSON that deserializes successfully but fails validation, so
+    // the deserialization-error branch was previously uncovered.
+    // ============================================================================
+
+    /// Test extract_validated returns Err when JSON has a wrong type for a
+    /// field (string where u32 is expected). Covers the
+    /// `serde_json::from_value` error branch in extract_validated.
+    #[tokio::test]
+    async fn test_extract_validated_deserialization_failure_wrong_type() {
+        // age is expected to be u32, but we pass a string
+        let json = serde_json::json!({
+            "name": "John",
+            "email": "john@example.com",
+            "age": "not a number"
+        });
+
+        let result = extract_validated::<TestParams>(&json).await;
+        assert!(result.is_err(), "Deserialization failure should produce Err");
+        let errors = result.unwrap_err();
+        assert!(errors.errors.is_empty(), "Deserialization errors produce empty errors vec");
+    }
+
+    /// Test extract_validated returns Err when JSON is missing a required
+    /// field. Covers the `serde_json::from_value` error branch.
+    #[tokio::test]
+    async fn test_extract_validated_deserialization_failure_missing_field() {
+        // Missing the age field entirely
+        let json = serde_json::json!({
+            "name": "John",
+            "email": "john@example.com"
+        });
+
+        let result = extract_validated::<TestParams>(&json).await;
+        assert!(result.is_err(), "Missing field should produce deserialization Err");
+    }
+
+    /// Test extract_validated returns Err when JSON root is not an object
+    /// (e.g., an array). Covers the `serde_json::from_value` error branch.
+    #[tokio::test]
+    async fn test_extract_validated_deserialization_failure_non_object() {
+        let json = serde_json::json!([1, 2, 3]);
+
+        let result = extract_validated::<TestParams>(&json).await;
+        assert!(result.is_err(), "Non-object JSON should produce deserialization Err");
+    }
 }

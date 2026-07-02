@@ -738,6 +738,58 @@ mod tests {
         assert!(cache.find_keys_by_pattern("user:*").is_empty());
     }
 
+    /// Test find_keys_by_pattern returns an empty Vec when the prefix-index
+    /// path produces an invalid regex (unclosed character class after the
+    /// `*`->`.*` substitution). Covers the `Err(_) => return Vec::new()`
+    /// fail-safe branch in the prefix-index path.
+    #[test]
+    fn test_find_keys_by_pattern_invalid_regex_in_prefix_path() {
+        let cache = DashMapCache::new();
+        cache.set("user:1", b"v1".to_vec());
+
+        // `user:*[` -> prefix_part `user:` ends with `:` and has no other
+        // wildcards, so the prefix-index path is taken. After substitution the
+        // regex becomes `^user:.*[$` which is invalid (unclosed `[`).
+        let keys = cache.find_keys_by_pattern("user:*[");
+        assert!(
+            keys.is_empty(),
+            "Invalid regex should fail safe to an empty Vec"
+        );
+    }
+
+    /// Test find_keys_by_pattern returns an empty Vec when the full-scan
+    /// fallback path produces an invalid regex (no `*` present, so the
+    /// prefix-index path is skipped). Covers the `Err(_) => return Vec::new()`
+    /// fail-safe branch in the fallback path.
+    #[test]
+    fn test_find_keys_by_pattern_invalid_regex_in_fallback_path() {
+        let cache = DashMapCache::new();
+        cache.set("user:1", b"v1".to_vec());
+
+        // No `*` in pattern -> prefix-index path skipped -> fallback regex
+        // `^user:[$` is invalid (unclosed character class).
+        let keys = cache.find_keys_by_pattern("user:[");
+        assert!(
+            keys.is_empty(),
+            "Invalid regex should fail safe to an empty Vec"
+        );
+    }
+
+    /// Test find_keys_by_pattern with a pattern containing `?` wildcard in
+    /// the prefix part. Since the prefix part contains `?`, the prefix-index
+    /// path is skipped and the full-scan fallback is used.
+    #[test]
+    fn test_find_keys_by_pattern_question_mark_in_prefix_skips_index() {
+        let cache = DashMapCache::new();
+        cache.set("user:1", b"v1".to_vec());
+        cache.set("user:2", b"v2".to_vec());
+
+        // `us?r:*` -> prefix_part `us?r:` contains `?`, so prefix-index path
+        // is skipped. Fallback regex `^us.r:.*$` matches both keys.
+        let keys = cache.find_keys_by_pattern("us?r:*");
+        assert_eq!(keys.len(), 2);
+    }
+
     #[test]
     fn test_set_many_respects_lru_eviction_and_prefix_index() {
         // Regression: set_many must maintain LRU eviction and prefix index,

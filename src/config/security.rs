@@ -149,4 +149,87 @@ mod tests {
         let headers = config.get_headers();
         assert!(headers.is_empty());
     }
+
+    /// Test headers_enabled() reflects the enable_headers flag for both the
+    /// default (enabled) and disabled configurations. Covers the headers_enabled
+    /// accessor method.
+    #[test]
+    fn test_headers_enabled_reflects_flag() {
+        let enabled = SecurityConfig::default();
+        assert!(enabled.headers_enabled());
+
+        let disabled = SecurityConfig::disabled();
+        assert!(!disabled.headers_enabled());
+
+        let minimal = SecurityConfig::minimal();
+        assert!(minimal.headers_enabled());
+    }
+
+    /// Test get_headers returns all eight security headers in the correct
+    /// order when enabled, verifying the full header set is emitted.
+    #[test]
+    fn test_get_headers_contains_all_eight_headers() {
+        let config = SecurityConfig::default();
+        let headers = config.get_headers();
+        assert_eq!(headers.len(), 8);
+        let names: Vec<&str> = headers.iter().map(|(n, _)| *n).collect();
+        assert_eq!(
+            names,
+            vec![
+                "Content-Type-Options",
+                "X-Frame-Options",
+                "X-XSS-Protection",
+                "Cache-Control",
+                "Content-Security-Policy",
+                "Strict-Transport-Security",
+                "Referrer-Policy",
+                "Permissions-Policy",
+            ]
+        );
+    }
+
+    /// Test that the minimal config differs from the default only in the
+    /// frame_options and content_security_policy fields.
+    #[test]
+    fn test_minimal_config_differs_from_default() {
+        let default = SecurityConfig::default();
+        let minimal = SecurityConfig::minimal();
+        assert_ne!(default.frame_options, minimal.frame_options);
+        assert_eq!(minimal.frame_options, "SAMEORIGIN");
+        assert_ne!(default.content_security_policy, minimal.content_security_policy);
+        assert_eq!(minimal.content_security_policy, "default-src 'self'");
+    }
+
+    /// Test SecurityConfig serialization round-trip preserves all fields.
+    #[test]
+    fn test_security_config_serialization_roundtrip() {
+        let config = SecurityConfig::default();
+        let json = serde_json::to_string(&config).unwrap();
+        let restored: SecurityConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.enable_headers, config.enable_headers);
+        assert_eq!(restored.content_type_options, config.content_type_options);
+        assert_eq!(restored.frame_options, config.frame_options);
+    }
+
+    /// Test SecurityConfig deserialization with missing fields uses serde
+    /// defaults (the struct is annotated with #[serde(default)]).
+    #[test]
+    fn test_security_config_deserialization_with_empty_object() {
+        let json = r#"{}"#;
+        let config: SecurityConfig = serde_json::from_str(json).unwrap();
+        assert!(config.enable_headers);
+        assert_eq!(config.content_type_options, "nosniff");
+    }
+
+    /// Test the ValidateConfig implementation always returns Ok since all
+    /// fields have sensible defaults. Only compiled with the validation feature.
+    #[cfg(feature = "validation")]
+    #[test]
+    fn test_security_config_validate_always_ok() {
+        use crate::config::ValidateConfig;
+        let config = SecurityConfig::default();
+        assert!(config.validate().is_ok());
+        let disabled = SecurityConfig::disabled();
+        assert!(disabled.validate().is_ok());
+    }
 }

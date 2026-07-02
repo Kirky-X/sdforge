@@ -50,20 +50,10 @@ impl AppConfig {
 #[cfg(feature = "validation")]
 impl crate::config::ValidateConfig for AppConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
-        // Validate all sub-configs
-        self.server.validate()?;
-        self.authentication.validate()?;
-
-        // Validate timeout if present
-        if let Some(ref timeout) = self.timeout {
-            timeout.validate()?;
-        }
-
-        // Cross-field validation
-        // Example: Ensure rate limiting is configured if security is enabled
-        // This can be expanded based on business requirements
-
-        Ok(())
+        // Delegate to inherent method to keep a single source of truth.
+        // Previously this body was a near-duplicate of the inherent impl and
+        // contained a YAGNI "Cross-field validation" placeholder comment.
+        AppConfig::validate(self)
     }
 }
 
