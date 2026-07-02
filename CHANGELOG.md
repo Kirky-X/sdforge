@@ -5,7 +5,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本规范](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
-## [Unreleased] - 2026-03-31
+## [0.2.0] - 2026-07-03
 
 ### Phase 1 架构改进
 
@@ -71,6 +71,77 @@
 以下警告为现有代码问题，非本次引入：
 - 21 个 Clippy 警告（base64 弃用、未定义 cfg、未使用导入等）
 - 将在 Phase 2 中集中清理
+
+### specmark v0.2.0 战略发布工作流
+
+本次工作流通过 specmark skill 驱动，涵盖 MCP 迁移、文件拆分、OpenAPI 集成、质量门禁、diting 全维度审查等 9 大任务域。
+
+#### BREAKING 变更 ⚠️
+
+**MCP SDK 迁移（mcp-sdk 0.0.3 → rmcp 0.16）：**
+- 移除 `mcp-sdk = "0.0.3"` 依赖，新增 `rmcp = { version = "0.16", features = ["server"] }`
+- 移除 `initialize` 握手流程，改用 `server/discover` 端点（适配 MCP 2026-07-28 规范）
+- 新增 `StatelessServerHandler` 无状态适配层，实现 `rmcp::ServerHandler` trait
+- `RouteRegistration::register_mcp` 签名从 `fn register_mcp(&self, server: &mut Server)` 改为 `fn register_mcp(&self, registry: &mut dyn McpToolRegistry)`
+- 新增 `Mcp-Method` 和 `Mcp-Name` HTTP 头解析（`parse_mcp_headers`）
+- 新增 `cache_semantics` 模块处理 `ttlMs` 和 `cacheScope` 字段
+- 新增 Multi Round-Trip Requests (MRTR) 支持，`MrtrSessionManager` 管理 300 秒超时会话
+
+**配置验证统一：**
+- `AuthConfig`、`ServerConfig`、`AppConfig` 的 `ValidateConfig` trait 实现委托给 inherent `validate()` 方法，消除双实现行为分叉
+- 移除 `AuthConfig::validate` 中的 `eprintln!` 警告
+
+#### 新增特性
+
+**OpenAPI 自动生成（新 `openapi` feature）：**
+- 基于 utoipa 5.5.0 生成 OpenAPI 3.1 规范
+- `#[service_api]` 宏在 `openapi` 特性启用时自动通过 `inventory::submit!` 注册 `OpenApiRouteInfo`
+- 新增 `OpenApiBuilder` 链式构造器（`new().title().version().description().build()`）
+- 新增 `generate_openapi_spec()` 函数收集所有注册路由生成完整规范
+- 宏使用 `#[cfg(feature = "openapi")]` 门控，未启用时零运行时开销
+
+**文件拆分（降低单文件复杂度）：**
+- `src/mcp/mod.rs` 拆分为 `server.rs`、`handler.rs`、`stateless.rs`、`headers.rs`、`cache_semantics.rs`、`mrtr.rs`、`protocol.rs` + `tests/`（mod.rs 从 800+ 行降至 200 行）
+- `src/websocket/mod.rs` 拆分为 `connection.rs`、`handler.rs`、`broadcast.rs`、`message.rs` + `tests/`（mod.rs 从 2742 行降至 69 行）
+- `src/core/error/mod.rs` 拆分为 `api_error.rs`、`i18n.rs`、`context.rs`、`sdforge_error.rs` + `tests/`（mod.rs 从 800+ 行降至 23 行）
+
+#### 正确性修复
+
+- **CRIT-3**：移除 `macros/src/lib.rs` 中 `_param_unwraps` 的逐字重复定义
+- **CRIT-4**：`AuthConfig`/`ServerConfig`/`AppConfig` 双 `validate()` 实现统一为单一来源
+- **CRIT-5**：`MrtrSessionManager::create_session` 添加会话 ID 冲突检查，冲突时返回 `ErrorData::invalid_params`（原静默覆盖）
+- **CRIT-6**：SSE 流 30 秒超时后发送 `Error` 事件，客户端可区分超时与正常完成
+- **HIGH-003**：修复 `RegexCache` LRU 驱逐逻辑（`Reverse(time)` 导致驱逐 MRU 而非 LRU）
+- **C-HIGH-1**：修复版本路由 `"v"` 单字符误判为有效版本（缺少 `len() > 1` 检查）
+- **C-HIGH-4**：`ApiError::from_std_error` 中 `SystemTime::now().duration_since(UNIX_EPOCH).unwrap()` 改为 `.unwrap_or_default()`，防止系统时钟回拨 panic
+
+#### 质量门禁
+
+- 覆盖率从 88.96% 提升至 95.94%（2720/2835 行），超过 95% 目标
+- `cargo clippy --all-features --all-targets -- -D warnings` 零警告零错误
+- CI 覆盖率门禁修复：`--features full --lib` 替代 `--all-features --workspace` 避免 macros trybuild 测试超时
+- `.tarpaulin.toml` 配置修正：`exclude_files` → `exclude-files`（kebab-case）
+- diting 6 维度全量审查完成（Security/Performance/Quality/Architecture/Simplification/Correctness），6 项 P0 Critical/High 问题已修复
+- 25 项 Medium/High 技术债记录至 `SIMPLIFY-DEBT.md` 作为 v0.2.1+ backlog
+
+#### 测试
+
+- ✅ lib 测试 1638 个全部通过（基线 1383 + 新增 255）
+- ✅ clippy 零警告零错误
+- ✅ 覆盖率 95.94%
+- ✅ CI 门禁本地验证通过
+
+#### 文档
+
+- `README.md` 改为中文版（原 `README_zh.md`），英文版迁移至 `README_EN.md`
+- 移除所有 Redis 提及（与 no-db 策略一致）
+- 修正 `CacheConfig` 文档示例字段（`ttl_seconds`/`max_size_mb`/`max_entries` → `default_ttl_secs`/`max_items`/`track_stats`）
+- Feature 表格新增 `openapi` 行，修正 `security`/`cache`/`mcp` 行依赖列表
+- 新增 "OpenAPI 自动生成" 章节
+- 新增 "MCP 2026-07-28 迁移指南" 章节
+- `src/AGENTS.md` 更新 5 处 stale 文件路径引用（`security.rs` → `security/` 等）
+- `examples/README.md` 删除对不存在的 `rate_limiting.rs` 的引用
+- `examples/config/production.toml` 移除 `postgresql://` 连接字符串（与 no-db 策略一致）
 
 ---
 
