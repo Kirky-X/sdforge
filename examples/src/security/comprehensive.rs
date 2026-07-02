@@ -14,9 +14,7 @@
 //! ```
 
 use sdforge::prelude::*;
-use sdforge::security::{
-    ApiKeyAuth, AppApiKeyAuth, AppAuditLogger, AuthContext, AuthMetadata, BearerAuth,
-};
+use sdforge::security::{AppApiKeyAuth, AppAuditLogger, AuthContext, AuthMetadata, BearerAuth};
 use sdforge::cache::{DashMapCache, SyncCache};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -348,7 +346,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Setup JWT authentication
     let jwt_secret = sdforge::security::generate_secure_jwt_secret();
-    let jwt_auth = BearerAuth::builder().secret(jwt_secret.clone()).build();
+    let _jwt_auth = BearerAuth::builder().secret(jwt_secret.clone()).build();
 
     println!("✓ JWT Authentication configured");
     println!("  Secret length: {} characters\n", jwt_secret.len());

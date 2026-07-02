@@ -249,7 +249,7 @@ async fn list_items(limit: Option<u32>, offset: Option<u32>) -> Result<ListRespo
     tool_name = "delete_item",
     description = "删除数据项"
 )]
-async fn delete_item(id: u64) -> Result<StatusResponse, ApiError> {
+async fn delete_item(_id: u64) -> Result<StatusResponse, ApiError> {
     Ok(StatusResponse {
         operation: "delete_item".to_string(),
         status: "completed".to_string(),
@@ -330,7 +330,7 @@ pub struct CreateItemRequest {
     tool_name = "create_item",
     description = "创建新数据项"
 )]
-async fn create_item(request: CreateItemRequest) -> Result<StatusResponse, ApiError> {
+async fn create_item(_request: CreateItemRequest) -> Result<StatusResponse, ApiError> {
     // 模拟创建操作
     Ok(StatusResponse {
         operation: "create_item".to_string(),
