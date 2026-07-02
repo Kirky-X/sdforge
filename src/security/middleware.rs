@@ -826,4 +826,48 @@ mod tests {
         assert!(is_ip_in_range("8.8.8.8", "10.0.0.0/0"));
         assert!(is_ip_in_range("1.2.3.4", "0.0.0.0/0"));
     }
+
+    // ============================================================================
+    // Trusted-proxy X-Real-IP and multi-IP X-Forwarded-For branch coverage
+    // ============================================================================
+
+    /// Trusted proxy (10.0.0.1) with X-Real-IP header but no X-Forwarded-For.
+    /// Exercises the X-Real-IP secondary path in the trusted-proxy branch
+    /// (lines 73-79), which is unreachable when X-Forwarded-For is present.
+    #[test]
+    fn test_extract_client_ip_trusted_proxy_uses_x_real_ip_when_no_x_forwarded_for() {
+        use axum::extract::connect_info::ConnectInfo;
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+        let mut req = Request::new(Body::empty());
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 8080);
+        req.extensions_mut().insert(ConnectInfo(addr));
+        // No X-Forwarded-For header → falls through to X-Real-IP
+        req.headers_mut()
+            .insert("X-Real-IP", "203.0.113.50".parse().unwrap());
+
+        let ip = extract_client_ip_core(&req);
+        assert_eq!(ip, Some("203.0.113.50".to_string()));
+    }
+
+    /// Trusted proxy (10.0.0.1) with X-Forwarded-For containing multiple
+    /// comma-separated IPs. Verifies the leftmost (original client) IP is
+    /// returned, exercising the `value.split(',').next()` path in the
+    /// trusted-proxy branch with a multi-IP list.
+    #[test]
+    fn test_extract_client_ip_trusted_proxy_x_forwarded_for_multiple_ips() {
+        use axum::extract::connect_info::ConnectInfo;
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+        let mut req = Request::new(Body::empty());
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 8080);
+        req.extensions_mut().insert(ConnectInfo(addr));
+        req.headers_mut().insert(
+            "X-Forwarded-For",
+            "203.0.113.5, 198.51.100.10, 8.8.8.8".parse().unwrap(),
+        );
+
+        let ip = extract_client_ip_core(&req);
+        assert_eq!(ip, Some("203.0.113.5".to_string()));
+    }
 }

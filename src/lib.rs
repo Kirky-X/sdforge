@@ -117,37 +117,16 @@ pub mod core;
 #[cfg(feature = "http")]
 pub mod http;
 
-/// MCP (Model Context Protocol) support
+/// MCP (Model Context Protocol) support — built on official rmcp SDK
 #[cfg(feature = "mcp")]
 pub mod mcp;
 
-// Create a module hierarchy for mcp-sdk to match generated code expectations
+// Re-export rmcp types for convenience (replaces old mcp_sdk re-exports)
 #[cfg(feature = "mcp")]
-/// MCP SDK types re-exported for compatibility with generated code
-pub mod mcp_sdk_types {
-    /// MCP tool types
-    pub mod tools {
-        pub use ::mcp_sdk::tools::Tool;
-    }
-
-    /// MCP type definitions
-    pub mod types {
-        pub use ::mcp_sdk::types::CallToolResponse;
-        pub use ::mcp_sdk::types::ToolResponseContent;
-    }
-}
-
-// Make mcp_sdk available for generated code (aliases mcp_sdk_types)
-#[cfg(feature = "mcp")]
-pub use mcp_sdk_types as mcp_sdk;
-
-// Re-export types at crate root for convenience
-#[cfg(feature = "mcp")]
-pub use mcp_sdk_types::tools::Tool;
-#[cfg(feature = "mcp")]
-pub use mcp_sdk_types::types::CallToolResponse;
-#[cfg(feature = "mcp")]
-pub use mcp_sdk_types::types::ToolResponseContent;
+pub use mcp::{
+    McpToolRegistration, McpToolInstance, SdForgeMcpServer, SdForgeTool, build, get_mcp_tools,
+    StatelessServerHandler, McpHeaderInfo, InputRequiredResult, MrtrSession,
+};
 
 /// Streaming utilities for SSE and streaming responses
 #[cfg(feature = "streaming")]
@@ -225,7 +204,7 @@ pub mod websocket;
 
 #[cfg(feature = "websocket")]
 pub use websocket::{
-    build, parse_websocket_message, websocket_upgrade, BoxFuture, ConnectionManager,
+    parse_websocket_message, websocket_upgrade, BoxFuture, ConnectionManager,
     ValidatedWebSocketUpgrade, WebSocketConfig, WebSocketConnection, WebSocketHandler,
     WebSocketMessage, WebSocketRoute,
 };
@@ -256,6 +235,16 @@ pub use grpc::sdforge_v1::{
 
 #[cfg(feature = "http")]
 pub use http::version_routing::{build_version_router, VersionRouterConfig, VersionedRoute};
+
+/// OpenAPI 3.1 specification generation.
+///
+/// Only available when the `openapi` feature is enabled. See [`openapi`] module
+/// docs for usage.
+#[cfg(feature = "openapi")]
+pub mod openapi;
+
+#[cfg(feature = "openapi")]
+pub use openapi::{generate_openapi_spec, OpenApiBuilder, OpenApiRouteInfo};
 
 /// 初始化所有已注册的插件，确保它们不会被链接器优化掉。
 ///
@@ -387,12 +376,6 @@ pub struct PluginCounts {
     pub grpc_routes: usize,
 }
 
-/// Get all registered MCP tools
-#[cfg(feature = "mcp")]
-pub fn get_mcp_tools() -> Vec<crate::mcp::McpToolInstance> {
-    crate::mcp::get_mcp_tools()
-}
-
 /// Get all registered WebSocket routes
 #[cfg(feature = "websocket")]
 pub fn get_websocket_routes() -> Vec<&'static crate::websocket::WebSocketRoute> {
@@ -487,6 +470,81 @@ mod tests {
         let _default = EmptyConfig;
         // Ensure both construction paths produce the same type
         let _: EmptyConfig = config;
+    }
+
+    // ============================================================================
+    // impl_default_new! macro: Default trait integration
+    //
+    // The macro generates both `new()` and `Default::default()`. The existing
+    // test only calls `new()`. These tests verify the generated `Default`
+    // impl produces an equivalent value and that the macro can be applied to
+    // multiple distinct unit structs in the same scope.
+    // ============================================================================
+
+    /// Test the impl_default_new! macro generates a working Default impl
+    /// whose `default()` equals `new()`.
+    #[test]
+    #[allow(clippy::default_constructed_unit_structs)] // test asserts Default impl exists
+    fn test_impl_default_new_macro_generates_default_trait() {
+        struct ConfigA;
+        impl_default_new!(ConfigA);
+
+        let from_new = ConfigA::new();
+        let from_default = ConfigA::default();
+        // Unit structs have a single value, so both must be equal in type.
+        let _: ConfigA = from_new;
+        let _: ConfigA = from_default;
+    }
+
+    /// Test the impl_default_new! macro can be applied to multiple distinct
+    /// unit structs without name collisions.
+    #[test]
+    #[allow(clippy::default_constructed_unit_structs)] // test asserts Default impl exists
+    fn test_impl_default_new_macro_multiple_structs() {
+        struct FirstConfig;
+        struct SecondConfig;
+        impl_default_new!(FirstConfig);
+        impl_default_new!(SecondConfig);
+
+        let _a = FirstConfig::new();
+        let _b = SecondConfig::new();
+        let _a2 = FirstConfig::default();
+        let _b2 = SecondConfig::default();
+    }
+
+    // ============================================================================
+    // PluginCounts struct: field access under the http,cache feature set
+    //
+    // When only `http` and `cache` features are enabled, PluginCounts has a
+    // single `routes` field (the mcp_tools/ws_routes/grpc_routes fields are
+    // cfg-gated out). These tests verify the struct can be constructed and
+    // its field accessed without panicking.
+    // ============================================================================
+
+    /// Test PluginCounts can be constructed via init_all_plugins and the
+    /// `routes` field is a non-negative usize.
+    #[test]
+    #[serial_test::serial]
+    fn test_plugin_counts_routes_field_is_usize() {
+        let counts = init_all_plugins();
+        // routes is always present when any protocol feature is enabled.
+        let routes: usize = counts.routes;
+        // usize is always >= 0 by definition; this just ensures the field
+        // is accessible and has a sane value type.
+        let _ = routes;
+    }
+
+    /// Test calling init_all_plugins multiple times returns consistent counts
+    /// (idempotency via the internal OnceLocks), verifying the cached
+    /// inventory iteration does not change between calls.
+    #[test]
+    #[serial_test::serial]
+    fn test_init_all_plugins_counts_are_stable_across_calls() {
+        let a = init_all_plugins();
+        let b = init_all_plugins();
+        let c = init_all_plugins();
+        assert_eq!(a.routes, b.routes);
+        assert_eq!(b.routes, c.routes);
     }
 }
 

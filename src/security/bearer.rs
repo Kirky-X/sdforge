@@ -725,7 +725,7 @@ impl BearerAuthBuilder {
 /// # Example
 ///
 /// ```rust
-/// use sdforge::security::bearer::generate_secure_jwt_secret;
+/// use sdforge::security::{generate_secure_jwt_secret, BearerAuth};
 ///
 /// let secret = generate_secure_jwt_secret();
 /// println!("Generated secure JWT secret: {}", secret);
@@ -1909,6 +1909,197 @@ mod tests {
         assert!(ctx.is_some());
         let ctx = ctx.unwrap();
         assert_eq!(ctx.user_id(), Some("用户123"));
+    }
+
+    // ========================================================================
+    // Additional Coverage Tests: alg Confusion, panic paths, cleanup task
+    // ========================================================================
+
+    /// Verify that a JWT using `alg: "none"` is rejected (alg confusion attack).
+    /// This covers the `if alg != "HS256" { return None; }` branch in verify_jwt.
+    #[test]
+    fn test_validate_token_rejects_alg_none() {
+        use base64::Engine;
+        let secret = "MySecureSecret123!@#ABCDEFGHIJKLM";
+        let auth = BearerAuth::new(secret);
+
+        // Header with alg: "none" (alg confusion attack)
+        let header = serde_json::json!({"alg": "none", "typ": "JWT"});
+        let payload = serde_json::json!({
+            "sub": "user123",
+            "iat": chrono::Utc::now().timestamp(),
+            "exp": chrono::Utc::now().timestamp() + 3600
+        });
+
+        let header_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(serde_json::to_string(&header).unwrap());
+        let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(serde_json::to_string(&payload).unwrap());
+        // Empty signature (alg:none typically has no signature)
+        let token = format!("{}.{}.", header_b64, payload_b64);
+
+        assert!(
+            auth.validate_token(&token).is_none(),
+            "JWT with alg:none must be rejected"
+        );
+    }
+
+    /// Verify that a JWT using `alg: "RS256"` is rejected (only HS256 supported).
+    #[test]
+    fn test_validate_token_rejects_alg_rs256() {
+        use base64::Engine;
+        let secret = "MySecureSecret123!@#ABCDEFGHIJKLM";
+        let auth = BearerAuth::new(secret);
+
+        let header = serde_json::json!({"alg": "RS256", "typ": "JWT"});
+        let payload = serde_json::json!({
+            "sub": "user123",
+            "iat": chrono::Utc::now().timestamp()
+        });
+
+        let header_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(serde_json::to_string(&header).unwrap());
+        let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(serde_json::to_string(&payload).unwrap());
+        // 32-byte fake signature
+        let sig_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0u8; 32]);
+        let token = format!("{}.{}.{}", header_b64, payload_b64, sig_b64);
+
+        assert!(
+            auth.validate_token(&token).is_none(),
+            "JWT with alg:RS256 must be rejected (only HS256 supported)"
+        );
+    }
+
+    /// Verify that a JWT with a header missing the `alg` field is rejected.
+    #[test]
+    fn test_validate_token_rejects_missing_alg_field() {
+        use base64::Engine;
+        let auth = BearerAuth::new("MySecureSecret123!@#ABCDEFGHIJKLM");
+
+        // Header without alg field
+        let header = serde_json::json!({"typ": "JWT"});
+        let payload = serde_json::json!({"sub": "user123"});
+
+        let header_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(serde_json::to_string(&header).unwrap());
+        let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(serde_json::to_string(&payload).unwrap());
+        let sig_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0u8; 32]);
+        let token = format!("{}.{}.{}", header_b64, payload_b64, sig_b64);
+
+        assert!(auth.validate_token(&token).is_none());
+    }
+
+    /// Verify that with_audience panics when given an invalid (too short) secret.
+    #[test]
+    fn test_with_audience_panics_on_invalid_secret() {
+        let result = std::panic::catch_unwind(|| {
+            BearerAuth::with_audience("short", "my-api");
+        });
+        assert!(result.is_err(), "with_audience should panic on invalid secret");
+    }
+
+    /// Verify that with_claims panics when given an invalid (too short) secret.
+    #[test]
+    fn test_with_claims_panics_on_invalid_secret() {
+        let result = std::panic::catch_unwind(|| {
+            BearerAuth::with_claims("short", "aud", "iss");
+        });
+        assert!(result.is_err(), "with_claims should panic on invalid secret");
+    }
+
+    /// Verify that with_audience panics when secret lacks required character classes.
+    #[test]
+    fn test_with_audience_panics_on_missing_char_class() {
+        // 36 chars, no uppercase
+        let result = std::panic::catch_unwind(|| {
+            BearerAuth::with_audience("mysecret123!@#abcdefghijklmnopqrstuv", "api");
+        });
+        assert!(result.is_err());
+    }
+
+    /// Verify that with_claims panics when secret lacks special characters.
+    #[test]
+    fn test_with_claims_panics_on_missing_special_char() {
+        // 36 chars, no special char
+        let result = std::panic::catch_unwind(|| {
+            BearerAuth::with_claims(
+                "MySecureSecret123ABCDEFGHIJKLM",
+                "aud",
+                "iss",
+            );
+        });
+        assert!(result.is_err());
+    }
+
+    /// Verify that start_blacklist_cleanup spawns a task without panicking.
+    /// The task runs indefinitely; we only verify it can be started.
+    #[cfg(feature = "tokio")]
+    #[tokio::test]
+    async fn test_start_blacklist_cleanup_does_not_panic() {
+        let auth = BearerAuth::new("MySecureSecret123!@#ABCDEFGHIJKLM");
+        // This spawns a background task that runs indefinitely.
+        // We just verify it doesn't panic.
+        auth.start_blacklist_cleanup(std::time::Duration::from_secs(3600));
+        // Give the runtime a moment to ensure the task spawned
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        // The task will be dropped when the test completes
+    }
+
+    /// Verify that a token with valid structure but non-JSON header is rejected.
+    #[test]
+    fn test_validate_token_rejects_non_json_header() {
+        use base64::Engine;
+        let auth = BearerAuth::new("MySecureSecret123!@#ABCDEFGHIJKLM");
+
+        // Non-JSON header
+        let header_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"not json");
+        let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(serde_json::json!({"sub": "user"}).to_string());
+        let sig_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([0u8; 32]);
+
+        let token = format!("{}.{}.{}", header_b64, payload_b64, sig_b64);
+        assert!(auth.validate_token(&token).is_none());
+    }
+
+    /// Verify audience validation when aud claim is present but not a string
+    /// and not an array (e.g., a number). The `or_else` chain should return None.
+    #[test]
+    fn test_validate_token_audience_not_string_or_array() {
+        let secret = "MySecureSecret123!@#ABCDEFGHIJKLM";
+        let auth = BearerAuth::with_audience(secret, "expected-api");
+
+        let payload = serde_json::json!({
+            "sub": "user123",
+            "aud": 12345,  // aud is a number, not string or array
+            "iat": chrono::Utc::now().timestamp(),
+            "exp": chrono::Utc::now().timestamp() + 3600
+        });
+
+        let token = create_test_jwt(secret.as_bytes(), &payload);
+        // aud as number → token_aud is None → mismatch → rejected
+        assert!(auth.validate_token(&token).is_none());
+    }
+
+    /// Verify that issuer validation rejects when iss claim is present but
+    /// is not a string (e.g., a number).
+    #[test]
+    fn test_validate_token_issuer_not_string() {
+        let secret = "MySecureSecret123!@#ABCDEFGHIJKLM";
+        let auth = BearerAuth::with_claims(secret, "my-api", "expected-issuer");
+
+        let payload = serde_json::json!({
+            "sub": "user123",
+            "aud": "my-api",
+            "iss": 999,  // iss is a number, not a string
+            "iat": chrono::Utc::now().timestamp(),
+            "exp": chrono::Utc::now().timestamp() + 3600
+        });
+
+        let token = create_test_jwt(secret.as_bytes(), &payload);
+        // iss as number → token_iss is None → mismatch → rejected
+        assert!(auth.validate_token(&token).is_none());
     }
 }
 
