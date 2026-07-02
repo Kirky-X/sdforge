@@ -174,7 +174,9 @@ mod tests {
     async fn test_stateless_handler_call_tool() {
         // Use call_tool_internal() to avoid RequestContext construction.
         let handler = StatelessServerHandler::from_registry();
-        let result = handler.inner().call_tool_internal("coverage_test_tool", None);
+        let result = handler
+            .inner()
+            .call_tool_internal("coverage_test_tool", None);
         assert!(result.is_ok());
     }
 
@@ -220,14 +222,13 @@ mod tests {
 
         fn receive(
             &mut self,
-        ) -> impl std::future::Future<Output = Option<rmcp::service::RxJsonRpcMessage<rmcp::RoleServer>>> + Send
-        {
+        ) -> impl std::future::Future<
+            Output = Option<rmcp::service::RxJsonRpcMessage<rmcp::RoleServer>>,
+        > + Send {
             async { None }
         }
 
-        fn close(
-            &mut self,
-        ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
+        fn close(&mut self) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
             async { Ok(()) }
         }
     }

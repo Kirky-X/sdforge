@@ -242,9 +242,9 @@ impl MrtrSessionManager {
             .lock()
             .map_err(|_| ErrorData::internal_error("session manager lock poisoned", None))?;
 
-        let session = sessions
-            .get_mut(session_id)
-            .ok_or_else(|| ErrorData::invalid_params(format!("session not found: {}", session_id), None))?;
+        let session = sessions.get_mut(session_id).ok_or_else(|| {
+            ErrorData::invalid_params(format!("session not found: {}", session_id), None)
+        })?;
 
         if session.is_timed_out() {
             session.mark_timeout();
@@ -256,7 +256,10 @@ impl MrtrSessionManager {
 
         if session.state != SessionState::Pending {
             return Err(ErrorData::invalid_params(
-                format!("session {} is not pending (state: {:?})", session_id, session.state),
+                format!(
+                    "session {} is not pending (state: {:?})",
+                    session_id, session.state
+                ),
                 None,
             ));
         }
@@ -272,9 +275,9 @@ impl MrtrSessionManager {
             .lock()
             .map_err(|_| ErrorData::internal_error("session manager lock poisoned", None))?;
 
-        let session = sessions
-            .get(session_id)
-            .ok_or_else(|| ErrorData::invalid_params(format!("session not found: {}", session_id), None))?;
+        let session = sessions.get(session_id).ok_or_else(|| {
+            ErrorData::invalid_params(format!("session not found: {}", session_id), None)
+        })?;
 
         Ok(session.resume_input().cloned())
     }
@@ -286,9 +289,9 @@ impl MrtrSessionManager {
             .lock()
             .map_err(|_| ErrorData::internal_error("session manager lock poisoned", None))?;
 
-        let session = sessions
-            .get_mut(session_id)
-            .ok_or_else(|| ErrorData::invalid_params(format!("session not found: {}", session_id), None))?;
+        let session = sessions.get_mut(session_id).ok_or_else(|| {
+            ErrorData::invalid_params(format!("session not found: {}", session_id), None)
+        })?;
 
         session.complete();
         Ok(())
@@ -301,9 +304,9 @@ impl MrtrSessionManager {
             .lock()
             .map_err(|_| ErrorData::internal_error("session manager lock poisoned", None))?;
 
-        let session = sessions
-            .get_mut(session_id)
-            .ok_or_else(|| ErrorData::invalid_params(format!("session not found: {}", session_id), None))?;
+        let session = sessions.get_mut(session_id).ok_or_else(|| {
+            ErrorData::invalid_params(format!("session not found: {}", session_id), None)
+        })?;
 
         session.cancel();
         Ok(())
@@ -337,10 +340,7 @@ impl MrtrSessionManager {
 
     /// Get the number of active sessions.
     pub fn session_count(&self) -> usize {
-        self.sessions
-            .lock()
-            .map(|s| s.len())
-            .unwrap_or(0)
+        self.sessions.lock().map(|s| s.len()).unwrap_or(0)
     }
 
     /// Clear all sessions.
@@ -376,8 +376,8 @@ mod tests {
     #[test]
     fn test_input_required_result_with_schema() {
         let schema = serde_json::json!({"type": "object"});
-        let result = InputRequiredResult::new("session-1", "Need input")
-            .with_schema(schema.clone());
+        let result =
+            InputRequiredResult::new("session-1", "Need input").with_schema(schema.clone());
         assert_eq!(result.input_schema, Some(schema));
     }
 
@@ -408,11 +408,7 @@ mod tests {
 
     #[test]
     fn test_mrtr_session_with_timeout() {
-        let session = MrtrSession::with_timeout(
-            "s1",
-            "tool",
-            Duration::from_millis(100),
-        );
+        let session = MrtrSession::with_timeout("s1", "tool", Duration::from_millis(100));
         assert_eq!(session.timeout, Duration::from_millis(100));
     }
 
@@ -424,11 +420,7 @@ mod tests {
 
     #[test]
     fn test_mrtr_session_is_timed_out() {
-        let session = MrtrSession::with_timeout(
-            "s1",
-            "tool",
-            Duration::from_millis(1),
-        );
+        let session = MrtrSession::with_timeout("s1", "tool", Duration::from_millis(1));
         std::thread::sleep(Duration::from_millis(2));
         assert!(session.is_timed_out());
         assert!(!session.is_pending());
@@ -440,10 +432,7 @@ mod tests {
         session.resume(serde_json::json!({"input": "value"}));
         assert_eq!(session.state, SessionState::Resumed);
         assert!(session.resume_input.is_some());
-        assert_eq!(
-            session.resume_input().unwrap()["input"],
-            "value"
-        );
+        assert_eq!(session.resume_input().unwrap()["input"], "value");
     }
 
     #[test]
@@ -469,11 +458,7 @@ mod tests {
 
     #[test]
     fn test_mrtr_session_remaining() {
-        let session = MrtrSession::with_timeout(
-            "s1",
-            "tool",
-            Duration::from_secs(300),
-        );
+        let session = MrtrSession::with_timeout("s1", "tool", Duration::from_secs(300));
         let remaining = session.remaining();
         assert!(remaining <= Duration::from_secs(300));
         assert!(remaining > Duration::from_secs(290));
@@ -495,9 +480,7 @@ mod tests {
     #[test]
     fn test_session_manager_create_session() {
         let manager = MrtrSessionManager::new();
-        let result = manager
-            .create_session("s1", "my_tool")
-            .unwrap();
+        let result = manager.create_session("s1", "my_tool").unwrap();
         assert_eq!(result.session_id, "s1");
         assert_eq!(manager.session_count(), 1);
     }
@@ -561,11 +544,7 @@ mod tests {
         let manager = MrtrSessionManager::new();
         // Create a session with very short timeout
         {
-            let session = MrtrSession::with_timeout(
-                "s1",
-                "tool",
-                Duration::from_millis(1),
-            );
+            let session = MrtrSession::with_timeout("s1", "tool", Duration::from_millis(1));
             manager
                 .sessions
                 .lock()
@@ -693,7 +672,10 @@ mod tests {
     fn test_mrtr_session_is_pending_false_for_cancelled() {
         let mut session = MrtrSession::new("s1", "tool");
         session.cancel();
-        assert!(!session.is_pending(), "Cancelled session should not be pending");
+        assert!(
+            !session.is_pending(),
+            "Cancelled session should not be pending"
+        );
     }
 
     /// Verify that `is_pending` returns false for a Completed session.
@@ -701,7 +683,10 @@ mod tests {
     fn test_mrtr_session_is_pending_false_for_completed() {
         let mut session = MrtrSession::new("s1", "tool");
         session.complete();
-        assert!(!session.is_pending(), "Completed session should not be pending");
+        assert!(
+            !session.is_pending(),
+            "Completed session should not be pending"
+        );
     }
 
     /// Verify that `is_pending` returns false for a Resumed session.
@@ -709,7 +694,10 @@ mod tests {
     fn test_mrtr_session_is_pending_false_for_resumed() {
         let mut session = MrtrSession::new("s1", "tool");
         session.resume(serde_json::json!({}));
-        assert!(!session.is_pending(), "Resumed session should not be pending");
+        assert!(
+            !session.is_pending(),
+            "Resumed session should not be pending"
+        );
     }
 
     /// Verify that `is_pending` returns false for an already-timed-out session
@@ -718,7 +706,10 @@ mod tests {
     fn test_mrtr_session_is_pending_false_for_timeout_state() {
         let mut session = MrtrSession::new("s1", "tool");
         session.mark_timeout();
-        assert!(!session.is_pending(), "Timeout session should not be pending");
+        assert!(
+            !session.is_pending(),
+            "Timeout session should not be pending"
+        );
     }
 
     /// Verify that `is_timed_out` returns false when the session is not in

@@ -252,8 +252,11 @@ impl AppApiKeyAuth {
         // Cleanup old versions and delete their key_hashes from valid_keys cache
         // so rotated-out keys can no longer authenticate.
         if let Some(config) = &self.rotation_config {
-            let hashes_before: std::collections::HashSet<String> =
-                metadata.versions.iter().map(|v| v.key_hash.clone()).collect();
+            let hashes_before: std::collections::HashSet<String> = metadata
+                .versions
+                .iter()
+                .map(|v| v.key_hash.clone())
+                .collect();
             metadata.cleanup_versions(config.keep_versions);
             for hash in hashes_before {
                 let still_present = metadata.versions.iter().any(|v| v.key_hash == hash);
@@ -866,8 +869,7 @@ mod tests {
         let valid_keys = Arc::new(crate::cache::DashMapCache::new());
         let key_metadata = Arc::new(crate::cache::DashMapCache::new());
 
-        let auth =
-            AppApiKeyAuth::with_dependencies(valid_keys.clone(), Some(key_metadata.clone()));
+        let auth = AppApiKeyAuth::with_dependencies(valid_keys.clone(), Some(key_metadata.clone()));
 
         // Add a versioned key — this writes to key_metadata
         auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None);
@@ -916,7 +918,10 @@ mod tests {
 
         // v2 should still validate
         let perms_v2 = auth.validate_key("secret_v2", "127.0.0.1");
-        assert!(perms_v2.is_some(), "Latest version v2 should still validate");
+        assert!(
+            perms_v2.is_some(),
+            "Latest version v2 should still validate"
+        );
         assert_eq!(perms_v2.unwrap(), vec!["read"]);
     }
 
@@ -935,7 +940,8 @@ mod tests {
         let auth = AppApiKeyAuth::new();
 
         // Manually store corrupted metadata for "kid1"
-        auth.key_metadata.set("metadata:kid1", b"corrupted_data".to_vec());
+        auth.key_metadata
+            .set("metadata:kid1", b"corrupted_data".to_vec());
 
         // Call add_key_version — it should find the corrupted metadata,
         // fail to deserialize it, and skip the metadata update.

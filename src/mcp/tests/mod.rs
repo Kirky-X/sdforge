@@ -11,9 +11,9 @@ mod migration_tests;
 mod protocol_tests;
 mod server_tests;
 
-use rmcp::model::{CallToolResult, Content, ErrorData as McpError};
 use crate::core::ApiMetadata;
 use crate::mcp::{McpToolRegistration, SdForgeTool};
+use rmcp::model::{CallToolResult, Content, ErrorData as McpError};
 use serde_json::Value;
 use std::sync::Arc;
 

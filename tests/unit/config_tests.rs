@@ -349,9 +349,7 @@ mod config_enhanced_tests {
             cors: None,
         };
 
-        let config = AppConfig::builder()
-            .server(server)
-            .build();
+        let config = AppConfig::builder().server(server).build();
 
         #[cfg(feature = "validation")]
         let config = config.expect("build should succeed with valid config");

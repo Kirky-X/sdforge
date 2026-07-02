@@ -239,9 +239,16 @@ mod tests {
             }),
         };
         let result = config.validate();
-        assert!(result.is_err(), "Invalid CORS should propagate validation error");
+        assert!(
+            result.is_err(),
+            "Invalid CORS should propagate validation error"
+        );
         let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("empty"), "Error should mention empty origins: {}", err_msg);
+        assert!(
+            err_msg.contains("empty"),
+            "Error should mention empty origins: {}",
+            err_msg
+        );
     }
 
     /// Test ServerConfig::validate() propagates the error when the CorsConfig
@@ -261,7 +268,10 @@ mod tests {
         };
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid CORS origin"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid CORS origin"));
     }
 
     /// Test ServerConfig with boundary timeout value (exactly 86400) passes
@@ -274,7 +284,10 @@ mod tests {
             request_timeout_secs: 86400,
             cors: None,
         };
-        assert!(config.validate().is_ok(), "86400 seconds should be allowed (boundary)");
+        assert!(
+            config.validate().is_ok(),
+            "86400 seconds should be allowed (boundary)"
+        );
     }
 
     /// Test ServerConfig deserialization with serde(default) fills missing
@@ -285,7 +298,10 @@ mod tests {
         let config: ServerConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.host, "0.0.0.0");
         assert_eq!(config.port, 3000);
-        assert_eq!(config.request_timeout_secs, 0, "Missing field should use default");
+        assert_eq!(
+            config.request_timeout_secs, 0,
+            "Missing field should use default"
+        );
         assert!(config.cors.is_none(), "Missing cors should default to None");
     }
 }

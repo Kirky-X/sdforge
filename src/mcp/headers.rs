@@ -115,12 +115,10 @@ pub fn parse_mcp_headers(headers: &HeaderMap) -> Result<McpHeaderInfo, McpHeader
 
     // Validate the method
     match method.as_str() {
-        MCP_METHOD_TOOLS_LIST | MCP_METHOD_PING => {
-            Ok(McpHeaderInfo {
-                method,
-                tool_name: None,
-            })
-        }
+        MCP_METHOD_TOOLS_LIST | MCP_METHOD_PING => Ok(McpHeaderInfo {
+            method,
+            tool_name: None,
+        }),
         MCP_METHOD_TOOLS_CALL => {
             let tool_name = headers
                 .get("mcp-name")

@@ -196,7 +196,10 @@ mod tests {
         let minimal = SecurityConfig::minimal();
         assert_ne!(default.frame_options, minimal.frame_options);
         assert_eq!(minimal.frame_options, "SAMEORIGIN");
-        assert_ne!(default.content_security_policy, minimal.content_security_policy);
+        assert_ne!(
+            default.content_security_policy,
+            minimal.content_security_policy
+        );
         assert_eq!(minimal.content_security_policy, "default-src 'self'");
     }
 

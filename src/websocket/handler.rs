@@ -30,9 +30,7 @@ use std::sync::Arc;
 #[cfg(feature = "websocket")]
 use crate::websocket::connection::{AppState, ConnectionManager};
 #[cfg(feature = "websocket")]
-use crate::websocket::message::{
-    parse_websocket_message, WebSocketMessage, MAX_MESSAGE_SIZE,
-};
+use crate::websocket::message::{parse_websocket_message, WebSocketMessage, MAX_MESSAGE_SIZE};
 
 #[cfg(feature = "websocket")]
 use crate::core::ApiMetadata;
@@ -281,9 +279,7 @@ mod tests {
     #[tokio::test]
     async fn handle_socket_closes_connection_on_oversized_message() {
         let app = Router::new().route("/ws", axum::routing::get(websocket_upgrade));
-        let server = axum_test::TestServer::builder()
-            .http_transport()
-            .build(app);
+        let server = axum_test::TestServer::builder().http_transport().build(app);
 
         let mut ws = server.get_websocket("/ws").await.into_websocket().await;
 
@@ -326,9 +322,7 @@ mod tests {
     #[tokio::test]
     async fn handle_socket_ignores_binary_messages() {
         let app = Router::new().route("/ws", axum::routing::get(websocket_upgrade));
-        let server = axum_test::TestServer::builder()
-            .http_transport()
-            .build(app);
+        let server = axum_test::TestServer::builder().http_transport().build(app);
 
         let mut ws = server.get_websocket("/ws").await.into_websocket().await;
 

@@ -1,16 +1,16 @@
 #![allow(unused_imports)]
-use crate::websocket::*;
-use crate::websocket::message::*;
-use crate::websocket::connection::*;
-use crate::websocket::handler::*;
-use crate::websocket::broadcast::*;
 use crate::core::registration::Registration;
 use crate::core::ApiMetadata;
+use crate::websocket::broadcast::*;
+use crate::websocket::connection::*;
+use crate::websocket::handler::*;
+use crate::websocket::message::*;
+use crate::websocket::*;
+use axum::http::header::AUTHORIZATION;
+use axum::http::StatusCode;
+use axum::Router;
 use futures_util::FutureExt;
 use std::sync::Arc;
-use axum::Router;
-use axum::http::StatusCode;
-use axum::http::header::AUTHORIZATION;
 
 /// Test DefaultWebSocketHandler
 #[test]
@@ -177,13 +177,18 @@ fn websocket_route_custom_handler() {
             Box::pin(async move { message })
         }
     }
-    let route = WebSocketRoute::new("/echo", "v2", || Arc::new(EchoHandler), || ApiMetadata {
-        name: "/echo".to_string(),
-        version: "v2".to_string(),
-        description: "Echo handler".to_string(),
-        cache_ttl: None,
-        is_streaming: false,
-    });
+    let route = WebSocketRoute::new(
+        "/echo",
+        "v2",
+        || Arc::new(EchoHandler),
+        || ApiMetadata {
+            name: "/echo".to_string(),
+            version: "v2".to_string(),
+            description: "Echo handler".to_string(),
+            cache_ttl: None,
+            is_streaming: false,
+        },
+    );
     assert_eq!(route.name(), "/echo");
     assert_eq!(route.version(), "v2");
 }
@@ -195,9 +200,7 @@ fn websocket_route_custom_handler() {
 /// Helper: build a test server with the websocket_upgrade handler (no auth).
 fn build_ws_test_server() -> axum_test::TestServer {
     let app = Router::new().route("/ws", axum::routing::get(websocket_upgrade));
-    axum_test::TestServer::builder()
-        .http_transport()
-        .build(app)
+    axum_test::TestServer::builder().http_transport().build(app)
 }
 
 /// Test handle_socket processes a Request and returns a Response.
@@ -207,11 +210,7 @@ fn build_ws_test_server() -> axum_test::TestServer {
 #[tokio::test]
 async fn handle_socket_processes_request_and_returns_response() {
     let server = build_ws_test_server();
-    let mut ws = server
-        .get_websocket("/ws")
-        .await
-        .into_websocket()
-        .await;
+    let mut ws = server.get_websocket("/ws").await.into_websocket().await;
 
     let request = WebSocketMessage::Request {
         id: "req-1".to_string(),
@@ -238,11 +237,7 @@ async fn handle_socket_processes_request_and_returns_response() {
 #[tokio::test]
 async fn handle_socket_handles_invalid_json() {
     let server = build_ws_test_server();
-    let mut ws = server
-        .get_websocket("/ws")
-        .await
-        .into_websocket()
-        .await;
+    let mut ws = server.get_websocket("/ws").await.into_websocket().await;
 
     ws.send_text("not valid json").await;
 
@@ -262,11 +257,7 @@ async fn handle_socket_handles_invalid_json() {
 #[tokio::test]
 async fn handle_socket_echoes_notification_messages() {
     let server = build_ws_test_server();
-    let mut ws = server
-        .get_websocket("/ws")
-        .await
-        .into_websocket()
-        .await;
+    let mut ws = server.get_websocket("/ws").await.into_websocket().await;
 
     let notification = WebSocketMessage::Notification {
         event: "test_event".to_string(),
@@ -296,16 +287,10 @@ async fn handle_socket_echoes_notification_messages() {
 #[tokio::test]
 async fn validated_websocket_upgrade_accepts_without_auth() {
     let app = Router::new().route("/ws", axum::routing::get(websocket_upgrade));
-    let server = axum_test::TestServer::builder()
-        .http_transport()
-        .build(app);
+    let server = axum_test::TestServer::builder().http_transport().build(app);
 
     // A successful WS connect means the extractor accepted the request.
-    let mut ws = server
-        .get_websocket("/ws")
-        .await
-        .into_websocket()
-        .await;
+    let mut ws = server.get_websocket("/ws").await.into_websocket().await;
     // Send a request to confirm the connection is functional.
     let request = WebSocketMessage::Request {
         id: "no-auth-1".to_string(),
@@ -319,9 +304,8 @@ async fn validated_websocket_upgrade_accepts_without_auth() {
 
 /// Helper: build a test server with auth configured via Extension layer.
 fn build_ws_test_server_with_auth() -> axum_test::TestServer {
-    let auth =
-        crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-            .expect("valid secret");
+    let auth = crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        .expect("valid secret");
     let config = WebSocketConfig {
         auth: Some(auth),
         rate_limit: RateLimitConfig::default(),
@@ -331,9 +315,7 @@ fn build_ws_test_server_with_auth() -> axum_test::TestServer {
     let app = Router::new()
         .route("/ws", axum::routing::get(websocket_upgrade))
         .layer(axum::Extension(app_state));
-    axum_test::TestServer::builder()
-        .http_transport()
-        .build(app)
+    axum_test::TestServer::builder().http_transport().build(app)
 }
 
 /// Test the extractor rejects with 401 when auth is configured but no

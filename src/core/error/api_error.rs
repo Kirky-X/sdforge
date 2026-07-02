@@ -449,8 +449,7 @@ impl ApiError {
                     details["timestamp"] = serde_json::json!(chrono::Utc::now().timestamp());
                 }
                 if let Some(ctx) = context {
-                    details["context"] =
-                        serde_json::to_value(ctx).unwrap_or(serde_json::json!({}));
+                    details["context"] = serde_json::to_value(ctx).unwrap_or(serde_json::json!({}));
                 }
                 ServiceError::with_details("INTERNAL_ERROR", message.clone(), details, 500)
             }
@@ -706,8 +705,7 @@ mod tests {
     /// Test internal_with_context() constructor stores the context.
     #[test]
     fn test_internal_with_context_constructor() {
-        let ctx = ErrorContext::new()
-            .with_extra("request_id".to_string(), "req-789".to_string());
+        let ctx = ErrorContext::new().with_extra("request_id".to_string(), "req-789".to_string());
         let err = ApiError::internal_with_context("msg", "err-789", ctx);
         match err {
             ApiError::Internal {
@@ -732,12 +730,8 @@ mod tests {
     fn test_internal_with_source_and_context_constructor() {
         let source_err = TestSourceError("db down".to_string());
         let ctx = ErrorContext::current();
-        let err = ApiError::internal_with_source_and_context(
-            "sanitized",
-            "err-000",
-            source_err,
-            ctx,
-        );
+        let err =
+            ApiError::internal_with_source_and_context("sanitized", "err-000", source_err, ctx);
         match err {
             ApiError::Internal {
                 message,
@@ -884,7 +878,9 @@ mod tests {
     #[test]
     fn test_source_none_for_client_errors() {
         assert!(ApiError::not_found("X", None).source().is_none());
-        assert!(ApiError::invalid_input("msg", None, None).source().is_none());
+        assert!(ApiError::invalid_input("msg", None, None)
+            .source()
+            .is_none());
         assert!(ApiError::authentication_failed("r").source().is_none());
         assert!(ApiError::access_denied("p", None).source().is_none());
         assert!(ApiError::rate_limit_exceeded(1, 1).source().is_none());
@@ -901,11 +897,8 @@ mod tests {
     /// Test source() returns the source for Internal with a source.
     #[test]
     fn test_source_some_for_internal_with_source() {
-        let err = ApiError::internal_with_source(
-            "msg",
-            "id",
-            TestSourceError("chained".to_string()),
-        );
+        let err =
+            ApiError::internal_with_source("msg", "id", TestSourceError("chained".to_string()));
         let src = err.source().expect("source should be present");
         assert!(src.to_string().contains("chained"));
     }
@@ -990,29 +983,30 @@ mod tests {
                 ApiError::authentication_failed("r"),
             ),
             ("ACCESS_DENIED", ApiError::access_denied("p", None)),
-            (
-                "RATE_LIMIT_EXCEEDED",
-                ApiError::rate_limit_exceeded(1, 1),
-            ),
+            ("RATE_LIMIT_EXCEEDED", ApiError::rate_limit_exceeded(1, 1)),
             ("INTERNAL_ERROR", ApiError::internal_error("m", "id")),
             (
                 "SERVICE_UNAVAILABLE",
                 ApiError::service_unavailable("svc", None),
             ),
-            (
-                "VALIDATION_ERROR",
-                ApiError::validation("f", "c"),
-            ),
+            ("VALIDATION_ERROR", ApiError::validation("f", "c")),
         ];
 
         for (expected_code, err) in errors {
             let json = err.to_mcp_json();
-            let parsed: serde_json::Value = serde_json::from_str(&json)
-                .unwrap_or_else(|e| panic!("to_mcp_json should produce valid JSON for {}: {}", expected_code, e));
-            assert_eq!(parsed["success"], false, "success should be false for {}", expected_code);
+            let parsed: serde_json::Value = serde_json::from_str(&json).unwrap_or_else(|e| {
+                panic!(
+                    "to_mcp_json should produce valid JSON for {}: {}",
+                    expected_code, e
+                )
+            });
             assert_eq!(
-                parsed["error"]["code"],
-                expected_code,
+                parsed["success"], false,
+                "success should be false for {}",
+                expected_code
+            );
+            assert_eq!(
+                parsed["error"]["code"], expected_code,
                 "error code mismatch for {}",
                 expected_code
             );
@@ -1043,10 +1037,22 @@ mod tests {
     fn test_to_service_error_all_variants() {
         let cases: Vec<(&str, u16, ApiError)> = vec![
             ("NOT_FOUND", 404, ApiError::not_found("X", None)),
-            ("INVALID_INPUT", 400, ApiError::invalid_input("m", None, None)),
-            ("AUTHENTICATION_FAILED", 401, ApiError::authentication_failed("r")),
+            (
+                "INVALID_INPUT",
+                400,
+                ApiError::invalid_input("m", None, None),
+            ),
+            (
+                "AUTHENTICATION_FAILED",
+                401,
+                ApiError::authentication_failed("r"),
+            ),
             ("ACCESS_DENIED", 403, ApiError::access_denied("p", None)),
-            ("RATE_LIMIT_EXCEEDED", 429, ApiError::rate_limit_exceeded(1, 1)),
+            (
+                "RATE_LIMIT_EXCEEDED",
+                429,
+                ApiError::rate_limit_exceeded(1, 1),
+            ),
             ("INTERNAL_ERROR", 500, ApiError::internal_error("m", "id")),
             (
                 "SERVICE_UNAVAILABLE",
@@ -1095,12 +1101,14 @@ mod tests {
     /// Test to_service_error() for Internal with context includes context in details.
     #[test]
     fn test_to_service_error_internal_with_context_details() {
-        let ctx = ErrorContext::new()
-            .with_extra("trace_id".to_string(), "trace-123".to_string());
+        let ctx = ErrorContext::new().with_extra("trace_id".to_string(), "trace-123".to_string());
         let err = ApiError::internal_with_context("msg", "id", ctx);
         let service_err = err.to_service_error();
         let details = service_err.details().expect("details should be present");
-        assert!(details.get("context").is_some(), "context should be in details");
+        assert!(
+            details.get("context").is_some(),
+            "context should be in details"
+        );
     }
 
     /// Test to_service_error() for ServiceUnavailable includes service and retry_after.
@@ -1133,7 +1141,9 @@ mod tests {
     /// Test Display for each variant produces the expected message.
     #[test]
     fn test_display_all_variants() {
-        assert!(ApiError::not_found("User", None).to_string().contains("User"));
+        assert!(ApiError::not_found("User", None)
+            .to_string()
+            .contains("User"));
         assert!(ApiError::invalid_input("bad", None, None)
             .to_string()
             .contains("bad"));
@@ -1146,7 +1156,10 @@ mod tests {
         assert!(ApiError::rate_limit_exceeded(1, 1)
             .to_string()
             .contains("Rate limit"));
-        assert_eq!(ApiError::internal_error("m", "id").to_string(), "Internal server error");
+        assert_eq!(
+            ApiError::internal_error("m", "id").to_string(),
+            "Internal server error"
+        );
         assert!(ApiError::service_unavailable("svc", None)
             .to_string()
             .contains("svc"));
@@ -1173,7 +1186,8 @@ mod tests {
     fn test_serde_roundtrip_not_found() {
         let err = ApiError::not_found("User", Some("42".to_string()));
         let json = serde_json::to_string(&err).expect("serialization should succeed");
-        let restored: ApiError = serde_json::from_str(&json).expect("deserialization should succeed");
+        let restored: ApiError =
+            serde_json::from_str(&json).expect("deserialization should succeed");
         match restored {
             ApiError::NotFound {
                 resource,
@@ -1191,21 +1205,25 @@ mod tests {
     fn test_serde_includes_type_tag() {
         let err = ApiError::validation("email", "invalid");
         let json = serde_json::to_string(&err).expect("serialization should succeed");
-        assert!(json.contains(r#""type":"ValidationError""#), "json should include type tag: {}", json);
+        assert!(
+            json.contains(r#""type":"ValidationError""#),
+            "json should include type tag: {}",
+            json
+        );
     }
 
     /// Test that Internal and ServiceUnavailable variants skip the source field
     /// during serialization (source is #[serde(skip)]).
     #[test]
     fn test_serde_skips_source_field() {
-        let err = ApiError::internal_with_source(
-            "msg",
-            "id",
-            TestSourceError("secret".to_string()),
-        );
+        let err =
+            ApiError::internal_with_source("msg", "id", TestSourceError("secret".to_string()));
         let json = serde_json::to_string(&err).expect("serialization should succeed");
         // The source error message must NOT appear in the serialized output.
-        assert!(!json.contains("secret"), "source should be skipped in serialization");
+        assert!(
+            !json.contains("secret"),
+            "source should be skipped in serialization"
+        );
     }
 
     /// Test ApiError implements Send + Sync.

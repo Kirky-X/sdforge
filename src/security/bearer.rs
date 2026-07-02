@@ -100,7 +100,8 @@ impl BearerAuth {
     /// # Panics
     /// Panics if the secret doesn't meet complexity requirements
     pub fn with_audience(secret: impl Into<String>, expected_audience: impl Into<String>) -> Self {
-        Self::try_new(secret).expect("Failed to create BearerAuth: invalid secret")
+        Self::try_new(secret)
+            .expect("Failed to create BearerAuth: invalid secret")
             .with_audience_inner(expected_audience)
     }
 
@@ -1997,7 +1998,10 @@ mod tests {
         let result = std::panic::catch_unwind(|| {
             BearerAuth::with_audience("short", "my-api");
         });
-        assert!(result.is_err(), "with_audience should panic on invalid secret");
+        assert!(
+            result.is_err(),
+            "with_audience should panic on invalid secret"
+        );
     }
 
     /// Verify that with_claims panics when given an invalid (too short) secret.
@@ -2006,7 +2010,10 @@ mod tests {
         let result = std::panic::catch_unwind(|| {
             BearerAuth::with_claims("short", "aud", "iss");
         });
-        assert!(result.is_err(), "with_claims should panic on invalid secret");
+        assert!(
+            result.is_err(),
+            "with_claims should panic on invalid secret"
+        );
     }
 
     /// Verify that with_audience panics when secret lacks required character classes.
@@ -2024,11 +2031,7 @@ mod tests {
     fn test_with_claims_panics_on_missing_special_char() {
         // 36 chars, no special char
         let result = std::panic::catch_unwind(|| {
-            BearerAuth::with_claims(
-                "MySecureSecret123ABCDEFGHIJKLM",
-                "aud",
-                "iss",
-            );
+            BearerAuth::with_claims("MySecureSecret123ABCDEFGHIJKLM", "aud", "iss");
         });
         assert!(result.is_err());
     }
@@ -2102,4 +2105,3 @@ mod tests {
         assert!(auth.validate_token(&token).is_none());
     }
 }
-

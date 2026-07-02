@@ -12,8 +12,8 @@ use rmcp::model::{
 use rmcp::service::RequestContext;
 use rmcp::RoleServer;
 
-use crate::mcp::handler::{value_to_json_object_arc, McpToolInstance};
 use crate::mcp::get_mcp_tools;
+use crate::mcp::handler::{value_to_json_object_arc, McpToolInstance};
 
 /// MCP server that dispatches to tools registered via SDForge's inventory.
 ///
@@ -242,14 +242,13 @@ mod tests {
 
         fn receive(
             &mut self,
-        ) -> impl std::future::Future<Output = Option<rmcp::service::RxJsonRpcMessage<rmcp::RoleServer>>> + Send
-        {
+        ) -> impl std::future::Future<
+            Output = Option<rmcp::service::RxJsonRpcMessage<rmcp::RoleServer>>,
+        > + Send {
             async { None }
         }
 
-        fn close(
-            &mut self,
-        ) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
+        fn close(&mut self) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
             async { Ok(()) }
         }
     }

@@ -71,8 +71,7 @@ static PATH_PATTERN: Lazy<regex::Regex> =
 
 /// Pattern to match API keys in error messages (case-insensitive key=value form)
 static API_KEY_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
-    regex::Regex::new(r#"(?i)(api[_-]?key|apikey)\s*[:=]\s*['\"]?[A-Za-z0-9]{20,}['\"]?"#)
-        .unwrap()
+    regex::Regex::new(r#"(?i)(api[_-]?key|apikey)\s*[:=]\s*['\"]?[A-Za-z0-9]{20,}['\"]?"#).unwrap()
 });
 
 /// Pattern to match credit card numbers (16 digits, optional separators)
@@ -1545,7 +1544,10 @@ mod tests {
     async fn test_log_with_signing_key_generates_signature() {
         // Set a non-empty signing key — log.generate_signature should be called
         // and the resulting log should have a non-None signature.
-        std::env::set_var("SDFORGE_AUDIT_SIGNING_KEY", "test_signing_key_min_32_bytes_long!!!");
+        std::env::set_var(
+            "SDFORGE_AUDIT_SIGNING_KEY",
+            "test_signing_key_min_32_bytes_long!!!",
+        );
 
         let logger = AppAuditLogger::with_limit(10);
         let context = AuthContext {
@@ -1678,8 +1680,14 @@ mod tests {
 
         // Verify both logs are present
         let actions: Vec<&str> = logs.iter().map(|l| l.action()).collect();
-        assert!(actions.contains(&"fallback_action"), "Fallback action should be present");
-        assert!(actions.contains(&"new_action"), "New action should be present");
+        assert!(
+            actions.contains(&"fallback_action"),
+            "Fallback action should be present"
+        );
+        assert!(
+            actions.contains(&"new_action"),
+            "New action should be present"
+        );
     }
 
     #[tokio::test]
@@ -1783,9 +1791,10 @@ mod tests {
         };
 
         // Populate primary with the shared log
-        logger
-            .logs
-            .set("dedup_user", serialize_audit_logs(std::slice::from_ref(&shared_log)));
+        logger.logs.set(
+            "dedup_user",
+            serialize_audit_logs(std::slice::from_ref(&shared_log)),
+        );
 
         // Populate fallback with both the shared log and the fallback-only log
         logger.fallback_logs.set(
@@ -1831,7 +1840,11 @@ mod tests {
             .set("fb_user", serialize_audit_logs(&[fallback_log]));
 
         let logs = logger.get_logs("fb_user");
-        assert_eq!(logs.len(), 1, "Should return fallback log when primary is empty");
+        assert_eq!(
+            logs.len(),
+            1,
+            "Should return fallback log when primary is empty"
+        );
         assert_eq!(logs[0].id(), "fb-only-2");
     }
 
@@ -1937,7 +1950,11 @@ mod tests {
 
         // Primary should be unchanged (worker found no fallback to merge)
         let logs = logger.get_logs("no_fb_user");
-        assert_eq!(logs.len(), 1, "Primary should have 1 log (no merge occurred)");
+        assert_eq!(
+            logs.len(),
+            1,
+            "Primary should have 1 log (no merge occurred)"
+        );
     }
 
     // ============================================================================
@@ -2047,7 +2064,11 @@ mod tests {
 
         // The log should have been stored
         let logs = logger.get_logs("rt_user");
-        assert_eq!(logs.len(), 1, "Log should be stored when runtime is available");
+        assert_eq!(
+            logs.len(),
+            1,
+            "Log should be stored when runtime is available"
+        );
         assert_eq!(logs[0].action(), "runtime_action");
     }
 
@@ -2129,7 +2150,9 @@ mod tests {
             permissions: vec![],
             metadata: AuthMetadata::default(),
         };
-        logger.log(&context, "closed_action", "res", true, None).await;
+        logger
+            .log(&context, "closed_action", "res", true, None)
+            .await;
 
         // The log should still be stored in primary storage
         let logs = logger.get_logs("closed_user");
@@ -2164,7 +2187,9 @@ mod tests {
         };
 
         let start = std::time::Instant::now();
-        logger.log(&context, "timeout_action", "res", true, None).await;
+        logger
+            .log(&context, "timeout_action", "res", true, None)
+            .await;
         let elapsed = start.elapsed();
 
         // Should have waited approximately 1 second (the timeout duration)
