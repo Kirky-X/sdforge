@@ -851,4 +851,110 @@ mod tests {
         assert!(perms.is_some());
         assert_eq!(perms.unwrap(), vec!["read"]);
     }
+
+    // ============================================================================
+    // with_dependencies with Some(key_metadata) Tests
+    // ============================================================================
+
+    /// Verify that with_dependencies uses the provided key_metadata cache
+    /// instead of creating a new one (covers the unwrap_or_else Some branch,
+    /// line 66).
+    #[test]
+    fn test_with_dependencies_with_custom_key_metadata() {
+        use crate::cache::SyncCache;
+
+        let valid_keys = Arc::new(crate::cache::DashMapCache::new());
+        let key_metadata = Arc::new(crate::cache::DashMapCache::new());
+
+        let auth =
+            AppApiKeyAuth::with_dependencies(valid_keys.clone(), Some(key_metadata.clone()));
+
+        // Add a versioned key — this writes to key_metadata
+        auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None);
+
+        // Verify the metadata was stored in OUR custom key_metadata cache,
+        // not a newly-created one.
+        let stored = key_metadata.get("metadata:kid1");
+        assert!(
+            stored.is_some(),
+            "Metadata should be stored in the custom key_metadata cache"
+        );
+    }
+
+    // ============================================================================
+    // rotate_key cleanup with version deletion Tests
+    // ============================================================================
+
+    /// Verify that rotate_key cleans up old versions beyond keep_versions and
+    /// deletes their key hashes from valid_keys (lines 258-263).
+    ///
+    /// Uses keep_versions=1 so that after multiple rotations, old versions are
+    /// evicted and their keys no longer validate.
+    #[test]
+    fn test_rotate_key_cleans_up_old_versions_beyond_keep_limit() {
+        let rotation_config = RotationConfig {
+            rotation_interval: std::time::Duration::from_secs(3600),
+            grace_period: std::time::Duration::from_secs(60),
+            keep_versions: 1,
+        };
+        let auth = AppApiKeyAuth::new().with_rotation(rotation_config);
+
+        // Add initial version
+        auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None);
+
+        // Rotate to v2 — with keep_versions=1, v1 should be cleaned up and
+        // its hash deleted from valid_keys.
+        auth.rotate_key("kid1", "secret_v2", vec!["read".to_string()], "v2")
+            .expect("rotation v2");
+
+        // v1 should no longer validate because its hash was deleted from valid_keys
+        let perms_v1 = auth.validate_key("secret_v1", "127.0.0.1");
+        assert!(
+            perms_v1.is_none(),
+            "Old version v1 should no longer validate after cleanup (keep_versions=1)"
+        );
+
+        // v2 should still validate
+        let perms_v2 = auth.validate_key("secret_v2", "127.0.0.1");
+        assert!(perms_v2.is_some(), "Latest version v2 should still validate");
+        assert_eq!(perms_v2.unwrap(), vec!["read"]);
+    }
+
+    // ============================================================================
+    // add_key_version with corrupted metadata Tests
+    // ============================================================================
+
+    /// Verify that add_key_version silently skips metadata update when
+    /// existing metadata is corrupted (the `if let Ok` failure path,
+    /// line 172).
+    ///
+    /// When the stored metadata cannot be deserialized, add_key_version still
+    /// stores the key hash in valid_keys but does NOT update the metadata.
+    #[test]
+    fn test_add_key_version_with_corrupted_metadata_skips_update() {
+        let auth = AppApiKeyAuth::new();
+
+        // Manually store corrupted metadata for "kid1"
+        auth.key_metadata.set("metadata:kid1", b"corrupted_data".to_vec());
+
+        // Call add_key_version — it should find the corrupted metadata,
+        // fail to deserialize it, and skip the metadata update.
+        auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None);
+
+        // The key hash should still be stored in valid_keys (stored before
+        // the metadata check).
+        let perms = auth.validate_key("secret_v1", "127.0.0.1");
+        assert!(
+            perms.is_some(),
+            "Key hash should be stored in valid_keys even when metadata is corrupted"
+        );
+        assert_eq!(perms.unwrap(), vec!["read"]);
+
+        // The metadata should still be corrupted (not updated)
+        let metadata = auth.get_key_metadata("kid1");
+        assert!(
+            metadata.is_none(),
+            "Corrupted metadata should not be parseable, so get_key_metadata returns None"
+        );
+    }
 }

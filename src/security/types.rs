@@ -1517,4 +1517,52 @@ mod tests {
         assert_eq!(result[0], "perm_0");
         assert_eq!(result[999], "perm_999");
     }
+
+    // ============================================================================
+    // deserialize_audit_logs single-object branch coverage
+    // ============================================================================
+
+    /// Deserialize a single JSON object (not an array) — exercises the
+    /// Ok(serde_json::Value::Object(_)) branch of deserialize_audit_logs,
+    /// which re-parses the object via parse_audit_log and returns a 1-element Vec.
+    #[test]
+    fn test_deserialize_audit_logs_single_object() {
+        let json = serde_json::json!({
+            "id": "single-log",
+            "timestamp": 1700000000,
+            "user_id": "user-single",
+            "action": "LOGIN",
+            "resource": "/api/auth",
+            "result": {"status": "success"},
+            "metadata": {
+                "client_ip": "203.0.113.5",
+                "user_agent": "test-agent",
+                "request_id": "req-001",
+                "timestamp": 1700000000
+            },
+            "signature": null
+        });
+        let bytes = serde_json::to_vec(&json).unwrap();
+        let result = deserialize_audit_logs(&bytes);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, "single-log");
+        assert_eq!(result[0].user_id, Some("user-single".to_string()));
+        assert_eq!(result[0].action, "LOGIN");
+        assert_eq!(result[0].resource, "/api/auth");
+    }
+
+    /// Deserialize a single JSON object that is NOT a valid AuditLog —
+    /// parse_audit_log returns None, so the Object branch yields an empty Vec.
+    /// Covers the `.and_then(|v| parse_audit_log(&v))` None sub-branch.
+    #[test]
+    fn test_deserialize_audit_logs_single_object_invalid_returns_empty() {
+        // Valid JSON object but missing required "action" field.
+        let json = serde_json::json!({
+            "id": "bad-log",
+            "timestamp": 1700000000
+        });
+        let bytes = serde_json::to_vec(&json).unwrap();
+        let result = deserialize_audit_logs(&bytes);
+        assert_eq!(result.len(), 0);
+    }
 }

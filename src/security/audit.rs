@@ -2050,4 +2050,136 @@ mod tests {
         assert_eq!(logs.len(), 1, "Log should be stored when runtime is available");
         assert_eq!(logs[0].action(), "runtime_action");
     }
+
+    // ============================================================================
+    // Channel Full/Closed and semaphore timeout branch tests
+    //
+    // log() sends an AuditLogBatch via try_send(). The Full and Closed error
+    // arms are hard to reach in normal operation because log() also writes
+    // synchronously and the channel is created by the logger. These tests
+    // exercise both arms by constructing a logger with a controlled channel
+    // state (no spawned worker to drain the queue).
+    // ============================================================================
+
+    /// Verify that log() still stores to primary storage when the async queue
+    /// is full, hitting the `TrySendError::Full(_)` arm (lines 370-373).
+    ///
+    /// Constructs a logger with a capacity-1 channel that is pre-filled, so
+    /// the next try_send from log() returns Full. The receiver is held (not
+    /// dropped) to keep the channel open, and no worker is spawned so the
+    /// queue stays full deterministically.
+    #[tokio::test]
+    async fn test_log_handles_full_queue() {
+        let (sender, _receiver) = tokio::sync::mpsc::channel::<AuditLogBatch>(1);
+
+        // Fill the queue to capacity
+        let filler = AuditLogBatch {
+            user_id: "filler_user".to_string(),
+            log: make_test_audit_log("filler_user", "filler"),
+        };
+        assert!(sender.try_send(filler).is_ok());
+
+        let logger = AppAuditLogger {
+            logs: Arc::new(crate::cache::DashMapCache::new()),
+            max_logs_per_user: 100,
+            semaphore: Arc::new(tokio::sync::Semaphore::new(10)),
+            queue_sender: Arc::new(sender),
+            fallback_logs: Arc::new(crate::cache::DashMapCache::new()),
+            dropped_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            total_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        };
+
+        let context = AuthContext {
+            user_id: Some("full_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+        logger.log(&context, "full_action", "res", true, None).await;
+
+        // The log should still be stored in primary storage (synchronous path)
+        let logs = logger.get_logs("full_user");
+        assert_eq!(
+            logs.len(),
+            1,
+            "Log should be stored in primary storage even when queue is full"
+        );
+        assert_eq!(logs[0].action(), "full_action");
+    }
+
+    /// Verify that log() still stores to primary storage when the async
+    /// channel is closed (receiver dropped), hitting the
+    /// `TrySendError::Closed(_)` arm (lines 374-376).
+    #[tokio::test]
+    async fn test_log_handles_closed_channel() {
+        let (sender, receiver) = tokio::sync::mpsc::channel::<AuditLogBatch>(1);
+        drop(receiver); // closes the channel
+
+        let logger = AppAuditLogger {
+            logs: Arc::new(crate::cache::DashMapCache::new()),
+            max_logs_per_user: 100,
+            semaphore: Arc::new(tokio::sync::Semaphore::new(10)),
+            queue_sender: Arc::new(sender),
+            fallback_logs: Arc::new(crate::cache::DashMapCache::new()),
+            dropped_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            total_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        };
+
+        let context = AuthContext {
+            user_id: Some("closed_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+        logger.log(&context, "closed_action", "res", true, None).await;
+
+        // The log should still be stored in primary storage
+        let logs = logger.get_logs("closed_user");
+        assert_eq!(
+            logs.len(),
+            1,
+            "Log should be stored in primary storage even when channel is closed"
+        );
+        assert_eq!(logs[0].action(), "closed_action");
+    }
+
+    /// Verify that log() skips storage entirely when the semaphore permit
+    /// cannot be acquired within the 1-second timeout (lines 271-274).
+    ///
+    /// Builds a logger with max_concurrent_ops=1, acquires the only permit,
+    /// then calls log() which must wait and eventually time out.
+    #[tokio::test]
+    async fn test_log_skips_when_semaphore_times_out() {
+        let logger = AppAuditLogger::builder()
+            .max_logs_per_user(100)
+            .max_concurrent_ops(1)
+            .queue_size(100)
+            .build();
+
+        // Acquire the only permit and hold it for the duration of the test
+        let _held_permit = logger.semaphore.clone().acquire_owned().await.unwrap();
+
+        let context = AuthContext {
+            user_id: Some("timeout_user".to_string()),
+            permissions: vec![],
+            metadata: AuthMetadata::default(),
+        };
+
+        let start = std::time::Instant::now();
+        logger.log(&context, "timeout_action", "res", true, None).await;
+        let elapsed = start.elapsed();
+
+        // Should have waited approximately 1 second (the timeout duration)
+        assert!(
+            elapsed >= std::time::Duration::from_millis(900),
+            "Should have waited ~1s for the semaphore timeout, elapsed: {:?}",
+            elapsed
+        );
+
+        // No log should be stored because the permit was never acquired
+        let logs = logger.get_logs("timeout_user");
+        assert_eq!(
+            logs.len(),
+            0,
+            "No log should be stored on semaphore timeout"
+        );
+    }
 }
