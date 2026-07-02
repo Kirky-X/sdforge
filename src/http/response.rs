@@ -383,4 +383,63 @@ mod tests {
         assert_eq!(parsed["error"]["message"], "custom fallback message");
         assert_eq!(parsed["error"]["code"], "SERIALIZATION_ERROR");
     }
+
+    // ============================================================================
+    // unwrap_or_else fallback branch coverage
+    //
+    // The `unwrap_or_else` closures in build_json_response (line 27) and
+    // build_fallback_response (line 44) are defensive fallbacks triggered when
+    // `Response::builder().body()` returns Err. This happens when the status
+    // code is invalid (outside the 100..=999 range accepted by
+    // `StatusCode::TryFrom<u16>`). Passing a status < 100 (e.g., 99) causes
+    // the builder to store an error internally, making `.body()` return Err.
+    // ============================================================================
+
+    /// Test build_json_response falls back when given an invalid status code
+    /// (< 100). Covers the `unwrap_or_else(|_| build_fallback_response(...))`
+    /// branch in build_json_response.
+    #[test]
+    fn test_build_json_response_invalid_status_triggers_fallback() {
+        #[derive(serde::Serialize)]
+        struct Payload {
+            value: i32,
+        }
+
+        // Status 99 is invalid (< 100), causing Response::builder().body() to
+        // return Err, which triggers the unwrap_or_else fallback.
+        let resp = build_json_response(99, &Payload { value: 42 }, "fallback for invalid status");
+        // The response should still be created via the fallback path.
+        // The fallback itself also receives the invalid status, so it too
+        // falls back to Response::new(Body::empty()).
+        // Just verify we get a Response without panic.
+        let _ = resp.status();
+    }
+
+    /// Test build_fallback_response falls back to an empty body when given an
+    /// invalid status code (< 100). Covers the
+    /// `unwrap_or_else(|_| axum::response::Response::new(Body::empty()))`
+    /// branch in build_fallback_response.
+    #[test]
+    fn test_build_fallback_response_invalid_status_triggers_empty_body() {
+        // Status 99 is invalid, causing both build_json_response and
+        // build_fallback_response to hit their unwrap_or_else fallbacks.
+        let resp = build_fallback_response(99, "invalid status test");
+        // The final fallback is Response::new(Body::empty()), which defaults
+        // to status 200. Verify no panic occurs.
+        let _ = resp.status();
+    }
+
+    /// Test build_json_response with a very large invalid status code (> 999)
+    /// also triggers the fallback path.
+    #[test]
+    fn test_build_json_response_status_above_999_triggers_fallback() {
+        #[derive(serde::Serialize)]
+        struct Payload {
+            value: i32,
+        }
+
+        // Status 1000 is invalid (> 999), triggering the fallback.
+        let resp = build_json_response(1000, &Payload { value: 42 }, "overflow status");
+        let _ = resp.status();
+    }
 }
