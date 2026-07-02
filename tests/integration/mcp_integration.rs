@@ -8,24 +8,24 @@ mod mcp_tests {
     #[tokio::test]
     async fn test_mcp_server_builds() {
         // Just verify build() can be called without panicking
-        let _server = build().await;
+        let _server = build();
     }
 }
 
 #[cfg(feature = "mcp")]
 mod mcp_registration_tests {
-    use mcp_sdk::tools::Tool;
-    use sdforge::core::types::ApiMetadata;
-    use sdforge::mcp::McpToolRegistration;
+    use rmcp::model::{CallToolResult, ErrorData as McpError};
+    use sdforge::core::ApiMetadata;
+    use sdforge::mcp::{McpToolRegistration, SdForgeTool};
     use std::sync::Arc;
 
     struct TestTool;
-    impl Tool for TestTool {
-        fn name(&self) -> String {
-            "test_tool".to_string()
+    impl SdForgeTool for TestTool {
+        fn name(&self) -> &str {
+            "test_tool"
         }
-        fn description(&self) -> String {
-            "A test tool".to_string()
+        fn description(&self) -> &str {
+            "A test tool"
         }
         fn input_schema(&self) -> serde_json::Value {
             serde_json::json!({
@@ -38,9 +38,10 @@ mod mcp_registration_tests {
         fn call(
             &self,
             _input: Option<serde_json::Value>,
-        ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
-            Ok(mcp_sdk::types::CallToolResponse {
+        ) -> Result<CallToolResult, McpError> {
+            Ok(CallToolResult {
                 content: vec![],
+                structured_content: None,
                 is_error: None,
                 meta: None,
             })
@@ -50,7 +51,7 @@ mod mcp_registration_tests {
     #[test]
     fn test_mcp_tool_registration() {
         // Test that McpToolRegistration::new() works with the new API
-        fn create_tool() -> Arc<dyn Tool> {
+        fn create_tool() -> Arc<dyn SdForgeTool> {
             Arc::new(TestTool)
         }
         fn create_metadata() -> ApiMetadata {
@@ -70,7 +71,7 @@ mod mcp_registration_tests {
 
     #[test]
     fn test_mcp_tool_creation() {
-        // Create a tool instance directly to verify the Tool implementation works
+        // Create a tool instance directly to verify the SdForgeTool implementation works
         let tool = TestTool;
         assert_eq!(tool.name(), "test_tool");
     }
@@ -85,6 +86,6 @@ mod dual_protocol_tests {
     async fn test_both_protocols_build() {
         // Just verify both builds can be called without panicking
         let _http_app = http_build();
-        let _mcp_server = mcp_build().await;
+        let _mcp_server = mcp_build();
     }
 }

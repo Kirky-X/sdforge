@@ -17,7 +17,7 @@ mod mcp_macro_tests {
 
     #[tokio::test]
     async fn test_mcp_build() {
-        let _ = build().await;
+        let _ = build();
     }
 }
 
@@ -28,6 +28,6 @@ mod dual_macro_tests {
     #[tokio::test]
     async fn test_dual_build() {
         let _ = http_build();
-        let _ = mcp_build().await;
+        let _ = mcp_build();
     }
 }
