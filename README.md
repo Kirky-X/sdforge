@@ -84,12 +84,6 @@ Recent architectural enhancements include:
 - **🔐 Enhanced Security Module** - API Key versioning, LRU caching, key rotation with audit logging, and comprehensive security headers configuration
 - **💾 Advanced Caching** - Pattern-based cache invalidation, key normalization, batch operations, and statistics tracking
 
-📚 **Learn more**: 
-- [Migration Guide](docs/MIGRATION_GUIDE_PHASE1.md)
-- [Usage Examples](docs/EXAMPLES_PHASE1.md)
-- [Phase 2 Report](docs/PHASE2_REPORT.md) - Configuration validation & performance benchmarks
-- [Phase 3 Plan](docs/PHASE3_PLAN.md) - Code quality zeroing & optimization
-
 ---
 
 ## <span id="installation">📦 Installation</span>
@@ -100,12 +94,12 @@ Add SDForge to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["http"] }
+sdforge = { version = "0.1", features = ["http"] }
 ```
 
 **CLI Tool**: To use the CLI, enable the `cli` feature:
 ```toml
-sdforge = { version = "0.2", features = ["cli"] }
+sdforge = { version = "0.1", features = ["cli"] }
 ```
 
 Then run:
@@ -162,13 +156,12 @@ SDForge uses Cargo features for compile-time protocol selection and feature comp
 | `mcp`        | MCP protocol (mcp-sdk 0.0.3)             | mcp-sdk                                       |
 | `streaming`  | SSE streaming support                    | tokio-stream, futures-util                    |
 | `timestamp`  | Auto-add timestamp to responses          | chrono                                        |
-| `logging`    | Structured request logging                | tracing, tracing-subscriber, tracing-appender |
-| `security`   | Security features (auth, rate limiting)   | dashmap, uuid, hmac, sha2, secrecy           |
-| `hot-reload` | Config hot reload                        | notify                                        |
+| `logging`    | Structured request logging                | chrono, tokio                                 |
+| `security`   | Security features (auth, rate limiting)   | dashmap, uuid, hmac, sha2, secrets           |
+| `hot-reload` | Config hot reload                        | http, confers                                 |
 | `websocket`  | WebSocket support                        | tokio-tungstenite, axum-extra                |
 | `grpc`       | gRPC support                             | tonic, prost                                 |
-| `cache`      | Caching support                          | cached, cached_proc_macro                     |
-| `cache-redis`| Redis caching                           | redis                                         |
+| `cache`      | Caching support                          | oxcache, async-trait                          |
 | `full`       | All features enabled                     | -                                             |
 
 ### 🔗 Feature Dependencies
@@ -182,8 +175,7 @@ SDForge uses Cargo features for compile-time protocol selection and feature comp
 - `hot-reload`: Requires `http`
 - `websocket`: Requires `http`, `streaming`
 - `grpc`: Requires `http`
-- `cache`: Requires `http`
-- `cache-redis`: Requires `cache`
+- `cache`: Independent (uses http crate types, not sdforge http feature)
 
 ---
 
@@ -466,16 +458,13 @@ cargo clippy --all-features --all-targets
 ## <span id="documentation">📚 Documentation</span>
 
 - [📖 API Documentation](https://docs.rs/sdforge)
-- [📋 API Reference](./docs/API_REFERENCE.md)
-- [🏗️ Architecture Documentation](./docs/ARCHITECTURE.md)
-- [🤝 Contributing Guide](./docs/CONTRIBUTING.md)
 - [💡 Examples](./examples/)
 
 ---
 
 ## <span id="contributing">🤝 Contributing</span>
 
-We welcome contributions! Please read our [contributing guidelines](./docs/CONTRIBUTING.md) before submitting pull requests.
+We welcome contributions! Please submit pull requests with clear descriptions of your changes.
 
 ### 🛠️ Development Setup
 
@@ -538,7 +527,7 @@ sdforge/
 
 **Note**: The CLI binary is only compiled when the `cli` feature is enabled:
 ```toml
-sdforge = { version = "0.2", features = ["cli"] }
+sdforge = { version = "0.1", features = ["cli"] }
 ```
 
 ---
@@ -609,39 +598,29 @@ enabled = true
 ttl_seconds = 300
 max_size_mb = 100
 max_entries = 10000
-
-[cache.redis]
-url = "redis://localhost:6379"
-enabled = false
 ```
 
 ### 📊 Memory Management
 
 ```rust
-use sdforge::cache::CacheConfig;
+use sdforge::config::CacheConfig;
 
 let cache_config = CacheConfig {
-    ttl_seconds: 600,
-    max_size_bytes: 50 * 1024 * 1024, // 50MB
-    max_entries: 5000,
-    cacheable_methods: vec!["GET".to_string(), "HEAD".to_string()],
-    cacheable_status_codes: vec![200, 203, 204, 206, 300, 301, 404, 410],
+    enabled: true,
+    default_ttl_secs: 600,
+    max_items: 5000,
+    track_stats: true,
 };
 ```
 
 ### ⚙️ Connection Pooling
 
 ```rust
+use sdforge::config::AppConfig;
 use sdforge::http::build_with_config;
 
-let config = HttpConfig {
-    max_connections: 1000,
-    connection_timeout: Duration::from_secs(30),
-    keep_alive: Duration::from_secs(60),
-    ..Default::default()
-};
-
-let app = build_with_config(config);
+let config = AppConfig::default();
+let app = build_with_config(&config)?;
 ```
 
 ---

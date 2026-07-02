@@ -138,6 +138,9 @@ pub mod grpc;
 ///
 /// 包含配置功能示例：
 /// - [`app_config`](config::app_config) - 应用配置构建与加载
+/// - [`derive_config`](config::derive_config) - confers `#[derive(Config)]` 宏完整示例
+/// - [`config_builder`](config::config_builder) - confers `ConfigBuilder<T>` 流式 API
+/// - [`hot_reload`](config::hot_reload) - 配置热重载 API
 #[cfg(feature = "http_examples")]
 pub mod config;
 
