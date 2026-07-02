@@ -605,11 +605,11 @@ fn benchmark_http_router_construction(c: &mut Criterion) {
     use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
 
     c.bench_function("http_router_build", |b| {
-        b.iter(|| sdforge::http::build())
+        b.iter(sdforge::http::build)
     });
 
     c.bench_function("http_router_build_with_redirect", |b| {
-        b.iter(|| sdforge::http::build_with_redirect())
+        b.iter(sdforge::http::build_with_redirect)
     });
 
     let config = AppConfig {
@@ -662,11 +662,11 @@ criterion_group!(
 #[cfg(feature = "mcp")]
 fn benchmark_mcp_tool_registration(c: &mut Criterion) {
     c.bench_function("mcp_get_tools", |b| {
-        b.iter(|| sdforge::get_mcp_tools())
+        b.iter(sdforge::get_mcp_tools)
     });
 
     c.bench_function("mcp_init_all_plugins", |b| {
-        b.iter(|| sdforge::init_all_plugins())
+        b.iter(sdforge::init_all_plugins)
     });
 }
 
