@@ -23,10 +23,11 @@ mod tests {
 
     #[test]
     fn test_macro_compilation() {
-        // This test verifies that the macros compile correctly
+        // This test verifies that the macros compile correctly.
+        // Reaching here without panicking means compilation succeeded;
+        // the explicit `assert!(true, ...)` was removed to satisfy
+        // clippy::assertions_on_constants.
         let _result = test_basic_macro;
         let _result2 = test_module::test_fn();
-        // If we reach here, macros compiled successfully
-        assert!(true, "Macros should compile without errors");
     }
 }
