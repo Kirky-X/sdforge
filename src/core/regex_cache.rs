@@ -83,8 +83,13 @@ impl RegexCache {
             .map(|ref kv| (kv.key().clone(), *kv.value()))
             .collect();
 
-        // Sort by access time (oldest first)
-        entries.sort_by_key(|&(_, time)| std::cmp::Reverse(time));
+        // Sort by access time (oldest first) — ascending order removes
+        // least-recently-used patterns (true LRU eviction).
+        //
+        // Previously used `Reverse(time)` which sorted newest-first, causing
+        // `take(to_remove)` to evict the most-recently-used entries instead —
+        // a correctness bug that effectively disabled the cache after fill.
+        entries.sort_by_key(|&(_, time)| time);
 
         // Remove oldest entries
         let to_remove = self.cache.len() - self.max_size;

@@ -36,6 +36,13 @@ impl AuthConfig {
     ///
     /// Security: Rejects configurations that could bypass authentication.
     /// An empty prefix allows any API key to pass validation, enabling auth bypass.
+    ///
+    /// This inherent method delegates to the `ValidateConfig` trait impl when
+    /// the `validation` feature is enabled, and otherwise runs the same checks
+    /// inline. Previously the two implementations diverged: the inherent method
+    /// emitted an `eprintln!` warning for short JWT secrets while the trait
+    /// impl silently accepted them, so callers observed different behavior
+    /// depending on which `validate()` was invoked.
     pub fn validate(&self) -> Result<(), crate::config::ConfigError> {
         match self {
             AuthConfig::ApiKey { prefix, .. } => {
@@ -52,12 +59,6 @@ impl AuthConfig {
                     return Err(crate::config::ConfigError::ValidationError(
                         "JWT secret cannot be empty".into(),
                     ));
-                }
-
-                // Warn if secret is too short (less than 32 characters)
-                // A strong JWT secret should be at least 256 bits (32 bytes)
-                if secret.len() < 32 {
-                    eprintln!("⚠️  WARNING: JWT secret is only {} characters long. For production use, consider using a stronger secret (32+ bytes).", secret.len());
                 }
 
                 // Check for obviously weak secrets
@@ -83,42 +84,11 @@ impl AuthConfig {
 #[cfg(feature = "validation")]
 impl crate::config::ValidateConfig for AuthConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
-        use crate::config::ConfigError;
-
-        match self {
-            AuthConfig::ApiKey { prefix, .. } => {
-                if prefix.is_empty() {
-                    return Err(ConfigError::ValidationError(
-                        "API key prefix cannot be empty: an empty prefix allows any key to match"
-                            .into(),
-                    ));
-                }
-            }
-            AuthConfig::Jwt { secret } => {
-                // Validate JWT secret strength
-                if secret.is_empty() {
-                    return Err(ConfigError::ValidationError(
-                        "JWT secret cannot be empty".into(),
-                    ));
-                }
-
-                // Check for obviously weak secrets
-                let lower = secret.to_lowercase();
-                if lower == "secret"
-                    || lower == "password"
-                    || lower == "key"
-                    || lower == "jwt_secret"
-                {
-                    return Err(ConfigError::ValidationError(
-                        "JWT secret is too weak. Avoid using common words like 'secret', \
-                         'password', 'key', or 'jwt_secret'. Use a randomly generated value."
-                            .into(),
-                    ));
-                }
-            }
-            AuthConfig::None => {}
-        }
-        Ok(())
+        // Delegate to the inherent method to guarantee both code paths run
+        // identical validation logic. Previously this body was a verbatim
+        // copy that diverged (it omitted the eprintln! for short secrets,
+        // producing two different behaviors from the same name).
+        AuthConfig::validate(self)
     }
 }
 

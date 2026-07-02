@@ -492,4 +492,152 @@ mod tests {
         let result: Result<serde_json::Value, _> = simd_from_str("{}");
         assert!(result.is_ok());
     }
+
+    // ============================================================================
+    // Defensive fallback path documentation
+    //
+    // The `unwrap_or_else` fallback closures in `error_response`,
+    // `success_response`, `paginated_response`, and `api_metadata_response`
+    // are defensive code paths that are effectively unreachable in practice:
+    //
+    // - `error_response` serializes a `serde_json::Value` built from `&str`
+    //   slices via `serde_json::json!()`. Converting `&str` to `Value` never
+    //   fails, and `serde_json::to_string` on a `Value` always succeeds.
+    // - `success_response`/`paginated_response`/`api_metadata_response` embed
+    //   the caller's `T: Serialize` value inside `serde_json::json!()`. The
+    //   `json!` macro calls `serde_json::to_value(..).expect(..)`, which
+    //   *panics* if `T`'s `Serialize` impl fails — so execution never reaches
+    //   the `to_string` call, let alone its `unwrap_or_else` fallback.
+    //
+    // The following `#[should_panic]` test documents this actual behavior:
+    // passing a non-serializable type panics rather than triggering the
+    // fallback. This is the real runtime behavior and must not be silently
+    // changed without updating the fallback design.
+    // ============================================================================
+
+    /// Document that `success_response` panics (rather than falling back) when
+    /// given a value whose `Serialize` implementation fails, because the
+    /// `serde_json::json!` macro calls `to_value(..).expect(..)` internally.
+    #[test]
+    #[should_panic]
+    fn test_success_response_panics_on_unserializable_data() {
+        let _ = success_response(&FailingSerialize);
+    }
+
+    /// Document that `paginated_response` panics (rather than falling back)
+    /// when given items whose `Serialize` implementation fails.
+    #[test]
+    #[should_panic]
+    fn test_paginated_response_panics_on_unserializable_data() {
+        let items = [FailingSerialize];
+        let _ = paginated_response(&items, 1, 1, 1);
+    }
+
+    // ============================================================================
+    // Edge case tests for the success paths
+    // ============================================================================
+
+    /// Test error_response with unicode characters in both code and message.
+    #[test]
+    fn test_error_response_unicode_characters() {
+        let json = error_response("错误", "资源未找到：用户");
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], false);
+        assert_eq!(parsed["error"]["code"], "错误");
+        assert_eq!(parsed["error"]["message"], "资源未找到：用户");
+    }
+
+    /// Test success_response with a boolean value.
+    #[test]
+    fn test_success_response_with_boolean() {
+        let json = success_response(&true);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], true);
+        assert_eq!(parsed["data"], true);
+    }
+
+    /// Test success_response with None to verify Option serialization.
+    #[test]
+    fn test_success_response_with_none() {
+        let json = success_response(&None::<i32>);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["success"], true);
+        assert_eq!(parsed["data"], serde_json::Value::Null);
+    }
+
+    /// Test paginated_response with a large total_items to verify div_ceil
+    /// calculates total_pages correctly for non-exact multiples.
+    #[test]
+    fn test_paginated_response_non_exact_multiple() {
+        let items = vec!["a"];
+        // 7 items, page_size 3 -> total_pages = ceil(7/3) = 3
+        let json = paginated_response(&items, 1, 3, 7);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["data"]["pagination"]["total_pages"], 3);
+        assert_eq!(parsed["data"]["pagination"]["has_next"], true);
+    }
+
+    /// Test paginated_response on the last page of a non-exact multiple.
+    #[test]
+    fn test_paginated_response_last_page_non_exact() {
+        let items = vec!["c"];
+        // page=3, total_pages=3 -> has_next=false, has_previous=true
+        let json = paginated_response(&items, 3, 3, 7);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["data"]["pagination"]["has_next"], false);
+        assert_eq!(parsed["data"]["pagination"]["has_previous"], true);
+    }
+
+    /// Test api_metadata_response with special characters in description.
+    #[test]
+    fn test_api_metadata_response_special_characters() {
+        let json = api_metadata_response(
+            "api/v1",
+            "2.0.0-beta",
+            "Handles \"quotes\", backslashes \\, and unicode 世界",
+        );
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["api"]["name"], "api/v1");
+        assert_eq!(parsed["api"]["version"], "2.0.0-beta");
+        assert!(parsed["api"]["description"].as_str().unwrap().contains("世界"));
+    }
+
+    /// Test paginated_response with page_size=1 and many items.
+    #[test]
+    fn test_paginated_response_page_size_one() {
+        let items = vec!["only"];
+        let json = paginated_response(&items, 1, 1, 5);
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["data"]["pagination"]["total_pages"], 5);
+        assert_eq!(parsed["data"]["pagination"]["has_next"], true);
+        assert_eq!(parsed["data"]["pagination"]["has_previous"], false);
+    }
+
+    /// Test simd_to_string with a Vec of mixed values.
+    #[test]
+    fn test_simd_to_string_with_vec() {
+        let data = vec![1, 2, 3, 4, 5];
+        let result = simd_to_string(&data);
+        assert!(result.is_ok());
+        let json = result.unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, serde_json::json!([1, 2, 3, 4, 5]));
+    }
+
+    /// Test simd_from_slice with a valid JSON array.
+    #[test]
+    fn test_simd_from_slice_array() {
+        let json = br#"[1, 2, 3]"#;
+        let result: Result<Vec<i32>, _> = simd_from_slice(json);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), vec![1, 2, 3]);
+    }
+
+    /// Test simd_from_str with a JSON boolean.
+    #[test]
+    fn test_simd_from_str_boolean() {
+        let result: Result<bool, _> = simd_from_str("true");
+        assert!(result.is_ok());
+        assert!(result.unwrap());
+    }
 }
