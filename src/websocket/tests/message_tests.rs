@@ -1,10 +1,10 @@
 #![allow(unused_imports)]
-use crate::websocket::*;
-use crate::websocket::message::*;
+use crate::core::registration::Registration;
+use crate::websocket::broadcast::*;
 use crate::websocket::connection::*;
 use crate::websocket::handler::*;
-use crate::websocket::broadcast::*;
-use crate::core::registration::Registration;
+use crate::websocket::message::*;
+use crate::websocket::*;
 use futures_util::FutureExt;
 
 /// Test WebSocketMessage serialization and deserialization

@@ -716,10 +716,7 @@ mod tests {
         // Verification should fail
         let result = log.verify_signature(secret_key);
         assert!(result.is_ok());
-        assert!(
-            !result.unwrap(),
-            "Tampered log should fail verification"
-        );
+        assert!(!result.unwrap(), "Tampered log should fail verification");
     }
 
     #[test]

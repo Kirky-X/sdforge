@@ -260,8 +260,7 @@ mod tests {
     async fn test_build_discovery_response_has_tools() {
         let server = SdForgeMcpServer::new();
         let response = build_discovery_response(&server).await;
-        let tool_names: Vec<&str> =
-            response.tools.iter().map(|t| t.name.as_str()).collect();
+        let tool_names: Vec<&str> = response.tools.iter().map(|t| t.name.as_str()).collect();
         assert!(tool_names.contains(&"coverage_test_tool"));
     }
 

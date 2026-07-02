@@ -55,7 +55,11 @@ fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
     // attacker can spoof these headers to bypass IP-based checks.
     let from_trusted_proxy = direct_ip
         .as_deref()
-        .map(|ip| trusted_proxies.iter().any(|range| is_ip_in_range(ip, range)))
+        .map(|ip| {
+            trusted_proxies
+                .iter()
+                .any(|range| is_ip_in_range(ip, range))
+        })
         .unwrap_or(false);
 
     if from_trusted_proxy {

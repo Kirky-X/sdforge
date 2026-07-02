@@ -85,9 +85,9 @@ mod tests;
 // ============================================================================
 
 #[cfg(feature = "mcp")]
-pub use headers::McpHeaderInfo;
-#[cfg(feature = "mcp")]
 pub use handler::McpToolInstance;
+#[cfg(feature = "mcp")]
+pub use headers::McpHeaderInfo;
 #[cfg(feature = "mcp")]
 pub use mrtr::{InputRequiredResult, MrtrSession};
 #[cfg(feature = "mcp")]
@@ -131,11 +131,7 @@ pub trait SdForgeTool: Send + Sync + 'static {
 // The instance type is `Arc<dyn SdForgeTool>` so tools can be shared across
 // threads without copying.
 #[cfg(feature = "mcp")]
-define_registration!(
-    McpToolRegistration,
-    Arc<dyn SdForgeTool>,
-    ApiMetadata
-);
+define_registration!(McpToolRegistration, Arc<dyn SdForgeTool>, ApiMetadata);
 
 #[cfg(not(feature = "mcp"))]
 /// Stub struct for non-MCP builds

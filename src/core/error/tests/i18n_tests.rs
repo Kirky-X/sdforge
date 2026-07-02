@@ -119,7 +119,9 @@ fn test_localized_error_zh_all_variants() {
             field: None,
             value: None,
         };
-        assert!(invalid_input.localized_message(&locale).contains("无效输入"));
+        assert!(invalid_input
+            .localized_message(&locale)
+            .contains("无效输入"));
         assert!(invalid_input.localized_message(&locale).contains("bad"));
 
         let auth_failed = ApiError::AuthenticationFailed {
@@ -132,7 +134,9 @@ fn test_localized_error_zh_all_variants() {
             permission: "admin".to_string(),
             user_id: None,
         };
-        assert!(access_denied.localized_message(&locale).contains("访问被拒绝"));
+        assert!(access_denied
+            .localized_message(&locale)
+            .contains("访问被拒绝"));
         assert!(access_denied.localized_message(&locale).contains("admin"));
 
         let rate_limit = ApiError::RateLimitExceeded {
@@ -158,7 +162,9 @@ fn test_localized_error_zh_all_variants() {
             retry_after: None,
             source: None,
         };
-        assert!(unavailable.localized_message(&locale).contains("服务不可用"));
+        assert!(unavailable
+            .localized_message(&locale)
+            .contains("服务不可用"));
         assert!(unavailable.localized_message(&locale).contains("db"));
 
         let validation = ApiError::ValidationError {
@@ -229,7 +235,9 @@ fn test_localized_error_fr_all_variants() {
             source: None,
             context: None,
         };
-        assert!(internal.localized_message(&locale).contains("Erreur interne"));
+        assert!(internal
+            .localized_message(&locale)
+            .contains("Erreur interne"));
         assert!(internal.localized_message(&locale).contains("err"));
 
         let unavailable = ApiError::ServiceUnavailable {
@@ -310,7 +318,9 @@ fn test_localized_error_es_all_variants() {
             source: None,
             context: None,
         };
-        assert!(internal.localized_message(&locale).contains("Error interno"));
+        assert!(internal
+            .localized_message(&locale)
+            .contains("Error interno"));
         assert!(internal.localized_message(&locale).contains("err"));
 
         let unavailable = ApiError::ServiceUnavailable {
@@ -349,7 +359,9 @@ fn test_localized_error_en_all_variants() {
             not_found.localized_message(&locale),
             not_found.default_message()
         );
-        assert!(not_found.localized_message(&locale).contains("Resource not found"));
+        assert!(not_found
+            .localized_message(&locale)
+            .contains("Resource not found"));
 
         let invalid_input = ApiError::InvalidInput {
             message: "bad".to_string(),
@@ -550,7 +562,9 @@ fn test_default_message_all_variants() {
         retry_after: None,
         source: None,
     };
-    assert!(unavailable.default_message().contains("Service unavailable"));
+    assert!(unavailable
+        .default_message()
+        .contains("Service unavailable"));
 
     let validation = ApiError::ValidationError {
         field: "email".to_string(),

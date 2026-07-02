@@ -35,10 +35,7 @@ mod mcp_registration_tests {
                 }
             })
         }
-        fn call(
-            &self,
-            _input: Option<serde_json::Value>,
-        ) -> Result<CallToolResult, McpError> {
+        fn call(&self, _input: Option<serde_json::Value>) -> Result<CallToolResult, McpError> {
             Ok(CallToolResult {
                 content: vec![],
                 structured_content: None,
@@ -63,7 +60,8 @@ mod mcp_registration_tests {
                 false,
             )
         }
-        let _registration = McpToolRegistration::new("test_tool", "v1", create_tool, create_metadata);
+        let _registration =
+            McpToolRegistration::new("test_tool", "v1", create_tool, create_metadata);
 
         // Verify the registration was created successfully (construction without panic)
         let _ = &_registration;

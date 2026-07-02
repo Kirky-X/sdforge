@@ -124,8 +124,8 @@ pub mod mcp;
 // Re-export rmcp types for convenience (replaces old mcp_sdk re-exports)
 #[cfg(feature = "mcp")]
 pub use mcp::{
-    McpToolRegistration, McpToolInstance, SdForgeMcpServer, SdForgeTool, build, get_mcp_tools,
-    StatelessServerHandler, McpHeaderInfo, InputRequiredResult, MrtrSession,
+    build, get_mcp_tools, InputRequiredResult, McpHeaderInfo, McpToolInstance, McpToolRegistration,
+    MrtrSession, SdForgeMcpServer, SdForgeTool, StatelessServerHandler,
 };
 
 /// Streaming utilities for SSE and streaming responses
@@ -194,8 +194,7 @@ pub mod cache;
 
 #[cfg(feature = "cache")]
 pub use cache::{
-    Cache, CacheKey, DashMapCache, DashMapMemoryBackend, MokaMemoryBackend, SharedCache,
-    SyncCache,
+    Cache, CacheKey, DashMapCache, DashMapMemoryBackend, MokaMemoryBackend, SharedCache, SyncCache,
 };
 
 /// WebSocket support
@@ -547,4 +546,3 @@ mod tests {
         assert_eq!(b.routes, c.routes);
     }
 }
-

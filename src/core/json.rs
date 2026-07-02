@@ -334,7 +334,9 @@ mod tests {
         where
             S: serde::Serializer,
         {
-            Err(serde::ser::Error::custom("intentional serialization failure"))
+            Err(serde::ser::Error::custom(
+                "intentional serialization failure",
+            ))
         }
     }
 
@@ -356,9 +358,7 @@ mod tests {
         // the map_err branch in simd_from_slice.
         let result: Result<TestData, _> = simd_from_slice(br#"{"name":123}"#);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("JSON deserialization failed"));
+        assert!(result.unwrap_err().contains("JSON deserialization failed"));
     }
 
     #[test]
@@ -367,9 +367,7 @@ mod tests {
         // the map_err branch in simd_from_str.
         let result: Result<TestData, _> = simd_from_str(r#"{"name":true}"#);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("JSON deserialization failed"));
+        assert!(result.unwrap_err().contains("JSON deserialization failed"));
     }
 
     // ============================================================================
@@ -599,7 +597,10 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed["api"]["name"], "api/v1");
         assert_eq!(parsed["api"]["version"], "2.0.0-beta");
-        assert!(parsed["api"]["description"].as_str().unwrap().contains("世界"));
+        assert!(parsed["api"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("世界"));
     }
 
     /// Test paginated_response with page_size=1 and many items.
