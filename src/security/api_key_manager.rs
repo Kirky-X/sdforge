@@ -894,4 +894,116 @@ mod tests {
             remaining
         );
     }
+
+    // ============================================================================
+    // Branch coverage: poisoned mutex, expired-active filter, retain path
+    // ============================================================================
+
+    /// check_and_evict takes the early-return branch when access_times mutex is
+    /// poisoned. set() must still store the value in the backing cache, while
+    /// stats() must report total_entries=0 (poisoned lock falls back to 0).
+    #[test]
+    fn test_check_and_evict_returns_early_on_poisoned_mutex() {
+        use crate::cache::DashMapCache;
+        use std::panic::{self, AssertUnwindSafe};
+
+        let cache: SharedCache = Arc::new(DashMapCache::new());
+        let config = LruConfig::default();
+        let manager = LruCacheManager::new(cache.clone(), config);
+
+        // Poison the access_times mutex by panicking while holding the lock.
+        // catch_unwind catches the panic, but the mutex remains poisoned.
+        let access_times = manager.access_times.clone();
+        let _ = panic::catch_unwind(AssertUnwindSafe(|| {
+            let _guard = access_times.lock().unwrap();
+            panic!("intentional panic to poison mutex");
+        }));
+
+        // Confirm the mutex is poisoned.
+        assert!(manager.access_times.lock().is_err());
+
+        // set() calls check_and_evict() first. With a poisoned mutex the
+        // `let Ok(mut times) = self.access_times.lock() else { return; }`
+        // branch returns early. The value is still stored in the backing cache.
+        manager.set("key1", b"value1".to_vec());
+        assert_eq!(cache.get("key1"), Some(b"value1".to_vec()));
+
+        // stats() locks the mutex; on failure it returns 0 via unwrap_or(0).
+        let stats = manager.stats();
+        assert_eq!(stats.total_entries, 0);
+    }
+
+    /// get_active_version returns None when the active version is expired,
+    /// exercising the `.filter(|v| v.is_active && !v.is_expired())` branch.
+    #[test]
+    fn test_get_active_version_returns_none_when_active_expired() {
+        let mut metadata = ApiKeyMetadata::new("key1".to_string(), None);
+
+        // Single version with a very short TTL becomes the active version.
+        let v1 = ApiKeyVersion::new(
+            "v1".to_string(),
+            "hash1".to_string(),
+            vec!["read".to_string()],
+            Some(Duration::from_millis(10)),
+        );
+        metadata.add_version(v1);
+
+        // Before expiration the active version is present.
+        assert!(metadata.get_active_version().is_some());
+
+        // Wait for the TTL to elapse.
+        std::thread::sleep(Duration::from_millis(20));
+
+        // After expiration the filter rejects the version (is_expired() true),
+        // so get_active_version returns None.
+        assert!(metadata.get_active_version().is_none());
+    }
+
+    /// cleanup_versions retain removes expired versions when the active
+    /// version is NOT the last one. Exercises the retain closure returning
+    /// false for expired entries (active_idx != Some(last_idx)).
+    #[test]
+    fn test_cleanup_versions_retain_removes_expired_when_active_not_last() {
+        let mut metadata = ApiKeyMetadata::new("key1".to_string(), None);
+
+        // v1: short TTL, will expire. Becomes active after rotation (index 0).
+        let v1 = ApiKeyVersion::new(
+            "v1".to_string(),
+            "hash1".to_string(),
+            vec![],
+            Some(Duration::from_millis(10)),
+        );
+        // v2: short TTL, will expire.
+        let v2 = ApiKeyVersion::new(
+            "v2".to_string(),
+            "hash2".to_string(),
+            vec![],
+            Some(Duration::from_millis(10)),
+        );
+        // v3: no expiration, stays valid, is the last version (index 2).
+        let v3 = ApiKeyVersion::new("v3".to_string(), "hash3".to_string(), vec![], None);
+
+        metadata.add_version(v1);
+        metadata.add_version(v2);
+        metadata.add_version(v3);
+
+        // Wait for v1 and v2 to expire.
+        std::thread::sleep(Duration::from_millis(20));
+
+        // Rotate active to v1 (index 0). active_idx = Some(0), last_idx = 2,
+        // so active_idx != Some(last_idx) — retain will prune expired entries.
+        metadata.rotate_to_version(0).unwrap();
+        assert_eq!(metadata.active_version_index, Some(0));
+
+        // Before cleanup there are 3 versions.
+        assert_eq!(metadata.versions.len(), 3);
+
+        // keep_last_n=100 so the "keep only last N" block does not run; only
+        // the retain path executes.
+        metadata.cleanup_versions(100);
+
+        // Only the non-expired v3 remains.
+        assert_eq!(metadata.versions.len(), 1);
+        assert_eq!(metadata.versions[0].version, "v3");
+    }
 }
