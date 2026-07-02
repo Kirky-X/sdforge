@@ -9,7 +9,9 @@
 
 #[cfg(feature = "mcp")]
 mod mcp_comprehensive_tests {
-    use sdforge::mcp::{get_mcp_tools, McpToolRegistration};
+    use rmcp::model::{CallToolResult, Content, ErrorData as McpError};
+    use sdforge::core::ApiMetadata;
+    use sdforge::mcp::{get_mcp_tools, McpToolRegistration, SdForgeTool};
     use std::sync::Arc;
     use std::thread;
 
@@ -17,18 +19,19 @@ mod mcp_comprehensive_tests {
     // Helper Functions
     // ============================================================================
 
-    fn create_simple_tool(name: &str) -> Arc<dyn mcp_sdk::tools::Tool> {
+    fn create_simple_tool(name: &str) -> Arc<dyn SdForgeTool> {
         struct SimpleTool {
             name: String,
+            description: String,
         }
 
-        impl mcp_sdk::tools::Tool for SimpleTool {
-            fn name(&self) -> String {
-                self.name.clone()
+        impl SdForgeTool for SimpleTool {
+            fn name(&self) -> &str {
+                &self.name
             }
 
-            fn description(&self) -> String {
-                format!("Test tool: {}", self.name)
+            fn description(&self) -> &str {
+                &self.description
             }
 
             fn input_schema(&self) -> serde_json::Value {
@@ -38,9 +41,10 @@ mod mcp_comprehensive_tests {
             fn call(
                 &self,
                 _input: Option<serde_json::Value>,
-            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
-                Ok(mcp_sdk::types::CallToolResponse {
+            ) -> Result<CallToolResult, McpError> {
+                Ok(CallToolResult {
                     content: vec![],
+                    structured_content: None,
                     is_error: None,
                     meta: None,
                 })
@@ -49,19 +53,20 @@ mod mcp_comprehensive_tests {
 
         Arc::new(SimpleTool {
             name: name.to_string(),
-        }) as Arc<dyn mcp_sdk::tools::Tool>
+            description: format!("Test tool: {}", name),
+        }) as Arc<dyn SdForgeTool>
     }
 
-    fn create_echo_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+    fn create_echo_tool() -> Arc<dyn SdForgeTool> {
         struct EchoTool;
 
-        impl mcp_sdk::tools::Tool for EchoTool {
-            fn name(&self) -> String {
-                "echo".to_string()
+        impl SdForgeTool for EchoTool {
+            fn name(&self) -> &str {
+                "echo"
             }
 
-            fn description(&self) -> String {
-                "Echoes input back as response".to_string()
+            fn description(&self) -> &str {
+                "Echoes input back as response"
             }
 
             fn input_schema(&self) -> serde_json::Value {
@@ -76,32 +81,28 @@ mod mcp_comprehensive_tests {
             fn call(
                 &self,
                 input: Option<serde_json::Value>,
-            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+            ) -> Result<CallToolResult, McpError> {
                 let text = input
-                    .and_then(|v| v.get("message").map(|m| m.to_string()))
+                    .and_then(|v| v.get("message").and_then(|m| m.as_str()).map(|s| s.to_string()))
                     .unwrap_or_default();
 
-                Ok(mcp_sdk::types::CallToolResponse {
-                    content: vec![mcp_sdk::types::ToolResponseContent::Text { text }],
-                    is_error: None,
-                    meta: None,
-                })
+                Ok(CallToolResult::success(vec![Content::text(text)]))
             }
         }
 
-        Arc::new(EchoTool) as Arc<dyn mcp_sdk::tools::Tool>
+        Arc::new(EchoTool) as Arc<dyn SdForgeTool>
     }
 
-    fn create_math_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+    fn create_math_tool() -> Arc<dyn SdForgeTool> {
         struct MathTool;
 
-        impl mcp_sdk::tools::Tool for MathTool {
-            fn name(&self) -> String {
-                "math".to_string()
+        impl SdForgeTool for MathTool {
+            fn name(&self) -> &str {
+                "math"
             }
 
-            fn description(&self) -> String {
-                "Performs basic arithmetic".to_string()
+            fn description(&self) -> &str {
+                "Performs basic arithmetic"
             }
 
             fn input_schema(&self) -> serde_json::Value {
@@ -119,51 +120,52 @@ mod mcp_comprehensive_tests {
             fn call(
                 &self,
                 input: Option<serde_json::Value>,
-            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
-                let val = input.ok_or_else(|| anyhow::anyhow!("Input required"))?;
+            ) -> Result<CallToolResult, McpError> {
+                let val = input.ok_or_else(|| McpError::invalid_params("Input required", None))?;
                 let a = val
                     .get("a")
                     .and_then(|v| v.as_f64())
-                    .ok_or_else(|| anyhow::anyhow!("Missing 'a'"))?;
+                    .ok_or_else(|| McpError::invalid_params("Missing 'a'", None))?;
                 let b = val
                     .get("b")
                     .and_then(|v| v.as_f64())
-                    .ok_or_else(|| anyhow::anyhow!("Missing 'b'"))?;
+                    .ok_or_else(|| McpError::invalid_params("Missing 'b'", None))?;
                 let op = val
                     .get("operation")
                     .and_then(|v| v.as_str())
-                    .ok_or_else(|| anyhow::anyhow!("Missing 'operation'"))?;
+                    .ok_or_else(|| McpError::invalid_params("Missing 'operation'", None))?;
 
                 let result = match op {
                     "add" => a + b,
                     "subtract" => a - b,
                     "multiply" => a * b,
-                    _ => return Err(anyhow::anyhow!("Unknown operation: {}", op)),
+                    _ => {
+                        return Err(McpError::invalid_params(
+                            format!("Unknown operation: {}", op),
+                            None,
+                        ))
+                    }
                 };
 
-                Ok(mcp_sdk::types::CallToolResponse {
-                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
-                        text: result.to_string(),
-                    }],
-                    is_error: None,
-                    meta: None,
-                })
+                Ok(CallToolResult::success(vec![Content::text(
+                    result.to_string(),
+                )]))
             }
         }
 
-        Arc::new(MathTool) as Arc<dyn mcp_sdk::tools::Tool>
+        Arc::new(MathTool) as Arc<dyn SdForgeTool>
     }
 
-    fn create_error_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+    fn create_error_tool() -> Arc<dyn SdForgeTool> {
         struct ErrorTool;
 
-        impl mcp_sdk::tools::Tool for ErrorTool {
-            fn name(&self) -> String {
-                "error_tool".to_string()
+        impl SdForgeTool for ErrorTool {
+            fn name(&self) -> &str {
+                "error_tool"
             }
 
-            fn description(&self) -> String {
-                "Always returns an error".to_string()
+            fn description(&self) -> &str {
+                "Always returns an error"
             }
 
             fn input_schema(&self) -> serde_json::Value {
@@ -173,24 +175,24 @@ mod mcp_comprehensive_tests {
             fn call(
                 &self,
                 _input: Option<serde_json::Value>,
-            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
-                Err(anyhow::anyhow!("Intentional test error"))
+            ) -> Result<CallToolResult, McpError> {
+                Err(McpError::invalid_params("Intentional test error", None))
             }
         }
 
-        Arc::new(ErrorTool) as Arc<dyn mcp_sdk::tools::Tool>
+        Arc::new(ErrorTool) as Arc<dyn SdForgeTool>
     }
 
-    fn create_complex_schema_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+    fn create_complex_schema_tool() -> Arc<dyn SdForgeTool> {
         struct ComplexSchemaTool;
 
-        impl mcp_sdk::tools::Tool for ComplexSchemaTool {
-            fn name(&self) -> String {
-                "complex_schema".to_string()
+        impl SdForgeTool for ComplexSchemaTool {
+            fn name(&self) -> &str {
+                "complex_schema"
             }
 
-            fn description(&self) -> String {
-                "Tool with complex nested schema".to_string()
+            fn description(&self) -> &str {
+                "Tool with complex nested schema"
             }
 
             fn input_schema(&self) -> serde_json::Value {
@@ -225,16 +227,17 @@ mod mcp_comprehensive_tests {
             fn call(
                 &self,
                 _input: Option<serde_json::Value>,
-            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
-                Ok(mcp_sdk::types::CallToolResponse {
+            ) -> Result<CallToolResult, McpError> {
+                Ok(CallToolResult {
                     content: vec![],
+                    structured_content: None,
                     is_error: None,
                     meta: None,
                 })
             }
         }
 
-        Arc::new(ComplexSchemaTool) as Arc<dyn mcp_sdk::tools::Tool>
+        Arc::new(ComplexSchemaTool) as Arc<dyn SdForgeTool>
     }
 
     // ============================================================================
@@ -344,11 +347,14 @@ mod mcp_comprehensive_tests {
 
     #[test]
     fn test_tool_versions() {
-        let versions = vec!["v1", "v2.0", "1.0.0", "beta", "2024-01-01", ""];
+        let versions = ["v1", "v2.0", "1.0.0", "beta", "2024-01-01", ""];
         for version in versions {
-            let reg = McpToolRegistration::new("version_test", version, "Version test", || {
-                create_simple_tool("version_test")
-            });
+            let reg = McpToolRegistration::new(
+                "version_test",
+                version,
+                || create_simple_tool("version_test"),
+                || ApiMetadata::default(),
+            );
             let _ = reg;
         }
     }
@@ -562,10 +568,12 @@ mod mcp_comprehensive_tests {
     /// Test McpToolRegistration creation through new() constructor
     #[test]
     fn test_registration_creation() {
-        let _registration =
-            McpToolRegistration::new("test_registration", "v1", "Test registration", || {
-                create_simple_tool("test_registration")
-            });
+        let _registration = McpToolRegistration::new(
+            "test_registration",
+            "v1",
+            || create_simple_tool("test_registration"),
+            || ApiMetadata::default(),
+        );
     }
 
     /// Test McpToolRegistration create_fn execution via tool creation
@@ -601,7 +609,7 @@ mod mcp_comprehensive_tests {
         assert!(!response.content.is_empty());
         assert!(matches!(
             response.content.first(),
-            Some(mcp_sdk::types::ToolResponseContent::Text { .. })
+            Some(rmcp::model::Content::Text(_))
         ));
     }
 

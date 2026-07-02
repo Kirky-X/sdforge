@@ -1,17 +1,18 @@
 #[cfg(feature = "mcp")]
 mod mcp_tool_instance_tests {
+    use rmcp::model::{CallToolResult, ErrorData as McpError};
     use sdforge::core::ApiMetadata;
-    use sdforge::mcp::{get_mcp_tools, McpToolRegistration};
+    use sdforge::mcp::{get_mcp_tools, McpToolRegistration, SdForgeTool};
     use std::sync::Arc;
 
-    fn create_echo_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+    fn create_echo_tool() -> Arc<dyn SdForgeTool> {
         struct EchoTool;
-        impl mcp_sdk::tools::Tool for EchoTool {
-            fn name(&self) -> String {
-                "echo".to_string()
+        impl SdForgeTool for EchoTool {
+            fn name(&self) -> &str {
+                "echo"
             }
-            fn description(&self) -> String {
-                "Echoes input back".to_string()
+            fn description(&self) -> &str {
+                "Echoes input back"
             }
             fn input_schema(&self) -> serde_json::Value {
                 serde_json::json!({
@@ -24,27 +25,23 @@ mod mcp_tool_instance_tests {
             fn call(
                 &self,
                 input: Option<serde_json::Value>,
-            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
-                Ok(mcp_sdk::types::CallToolResponse {
-                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
-                        text: input.map(|v| v.to_string()).unwrap_or_default(),
-                    }],
-                    is_error: None,
-                    meta: None,
-                })
+            ) -> Result<CallToolResult, McpError> {
+                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+                    input.map(|v| v.to_string()).unwrap_or_default(),
+                )]))
             }
         }
-        Arc::new(EchoTool) as Arc<dyn mcp_sdk::tools::Tool>
+        Arc::new(EchoTool) as Arc<dyn SdForgeTool>
     }
 
-    fn create_add_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+    fn create_add_tool() -> Arc<dyn SdForgeTool> {
         struct AddTool;
-        impl mcp_sdk::tools::Tool for AddTool {
-            fn name(&self) -> String {
-                "add".to_string()
+        impl SdForgeTool for AddTool {
+            fn name(&self) -> &str {
+                "add"
             }
-            fn description(&self) -> String {
-                "Adds two numbers".to_string()
+            fn description(&self) -> &str {
+                "Adds two numbers"
             }
             fn input_schema(&self) -> serde_json::Value {
                 serde_json::json!({
@@ -59,21 +56,17 @@ mod mcp_tool_instance_tests {
             fn call(
                 &self,
                 input: Option<serde_json::Value>,
-            ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
+            ) -> Result<CallToolResult, McpError> {
                 let val = input.unwrap_or_default();
                 let a = val.get("a").and_then(|v| v.as_f64()).unwrap_or(0.0);
                 let b = val.get("b").and_then(|v| v.as_f64()).unwrap_or(0.0);
                 let sum = a + b;
-                Ok(mcp_sdk::types::CallToolResponse {
-                    content: vec![mcp_sdk::types::ToolResponseContent::Text {
-                        text: sum.to_string(),
-                    }],
-                    is_error: None,
-                    meta: None,
-                })
+                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+                    sum.to_string(),
+                )]))
             }
         }
-        Arc::new(AddTool) as Arc<dyn mcp_sdk::tools::Tool>
+        Arc::new(AddTool) as Arc<dyn SdForgeTool>
     }
 
     fn create_echo_metadata() -> ApiMetadata {
@@ -144,14 +137,14 @@ mod mcp_tool_instance_tests {
 
     #[test]
     fn test_tool_response_content_types() {
-        fn create_text_tool() -> Arc<dyn mcp_sdk::tools::Tool> {
+        fn create_text_tool() -> Arc<dyn SdForgeTool> {
             struct TextTool;
-            impl mcp_sdk::tools::Tool for TextTool {
-                fn name(&self) -> String {
-                    "text".to_string()
+            impl SdForgeTool for TextTool {
+                fn name(&self) -> &str {
+                    "text"
                 }
-                fn description(&self) -> String {
-                    "Text tool".to_string()
+                fn description(&self) -> &str {
+                    "Text tool"
                 }
                 fn input_schema(&self) -> serde_json::Value {
                     serde_json::json!({"type": "object"})
@@ -159,17 +152,13 @@ mod mcp_tool_instance_tests {
                 fn call(
                     &self,
                     _: Option<serde_json::Value>,
-                ) -> Result<mcp_sdk::types::CallToolResponse, anyhow::Error> {
-                    Ok(mcp_sdk::types::CallToolResponse {
-                        content: vec![mcp_sdk::types::ToolResponseContent::Text {
-                            text: "Hello".to_string(),
-                        }],
-                        is_error: None,
-                        meta: None,
-                    })
+                ) -> Result<CallToolResult, McpError> {
+                    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
+                        "Hello".to_string(),
+                    )]))
                 }
             }
-            Arc::new(TextTool) as Arc<dyn mcp_sdk::tools::Tool>
+            Arc::new(TextTool) as Arc<dyn SdForgeTool>
         }
 
         let tool = create_text_tool();
@@ -177,7 +166,7 @@ mod mcp_tool_instance_tests {
 
         assert!(matches!(
             result.content.first(),
-            Some(mcp_sdk::types::ToolResponseContent::Text { .. })
+            Some(c) if c.as_text().is_some()
         ));
     }
 

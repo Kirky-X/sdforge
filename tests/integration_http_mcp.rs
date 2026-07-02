@@ -124,7 +124,7 @@ mod integration_tests {
     async fn test_mcp_build() {
         use sdforge::mcp::build;
 
-        let server = build().await;
+        let server = build();
         // Server built successfully - verify it's not null
         assert!(!std::ptr::eq(&server, std::ptr::null()));
     }
