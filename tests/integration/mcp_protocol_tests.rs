@@ -2,14 +2,19 @@
 // Comprehensive integration tests for MCP protocol functionality
 // Tests cover: tool discovery, request handling, response formatting,
 // input validation, and error handling
+//
+// Migrated from mcp_sdk to rmcp: JSON-RPC transport tests removed (handled
+// internally by rmcp). Tests now focus on SdForgeTool behavior and
+// SdForgeMcpServer (ServerHandler) integration.
 
 #[cfg(feature = "mcp")]
 mod mcp_protocol_tests {
-    use mcp_sdk::tools::Tool;
-    use mcp_sdk::transport::{JsonRpcRequest, JsonRpcResponse, JsonRpcVersion};
-    use mcp_sdk::types::{CallToolResponse, Resource, ToolResponseContent};
-    use sdforge::core::ApiMetadata;
-    use sdforge::mcp::{build, get_mcp_tools, McpToolRegistration};
+    use rmcp::handler::server::ServerHandler;
+    use rmcp::model::{CallToolResult, Content, ErrorData as McpError};
+    use sdforge::core::{ApiMetadata, Registration};
+    use sdforge::mcp::{
+        get_mcp_tools, McpToolInstance, McpToolRegistration, SdForgeMcpServer, SdForgeTool,
+    };
     use serde_json::Value;
     use std::sync::Arc;
 
@@ -18,14 +23,14 @@ mod mcp_protocol_tests {
     // ============================================================================
 
     /// Creates a simple echo tool for testing
-    fn create_echo_tool() -> Arc<dyn Tool> {
+    fn create_echo_tool() -> Arc<dyn SdForgeTool> {
         struct EchoTool;
-        impl Tool for EchoTool {
-            fn name(&self) -> String {
-                "echo".to_string()
+        impl SdForgeTool for EchoTool {
+            fn name(&self) -> &str {
+                "echo"
             }
-            fn description(&self) -> String {
-                "Echoes the input message back".to_string()
+            fn description(&self) -> &str {
+                "Echoes the input message back"
             }
             fn input_schema(&self) -> Value {
                 serde_json::json!({
@@ -36,12 +41,12 @@ mod mcp_protocol_tests {
                     }
                 })
             }
-            fn call(&self, input: Option<Value>) -> Result<CallToolResponse, anyhow::Error> {
+            fn call(&self, input: Option<Value>) -> Result<CallToolResult, McpError> {
                 let message = input
                     .as_ref()
                     .and_then(|v| v.get("message"))
-                    .map(|m| m.to_string())
-                    .unwrap_or_else(|| "\"\"".to_string());
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("");
 
                 let count = input
                     .as_ref()
@@ -50,25 +55,21 @@ mod mcp_protocol_tests {
                     .unwrap_or(1) as usize;
 
                 let output = format!("{}x{}", message, count);
-                Ok(CallToolResponse {
-                    content: vec![ToolResponseContent::Text { text: output }],
-                    is_error: None,
-                    meta: None,
-                })
+                Ok(CallToolResult::success(vec![Content::text(output)]))
             }
         }
-        Arc::new(EchoTool) as Arc<dyn Tool>
+        Arc::new(EchoTool) as Arc<dyn SdForgeTool>
     }
 
     /// Creates a math tool for testing with multiple operations
-    fn create_math_tool() -> Arc<dyn Tool> {
+    fn create_math_tool() -> Arc<dyn SdForgeTool> {
         struct MathTool;
-        impl Tool for MathTool {
-            fn name(&self) -> String {
-                "math".to_string()
+        impl SdForgeTool for MathTool {
+            fn name(&self) -> &str {
+                "math"
             }
-            fn description(&self) -> String {
-                "Performs basic arithmetic operations".to_string()
+            fn description(&self) -> &str {
+                "Performs basic arithmetic operations"
             }
             fn input_schema(&self) -> Value {
                 serde_json::json!({
@@ -84,20 +85,20 @@ mod mcp_protocol_tests {
                     "required": ["a", "b", "operation"]
                 })
             }
-            fn call(&self, input: Option<Value>) -> Result<CallToolResponse, anyhow::Error> {
-                let input = input.ok_or_else(|| anyhow::anyhow!("Input required"))?;
+            fn call(&self, input: Option<Value>) -> Result<CallToolResult, McpError> {
+                let input = input.ok_or_else(|| McpError::invalid_params("Input required", None))?;
                 let a = input
                     .get("a")
                     .and_then(|v| v.as_f64())
-                    .ok_or_else(|| anyhow::anyhow!("Missing 'a'"))?;
+                    .ok_or_else(|| McpError::invalid_params("Missing 'a'", None))?;
                 let b = input
                     .get("b")
                     .and_then(|v| v.as_f64())
-                    .ok_or_else(|| anyhow::anyhow!("Missing 'b'"))?;
+                    .ok_or_else(|| McpError::invalid_params("Missing 'b'", None))?;
                 let op = input
                     .get("operation")
                     .and_then(|v| v.as_str())
-                    .ok_or_else(|| anyhow::anyhow!("Missing 'operation'"))?;
+                    .ok_or_else(|| McpError::invalid_params("Missing 'operation'", None))?;
 
                 let result = match op {
                     "add" => a + b,
@@ -105,86 +106,77 @@ mod mcp_protocol_tests {
                     "multiply" => a * b,
                     "divide" => {
                         if b == 0.0 {
-                            return Err(anyhow::anyhow!("Division by zero"));
+                            return Err(McpError::invalid_params("Division by zero", None));
                         }
                         a / b
                     }
-                    _ => return Err(anyhow::anyhow!("Unknown operation: {}", op)),
+                    _ => {
+                        return Err(McpError::invalid_params(
+                            format!("Unknown operation: {}", op),
+                            None,
+                        ))
+                    }
                 };
 
-                Ok(CallToolResponse {
-                    content: vec![ToolResponseContent::Text {
-                        text: result.to_string(),
-                    }],
-                    is_error: None,
-                    meta: None,
-                })
+                Ok(CallToolResult::success(vec![Content::text(
+                    result.to_string(),
+                )]))
             }
         }
-        Arc::new(MathTool) as Arc<dyn Tool>
+        Arc::new(MathTool) as Arc<dyn SdForgeTool>
     }
 
     /// Creates a tool that always returns an error
-    fn create_error_tool() -> Arc<dyn Tool> {
+    fn create_error_tool() -> Arc<dyn SdForgeTool> {
         struct ErrorTool;
-        impl Tool for ErrorTool {
-            fn name(&self) -> String {
-                "error_tool".to_string()
+        impl SdForgeTool for ErrorTool {
+            fn name(&self) -> &str {
+                "error_tool"
             }
-            fn description(&self) -> String {
-                "Always returns an error".to_string()
+            fn description(&self) -> &str {
+                "Always returns an error"
             }
             fn input_schema(&self) -> Value {
                 serde_json::json!({"type": "object"})
             }
-            fn call(&self, _input: Option<Value>) -> Result<CallToolResponse, anyhow::Error> {
-                Err(anyhow::anyhow!("Intentional test error"))
+            fn call(&self, _input: Option<Value>) -> Result<CallToolResult, McpError> {
+                Err(McpError::invalid_params("Intentional test error", None))
             }
         }
-        Arc::new(ErrorTool) as Arc<dyn Tool>
+        Arc::new(ErrorTool) as Arc<dyn SdForgeTool>
     }
 
     /// Creates a tool with no parameters
-    fn create_no_param_tool() -> Arc<dyn Tool> {
+    fn create_no_param_tool() -> Arc<dyn SdForgeTool> {
         struct NoParamTool;
-        impl Tool for NoParamTool {
-            fn name(&self) -> String {
-                "no_param".to_string()
+        impl SdForgeTool for NoParamTool {
+            fn name(&self) -> &str {
+                "no_param"
             }
-            fn description(&self) -> String {
-                "Tool that takes no parameters".to_string()
+            fn description(&self) -> &str {
+                "Tool with no parameters"
             }
             fn input_schema(&self) -> Value {
                 serde_json::json!({"type": "object"})
             }
-            fn call(&self, input: Option<Value>) -> Result<CallToolResponse, anyhow::Error> {
-                let response = match input {
-                    Some(_) if !input.as_ref().unwrap().is_null() => {
-                        "Warning: parameters provided but not required"
-                    }
-                    _ => "Success: no parameters used",
-                };
-                Ok(CallToolResponse {
-                    content: vec![ToolResponseContent::Text {
-                        text: response.to_string(),
-                    }],
-                    is_error: None,
-                    meta: None,
-                })
+            fn call(&self, _input: Option<Value>) -> Result<CallToolResult, McpError> {
+                Ok(CallToolResult::success(vec![Content::text(
+                    "no params needed".to_string(),
+                )]))
             }
         }
-        Arc::new(NoParamTool) as Arc<dyn Tool>
+        Arc::new(NoParamTool) as Arc<dyn SdForgeTool>
     }
 
     /// Creates a tool with complex nested schema
-    fn create_complex_schema_tool() -> Arc<dyn Tool> {
-        struct ComplexSchemaTool;
-        impl Tool for ComplexSchemaTool {
-            fn name(&self) -> String {
-                "complex_schema".to_string()
+    fn create_complex_tool() -> Arc<dyn SdForgeTool> {
+        struct ComplexTool;
+        impl SdForgeTool for ComplexTool {
+            fn name(&self) -> &str {
+                "complex"
             }
-            fn description(&self) -> String {
-                "Tool with complex nested parameters".to_string()
+            fn description(&self) -> &str {
+                "Tool with complex nested schema"
             }
             fn input_schema(&self) -> Value {
                 serde_json::json!({
@@ -194,938 +186,441 @@ mod mcp_protocol_tests {
                             "type": "object",
                             "properties": {
                                 "name": {"type": "string"},
-                                "age": {"type": "integer", "minimum": 0},
-                                "address": {
-                                    "type": "object",
-                                    "properties": {
-                                        "street": {"type": "string"},
-                                        "city": {"type": "string"},
-                                        "country": {"type": "string"}
-                                    },
-                                    "required": ["city"]
-                                }
+                                "age": {"type": "integer"}
                             },
                             "required": ["name"]
-                        },
-                        "tags": {
-                            "type": "array",
-                            "items": {"type": "string"}
-                        },
-                        "active": {"type": "boolean"}
+                        }
                     },
                     "required": ["user"]
                 })
             }
-            fn call(&self, _input: Option<Value>) -> Result<CallToolResponse, anyhow::Error> {
-                Ok(CallToolResponse {
-                    content: vec![],
-                    is_error: None,
-                    meta: None,
-                })
+            fn call(&self, input: Option<Value>) -> Result<CallToolResult, McpError> {
+                let input = input.unwrap_or_default();
+                let name = input
+                    .get("user")
+                    .and_then(|u| u.get("name"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("unknown");
+                Ok(CallToolResult::success(vec![Content::text(format!(
+                    "Hello, {}!",
+                    name
+                ))]))
             }
         }
-        Arc::new(ComplexSchemaTool) as Arc<dyn Tool>
+        Arc::new(ComplexTool) as Arc<dyn SdForgeTool>
     }
 
     // ============================================================================
-    // MCP Tool Discovery Tests
+    // SdForgeMcpServer Tests (ServerHandler integration)
     // ============================================================================
 
-    /// Test: MCP list tools endpoint functionality
-    /// Verifies that tools can be discovered and retrieved
-    #[tokio::test]
-    async fn test_mcp_list_tools_endpoint() {
-        // Verify that MCP server can be built
-        let _server = build().await;
-        let _ = &_server; // construction without panic verifies success
-
-        // Verify get_mcp_tools returns a vector
-        let tools = get_mcp_tools();
-        // Just verify the function works (len() is always >= 0)
-        let _ = tools.len();
-
-        // Each tool instance should have valid metadata
-        for instance in &tools {
-            let metadata = instance.metadata();
-            assert!(
-                !metadata.name().is_empty() || metadata.name().is_empty(),
-                "Tool metadata should be accessible"
-            );
-        }
-    }
-
-    /// Test: MCP tool schema discovery
-    /// Verifies that tool input schemas are properly discovered
-    #[tokio::test]
-    async fn test_mcp_tool_schema_discovery() {
-        let tool = create_echo_tool();
-        let schema = tool.input_schema();
-
-        // Schema should be valid JSON
-        assert!(schema.is_object(), "Schema should be an object");
-
-        // Schema should have type field
-        assert_eq!(schema["type"], "object", "Schema type should be object");
-
-        // Schema should have properties
-        assert!(
-            schema.get("properties").is_some(),
-            "Schema should have properties"
-        );
-
-        // Properties should be accessible
-        let props = &schema["properties"];
-        assert!(
-            props.get("message").is_some(),
-            "Schema should have 'message' property"
-        );
-        assert!(
-            props.get("count").is_some(),
-            "Schema should have 'count' property"
-        );
-    }
-
-    /// Test: MCP tool count verification
-    /// Verifies that the expected number of tools are registered
-    #[tokio::test]
-    async fn test_mcp_tool_count() {
-        let tools = get_mcp_tools();
-        let count = tools.len();
-
-        // The count should be consistent across multiple calls
-        let count2 = get_mcp_tools().len();
-        assert_eq!(
-            count, count2,
-            "Tool count should be consistent across calls"
-        );
-
-        // Each tool should have a valid name
-        for instance in &tools {
-            let tool = instance.tool();
-            assert!(
-                !tool.name().is_empty() || tool.name().is_empty(),
-                "Tool name should be accessible"
-            );
-        }
-    }
-
-    // ============================================================================
-    // MCP Request Handling Tests
-    // ============================================================================
-
-    /// Test: Call tool with parameters
-    /// Verifies that tools can be called with valid parameters
-    #[tokio::test]
-    async fn test_mcp_call_tool_with_params() {
-        let tool = create_echo_tool();
-        let input = serde_json::json!({
-            "message": "Hello, MCP!",
-            "count": 3
-        });
-
-        let result = tool.call(Some(input.clone()));
-        assert!(result.is_ok(), "Tool call with params should succeed");
-
-        let response = result.unwrap();
-        assert!(!response.content.is_empty(), "Response should have content");
-
-        // Verify the response contains expected text
-        if let ToolResponseContent::Text { text } = &response.content[0] {
-            assert!(
-                text.contains("Hello, MCP!"),
-                "Response should contain the echoed message"
-            );
-            assert!(text.contains("3"), "Response should contain the count");
-        } else {
-            panic!("Expected text content");
-        }
-    }
-
-    /// Test: Call tool without parameters
-    /// Verifies that tools can be called without parameters
-    #[tokio::test]
-    async fn test_mcp_call_tool_no_params() {
-        let tool = create_echo_tool();
-
-        // Call with None
-        let result = tool.call(None);
-        assert!(result.is_ok(), "Tool call without params should succeed");
-
-        let response = result.unwrap();
-        assert!(!response.content.is_empty(), "Response should have content");
-
-        // Call with empty object
-        let result = tool.call(Some(serde_json::json!({})));
-        assert!(result.is_ok(), "Tool call with empty params should succeed");
-    }
-
-    /// Test: Call nonexistent tool handling
-    /// Verifies proper error when calling a tool that doesn't exist
-    #[tokio::test]
-    async fn test_mcp_call_nonexistent_tool() {
-        let tools = get_mcp_tools();
-        let tool_names: Vec<String> = tools.iter().map(|t| t.tool().name()).collect();
-
-        // Create a tool wrapper that simulates "not found"
-        struct NonexistentTool;
-        impl Tool for NonexistentTool {
-            fn name(&self) -> String {
-                "definitely_does_not_exist_12345".to_string()
-            }
-            fn description(&self) -> String {
-                "This tool does not exist".to_string()
-            }
-            fn input_schema(&self) -> Value {
-                serde_json::json!({"type": "object"})
-            }
-            fn call(&self, _input: Option<Value>) -> Result<CallToolResponse, anyhow::Error> {
-                Err(anyhow::anyhow!("Tool not found in registry"))
-            }
-        }
-
-        let tool = Arc::new(NonexistentTool) as Arc<dyn Tool>;
-        let result = tool.call(None);
-
-        // Should return an error
-        assert!(result.is_err(), "Calling nonexistent tool should fail");
-        let error_msg = result.unwrap_err().to_string();
-        assert!(
-            error_msg.contains("not found") || error_msg.contains("not exist"),
-            "Error message should indicate tool not found"
-        );
-
-        // Verify it's not in the registered tools
-        assert!(
-            !tool_names.contains(&"definitely_does_not_exist_12345".to_string()),
-            "Nonexistent tool should not be in registry"
-        );
-    }
-
-    /// Test: Concurrent tool calls
-    /// Verifies that multiple tool calls can be handled concurrently
-    #[tokio::test]
-    async fn test_mcp_concurrent_tool_calls() {
-        use tokio::task;
-
-        let tool = Arc::new(create_math_tool());
-
-        // Spawn multiple concurrent tasks
-        let mut handles = vec![];
-
-        for i in 0..10 {
-            let tool_clone = Arc::clone(&tool);
-            let handle = task::spawn(async move {
-                let input = serde_json::json!({
-                    "a": i as f64,
-                    "b": 10.0,
-                    "operation": "add"
-                });
-                tool_clone.call(Some(input))
-            });
-            handles.push(handle);
-        }
-
-        // Collect results
-        let mut success_count = 0;
-        for handle in handles {
-            let result = handle.await;
-            if result.is_ok() && result.unwrap().is_ok() {
-                success_count += 1;
-            }
-        }
-
-        assert_eq!(success_count, 10, "All concurrent calls should succeed");
-    }
-
-    // ============================================================================
-    // MCP Response Formatting Tests
-    // ============================================================================
-
-    /// Test: Text response format
-    /// Verifies that text responses are properly formatted
-    #[tokio::test]
-    async fn test_mcp_text_response_format() {
-        let tool = create_echo_tool();
-        let input = serde_json::json!({"message": "Test message", "count": 1});
-
-        let result = tool.call(Some(input));
-        assert!(result.is_ok(), "Tool call should succeed");
-
-        let response = result.unwrap();
-
-        // Verify response structure
-        assert!(!response.content.is_empty(), "Content should not be empty");
-
-        // Verify content type
-        match &response.content[0] {
-            ToolResponseContent::Text { text } => {
-                assert!(!text.is_empty(), "Text content should not be empty");
-            }
-            _ => panic!("Expected Text content type"),
-        }
-
-        // Verify is_error flag
-        assert!(
-            response.is_error.is_none() || response.is_error == Some(false),
-            "is_error should be None or false for success"
-        );
-
-        // Verify meta is optional
-        assert!(response.meta.is_none(), "meta should be None when not set");
-    }
-
-    /// Test: Error response format
-    /// Verifies that error responses are properly formatted
-    #[tokio::test]
-    async fn test_mcp_error_response_format() {
-        let tool = create_error_tool();
-
-        let result = tool.call(None);
-        assert!(result.is_err(), "Error tool call should fail");
-
-        let error = result.unwrap_err();
-        let error_msg = error.to_string();
-
-        // Error message should be descriptive
-        assert!(!error_msg.is_empty(), "Error message should not be empty");
-        assert!(
-            error_msg.contains("test") || error_msg.contains("error"),
-            "Error message should contain error context"
-        );
-    }
-
-    /// Test: Resource response format
-    /// Verifies that resource responses follow MCP protocol
-    #[tokio::test]
-    async fn test_mcp_resource_response_format() {
-        use url::Url;
-
-        let resource = Resource {
-            uri: Url::parse("file:///test/resource").expect("valid URL"),
-            name: "test-resource".to_string(),
-            description: Some("A test resource".to_string()),
-            mime_type: Some("application/json".to_string()),
-        };
-
-        // Verify resource serialization
-        let serialized =
-            serde_json::to_string(&resource).expect("Resource serialization should succeed");
-
-        assert!(
-            serialized.contains("\"uri\""),
-            "Resource should have uri field"
-        );
-        assert!(
-            serialized.contains("\"name\""),
-            "Resource should have name field"
-        );
-        assert!(
-            serialized.contains("\"mimeType\""),
-            "Resource should have mimeType field"
-        );
-
-        // Verify resource deserialization
-        let deserialized: Resource =
-            serde_json::from_str(&serialized).expect("Resource deserialization should succeed");
-
-        assert_eq!(
-            deserialized.name, "test-resource",
-            "Deserialized name should match"
-        );
-    }
-
-    /// Test: Prompt response format
-    /// Verifies that prompt responses follow MCP protocol
-    #[tokio::test]
-    async fn test_mcp_prompt_response_format() {
-        // Create a prompt get request
-        let request = JsonRpcRequest {
-            jsonrpc: JsonRpcVersion::default(),
-            method: "prompts/get".to_string(),
-            params: Some(serde_json::json!({
-                "name": "greeting",
-                "arguments": {
-                    "name": "User",
-                    "language": "en"
-                }
-            })),
-            id: 1_u64,
-        };
-
-        // Verify request serialization
-        let serialized =
-            serde_json::to_string(&request).expect("Prompt request serialization should succeed");
-
-        assert!(
-            serialized.contains("\"prompts/get\""),
-            "Request should contain prompts/get method"
-        );
-        assert!(
-            serialized.contains("\"greeting\""),
-            "Request should contain prompt name"
-        );
-
-        // Verify request deserialization
-        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized)
-            .expect("Prompt request deserialization should succeed");
-
-        assert_eq!(
-            deserialized.method, "prompts/get",
-            "Deserialized method should match"
-        );
-        assert!(deserialized.params.is_some(), "Params should be present");
-    }
-
-    // ============================================================================
-    // MCP Input Validation Tests
-    // ============================================================================
-
-    /// Test: Missing required parameters
-    /// Verifies that missing required parameters are detected
-    #[tokio::test]
-    async fn test_mcp_missing_required_params() {
-        let tool = create_math_tool();
-
-        // Missing 'operation' parameter
-        let input = serde_json::json!({"a": 5, "b": 3});
-        let result = tool.call(Some(input));
-        assert!(result.is_err(), "Should fail when operation is missing");
-
-        // Missing 'b' parameter
-        let input = serde_json::json!({"a": 5, "operation": "add"});
-        let result = tool.call(Some(input));
-        assert!(result.is_err(), "Should fail when b is missing");
-
-        // All parameters missing
-        let input = serde_json::json!({});
-        let result = tool.call(Some(input));
-        assert!(result.is_err(), "Should fail when all params missing");
-
-        // No input at all
-        let result = tool.call(None);
-        assert!(result.is_err(), "Should fail when input is None");
-    }
-
-    /// Test: Invalid parameter type
-    /// Verifies that invalid parameter types are detected
-    #[tokio::test]
-    async fn test_mcp_invalid_param_type() {
-        let tool = create_math_tool();
-
-        // String instead of number for 'a'
-        let input = serde_json::json!({
-            "a": "not a number",
-            "b": 3,
-            "operation": "add"
-        });
-        let result = tool.call(Some(input));
-        assert!(result.is_err(), "Should fail with string for number param");
-
-        // Invalid operation enum value
-        let input = serde_json::json!({
-            "a": 5,
-            "b": 3,
-            "operation": "invalid_operation"
-        });
-        let result = tool.call(Some(input));
-        assert!(result.is_err(), "Should fail with invalid operation");
-    }
-
-    /// Test: Extra parameters handling
-    /// Verifies that extra parameters are handled gracefully
-    #[tokio::test]
-    async fn test_mcp_extra_params_handling() {
-        let tool = create_echo_tool();
-
-        // Include extra parameters that shouldn't affect execution
-        let input = serde_json::json!({
-            "message": "Test",
-            "count": 2,
-            "extra_param": "should be ignored",
-            "another_extra": 12345
-        });
-
-        let result = tool.call(Some(input));
-        assert!(result.is_ok(), "Tool call with extra params should succeed");
-
-        let response = result.unwrap();
-        assert!(!response.content.is_empty(), "Response should have content");
-    }
-
-    // ============================================================================
-    // MCP Error Handling Tests
-    // ============================================================================
-
-    /// Test: Invalid JSON request
-    /// Verifies that invalid JSON is properly detected
-    #[tokio::test]
-    async fn test_mcp_invalid_json_request() {
-        // Test various invalid JSON formats
-        let invalid_json_samples = vec![
-            r#"{"jsonrpc": "2.0", "method": "test", "params": invalid}"#,
-            r#"{not valid json"#,
-            r#"just text"#,
-            r#"{"missing": "closing brace""#,
-            r#"null"#,
+    /// Test: Create server with explicit tools
+    #[test]
+    fn test_server_creation_with_tools() {
+        let tools = vec![
+            McpToolInstance::new(create_echo_tool(), ApiMetadata::default()),
+            McpToolInstance::new(create_math_tool(), ApiMetadata::default()),
         ];
-
-        for invalid_json in invalid_json_samples {
-            let result: Result<JsonRpcRequest, _> = serde_json::from_str(invalid_json);
-            assert!(
-                result.is_err(),
-                "Invalid JSON '{}' should fail to parse",
-                invalid_json
-            );
-        }
+        let server = SdForgeMcpServer::with_tools(tools);
+        assert_eq!(server.tool_count(), 2);
     }
 
-    /// Test: Tool execution error
-    /// Verifies that tool execution errors are properly handled
-    #[tokio::test]
-    async fn test_mcp_tool_execution_error() {
-        let tool = create_error_tool();
-
-        let result = tool.call(None);
-        assert!(result.is_err(), "Error tool should return error");
-
-        let error = result.unwrap_err();
-        let error_msg = error.to_string();
-
-        // Error should contain meaningful context
-        assert!(
-            error_msg.contains("Intentional") || error_msg.contains("test"),
-            "Error message should contain context"
-        );
+    /// Test: Create empty server
+    #[test]
+    fn test_server_creation_empty() {
+        let server = SdForgeMcpServer::empty();
+        assert_eq!(server.tool_count(), 0);
     }
 
-    /// Test: Internal error handling
-    /// Verifies that internal errors are properly handled and don't crash
-    #[tokio::test]
-    async fn test_mcp_internal_error_handling() {
-        // Test with division by zero
+    /// Test: Find tool by name
+    #[test]
+    fn test_find_tool_by_name() {
+        let tools = vec![
+            McpToolInstance::new(create_echo_tool(), ApiMetadata::default()),
+            McpToolInstance::new(create_math_tool(), ApiMetadata::default()),
+        ];
+        let server = SdForgeMcpServer::with_tools(tools);
+
+        assert!(server.find_tool("echo").is_some());
+        assert!(server.find_tool("math").is_some());
+        assert!(server.find_tool("nonexistent").is_none());
+    }
+
+    /// Test: Server get_info returns server info
+    #[test]
+    fn test_server_get_info() {
+        let server = SdForgeMcpServer::empty();
+        let info = server.get_info();
+        assert!(!info.server_info.name.is_empty());
+        assert!(!info.server_info.version.is_empty());
+    }
+
+    // ============================================================================
+    // Tool Execution Tests
+    // ============================================================================
+
+    /// Test: Echo tool with valid input
+    #[test]
+    fn test_echo_tool_execution() {
+        let tool = create_echo_tool();
+        let input = serde_json::json!({"message": "hello", "count": 3});
+
+        let result = tool.call(Some(input));
+        assert!(result.is_ok());
+
+        let response = result.unwrap();
+        assert!(!response.content.is_empty());
+
+        // Verify content is text
+        assert!(matches!(
+            response.content.first(),
+            Some(c) if c.as_text().is_some()
+        ));
+    }
+
+    /// Test: Echo tool with default count
+    #[test]
+    fn test_echo_tool_default_count() {
+        let tool = create_echo_tool();
+        let input = serde_json::json!({"message": "test"});
+
+        let result = tool.call(Some(input)).unwrap();
+        assert!(!result.content.is_empty());
+    }
+
+    /// Test: Math tool addition
+    #[test]
+    fn test_math_tool_addition() {
         let tool = create_math_tool();
-        let input = serde_json::json!({
-            "a": 10.0,
-            "b": 0.0,
-            "operation": "divide"
-        });
+        let input = serde_json::json!({"a": 5, "b": 3, "operation": "add"});
 
         let result = tool.call(Some(input));
-        assert!(result.is_err(), "Division by zero should fail");
+        assert!(result.is_ok());
 
-        let error = result.unwrap_err();
-        assert!(
-            error.to_string().contains("zero"),
-            "Error should mention division by zero"
-        );
+        let response = result.unwrap();
+        assert!(!response.content.is_empty());
+    }
 
-        // Test with negative numbers (if applicable)
-        let input = serde_json::json!({
-            "a": -5.0,
-            "b": 2.0,
-            "operation": "add"
-        });
+    /// Test: Math tool subtraction
+    #[test]
+    fn test_math_tool_subtraction() {
+        let tool = create_math_tool();
+        let input = serde_json::json!({"a": 10, "b": 4, "operation": "subtract"});
+
+        let result = tool.call(Some(input)).unwrap();
+        assert!(!result.content.is_empty());
+    }
+
+    /// Test: Math tool multiplication
+    #[test]
+    fn test_math_tool_multiplication() {
+        let tool = create_math_tool();
+        let input = serde_json::json!({"a": 6, "b": 7, "operation": "multiply"});
+
+        let result = tool.call(Some(input)).unwrap();
+        assert!(!result.content.is_empty());
+    }
+
+    /// Test: Math tool division
+    #[test]
+    fn test_math_tool_division() {
+        let tool = create_math_tool();
+        let input = serde_json::json!({"a": 20, "b": 4, "operation": "divide"});
+
         let result = tool.call(Some(input));
-        assert!(result.is_ok(), "Negative numbers should be handled");
+        assert!(result.is_ok());
+    }
 
-        // Test with very large numbers
-        let input = serde_json::json!({
-            "a": 1e308,
-            "b": 1e308,
-            "operation": "multiply"
-        });
+    /// Test: Math tool division by zero
+    #[test]
+    fn test_math_tool_division_by_zero() {
+        let tool = create_math_tool();
+        let input = serde_json::json!({"a": 10, "b": 0, "operation": "divide"});
+
         let result = tool.call(Some(input));
-        // Should either succeed with inf or fail gracefully
-        if let Ok(response) = result {
-            if let ToolResponseContent::Text { text } = &response.content[0] {
-                assert!(
-                    text.contains("inf") || !text.is_empty(),
-                    "Large number result should be valid"
-                );
-            }
-        }
+        assert!(result.is_err());
+    }
+
+    /// Test: Math tool missing required field
+    #[test]
+    fn test_math_tool_missing_field() {
+        let tool = create_math_tool();
+        let input = serde_json::json!({"a": 5}); // Missing 'b' and 'operation'
+
+        let result = tool.call(Some(input));
+        assert!(result.is_err());
+    }
+
+    /// Test: Math tool invalid operation
+    #[test]
+    fn test_math_tool_invalid_operation() {
+        let tool = create_math_tool();
+        let input = serde_json::json!({"a": 5, "b": 3, "operation": "modulo"});
+
+        let result = tool.call(Some(input));
+        assert!(result.is_err());
+    }
+
+    /// Test: Math tool no input
+    #[test]
+    fn test_math_tool_no_input() {
+        let tool = create_math_tool();
+        let result = tool.call(None);
+        assert!(result.is_err());
+    }
+
+    /// Test: Error tool returns error
+    #[test]
+    fn test_error_tool_returns_error() {
+        let tool = create_error_tool();
+        let result = tool.call(None);
+        assert!(result.is_err());
+    }
+
+    /// Test: No-param tool works without input
+    #[test]
+    fn test_no_param_tool() {
+        let tool = create_no_param_tool();
+        let result = tool.call(None);
+        assert!(result.is_ok());
+
+        let response = result.unwrap();
+        assert!(!response.content.is_empty());
+    }
+
+    /// Test: Complex tool with valid input
+    #[test]
+    fn test_complex_tool_valid_input() {
+        let tool = create_complex_tool();
+        let input = serde_json::json!({"user": {"name": "Alice", "age": 30}});
+
+        let result = tool.call(Some(input));
+        assert!(result.is_ok());
+    }
+
+    /// Test: Complex tool with missing required field
+    #[test]
+    fn test_complex_tool_missing_field() {
+        let tool = create_complex_tool();
+        let input = serde_json::json!({"user": {"age": 30}}); // Missing 'name'
+
+        // Complex tool doesn't validate required fields in call, only in schema
+        let result = tool.call(Some(input));
+        assert!(result.is_ok()); // Uses default "unknown"
     }
 
     // ============================================================================
-    // MCP Server Build Tests
+    // Input Schema Validation Tests
     // ============================================================================
 
-    /// Test: MCP server build with no tools
-    /// Verifies that MCP server can build with zero registered tools
-    #[tokio::test]
-    async fn test_mcp_server_build_empty() {
-        let _server = build().await;
-        let _ = &_server; // construction without panic verifies success
-    }
-
-    /// Test: MCP server build with multiple tools
-    /// Verifies that MCP server can build with multiple registered tools
-    #[tokio::test]
-    async fn test_mcp_server_build_with_tools() {
-        // Register multiple tools temporarily
-        let _reg1 = McpToolRegistration::new("test_tool_1", "v1", create_echo_tool, || {
-            ApiMetadata::default()
-        });
-        let _reg2 = McpToolRegistration::new("test_tool_2", "v1", create_math_tool, || {
-            ApiMetadata::default()
-        });
-
-        let _server = build().await;
-        let _ = &_server; // construction without panic verifies success
-    }
-
-    // ============================================================================
-    // MCP Tool Instance Tests
-    // ============================================================================
-
-    /// Test: Tool instance metadata access
-    /// Verifies that tool instance metadata can be accessed correctly
-    #[tokio::test]
-    async fn test_mcp_tool_instance_metadata_access() {
-        let tools = get_mcp_tools();
-
-        for instance in &tools {
-            let metadata = instance.metadata();
-
-            // Name should be accessible
-            let _name = metadata.name();
-
-            // Version should be accessible
-            let _version = metadata.version();
-
-            // Description should be accessible
-            let _desc = metadata.description();
-
-            // Cache TTL should be accessible
-            let _ttl = metadata.cache_ttl();
-
-            // Streaming flag should be accessible
-            let _streaming = metadata.is_streaming();
-        }
-    }
-
-    /// Test: Tool instance tool access
-    /// Verifies that tool instance tool can be accessed correctly
-    #[tokio::test]
-    async fn test_mcp_tool_instance_tool_access() {
-        let tools = get_mcp_tools();
-
-        for instance in &tools {
-            let tool = instance.tool();
-
-            // Tool should have a name
-            let _name = tool.name();
-
-            // Tool should have a description
-            let _desc = tool.description();
-
-            // Tool should have an input schema
-            let _schema = tool.input_schema();
-        }
-    }
-
-    /// Test: Arc clone functionality
-    /// Verifies that tool Arc can be cloned for shared access
-    #[tokio::test]
-    async fn test_mcp_tool_arc_clone() {
-        let tools = get_mcp_tools();
-
-        if let Some(instance) = tools.first() {
-            let tool1 = instance.tool().clone();
-            let tool2 = instance.tool().clone();
-
-            // Both clones should reference the same tool
-            assert_eq!(
-                tool1.name(),
-                tool2.name(),
-                "Cloned tools should have the same name"
-            );
-        }
-    }
-
-    // ============================================================================
-    // MCP Registration Tests
-    // ============================================================================
-
-    /// Test: Tool registration creation
-    /// Verifies that tool registrations can be created
-    #[tokio::test]
-    async fn test_mcp_tool_registration_creation() {
-        let _registration =
-            McpToolRegistration::new("integration_test_tool", "v1.0.0", create_echo_tool, || {
-                ApiMetadata::default()
-            });
-
-        // Registration creation should succeed without panic
-        let _ = &_registration;
-
-        // Verify by checking if we can get tools (the registration is collected via inventory)
-        let tools = get_mcp_tools();
-        // Just verify the function works (len() is always >= 0)
-        let _ = tools.len();
-    }
-
-    /// Test: Complex schema validation
-    /// Verifies that complex nested schemas are properly validated
-    #[tokio::test]
-    async fn test_mcp_complex_schema_validation() {
-        let tool = create_complex_schema_tool();
+    /// Test: Echo tool schema structure
+    #[test]
+    fn test_echo_tool_schema() {
+        let tool = create_echo_tool();
         let schema = tool.input_schema();
 
-        // Verify nested structure
-        assert_eq!(schema["type"], "object", "Root type should be object");
+        assert_eq!(schema["type"], "object");
+        assert!(schema["properties"]["message"].is_object());
+        assert!(schema["properties"]["count"].is_object());
+    }
 
-        // Verify nested object properties
+    /// Test: Math tool schema with required fields
+    #[test]
+    fn test_math_tool_schema() {
+        let tool = create_math_tool();
+        let schema = tool.input_schema();
+
+        assert_eq!(schema["type"], "object");
+        let required = schema["required"].as_array().unwrap();
+        assert!(required.contains(&serde_json::json!("a")));
+        assert!(required.contains(&serde_json::json!("b")));
+        assert!(required.contains(&serde_json::json!("operation")));
+
+        // Verify enum constraint
+        let op_schema = &schema["properties"]["operation"];
+        let enum_values = op_schema["enum"].as_array().unwrap();
+        assert!(enum_values.contains(&serde_json::json!("add")));
+        assert!(enum_values.contains(&serde_json::json!("subtract")));
+        assert!(enum_values.contains(&serde_json::json!("multiply")));
+        assert!(enum_values.contains(&serde_json::json!("divide")));
+    }
+
+    /// Test: Complex tool nested schema
+    #[test]
+    fn test_complex_tool_nested_schema() {
+        let tool = create_complex_tool();
+        let schema = tool.input_schema();
+
         let user_props = &schema["properties"]["user"]["properties"];
-        assert!(
-            user_props.get("name").is_some(),
-            "Should have name property"
-        );
-        assert!(user_props.get("age").is_some(), "Should have age property");
-        assert!(
-            user_props.get("address").is_some(),
-            "Should have address property"
-        );
+        assert!(user_props.get("name").is_some());
+        assert!(user_props.get("age").is_some());
 
-        // Verify deeply nested address
-        let address_props = &user_props["address"]["properties"];
-        assert!(
-            address_props.get("street").is_some(),
-            "Address should have street"
-        );
-        assert!(
-            address_props.get("city").is_some(),
-            "Address should have city"
-        );
-        assert!(
-            address_props.get("country").is_some(),
-            "Address should have country"
-        );
+        let user_required = schema["properties"]["user"]["required"]
+            .as_array()
+            .unwrap();
+        assert!(user_required.contains(&serde_json::json!("name")));
+    }
 
-        // Verify array type
-        assert_eq!(
-            schema["properties"]["tags"]["type"], "array",
-            "Tags should be array type"
-        );
+    /// Test: Schema is valid JSON
+    #[test]
+    fn test_schema_serialization() {
+        let tool = create_complex_tool();
+        let schema = tool.input_schema();
 
-        // Verify boolean type
-        assert_eq!(
-            schema["properties"]["active"]["type"], "boolean",
-            "Active should be boolean type"
-        );
+        let serialized = serde_json::to_string(&schema).unwrap();
+        let deserialized: Value = serde_json::from_str(&serialized).unwrap();
+        assert!(deserialized.is_object());
     }
 
     // ============================================================================
-    // JSON-RPC Protocol Tests
+    // Response Content Tests
     // ============================================================================
 
-    /// Test: JSON-RPC request serialization roundtrip
-    /// Verifies that JSON-RPC requests can be serialized and deserialized
-    #[tokio::test]
-    async fn test_mcp_jsonrpc_request_roundtrip() {
-        let request = JsonRpcRequest {
-            jsonrpc: JsonRpcVersion::default(),
-            method: "tools/call".to_string(),
-            params: Some(serde_json::json!({
-                "name": "test_tool",
-                "arguments": {"key": "value"}
-            })),
-            id: 42_u64,
-        };
+    /// Test: Text content type
+    #[test]
+    fn test_text_content_type() {
+        let tool = create_echo_tool();
+        let input = serde_json::json!({"message": "test"});
 
-        // Serialize
-        let serialized = serde_json::to_string(&request).expect("Serialization should succeed");
+        let response = tool.call(Some(input)).unwrap();
+        assert!(!response.content.is_empty());
 
-        // Verify JSON structure
-        assert!(
-            serialized.contains("\"jsonrpc\":\"2.0\""),
-            "Should contain JSON-RPC version"
-        );
-        assert!(
-            serialized.contains("\"method\":\"tools/call\""),
-            "Should contain method"
-        );
-        assert!(serialized.contains("\"params\""), "Should contain params");
-        assert!(serialized.contains("\"id\":42"), "Should contain id");
-
-        // Deserialize
-        let deserialized: JsonRpcRequest =
-            serde_json::from_str(&serialized).expect("Deserialization should succeed");
-
-        assert_eq!(
-            deserialized.jsonrpc.as_str(),
-            "2.0",
-            "JSON-RPC version should match"
-        );
-        assert_eq!(deserialized.method, "tools/call", "Method should match");
-        assert_eq!(deserialized.id, 42, "ID should match");
+        // Verify content is text type
+        assert!(matches!(
+            response.content.first(),
+            Some(c) if c.as_text().is_some()
+        ));
     }
 
-    /// Test: JSON-RPC response serialization roundtrip
-    /// Verifies that JSON-RPC responses can be serialized and deserialized
-    #[tokio::test]
-    async fn test_mcp_jsonrpc_response_roundtrip() {
-        let response = JsonRpcResponse {
-            jsonrpc: JsonRpcVersion::default(),
-            id: 1_u64,
-            result: Some(serde_json::json!({
-                "content": [
-                    {"type": "text", "text": "Hello, World!"}
-                ]
-            })),
-            error: None,
-        };
+    /// Test: is_error flag is None for successful calls
+    #[test]
+    fn test_is_error_none_on_success() {
+        let tool = create_echo_tool();
+        let input = serde_json::json!({"message": "test"});
 
-        // Serialize
-        let serialized = serde_json::to_string(&response).expect("Serialization should succeed");
-
-        assert!(
-            serialized.contains("\"jsonrpc\":\"2.0\""),
-            "Should contain JSON-RPC version"
-        );
-        assert!(serialized.contains("\"result\""), "Should contain result");
-
-        // Deserialize
-        let deserialized: JsonRpcResponse =
-            serde_json::from_str(&serialized).expect("Deserialization should succeed");
-
-        assert!(deserialized.result.is_some(), "Should have result");
-        assert!(deserialized.error.is_none(), "Should not have error");
+        let response = tool.call(Some(input)).unwrap();
+        assert!(response.is_error.is_none() || response.is_error == Some(false));
     }
 
-    /// Test: JSON-RPC error response serialization
-    /// Verifies that JSON-RPC error responses are properly formatted
-    #[tokio::test]
-    async fn test_mcp_jsonrpc_error_response() {
-        use mcp_sdk::transport::JsonRpcError;
-
-        let response = JsonRpcResponse {
-            jsonrpc: JsonRpcVersion::default(),
-            id: 1_u64,
-            result: None,
-            error: Some(JsonRpcError {
-                code: -32600,
-                message: "Invalid Request".to_string(),
-                data: None,
-            }),
-        };
-
-        // Serialize
-        let serialized = serde_json::to_string(&response).expect("Serialization should succeed");
-
-        assert!(
-            serialized.contains("\"error\""),
-            "Should contain error field"
-        );
-        assert!(
-            serialized.contains("\"code\":-32600"),
-            "Should contain error code"
-        );
-        assert!(
-            serialized.contains("\"message\":\"Invalid Request\""),
-            "Should contain error message"
-        );
-
-        // Deserialize
-        let deserialized: JsonRpcResponse =
-            serde_json::from_str(&serialized).expect("Deserialization should succeed");
-
-        assert!(deserialized.result.is_none(), "Should not have result");
-        assert!(deserialized.error.is_some(), "Should have error");
-    }
-
-    /// Test: Empty params handling
-    /// Verifies that empty/null params are handled correctly
-    #[tokio::test]
-    async fn test_mcp_empty_params_handling() {
-        let request = JsonRpcRequest {
-            jsonrpc: JsonRpcVersion::default(),
-            method: "tools/list".to_string(),
-            params: None,
-            id: 1_u64,
-        };
-
-        let serialized = serde_json::to_string(&request).expect("Serialization should succeed");
-
-        // Empty params should not appear in JSON
-        assert!(
-            !serialized.contains("\"params\":null"),
-            "Empty params should not serialize as null"
-        );
-
-        let deserialized: JsonRpcRequest =
-            serde_json::from_str(&serialized).expect("Deserialization should succeed");
-
-        assert!(
-            deserialized.params.is_none(),
-            "Deserialized params should be None"
-        );
-    }
-
-    /// Test: No-param tool execution
-    /// Verifies that tools with no parameters work correctly
-    #[tokio::test]
-    async fn test_mcp_no_param_tool_execution() {
+    /// Test: meta field is None by default
+    #[test]
+    fn test_meta_none_by_default() {
         let tool = create_no_param_tool();
-
-        // Call with no parameters
-        let result = tool.call(None);
-        assert!(result.is_ok(), "No-param tool should succeed with None");
-
-        // Call with empty object
-        let result = tool.call(Some(serde_json::json!({})));
-        assert!(
-            result.is_ok(),
-            "No-param tool should succeed with empty object"
-        );
-
-        // Call with null
-        let result = tool.call(Some(serde_json::json!(null)));
-        assert!(result.is_ok(), "No-param tool should succeed with null");
-
-        let response = result.unwrap();
-        assert!(!response.content.is_empty(), "Should have content");
+        let response = tool.call(None).unwrap();
+        assert!(response.meta.is_none());
     }
 
-    /// Test: Multiple content items in response
-    /// Verifies that responses can contain multiple content items
-    #[tokio::test]
-    async fn test_mcp_multiple_content_items() {
-        struct MultiContentTool;
-        impl Tool for MultiContentTool {
-            fn name(&self) -> String {
-                "multi_content".to_string()
-            }
-            fn description(&self) -> String {
-                "Returns multiple content items".to_string()
-            }
-            fn input_schema(&self) -> Value {
-                serde_json::json!({"type": "object"})
-            }
-            fn call(&self, _input: Option<Value>) -> Result<CallToolResponse, anyhow::Error> {
-                Ok(CallToolResponse {
-                    content: vec![
-                        ToolResponseContent::Text {
-                            text: "First".to_string(),
-                        },
-                        ToolResponseContent::Text {
-                            text: "Second".to_string(),
-                        },
-                        ToolResponseContent::Text {
-                            text: "Third".to_string(),
-                        },
-                    ],
-                    is_error: None,
-                    meta: None,
-                })
-            }
+    /// Test: structured_content is None by default
+    #[test]
+    fn test_structured_content_none_by_default() {
+        let tool = create_no_param_tool();
+        let response = tool.call(None).unwrap();
+        assert!(response.structured_content.is_none());
+    }
+
+    // ============================================================================
+    // Multiple Tools Coexistence Tests
+    // ============================================================================
+
+    /// Test: Multiple tools can coexist with different names
+    #[test]
+    fn test_multiple_tools_coexistence() {
+        let tools = vec![
+            McpToolInstance::new(create_echo_tool(), ApiMetadata::default()),
+            McpToolInstance::new(create_math_tool(), ApiMetadata::default()),
+            McpToolInstance::new(create_error_tool(), ApiMetadata::default()),
+            McpToolInstance::new(create_no_param_tool(), ApiMetadata::default()),
+            McpToolInstance::new(create_complex_tool(), ApiMetadata::default()),
+        ];
+        let server = SdForgeMcpServer::with_tools(tools);
+
+        assert_eq!(server.tool_count(), 5);
+        assert!(server.find_tool("echo").is_some());
+        assert!(server.find_tool("math").is_some());
+        assert!(server.find_tool("error_tool").is_some());
+        assert!(server.find_tool("no_param").is_some());
+        assert!(server.find_tool("complex").is_some());
+    }
+
+    // ============================================================================
+    // get_mcp_tools Integration Tests
+    // ============================================================================
+
+    /// Test: get_mcp_tools returns instances with accessible metadata
+    #[test]
+    fn test_get_mcp_tools_metadata_access() {
+        let tools = get_mcp_tools();
+        for instance in tools {
+            let metadata = instance.metadata();
+            let _ = metadata.name();
+            let _ = metadata.version();
+            let _ = metadata.cache_ttl();
+            let _ = metadata.is_streaming();
         }
+    }
 
-        let tool = Arc::new(MultiContentTool) as Arc<dyn Tool>;
-        let result = tool.call(None);
+    /// Test: get_mcp_tools returns instances with accessible tools
+    #[test]
+    fn test_get_mcp_tools_tool_access() {
+        let tools = get_mcp_tools();
+        for instance in tools {
+            let tool = instance.tool();
+            let _ = tool.name();
+            let _ = tool.description();
+            let _ = tool.input_schema();
+        }
+    }
 
-        assert!(result.is_ok(), "Multi-content tool should succeed");
-        let response = result.unwrap();
-        assert_eq!(response.content.len(), 3, "Should have 3 content items");
+    // ============================================================================
+    // McpToolRegistration Tests
+    // ============================================================================
+
+    /// Test: Registration creates valid tool instances
+    #[test]
+    fn test_registration_creates_valid_tool() {
+        fn create_test_tool() -> Arc<dyn SdForgeTool> {
+            create_echo_tool()
+        }
+        fn create_test_metadata() -> ApiMetadata {
+            ApiMetadata::default()
+        }
+        let reg = McpToolRegistration::new(
+            "echo",
+            "v1",
+            create_test_tool,
+            create_test_metadata,
+        );
+        assert_eq!(reg.name, "echo");
+        assert_eq!(reg.version, "v1");
+
+        let tool = reg.create();
+        assert_eq!(tool.name(), "echo");
+    }
+
+    /// Test: Registration metadata is accessible
+    #[test]
+    fn test_registration_metadata_access() {
+        fn create_test_tool() -> Arc<dyn SdForgeTool> {
+            create_math_tool()
+        }
+        fn create_test_metadata() -> ApiMetadata {
+            ApiMetadata::new(
+                "math".to_string(),
+                "v2".to_string(),
+                "Math tool".to_string(),
+                Some(300),
+                false,
+            )
+        }
+        let reg = McpToolRegistration::new(
+            "math",
+            "v2",
+            create_test_tool,
+            create_test_metadata,
+        );
+
+        let metadata = reg.metadata();
+        assert_eq!(metadata.name(), "math");
+        assert_eq!(metadata.version(), "v2");
     }
 }

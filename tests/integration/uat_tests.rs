@@ -23,7 +23,7 @@ mod uat_002_mcp_service {
 
     #[tokio::test]
     async fn test_mcp_service_creation() {
-        let server = build().await;
+        let server = build();
         assert!(
             !std::ptr::eq(&server, std::ptr::null()),
             "MCP service should build successfully"
@@ -40,7 +40,7 @@ mod uat_003_dual_protocol {
     #[tokio::test]
     async fn test_dual_protocol_build() {
         let http_result = http_build();
-        let mcp_result = mcp_build().await;
+        let mcp_result = mcp_build();
         assert!(
             !std::ptr::eq(&http_result, std::ptr::null()),
             "HTTP build should succeed"
