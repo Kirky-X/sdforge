@@ -4,7 +4,7 @@ This directory contains examples demonstrating how to use the SDForge framework.
 
 ## Structure
 
-- `src/basic/` - Core API definitions and error handling
+- `src/basics/` - Core API definitions and error handling
 - `src/http/` - HTTP protocol examples (routing, parameters, middleware, versioning)
 - `src/mcp/` - MCP protocol examples (tools, registration)
 - `src/security/` - Authentication, authorization, rate limiting, audit logging
@@ -45,8 +45,7 @@ cargo run --features full
 
 Some examples require external services:
 
-- **Redis**: Required for `cache/redis.rs` examples (use Docker Compose or run Redis locally)
-- **PostgreSQL**: Some advanced examples may require a database connection
+- **Cache**: See `cache/performance.rs` for advanced in-memory caching patterns (no external services required)
 
 ## Feature Matrix
 
@@ -64,10 +63,10 @@ Some examples require external services:
 
 ## Next Steps
 
-1. Start with `basic/simple_api.rs` to understand the core macro
-2. Explore `http/routing.rs` for HTTP routing patterns
-3. Check `mcp/tools.rs` for MCP protocol usage
-4. Look at `combined/multi_protocol.rs` to see HTTP + MCP together
+1. Start with `basics/simple_api.rs` to understand the core macro
+2. Explore `http/routing/path_params.rs` and `http/routing/query_params.rs` for HTTP routing patterns
+3. Check `mcp/tool_registration.rs` and `mcp/tool_definition.rs` for MCP protocol usage
+4. Look at `combined/full_example.rs` to see HTTP + MCP together
 5. **NEW**: Study `security/comprehensive.rs` for complete security implementation
 6. **NEW**: Review `cache/performance.rs` for advanced caching patterns
 
@@ -159,13 +158,17 @@ if let Some(data) = l2_cache.get(key) {
 
 ## Running Specific Examples
 
+These examples are lib modules in the `sdforge-examples` crate (not `cargo --example` binaries).
+You can reference them via `use sdforge_examples::security::comprehensive;` or run their
+module tests:
+
 ```bash
-# Security comprehensive example
-cargo run --features "http security cache" --example security/comprehensive
+# Security comprehensive example (run module tests)
+cargo test --features "http_examples security_examples cache_examples" --manifest-path examples/Cargo.toml --lib security::comprehensive
 
-# Cache performance example
-cargo run --features "http cache" --example cache/performance
+# Cache performance example (run module tests)
+cargo test --features "http_examples cache_examples" --manifest-path examples/Cargo.toml --lib cache::performance
 
-# All features combined
-cargo run --features full --example security/comprehensive
+# All features combined (run all module tests)
+cargo test --manifest-path examples/Cargo.toml --lib
 ```
