@@ -84,7 +84,7 @@
 
 ```toml
 [dependencies]
-sdforge = { version = "0.1", features = ["http"] }
+sdforge = { version = "0.2", features = ["http"] }
 ```
 
 ---
@@ -139,16 +139,23 @@ SDForge 使用 Cargo features 进行编译时协议选择和特性组合。
 | `grpc`       | gRPC 支持                                | tonic, prost                                 |
 | `cache`      | 缓存支持                                 | dep:http, oxcache/memory, async-trait         |
 | `openapi`    | 自动 OpenAPI 3.1 规范生成                | utoipa, http                                  |
-| `full`       | 启用所有特性                             | -                                             |
+| `cli`        | CLI 工具（代码生成、项目脚手架）         | clap, tera, walkdir, confers/cli              |
+| `validation` | Confers 验证扩展                        | confers/validation                            |
+| `schema`     | Confers schema 扩展                     | confers/schema, schemars                      |
+| `watch`      | Confers 热重载扩展                      | confers/watch                                 |
+| `audit`      | Confers 审计扩展                        | confers/audit                                 |
+| `simd-json`  | SIMD 加速 JSON 序列化                   | simd-json                                     |
+| `hex`        | 十六进制编码工具                        | hex                                           |
+| `full`       | 启用所有运行时特性（不含 cli/simd-json/hex 等工具特性） | -                                |
 
 ### 🔗 特性依赖
 
 - `default`: [`http`]
-- `mcp`: 无依赖
+- `mcp`: 独立协议（依赖外部 http crate 用于 stateless HTTP 头解析，不依赖 sdforge http feature）
 - `streaming`: 需要 `http`
 - `timestamp`: 无依赖
 - `logging`: 无依赖
-- `security`: 需要 `http`
+- `security`: 需要 `http`、`cache`
 - `hot-reload`: 需要 `http`
 - `websocket`: 需要 `http`, `streaming`
 - `grpc`: 需要 `http`
@@ -165,7 +172,7 @@ SDForge 使用 Cargo features 进行编译时协议选择和特性组合。
 
 ```toml
 [dependencies]
-sdforge = { version = "0.1", features = ["http"] }
+sdforge = { version = "0.2", features = ["http"] }
 ```
 
 ### 🤖 仅 MCP
@@ -174,7 +181,7 @@ sdforge = { version = "0.1", features = ["http"] }
 
 ```toml
 [dependencies]
-sdforge = { version = "0.1", features = ["mcp"] }
+sdforge = { version = "0.2", features = ["mcp"] }
 ```
 
 ### 🔄 双协议
@@ -183,7 +190,7 @@ sdforge = { version = "0.1", features = ["mcp"] }
 
 ```toml
 [dependencies]
-sdforge = { version = "0.1", features = ["http", "mcp"] }
+sdforge = { version = "0.2", features = ["http", "mcp"] }
 ```
 
 ### 🎯 全功能
@@ -192,7 +199,7 @@ sdforge = { version = "0.1", features = ["http", "mcp"] }
 
 ```toml
 [dependencies]
-sdforge = { version = "0.1", features = ["full"] }
+sdforge = { version = "0.2", features = ["full"] }
 ```
 
 ---
@@ -491,6 +498,7 @@ sdforge/
 │   ├── cache/        # 缓存实现
 │   ├── websocket/    # WebSocket 支持
 │   ├── grpc/         # gRPC 支持
+│   ├── streaming/    # SSE 流式支持
 │   ├── config/       # 配置管理
 │   ├── cli/          # CLI 工具（可选，需要 `cli` 特性）
 │   ├── lib.rs        # 库入口点
@@ -505,7 +513,7 @@ sdforge/
 
 **注意**: CLI 二进制仅在启用 `cli` 特性时编译：
 ```toml
-sdforge = { version = "0.1", features = ["cli"] }
+sdforge = { version = "0.2", features = ["cli"] }
 ```
 
 ---
