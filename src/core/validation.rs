@@ -1,10 +1,9 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Parameter validation and type conversion utilities
 //!
 //! This module provides utilities for validating request parameters and
 //! converting between different types. Requires the `http` feature.
-
-#![allow(clippy::result_large_err)]
 
 // =============================================================================
 // Security Limits - Input Size Constraints
@@ -342,6 +341,7 @@ pub(crate) mod sanitizer {
     }
 
     /// Validate and sanitize a user ID (must be positive integer)
+    #[allow(clippy::result_large_err)]
     pub fn validate_user_id(id: i64) -> Result<i64, ApiError> {
         if id <= 0 {
             Err(ApiError::validation_error(
@@ -354,6 +354,7 @@ pub(crate) mod sanitizer {
     }
 
     /// Validate a string is not empty after trimming
+    #[allow(clippy::result_large_err)]
     pub fn validate_not_empty(input: &str, field_name: &str) -> Result<String, ApiError> {
         let trimmed = input.trim().to_string();
         if trimmed.is_empty() {
@@ -367,6 +368,7 @@ pub(crate) mod sanitizer {
     }
 
     /// Validate string length
+    #[allow(clippy::result_large_err)]
     pub fn validate_length(
         input: &str,
         min: usize,
@@ -397,6 +399,7 @@ pub(crate) mod sanitizer {
     }
 
     /// Validate an email address format
+    #[allow(clippy::result_large_err)]
     pub fn validate_email_format(email: &str) -> Result<String, ApiError> {
         let trimmed = email.trim().to_string();
 
