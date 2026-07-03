@@ -743,7 +743,7 @@ fn test_grpc_route_registration_name_accessor() {
     }
 
     let registration =
-        GrpcRouteRegistration::new("unique_name", "v1", create_route, || ApiMetadata::default());
+        GrpcRouteRegistration::new("unique_name", "v1", create_route, ApiMetadata::default);
 
     assert_eq!(registration.name(), "unique_name");
 }
