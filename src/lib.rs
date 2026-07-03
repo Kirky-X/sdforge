@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! SDForge runtime library
 //!
 //! This crate provides the runtime types and service builders for the SDForge framework.
@@ -243,7 +244,7 @@ pub use http::version_routing::{build_version_router, VersionRouterConfig, Versi
 pub mod openapi;
 
 #[cfg(feature = "openapi")]
-pub use openapi::{generate_openapi_spec, OpenApiBuilder, OpenApiRouteInfo};
+pub use openapi::{generate_openapi_spec, OpenApiBuilder, OpenApiPathParam, OpenApiRouteInfo};
 
 /// 初始化所有已注册的插件，确保它们不会被链接器优化掉。
 ///
