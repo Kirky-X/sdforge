@@ -40,45 +40,45 @@
 
 #### Security（6 项）
 
-- [DEBT-S3] 审计签名密钥每次 env 读取 + 静默降级 (`audit.rs:300-313`)
-- [DEBT-S4] 审计日志存储可变，读取时不校验签名 (`audit.rs:325-335`)
-- [DEBT-S5] Bearer 密钥 `Vec<u8>` 未 zeroize (`bearer.rs:27`) — `zeroize` 已声明但未用
-- [DEBT-S6] `validate_key` 恒定时间延迟无效，测试跳过 (`api_key.rs:316-328`)
-- [DEBT-S7] `register_token` 死代码，`validate_token` 从不查询白名单 (`bearer.rs:414-418`)
-- [DEBT-S8] 可信代理白名单 `"127.0.0.1"` 缺 CIDR 掩码 (`middleware.rs:45`)
+- [DEBT-S3] 审计签名密钥每次 env 读取 + 静默降级 (`src/security/audit/mod.rs:300-313`)
+- [DEBT-S4] 审计日志存储可变，读取时不校验签名 (`src/security/audit/mod.rs:325-335`)
+- [DEBT-S5] Bearer 密钥 `Vec<u8>` 未 zeroize (`src/security/bearer/mod.rs:27`) — `zeroize` 已声明但未用
+- [DEBT-S6] `validate_key` 恒定时间延迟无效，测试跳过 (`src/security/api_key.rs:316-328`)
+- [DEBT-S7] `register_token` 死代码，`validate_token` 从不查询白名单 (`src/security/bearer/mod.rs:414-418`)
+- [DEBT-S8] 可信代理白名单 `"127.0.0.1"` 缺 CIDR 掩码 (`src/security/middleware.rs:45`)
 
 #### Performance（2 项）
 
-- [DEBT-P1] DashMapCache LRU 使用 O(n) 线性查找与删除 (`cache/dashmap.rs:122-124`)
-- [DEBT-P2] prefix_index 单一 std::sync::Mutex 序列化所有写 (`cache/dashmap.rs:31`)
+- [DEBT-P1] DashMapCache LRU 使用 O(n) 线性查找与删除 (`src/cache/dashmap.rs:122-124`)
+- [DEBT-P2] prefix_index 单一 std::sync::Mutex 序列化所有写 (`src/cache/dashmap.rs:31`)
 
 #### Quality（6 项）
 
-- [DEBT-Q3] `ApiError::validation_error()` 静默丢弃 `_code` 参数 (`api_error.rs:101-107`)
-- [DEBT-Q4] `ErrorContext::current()` 把 function 填成 "()" (`context.rs:60-67`)
-- [DEBT-Q5] `SdForgeError::Internal` 直接发送原始消息给客户端 (`sdforge_error.rs:63-70`)
-- [DEBT-Q6] `validate_or_error` 接受 `_error_map` 但从不调用 (`validation.rs:242-251`)
-- [DEBT-Q7] `extract_validated` 丢弃 serde 错误上下文 (`validation.rs:440-450`)
+- [DEBT-Q3] `ApiError::validation_error()` 静默丢弃 `_code` 参数 (`src/core/error/api_error.rs:101-107`)
+- [DEBT-Q4] `ErrorContext::current()` 把 function 填成 "()" (`src/core/error/context.rs:60-67`)
+- [DEBT-Q5] `SdForgeError::Internal` 直接发送原始消息给客户端 (`src/core/error/sdforge_error.rs:63-70`)
+- [DEBT-Q6] `validate_or_error` 接受 `_error_map` 但从不调用 (`src/core/validation.rs:242-251`)
+- [DEBT-Q7] `extract_validated` 丢弃 serde 错误上下文 (`src/core/validation.rs:440-450`)
 - [DEBT-Q8] 过程宏累积"备用"死代码 (`macros/src/lib.rs:614, 656, 718, 724`)
 
 #### Architecture（5 项）
 
-- [DEBT-A1] HTTP 三重路由注册机制，需 HashMap 去重 (`http/mod.rs:85-87`)
-- [DEBT-A2] HTTP `build()` 跨协议调用其他模块 (`http/mod.rs:111-133`)
-- [DEBT-A3] `WebSocketRoute` 命名混淆——注册类型与实例类型同名 (`websocket/handler.rs:54`)
-- [DEBT-A4] gRPC 是空壳——`build_server` 完全忽略注册项 (`grpc/mod.rs:107-127`)
-- [DEBT-A5] `Registration` trait 是死抽象——生产代码绕过 trait (`core/registration.rs:47-65`)
+- [DEBT-A1] HTTP 三重路由注册机制，需 HashMap 去重 (`src/http/mod.rs:85-87`)
+- [DEBT-A2] HTTP `build()` 跨协议调用其他模块 (`src/http/mod.rs:111-133`)
+- [DEBT-A3] `WebSocketRoute` 命名混淆——注册类型与实例类型同名 (`src/websocket/handler.rs:54`)
+- [DEBT-A4] gRPC 是空壳——`build_server` 完全忽略注册项 (`src/grpc/mod.rs:107-127`)
+- [DEBT-A5] `Registration` trait 是死抽象——生产代码绕过 trait (`src/core/registration.rs:47-65`)
 
 #### Correctness（2 项）
 
-- [DEBT-C2] `to_mcp_json` 泄露内部错误消息 (`api_error.rs:361`)
-- [DEBT-C3] 版本重定向丢失查询参数 (`version_routing.rs:176-191`)
+- [DEBT-C2] `to_mcp_json` 泄露内部错误消息 (`src/core/error/api_error.rs:361`)
+- [DEBT-C3] 版本重定向丢失查询参数 (`src/http/version_routing.rs:176-191`)
 
 ### Simplification（35 项，已在 diting 报告详述）
 
 详见 `temp/diting-review-report.md` 的 Simplification 章节。高 ROI 重构点：
 - [SIM5] AppAuditLogger 异步队列 worker 冗余（-25 行）
-- [SIM26] audit.rs `with_limit()` 与 `Builder::build()` 复制 spawn worker（-40 行）
+- [SIM26] `src/security/audit/mod.rs` 中 `with_limit()` 与 `Builder::build()` 复制 spawn worker（-40 行）
 - [SIM27] AuthConfig 双 validate 行为分歧（已部分修复，剩余 ServerConfig/AppConfig 已修复）
 - [SIM28] ServerConfig 双 validate 逐字重复（已修复）
 - [SIM33] ConnectionManager.check_and_record 生产路径零调用（-50 行，30+ 测试覆盖未启用功能）

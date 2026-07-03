@@ -50,6 +50,8 @@
 - [📚 Documentation](#documentation)
 - [🔒 Security Configuration](#security-configuration)
 - [⚡ Performance Optimization](#performance-optimization)
+- [📜 OpenAPI Auto-Generation](#openapi-generation)
+- [🔄 MCP 2026-07-28 Migration Guide](#mcp-migration)
 - [🚀 Production Deployment](#deployment-guide)
 - [🐛 Troubleshooting](#troubleshooting)
 - [🤝 Contributing](#contributing)
@@ -94,12 +96,12 @@ Add SDForge to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.1", features = ["http"] }
+sdforge = { version = "0.2", features = ["http"] }
 ```
 
 **CLI Tool**: To use the CLI, enable the `cli` feature:
 ```toml
-sdforge = { version = "0.1", features = ["cli"] }
+sdforge = { version = "0.2", features = ["cli"] }
 ```
 
 Then run:
@@ -163,16 +165,23 @@ SDForge uses Cargo features for compile-time protocol selection and feature comp
 | `grpc`       | gRPC support                             | tonic, prost                                 |
 | `cache`      | Caching support                          | dep:http, oxcache/memory, async-trait         |
 | `openapi`    | Automatic OpenAPI 3.1 spec generation    | utoipa, http                                  |
-| `full`       | All features enabled                     | -                                             |
+| `cli`        | CLI tool (code generation, scaffolding)  | clap, tera, walkdir, confers/cli              |
+| `validation` | Confers validation extension             | confers/validation                            |
+| `schema`     | Confers schema extension                 | confers/schema, schemars                      |
+| `watch`      | Confers hot-reload extension             | confers/watch                                 |
+| `audit`      | Confers audit extension                  | confers/audit                                 |
+| `simd-json`  | SIMD-accelerated JSON serialization      | simd-json                                     |
+| `hex`        | Hexadecimal encoding utility             | hex                                           |
+| `full`       | All runtime features (excludes cli/simd-json/hex tooling) | -                                |
 
 ### 🔗 Feature Dependencies
 
 - `default`: [`http`]
-- `mcp`: No dependencies
+- `mcp`: Independent protocol (depends on external http crate for stateless HTTP header parsing, not sdforge http feature)
 - `streaming`: Requires `http`
 - `timestamp`: No dependencies
 - `logging`: No dependencies
-- `security`: Requires `http`
+- `security`: Requires `http`, `cache`
 - `hot-reload`: Requires `http`
 - `websocket`: Requires `http`, `streaming`
 - `grpc`: Requires `http`
@@ -189,7 +198,7 @@ For traditional REST APIs:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.1", features = ["http"] }
+sdforge = { version = "0.2", features = ["http"] }
 ```
 
 ### 🤖 MCP Only
@@ -198,7 +207,7 @@ For AI tool integration:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.1", features = ["mcp"] }
+sdforge = { version = "0.2", features = ["mcp"] }
 ```
 
 ### 🔄 Both Protocols
@@ -207,7 +216,7 @@ Exposure via both HTTP and MCP from the same code:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.1", features = ["http", "mcp"] }
+sdforge = { version = "0.2", features = ["http", "mcp"] }
 ```
 
 ### 🎯 Full Features
@@ -216,7 +225,7 @@ All capabilities enabled:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.1", features = ["full"] }
+sdforge = { version = "0.2", features = ["full"] }
 ```
 
 ---
@@ -515,6 +524,7 @@ sdforge/
 │   ├── cache/        # Caching implementation
 │   ├── websocket/    # WebSocket support
 │   ├── grpc/         # gRPC support
+│   ├── streaming/    # SSE streaming support
 │   ├── config/       # Configuration management
 │   ├── cli/          # CLI tool (optional, requires `cli` feature)
 │   ├── lib.rs        # Library entry point
@@ -529,7 +539,7 @@ sdforge/
 
 **Note**: The CLI binary is only compiled when the `cli` feature is enabled:
 ```toml
-sdforge = { version = "0.1", features = ["cli"] }
+sdforge = { version = "0.2", features = ["cli"] }
 ```
 
 ---
@@ -624,6 +634,131 @@ use sdforge::http::build_with_config;
 let config = AppConfig::default();
 let app = build_with_config(&config)?;
 ```
+
+---
+
+## <span id="openapi-generation">📜 OpenAPI Auto-Generation</span>
+
+SDForge v0.2.0 introduces automatic OpenAPI 3.1 specification generation based on [utoipa 5.5](https://crates.io/crates/utoipa). When the `openapi` feature is enabled, each `#[service_api]` macro registers an `OpenApiRouteInfo` at compile time via `inventory`. At runtime, calling `generate_openapi_spec()` collects all routes and generates a complete specification.
+
+### 🔧 Enabling
+
+```toml
+[dependencies]
+sdforge = { version = "0.2", features = ["http", "openapi"] }
+```
+
+### 🚀 Basic Usage
+
+```rust
+use sdforge::openapi::generate_openapi_spec;
+
+// Collect all routes registered via #[service_api] and generate the OpenAPI specification
+let spec = generate_openapi_spec();
+
+// Serialize to JSON to write to a file or return to the client
+let json = serde_json::to_string_pretty(&spec).unwrap();
+println!("{json}");
+```
+
+### 🎨 Custom Metadata
+
+Use the `OpenApiBuilder` chainable calls to customize the `info` section (title, version, description). Routes are always collected from the global `inventory` registry:
+
+```rust
+use sdforge::openapi::OpenApiBuilder;
+
+let spec = OpenApiBuilder::new()
+    .title("My Service")
+    .version("2.0.0")
+    .description("User-facing API for the billing domain")
+    .build();
+```
+
+### 🔗 Macro Integration
+
+When the `openapi` feature is enabled, `#[service_api]` automatically generates registration code—no manual maintenance required:
+
+```rust
+#[service_api(
+    name = "get_user",
+    version = "v1",
+    path = "/users/:id",
+    method = "GET",
+    description = "Get a user by ID"
+)]
+async fn get_user(id: u64) -> Result<User, ApiError> { /* ... */ }
+```
+
+The above code automatically submits an `OpenApiRouteInfo { path: "/users/{id}", method: "GET", ... }` to the global registry at compile time. `generate_openapi_spec()` will include it in the generated specification.
+
+> **Note**: When the `openapi` feature is not enabled, the macro does not generate any utoipa-related code—zero runtime overhead.
+
+---
+
+## <span id="mcp-migration">🔄 MCP 2026-07-28 Migration Guide</span>
+
+v0.2.0 fully migrates the MCP implementation from `mcp-sdk 0.0.3` to [`rmcp 0.16`](https://crates.io/crates/rmcp), adapting to the MCP 2026-07-28 specification. This migration is a **BREAKING** change.
+
+### ⚠️ BREAKING Changes
+
+| Old Version (v0.1.x)                  | New Version (v0.2.0)                          |
+|----------------------------------------|-----------------------------------------------|
+| `mcp-sdk = "0.0.3"` dependency          | `rmcp = "0.16"` dependency                    |
+| `initialize` handshake flow             | Removed, replaced with `server/discover` endpoint |
+| Stateful sessions (`StatefulServerHandler`) | Stateless adapter layer (`StatelessServerHandler`) |
+| `register_mcp(&mut Server)` signature   | `register_mcp(&mut dyn McpToolRegistry)`      |
+
+### 🛠️ Stateless Adapter Layer
+
+`StatelessServerHandler` implements the `rmcp::ServerHandler` trait. None of its methods depend on session state, adapting to the stateless protocol model of the 2026-07-28 specification:
+
+```rust
+use sdforge::mcp::stateless::StatelessServerHandler;
+
+let handler = StatelessServerHandler::new();
+// Mount to HTTP routes via rmcp's axum integration
+```
+
+### 📨 HTTP Header Protocol
+
+The stateless protocol passes methods and tool names through HTTP headers, parsed by `parse_mcp_headers`:
+
+```rust
+use sdforge::mcp::headers::parse_mcp_headers;
+
+// Client requests must carry:
+//   Mcp-Method: tools/call
+//   Mcp-Name: get_user
+let info = parse_mcp_headers(&headers)?;
+```
+
+Missing headers return `400 Bad Request`, consistent with the 2026-07-28 specification.
+
+### 🔁 Multi Round-Trip Requests (MRTR)
+
+New MRTR support is added. Tools can suspend execution via `InputRequiredResult` and wait for the client to provide additional input. It is automatically canceled after a 300-second timeout:
+
+```rust
+use sdforge::mcp::mrtr::MrtrSessionManager;
+
+let manager = MrtrSessionManager::new();
+let result = manager.create_session("session-1", "get_user")?;
+// The client later resumes execution via session_id
+```
+
+### 💾 Cache Semantics
+
+The `cache_semantics` module handles the `ttlMs` and `cacheScope` fields, supporting both `global` and `request` cache scopes. It integrates with oxcache to implement tool result caching.
+
+### 📚 Migration Steps
+
+1. Replace the `mcp-sdk` dependency in `Cargo.toml` with `rmcp` (`features = ["server"]`)
+2. Change the `register_mcp(&mut Server)` call to `register_mcp(&mut dyn McpToolRegistry)`
+3. Remove the `initialize` handshake-related code and use the `server/discover` endpoint instead
+4. If you need MRTR or cache semantics, import the corresponding modules
+
+> For the complete migration example, see `examples/src/mcp/migration_2026.rs`.
 
 ---
 
