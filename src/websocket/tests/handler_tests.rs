@@ -1,11 +1,10 @@
-#![allow(unused_imports)]
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 use crate::core::registration::Registration;
 use crate::core::ApiMetadata;
-use crate::websocket::broadcast::*;
 use crate::websocket::connection::*;
 use crate::websocket::handler::*;
 use crate::websocket::message::*;
-use crate::websocket::*;
 use axum::http::header::AUTHORIZATION;
 use axum::http::StatusCode;
 use axum::Router;
