@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 use sdforge_macros::service_module;
 
 #[service_module(prefix = "/api/v1")]

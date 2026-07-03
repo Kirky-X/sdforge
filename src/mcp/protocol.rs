@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! MCP 2026-07-28 protocol adaptation layer.
 //!
 //! This module provides utilities for the 2026-07-28 MCP protocol version,

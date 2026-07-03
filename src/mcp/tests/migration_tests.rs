@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Tests for `McpToolRegistration`, `get_mcp_tools`, and inventory collection.
 //!
 //! These tests verify the migration from `mcp_sdk` to `rmcp` by exercising

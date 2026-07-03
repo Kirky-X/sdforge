@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! `McpToolInstance` and helpers — runtime representation of a registered tool.
 //!
 //! This module defines the runtime tool instance type and the conversion

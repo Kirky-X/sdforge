@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! MCP 2026-07-28 cache semantics.
 //!
 //! The 2026-07-28 MCP protocol introduces cache control fields for tool

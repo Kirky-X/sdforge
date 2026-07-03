@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Multi Round-Trip Requests (MRTR) support for MCP 2026-07-28.
 //!
 //! MRTR allows a tool to pause execution and request additional input from

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! SDForge CLI Tool
 //!
 //! Command-line interface for the SDForge framework.

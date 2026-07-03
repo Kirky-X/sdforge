@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Server configuration module
 //!
 //! This module provides server-related configuration types.

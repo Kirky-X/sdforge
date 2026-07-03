@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Service response and error types
 //!
 //! Provides unified response wrappers and error types for the framework.

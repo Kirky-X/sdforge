@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Tests for `SdForgeTool` trait implementations and tool execution behavior.
 
 use super::{create_test_metadata, create_test_tool, exercise_all_tool_methods};

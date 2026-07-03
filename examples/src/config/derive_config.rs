@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //!
 //! # confers `#[derive(Config)]` 宏完整示例
 //!

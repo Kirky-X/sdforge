@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Configuration management module
 //!
 //! This module provides configuration management using the Confers library.

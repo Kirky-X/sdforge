@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! String helper utilities for consistent formatting.
 //!
 //! This module provides standardized string formatting functions used across

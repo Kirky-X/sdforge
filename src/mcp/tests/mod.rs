@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! MCP module test suites.
 //!
 //! Tests are organized by responsibility:
