@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Performance verification for LRU eviction optimization
 
 use sdforge::cache::{DashMapCache, SyncCache};

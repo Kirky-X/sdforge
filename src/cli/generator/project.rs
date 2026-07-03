@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Project generation utilities.
 //!
 //! Provides the main entry point for creating new Axiom projects

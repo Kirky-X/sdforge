@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! JSON helper utilities for consistent response formatting.
 //!
 //! This module provides standardized JSON response helpers used across

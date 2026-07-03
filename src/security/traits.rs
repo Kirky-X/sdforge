@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Trait definitions for the security module
 //!
 //! This module contains the feature layer trait interfaces that define

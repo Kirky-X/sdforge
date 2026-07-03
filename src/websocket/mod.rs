@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! WebSocket support for Axiom
 //!
 //! This module provides WebSocket protocol support alongside SSE.

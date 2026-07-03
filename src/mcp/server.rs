@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! `SdForgeMcpServer` — MCP server that implements rmcp's `ServerHandler` trait.
 //!
 //! This module contains the server struct, its constructors, lookup methods,

@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Comprehensive Security Example
 //!
 //! This example demonstrates how to combine multiple security features:

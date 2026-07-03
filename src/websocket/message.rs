@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! WebSocket message types and parsing utilities.
 //!
 //! Provides [`WebSocketMessage`] enum for request/response/error/notification

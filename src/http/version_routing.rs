@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Version routing module
 //!
 //! This module provides version-based routing for the HTTP server.

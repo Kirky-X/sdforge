@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! CORS configuration module
 //!
 //! This module provides CORS-related configuration types and functions.

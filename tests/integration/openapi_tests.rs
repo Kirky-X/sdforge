@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! OpenAPI integration tests.
 //!
 //! These tests exercise the end-to-end pipeline: `#[service_api]` macro

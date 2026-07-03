@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //!
 //! 基于 DashMap 的同步缓存实现
 //!

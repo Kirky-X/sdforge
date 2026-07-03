@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Core type definitions for the Axiom framework
 //!
 //! This module provides fundamental types used across the framework.

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Template rendering utilities.
 //!
 //! Provides functions for rendering templates using the Tera template engine
