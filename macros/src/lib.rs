@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! SDForge procedural macros
 //!
 //! This crate provides procedural macros for the SDForge framework.
@@ -586,6 +587,42 @@ fn extract_path_params(path: &str) -> Vec<String> {
         .collect()
 }
 
+/// Map a Rust primitive type string to OpenAPI schema (type, format) pair.
+///
+/// Returns `(schema_type, schema_format)` where `schema_format` is empty when
+/// the type has no finer format. Used by the `#[service_api]` macro to emit
+/// `OpenApiPathParam` entries with precise schema metadata matching the Rust
+/// handler parameter type.
+///
+/// # Examples
+///
+/// | Rust type | schema_type | schema_format |
+/// |-----------|-------------|---------------|
+/// | `u64`     | `"integer"` | `"uint64"`    |
+/// | `i32`     | `"integer"` | `"int32"`     |
+/// | `f64`     | `"number"`  | `"double"`    |
+/// | `bool`    | `"boolean"` | `""`          |
+/// | `String`  | `"string"`  | `""`          |
+fn rust_type_to_openapi_schema(rust_type: &str) -> (&'static str, &'static str) {
+    match rust_type {
+        "u8" => ("integer", "uint8"),
+        "u16" => ("integer", "uint16"),
+        "u32" => ("integer", "uint32"),
+        "u64" => ("integer", "uint64"),
+        "u128" => ("integer", "uint128"),
+        "i8" => ("integer", "int8"),
+        "i16" => ("integer", "int16"),
+        "i32" => ("integer", "int32"),
+        "i64" => ("integer", "int64"),
+        "i128" => ("integer", "int128"),
+        "f32" => ("number", "float"),
+        "f64" => ("number", "double"),
+        "bool" => ("boolean", ""),
+        "String" | "&str" | "&'static str" => ("string", ""),
+        _ => ("string", ""),
+    }
+}
+
 #[proc_macro_attribute]
 pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = match parse_service_api_args(args.into()) {
@@ -826,6 +863,58 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     // Build description expression
     let description_literal = description.as_deref().unwrap_or(&name);
 
+    // Build OpenAPI path parameter tokens for the `#[service_api]` macro.
+    //
+    // Each path parameter (e.g. `/users/:id`) is mapped to an
+    // `OpenApiPathParam` entry with name + schema type/format derived from the
+    // matching Rust handler parameter type. This satisfies the
+    // `openapi-generation` spec requirement: path params MUST be auto-mapped
+    // to OpenAPI parameters with name/in(path)/required/schema.
+    let openapi_path_params_tokens: Vec<proc_macro2::TokenStream> = path_params
+        .iter()
+        .map(|param_name| {
+            let schema = params
+                .iter()
+                .find(|p| &p.name == param_name)
+                .map(|p| rust_type_to_openapi_schema(&p.inner_type))
+                .unwrap_or(("string", ""));
+            let name_lit = proc_macro2::Literal::string(param_name);
+            let type_lit = proc_macro2::Literal::string(schema.0);
+            let format_lit = proc_macro2::Literal::string(schema.1);
+            quote! {
+                sdforge::openapi::OpenApiPathParam::new(
+                    #name_lit,
+                    "",
+                    true,
+                    #type_lit,
+                    #format_lit,
+                )
+            }
+        })
+        .collect();
+
+    // Generate the `#[utoipa::path]` attribute (T095). When the downstream
+    // crate enables the `openapi` feature, this attribute is processed by
+    // utoipa and registers a `__path` struct, making the route discoverable
+    // by utoipa-aware tooling. The path uses `{id}` OpenAPI templating
+    // (already produced by `convert_axum_path`); responses use a minimal
+    // `200` entry without `body = ...` so handler return types are NOT
+    // required to derive `ToSchema`.
+    let openapi_path_attr = if path.is_some() && method.is_some() {
+        let method_ident = syn::Ident::new(&http_method_lower, proc_macro2::Span::call_site());
+        quote! {
+            #[cfg_attr(feature = "openapi", utoipa::path(
+                #method_ident,
+                path = #http_path,
+                responses(
+                    (status = 200, description = #description_literal)
+                )
+            ))]
+        }
+    } else {
+        quote! {}
+    };
+
     // Generate HTTP code
     let http_code = if path.is_some() && method.is_some() {
         // Generate metadata tokens before the quote block
@@ -994,18 +1083,21 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                 #metadata_fn_name,
             ));
             // When the downstream crate enables the `openapi` feature, also
-            // register an `OpenApiRouteInfo` entry so `generate_openapi_spec`
-            // can emit this route. The path/method/description are sourced
-            // from the same macro arguments as the HTTP route above; tags is
-            // kept empty so users can group routes via the utoipa tag API.
+            // register an `OpenApiRouteInfo` entry (with auto-extracted path
+            // params) so `generate_openapi_spec` can emit this route with
+            // fully-populated OpenAPI `parameters`. The path/method/description
+            // are sourced from the same macro arguments as the HTTP route
+            // above; tags is kept empty so users can group routes via the
+            // utoipa tag API.
             #[cfg(feature = "openapi")]
-            sdforge::inventory::submit!(sdforge::openapi::OpenApiRouteInfo::new(
+            sdforge::inventory::submit!(sdforge::openapi::OpenApiRouteInfo::with_path_params(
                 #http_path,
                 #http_method_upper,
                 #description_literal,
                 #description_literal,
                 #version,
                 &[],
+                &[#(#openapi_path_params_tokens),*],
             ));
         }
     } else {
@@ -1274,6 +1366,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let generated = quote! {
+        #openapi_path_attr
         #cleaned_input
         #http_code
         #mcp_code
