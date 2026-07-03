@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! WebSocket handler trait, default implementation, and Axum integration.
 //!
 //! Provides:
@@ -14,10 +15,15 @@
 #[cfg(feature = "websocket")]
 use axum::{
     extract::ws::{WebSocket, WebSocketUpgrade},
-    http::{header::AUTHORIZATION, StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
     Router,
 };
+// AUTHORIZATION header is only referenced inside the `security`-gated bearer-token
+// extraction in `ValidatedWebSocketUpgrade::from_request`; gated separately so
+// `http,websocket` (without `security`) does not warn about an unused import.
+#[cfg(all(feature = "websocket", feature = "security"))]
+use axum::http::header::AUTHORIZATION;
 #[cfg(feature = "websocket")]
 use futures_util::SinkExt;
 #[cfg(feature = "websocket")]
@@ -111,7 +117,10 @@ where
     async fn from_request(req: axum::extract::Request, state: &S) -> Result<Self, Self::Rejection> {
         let req = req;
 
-        // Get bearer token from Authorization header
+        // Get bearer token from Authorization header.
+        // Only needed when the `security` feature is enabled (for auth validation);
+        // gated to avoid an unused-variable warning when security is off.
+        #[cfg(feature = "security")]
         let bearer_token: Option<String> = req
             .headers()
             .get(AUTHORIZATION)
@@ -123,7 +132,10 @@ where
         // The state parameter is &Arc<AppState> since that's what we registered
         let app_state = req.extensions().get::<Arc<AppState>>().cloned();
 
-        // Validate auth if configured
+        // Validate auth if configured. The `auth` field only exists when the
+        // `security` feature is enabled (see WebSocketConfig), so the entire
+        // validation block is gated to match.
+        #[cfg(feature = "security")]
         if let Some(ref state_ref) = app_state {
             if let Some(ref auth) = state_ref.config.auth {
                 let token = bearer_token.ok_or(StatusCode::UNAUTHORIZED)?;

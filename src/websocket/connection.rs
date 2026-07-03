@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! WebSocket connection management.
 //!
 //! Provides [`WebSocketConnection`] for individual connections, [`ConnectionManager`]
@@ -154,6 +155,10 @@ pub struct WebSocketConfig {
     /// Optional JWT authentication validator.
     /// When `Some`, all connections must present a valid JWT bearer token.
     /// When `None`, connections are accepted without authentication.
+    ///
+    /// Only available when the `security` feature is enabled; omitted
+    /// otherwise so that `http,websocket` (without `security`) compiles.
+    #[cfg(feature = "security")]
     pub auth: Option<crate::security::BearerAuth>,
     /// Rate limiting configuration for connections.
     pub rate_limit: RateLimitConfig,
