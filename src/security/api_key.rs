@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! API Key authentication implementation with versioning, LRU eviction, and rotation support
 //!
 //! This module provides API key authentication with:

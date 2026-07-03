@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Simple performance verification for regex cache optimization
 
 use sdforge::cache::{DashMapCache, SyncCache};

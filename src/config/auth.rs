@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Authentication configuration module
 //!
 //! This module provides authentication-related configuration types.

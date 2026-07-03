@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 use std::collections::HashMap;
 use std::error::Error as StdError;
 

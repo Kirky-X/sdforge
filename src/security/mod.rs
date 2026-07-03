@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Security module providing authentication and audit logging
 //!
 //! This module provides utilities for securing API endpoints.

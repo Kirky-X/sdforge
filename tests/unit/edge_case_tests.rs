@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Edge Case Tests for SDForge Core Modules
 //!
 //! This module tests edge cases and boundary conditions across all core modules:

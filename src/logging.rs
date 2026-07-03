@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Structured logging utilities for SDForge
 //!
 //! This module provides structured logging capabilities with support for:

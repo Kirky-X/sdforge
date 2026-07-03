@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 // MCP Protocol Integration Tests
 // Comprehensive integration tests for MCP protocol functionality
 // Tests cover: tool discovery, request handling, response formatting,

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Regular expression compilation and caching optimization (PERF-005)
 //!
 //! This module provides:

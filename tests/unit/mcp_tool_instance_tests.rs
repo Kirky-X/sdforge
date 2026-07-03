@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 #[cfg(feature = "mcp")]
 mod mcp_tool_instance_tests {
     use rmcp::model::{CallToolResult, ErrorData as McpError};

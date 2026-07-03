@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Validation utilities for code generation.
 //!
 //! Provides validation functions for project names, template content,

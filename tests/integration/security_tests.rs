@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Security Authentication Integration Tests
 //!
 //! This module contains comprehensive integration tests for the security module.

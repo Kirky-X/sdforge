@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! WebSocket broadcast logic.
 //!
 //! Implements the [`ConnectionManager::broadcast`] method that sends a single

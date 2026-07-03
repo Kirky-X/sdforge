@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 // Unit tests for SDForge framework
 // Tests core functionality and module integration
 

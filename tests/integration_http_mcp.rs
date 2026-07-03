@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 // Integration tests for HTTP+MCP protocol combinations
 //
 // These tests verify that the framework works correctly when both

@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Tests for MCP protocol types: `CallToolResult`, `Content`, `ErrorData` (McpError).
 
 use rmcp::model::{CallToolResult, Content, ErrorData as McpError, Meta};

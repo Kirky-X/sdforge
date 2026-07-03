@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 #[cfg(feature = "websocket")]
 mod websocket_tests {
     use sdforge::websocket::{

@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Unified security headers configuration and application
 //!
 //! This module provides a centralized way to configure and apply HTTP security headers.

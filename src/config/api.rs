@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! API and utility configuration module
 //!
 //! This module provides API-related configuration types and utility configs.
