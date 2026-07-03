@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 // Security Middleware Integration Tests
 // Tests security components with actual HTTP requests
 

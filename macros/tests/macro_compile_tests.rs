@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Macro compilation tests for sdforge-macros
 //!
 //! This file contains tests that verify the macro compiles correctly

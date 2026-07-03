@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! MCP protocol comprehensive tests
 //!
 //! This module provides comprehensive external integration tests for the MCP module,

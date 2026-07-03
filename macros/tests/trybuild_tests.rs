@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 #[test]
 fn test_macro_pass_cases() {
     let t = trybuild::TestCases::new();

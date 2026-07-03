@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Cache configuration
 //!
 //! This module provides cache configuration options for the application.

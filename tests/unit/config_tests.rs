@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 #[cfg(feature = "http")]
 mod config_tests {
     use sdforge::config::{AppConfig, AuthConfig, ServerConfig};

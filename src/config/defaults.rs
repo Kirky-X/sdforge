@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Centralized default values for configuration
 //!
 //! This module provides a single source of truth for all default configuration values.

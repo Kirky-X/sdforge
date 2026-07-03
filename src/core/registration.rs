@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Unified registration system for eliminating code duplication across protocols
 //!
 //! This module provides a trait-based abstraction for protocol registration,

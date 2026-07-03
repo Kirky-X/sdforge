@@ -1,4 +1,5 @@
 // Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Configuration hot reload support
 //!
 //! This module provides configuration hot-reload functionality using the Confers library.

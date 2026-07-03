@@ -1,4 +1,6 @@
 #!/bin/bash
+# Copyright (c) 2026 Kirky.X
+# SPDX-License-Identifier: MIT
 # Feature 组合测试脚本
 # 测试所有主要 feature 组合的编译和测试
 

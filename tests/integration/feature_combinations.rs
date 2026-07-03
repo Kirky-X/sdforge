@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 // Feature Combination Tests
 // Tests all feature combinations as defined in test.md Section 6
 

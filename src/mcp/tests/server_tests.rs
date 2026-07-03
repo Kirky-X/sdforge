@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 //! Tests for `SdForgeMcpServer`: construction, lookup, and `ServerHandler` integration.
 
 use super::{create_test_metadata, create_test_tool};

@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 // WebSocket Integration Tests
 // Tests WebSocket upgrade with authentication flow
 
