@@ -1,5 +1,5 @@
-#![allow(unused_imports)]
-
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 use crate::core::error::*;
 use crate::core::response::ServiceError;
 use std::error::Error as StdError;

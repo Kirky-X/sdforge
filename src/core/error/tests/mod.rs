@@ -1,5 +1,5 @@
-#![allow(unused_imports)]
-
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 #[cfg(test)]
 mod api_error_tests;
 
