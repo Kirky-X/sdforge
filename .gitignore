@@ -122,6 +122,7 @@ IFLOW.md
 
 # AI Assistant Configuration
 openspec/
+specmark/
 .iflow/
 AGENTS.md
 .opencode/
