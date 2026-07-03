@@ -1,10 +1,7 @@
-#![allow(unused_imports)]
-use crate::core::registration::Registration;
-use crate::websocket::broadcast::*;
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 use crate::websocket::connection::*;
-use crate::websocket::handler::*;
 use crate::websocket::message::*;
-use crate::websocket::*;
 use futures_util::FutureExt;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;

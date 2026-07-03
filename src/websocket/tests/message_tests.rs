@@ -1,11 +1,6 @@
-#![allow(unused_imports)]
-use crate::core::registration::Registration;
-use crate::websocket::broadcast::*;
-use crate::websocket::connection::*;
-use crate::websocket::handler::*;
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
 use crate::websocket::message::*;
-use crate::websocket::*;
-use futures_util::FutureExt;
 
 /// Test WebSocketMessage serialization and deserialization
 #[test]
