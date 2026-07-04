@@ -90,6 +90,7 @@ impl crate::config::ValidateConfig for CacheConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::ValidateConfig;
 
     #[test]
     fn test_cache_config_default() {
@@ -118,5 +119,98 @@ mod tests {
         assert!(config.is_enabled());
         assert_eq!(config.default_ttl(), 300);
         assert_eq!(config.max_items(), 10_000);
+    }
+
+    // ============================================================================
+    // ValidateConfig tests
+    //
+    // The validate() method checks two invariants:
+    //   1. default_ttl_secs must be > 0
+    //   2. max_items must be > 0
+    // These tests cover the success path and both error branches.
+    // ============================================================================
+
+    #[test]
+    fn test_cache_config_validate_valid() {
+        let config = CacheConfig::default();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_cache_config_validate_zero_ttl_rejected() {
+        let config = CacheConfig {
+            default_ttl_secs: 0,
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err {
+            crate::config::ConfigError::ValidationError(msg) => {
+                assert!(
+                    msg.contains("default_ttl_secs"),
+                    "Error should mention default_ttl_secs, got: {}",
+                    msg
+                );
+            }
+            other => panic!("Expected ValidationError, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_cache_config_validate_zero_max_items_rejected() {
+        let config = CacheConfig {
+            max_items: 0,
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err {
+            crate::config::ConfigError::ValidationError(msg) => {
+                assert!(
+                    msg.contains("max_items"),
+                    "Error should mention max_items, got: {}",
+                    msg
+                );
+            }
+            other => panic!("Expected ValidationError, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_cache_config_validate_both_invalid_reports_ttl_first() {
+        // When both TTL and max_items are invalid, validate() checks TTL first
+        // and returns that error, never reaching the max_items check.
+        let config = CacheConfig {
+            default_ttl_secs: 0,
+            max_items: 0,
+            ..Default::default()
+        };
+        let result = config.validate();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        match err {
+            crate::config::ConfigError::ValidationError(msg) => {
+                assert!(msg.contains("default_ttl_secs"));
+                assert!(!msg.contains("max_items"));
+            }
+            other => panic!("Expected ValidationError, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_cache_config_with_ttl_validates() {
+        // with_ttl creates a config with custom TTL but default max_items.
+        // It should always validate successfully since default max_items > 0.
+        let config = CacheConfig::with_ttl(600);
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_cache_config_disabled_validates() {
+        // disabled() only sets enabled=false; TTL and max_items keep defaults.
+        let config = CacheConfig::disabled();
+        assert!(config.validate().is_ok());
     }
 }
