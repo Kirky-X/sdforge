@@ -9,23 +9,24 @@
 //!
 //! Performance: Avoids redundant regex compilation by caching compiled Regex objects.
 
-use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 /// Maximum number of regex patterns to cache
 const MAX_CACHE_SIZE: usize = 1000;
 
 /// Thread-safe regex cache with LRU eviction
 ///
-/// Uses DashMap for lock-free concurrent access and automatic
+/// Uses `Mutex<HashMap>` for thread-safe concurrent access and automatic
 /// cache management to prevent unbounded memory growth.
 pub struct RegexCache {
     /// Internal cache storage (pattern -> compiled Regex)
-    cache: Arc<DashMap<String, Arc<Regex>>>,
+    cache: Arc<Mutex<HashMap<String, Arc<Regex>>>>,
     /// Access tracking for LRU eviction
-    access_times: Arc<DashMap<String, std::time::Instant>>,
+    access_times: Arc<Mutex<HashMap<String, std::time::Instant>>>,
     /// Maximum cache size
     max_size: usize,
 }
@@ -39,8 +40,8 @@ impl RegexCache {
     /// Create regex cache with specified capacity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            cache: Arc::new(DashMap::with_capacity(capacity)),
-            access_times: Arc::new(DashMap::with_capacity(capacity)),
+            cache: Arc::new(Mutex::new(HashMap::with_capacity(capacity))),
+            access_times: Arc::new(Mutex::new(HashMap::with_capacity(capacity))),
             max_size: capacity,
         }
     }
@@ -48,14 +49,24 @@ impl RegexCache {
     /// Get or compile a regex pattern
     ///
     /// Performance: O(1) cache hit, O(pattern complexity) cache miss
+    ///
+    /// Poison-aware: 若 cache lock 中毒（之前 panic 永久污染），降级为
+    /// 每次重新编译 regex，避免全局输入校验子系统连锁失效。
     pub fn get_or_compile(&self, pattern: &str) -> Result<Arc<Regex>, regex::Error> {
         // Update access time
         let now = std::time::Instant::now();
-        self.access_times.insert(pattern.to_string(), now);
+        if let Ok(mut times) = self.access_times.lock() {
+            times.insert(pattern.to_string(), now);
+        }
 
         // Try cache first
-        if let Some(regex) = self.cache.get(pattern) {
-            return Ok(regex.clone());
+        {
+            if let Ok(cache) = self.cache.lock() {
+                if let Some(regex) = cache.get(pattern) {
+                    return Ok(regex.clone());
+                }
+            }
+            // lock poisoned: 跳过 cache 查询，降级到重新编译
         }
 
         // Cache miss - compile new regex
@@ -63,7 +74,9 @@ impl RegexCache {
         let regex_arc = Arc::new(compiled);
 
         // Insert into cache
-        self.cache.insert(pattern.to_string(), regex_arc.clone());
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.insert(pattern.to_string(), regex_arc.clone());
+        }
 
         // Check if we need to evict
         self.maybe_evict();
@@ -73,16 +86,19 @@ impl RegexCache {
 
     /// Check cache size and evict if necessary
     fn maybe_evict(&self) {
-        if self.cache.len() <= self.max_size {
+        let cache_len = { self.cache.lock().map(|c| c.len()).unwrap_or(0) };
+
+        if cache_len <= self.max_size {
             return;
         }
 
         // Collect all entries with access times
-        let mut entries: Vec<(String, std::time::Instant)> = self
-            .access_times
-            .iter()
-            .map(|ref kv| (kv.key().clone(), *kv.value()))
-            .collect();
+        let mut entries: Vec<(String, std::time::Instant)> = {
+            match self.access_times.lock() {
+                Ok(times) => times.iter().map(|(k, v)| (k.clone(), *v)).collect(),
+                Err(_) => return, // poison: 跳过本轮驱逐，下次再试
+            }
+        };
 
         // Sort by access time (oldest first) — ascending order removes
         // least-recently-used patterns (true LRU eviction).
@@ -93,23 +109,32 @@ impl RegexCache {
         entries.sort_by_key(|&(_, time)| time);
 
         // Remove oldest entries
-        let to_remove = self.cache.len() - self.max_size;
+        let to_remove = cache_len - self.max_size;
         for (pattern, _) in entries.into_iter().take(to_remove) {
-            self.cache.remove(&pattern);
-            self.access_times.remove(&pattern);
+            if let Ok(mut cache) = self.cache.lock() {
+                cache.remove(&pattern);
+            }
+            if let Ok(mut times) = self.access_times.lock() {
+                times.remove(&pattern);
+            }
         }
     }
 
     /// Clear all cached regex patterns
     pub fn clear(&self) {
-        self.cache.clear();
-        self.access_times.clear();
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.clear();
+        }
+        if let Ok(mut times) = self.access_times.lock() {
+            times.clear();
+        }
     }
 
     /// Get cache statistics
     pub fn stats(&self) -> RegexCacheStats {
+        let total_patterns = self.cache.lock().map(|c| c.len()).unwrap_or(0);
         RegexCacheStats {
-            total_patterns: self.cache.len(),
+            total_patterns,
             max_capacity: self.max_size,
         }
     }

@@ -65,7 +65,6 @@ impl CacheConfig {
     }
 }
 
-#[cfg(feature = "validation")]
 impl crate::config::ValidateConfig for CacheConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
         use crate::config::ConfigError;

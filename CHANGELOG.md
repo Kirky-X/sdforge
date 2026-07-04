@@ -5,6 +5,65 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本规范](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## [0.3.0] - 2026-07-04
+
+### 概览
+
+本次发布聚焦于**安全加固**与**依赖精简**：移除 confers 集成与 CLI 工具以收敛职责边界，缓存底座切换至 oxcache 0.3.2，修复 diting 安全审计 10 项发现与 kueiku FMEA 分析 5 项 Bug。共计 2057 个测试全部通过。
+
+#### BREAKING 变更 ⚠️
+
+1. **移除 confers 集成** — 删除 6 个特性：`validation`、`schema`、`watch`、`audit`、`hot-reload`、`cli`。如需 confers 能力，用户在自身代码中集成。
+2. **移除 CLI 工具** — 删除 `src/main.rs` 与 `src/cli/` 目录，`cli` 特性不再存在。
+3. **缓存底座从 dashmap 切换至 oxcache 0.3.2** — `DashMapCache` 现为 `OxcacheSyncCache` 的类型别名（由 oxcache 的 `DashMapMemoryBackend` 支撑），内部所有 `DashMap` 用法替换为 `Mutex<HashMap>` 或 `RwLock<HashMap>`。
+4. **移除 dashmap 依赖** — 不再出现在 Cargo.toml。
+5. **ServerConfig 默认值变更** — `DEFAULT_HOST` 从 `"0.0.0.0"`（fail-open，绑定所有网卡）改为 `"127.0.0.1"`（fail-safe 回环）。`Default` 实现改用常量：host="127.0.0.1"、port=8080、request_timeout_secs=30。
+6. **JWT 密钥强制最小 32 字符** — `MIN_SECRET_LENGTH=32` 常量现已实际用于校验，短于 32 字符的密钥将被拒绝并返回错误。
+7. **CORS 校验收紧** — `"http://"`（仅 scheme 无 host）在 `validate()` 与 `build_cors_layer()` 中均被拒绝。
+8. **AppConfigBuilder::build() 一致性修复** — 未设置 `timeout` 字段时默认填充 `Some(TimeoutConfig::default())`，与 `AppConfig::default()` 行为一致。
+
+#### 安全修复（diting 审计 — 10 项）
+
+- **HIGH-001**：缓存 `key_index`/`backend` 一致性竞态 — 现在在整个 backend 操作期间持有 index 锁
+- **HIGH-002**：缓存静默吞错 — backend 错误现通过 `log::warn!` 记录，不再 `let _ =`
+- **MED-001**：websocket 中 `RwLock` 中毒 — 所有 `.write().unwrap()`/`.read().unwrap()` 替换为感知中毒的 `match`/`if let Ok(...)` 模式
+- **MED-002**：`regex_cache.rs` 与 `validation.rs` 中 `Mutex` 中毒 — 同样替换为感知中毒模式
+- **MED-003**：`init_all_plugins` 中 `Mutex` 中毒 — `routes.lock().unwrap().len()` 替换为 `.lock().map(|g| g.len()).unwrap_or(0)`
+- **MED-004**：CORS validate 不一致 — 在 scheme 校验后新增 host 校验
+- **LOW-001**：`ServerConfig` fail-open 默认值 — 已修复（见 BREAKING 第 5 项）
+- **LOW-002**：JWT 密钥无最小长度 — 已修复（见 BREAKING 第 6 项）
+- **LOW-003**：WebSocket 认证文档告警 — 新增 Security Warning 文档注释
+- **LOW-004**：`SecurityHeaders::relaxed()` CSP 告警 — 新增 Security Warning 文档注释
+
+#### Bug 修复（kueiku FMEA 分析 — 5 项）
+
+- **BUG-1 [严重]**：`remove_connection` usize 下溢 — 现先检查 `map.remove(id).is_some()` 再 `fetch_sub(1)`，防止 `usize::MAX` 下溢导致所有新连接被永久阻塞
+- **BUG-2 [低]**：`check_and_record` 窗口重置 off-by-one — 窗口重置时计数设为 1（非 0），当前消息被计入（原先每窗口允许 max+1 条消息）
+- **BUG-3 [中]**：`AppConfigBuilder::build()` timeout 不一致 — 已修复（见 BREAKING 第 8 项）
+- **BUG-4 [中]**：缓存 backend 容量驱逐后 `key_index` 成为超集 — `find_keys_by_pattern` 现通过 `backend.exists()` 过滤并惰性清理过期索引项
+- **BUG-5 [低]**：`get_stats` 静默丢弃浮点统计 — 现尝试 u64 → f64（rate/ratio/pct ×100）→ `log::warn!`（不再静默）
+
+#### 依赖变更
+
+- **新增**：`oxcache = { version = "0.3.2", features = ["memory"] }`（来自 crates.io）
+- **移除**：`dashmap`、`confers`、`schemars`、`clap`、`tera`、`walkdir`
+- **移除特性**：`validation`、`schema`、`watch`、`audit`、`hot-reload`、`cli`
+
+#### 从 v0.2.0 迁移
+
+1. 若使用 `cli` 特性或 `src/main.rs` 二进制，需在应用层自行实现 CLI
+2. 若依赖 `confers` 特性（validation/schema/watch/audit/hot-reload），需在自身代码中直接集成 confers
+3. `DashMapCache` 类型仍可编译（为 `OxcacheSyncCache` 别名），但底层实现已变更
+4. `ServerConfig::default()` 现绑定 `127.0.0.1`，生产部署需显式配置 host
+5. JWT 密钥若短于 32 字符将被拒绝，请更新密钥
+
+#### 测试
+
+- ✅ 2057 个测试全部通过（0 失败）
+- ✅ clippy 零警告零错误
+
+---
+
 ## [0.2.0] - 2026-07-04
 
 ### 概览

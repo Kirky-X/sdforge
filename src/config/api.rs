@@ -4,11 +4,10 @@
 //!
 //! This module provides API-related configuration types and utility configs.
 
-use crate::config::Config;
 use serde::{Deserialize, Serialize};
 
 /// API configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Config)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ApiConfig {
     /// API prefix
     pub prefix: String,
@@ -17,14 +16,14 @@ pub struct ApiConfig {
 }
 
 /// Tracing configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Config)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TracingConfig {
     /// Tracing enabled
     pub enabled: bool,
 }
 
 /// Environment helper
-#[derive(Debug, Clone, Serialize, Deserialize, Config)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EnvHelper {
     /// Environment name
     pub environment: String,

@@ -3,7 +3,7 @@ members = ["."]
 resolver = "2"
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Kirky.X"]
 license = "MIT"
@@ -42,7 +42,6 @@ validator = { version = "~0.20", features = ["derive"] }
 once_cell = "~1.21"
 
 # 安全依赖
-dashmap = "~6.2"
 hmac = "~0.12"
 sha2 = "~0.10"
 secrets = "~1.2"
@@ -54,13 +53,11 @@ rand = "~0.10"
 hex = "~0.4"
 base64 = "~0.22"
 
-# 配置依赖（使用相对路径）
-confers = { path = "../confers", features = ["watch"] }
+# 配置依赖
 toml = "~0.9"
-schemars = "~0.8"
 
-# 缓存依赖（使用相对路径）- oxcache 0.3 用 memory feature 提供 dashmap/moka 后端
-oxcache = { version = "0.3", path = "../oxcache", features = ["memory"] }
+# 缓存依赖 - oxcache 0.3.2 用 memory feature 提供 dashmap/moka 后端
+oxcache = { version = "0.3.2", features = ["memory"] }
 http = "~1.4"
 bincode = "~1.3"
 
@@ -76,10 +73,7 @@ tonic-prost = "~0.14"
 # OpenAPI 依赖
 utoipa = "~5.5"
 
-# CLI 依赖
-clap = { version = "~4.6", features = ["derive"] }
-tera = "~1.20"
-walkdir = "~2.5"
+# 其他依赖
 url = "~2.5"
 simd-json = "~0.14"
 
@@ -96,7 +90,7 @@ pretty_assertions = "~1.4"
 
 [package]
 name = "sdforge"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Kirky.X"]
 license = "MIT"
@@ -131,7 +125,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-sdforge-macros = { version = "0.2.0", path = "./macros" }
+sdforge-macros = { version = "0.3.0", path = "./macros" }
 
 # HTTP dependencies
 axum = { workspace = true, optional = true }
@@ -171,7 +165,6 @@ regex = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
 
 # Security dependencies
-dashmap = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 hmac = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
@@ -184,13 +177,11 @@ rand = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
 
-# Configuration dependencies (按特性导入)
-confers = { path = "../confers", optional = true, features = ["watch"] }
+# Configuration dependencies
 toml = { workspace = true, optional = true }
-schemars = { workspace = true, optional = true }
 
-# Cache dependencies (按特性导入) - oxcache 0.3 用 memory feature 提供 dashmap/moka 后端
-oxcache = { version = "0.3", path = "../oxcache", features = ["memory"], optional = true }
+# Cache dependencies - oxcache 0.3.2 用 memory feature 提供缓存后端
+oxcache = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 
 # Serialization for SyncCache storage values
@@ -199,16 +190,11 @@ bincode = { workspace = true, optional = true }
 # SIMD-accelerated JSON (optional, requires SIMD support)
 simd-json = { workspace = true, optional = true }
 
-# CLI dependencies (按特性导入)
-clap = { workspace = true, optional = true }
-tera = { workspace = true, optional = true }
-walkdir = { workspace = true, optional = true }
-
 [dev-dependencies]
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
-sdforge-macros = { version = "0.2.0", path = "./macros" }
+sdforge-macros = { version = "0.3.0", path = "./macros" }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }
@@ -221,9 +207,8 @@ url = { workspace = true }
 [features]
 default = ["http"]
 
-# HTTP 特性 - 启用时编译 confers、axum 等
+# HTTP 特性 - 启用时编译 axum 等
 http = [
-    "confers",
     "axum",
     "tower",
     "tower-http",
@@ -234,14 +219,13 @@ http = [
     "regex",
     "once_cell",
     "validator",
-    "dashmap",
     "uuid",
     "futures",
 ]
 
 # MCP 特性 (migrated to official rmcp SDK)
 # http crate needed for MCP 2026-07-28 stateless HTTP header parsing (Mcp-Method/Mcp-Name)
-mcp = ["rmcp", "inventory", "anyhow", "schemars", "dep:http"]
+mcp = ["rmcp", "inventory", "anyhow", "dep:http"]
 
 # Streaming 特性
 streaming = ["http", "tokio-stream", "futures-util", "chrono"]
@@ -249,18 +233,9 @@ streaming = ["http", "tokio-stream", "futures-util", "chrono"]
 # Timestamp 特性
 timestamp = ["chrono"]
 
-# CLI 特性
-cli = [
-    "clap",
-    "anyhow",
-    "tera",
-    "walkdir",
-    "confers/cli",
-]
 # Security 特性
 security = [
     "http",
-    "dashmap",
     "uuid",
     "hmac",
     "sha2",
@@ -276,20 +251,10 @@ security = [
     "regex",
     "oxcache/memory",
     "bincode",
-    "confers",
     "cache",
     "hex",
     "base64",
 ]
-
-# Hot reload 特性
-hot-reload = ["http", "confers"]
-
-# Confers 扩展特性
-validation = ["confers/validation"]
-schema = ["confers/schema", "schemars"]
-watch = ["confers/watch"]
-audit = ["confers/audit"]
 
 # WebSocket 特性
 websocket = ["http", "streaming", "tokio-tungstenite", "axum-extra", "async-trait", "chrono"]
@@ -300,7 +265,7 @@ grpc = ["http", "tonic", "prost", "tonic-prost"]
 # OpenAPI 特性 - 自动生成 OpenAPI 3.1 规范
 openapi = ["utoipa", "http"]
 
-# Cache 特性 - oxcache 0.3 用 memory feature 提供缓存后端
+# Cache 特性 - oxcache 0.3.2 用 memory feature 提供缓存后端
 cache = ["dep:http", "oxcache/memory", "async-trait"]
 
 # Logging 特性
@@ -316,7 +281,6 @@ full = [
     "streaming",
     "timestamp",
     "security",
-    "hot-reload",
     "cache",
     "websocket",
     "grpc",
@@ -331,10 +295,6 @@ tonic-prost-build = "0.14"
 
 [package.metadata.docs.rs]
 all-features = true
-
-[[bin]]
-name = "sdforge"
-path = "src/main.rs"
 
 [[bench]]
 name = "axiom_bench"
@@ -448,7 +408,3 @@ debug = true
 
 [profile.dev.package."*"]
 opt-level = 2
-
-
-
-

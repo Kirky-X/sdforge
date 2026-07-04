@@ -11,6 +11,8 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     labels: [dependencies, github-actions]
+    cooldown:
+      default-days: 7
 
   # 2) Rust cargo 依赖
   - package-ecosystem: cargo
@@ -20,3 +22,5 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     labels: [dependencies, rust]
+    cooldown:
+      default-days: 7

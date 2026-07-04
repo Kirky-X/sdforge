@@ -20,10 +20,8 @@ mod config_tests {
                 request_timeout_secs: 30,
                 cors: None,
             })
-            .build();
-
-        #[cfg(feature = "validation")]
-        let config = config.expect("build should succeed with valid config");
+            .build()
+            .expect("build should succeed with valid config");
 
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 3000);
@@ -351,10 +349,10 @@ mod config_enhanced_tests {
             cors: None,
         };
 
-        let config = AppConfig::builder().server(server).build();
-
-        #[cfg(feature = "validation")]
-        let config = config.expect("build should succeed with valid config");
+        let config = AppConfig::builder()
+            .server(server)
+            .build()
+            .expect("build should succeed with valid config");
 
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 8080);
@@ -384,7 +382,8 @@ mod config_enhanced_tests {
                 request_timeout_secs: 30,
                 cors: None,
             })
-            .build();
+            .build()
+            .expect("build1 should succeed");
 
         let config2 = AppConfig::builder()
             .server(ServerConfig {
@@ -393,13 +392,8 @@ mod config_enhanced_tests {
                 request_timeout_secs: 60,
                 cors: None,
             })
-            .build();
-
-        #[cfg(feature = "validation")]
-        let (config1, config2) = (
-            config1.expect("build1 should succeed"),
-            config2.expect("build2 should succeed"),
-        );
+            .build()
+            .expect("build2 should succeed");
 
         assert_ne!(config1.server.port, config2.server.port);
         assert_ne!(config1.server.host, config2.server.host);

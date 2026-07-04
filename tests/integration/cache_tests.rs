@@ -499,9 +499,11 @@ mod cache_tests {
         // 计算缓存项大小的函数
         let calculate_size = |cache: &DashMapCache| -> usize {
             let mut total = 0;
-            for entry in cache.inner().iter() {
-                total += entry.key().len();
-                total += entry.value().len();
+            for key in cache.find_keys_by_pattern("*") {
+                if let Some(value) = cache.get(&key) {
+                    total += key.len();
+                    total += value.len();
+                }
             }
             total
         };
@@ -520,7 +522,7 @@ mod cache_tests {
             while calculate_size(cache) > memory_limit && iterations < 10 {
                 iterations += 1;
                 // 找到第一个不是 _size 结尾的键
-                let keys: Vec<String> = cache.inner().iter().map(|e| e.key().clone()).collect();
+                let keys: Vec<String> = cache.find_keys_by_pattern("*");
                 if let Some(key_to_remove) = keys.iter().find(|k| !k.ends_with("_size")) {
                     cache.delete(key_to_remove);
                 } else {

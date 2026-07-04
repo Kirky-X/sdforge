@@ -186,10 +186,8 @@ mod config_tests {
                 request_timeout_secs: 30,
                 cors: None,
             })
-            .build();
-
-        #[cfg(feature = "validation")]
-        let config = config.expect("build should succeed with valid config");
+            .build()
+            .expect("build should succeed with valid config");
 
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 3000);

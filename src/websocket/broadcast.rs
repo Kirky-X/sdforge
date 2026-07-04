@@ -14,6 +14,8 @@ use std::sync::Arc;
 use crate::websocket::connection::ConnectionManager;
 #[cfg(feature = "websocket")]
 use crate::websocket::message::WebSocketMessage;
+#[cfg(feature = "websocket")]
+use crate::websocket::WebSocketConnection;
 
 #[cfg(feature = "websocket")]
 impl ConnectionManager {
@@ -25,7 +27,19 @@ impl ConnectionManager {
     pub async fn broadcast(&self, message: &Arc<WebSocketMessage>) {
         let mut failed_connections: Vec<String> = Vec::new();
 
-        for conn in self.connections.iter() {
+        // Collect connection clones first so we don't hold the lock across
+        // `.await` points (which would risk deadlock and is not `Send`-safe).
+        let conns: Vec<WebSocketConnection> = {
+            match self.connections.read() {
+                Ok(map) => map.values().cloned().collect(),
+                Err(_) => {
+                    log::warn!("websocket connections lock poisoned; broadcast aborted");
+                    return;
+                }
+            }
+        };
+
+        for conn in conns {
             if conn.send(message.as_ref().clone()).await.is_err() {
                 // Track failed connections for cleanup
                 // Don't log every failure to avoid log spam

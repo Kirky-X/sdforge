@@ -4,22 +4,28 @@
 //!
 //! This module provides timeout-related configuration types.
 
-use crate::config::{defaults, Config};
+use crate::config::defaults;
 use serde::{Deserialize, Serialize};
 
 /// Timeout configuration for different routes
-#[derive(Debug, Clone, Serialize, Deserialize, Config)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TimeoutConfig {
     /// Default request timeout in seconds
     #[serde(default = "default_timeout")]
-    #[config(default = default_timeout())]
     pub default_timeout_secs: u64,
     /// Route-specific timeouts
     #[serde(default)]
-    #[config(default = default_route_timeouts())]
-    #[config(skip)]
     pub route_timeouts: std::collections::HashMap<String, u64>,
+}
+
+impl Default for TimeoutConfig {
+    fn default() -> Self {
+        Self {
+            default_timeout_secs: default_timeout(),
+            route_timeouts: default_route_timeouts(),
+        }
+    }
 }
 
 fn default_timeout() -> u64 {

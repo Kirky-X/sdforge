@@ -9,11 +9,11 @@
 //! Broadcast logic lives in [`crate::websocket::broadcast`].
 
 #[cfg(feature = "websocket")]
-use dashmap::DashMap;
+use std::collections::HashMap;
 #[cfg(feature = "websocket")]
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 #[cfg(feature = "websocket")]
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 #[cfg(feature = "websocket")]
 use crate::websocket::message::WebSocketMessage;
@@ -51,14 +51,13 @@ pub struct ConnectionManager {
     /// Active connections keyed by ID.
     ///
     /// `pub(crate)` so the [`crate::websocket::broadcast`] module can iterate
-    /// connections without re-implementing the dashmap iterator type path
-    /// (which differs across dashmap versions).
-    pub(crate) connections: Arc<DashMap<String, WebSocketConnection>>,
+    /// connections without re-implementing the underlying iterator type path.
+    pub(crate) connections: Arc<RwLock<HashMap<String, WebSocketConnection>>>,
     /// Rate limiting: message count per connection per window.
     ///
     /// `pub(crate)` so unit tests in `tests/connection_tests.rs` can inspect
     /// rate-limit counters after exercising `check_and_record`.
-    pub(crate) message_counts: Arc<DashMap<String, AtomicU64>>,
+    pub(crate) message_counts: Arc<RwLock<HashMap<String, AtomicU64>>>,
     /// Rate limiting: connection count tracking.
     ///
     /// `pub(crate)` so unit tests can assert on the live counter.
@@ -66,7 +65,7 @@ pub struct ConnectionManager {
     /// Rate limiting: track messages per time window.
     ///
     /// `pub(crate)` so unit tests can inspect window-reset behavior.
-    pub(crate) last_message_time: Arc<DashMap<String, AtomicU64>>,
+    pub(crate) last_message_time: Arc<RwLock<HashMap<String, AtomicU64>>>,
 }
 
 /// Rate limiting configuration for WebSocket connections
@@ -158,6 +157,15 @@ pub struct WebSocketConfig {
     ///
     /// Only available when the `security` feature is enabled; omitted
     /// otherwise so that `http,websocket` (without `security`) compiles.
+    ///
+    /// # Security Warning (LOW-003)
+    ///
+    /// When the `security` feature is NOT enabled, this field does not exist
+    /// and **all WebSocket upgrade requests are accepted without authentication**.
+    /// To require JWT authentication, enable both `websocket` and `security` features:
+    /// ```toml
+    /// sdforge = { features = ["websocket", "security"] }
+    /// ```
     #[cfg(feature = "security")]
     pub auth: Option<crate::security::BearerAuth>,
     /// Rate limiting configuration for connections.
@@ -200,10 +208,10 @@ impl ConnectionManager {
     /// Create a new connection manager with rate limiting
     pub fn new() -> Self {
         Self {
-            connections: Arc::new(DashMap::new()),
-            message_counts: Arc::new(DashMap::new()),
+            connections: Arc::new(RwLock::new(HashMap::new())),
+            message_counts: Arc::new(RwLock::new(HashMap::new())),
             connection_count: Arc::new(AtomicUsize::new(0)),
-            last_message_time: Arc::new(DashMap::new()),
+            last_message_time: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -225,39 +233,70 @@ impl ConnectionManager {
             return true;
         }
 
-        // Check per-connection rate limit
+        // Check per-connection rate limit.
+        //
+        // Lock order is always `message_counts` -> `last_message_time` to prevent deadlock.
+        // A single write lock on each map is held for the whole critical section so the
+        // "exists?" check + subsequent mutation form one atomic unit (mirroring the
+        // previous dashmap `Entry` semantics).
+        //
+        // Poison-aware: 在 lock 失败时降级返回（false = 不强制断开），
+        // 避免单次 panic 永久击垮 WebSocket 子系统。
         let mut should_disconnect = false;
 
-        let entry = self.message_counts.entry(conn_id.to_string());
+        let mut counts = match self.message_counts.write() {
+            Ok(g) => g,
+            Err(_) => {
+                log::warn!(
+                    "websocket message_counts lock poisoned; rate-limit check skipped for conn={}",
+                    conn_id
+                );
+                return false;
+            }
+        };
+        let mut times = match self.last_message_time.write() {
+            Ok(g) => g,
+            Err(_) => {
+                log::warn!(
+                    "websocket last_message_time lock poisoned; rate-limit check skipped for conn={}",
+                    conn_id
+                );
+                return false;
+            }
+        };
 
-        match entry {
-            dashmap::mapref::entry::Entry::Occupied(count_entry) => {
-                let count = count_entry.get();
-                let last_time = self
-                    .last_message_time
+        if counts.contains_key(conn_id) {
+            let last_time = times
+                .get(conn_id)
+                .map(|t| t.load(Ordering::Relaxed))
+                .unwrap_or(0);
+
+            // Reset counter if window has passed
+            //
+            // BUG-2 修复: 窗口重置时计数设为 1（包含当前消息），而不是 0。
+            // 原代码设为 0 后该分支直接返回，当前消息未被计入新窗口，
+            // 使得每窗口实际允许 max+1 条消息（off-by-one）。
+            if current_time.saturating_sub(last_time) >= config.rate_limit_window_seconds {
+                if let Some(count) = counts.get(conn_id) {
+                    count.store(1, Ordering::Relaxed);
+                }
+                if let Some(time_entry) = times.get_mut(conn_id) {
+                    time_entry.store(current_time, Ordering::Relaxed);
+                }
+            } else {
+                let count_val = counts
                     .get(conn_id)
-                    .map(|t| t.value().load(Ordering::Relaxed))
+                    .map(|c| c.load(Ordering::Relaxed))
                     .unwrap_or(0);
-
-                // Reset counter if window has passed
-                if current_time.saturating_sub(last_time) >= config.rate_limit_window_seconds {
-                    count.store(0, Ordering::Relaxed);
-                    if let Some(time_entry) = self.last_message_time.get_mut(conn_id) {
-                        time_entry.value().store(current_time, Ordering::Relaxed);
-                    }
-                } else if count.load(Ordering::Relaxed) >= config.max_messages_per_second {
+                if count_val >= config.max_messages_per_second {
                     should_disconnect = true;
-                } else {
+                } else if let Some(count) = counts.get(conn_id) {
                     count.fetch_add(1, Ordering::Relaxed);
                 }
             }
-            dashmap::mapref::entry::Entry::Vacant(_) => {
-                drop(entry);
-                self.message_counts
-                    .insert(conn_id.to_string(), AtomicU64::new(1));
-                self.last_message_time
-                    .insert(conn_id.to_string(), AtomicU64::new(current_time));
-            }
+        } else {
+            counts.insert(conn_id.to_string(), AtomicU64::new(1));
+            times.insert(conn_id.to_string(), AtomicU64::new(current_time));
         }
 
         should_disconnect
@@ -265,22 +304,56 @@ impl ConnectionManager {
 
     /// Add a connection to the manager
     pub async fn add_connection(&self, id: String, conn: WebSocketConnection) {
-        self.connections.insert(id.clone(), conn);
+        {
+            if let Ok(mut map) = self.connections.write() {
+                map.insert(id, conn);
+            } else {
+                log::warn!("websocket connections lock poisoned; add_connection skipped");
+                return;
+            }
+        }
         self.connection_count.fetch_add(1, Ordering::Relaxed);
     }
 
     /// Remove a connection from the manager
+    ///
+    /// BUG-1 修复: 仅在确实移除连接时才递减 `connection_count`，
+    /// 避免并发 remove 同一 id 导致 usize 下溢为 `usize::MAX`，
+    /// 进而使 `check_and_record` 永远判定超限、拒绝所有新连接。
     pub async fn remove_connection(&self, id: &str) {
-        self.connections.remove(id);
+        let existed = {
+            if let Ok(mut map) = self.connections.write() {
+                map.remove(id).is_some()
+            } else {
+                log::warn!("websocket connections lock poisoned; remove_connection skipped");
+                return;
+            }
+        };
+        if !existed {
+            // 连接已被另一路径移除（如 broadcast 清理 + handler 断开同时触发），
+            // 不递减计数器，避免下溢。
+            return;
+        }
         self.connection_count.fetch_sub(1, Ordering::Relaxed);
         // Clean up rate limiting data
-        self.message_counts.remove(id);
-        self.last_message_time.remove(id);
+        if let Ok(mut counts) = self.message_counts.write() {
+            counts.remove(id);
+        }
+        if let Ok(mut times) = self.last_message_time.write() {
+            times.remove(id);
+        }
     }
 
     /// Get a connection by ID
     pub async fn get_connection(&self, id: &str) -> Option<WebSocketConnection> {
-        self.connections.get(id).map(|conn| conn.clone())
+        let map = match self.connections.read() {
+            Ok(g) => g,
+            Err(_) => {
+                log::warn!("websocket connections lock poisoned; get_connection returned None");
+                return None;
+            }
+        };
+        map.get(id).cloned()
     }
 
     /// Get the number of active connections

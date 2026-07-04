@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 //! Configuration management module
 //!
-//! This module provides configuration management using the Confers library.
-//! Configuration loading uses confers::ConfigLoader for all functionality.
+//! This module provides configuration management for the SDForge framework.
+//! Configuration types use serde for serialization/deserialization.
 //!
 //! Configuration types are organized into submodules by functionality:
 //! - `server` - ServerConfig, TlsConfig
@@ -12,18 +12,12 @@
 //! - `timeout` - TimeoutConfig
 //! - `api` - ApiConfig, TracingConfig, EnvHelper
 //! - `defaults` - Default values for all configuration types
-//! - `hot_reload` - Hot reload support (feature-gated)
-
-pub use confers::Config;
-#[cfg(feature = "validation")]
-pub use confers::Validate;
 
 /// Validation trait for configuration types
 ///
 /// This trait provides a standard interface for validating configuration values.
 /// Implementors should check that their configuration is valid and return
 /// descriptive errors if not.
-#[cfg(feature = "validation")]
 pub trait ValidateConfig {
     /// Validate the configuration
     ///
@@ -44,11 +38,6 @@ pub mod server;
 pub mod timeout;
 
 pub mod defaults;
-pub mod hot_reload;
-
-// Re-export hot_reload types with feature gate
-#[cfg(feature = "hot-reload")]
-pub use hot_reload::{create_config_watcher, ConfigEvent, ConfigManager, ConfigWatcherImpl};
 
 // Re-export all configuration types
 pub use api::{ApiConfig, EnvHelper, TracingConfig};
@@ -159,7 +148,8 @@ mod tests {
     #[test]
     fn test_app_config_default() {
         let config = AppConfig::default();
-        assert!(config.server.host.is_empty());
+        // LOW-001: ServerConfig::default() 现在使用 fail-safe loopback host
+        assert_eq!(config.server.host, "127.0.0.1");
         matches!(config.authentication, AuthConfig::None);
     }
 
@@ -176,8 +166,6 @@ mod tests {
             .authentication(AuthConfig::None)
             .build();
 
-        // With validation feature, build() returns Result
-        #[cfg(feature = "validation")]
         let config = config.expect("Failed to build config");
 
         assert_eq!(config.server.host, "localhost");
@@ -199,11 +187,7 @@ mod tests {
             })
             .build();
 
-        #[cfg(feature = "validation")]
         let config = result.expect("Failed to build config");
-
-        #[cfg(not(feature = "validation"))]
-        let config = result;
 
         assert!(config.timeout.is_some());
         assert_eq!(config.timeout.unwrap().default_timeout_secs, 60);
@@ -225,11 +209,7 @@ mod tests {
             .timeout(TimeoutConfig::default())
             .build();
 
-        #[cfg(feature = "validation")]
         let config = result.expect("Failed to build config");
-
-        #[cfg(not(feature = "validation"))]
-        let config = result;
 
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 8080);
@@ -292,7 +272,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "validation")]
     fn test_app_config_validate_valid() {
         let config = AppConfig {
             server: ServerConfig {
@@ -311,7 +290,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "validation")]
     fn test_app_config_validate_invalid_server_port() {
         let config = AppConfig {
             server: ServerConfig {
@@ -327,7 +305,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "validation")]
     fn test_app_config_validate_invalid_auth_prefix() {
         let config = AppConfig {
             server: ServerConfig {

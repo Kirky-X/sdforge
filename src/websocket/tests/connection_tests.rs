@@ -560,8 +560,11 @@ fn check_and_record_resets_after_window_elapsed() {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     let backdated = now.saturating_sub(config.rate_limit_window_seconds + 1);
-    if let Some(entry) = manager.last_message_time.get_mut("conn-reset") {
-        entry.value().store(backdated, Ordering::Relaxed);
+    {
+        let map = manager.last_message_time.read().unwrap();
+        if let Some(entry) = map.get("conn-reset") {
+            entry.store(backdated, Ordering::Relaxed);
+        }
     }
 
     // After the window has elapsed, the counter resets and the connection
@@ -609,8 +612,18 @@ async fn connection_manager_remove_cleans_up_rate_limit_data() {
         .await;
     manager.check_and_record("cleanup-test", &config);
     manager.remove_connection("cleanup-test").await;
-    assert!(manager.message_counts.get("cleanup-test").is_none());
-    assert!(manager.last_message_time.get("cleanup-test").is_none());
+    assert!(manager
+        .message_counts
+        .read()
+        .unwrap()
+        .get("cleanup-test")
+        .is_none());
+    assert!(manager
+        .last_message_time
+        .read()
+        .unwrap()
+        .get("cleanup-test")
+        .is_none());
 }
 
 /// Test ConnectionManager::broadcast with empty connections

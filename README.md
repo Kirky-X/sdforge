@@ -71,8 +71,8 @@
 - **🌐 多协议支持** - HTTP (Axum), MCP, gRPC, WebSocket, SSE 流式传输
 - **🧩 模块化设计** - 基于 Feature 的架构，允许仅选择所需功能
 - **🛡️ 安全特性** - 内置认证、限流和请求验证
-- **💾 缓存** - 基于内存缓存（oxcache/dashmap），无需外部数据库
-- **🔧 配置管理** - 支持热重载的 TOML 配置
+- **💾 缓存** - 基于内存缓存（oxcache 0.3.2），无需外部数据库
+- **🔧 配置管理** - 自包含的 TOML 配置（无需外部配置中心）
 - **📊 版本控制** - 内置 API 版本管理
 </details>
 
@@ -84,7 +84,7 @@
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["http"] }
+sdforge = { version = "0.3", features = ["http"] }
 ```
 
 ---
@@ -129,24 +129,18 @@ SDForge 使用 Cargo features 进行编译时协议选择和特性组合。
 | 特性         | 描述                                     | 依赖                                          |
 |--------------|------------------------------------------|-----------------------------------------------|
 | `http`       | HTTP 服务器 (Axum 0.8.8)                 | axum, tower, tower-http                        |
-| `mcp`        | MCP 协议 (rmcp 0.16, 2026-07-28 规范)    | rmcp, schemars                                |
+| `mcp`        | MCP 协议 (rmcp 0.16, 2026-07-28 规范)    | rmcp |
 | `streaming`  | SSE 流式传输支持                         | tokio-stream, futures-util                    |
 | `timestamp`  | 自动向响应添加时间戳                     | chrono                                        |
 | `logging`    | 结构化请求日志                           | chrono, tokio                                 |
-| `security`   | 安全特性 (认证, 限流)                    | http, dashmap, uuid, hmac, sha2, chrono, tokio, secrets, zeroize, subtle, once_cell, argon2, password-hash, rand, regex, oxcache/memory, bincode, confers, cache, hex, base64 |
-| `hot-reload` | 配置热重载                               | http, confers                                 |
+| `security`   | 安全特性 (认证, 限流)                    | http, cache, uuid, hmac, sha2, chrono, tokio, secrets, zeroize, subtle, once_cell, argon2, password-hash, rand, regex, oxcache/memory, bincode, hex, base64 |
 | `websocket`  | WebSocket 支持                           | tokio-tungstenite, axum-extra                |
 | `grpc`       | gRPC 支持                                | tonic, prost                                 |
 | `cache`      | 缓存支持                                 | dep:http, oxcache/memory, async-trait         |
 | `openapi`    | 自动 OpenAPI 3.1 规范生成                | utoipa, http                                  |
-| `cli`        | CLI 工具（代码生成、项目脚手架）         | clap, tera, walkdir, confers/cli              |
-| `validation` | Confers 验证扩展                        | confers/validation                            |
-| `schema`     | Confers schema 扩展                     | confers/schema, schemars                      |
-| `watch`      | Confers 热重载扩展                      | confers/watch                                 |
-| `audit`      | Confers 审计扩展                        | confers/audit                                 |
 | `simd-json`  | SIMD 加速 JSON 序列化                   | simd-json                                     |
 | `hex`        | 十六进制编码工具                        | hex                                           |
-| `full`       | 启用所有运行时特性（不含 cli/simd-json/hex 等工具特性） | -                                |
+| `full`       | 启用所有运行时特性（不含 simd-json/hex 等工具特性） | -                                |
 
 ### 🔗 特性依赖
 
@@ -156,7 +150,6 @@ SDForge 使用 Cargo features 进行编译时协议选择和特性组合。
 - `timestamp`: 无依赖
 - `logging`: 无依赖
 - `security`: 需要 `http`、`cache`
-- `hot-reload`: 需要 `http`
 - `websocket`: 需要 `http`, `streaming`
 - `grpc`: 需要 `http`
 - `cache`: 独立（使用 http crate 类型，不依赖 sdforge http 特性）
@@ -172,7 +165,7 @@ SDForge 使用 Cargo features 进行编译时协议选择和特性组合。
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["http"] }
+sdforge = { version = "0.3", features = ["http"] }
 ```
 
 ### 🤖 仅 MCP
@@ -181,7 +174,7 @@ sdforge = { version = "0.2", features = ["http"] }
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["mcp"] }
+sdforge = { version = "0.3", features = ["mcp"] }
 ```
 
 ### 🔄 双协议
@@ -190,7 +183,7 @@ sdforge = { version = "0.2", features = ["mcp"] }
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["http", "mcp"] }
+sdforge = { version = "0.3", features = ["http", "mcp"] }
 ```
 
 ### 🎯 全功能
@@ -199,7 +192,7 @@ sdforge = { version = "0.2", features = ["http", "mcp"] }
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["full"] }
+sdforge = { version = "0.3", features = ["full"] }
 ```
 
 ---
@@ -500,20 +493,13 @@ sdforge/
 │   ├── grpc/         # gRPC 支持
 │   ├── streaming/    # SSE 流式支持
 │   ├── config/       # 配置管理
-│   ├── cli/          # CLI 工具（可选，需要 `cli` 特性）
-│   ├── lib.rs        # 库入口点
-│   └── main.rs       # CLI 二进制入口点
+│   └── lib.rs        # 库入口点
 ├── macros/            # 过程宏 crate
 │   ├── src/
 │   └── Cargo.toml
 ├── docs/              # 文档
 ├── .github/           # GitHub 工作流
 └── scripts/           # 构建和实用脚本
-```
-
-**注意**: CLI 二进制仅在启用 `cli` 特性时编译：
-```toml
-sdforge = { version = "0.2", features = ["cli"] }
 ```
 
 ---
@@ -571,6 +557,13 @@ let app = Router::new()
     .layer(auth_middleware(ApiKeyAuth::new("your-secret-key")));
 ```
 
+### ⚠️ 安全默认值（v0.3.0+）
+
+> **注意**：v0.3.0 收紧了安全默认值，迁移时请检查：
+> - **JWT 密钥最小长度**：`MIN_SECRET_LENGTH=32`，短于 32 字符的密钥将被拒绝并返回错误
+> - **ServerConfig 默认 host**：从 `"0.0.0.0"`（fail-open）改为 `"127.0.0.1"`（fail-safe 回环），生产部署需显式配置 host
+> - **CORS 校验收紧**：`"http://"`（仅 scheme 无 host）将被拒绝
+
 ---
 
 ## <span id="performance-optimization">⚡ 性能优化</span>
@@ -621,7 +614,7 @@ SDForge v0.2.0 引入基于 [utoipa 5.5](https://crates.io/crates/utoipa) 的 Op
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["http", "openapi"] }
+sdforge = { version = "0.3", features = ["http", "openapi"] }
 ```
 
 ### 🚀 基本用法
