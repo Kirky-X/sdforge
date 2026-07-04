@@ -38,11 +38,10 @@ mod mcp_registration_tests {
             })
         }
         fn call(&self, _input: Option<serde_json::Value>) -> Result<CallToolResult, McpError> {
-            Ok(CallToolResult {
-                content: vec![],
-                structured_content: None,
-                is_error: None,
-                meta: None,
+            Ok({
+                let mut result = CallToolResult::success(vec![]);
+                result.is_error = None;
+                result
             })
         }
     }

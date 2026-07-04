@@ -11,7 +11,7 @@
 
 #[cfg(feature = "mcp")]
 mod mcp_comprehensive_tests {
-    use rmcp::model::{CallToolResult, Content, ErrorData as McpError};
+    use rmcp::model::{CallToolResult, ContentBlock, ErrorData as McpError};
     use sdforge::core::ApiMetadata;
     use sdforge::mcp::{get_mcp_tools, McpToolRegistration, SdForgeTool};
     use std::sync::Arc;
@@ -44,11 +44,10 @@ mod mcp_comprehensive_tests {
                 &self,
                 _input: Option<serde_json::Value>,
             ) -> Result<CallToolResult, McpError> {
-                Ok(CallToolResult {
-                    content: vec![],
-                    structured_content: None,
-                    is_error: None,
-                    meta: None,
+                Ok({
+                    let mut result = CallToolResult::success(vec![]);
+                    result.is_error = None;
+                    result
                 })
             }
         }
@@ -88,7 +87,7 @@ mod mcp_comprehensive_tests {
                     .and_then(|v| v.get("message").and_then(|m| m.as_str()).map(|s| s.to_string()))
                     .unwrap_or_default();
 
-                Ok(CallToolResult::success(vec![Content::text(text)]))
+                Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
             }
         }
 
@@ -149,7 +148,7 @@ mod mcp_comprehensive_tests {
                     }
                 };
 
-                Ok(CallToolResult::success(vec![Content::text(
+                Ok(CallToolResult::success(vec![ContentBlock::text(
                     result.to_string(),
                 )]))
             }
@@ -230,11 +229,10 @@ mod mcp_comprehensive_tests {
                 &self,
                 _input: Option<serde_json::Value>,
             ) -> Result<CallToolResult, McpError> {
-                Ok(CallToolResult {
-                    content: vec![],
-                    structured_content: None,
-                    is_error: None,
-                    meta: None,
+                Ok({
+                    let mut result = CallToolResult::success(vec![]);
+                    result.is_error = None;
+                    result
                 })
             }
         }
@@ -611,7 +609,7 @@ mod mcp_comprehensive_tests {
         assert!(!response.content.is_empty());
         assert!(matches!(
             response.content.first(),
-            Some(rmcp::model::Content::Text(_))
+            Some(rmcp::model::ContentBlock::Text(_))
         ));
     }
 

@@ -12,7 +12,7 @@
 #[cfg(feature = "mcp")]
 mod mcp_protocol_tests {
     use rmcp::handler::server::ServerHandler;
-    use rmcp::model::{CallToolResult, Content, ErrorData as McpError};
+    use rmcp::model::{CallToolResult, ContentBlock, ErrorData as McpError};
     use sdforge::core::{ApiMetadata, Registration};
     use sdforge::mcp::{
         get_mcp_tools, McpToolInstance, McpToolRegistration, SdForgeMcpServer, SdForgeTool,
@@ -57,7 +57,7 @@ mod mcp_protocol_tests {
                     .unwrap_or(1) as usize;
 
                 let output = format!("{}x{}", message, count);
-                Ok(CallToolResult::success(vec![Content::text(output)]))
+                Ok(CallToolResult::success(vec![ContentBlock::text(output)]))
             }
         }
         Arc::new(EchoTool) as Arc<dyn SdForgeTool>
@@ -121,7 +121,7 @@ mod mcp_protocol_tests {
                     }
                 };
 
-                Ok(CallToolResult::success(vec![Content::text(
+                Ok(CallToolResult::success(vec![ContentBlock::text(
                     result.to_string(),
                 )]))
             }
@@ -163,7 +163,7 @@ mod mcp_protocol_tests {
                 serde_json::json!({"type": "object"})
             }
             fn call(&self, _input: Option<Value>) -> Result<CallToolResult, McpError> {
-                Ok(CallToolResult::success(vec![Content::text(
+                Ok(CallToolResult::success(vec![ContentBlock::text(
                     "no params needed".to_string(),
                 )]))
             }
@@ -204,7 +204,7 @@ mod mcp_protocol_tests {
                     .and_then(|u| u.get("name"))
                     .and_then(|n| n.as_str())
                     .unwrap_or("unknown");
-                Ok(CallToolResult::success(vec![Content::text(format!(
+                Ok(CallToolResult::success(vec![ContentBlock::text(format!(
                     "Hello, {}!",
                     name
                 ))]))

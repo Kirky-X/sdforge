@@ -74,21 +74,15 @@ impl ServerHandler for StatelessServerHandler {
         _context: RequestContext<RoleServer>,
     ) -> Result<InitializeResult, ErrorData> {
         // Stateless: return immediately without session setup.
-        Ok(InitializeResult {
-            protocol_version: Default::default(),
-            capabilities: rmcp::model::ServerCapabilities::builder()
+        let mut server_info = rmcp::model::Implementation::default();
+        server_info.name = self.inner.server_name.clone();
+        server_info.version = self.inner.server_version.clone();
+        Ok(InitializeResult::new(
+            rmcp::model::ServerCapabilities::builder()
                 .enable_tools()
                 .build(),
-            server_info: rmcp::model::Implementation {
-                name: self.inner.server_name.clone(),
-                title: None,
-                version: self.inner.server_version.clone(),
-                description: None,
-                icons: None,
-                website_url: None,
-            },
-            instructions: None,
-        })
+        )
+        .with_server_info(server_info))
     }
 
     async fn list_tools(
@@ -111,7 +105,7 @@ impl ServerHandler for StatelessServerHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rmcp::model::{Extensions, InitializeRequestParams, Meta, NumberOrString};
+    use rmcp::model::{InitializeRequestParams, NumberOrString};
     use rmcp::service::serve_directly;
 
     #[test]
@@ -242,13 +236,7 @@ mod tests {
         let server = StatelessServerHandler::from_registry();
         let running = serve_directly(server, DummyTransport, None);
         let peer = running.peer().clone();
-        RequestContext {
-            ct: Default::default(),
-            id: NumberOrString::Number(0),
-            meta: Meta::default(),
-            extensions: Extensions::new(),
-            peer,
-        }
+        RequestContext::new(NumberOrString::Number(0), peer)
     }
 
     /// Test `ServerHandler::initialize` returns a valid `InitializeResult`.
@@ -260,19 +248,12 @@ mod tests {
         let handler = StatelessServerHandler::from_registry();
         let context = make_test_context();
 
-        let request = InitializeRequestParams {
-            meta: None,
-            protocol_version: Default::default(),
-            capabilities: Default::default(),
-            client_info: rmcp::model::Implementation {
-                name: "test-client".to_string(),
-                title: None,
-                version: "1.0.0".to_string(),
-                description: None,
-                icons: None,
-                website_url: None,
-            },
-        };
+        let request = InitializeRequestParams::new(Default::default(), {
+            let mut impl_info = rmcp::model::Implementation::default();
+            impl_info.name = "test-client".to_string();
+            impl_info.version = "1.0.0".to_string();
+            impl_info
+        });
 
         let result = handler.initialize(request, context).await;
         assert!(result.is_ok(), "initialize should succeed");
@@ -338,10 +319,8 @@ mod tests {
         let handler = StatelessServerHandler::from_registry();
         let context = make_test_context();
 
-        let params = PaginatedRequestParams {
-            meta: None,
-            cursor: Some("page1".to_string()),
-        };
+        let mut params = PaginatedRequestParams::default();
+        params.cursor = Some("page1".to_string());
 
         let result = handler.list_tools(Some(params), context).await;
         assert!(result.is_ok(), "list_tools with cursor should succeed");
@@ -362,12 +341,7 @@ mod tests {
         let handler = StatelessServerHandler::from_registry();
         let context = make_test_context();
 
-        let request = CallToolRequestParams {
-            meta: None,
-            name: "coverage_test_tool".into(),
-            arguments: None,
-            task: None,
-        };
+        let request = CallToolRequestParams::new("coverage_test_tool");
 
         let result = handler.call_tool(request, context).await;
         assert!(result.is_ok(), "call_tool with valid name should succeed");
@@ -393,12 +367,7 @@ mod tests {
         let handler = StatelessServerHandler::from_registry();
         let context = make_test_context();
 
-        let request = CallToolRequestParams {
-            meta: None,
-            name: "nonexistent_tool".into(),
-            arguments: None,
-            task: None,
-        };
+        let request = CallToolRequestParams::new("nonexistent_tool");
 
         let result = handler.call_tool(request, context).await;
         assert!(
@@ -429,12 +398,8 @@ mod tests {
             serde_json::Value::String("value".to_string()),
         );
 
-        let request = CallToolRequestParams {
-            meta: None,
-            name: "coverage_test_tool".into(),
-            arguments: Some(args),
-            task: None,
-        };
+        let mut request = CallToolRequestParams::new("coverage_test_tool");
+        request.arguments = Some(args);
 
         let result = handler.call_tool(request, context).await;
         assert!(
@@ -456,19 +421,12 @@ mod tests {
 
         // Get info from initialize()
         let context = make_test_context();
-        let request = InitializeRequestParams {
-            meta: None,
-            protocol_version: Default::default(),
-            capabilities: Default::default(),
-            client_info: rmcp::model::Implementation {
-                name: "test-client".to_string(),
-                title: None,
-                version: "1.0.0".to_string(),
-                description: None,
-                icons: None,
-                website_url: None,
-            },
-        };
+        let request = InitializeRequestParams::new(Default::default(), {
+            let mut impl_info = rmcp::model::Implementation::default();
+            impl_info.name = "test-client".to_string();
+            impl_info.version = "1.0.0".to_string();
+            impl_info
+        });
         let init_result = handler.initialize(request, context).await.unwrap();
         let name_from_init = init_result.server_info.name.clone();
 

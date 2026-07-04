@@ -5,7 +5,7 @@
 use super::{create_test_metadata, create_test_tool, exercise_all_tool_methods};
 use crate::core::ApiMetadata;
 use crate::mcp::{McpToolInstance, SdForgeTool};
-use rmcp::model::{CallToolResult, Content, ErrorData as McpError};
+use rmcp::model::{CallToolResult, ContentBlock, ErrorData as McpError};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -116,11 +116,10 @@ fn test_input_schema_object_type() {
             })
         }
         fn call(&self, _input: Option<Value>) -> Result<CallToolResult, McpError> {
-            Ok(CallToolResult {
-                content: vec![],
-                structured_content: None,
-                is_error: None,
-                meta: None,
+            Ok({
+                let mut result = CallToolResult::success(vec![]);
+                result.is_error = None;
+                result
             })
         }
     }
@@ -146,11 +145,10 @@ fn test_input_schema_primitive_types() {
             serde_json::json!({"type": "string"})
         }
         fn call(&self, _input: Option<Value>) -> Result<CallToolResult, McpError> {
-            Ok(CallToolResult {
-                content: vec![],
-                structured_content: None,
-                is_error: None,
-                meta: None,
+            Ok({
+                let mut result = CallToolResult::success(vec![]);
+                result.is_error = None;
+                result
             })
         }
     }
@@ -175,7 +173,7 @@ fn test_tool_execution_with_result() {
         }
         fn call(&self, input: Option<Value>) -> Result<CallToolResult, McpError> {
             let result_value = input.unwrap_or(serde_json::json!({}));
-            Ok(CallToolResult::success(vec![Content::text(
+            Ok(CallToolResult::success(vec![ContentBlock::text(
                 serde_json::to_string(&result_value).unwrap_or_default(),
             )]))
         }
@@ -205,11 +203,10 @@ fn test_tool_execution_with_empty_response() {
             serde_json::json!({"type": "object"})
         }
         fn call(&self, _input: Option<Value>) -> Result<CallToolResult, McpError> {
-            Ok(CallToolResult {
-                content: vec![],
-                structured_content: None,
-                is_error: None,
-                meta: None,
+            Ok({
+                let mut result = CallToolResult::success(vec![]);
+                result.is_error = None;
+                result
             })
         }
     }
@@ -234,12 +231,9 @@ fn test_tool_execution_error_response() {
             serde_json::json!({"type": "object"})
         }
         fn call(&self, _input: Option<Value>) -> Result<CallToolResult, McpError> {
-            Ok(CallToolResult {
-                content: vec![Content::text("Error occurred".to_string())],
-                structured_content: None,
-                is_error: Some(true),
-                meta: None,
-            })
+            Ok(CallToolResult::error(vec![ContentBlock::text(
+                "Error occurred".to_string(),
+            )]))
         }
     }
     let tool = Arc::new(ErrorResponseTool) as Arc<dyn SdForgeTool>;
@@ -346,7 +340,7 @@ fn test_tool_with_none_input() {
         }
         fn call(&self, input: Option<Value>) -> Result<CallToolResult, McpError> {
             assert!(input.is_none());
-            Ok(CallToolResult::success(vec![Content::text(
+            Ok(CallToolResult::success(vec![ContentBlock::text(
                 "no input".to_string(),
             )]))
         }
@@ -372,7 +366,7 @@ fn test_tool_with_json_input() {
         fn call(&self, input: Option<Value>) -> Result<CallToolResult, McpError> {
             let input = input.unwrap_or_default();
             let text = serde_json::to_string(&input).unwrap_or_default();
-            Ok(CallToolResult::success(vec![Content::text(text)]))
+            Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
         }
     }
     let tool = JsonTool;
