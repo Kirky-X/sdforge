@@ -1471,4 +1471,300 @@ mod macro_parsing_tests {
         let result = parse_service_module_args(input).unwrap();
         assert_eq!(result, "/api/v1");
     }
+
+    // ============================================================================
+    // validate_api_name tests
+    //
+    // validate_api_name enforces multiple validation rules to prevent code
+    // injection through the #[service_api(name = ...)] attribute. Each test
+    // targets a specific validation path.
+    // ============================================================================
+
+    #[test]
+    fn test_validate_api_name_valid_simple() {
+        let result = validate_api_name("test").unwrap();
+        assert_eq!(result, "test");
+    }
+
+    #[test]
+    fn test_validate_api_name_valid_with_underscores() {
+        let result = validate_api_name("my_api_name").unwrap();
+        assert_eq!(result, "my_api_name");
+    }
+
+    #[test]
+    fn test_validate_api_name_valid_starting_with_underscore() {
+        let result = validate_api_name("_private").unwrap();
+        assert_eq!(result, "_private");
+    }
+
+    #[test]
+    fn test_validate_api_name_valid_alphanumeric() {
+        let result = validate_api_name("API1").unwrap();
+        assert_eq!(result, "API1");
+    }
+
+    #[test]
+    fn test_validate_api_name_strips_quotes() {
+        // The macro passes string literals with surrounding quotes; validate_api_name
+        // should trim them before validation.
+        let result = validate_api_name("\"quoted_name\"").unwrap();
+        assert_eq!(result, "quoted_name");
+    }
+
+    #[test]
+    fn test_validate_api_name_trims_whitespace() {
+        let result = validate_api_name("  spaced  ").unwrap();
+        assert_eq!(result, "spaced");
+    }
+
+    #[test]
+    fn test_validate_api_name_empty_rejected() {
+        let result = validate_api_name("");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("API name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_api_name_only_quotes_rejected_as_empty() {
+        // After trimming quotes and whitespace, this becomes empty.
+        let result = validate_api_name("\"\"");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("API name cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_api_name_too_long_rejected() {
+        // MAX_API_NAME_LENGTH = 64; create a name with 65 characters.
+        let long_name = "a".repeat(65);
+        let result = validate_api_name(&long_name);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("exceeds maximum length"));
+        assert!(err_msg.contains("64"));
+    }
+
+    #[test]
+    fn test_validate_api_name_max_length_accepted() {
+        // Exactly 64 characters should be accepted (boundary check).
+        let name = "a".repeat(64);
+        let result = validate_api_name(&name).unwrap();
+        assert_eq!(result.len(), 64);
+    }
+
+    #[test]
+    fn test_validate_api_name_invalid_chars_hyphen_rejected() {
+        let result = validate_api_name("test-api");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid characters"));
+    }
+
+    #[test]
+    fn test_validate_api_name_invalid_chars_dot_rejected() {
+        let result = validate_api_name("test.api");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid characters"));
+    }
+
+    #[test]
+    fn test_validate_api_name_starting_with_digit_rejected() {
+        let result = validate_api_name("1api");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must start with a letter or underscore"));
+    }
+
+    #[test]
+    fn test_validate_api_name_reserved_keyword_rejected() {
+        // Test a few representative reserved keywords.
+        for keyword in ["match", "if", "fn", "struct", "self", "Some", "None", "Ok"] {
+            let result = validate_api_name(keyword);
+            assert!(result.is_err(), "Keyword '{}' should be rejected", keyword);
+            assert!(result.unwrap_err().to_string().contains("Rust keyword"));
+        }
+    }
+
+    #[test]
+    fn test_validate_api_name_control_chars_rejected() {
+        // Control characters are caught by the invalid-characters check
+        // (they are not alphanumeric or underscore).
+        let result = validate_api_name("test\x00name");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid characters"));
+    }
+
+    // ============================================================================
+    // validate_version tests
+    //
+    // validate_version enforces that version strings contain only alphanumeric
+    // characters, dots, and hyphens (for pre-release segments like "1.0-beta").
+    // ============================================================================
+
+    #[test]
+    fn test_validate_version_valid_v1() {
+        let result = validate_version("v1").unwrap();
+        assert_eq!(result, "v1");
+    }
+
+    #[test]
+    fn test_validate_version_valid_semver() {
+        let result = validate_version("1.0.0").unwrap();
+        assert_eq!(result, "1.0.0");
+    }
+
+    #[test]
+    fn test_validate_version_valid_v_prefixed_semver() {
+        let result = validate_version("v1.2.3").unwrap();
+        assert_eq!(result, "v1.2.3");
+    }
+
+    #[test]
+    fn test_validate_version_valid_with_prerelease() {
+        // Hyphens are allowed for pre-release segments (e.g., "1.0.0-beta").
+        let result = validate_version("1.0.0-beta").unwrap();
+        assert_eq!(result, "1.0.0-beta");
+    }
+
+    #[test]
+    fn test_validate_version_strips_quotes() {
+        let result = validate_version("\"v1\"").unwrap();
+        assert_eq!(result, "v1");
+    }
+
+    #[test]
+    fn test_validate_version_trims_whitespace() {
+        let result = validate_version("  v1  ").unwrap();
+        assert_eq!(result, "v1");
+    }
+
+    #[test]
+    fn test_validate_version_empty_rejected() {
+        let result = validate_version("");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("API version cannot be empty"));
+    }
+
+    #[test]
+    fn test_validate_version_invalid_chars_at_sign_rejected() {
+        let result = validate_version("v1@2");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("invalid characters"));
+        assert!(err_msg.contains('@'));
+    }
+
+    #[test]
+    fn test_validate_version_invalid_chars_space_rejected() {
+        // Internal spaces are not alphanumeric, dots, or hyphens.
+        let result = validate_version("v1 2");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid characters"));
+    }
+
+    #[test]
+    fn test_validate_version_invalid_chars_slash_rejected() {
+        let result = validate_version("v1/2");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("invalid characters"));
+    }
+
+    // ============================================================================
+    // clean_function_attributes tests
+    //
+    // clean_function_attributes removes #[state] and #[param] attributes from
+    // function parameters. These attributes are used by the macro for parameter
+    // kind inference and should not appear in the output function.
+    // ============================================================================
+
+    /// Helper: count attributes on a parameter by name.
+    fn count_attr(input: &ItemFn, param_idx: usize, attr_name: &str) -> usize {
+        let FnArg::Typed(pat_type) = &input.sig.inputs[param_idx] else {
+            return 0;
+        };
+        pat_type
+            .attrs
+            .iter()
+            .filter(|a| a.path().is_ident(attr_name))
+            .count()
+    }
+
+    #[test]
+    fn test_clean_function_attributes_removes_state_attr() {
+        let input: ItemFn = syn::parse_quote! {
+            fn test_fn(#[state] state: i32) -> i32 { state }
+        };
+        assert_eq!(count_attr(&input, 0, "state"), 1);
+
+        let cleaned = clean_function_attributes(input);
+        assert_eq!(count_attr(&cleaned, 0, "state"), 0);
+    }
+
+    #[test]
+    fn test_clean_function_attributes_removes_param_attr() {
+        let input: ItemFn = syn::parse_quote! {
+            fn test_fn(#[param] param: String) -> String { param }
+        };
+        assert_eq!(count_attr(&input, 0, "param"), 1);
+
+        let cleaned = clean_function_attributes(input);
+        assert_eq!(count_attr(&cleaned, 0, "param"), 0);
+    }
+
+    #[test]
+    fn test_clean_function_attributes_removes_both_attrs() {
+        let input: ItemFn = syn::parse_quote! {
+            fn test_fn(#[state] state: i32, #[param] param: String) -> i32 { 0 }
+        };
+        assert_eq!(count_attr(&input, 0, "state"), 1);
+        assert_eq!(count_attr(&input, 1, "param"), 1);
+
+        let cleaned = clean_function_attributes(input);
+        assert_eq!(count_attr(&cleaned, 0, "state"), 0);
+        assert_eq!(count_attr(&cleaned, 1, "param"), 0);
+    }
+
+    #[test]
+    fn test_clean_function_attributes_preserves_no_attr_params() {
+        let input: ItemFn = syn::parse_quote! {
+            fn test_fn(plain: i32) -> i32 { plain }
+        };
+        let cleaned = clean_function_attributes(input);
+        // The plain parameter should still be present with no attributes.
+        assert_eq!(cleaned.sig.inputs.len(), 1);
+    }
+
+    #[test]
+    fn test_clean_function_attributes_handles_no_params() {
+        let input: ItemFn = syn::parse_quote! {
+            fn test_fn() -> i32 { 0 }
+        };
+        let cleaned = clean_function_attributes(input);
+        assert!(cleaned.sig.inputs.is_empty());
+    }
 }

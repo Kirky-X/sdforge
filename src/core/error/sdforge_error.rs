@@ -362,4 +362,139 @@ mod tests {
         assert_eq!(service_err.code(), "ACCESS_DENIED");
         assert_eq!(service_err.http_status(), 403);
     }
+
+    // ============================================================================
+    // Security error variant tests
+    //
+    // The to_service_error() method has dedicated branches for Auth, Jwt, and
+    // AuthConfig errors (gated behind the "security" feature). These tests
+    // cover those branches and verify the resulting ServiceError has the
+    // correct error code, HTTP status, and JSON details.
+    // ============================================================================
+
+    /// Test to_service_error() for the Auth variant produces a 401 ServiceError
+    /// with the AUTH_ERROR code and auth type marker.
+    #[cfg(feature = "security")]
+    #[test]
+    fn test_to_service_error_auth() {
+        use crate::security::AuthError;
+        let auth_err = AuthError::InvalidToken;
+        let sdforge_err: SdForgeError = auth_err.into();
+        let service_err = sdforge_err.to_service_error();
+        assert_eq!(service_err.code(), "AUTH_ERROR");
+        assert_eq!(service_err.http_status(), 401);
+    }
+
+    /// Test to_service_error() for the Jwt variant produces a 401 ServiceError
+    /// with the JWT_ERROR code and jwt type marker.
+    #[cfg(feature = "security")]
+    #[test]
+    fn test_to_service_error_jwt() {
+        use crate::security::JwtError;
+        let jwt_err = JwtError::Expired;
+        let sdforge_err: SdForgeError = jwt_err.into();
+        let service_err = sdforge_err.to_service_error();
+        assert_eq!(service_err.code(), "JWT_ERROR");
+        assert_eq!(service_err.http_status(), 401);
+    }
+
+    /// Test to_service_error() for the AuthConfig variant produces a 500
+    /// ServiceError with the AUTH_CONFIG_ERROR code and auth_config type marker.
+    #[cfg(feature = "security")]
+    #[test]
+    fn test_to_service_error_auth_config() {
+        use crate::security::AuthConfigError;
+        let config_err = AuthConfigError::SecretTooShort { length: 10 };
+        let sdforge_err: SdForgeError = config_err.into();
+        let service_err = sdforge_err.to_service_error();
+        assert_eq!(service_err.code(), "AUTH_CONFIG_ERROR");
+        assert_eq!(service_err.http_status(), 500);
+    }
+
+    /// Test category() for the Auth variant returns AuthError.
+    #[cfg(feature = "security")]
+    #[test]
+    fn test_category_auth() {
+        use crate::security::AuthError;
+        let err: SdForgeError = AuthError::MissingAuth.into();
+        assert_eq!(err.category(), ErrorCategory::AuthError);
+    }
+
+    /// Test category() for the Jwt variant returns AuthError.
+    #[cfg(feature = "security")]
+    #[test]
+    fn test_category_jwt() {
+        use crate::security::JwtError;
+        let err: SdForgeError = JwtError::InvalidSignature.into();
+        assert_eq!(err.category(), ErrorCategory::AuthError);
+    }
+
+    /// Test category() for the AuthConfig variant returns AuthError.
+    #[cfg(feature = "security")]
+    #[test]
+    fn test_category_auth_config() {
+        use crate::security::AuthConfigError;
+        let err: SdForgeError = AuthConfigError::InvalidSecret("weak".to_string()).into();
+        assert_eq!(err.category(), ErrorCategory::AuthError);
+    }
+
+    /// Test sanitized_message() for the Auth variant (security feature).
+    #[cfg(feature = "security")]
+    #[test]
+    fn test_sanitized_message_auth() {
+        use crate::security::AuthError;
+        let err: SdForgeError = AuthError::InvalidToken.into();
+        let msg = err.sanitized_message();
+        // Auth errors delegate to Display, which includes the error message.
+        assert!(msg.contains("Invalid or expired token"));
+    }
+
+    /// Test Display (Error trait) for the Auth variant delegates to AuthError.
+    #[cfg(feature = "security")]
+    #[test]
+    fn test_display_auth() {
+        use crate::security::AuthError;
+        let err: SdForgeError = AuthError::MissingAuth.into();
+        let s = err.to_string();
+        assert!(s.contains("Missing or invalid authorization header"));
+    }
+
+    /// Test From<AuthError> conversion produces the Auth variant.
+    #[cfg(feature = "security")]
+    #[test]
+    fn test_from_auth_error() {
+        use crate::security::AuthError;
+        let auth_err = AuthError::InvalidToken;
+        let sdforge_err: SdForgeError = auth_err.into();
+        match sdforge_err {
+            SdForgeError::Auth(_) => {}
+            other => panic!("Expected Auth variant, got: {:?}", other),
+        }
+    }
+
+    /// Test From<JwtError> conversion produces the Jwt variant.
+    #[cfg(feature = "security")]
+    #[test]
+    fn test_from_jwt_error() {
+        use crate::security::JwtError;
+        let jwt_err = JwtError::Expired;
+        let sdforge_err: SdForgeError = jwt_err.into();
+        match sdforge_err {
+            SdForgeError::Jwt(_) => {}
+            other => panic!("Expected Jwt variant, got: {:?}", other),
+        }
+    }
+
+    /// Test From<AuthConfigError> conversion produces the AuthConfig variant.
+    #[cfg(feature = "security")]
+    #[test]
+    fn test_from_auth_config_error() {
+        use crate::security::AuthConfigError;
+        let config_err = AuthConfigError::SecretTooShort { length: 5 };
+        let sdforge_err: SdForgeError = config_err.into();
+        match sdforge_err {
+            SdForgeError::AuthConfig(_) => {}
+            other => panic!("Expected AuthConfig variant, got: {:?}", other),
+        }
+    }
 }

@@ -354,3 +354,52 @@ async fn test_stream_to_sse_always_emits_completion_event() {
         );
     }
 }
+
+// ============================================================================
+// IntoResponse Err branch coverage test
+//
+// The `IntoResponse` impl for `StreamResponse<T>` maps `Result<T, String>`
+// items from the underlying stream: `Ok(data)` -> `StreamEvent::data(...)`,
+// `Err(err)` -> `StreamEvent::error(err)` (line 216 of src/streaming/mod.rs).
+//
+// The existing `test_stream_response_into_response_with_error_item` test
+// sends an Err item but never collects the response body — the lazy SSE
+// stream is never polled, so the mapper closure (and thus the Err branch)
+// never executes. This test forces the body to be consumed via
+// `axum::body::to_bytes`, exercising the Err branch end-to-end.
+// ============================================================================
+
+#[cfg(feature = "http")]
+#[tokio::test]
+async fn test_stream_response_into_response_err_branch_collected() {
+    use axum::response::IntoResponse;
+
+    // Build a stream that yields an error item to cover the
+    // `Err(err) => StreamEvent::error(err)` branch in the IntoResponse mapper.
+    let (tx, rx) = mpsc::channel::<Result<String, String>>(10);
+    let stream = StreamResponse::new(ReceiverStream::new(rx));
+
+    tokio::spawn(async move {
+        let _ = tx.send(Err("test error".to_string())).await;
+    });
+
+    let http_response = stream.into_response();
+    assert_eq!(http_response.status(), 200);
+
+    // Collect the body stream to force the mapper closure to execute.
+    let body = http_response.into_body();
+    let bytes = axum::body::to_bytes(body, 1024 * 1024).await.unwrap();
+    let body_str = String::from_utf8_lossy(&bytes);
+
+    // The error event should appear in the SSE output.
+    assert!(
+        body_str.contains(r#""type":"error""#),
+        "Body should contain an error event, got: {}",
+        body_str
+    );
+    assert!(
+        body_str.contains("test error"),
+        "Body should contain the error message, got: {}",
+        body_str
+    );
+}
