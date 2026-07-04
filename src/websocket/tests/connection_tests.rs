@@ -141,6 +141,7 @@ fn test_connection_manager_new() {
 }
 
 /// Test WebSocketConfig default has no auth configured
+#[cfg(feature = "security")]
 #[test]
 fn test_websocket_config_default_no_auth() {
     let config = WebSocketConfig::default();
@@ -150,6 +151,7 @@ fn test_websocket_config_default_no_auth() {
 }
 
 /// Test WebSocketConfig with BearerAuth configured
+#[cfg(feature = "security")]
 #[test]
 fn test_websocket_config_with_auth() {
     let auth = crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -162,6 +164,7 @@ fn test_websocket_config_with_auth() {
 }
 
 /// Test AppState creation with custom config
+#[cfg(feature = "security")]
 #[test]
 fn test_app_state_with_config() {
     use std::sync::Arc;
@@ -324,11 +327,22 @@ fn rate_limit_config_boundary_max_window() {
     assert!(config.validate().is_ok());
 }
 
+#[cfg(feature = "security")]
 #[test]
 fn websocket_config_clone() {
     let config = WebSocketConfig::default();
     let cloned = config.clone();
     assert_eq!(config.auth.is_some(), cloned.auth.is_some());
+    assert_eq!(
+        config.rate_limit.max_connections,
+        cloned.rate_limit.max_connections
+    );
+}
+
+#[test]
+fn websocket_config_clone_rate_limit() {
+    let config = WebSocketConfig::default();
+    let cloned = config.clone();
     assert_eq!(
         config.rate_limit.max_connections,
         cloned.rate_limit.max_connections
@@ -413,6 +427,7 @@ async fn connection_manager_default() {
     assert_eq!(manager.connection_count().await, 0);
 }
 
+#[cfg(feature = "security")]
 #[test]
 fn app_state_new_default_config() {
     let manager = Arc::new(ConnectionManager::new());
@@ -420,6 +435,7 @@ fn app_state_new_default_config() {
     assert!(state.config.auth.is_none());
 }
 
+#[cfg(feature = "security")]
 #[test]
 fn app_state_clone() {
     let manager = Arc::new(ConnectionManager::new());
@@ -662,6 +678,7 @@ async fn connection_manager_broadcast_single() {
 }
 
 /// Test AppState::new creates with default config
+#[cfg(feature = "security")]
 #[test]
 fn app_state_new_creates_default_config() {
     let manager = Arc::new(ConnectionManager::new());
@@ -670,7 +687,28 @@ fn app_state_new_creates_default_config() {
     assert_eq!(state.config.rate_limit.max_connections, 1000);
 }
 
-/// Test AppState::with_config preserves custom config
+/// Test AppState::with_config preserves custom rate_limit config
+#[test]
+fn app_state_with_config_preserves_rate_limit() {
+    let manager = Arc::new(ConnectionManager::new());
+    let config = WebSocketConfig {
+        rate_limit: RateLimitConfig {
+            max_messages_per_second: 50,
+            max_message_size: 2048,
+            max_connections: 500,
+            rate_limit_window_seconds: 30,
+        },
+        ..Default::default()
+    };
+    let state = AppState::with_config(config, manager.clone());
+    assert_eq!(state.config.rate_limit.max_messages_per_second, 50);
+    assert_eq!(state.config.rate_limit.max_message_size, 2048);
+    assert_eq!(state.config.rate_limit.max_connections, 500);
+    assert_eq!(state.config.rate_limit.rate_limit_window_seconds, 30);
+}
+
+/// Test AppState::with_config preserves custom config (with auth)
+#[cfg(feature = "security")]
 #[test]
 fn app_state_with_config_preserves_settings() {
     let manager = Arc::new(ConnectionManager::new());
@@ -701,6 +739,7 @@ fn app_state_clone_shares_data() {
 }
 
 /// Test AppState full config with auth
+#[cfg(feature = "security")]
 #[test]
 fn app_state_full_config() {
     let manager = Arc::new(ConnectionManager::new());
