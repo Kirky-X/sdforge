@@ -111,17 +111,11 @@ impl SdForgeMcpServer {
         // Convert serde_json::Value to Arc<JsonObject>.
         // If the schema is not an object, fall back to an empty object schema.
         let input_schema = value_to_json_object_arc(tool.input_schema());
-        Tool {
-            name: tool.name().to_string().into(),
-            title: None,
-            description: Some(tool.description().to_string().into()),
-            input_schema,
-            output_schema: None,
-            annotations: None,
-            execution: None,
-            icons: None,
-            meta: None,
-        }
+        let mut model = Tool::default();
+        model.name = tool.name().to_string().into();
+        model.description = Some(tool.description().to_string().into());
+        model.input_schema = input_schema;
+        model
     }
 
     /// Get all registered tools as rmcp `Tool` models (no RequestContext needed).
@@ -166,19 +160,11 @@ impl SdForgeMcpServer {
 impl ServerHandler for SdForgeMcpServer {
     fn get_info(&self) -> ServerInfo {
         use rmcp::model::{Implementation, ServerCapabilities};
-        ServerInfo {
-            protocol_version: Default::default(),
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            server_info: Implementation {
-                name: self.server_name.clone(),
-                title: None,
-                version: self.server_version.clone(),
-                description: None,
-                icons: None,
-                website_url: None,
-            },
-            instructions: None,
-        }
+        let mut server_info = Implementation::default();
+        server_info.name = self.server_name.clone();
+        server_info.version = self.server_version.clone();
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(server_info)
     }
 
     async fn list_tools(
@@ -210,7 +196,7 @@ impl ServerHandler for SdForgeMcpServer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rmcp::model::{Extensions, Meta, NumberOrString};
+    use rmcp::model::{NumberOrString, TaskMetadata};
     use rmcp::service::serve_directly;
 
     /// Dummy transport error type for test transport.
@@ -263,13 +249,7 @@ mod tests {
         let server = SdForgeMcpServer::new();
         let running = serve_directly(server, DummyTransport, None);
         let peer = running.peer().clone();
-        RequestContext {
-            ct: Default::default(),
-            id: NumberOrString::Number(0),
-            meta: Meta::default(),
-            extensions: Extensions::new(),
-            peer,
-        }
+        RequestContext::new(NumberOrString::Number(0), peer)
     }
 
     /// Test `ServerHandler::list_tools` returns all registered tools.
@@ -322,10 +302,8 @@ mod tests {
         let server = SdForgeMcpServer::new();
         let context = make_test_context();
 
-        let params = PaginatedRequestParams {
-            meta: None,
-            cursor: Some("cursor_abc".to_string()),
-        };
+        let mut params = PaginatedRequestParams::default();
+        params.cursor = Some("cursor_abc".to_string());
 
         let result = server.list_tools(Some(params), context).await;
         assert!(
@@ -349,12 +327,7 @@ mod tests {
         let server = SdForgeMcpServer::new();
         let context = make_test_context();
 
-        let request = CallToolRequestParams {
-            meta: None,
-            name: "coverage_test_tool".into(),
-            arguments: None,
-            task: None,
-        };
+        let request = CallToolRequestParams::new("coverage_test_tool");
 
         let result = server.call_tool(request, context).await;
         assert!(result.is_ok(), "call_tool should succeed for valid tool");
@@ -390,12 +363,8 @@ mod tests {
             serde_json::Value::Number(serde_json::Number::from(42)),
         );
 
-        let request = CallToolRequestParams {
-            meta: None,
-            name: "coverage_test_tool".into(),
-            arguments: Some(args),
-            task: None,
-        };
+        let mut request = CallToolRequestParams::new("coverage_test_tool");
+        request.arguments = Some(args);
 
         let result = server.call_tool(request, context).await;
         assert!(
@@ -413,12 +382,7 @@ mod tests {
         let server = SdForgeMcpServer::new();
         let context = make_test_context();
 
-        let request = CallToolRequestParams {
-            meta: None,
-            name: "does_not_exist".into(),
-            arguments: None,
-            task: None,
-        };
+        let request = CallToolRequestParams::new("does_not_exist");
 
         let result = server.call_tool(request, context).await;
         assert!(
@@ -448,12 +412,7 @@ mod tests {
         let server = SdForgeMcpServer::new();
         let context = make_test_context();
 
-        let request = CallToolRequestParams {
-            meta: None,
-            name: "".into(),
-            arguments: None,
-            task: None,
-        };
+        let request = CallToolRequestParams::new("");
 
         let result = server.call_tool(request, context).await;
         assert!(
@@ -471,17 +430,10 @@ mod tests {
         let server = SdForgeMcpServer::new();
         let context = make_test_context();
 
-        let mut task_meta = serde_json::Map::new();
-        task_meta.insert(
-            "task_id".to_string(),
-            serde_json::Value::String("task_123".to_string()),
-        );
-
-        let request = CallToolRequestParams {
-            meta: None,
-            name: "coverage_test_tool".into(),
-            arguments: None,
-            task: Some(task_meta),
+        let request = {
+            let mut params = CallToolRequestParams::new("coverage_test_tool");
+            params.task = Some(TaskMetadata::new());
+            params
         };
 
         let result = server.call_tool(request, context).await;

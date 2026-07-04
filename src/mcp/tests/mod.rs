@@ -15,7 +15,7 @@ mod server_tests;
 
 use crate::core::ApiMetadata;
 use crate::mcp::{McpToolRegistration, SdForgeTool};
-use rmcp::model::{CallToolResult, Content, ErrorData as McpError};
+use rmcp::model::{CallToolResult, ContentBlock, ErrorData as McpError};
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -45,7 +45,7 @@ pub(super) fn create_test_tool() -> Arc<dyn SdForgeTool> {
             serde_json::json!({"type": "object"})
         }
         fn call(&self, _input: Option<Value>) -> Result<CallToolResult, McpError> {
-            Ok(CallToolResult::success(vec![Content::text(
+            Ok(CallToolResult::success(vec![ContentBlock::text(
                 "ok".to_string(),
             )]))
         }
@@ -78,11 +78,10 @@ fn create_coverage_test_tool() -> Arc<dyn SdForgeTool> {
             serde_json::json!({"type": "object"})
         }
         fn call(&self, _input: Option<Value>) -> Result<CallToolResult, McpError> {
-            Ok(CallToolResult {
-                content: vec![],
-                structured_content: None,
-                is_error: None,
-                meta: None,
+            Ok({
+                let mut result = CallToolResult::success(vec![]);
+                result.is_error = None;
+                result
             })
         }
     }

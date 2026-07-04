@@ -25,9 +25,11 @@ mod mcp_tool_instance_tests {
                 })
             }
             fn call(&self, input: Option<serde_json::Value>) -> Result<CallToolResult, McpError> {
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    input.map(|v| v.to_string()).unwrap_or_default(),
-                )]))
+                Ok(CallToolResult::success(vec![
+                    rmcp::model::ContentBlock::text(
+                        input.map(|v| v.to_string()).unwrap_or_default(),
+                    ),
+                ]))
             }
         }
         Arc::new(EchoTool) as Arc<dyn SdForgeTool>
@@ -57,9 +59,9 @@ mod mcp_tool_instance_tests {
                 let a = val.get("a").and_then(|v| v.as_f64()).unwrap_or(0.0);
                 let b = val.get("b").and_then(|v| v.as_f64()).unwrap_or(0.0);
                 let sum = a + b;
-                Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                    sum.to_string(),
-                )]))
+                Ok(CallToolResult::success(vec![
+                    rmcp::model::ContentBlock::text(sum.to_string()),
+                ]))
             }
         }
         Arc::new(AddTool) as Arc<dyn SdForgeTool>
@@ -146,9 +148,9 @@ mod mcp_tool_instance_tests {
                     serde_json::json!({"type": "object"})
                 }
                 fn call(&self, _: Option<serde_json::Value>) -> Result<CallToolResult, McpError> {
-                    Ok(CallToolResult::success(vec![rmcp::model::Content::text(
-                        "Hello".to_string(),
-                    )]))
+                    Ok(CallToolResult::success(vec![
+                        rmcp::model::ContentBlock::text("Hello".to_string()),
+                    ]))
                 }
             }
             Arc::new(TextTool) as Arc<dyn SdForgeTool>

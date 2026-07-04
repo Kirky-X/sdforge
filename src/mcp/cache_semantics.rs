@@ -153,15 +153,13 @@ pub fn apply_cache_semantics(result: &CallToolResult) -> Option<CacheMetadata> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rmcp::model::Content;
+    use rmcp::model::ContentBlock;
 
     fn make_result(structured_content: Option<Value>) -> CallToolResult {
-        CallToolResult {
-            content: vec![Content::text("test".to_string())],
-            structured_content,
-            is_error: None,
-            meta: None,
-        }
+        let mut result = CallToolResult::success(vec![ContentBlock::text("test".to_string())]);
+        result.is_error = None;
+        result.structured_content = structured_content;
+        result
     }
 
     #[test]

@@ -16,7 +16,7 @@
 //! Sessions have a 300-second timeout. After timeout, the session is
 //! cancelled and the original tool call returns an error.
 
-use rmcp::model::{CallToolResult, Content, ErrorData};
+use rmcp::model::{CallToolResult, ContentBlock, ErrorData};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -61,12 +61,9 @@ impl InputRequiredResult {
                 "inputSchema": self.input_schema,
             }
         });
-        CallToolResult {
-            content: vec![Content::text(self.message.clone())],
-            structured_content: Some(structured),
-            is_error: Some(false),
-            meta: None,
-        }
+        let mut result = CallToolResult::success(vec![ContentBlock::text(self.message.clone())]);
+        result.structured_content = Some(structured);
+        result
     }
 }
 

@@ -1200,15 +1200,16 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                             let response_json = serde_json::to_value(response)
                                 .map_err(|e| rmcp::model::ErrorData::internal_error(
                                     format!("Failed to serialize response: {}", e), None))?;
-                            Ok(rmcp::model::CallToolResult {
-                                content: vec![rmcp::model::Content::text(
-                                    serde_json::to_string(&response_json)
-                                        .map_err(|e| rmcp::model::ErrorData::internal_error(
-                                            format!("Failed to stringify response: {}", e), None))?,
-                                )],
-                                structured_content: None,
-                                is_error: None,
-                                meta: None,
+                            Ok({
+                                let mut result = rmcp::model::CallToolResult::success(
+                                    vec![rmcp::model::ContentBlock::text(
+                                        serde_json::to_string(&response_json)
+                                            .map_err(|e| rmcp::model::ErrorData::internal_error(
+                                                format!("Failed to stringify response: {}", e), None))?,
+                                    )],
+                                );
+                                result.is_error = None;
+                                result
                             })
                         }
                         Err(e) => {
@@ -1222,16 +1223,13 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
                                         }
                                     })
                                 });
-                            Ok(rmcp::model::CallToolResult {
-                                content: vec![rmcp::model::Content::text(
+                            Ok(rmcp::model::CallToolResult::error(
+                                vec![rmcp::model::ContentBlock::text(
                                     serde_json::to_string(&error_json)
                                         .map_err(|e| rmcp::model::ErrorData::internal_error(
                                             format!("Failed to stringify error: {}", e), None))?,
                                 )],
-                                structured_content: None,
-                                is_error: Some(true),
-                                meta: None,
-                            })
+                            ))
                         }
                     }
                 }

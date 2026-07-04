@@ -2,52 +2,41 @@
 // SPDX-License-Identifier: MIT
 //! Tests for MCP protocol types: `CallToolResult`, `Content`, `ErrorData` (McpError).
 
-use rmcp::model::{CallToolResult, Content, ErrorData as McpError, Meta};
+use rmcp::model::{CallToolResult, ContentBlock, ErrorData as McpError, Meta};
 
 #[test]
 fn test_content_text_helper() {
-    let content = Content::text("hello".to_string());
+    let content = ContentBlock::text("hello".to_string());
     // Verify content was created (the exact field access depends on rmcp's API)
     assert!(format!("{:?}", content).contains("hello"));
 }
 
 #[test]
 fn test_call_tool_result_success() {
-    let result = CallToolResult::success(vec![Content::text("test".to_string())]);
+    let result = CallToolResult::success(vec![ContentBlock::text("test".to_string())]);
     assert_eq!(result.is_error, Some(false));
     assert!(!result.content.is_empty());
 }
 
 #[test]
 fn test_call_tool_result_error() {
-    let result = CallToolResult {
-        content: vec![Content::text("error".to_string())],
-        structured_content: None,
-        is_error: Some(true),
-        meta: None,
-    };
+    let result = CallToolResult::error(vec![ContentBlock::text("error".to_string())]);
     assert_eq!(result.is_error, Some(true));
 }
 
 #[test]
 fn test_call_tool_result_with_meta() {
-    let result = CallToolResult {
-        content: vec![],
-        structured_content: None,
-        is_error: None,
-        meta: Some(Meta::default()),
-    };
+    let mut result = CallToolResult::success(vec![]);
+    result.is_error = None;
+    result.meta = Some(Meta::default());
     assert!(result.meta.is_some());
 }
 
 #[test]
 fn test_call_tool_result_with_structured_content() {
-    let result = CallToolResult {
-        content: vec![],
-        structured_content: Some(serde_json::json!({"result": "ok"})),
-        is_error: None,
-        meta: None,
-    };
+    let mut result = CallToolResult::success(vec![]);
+    result.is_error = None;
+    result.structured_content = Some(serde_json::json!({"result": "ok"}));
     assert!(result.structured_content.is_some());
     assert_eq!(result.structured_content.unwrap()["result"], "ok");
 }
