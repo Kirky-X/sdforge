@@ -53,7 +53,7 @@ toml = { version = "~1.1", default-features = false, features = ["parse", "displ
 # 缓存依赖 - oxcache 0.3.2 用 minimal feature 提供内存后端 + 序列化 + tracing
 oxcache = { version = "0.3.2", default-features = false, features = ["minimal"] }
 http = { version = "~1.4", default-features = false }
-bincode = { version = "~2.0", default-features = false, features = ["std", "serde"] }
+bincode = { version = "~3.0", default-features = false, features = ["std", "serde"] }
 
 # WebSocket 依赖
 axum-extra = { version = "~0.12", default-features = false, features = ["typed-header"] }
