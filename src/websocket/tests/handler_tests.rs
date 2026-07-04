@@ -5,6 +5,7 @@ use crate::core::ApiMetadata;
 use crate::websocket::connection::*;
 use crate::websocket::handler::*;
 use crate::websocket::message::*;
+#[cfg(feature = "security")]
 use axum::http::header::AUTHORIZATION;
 use axum::http::StatusCode;
 use axum::Router;
@@ -302,6 +303,7 @@ async fn validated_websocket_upgrade_accepts_without_auth() {
 }
 
 /// Helper: build a test server with auth configured via Extension layer.
+#[cfg(feature = "security")]
 fn build_ws_test_server_with_auth() -> axum_test::TestServer {
     let auth = crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
         .expect("valid secret");
@@ -322,6 +324,7 @@ fn build_ws_test_server_with_auth() -> axum_test::TestServer {
 ///
 /// Covers `bearer_token.ok_or(StatusCode::UNAUTHORIZED)?` — the missing
 /// token rejection path.
+#[cfg(feature = "security")]
 #[tokio::test]
 async fn validated_websocket_upgrade_rejects_missing_token_with_auth() {
     let server = build_ws_test_server_with_auth();
@@ -335,6 +338,7 @@ async fn validated_websocket_upgrade_rejects_missing_token_with_auth() {
 ///
 /// Covers `auth.validate_token(&token).ok_or(StatusCode::UNAUTHORIZED)?`
 /// — the invalid token rejection path.
+#[cfg(feature = "security")]
 #[tokio::test]
 async fn validated_websocket_upgrade_rejects_invalid_token_with_auth() {
     let server = build_ws_test_server_with_auth();
