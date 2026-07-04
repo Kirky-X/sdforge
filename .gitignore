@@ -46,9 +46,9 @@ coverage/
 htmlcov/
 tarpaulin-report.html
 
-# Generated API documentation
-openapi/
-swagger/
+# Generated API documentation (root-level only, not src/openapi/)
+/openapi/
+/swagger/
 
 # =============================================================================
 # IDE & Editors
