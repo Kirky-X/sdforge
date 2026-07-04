@@ -11,18 +11,8 @@ documentation = "https://docs.rs/sdforge-macros"
 proc-macro2 = "1.0"
 syn = { workspace = true }
 quote = { workspace = true }
-proc-macro-error = "1.0"
 serde = { workspace = true }
 serde_json = { workspace = true }
-thiserror = { workspace = true }
-prettyplease = { version = "0.2", optional = true }
-axum = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true }
-
-[features]
-default = ["http"]
-http = ["dep:axum", "dep:tokio"]
-debug = ["dep:prettyplease"]
 
 [lib]
 proc-macro = true
