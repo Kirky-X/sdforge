@@ -1,6 +1,6 @@
 <div align="center" id="readme">
 
-<img src="resource/sdforge.png" alt="SDForge Logo" width="200" height="200">
+<img src="docs/asset/sdforge.png" alt="SDForge Logo" width="200" height="200">
 
 [![Crates.io](https://img.shields.io/crates/v/sdforge)](https://crates.io/crates/sdforge) [![Documentation](https://img.shields.io/docsrs/sdforge)](https://docs.rs/sdforge) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/Kirky-X/sdforge/ci.yml?branch=main)](https://github.com/Kirky-X/sdforge/actions) [![Rust Version](https://img.shields.io/badge/rust-2021%2B-orange.svg)](https://www.rust-lang.org)
 
