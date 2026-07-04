@@ -2,7 +2,7 @@
 
 **Created:** 2026-07-03
 **Source:** diting 全维度审查报告 (`temp/diting-review-report.md`)
-**Status:** v0.2.0 已修复 6 项 P0，剩余项作为 v0.2.1+ 待办
+**Status:** v0.2.0 已修复 6 项 P0；v0.3.0 已修复 10 项安全审计 + 5 项 FMEA Bug + 2 项性能技术债（DEBT-P1/P2），剩余项作为 v0.3.1+ 待办
 
 ## 已修复（v0.2.0）
 
@@ -33,7 +33,7 @@
 - **来源**: Security [S2]
 - **位置**: `src/http/mod.rs:222-233`
 - **影响**: 认证端点可被暴力破解
-- **建议**: 引入 `tower-governor` 或基于 `dashmap` 的滑动窗口限流器
+- **建议**: 引入 `tower-governor` 或基于 `Mutex<HashMap>`/`oxcache` 的滑动窗口限流器
 - **复杂度**: 高（需新增依赖 + 中间件层 + 测试）
 
 ### High（17 项，按维度分组）
@@ -42,15 +42,15 @@
 
 - [DEBT-S3] 审计签名密钥每次 env 读取 + 静默降级 (`src/security/audit/mod.rs:300-313`)
 - [DEBT-S4] 审计日志存储可变，读取时不校验签名 (`src/security/audit/mod.rs:325-335`)
-- [DEBT-S5] Bearer 密钥 `Vec<u8>` 未 zeroize (`src/security/bearer/mod.rs:27`) — `zeroize` 已声明但未用
+- [DEBT-S5] Bearer 密钥 `Vec<u8>` 未 zeroize (`src/security/bearer/mod.rs:28`) — `zeroize` 已声明但未用 **（v0.3.0 复核：仍适用，secret 字段仍为 `Vec<u8>`，未实现 Zeroize）**
 - [DEBT-S6] `validate_key` 恒定时间延迟无效，测试跳过 (`src/security/api_key.rs:316-328`)
 - [DEBT-S7] `register_token` 死代码，`validate_token` 从不查询白名单 (`src/security/bearer/mod.rs:414-418`)
 - [DEBT-S8] 可信代理白名单 `"127.0.0.1"` 缺 CIDR 掩码 (`src/security/middleware.rs:45`)
 
 #### Performance（2 项）
 
-- [DEBT-P1] DashMapCache LRU 使用 O(n) 线性查找与删除 (`src/cache/dashmap.rs:122-124`)
-- [DEBT-P2] prefix_index 单一 std::sync::Mutex 序列化所有写 (`src/cache/dashmap.rs:31`)
+- [DEBT-P1] ~~DashMapCache LRU 使用 O(n) 线性查找与删除~~ ✅ **v0.3.0 已修复** — DashMapCache 替换为 OxcacheSyncCache（oxcache 0.3.2 DashMapMemoryBackend），原 `src/cache/dashmap.rs` 已删除
+- [DEBT-P2] ~~prefix_index 单一 std::sync::Mutex 序列化所有写~~ ✅ **v0.3.0 已修复** — 缓存底座切换至 oxcache 0.3.2，原 `src/cache/dashmap.rs` 已删除
 
 #### Quality（6 项）
 
@@ -90,6 +90,40 @@
 - Architecture Medium（6 项）+ Low（4 项）
 - Security Medium（6 项）+ Low（3 项）
 - Correctness Medium（6 项）+ Low（4 项）
+
+## v0.3.0 修复
+
+### 安全审计修复（diting — 10 项）
+
+| ID | 严重度 | 描述 | 修复方式 |
+|----|--------|------|----------|
+| HIGH-001 | High | 缓存 `key_index`/`backend` 一致性竞态 | 整个 backend 操作期间持有 index 锁 |
+| HIGH-002 | High | 缓存静默吞错 | backend 错误通过 `log::warn!` 记录 |
+| MED-001 | Medium | websocket `RwLock` 中毒 | 替换为感知中毒的 `match`/`if let Ok(...)` |
+| MED-002 | Medium | `regex_cache.rs`/`validation.rs` `Mutex` 中毒 | 同上感知中毒模式 |
+| MED-003 | Medium | `init_all_plugins` `Mutex` 中毒 | `.lock().map(\|g\| g.len()).unwrap_or(0)` |
+| MED-004 | Medium | CORS validate 不一致 | scheme 校验后新增 host 校验 |
+| LOW-001 | Low | `ServerConfig` fail-open 默认值 | `DEFAULT_HOST` 改为 `127.0.0.1` |
+| LOW-002 | Low | JWT 密钥无最小长度 | 强制 `MIN_SECRET_LENGTH=32` |
+| LOW-003 | Low | WebSocket 认证文档告警 | 新增 Security Warning 文档注释 |
+| LOW-004 | Low | `SecurityHeaders::relaxed()` CSP 告警 | 新增 Security Warning 文档注释 |
+
+### Bug 修复（kueiku FMEA — 5 项）
+
+| ID | 严重度 | 描述 | 修复方式 |
+|----|--------|------|----------|
+| BUG-1 | 严重 | `remove_connection` usize 下溢 | 先检查 `map.remove(id).is_some()` 再 `fetch_sub(1)` |
+| BUG-2 | 低 | `check_and_record` 窗口重置 off-by-one | 窗口重置时计数设为 1（非 0） |
+| BUG-3 | 中 | `AppConfigBuilder::build()` timeout 不一致 | 未设置时填充 `Some(TimeoutConfig::default())` |
+| BUG-4 | 中 | 缓存 `key_index` 驱逐后成为超集 | `find_keys_by_pattern` 过滤 `backend.exists()` 并惰性清理 |
+| BUG-5 | 低 | `get_stats` 静默丢弃浮点统计 | u64 → f64 → `log::warn!` |
+
+### 性能技术债修复
+
+| ID | 描述 | 状态 |
+|----|------|------|
+| DEBT-P1 | DashMapCache LRU O(n) 线性查找 | ✅ v0.3.0 已修复（切换至 oxcache 0.3.2） |
+| DEBT-P2 | prefix_index 单一 Mutex 序列化所有写 | ✅ v0.3.0 已修复（缓存底座替换） |
 
 ## 处理原则
 

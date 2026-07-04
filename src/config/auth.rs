@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 
 /// Authentication configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(tag = "type")]
 #[non_exhaustive]
 pub enum AuthConfig {
@@ -62,6 +61,19 @@ impl AuthConfig {
                     ));
                 }
 
+                // LOW-002: 强制最小密钥长度（256-bit entropy recommended for HS256）
+                // 之前 MIN_SECRET_LENGTH=32 定义在 defaults.rs 但未被引用，形同虚设
+                let min_len = crate::config::defaults::jwt::MIN_SECRET_LENGTH;
+                if secret.len() < min_len {
+                    return Err(crate::config::ConfigError::ValidationError(format!(
+                        "JWT secret too short: {} chars, minimum {} required (256-bit entropy \
+                         recommended). Use `sdforge::security::bearer::generate_secure_jwt_secret()`\
+                         to generate a strong secret.",
+                        secret.len(),
+                        min_len
+                    )));
+                }
+
                 // Check for obviously weak secrets
                 let lower = secret.to_lowercase();
                 if lower == "secret"
@@ -82,7 +94,6 @@ impl AuthConfig {
     }
 }
 
-#[cfg(feature = "validation")]
 impl crate::config::ValidateConfig for AuthConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
         // Delegate to the inherent method to guarantee both code paths run
@@ -249,20 +260,25 @@ mod tests {
         assert!(err.to_string().contains("empty"));
     }
 
-    /// Test JWT validation warns about short secrets (but still accepts)
+    /// Test JWT validation rejects short secrets (LOW-002: 强制最小 32 字符)
     #[test]
-    fn test_jwt_validate_short_secret_accepted_with_warning() {
+    fn test_jwt_validate_short_secret_rejected() {
         let config = AuthConfig::Jwt {
             secret: "short".to_string(),
         };
-        // Short secrets are accepted but should log a warning in production
+        // LOW-002: 短 secret 现在被拒绝（之前只是 warn 后接受）
         let result = config.validate();
-        assert!(result.is_ok());
+        assert!(
+            result.is_err(),
+            "short JWT secret should be rejected, got: {:?}",
+            result
+        );
     }
 
     /// Test JWT validation rejects weak common secrets
     #[test]
     fn test_jwt_validate_rejects_weak_secrets() {
+        // 弱词列表（均 < 32 字符，会先被长度检查拒绝，再被弱词检查拒绝）
         let weak_secrets = vec![
             "secret",
             "SECRET",
@@ -285,10 +301,11 @@ mod tests {
                 "Expected weak secret '{}' to be rejected",
                 weak_secret
             );
+            // 弱词检查或长度检查都应拒绝（短 secret 命中长度检查，长 secret 命中弱词检查）
             let err = result.unwrap_err();
             assert!(
-                err.to_string().contains("weak"),
-                "Error should mention 'weak': {}",
+                err.to_string().contains("weak") || err.to_string().contains("short"),
+                "Error should mention 'weak' or 'short': {}",
                 err
             );
         }
@@ -299,8 +316,8 @@ mod tests {
     fn test_jwt_validate_accepts_strong_secrets() {
         let strong_secrets = vec![
             "this_is_a_very_long_and_random_secret_key_12345",
-            "xK9#mP2$vL5@nQ8*wR3&jT6^yU1!iO4",
-            "0123456789abcdef0123456789abcdef", // 32 hex chars = 128 bits
+            "xK9#mP2$vL5@nQ8*wR3&jT6^yU1!iO4zB7cD0", // 34 chars（≥32）
+            "0123456789abcdef0123456789abcdef",      // 32 hex chars = 128 bits
         ];
 
         for strong_secret in strong_secrets {
@@ -310,8 +327,10 @@ mod tests {
             let result = config.validate();
             assert!(
                 result.is_ok(),
-                "Expected strong secret '{}' to be accepted",
-                strong_secret
+                "Expected strong secret '{}' ({} chars) to be accepted, got: {:?}",
+                strong_secret,
+                strong_secret.len(),
+                result
             );
         }
     }

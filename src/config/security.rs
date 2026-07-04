@@ -82,7 +82,6 @@ impl SecurityConfig {
     }
 }
 
-#[cfg(feature = "validation")]
 impl crate::config::ValidateConfig for SecurityConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
         // Security config validation is minimal for now
@@ -227,7 +226,6 @@ mod tests {
 
     /// Test the ValidateConfig implementation always returns Ok since all
     /// fields have sensible defaults. Only compiled with the validation feature.
-    #[cfg(feature = "validation")]
     #[test]
     fn test_security_config_validate_always_ok() {
         use crate::config::ValidateConfig;

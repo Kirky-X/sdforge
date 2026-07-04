@@ -12,7 +12,7 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 /// Benchmark configuration validation performance
-#[cfg(all(feature = "validation", feature = "http"))]
+#[cfg(feature = "http")]
 fn benchmark_config_validation(c: &mut Criterion) {
     use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
 
@@ -60,7 +60,7 @@ fn benchmark_config_validation(c: &mut Criterion) {
 }
 
 /// Benchmark builder pattern with validation
-#[cfg(all(feature = "validation", feature = "http"))]
+#[cfg(feature = "http")]
 fn benchmark_builder_with_validation(c: &mut Criterion) {
     use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
 
@@ -260,7 +260,7 @@ fn benchmark_cache_statistics(c: &mut Criterion) {
 }
 
 // Criterion group registration
-#[cfg(all(feature = "validation", feature = "http"))]
+#[cfg(feature = "http")]
 criterion_group!(
     config_benches,
     benchmark_config_validation,
@@ -283,22 +283,18 @@ criterion_group!(
 );
 
 // Main benchmark groups - include all available benches based on features
-#[cfg(all(feature = "validation", feature = "http", feature = "cache"))]
+#[cfg(all(feature = "http", feature = "cache"))]
 criterion_main!(
     config_benches,
     cache_pattern_benches,
     cache_concurrent_benches,
 );
 
-#[cfg(all(feature = "validation", feature = "http", not(feature = "cache")))]
+#[cfg(all(feature = "http", not(feature = "cache")))]
 criterion_main!(config_benches, cache_pattern_benches,);
 
-#[cfg(all(not(feature = "validation"), not(feature = "http"), feature = "cache"))]
+#[cfg(all(not(feature = "http"), feature = "cache"))]
 criterion_main!(cache_pattern_benches, cache_concurrent_benches,);
 
-#[cfg(all(
-    not(feature = "validation"),
-    not(feature = "http"),
-    not(feature = "cache")
-))]
+#[cfg(all(not(feature = "http"), not(feature = "cache")))]
 fn main() {} // Empty main when no features enabled

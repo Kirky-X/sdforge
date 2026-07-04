@@ -7,7 +7,6 @@
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "validation")]
 use crate::config::ConfigError;
 use crate::config::{AuthConfig, ServerConfig, TimeoutConfig};
 
@@ -31,7 +30,6 @@ impl AppConfig {
     }
 
     /// Validate configuration with cross-field validation
-    #[cfg(feature = "validation")]
     pub fn validate(&self) -> Result<(), ConfigError> {
         // Validate server configuration
         self.server.validate()?;
@@ -48,7 +46,6 @@ impl AppConfig {
     }
 }
 
-#[cfg(feature = "validation")]
 impl crate::config::ValidateConfig for AppConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
         // Delegate to inherent method to keep a single source of truth.
@@ -96,28 +93,23 @@ impl AppConfigBuilder {
     }
 
     /// Build AppConfig with validation
-    #[cfg(feature = "validation")]
+    ///
+    /// BUG-3 修复: `timeout` 缺省时回退到 `TimeoutConfig::default()`，
+    /// 与 `AppConfig::default()` 的行为保持一致。
+    /// 原代码 `timeout: self.timeout` 在调用方未设置时产生 `None`，
+    /// 而 `Default` 产生 `Some(TimeoutConfig::default())`，
+    /// 导致两条构造路径语义不一致，下游 `if let Some(timeout)` 检查可能跳过验证。
     pub fn build(self) -> Result<AppConfig, crate::config::ConfigError> {
         let config = AppConfig {
             server: self.server.unwrap_or_default(),
             authentication: self.authentication.unwrap_or_default(),
-            timeout: self.timeout,
+            timeout: self.timeout.or_else(|| Some(TimeoutConfig::default())),
         };
 
         // Validate the built configuration
         config.validate()?;
 
         Ok(config)
-    }
-
-    /// Build AppConfig without validation (legacy method)
-    #[cfg(not(feature = "validation"))]
-    pub fn build(self) -> AppConfig {
-        AppConfig {
-            server: self.server.unwrap_or_default(),
-            authentication: self.authentication.unwrap_or_default(),
-            timeout: self.timeout,
-        }
     }
 }
 
@@ -128,9 +120,9 @@ mod tests {
     #[test]
     fn test_app_config_default() {
         let config = AppConfig::default();
-        // ServerConfig uses derive(Config) which provides empty string for host and 0 for port
-        assert_eq!(config.server.host, ""); // Default String is empty
-        assert_eq!(config.server.port, 0); // Default u16 is 0
+        // LOW-001: ServerConfig::default() 现在使用 fail-safe 常量
+        assert_eq!(config.server.host, "127.0.0.1"); // fail-safe loopback
+        assert_eq!(config.server.port, 8080);
 
         // Verify other fields have proper defaults
         assert!(config.timeout.is_some());
@@ -149,11 +141,7 @@ mod tests {
             .build();
 
         // With validation feature, build() returns Result
-        #[cfg(feature = "validation")]
         let config = result.expect("Failed to build config");
-
-        #[cfg(not(feature = "validation"))]
-        let config = result;
 
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 9000);

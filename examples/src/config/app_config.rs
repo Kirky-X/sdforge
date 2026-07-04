@@ -26,7 +26,7 @@ use sdforge::config::{
 /// 使用默认值创建应用配置。
 ///
 /// `AppConfig::default()` 提供合理的默认值：
-/// - server: `0.0.0.0:8080`, 30s 请求超时
+/// - server: `127.0.0.1:8080`, 30s 请求超时
 /// - authentication: `AuthConfig::None`
 /// - timeout: 默认 30s 超时 + 上传/导出路由特殊超时
 pub fn default_config() -> AppConfig {
@@ -229,10 +229,9 @@ mod tests {
     #[test]
     fn test_default_config_has_server() {
         let config = default_config();
-        // ServerConfig derives Default — host is empty String, port is 0.
-        // See src/config/server.rs test_server_config_default_values.
-        assert!(config.server.host.is_empty(), "default host is empty (derive Default)");
-        assert_eq!(config.server.port, 0, "default port is 0 (derive Default)");
+        // LOW-001: ServerConfig::default() 现在使用 fail-safe 常量（loopback + 8080）
+        assert_eq!(config.server.host, "127.0.0.1", "default host is fail-safe loopback");
+        assert_eq!(config.server.port, 8080, "default port is 8080");
     }
 
     #[test]

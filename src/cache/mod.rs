@@ -5,7 +5,8 @@
 //!
 //! 本模块提供：
 //! - `SyncCache` trait：同步键值存储接口（用于 security 模块等需要同步操作的场景）
-//! - `DashMapCache`：基于 DashMap 的同步内存缓存实现
+//! - `OxcacheSyncCache`：基于 oxcache `DashMapMemoryBackend` 的同步内存缓存实现
+//! - `DashMapCache`：`OxcacheSyncCache` 的类型别名（保持调用方兼容）
 //! - oxcache 异步缓存的透传（用于需要 TTL、分层缓存等高级功能的场景）
 //!
 //! # 架构
@@ -35,8 +36,9 @@
 //! cache.set(&"key".to_string(), &data).await?;
 //! ```
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::sync::Mutex;
 
 // =============================================================================
 // 键规范化函数
@@ -59,6 +61,46 @@ use std::sync::Arc;
 /// ```
 pub fn canonicalize_cache_key(key: &str) -> String {
     key.trim().to_lowercase()
+}
+
+// =============================================================================
+// 通配符模式匹配（无需 regex 依赖，用于 find_keys_by_pattern）
+// =============================================================================
+
+/// 通配符模式匹配：`*` 匹配任意字符序列（含空），`?` 匹配单个字符。
+///
+/// 与将 `*`→`.*`、`?`→`.` 后用 `^pattern$` 正则匹配的行为等价，
+/// 但无需编译 regex，且不引入 regex 依赖到 `cache` feature。
+fn matches_pattern(pattern: &str, text: &str) -> bool {
+    let p: Vec<char> = pattern.chars().collect();
+    let t: Vec<char> = text.chars().collect();
+    let mut pi = 0usize;
+    let mut ti = 0usize;
+    let mut star_pi: Option<usize> = None;
+    let mut star_ti = 0usize;
+
+    while ti < t.len() {
+        if pi < p.len() && (p[pi] == t[ti] || p[pi] == '?') {
+            pi += 1;
+            ti += 1;
+        } else if pi < p.len() && p[pi] == '*' {
+            star_pi = Some(pi);
+            star_ti = ti;
+            pi += 1;
+        } else if let Some(spi) = star_pi {
+            pi = spi + 1;
+            star_ti += 1;
+            ti = star_ti;
+        } else {
+            return false;
+        }
+    }
+
+    while pi < p.len() && p[pi] == '*' {
+        pi += 1;
+    }
+
+    pi == p.len()
 }
 
 // =============================================================================
@@ -182,19 +224,345 @@ pub trait SyncCache: Send + Sync {
 pub type SharedCache = Arc<dyn SyncCache>;
 
 // =============================================================================
-// DashMap 同步缓存实现
+// OxcacheSyncCache — 基于 oxcache DashMapMemoryBackend 的同步缓存实现
 // =============================================================================
 
-mod dashmap;
+/// 基于 oxcache `DashMapMemoryBackend` 的同步缓存实现。
+///
+/// 包装 oxcache 0.3.2 的 `DashMapMemoryBackend`（实现了 `SyncCacheBackend`），
+/// 通过 `SyncCacheReader`/`SyncCacheWriter` trait 方法提供同步 get/set/delete 操作。
+///
+/// 由于 oxcache 0.3.2 的公开 sync API 不暴露键枚举，`find_keys_by_pattern`
+/// 通过维护一个并行的键索引（`Mutex<HashSet<String>>`）实现。
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use sdforge::cache::{SyncCache, OxcacheSyncCache};
+///
+/// let cache = OxcacheSyncCache::new();
+/// cache.set("key", b"value".to_vec());
+/// assert_eq!(cache.get("key"), Some(b"value".to_vec()));
+/// ```
+pub struct OxcacheSyncCache {
+    /// oxcache 后端（实现了 SyncCacheBackend）
+    backend: oxcache::backend::DashMapMemoryBackend,
+    /// 键索引：oxcache 0.3.2 sync API 不暴露键枚举，需并行维护以支持 find_keys_by_pattern
+    key_index: Mutex<HashSet<String>>,
+}
 
-pub use dashmap::DashMapCache;
+impl OxcacheSyncCache {
+    /// 创建默认容量的同步缓存
+    pub fn new() -> Self {
+        Self {
+            backend: oxcache::backend::DashMapMemoryBackend::new(),
+            key_index: Mutex::new(HashSet::new()),
+        }
+    }
+
+    /// 创建指定容量的同步缓存
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            backend: oxcache::backend::DashMapMemoryBackend::builder()
+                .capacity(capacity)
+                .build(),
+            key_index: Mutex::new(HashSet::with_capacity(capacity)),
+        }
+    }
+
+    /// 获取内部 backend 引用（供高级用途）
+    pub fn inner(&self) -> &oxcache::backend::DashMapMemoryBackend {
+        &self.backend
+    }
+}
+
+impl Default for OxcacheSyncCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl std::fmt::Debug for OxcacheSyncCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let len = self.key_index.lock().map(|idx| idx.len()).unwrap_or(0);
+        f.debug_struct("OxcacheSyncCache")
+            .field("backend", &"DashMapMemoryBackend")
+            .field("key_count", &len)
+            .finish()
+    }
+}
+
+impl SyncCache for OxcacheSyncCache {
+    fn get(&self, key: &str) -> Option<Vec<u8>> {
+        use oxcache::backend::SyncCacheReader;
+        self.backend.get(key).ok().flatten()
+    }
+
+    fn set(&self, key: &str, value: Vec<u8>) {
+        use oxcache::backend::SyncCacheWriter;
+        // 持有 index 锁直到 backend 操作完成，保证 backend 与 index 一致性
+        // (HIGH-001: 避免并发下 backend 有键但 index 缺失的竞态)
+        let mut idx = match self.key_index.lock() {
+            Ok(idx) => idx,
+            Err(_) => {
+                log::warn!(
+                    "cache key_index poisoned; set falling back to backend-only for key={:?}",
+                    key
+                );
+                if let Err(e) = self.backend.set(key, value, None) {
+                    log::warn!("cache backend set failed for key={:?}: {}", key, e);
+                }
+                return;
+            }
+        };
+        // HIGH-002: 不静默吞掉 backend 错误；失败时不更新 index 以保持一致
+        if let Err(e) = self.backend.set(key, value, None) {
+            log::warn!("cache backend set failed for key={:?}: {}", key, e);
+            return;
+        }
+        idx.insert(key.to_string());
+    }
+
+    fn delete(&self, key: &str) -> bool {
+        use oxcache::backend::{SyncCacheReader, SyncCacheWriter};
+        let mut idx = match self.key_index.lock() {
+            Ok(idx) => idx,
+            Err(_) => {
+                log::warn!(
+                    "cache key_index poisoned; delete falling back to backend-only for key={:?}",
+                    key
+                );
+                let existed = self.backend.exists(key).unwrap_or(false);
+                if existed {
+                    if let Err(e) = self.backend.delete(key) {
+                        log::warn!("cache backend delete failed for key={:?}: {}", key, e);
+                    }
+                }
+                return existed;
+            }
+        };
+        let existed = self.backend.exists(key).unwrap_or(false);
+        if existed {
+            // HIGH-002: backend 失败时不更新 index，保持一致
+            if let Err(e) = self.backend.delete(key) {
+                log::warn!("cache backend delete failed for key={:?}: {}", key, e);
+                return existed;
+            }
+            idx.remove(key);
+        }
+        existed
+    }
+
+    fn contains(&self, key: &str) -> bool {
+        use oxcache::backend::SyncCacheReader;
+        self.backend.exists(key).unwrap_or(false)
+    }
+
+    fn clear(&self) {
+        use oxcache::backend::SyncCacheWriter;
+        let mut idx = match self.key_index.lock() {
+            Ok(idx) => idx,
+            Err(_) => {
+                log::warn!("cache key_index poisoned; clear falling back to backend-only");
+                if let Err(e) = self.backend.clear() {
+                    log::warn!("cache backend clear failed: {}", e);
+                }
+                return;
+            }
+        };
+        if let Err(e) = self.backend.clear() {
+            log::warn!("cache backend clear failed: {}", e);
+            return;
+        }
+        idx.clear();
+    }
+
+    fn len(&self) -> usize {
+        use oxcache::backend::SyncCacheReader;
+        self.backend.len().unwrap_or(0) as usize
+    }
+
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    fn find_keys_by_pattern(&self, pattern: &str) -> Vec<String> {
+        use oxcache::backend::SyncCacheReader;
+        let mut idx = match self.key_index.lock() {
+            Ok(idx) => idx,
+            Err(_) => return Vec::new(),
+        };
+        // BUG-4 修复: oxcache backend 达到容量时会内部驱逐键，但 `key_index` 不会同步感知，
+        // 导致 index 逐渐成为 backend 的超集，`find_keys_by_pattern` 返回已不存在的键。
+        //
+        // 修复策略：遍历 index 时通过 `backend.exists()` 过滤，并惰性清理已被驱逐的键，
+        // 既保证返回结果与 backend 一致，又避免 index 无限增长（内存泄漏）。
+        let mut result = Vec::new();
+        let mut stale_keys = Vec::new();
+        for k in idx.iter() {
+            if !matches_pattern(pattern, k) {
+                continue;
+            }
+            if self.backend.exists(k).unwrap_or(false) {
+                result.push(k.clone());
+            } else {
+                // backend 已驱逐此键，标记为 stale 以便从 index 移除
+                stale_keys.push(k.clone());
+            }
+        }
+        // 惰性清理：移除已被 backend 驱逐的键，防止 index 内存泄漏
+        for k in stale_keys {
+            idx.remove(&k);
+        }
+        result
+    }
+
+    fn get_many(&self, keys: &[&str]) -> HashMap<String, Vec<u8>> {
+        use oxcache::backend::SyncCacheReader;
+        let mut results = HashMap::with_capacity(keys.len());
+        for &key in keys {
+            if let Ok(Some(value)) = self.backend.get(key) {
+                results.insert(key.to_string(), value);
+            }
+        }
+        results
+    }
+
+    fn set_many(&self, items: &[(String, Vec<u8>)]) {
+        use oxcache::backend::SyncCacheWriter;
+        let mut idx = match self.key_index.lock() {
+            Ok(idx) => idx,
+            Err(_) => {
+                log::warn!(
+                    "cache key_index poisoned; set_many falling back to backend-only for {} items",
+                    items.len()
+                );
+                for (key, value) in items {
+                    if let Err(e) = self.backend.set(key, value.clone(), None) {
+                        log::warn!("cache backend set failed for key={:?}: {}", key, e);
+                    }
+                }
+                return;
+            }
+        };
+        // 先执行所有 backend 写入，成功后才更新 index，避免部分失败导致 index 与 backend 不一致
+        let mut succeeded: Vec<&String> = Vec::with_capacity(items.len());
+        for (key, value) in items {
+            if let Err(e) = self.backend.set(key, value.clone(), None) {
+                log::warn!("cache backend set failed for key={:?}: {}", key, e);
+            } else {
+                succeeded.push(key);
+            }
+        }
+        for key in succeeded {
+            idx.insert(key.clone());
+        }
+    }
+
+    fn delete_many(&self, keys: &[&str]) -> usize {
+        use oxcache::backend::{SyncCacheReader, SyncCacheWriter};
+        let mut idx = match self.key_index.lock() {
+            Ok(idx) => idx,
+            Err(_) => {
+                log::warn!(
+                    "cache key_index poisoned; delete_many falling back to backend-only for {} keys",
+                    keys.len()
+                );
+                let mut deleted = 0usize;
+                for &key in keys {
+                    let existed = self.backend.exists(key).unwrap_or(false);
+                    if existed {
+                        if let Err(e) = self.backend.delete(key) {
+                            log::warn!("cache backend delete failed for key={:?}: {}", key, e);
+                        } else {
+                            deleted += 1;
+                        }
+                    }
+                }
+                return deleted;
+            }
+        };
+        let mut deleted = 0usize;
+        for &key in keys {
+            let existed = self.backend.exists(key).unwrap_or(false);
+            if existed {
+                if let Err(e) = self.backend.delete(key) {
+                    log::warn!("cache backend delete failed for key={:?}: {}", key, e);
+                } else {
+                    idx.remove(key);
+                    deleted += 1;
+                }
+            }
+        }
+        deleted
+    }
+
+    fn get_stats(&self) -> HashMap<String, u64> {
+        use oxcache::backend::SyncCacheReader;
+        let mut stats = HashMap::new();
+        let len = self.backend.len().unwrap_or(0);
+        stats.insert("total_keys".to_string(), len);
+        stats.insert(
+            "capacity".to_string(),
+            SyncCacheReader::capacity(&self.backend).unwrap_or(0),
+        );
+        // 透传 backend stats（命中数、未命中数、命中率等）
+        //
+        // BUG-5 修复: 原代码仅尝试 `v.parse::<u64>()`，对 float 类型统计
+        // （如 hit_rate="0.85"）静默丢弃，违反 Rule 12（失败必须显性化）。
+        //
+        // 修复策略：
+        // 1. 先尝试 u64 解析（适用于 hits、misses 等整数统计）
+        // 2. 失败则尝试 f64 解析：
+        //    - 若键名含 "rate"/"ratio"/"pct"，视为 0.0-1.0 的比率，×100 后四舍五入为百分比 u64
+        //    - 否则直接四舍五入为 u64
+        // 3. 两者均失败则 log::warn! 显性化（不再静默丢弃）
+        if let Ok(backend_stats) = self.backend.stats() {
+            for (k, v) in backend_stats {
+                if let Ok(n) = v.parse::<u64>() {
+                    stats.entry(k).or_insert(n);
+                } else if let Ok(f) = v.parse::<f64>() {
+                    let lower = k.to_lowercase();
+                    let converted = if lower.contains("rate")
+                        || lower.contains("ratio")
+                        || lower.contains("pct")
+                    {
+                        (f * 100.0).round() as u64
+                    } else {
+                        f.round() as u64
+                    };
+                    log::debug!(
+                        "cache stat {:?} parsed as f64={} converted to u64={}",
+                        k,
+                        f,
+                        converted
+                    );
+                    stats.entry(k).or_insert(converted);
+                } else {
+                    log::warn!(
+                        "cache stat {:?} value {:?} could not be parsed as u64 or f64; dropped",
+                        k,
+                        v
+                    );
+                }
+            }
+        }
+        stats
+    }
+}
+
+/// DashMapCache 类型别名 — 保持调用方兼容
+///
+/// 底层实现已切换为 `OxcacheSyncCache`（基于 oxcache `DashMapMemoryBackend`）。
+/// 历史代码中的 `DashMapCache::new()` / `DashMapCache::with_capacity(n)` 调用
+/// 自动指向新的 oxcache 实现，无需修改调用方。
+pub type DashMapCache = OxcacheSyncCache;
 
 // =============================================================================
 // oxcache 异步缓存透传
 // =============================================================================
 
-// 直接透传 oxcache 库的缓存接口（oxcache 0.3 移除了 MemoryBackend 和 Cacheable）
-pub use oxcache::backend::{DashMapMemoryBackend, MokaMemoryBackend};
+// 直接透传 oxcache 库的异步缓存接口（用于需要 TTL、分层缓存等高级功能的场景）
 pub use oxcache::cache::Cache;
 pub use oxcache::traits::CacheKey;
 
@@ -222,6 +590,64 @@ mod tests {
         assert_eq!(canonicalize_cache_key("  USER:123  "), "user:123");
         assert_eq!(canonicalize_cache_key("\tMIXED_CASE\n"), "mixed_case");
     }
+
+    // ========================================================================
+    // matches_pattern 单元测试
+    // ========================================================================
+
+    #[test]
+    fn test_matches_pattern_exact() {
+        assert!(matches_pattern("user:1", "user:1"));
+        assert!(!matches_pattern("user:1", "user:2"));
+    }
+
+    #[test]
+    fn test_matches_pattern_prefix_wildcard() {
+        assert!(matches_pattern("user:*", "user:1"));
+        assert!(matches_pattern("user:*", "user:2"));
+        assert!(matches_pattern("user:*", "user:"));
+        assert!(!matches_pattern("user:*", "session:1"));
+    }
+
+    #[test]
+    fn test_matches_pattern_suffix_wildcard() {
+        assert!(matches_pattern("*:1", "user:1"));
+        assert!(matches_pattern("*:1", "admin:1"));
+        assert!(!matches_pattern("*:1", "user:2"));
+    }
+
+    #[test]
+    fn test_matches_pattern_middle_wildcard() {
+        assert!(matches_pattern("*session*", "my_session_data"));
+        assert!(matches_pattern("*session*", "session"));
+        assert!(!matches_pattern("*session*", "user:1"));
+    }
+
+    #[test]
+    fn test_matches_pattern_single_char_wildcard() {
+        assert!(matches_pattern("user:?", "user:1"));
+        assert!(matches_pattern("user:?", "user:a"));
+        assert!(!matches_pattern("user:?", "user:12"));
+    }
+
+    #[test]
+    fn test_matches_pattern_combined_wildcards() {
+        assert!(matches_pattern("?ser:*", "user:1"));
+        assert!(matches_pattern("?ser:*", "aser:xyz"));
+        assert!(!matches_pattern("?ser:*", "xser1:"));
+    }
+
+    #[test]
+    fn test_matches_pattern_empty_pattern_and_text() {
+        assert!(matches_pattern("", ""));
+        assert!(matches_pattern("*", ""));
+        assert!(!matches_pattern("", "a"));
+        assert!(matches_pattern("*", "anything"));
+    }
+
+    // ========================================================================
+    // SyncCache trait 测试（通过 DashMapCache 别名指向 OxcacheSyncCache）
+    // ========================================================================
 
     #[test]
     fn test_synccache_trait_get_set() {
@@ -326,6 +752,28 @@ mod tests {
     }
 
     #[test]
+    fn test_synccache_trait_find_keys_by_pattern_suffix() {
+        let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
+        cache.set("user:1", b"v1".to_vec());
+        cache.set("admin:1", b"a1".to_vec());
+        cache.set("user:2", b"v2".to_vec());
+
+        let keys = cache.find_keys_by_pattern("*:1");
+        assert_eq!(keys.len(), 2);
+        assert!(keys.contains(&"user:1".to_string()));
+        assert!(keys.contains(&"admin:1".to_string()));
+    }
+
+    #[test]
+    fn test_synccache_trait_find_keys_by_pattern_no_match() {
+        let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
+        cache.set("user:1", b"v1".to_vec());
+
+        let keys = cache.find_keys_by_pattern("session:*");
+        assert!(keys.is_empty());
+    }
+
+    #[test]
     fn test_synccache_trait_get_stats() {
         let cache: Box<dyn SyncCache> = Box::new(DashMapCache::new());
         cache.set("k1", b"v1".to_vec());
@@ -333,6 +781,8 @@ mod tests {
 
         let stats = cache.get_stats();
         assert!(stats.contains_key("total_keys"));
+        assert_eq!(stats.get("total_keys"), Some(&2));
+        assert!(stats.contains_key("capacity"));
     }
 
     #[test]
@@ -343,9 +793,46 @@ mod tests {
     }
 
     // ============================================================================
+    // OxcacheSyncCache 专属测试
+    // ============================================================================
+
+    #[test]
+    fn test_oxcache_sync_cache_with_capacity() {
+        let cache = OxcacheSyncCache::with_capacity(100);
+        cache.set("k1", b"v1".to_vec());
+        assert_eq!(cache.get("k1"), Some(b"v1".to_vec()));
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn test_oxcache_sync_cache_default() {
+        let cache = OxcacheSyncCache::default();
+        assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn test_oxcache_sync_cache_inner() {
+        let cache = OxcacheSyncCache::new();
+        let _backend: &oxcache::backend::DashMapMemoryBackend = cache.inner();
+    }
+
+    #[test]
+    fn test_oxcache_sync_cache_debug() {
+        let cache = OxcacheSyncCache::new();
+        let debug_str = format!("{:?}", cache);
+        assert!(debug_str.contains("OxcacheSyncCache"));
+    }
+
+    #[test]
+    fn test_oxcache_sync_cache_delete_nonexistent_returns_false() {
+        let cache = OxcacheSyncCache::new();
+        assert!(!cache.delete("nonexistent"));
+    }
+
+    // ============================================================================
     // Default trait method coverage tests
     //
-    // DashMapCache overrides get_many/set_many/delete_many/get_stats, so the
+    // OxcacheSyncCache overrides get_many/set_many/delete_many/get_stats, so the
     // default trait method implementations in SyncCache are not exercised by
     // the tests above. The MinimalCache below deliberately only implements
     // the required methods, leaving the default implementations in place so
@@ -396,16 +883,11 @@ mod tests {
         }
 
         fn find_keys_by_pattern(&self, pattern: &str) -> Vec<String> {
-            let regex_pattern = pattern.replace('*', ".*").replace('?', ".");
-            let re = match regex::Regex::new(&format!("^{}$", regex_pattern)) {
-                Ok(re) => re,
-                Err(_) => return Vec::new(),
-            };
             self.data
                 .lock()
                 .unwrap()
                 .keys()
-                .filter(|k| re.is_match(k))
+                .filter(|k| matches_pattern(pattern, k))
                 .cloned()
                 .collect()
         }

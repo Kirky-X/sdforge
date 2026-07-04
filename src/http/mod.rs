@@ -385,51 +385,5 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     Ok(router)
 }
 
-/// Build HTTP router with hot reload support
-///
-/// This function builds a router with configuration hot reload support.
-/// When the configuration file is modified, the router will automatically
-/// reload and apply the new configuration.
-///
-/// # Arguments
-/// * `config_path` - Path to the configuration file (YAML or JSON)
-///
-/// # Returns
-/// A tuple containing:
-/// * The configured Axum router
-/// * A `ConfigWatcher` that manages configuration updates
-///
-/// # Example
-/// ```no_run
-/// use std::path::PathBuf;
-///
-/// #[tokio::main]
-/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     let config_path = PathBuf::from("config.toml");
-///     let (router, config_watcher) =
-///         sdforge::http::build_with_hot_reload(&config_path).await?;
-///
-///     // Use router and config_watcher as needed
-///     let _ = (router, config_watcher);
-///     Ok(())
-/// }
-/// ```
-#[cfg(feature = "hot-reload")]
-pub async fn build_with_hot_reload(
-    config_path: &std::path::Path,
-) -> Result<(Router, crate::config::hot_reload::ConfigWatcherImpl), Box<dyn std::error::Error>> {
-    use crate::config::hot_reload::ConfigWatcherImpl;
-    use std::path::PathBuf;
-
-    let config_path = PathBuf::from(config_path);
-    let (config_watcher, _event_receiver) = ConfigWatcherImpl::new(config_path.clone()).await?;
-
-    // Build router with current configuration
-    let config = config_watcher.get().await?;
-    let router = build_with_config(&config)?;
-
-    Ok((router, config_watcher))
-}
-
 #[cfg(test)]
 mod tests;

@@ -71,8 +71,8 @@
 - **🌐 Multi-Protocol Support** - HTTP (Axum), MCP, gRPC, WebSocket, SSE streaming
 - **🧩 Modular Design** - Feature-based architecture allows selecting only needed functionality
 - **🛡️ Security Features** - Built-in authentication, rate limiting, and request validation
-- **💾 Caching** - In-memory caching (oxcache/dashmap), no external database required
-- **🔧 Configuration Management** - Hot-reloadable TOML-based configuration
+- **💾 Caching** - In-memory caching (oxcache 0.3.2), no external database required
+- **🔧 Configuration Management** - Self-contained TOML configuration (no external config center)
 - **📊 Versioning** - Built-in API version management
 
 </div>
@@ -96,17 +96,7 @@ Add SDForge to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["http"] }
-```
-
-**CLI Tool**: To use the CLI, enable the `cli` feature:
-```toml
-sdforge = { version = "0.2", features = ["cli"] }
-```
-
-Then run:
-```bash
-cargo run --features cli -- --help
+sdforge = { version = "0.3", features = ["http"] }
 ```
 
 </div>
@@ -155,24 +145,18 @@ SDForge uses Cargo features for compile-time protocol selection and feature comp
 | Feature      | Description                              | Dependencies                                   |
 |--------------|------------------------------------------|-----------------------------------------------|
 | `http`       | HTTP server (Axum 0.8.8)                 | axum, tower, tower-http                        |
-| `mcp`        | MCP protocol (rmcp 0.16, 2026-07-28 spec) | rmcp, schemars                                |
+| `mcp`        | MCP protocol (rmcp 0.16, 2026-07-28 spec) | rmcp |
 | `streaming`  | SSE streaming support                    | tokio-stream, futures-util                    |
 | `timestamp`  | Auto-add timestamp to responses          | chrono                                        |
 | `logging`    | Structured request logging                | chrono, tokio                                 |
-| `security`   | Security features (auth, rate limiting)   | http, dashmap, uuid, hmac, sha2, chrono, tokio, secrets, zeroize, subtle, once_cell, argon2, password-hash, rand, regex, oxcache/memory, bincode, confers, cache, hex, base64 |
-| `hot-reload` | Config hot reload                        | http, confers                                 |
+| `security`   | Security features (auth, rate limiting)   | http, cache, uuid, hmac, sha2, chrono, tokio, secrets, zeroize, subtle, once_cell, argon2, password-hash, rand, regex, oxcache/memory, bincode, hex, base64 |
 | `websocket`  | WebSocket support                        | tokio-tungstenite, axum-extra                |
 | `grpc`       | gRPC support                             | tonic, prost                                 |
 | `cache`      | Caching support                          | dep:http, oxcache/memory, async-trait         |
 | `openapi`    | Automatic OpenAPI 3.1 spec generation    | utoipa, http                                  |
-| `cli`        | CLI tool (code generation, scaffolding)  | clap, tera, walkdir, confers/cli              |
-| `validation` | Confers validation extension             | confers/validation                            |
-| `schema`     | Confers schema extension                 | confers/schema, schemars                      |
-| `watch`      | Confers hot-reload extension             | confers/watch                                 |
-| `audit`      | Confers audit extension                  | confers/audit                                 |
 | `simd-json`  | SIMD-accelerated JSON serialization      | simd-json                                     |
 | `hex`        | Hexadecimal encoding utility             | hex                                           |
-| `full`       | All runtime features (excludes cli/simd-json/hex tooling) | -                                |
+| `full`       | All runtime features (excludes simd-json/hex tooling) | -                                |
 
 ### 🔗 Feature Dependencies
 
@@ -182,7 +166,6 @@ SDForge uses Cargo features for compile-time protocol selection and feature comp
 - `timestamp`: No dependencies
 - `logging`: No dependencies
 - `security`: Requires `http`, `cache`
-- `hot-reload`: Requires `http`
 - `websocket`: Requires `http`, `streaming`
 - `grpc`: Requires `http`
 - `cache`: Independent (uses http crate types, not sdforge http feature)
@@ -198,7 +181,7 @@ For traditional REST APIs:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["http"] }
+sdforge = { version = "0.3", features = ["http"] }
 ```
 
 ### 🤖 MCP Only
@@ -207,7 +190,7 @@ For AI tool integration:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["mcp"] }
+sdforge = { version = "0.3", features = ["mcp"] }
 ```
 
 ### 🔄 Both Protocols
@@ -216,7 +199,7 @@ Exposure via both HTTP and MCP from the same code:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["http", "mcp"] }
+sdforge = { version = "0.3", features = ["http", "mcp"] }
 ```
 
 ### 🎯 Full Features
@@ -225,7 +208,7 @@ All capabilities enabled:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["full"] }
+sdforge = { version = "0.3", features = ["full"] }
 ```
 
 ---
@@ -526,20 +509,13 @@ sdforge/
 │   ├── grpc/         # gRPC support
 │   ├── streaming/    # SSE streaming support
 │   ├── config/       # Configuration management
-│   ├── cli/          # CLI tool (optional, requires `cli` feature)
-│   ├── lib.rs        # Library entry point
-│   └── main.rs       # CLI binary entry point
+│   └── lib.rs        # Library entry point
 ├── macros/            # Procedural macros crate
 │   ├── src/
 │   └── Cargo.toml
 ├── docs/              # Documentation
 ├── .github/           # GitHub workflows
 └── scripts/           # Build and utility scripts
-```
-
-**Note**: The CLI binary is only compiled when the `cli` feature is enabled:
-```toml
-sdforge = { version = "0.2", features = ["cli"] }
 ```
 
 ---
@@ -597,6 +573,13 @@ let app = Router::new()
     .layer(auth_middleware(ApiKeyAuth::new("your-secret-key")));
 ```
 
+### ⚠️ Security Defaults (v0.3.0+)
+
+> **Note**: v0.3.0 tightened security defaults. Please check during migration:
+> - **JWT secret minimum length**: `MIN_SECRET_LENGTH=32`. Secrets shorter than 32 characters are rejected with an error
+> - **ServerConfig default host**: Changed from `"0.0.0.0"` (fail-open) to `"127.0.0.1"` (fail-safe loopback). Production deployments must explicitly configure host
+> - **CORS validation tightened**: `"http://"` (scheme only, no host) is now rejected
+
 ---
 
 ## <span id="performance-optimization">⚡ Performance Optimization</span>
@@ -645,7 +628,7 @@ SDForge v0.2.0 introduces automatic OpenAPI 3.1 specification generation based o
 
 ```toml
 [dependencies]
-sdforge = { version = "0.2", features = ["http", "openapi"] }
+sdforge = { version = "0.3", features = ["http", "openapi"] }
 ```
 
 ### 🚀 Basic Usage

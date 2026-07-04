@@ -4,11 +4,10 @@
 //!
 //! This module provides server-related configuration types.
 
-use crate::config::Config;
 use serde::{Deserialize, Serialize};
 
 /// Server configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Config)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ServerConfig {
     /// Host to bind to
@@ -19,6 +18,20 @@ pub struct ServerConfig {
     pub request_timeout_secs: u64,
     /// CORS configuration
     pub cors: Option<CorsConfig>,
+}
+
+impl Default for ServerConfig {
+    /// Fail-safe 默认值：loopback host + 合理 port/timeout
+    /// (LOW-001: 避免 derive(Default) 产生空 host/port=0 的无效配置)
+    fn default() -> Self {
+        use crate::config::defaults::server::*;
+        Self {
+            host: DEFAULT_HOST.to_string(),
+            port: DEFAULT_PORT,
+            request_timeout_secs: DEFAULT_REQUEST_TIMEOUT_SECS,
+            cors: None,
+        }
+    }
 }
 
 impl ServerConfig {
@@ -53,7 +66,6 @@ impl ServerConfig {
     }
 }
 
-#[cfg(feature = "validation")]
 impl crate::config::ValidateConfig for ServerConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
         // Delegate to inherent method to keep a single source of truth.
@@ -63,7 +75,7 @@ impl crate::config::ValidateConfig for ServerConfig {
 }
 
 /// TLS configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Config)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TlsConfig {
     /// Path to certificate file
     cert_path: String,
@@ -92,10 +104,11 @@ mod tests {
 
     #[test]
     fn test_server_config_default() {
+        // LOW-001: Default 现在使用 fail-safe 常量（loopback + 合理端口/超时）
         let config = ServerConfig::default();
-        assert!(config.host.is_empty()); // Default String is empty
-        assert_eq!(config.port, 0); // Default u16 is 0
-        assert_eq!(config.request_timeout_secs, 0); // Default u64 is 0
+        assert_eq!(config.host, "127.0.0.1"); // fail-safe loopback
+        assert_eq!(config.port, 8080);
+        assert_eq!(config.request_timeout_secs, 30);
         assert!(config.cors.is_none());
     }
 
@@ -299,9 +312,10 @@ mod tests {
         let config: ServerConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.host, "0.0.0.0");
         assert_eq!(config.port, 3000);
+        // LOW-001: #[serde(default)] 现在使用 Default trait，request_timeout_secs 默认 30
         assert_eq!(
-            config.request_timeout_secs, 0,
-            "Missing field should use default"
+            config.request_timeout_secs, 30,
+            "Missing field should use Default (30 secs, fail-safe)"
         );
         assert!(config.cors.is_none(), "Missing cors should default to None");
     }

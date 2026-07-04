@@ -4,20 +4,16 @@
 //!
 //! This module provides CORS-related configuration types and functions.
 
-use crate::config::Config;
 use serde::{Deserialize, Serialize};
 
 /// CORS configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Config)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CorsConfig {
     /// Allowed origins
-    #[config(skip)]
     pub allowed_origins: Vec<String>,
     /// Allowed methods
-    #[config(skip)]
     pub allowed_methods: Vec<String>,
     /// Allowed headers
-    #[config(skip)]
     pub allowed_headers: Vec<String>,
 }
 
@@ -31,11 +27,19 @@ impl CorsConfig {
             ));
         }
 
-        // Validate origin format
+        // Validate origin format: 必须含 scheme + host（"http://" alone 不合法）
         for origin in &self.allowed_origins {
             if !origin.starts_with("http://") && !origin.starts_with("https://") {
                 return Err(crate::config::ConfigError::ValidationError(format!(
                     "Invalid CORS origin: {}. Must start with http:// or https://",
+                    origin
+                )));
+            }
+            // 检查 host 部分非空，与 build_cors_layer 行为一致（MED-004）
+            let after_scheme = origin.split("://").nth(1).unwrap_or("");
+            if after_scheme.is_empty() {
+                return Err(crate::config::ConfigError::ValidationError(format!(
+                    "Invalid CORS origin: {}. Must include host (e.g. http://example.com)",
                     origin
                 )));
             }
@@ -58,11 +62,18 @@ pub fn build_cors_layer(
         ));
     }
 
-    // Validate origin format
+    // Validate origin format: 与 CorsConfig::validate() 保持一致
     for origin in &config.allowed_origins {
         if !origin.starts_with("http://") && !origin.starts_with("https://") {
             return Err(crate::config::ConfigError::ValidationError(format!(
                 "Invalid CORS origin: {}. Must start with http:// or https://",
+                origin
+            )));
+        }
+        let after_scheme = origin.split("://").nth(1).unwrap_or("");
+        if after_scheme.is_empty() {
+            return Err(crate::config::ConfigError::ValidationError(format!(
+                "Invalid CORS origin: {}. Must include host (e.g. http://example.com)",
                 origin
             )));
         }
@@ -154,13 +165,18 @@ mod tests {
 
     #[test]
     fn test_cors_config_validate_invalid_origin_http_only() {
+        // MED-004: "http://" 仅含 scheme 无 host，应被拒绝（与 build_cors_layer 一致）
         let config = CorsConfig {
             allowed_origins: vec!["http://".to_string()],
             allowed_methods: vec!["GET".to_string()],
             allowed_headers: vec![],
         };
         let result = config.validate();
-        assert!(result.is_ok());
+        assert!(
+            result.is_err(),
+            "origin without host should be rejected, got: {:?}",
+            result
+        );
     }
 
     #[test]

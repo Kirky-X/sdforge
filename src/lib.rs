@@ -4,7 +4,7 @@
 //!
 //! This crate provides the runtime types and service builders for the SDForge framework.
 
-#![doc(html_root_url = "https://docs.rs/sdforge/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/sdforge/0.3.0")]
 #![warn(missing_docs)]
 
 /// Re-export macros from sdforge-macros for convenient use
@@ -167,22 +167,10 @@ pub use security::{
 #[cfg(feature = "http")]
 pub mod config;
 
-/// 直接透传 confers 库（配置管理由 confers 统一提供）
-#[cfg(feature = "http")]
-pub use confers;
-/// confers 的 Config trait（用于派生配置结构体）
-#[cfg(feature = "http")]
-pub use confers::Config;
-
 #[cfg(feature = "http")]
 pub use config::{
     ApiConfig, AppConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper, ServerConfig, TlsConfig,
     TracingConfig,
-};
-
-#[cfg(feature = "hot-reload")]
-pub use config::hot_reload::{
-    create_config_watcher, ConfigEvent, ConfigManager, ConfigWatcherImpl,
 };
 
 /// 直接透传 oxcache 库（缓存功能由 oxcache 统一提供）
@@ -194,9 +182,7 @@ pub use oxcache;
 pub mod cache;
 
 #[cfg(feature = "cache")]
-pub use cache::{
-    Cache, CacheKey, DashMapCache, DashMapMemoryBackend, MokaMemoryBackend, SharedCache, SyncCache,
-};
+pub use cache::{Cache, CacheKey, DashMapCache, OxcacheSyncCache, SharedCache, SyncCache};
 
 /// WebSocket support
 #[cfg(feature = "websocket")]
@@ -273,7 +259,9 @@ pub fn init_all_plugins() -> PluginCounts {
     use std::sync::Mutex;
     use std::sync::OnceLock;
 
-    // Store in global static to prevent linker optimization
+    // Store in global static to prevent linker optimization.
+    // Poison-aware: 若任一 inventory 收集期间 panic 导致 Mutex 中毒，
+    // 降级返回 0 而非连锁 panic，避免 init_all_plugins 永久失效。
     #[cfg(feature = "http")]
     let routes = {
         use crate::http::RouteRegistration;
@@ -281,7 +269,7 @@ pub fn init_all_plugins() -> PluginCounts {
         static ROUTES: OnceLock<Mutex<Vec<&'static RouteRegistration>>> = OnceLock::new();
         let routes =
             ROUTES.get_or_init(|| Mutex::new(inventory::iter::<RouteRegistration>().collect()));
-        routes.lock().unwrap().len()
+        routes.lock().map(|g| g.len()).unwrap_or(0)
     };
     #[cfg(not(feature = "http"))]
     let routes = 0;
@@ -293,7 +281,7 @@ pub fn init_all_plugins() -> PluginCounts {
         static MCP_TOOLS: OnceLock<Mutex<Vec<&'static McpToolRegistration>>> = OnceLock::new();
         let tools = MCP_TOOLS
             .get_or_init(|| Mutex::new(inventory::iter::<McpToolRegistration>().collect()));
-        tools.lock().unwrap().len()
+        tools.lock().map(|g| g.len()).unwrap_or(0)
     };
     #[cfg(feature = "websocket")]
     let ws_routes = {
@@ -302,7 +290,7 @@ pub fn init_all_plugins() -> PluginCounts {
         static WS_ROUTES: OnceLock<Mutex<Vec<&'static WebSocketRoute>>> = OnceLock::new();
         let routes =
             WS_ROUTES.get_or_init(|| Mutex::new(inventory::iter::<WebSocketRoute>().collect()));
-        routes.lock().unwrap().len()
+        routes.lock().map(|g| g.len()).unwrap_or(0)
     };
     #[cfg(feature = "grpc")]
     let grpc_routes = {
@@ -311,7 +299,7 @@ pub fn init_all_plugins() -> PluginCounts {
         static GRPC_ROUTES: OnceLock<Mutex<Vec<&'static GrpcRouteRegistration>>> = OnceLock::new();
         let routes = GRPC_ROUTES
             .get_or_init(|| Mutex::new(inventory::iter::<GrpcRouteRegistration>().collect()));
-        routes.lock().unwrap().len()
+        routes.lock().map(|g| g.len()).unwrap_or(0)
     };
 
     PluginCounts {

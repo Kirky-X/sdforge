@@ -7,8 +7,8 @@
 
 /// Server configuration defaults
 pub mod server {
-    /// Default server host
-    pub const DEFAULT_HOST: &str = "0.0.0.0";
+    /// Default server host (fail-safe: loopback only — 显式绑定 0.0.0.0 才暴露公网)
+    pub const DEFAULT_HOST: &str = "127.0.0.1";
     /// Default server port
     pub const DEFAULT_PORT: u16 = 8080;
     /// Default request timeout in seconds

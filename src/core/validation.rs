@@ -182,12 +182,14 @@ impl From<ValidationErrorsWrapper> for super::ApiError {
 /// Common validation helpers
 pub mod validators {
     use super::*;
-    use dashmap::DashMap;
     use once_cell::sync::Lazy;
+    use std::collections::HashMap;
+    use std::sync::Mutex;
     use validator::ValidationError;
 
-    /// Regex pattern cache (thread-safe with fine-grained locking)
-    static REGEX_CACHE: Lazy<DashMap<String, regex::Regex>> = Lazy::new(DashMap::new);
+    /// Regex pattern cache (thread-safe with Mutex<HashMap>)
+    static REGEX_CACHE: Lazy<Mutex<HashMap<String, regex::Regex>>> =
+        Lazy::new(|| Mutex::new(HashMap::new()));
 
     /// Validate that a string is a valid email
     pub fn validate_email(email: &str) -> Result<(), ValidationError> {
@@ -198,15 +200,24 @@ pub mod validators {
     }
 
     /// Validate that a string matches a regex pattern (with caching)
+    ///
+    /// Poison-aware: 若全局 REGEX_CACHE 中毒（之前 panic 永久污染），
+    /// 降级为每次重新编译 regex，避免输入校验永久失效。
     pub fn validate_regex(value: &str, pattern: &str) -> Result<(), ValidationError> {
-        let regex = {
-            if let Some(cached) = REGEX_CACHE.get(pattern) {
-                cached.clone()
-            } else {
-                let new_regex =
-                    regex::Regex::new(pattern).map_err(|_| ValidationError::new("regex"))?;
-                REGEX_CACHE.insert(pattern.to_string(), new_regex.clone());
-                new_regex
+        let regex = match REGEX_CACHE.lock() {
+            Ok(mut cache) => {
+                if let Some(cached) = cache.get(pattern) {
+                    cached.clone()
+                } else {
+                    let new_regex =
+                        regex::Regex::new(pattern).map_err(|_| ValidationError::new("regex"))?;
+                    cache.insert(pattern.to_string(), new_regex.clone());
+                    new_regex
+                }
+            }
+            Err(_) => {
+                // lock poisoned: 降级到无缓存编译，避免校验永久失效
+                regex::Regex::new(pattern).map_err(|_| ValidationError::new("regex"))?
             }
         };
 
