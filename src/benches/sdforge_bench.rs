@@ -434,7 +434,7 @@ fn benchmark_api_key_validation(c: &mut Criterion) {
     use sdforge::security::AppApiKeyAuth;
 
     let auth = AppApiKeyAuth::new();
-    let api_key = "testkey_test_1234567890abcdef";
+    let api_key = "testkey1234567890abcdef";
 
     // Add a test key
     auth.add_key(api_key.to_string(), vec!["read".to_string()]);

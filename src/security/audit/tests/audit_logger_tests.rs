@@ -26,12 +26,13 @@ fn test_sanitize_error_message_removes_secrets() {
 #[test]
 fn test_sanitize_error_message_removes_api_keys() {
     // Test API key removal (20+ characters)
-    // Note: API keys are caught by the secret pattern first, then by API key pattern
-    let message = "API key: testkey_live_abcdefghijklmnopqrstuvwxyz";
+    // Note: API keys are caught by the secret pattern first, then by API key pattern.
+    // Uses a clearly fake test key to avoid triggering secret scanners.
+    let message = "API key: testapikey1234567890abcdefghij";
     let sanitized = sanitize_error_message(message);
     // The key should be redacted (either as [REDACTED] or [REDACTED_API_KEY])
     assert!(
-        !sanitized.contains("testkey_live_"),
+        !sanitized.contains("testapikey1234567890"),
         "API key should be redacted, got: {}",
         sanitized
     );
@@ -517,7 +518,7 @@ fn test_sanitize_certificate_path() {
 
 #[test]
 fn test_sanitize_multiple_secrets() {
-    let message = "Auth failed with password=secret123 and token: abcdef123456 and api_key: testkey_test_12345678901234567890";
+    let message = "Auth failed with password=secret123 and token: abcdef123456 and api_key: testapikey1234567890abcdefghij";
     let sanitized = sanitize_error_message(message);
     assert!(sanitized.contains("password=[REDACTED]"));
     assert!(sanitized.contains("token=[REDACTED]"));
