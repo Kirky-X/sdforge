@@ -9,7 +9,7 @@ use crate::cache::SharedCache;
 use crate::security::types::{
     serialize_auth_context, AuthConfigError, AuthContext, AuthMetadata, CacheNamespace,
 };
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 use std::sync::Arc;
 

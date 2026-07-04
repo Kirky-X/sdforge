@@ -23,7 +23,7 @@ use super::*;
 /// Builds an HS256-signed JWT with the provided payload using the given secret.
 pub(super) fn create_test_jwt(secret: &[u8], payload: &serde_json::Value) -> String {
     use base64::Engine;
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
 
     let header = serde_json::json!({"alg": "HS256", "typ": "JWT"});
