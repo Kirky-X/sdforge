@@ -18,7 +18,7 @@ mod interceptor_tests;
 /// Generate a valid JWT for testing with the given secret and expiration timestamp
 #[cfg(feature = "security")]
 pub(super) fn make_test_jwt(secret: &str, exp_timestamp: i64) -> String {
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::Sha256;
 
     type HmacSha256 = Hmac<Sha256>;

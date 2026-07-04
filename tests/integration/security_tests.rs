@@ -10,7 +10,7 @@
 
 #[cfg(feature = "security")]
 mod security_tests {
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sdforge::security::{
         ApiKeyMetadata, AppApiKeyAuth, AppApiKeyAuthBuilder, AppAuditLogger, AuditResult,
         AuthContext, AuthMetadata, BearerAuth, BearerAuthBuilder, LruConfig, RotationConfig,

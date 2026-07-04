@@ -48,17 +48,19 @@ impl CacheNamespace {
 
 /// Serialize a list of permissions (Vec<String>) to bytes
 pub(crate) fn serialize_permissions(perms: &[String]) -> Vec<u8> {
-    bincode::serialize(perms).unwrap_or_default()
+    bincode::serde::encode_to_vec(perms, bincode::config::standard()).unwrap_or_default()
 }
 
 /// Deserialize a list of permissions from bytes
 pub(crate) fn deserialize_permissions(data: &[u8]) -> Vec<String> {
-    bincode::deserialize(data).unwrap_or_default()
+    bincode::serde::decode_from_slice::<Vec<String>, _>(data, bincode::config::standard())
+        .map(|(v, _)| v)
+        .unwrap_or_default()
 }
 
 /// Serialize AuthContext to bytes using bincode
 pub(crate) fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {
-    bincode::serialize(ctx).unwrap_or_default()
+    bincode::serde::encode_to_vec(ctx, bincode::config::standard()).unwrap_or_default()
 }
 
 /// Deserialize AuthContext from bytes using bincode.
@@ -67,7 +69,9 @@ pub(crate) fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {
 /// Kept for future use when AuthContext deserialization from cache is needed.
 #[allow(dead_code)]
 pub(crate) fn deserialize_auth_context(data: &[u8]) -> Option<AuthContext> {
-    bincode::deserialize(data).ok()
+    bincode::serde::decode_from_slice::<AuthContext, _>(data, bincode::config::standard())
+        .map(|(v, _)| v)
+        .ok()
 }
 
 /// Parse a single AuditLog from a serde_json::Value object.
@@ -469,7 +473,7 @@ impl AuditLog {
     /// log.generate_signature(b"your-secret-key");
     /// ```
     pub fn generate_signature(&mut self, secret_key: &[u8]) -> String {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
 
         type HmacSha256 = Hmac<Sha256>;
@@ -524,7 +528,7 @@ impl AuditLog {
     /// }
     /// ```
     pub fn verify_signature(&self, secret_key: &[u8]) -> Result<bool, &'static str> {
-        use hmac::{Hmac, Mac};
+        use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
 
         type HmacSha256 = Hmac<Sha256>;

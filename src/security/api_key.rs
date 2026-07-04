@@ -170,12 +170,18 @@ impl AppApiKeyAuth {
         let metadata_key = format!("metadata:{}", key_id);
         if let Some(data) = self.key_metadata.get(&metadata_key) {
             // Update existing metadata
-            if let Ok(mut metadata) = bincode::deserialize::<ApiKeyMetadata>(&data) {
+            if let Ok(mut metadata) = bincode::serde::decode_from_slice::<ApiKeyMetadata, _>(
+                &data,
+                bincode::config::standard(),
+            )
+            .map(|(v, _)| v)
+            {
                 let new_version = ApiKeyVersion::new(version_str, key_hash, permissions, ttl);
                 metadata.add_version(new_version);
                 self.key_metadata.set(
                     &metadata_key,
-                    bincode::serialize(&metadata).unwrap_or_default(),
+                    bincode::serde::encode_to_vec(&metadata, bincode::config::standard())
+                        .unwrap_or_default(),
                 );
             }
         } else {
@@ -185,7 +191,8 @@ impl AppApiKeyAuth {
             metadata.add_version(new_version);
             self.key_metadata.set(
                 &metadata_key,
-                bincode::serialize(&metadata).unwrap_or_default(),
+                bincode::serde::encode_to_vec(&metadata, bincode::config::standard())
+                    .unwrap_or_default(),
             );
         }
     }
@@ -219,8 +226,12 @@ impl AppApiKeyAuth {
             .get(&metadata_key)
             .ok_or_else(|| "Key not found".to_string())?;
 
-        let mut metadata: ApiKeyMetadata = bincode::deserialize(&data)
-            .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
+        let mut metadata: ApiKeyMetadata = bincode::serde::decode_from_slice::<ApiKeyMetadata, _>(
+            &data,
+            bincode::config::standard(),
+        )
+        .map(|(v, _)| v)
+        .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
 
         // Create new version
         let ttl = self
@@ -247,7 +258,8 @@ impl AppApiKeyAuth {
         // Save updated metadata
         self.key_metadata.set(
             &metadata_key,
-            bincode::serialize(&metadata).unwrap_or_default(),
+            bincode::serde::encode_to_vec(&metadata, bincode::config::standard())
+                .unwrap_or_default(),
         );
 
         // Cleanup old versions and delete their key_hashes from valid_keys cache
@@ -275,7 +287,9 @@ impl AppApiKeyAuth {
     pub fn get_key_metadata(&self, key_id: &str) -> Option<ApiKeyMetadata> {
         let metadata_key = format!("metadata:{}", key_id);
         let data = self.key_metadata.get(&metadata_key)?;
-        bincode::deserialize(&data).ok()
+        bincode::serde::decode_from_slice::<ApiKeyMetadata, _>(&data, bincode::config::standard())
+            .map(|(v, _)| v)
+            .ok()
     }
 
     /// Validate an API key with constant-time checking
@@ -339,8 +353,12 @@ impl AppApiKeyAuth {
             .get(&metadata_key)
             .ok_or_else(|| "Key not found".to_string())?;
 
-        let mut metadata: ApiKeyMetadata = bincode::deserialize(&data)
-            .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
+        let mut metadata: ApiKeyMetadata = bincode::serde::decode_from_slice::<ApiKeyMetadata, _>(
+            &data,
+            bincode::config::standard(),
+        )
+        .map(|(v, _)| v)
+        .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
 
         // Delete each version's key_hash from valid_keys cache so revoked keys
         // can no longer authenticate (validate_key only checks valid_keys, not metadata).
@@ -357,7 +375,8 @@ impl AppApiKeyAuth {
         // Save updated metadata
         self.key_metadata.set(
             &metadata_key,
-            bincode::serialize(&metadata).unwrap_or_default(),
+            bincode::serde::encode_to_vec(&metadata, bincode::config::standard())
+                .unwrap_or_default(),
         );
 
         Ok(())
