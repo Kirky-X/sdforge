@@ -29,10 +29,8 @@ inventory = { version = "~0.3", default-features = false }
 
 # 异步依赖
 tokio = { version = "~1.52", default-features = false, features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
-futures = { version = "~0.3", default-features = false, features = ["std", "async-await", "executor"] }
 futures-util = { version = "~0.3", default-features = false, features = ["std", "async-await", "async-await-macro"] }
 tokio-stream = { version = "~0.1", default-features = false }
-async-trait = { version = "~0.1", default-features = false }
 
 # 工具依赖
 uuid = { version = "~1.23", default-features = false, features = ["std", "v4"] }
@@ -44,11 +42,7 @@ once_cell = { version = "~1.21", default-features = false, features = ["std"] }
 # 安全依赖
 hmac = { version = "~0.13", default-features = false }
 sha2 = { version = "~0.11", default-features = false }
-secrets = { version = "~1.3", default-features = false }
-zeroize = { version = "~1.9", default-features = false, features = ["alloc"] }
 subtle = { version = "~2.6", default-features = false }
-argon2 = { version = "~0.5", default-features = false, features = ["std", "password-hash", "rand"] }
-password-hash = { version = "~0.6", default-features = false, features = ["alloc"] }
 rand = { version = "~0.10", default-features = false, features = ["std", "std_rng"] }
 hex = { version = "~0.4", default-features = false, features = ["alloc"] }
 base64 = { version = "~0.22", default-features = false, features = ["std", "alloc"] }
@@ -62,7 +56,6 @@ http = { version = "~1.4", default-features = false }
 bincode = { version = "~2.0", default-features = false, features = ["std", "serde"] }
 
 # WebSocket 依赖
-tokio-tungstenite = { version = "~0.29", default-features = false }
 axum-extra = { version = "~0.12", default-features = false, features = ["typed-header"] }
 
 # gRPC 依赖
@@ -90,11 +83,11 @@ pretty_assertions = { version = "~1.4", default-features = false, features = ["s
 
 [package]
 name = "sdforge"
-version = "0.3.0"
-edition = "2021"
-authors = ["Kirky.X"]
-license = "MIT"
-repository = "https://github.com/Kirky-X/sdforge"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
 keywords = ["api", "http", "mcp", "macro", "framework"]
 categories = ["web-programming", "development-tools"]
 description = "Multi-protocol SDK framework with unified macro configuration"
@@ -134,7 +127,6 @@ tower-http = { workspace = true, optional = true }
 inventory = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 axum-extra = { workspace = true, optional = true, features = ["typed-header"] }
-futures = { workspace = true, optional = true }
 
 # MCP dependencies (migrated from mcp-sdk 0.0.3 to official rmcp 2.1.0)
 rmcp = { version = "~2.1", optional = true, default-features = false, features = ["server"] }
@@ -143,10 +135,6 @@ anyhow = { version = "1.0", optional = true, default-features = false, features 
 # Streaming dependencies
 tokio-stream = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
-
-# WebSocket dependencies
-tokio-tungstenite = { workspace = true, optional = true }
-async-trait = { workspace = true, optional = true }
 
 # gRPC dependencies
 tonic = { workspace = true, optional = true }
@@ -168,11 +156,7 @@ once_cell = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 hmac = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
-secrets = { workspace = true, optional = true }
-zeroize = { workspace = true, optional = true }
 subtle = { workspace = true, optional = true }
-argon2 = { workspace = true, optional = true }
-password-hash = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
@@ -220,7 +204,6 @@ http = [
     "once_cell",
     "validator",
     "uuid",
-    "futures",
 ]
 
 # MCP 特性 (migrated to official rmcp SDK 2.1.0)
@@ -241,12 +224,8 @@ security = [
     "sha2",
     "chrono",
     "tokio",
-    "secrets",
-    "zeroize",
     "subtle",
     "once_cell",
-    "argon2",
-    "password-hash",
     "rand",
     "regex",
     "oxcache/minimal",
@@ -257,7 +236,7 @@ security = [
 ]
 
 # WebSocket 特性
-websocket = ["http", "streaming", "tokio-tungstenite", "axum-extra", "async-trait", "chrono"]
+websocket = ["http", "streaming", "axum-extra", "chrono"]
 
 # gRPC 特性
 grpc = ["http", "tonic", "prost", "tonic-prost"]
@@ -266,7 +245,7 @@ grpc = ["http", "tonic", "prost", "tonic-prost"]
 openapi = ["utoipa", "http"]
 
 # Cache 特性 - oxcache 0.3.2 用 minimal feature 提供缓存后端
-cache = ["dep:http", "oxcache/minimal", "async-trait"]
+cache = ["dep:http", "oxcache/minimal"]
 
 # Logging 特性
 logging = ["chrono", "tokio"]
