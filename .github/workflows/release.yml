@@ -32,12 +32,46 @@ jobs:
       - name: Verify tests pass
         run: cargo test --features full --workspace --no-fail-fast
 
-      - name: Verify package
-        run: cargo package --no-verify --features full
+  publish-crates:
+    name: Publish to crates.io (conditional)
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install protoc (for grpc feature)
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Check CARGO_REGISTRY_TOKEN
+        id: check_token
+        env:
+          TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "has_token=false" >> $GITHUB_OUTPUT
+            echo "No CARGO_REGISTRY_TOKEN secret set, skipping publish."
+          else
+            echo "has_token=true" >> $GITHUB_OUTPUT
+          fi
+
+      # macros 必须先发布，sdforge 主 crate 才能 cargo package / cargo publish
+      - name: Publish sdforge-macros
+        if: steps.check_token.outputs.has_token == 'true'
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --manifest-path macros/Cargo.toml
+
+      - name: Wait for crates.io index update
+        if: steps.check_token.outputs.has_token == 'true'
+        run: sleep 30
+
+      - name: Publish sdforge
+        if: steps.check_token.outputs.has_token == 'true'
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --features full
 
   github-release:
     name: Create GitHub Release
-    needs: verify
+    needs: [verify, publish-crates]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
@@ -53,11 +87,22 @@ jobs:
       - name: Install protoc (for grpc feature)
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-      - name: Package crate
+      # sdforge-macros 可独立打包（无外部依赖问题）
+      - name: Package sdforge-macros
+        run: cargo package --no-verify --manifest-path macros/Cargo.toml
+
+      # sdforge 主 crate 需要 sdforge-macros 已发布到 crates.io 才能 cargo package
+      # 若未配置 CARGO_REGISTRY_TOKEN，此步骤会失败但允许继续（macros.crate 仍上传）
+      - name: Package sdforge (may fail if macros not yet on crates.io)
+        continue-on-error: true
         run: cargo package --no-verify --features full
 
-      - name: Rename crate package
-        run: cp target/package/sdforge-*.crate sdforge-${{ steps.version.outputs.version }}.crate
+      - name: Collect crate packages
+        run: |
+          mkdir -p release-assets
+          cp target/package/sdforge-macros-*.crate release-assets/ 2>/dev/null || true
+          cp target/package/sdforge-*.crate release-assets/ 2>/dev/null || true
+          ls -la release-assets/
 
       - name: Create Release
         uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3.0.1
@@ -66,36 +111,8 @@ jobs:
           name: Release ${{ steps.version.outputs.tag_name }}
           generate_release_notes: true
           files: |
-            sdforge-${{ steps.version.outputs.version }}.crate
+            release-assets/*.crate
           draft: false
           prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  publish-crates:
-    name: Publish to crates.io (conditional)
-    needs: github-release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Check CARGO_REGISTRY_TOKEN
-        id: check_token
-        env:
-          TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: |
-          if [ -z "$TOKEN" ]; then
-            echo "has_token=false" >> $GITHUB_OUTPUT
-            echo "No CARGO_REGISTRY_TOKEN secret set, skipping publish."
-          else
-            echo "has_token=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Publish sdforge-macros
-        if: steps.check_token.outputs.has_token == 'true'
-        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --manifest-path macros/Cargo.toml
-
-      - name: Publish sdforge
-        if: steps.check_token.outputs.has_token == 'true'
-        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --features full
