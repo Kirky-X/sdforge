@@ -8,5 +8,6 @@
 //! - `cli_markdown_tests`: CLI Markdown 生成（T016 添加）
 //! - `mcp_markdown_tests`: MCP Markdown 生成（T018 添加，`mcp` feature 门控）
 
+mod cli_markdown_tests;
 mod mod_tests;
 mod swagger_tests;

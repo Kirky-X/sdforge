@@ -14,6 +14,7 @@
 //! let md = generate_docs(DocFormat::CliMarkdown);
 //! ```
 
+pub mod cli_markdown;
 pub mod swagger;
 
 pub use swagger::swagger_ui_router;
