@@ -5,7 +5,7 @@
 
 #[cfg(feature = "websocket")]
 mod websocket_integration_tests {
-    use sdforge::websocket::{AppState, ConnectionManager, RateLimitConfig, WebSocketConfig};
+    use sdforge::websocket::{AppState, ConnectionManager, WebSocketConfig};
     use std::sync::Arc;
 
     #[test]
@@ -13,7 +13,8 @@ mod websocket_integration_tests {
         let config = WebSocketConfig::default();
         // Verify it can be created and cloned
         let _cloned = config.clone();
-        assert!(config.rate_limit.max_connections > 0);
+        // `max_message_size` is now a top-level field (default 1 MiB).
+        assert_eq!(config.max_message_size, 1_048_576);
     }
 
     #[test]
@@ -24,20 +25,12 @@ mod websocket_integration_tests {
     }
 
     #[test]
-    fn test_rate_limit_config_default() {
-        let config = RateLimitConfig::default();
-        // Verify it can be created and cloned
-        let _cloned = config.clone();
-        assert!(config.validate().is_ok());
-    }
-
-    #[test]
     fn test_app_state_with_manager() {
         let manager = Arc::new(ConnectionManager::new());
         let state = AppState::new(manager);
         // Verify state is created
         let _state_clone = state.clone();
-        assert!(state.config.rate_limit.max_messages_per_second > 0);
+        assert_eq!(state.config.max_message_size, 1_048_576);
     }
 
     #[test]
@@ -48,14 +41,14 @@ mod websocket_integration_tests {
         let state = AppState::new(manager);
 
         // Basic verification - state was created successfully
-        assert!(state.config.rate_limit.max_connections > 0);
+        assert_eq!(state.config.max_message_size, 1_048_576);
     }
 }
 
 // Enhanced WebSocket Integration tests
 #[cfg(feature = "websocket")]
 mod websocket_enhanced_integration_tests {
-    use sdforge::websocket::{ConnectionManager, RateLimitConfig, WebSocketConnection};
+    use sdforge::websocket::{ConnectionManager, WebSocketConnection};
     use std::sync::Arc;
 
     /// Test 1: WebSocket connection creation and basic operations
@@ -106,27 +99,5 @@ mod websocket_enhanced_integration_tests {
         // Verify connection no longer exists
         let conn = manager.get_connection("remove-test").await;
         assert!(conn.is_none());
-    }
-
-    /// Test 4: Rate limit configuration validation
-    #[test]
-    fn test_rate_limit_config_validation() {
-        // Valid config
-        let valid_config = RateLimitConfig {
-            max_connections: 100,
-            max_messages_per_second: 50,
-            max_message_size: 1024 * 1024,
-            rate_limit_window_seconds: 1,
-        };
-        assert!(valid_config.validate().is_ok());
-
-        // Invalid config - zero max_connections
-        let invalid_config = RateLimitConfig {
-            max_connections: 0,
-            max_messages_per_second: 50,
-            max_message_size: 1024 * 1024,
-            rate_limit_window_seconds: 1,
-        };
-        assert!(invalid_config.validate().is_err());
     }
 }

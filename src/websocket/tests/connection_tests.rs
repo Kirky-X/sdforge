@@ -3,7 +3,6 @@
 use crate::websocket::connection::*;
 use crate::websocket::message::*;
 use futures_util::FutureExt;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 /// Test WebSocketConnection creation
@@ -16,120 +15,22 @@ fn test_websocket_connection_new() {
     assert!(receiver.recv().now_or_never().is_none());
 }
 
-/// Test RateLimitConfig default values
+/// Test WebSocketConfig default values.
+///
+/// Replaces the old `test_rate_limit_config_default` (R-websocket-003):
+/// `max_message_size` is now a top-level field (default 1 MiB), and
+/// `rate_limit` (when `ratelimit` feature is on) is a `FlowControlConfig`.
 #[test]
-fn test_rate_limit_config_default() {
-    let config = RateLimitConfig::default();
-    assert_eq!(config.max_messages_per_second, 100);
+fn test_websocket_config_default() {
+    let config = WebSocketConfig::default();
     assert_eq!(config.max_message_size, 1_048_576);
-    assert_eq!(config.max_connections, 1000);
-    assert_eq!(config.rate_limit_window_seconds, 1);
-}
-
-/// Test RateLimitConfig validation - valid config
-#[test]
-fn test_rate_limit_config_valid() {
-    let config = RateLimitConfig {
-        max_messages_per_second: 50,
-        max_message_size: 1024,
-        max_connections: 100,
-        rate_limit_window_seconds: 60,
-    };
-    assert!(config.validate().is_ok());
-}
-
-/// Test RateLimitConfig validation - invalid max_connections
-#[test]
-fn test_rate_limit_config_invalid_connections() {
-    let config = RateLimitConfig {
-        max_connections: 0,
-        ..Default::default()
-    };
-    assert!(config.validate().is_err());
-    assert!(config.validate().unwrap_err().contains("max_connections"));
-}
-
-/// Test RateLimitConfig validation - exceeds max connections
-#[test]
-fn test_rate_limit_config_exceeds_connections() {
-    let config = RateLimitConfig {
-        max_connections: 100_001,
-        ..Default::default()
-    };
-    assert!(config.validate().is_err());
-    assert!(config.validate().unwrap_err().contains("100,000"));
-}
-
-/// Test RateLimitConfig validation - invalid messages per second
-#[test]
-fn test_rate_limit_config_invalid_messages() {
-    let config = RateLimitConfig {
-        max_messages_per_second: 0,
-        ..Default::default()
-    };
-    assert!(config.validate().is_err());
-    assert!(config
-        .validate()
-        .unwrap_err()
-        .contains("max_messages_per_second"));
-}
-
-/// Test RateLimitConfig validation - exceeds max messages
-#[test]
-fn test_rate_limit_config_exceeds_messages() {
-    let config = RateLimitConfig {
-        max_messages_per_second: 1_000_001,
-        ..Default::default()
-    };
-    assert!(config.validate().is_err());
-    assert!(config.validate().unwrap_err().contains("1,000,000"));
-}
-
-/// Test RateLimitConfig validation - invalid message size
-#[test]
-fn test_rate_limit_config_invalid_size() {
-    let config = RateLimitConfig {
-        max_message_size: 0,
-        ..Default::default()
-    };
-    assert!(config.validate().is_err());
-    assert!(config.validate().unwrap_err().contains("max_message_size"));
-}
-
-/// Test RateLimitConfig validation - exceeds max size
-#[test]
-fn test_rate_limit_config_exceeds_size() {
-    let config = RateLimitConfig {
-        max_message_size: 100_000_001,
-        ..Default::default()
-    };
-    assert!(config.validate().is_err());
-    assert!(config.validate().unwrap_err().contains("100MB"));
-}
-
-/// Test RateLimitConfig validation - invalid window
-#[test]
-fn test_rate_limit_config_invalid_window() {
-    let config = RateLimitConfig {
-        rate_limit_window_seconds: 0,
-        ..Default::default()
-    };
-    assert!(config.validate().is_err());
-    assert!(config
-        .validate()
-        .unwrap_err()
-        .contains("rate_limit_window_seconds"));
-}
-
-/// Test RateLimitConfig validation - exceeds max window
-#[test]
-fn test_rate_limit_config_exceeds_window() {
-    let config = RateLimitConfig {
-        rate_limit_window_seconds: 86401,
-        ..Default::default()
-    };
-    assert!(config.validate().is_err());
-    assert!(config.validate().unwrap_err().contains("24 hours"));
+    #[cfg(feature = "ratelimit")]
+    {
+        // FlowControlConfig::default() has an empty rules vec; we only
+        // assert that the field exists and is the default value.
+        let expected = limiteron::config::FlowControlConfig::default();
+        assert_eq!(config.rate_limit.rules.len(), expected.rules.len());
+    }
 }
 
 /// Test ConnectionManager creation
@@ -146,8 +47,7 @@ fn test_connection_manager_new() {
 fn test_websocket_config_default_no_auth() {
     let config = WebSocketConfig::default();
     assert!(config.auth.is_none());
-    assert_eq!(config.rate_limit.max_connections, 1000);
-    assert_eq!(config.rate_limit.max_messages_per_second, 100);
+    assert_eq!(config.max_message_size, 1_048_576);
 }
 
 /// Test WebSocketConfig with BearerAuth configured
@@ -158,7 +58,7 @@ fn test_websocket_config_with_auth() {
         .expect("valid secret");
     let config = WebSocketConfig {
         auth: Some(auth),
-        rate_limit: RateLimitConfig::default(),
+        ..Default::default()
     };
     assert!(config.auth.is_some());
 }
@@ -173,7 +73,7 @@ fn test_app_state_with_config() {
         .expect("valid secret");
     let config = WebSocketConfig {
         auth: Some(auth),
-        rate_limit: RateLimitConfig::default(),
+        ..Default::default()
     };
     let state = AppState::with_config(config, manager.clone());
     assert!(state.config.auth.is_some());
@@ -235,118 +135,23 @@ async fn test_websocket_connection_send_success() {
     assert!(received.is_some());
 }
 
-#[test]
-fn rate_limit_config_clone() {
-    let config = RateLimitConfig::default();
-    let cloned = config.clone();
-    assert_eq!(config.max_connections, cloned.max_connections);
-    assert_eq!(
-        config.max_messages_per_second,
-        cloned.max_messages_per_second
-    );
-}
-
-#[test]
-fn rate_limit_config_debug() {
-    let config = RateLimitConfig::default();
-    let debug_str = format!("{:?}", config);
-    assert!(debug_str.contains("max_messages_per_second"));
-    assert!(debug_str.contains("max_message_size"));
-    assert!(debug_str.contains("max_connections"));
-}
-
-#[test]
-fn rate_limit_config_boundary_min_connections() {
-    let config = RateLimitConfig {
-        max_connections: 1,
-        ..Default::default()
-    };
-    assert!(config.validate().is_ok());
-}
-
-#[test]
-fn rate_limit_config_boundary_max_connections() {
-    let config = RateLimitConfig {
-        max_connections: 100_000,
-        ..Default::default()
-    };
-    assert!(config.validate().is_ok());
-}
-
-#[test]
-fn rate_limit_config_boundary_min_messages() {
-    let config = RateLimitConfig {
-        max_messages_per_second: 1,
-        ..Default::default()
-    };
-    assert!(config.validate().is_ok());
-}
-
-#[test]
-fn rate_limit_config_boundary_max_messages() {
-    let config = RateLimitConfig {
-        max_messages_per_second: 1_000_000,
-        ..Default::default()
-    };
-    assert!(config.validate().is_ok());
-}
-
-#[test]
-fn rate_limit_config_boundary_min_size() {
-    let config = RateLimitConfig {
-        max_message_size: 1,
-        ..Default::default()
-    };
-    assert!(config.validate().is_ok());
-}
-
-#[test]
-fn rate_limit_config_boundary_max_size() {
-    let config = RateLimitConfig {
-        max_message_size: 100_000_000,
-        ..Default::default()
-    };
-    assert!(config.validate().is_ok());
-}
-
-#[test]
-fn rate_limit_config_boundary_min_window() {
-    let config = RateLimitConfig {
-        rate_limit_window_seconds: 1,
-        ..Default::default()
-    };
-    assert!(config.validate().is_ok());
-}
-
-#[test]
-fn rate_limit_config_boundary_max_window() {
-    let config = RateLimitConfig {
-        rate_limit_window_seconds: 86400,
-        ..Default::default()
-    };
-    assert!(config.validate().is_ok());
-}
-
+/// Test WebSocketConfig clone preserves `max_message_size` and (when
+/// `ratelimit` is on) the `rate_limit` field.
 #[cfg(feature = "security")]
 #[test]
 fn websocket_config_clone() {
     let config = WebSocketConfig::default();
     let cloned = config.clone();
     assert_eq!(config.auth.is_some(), cloned.auth.is_some());
-    assert_eq!(
-        config.rate_limit.max_connections,
-        cloned.rate_limit.max_connections
-    );
+    assert_eq!(config.max_message_size, cloned.max_message_size);
 }
 
+/// Test WebSocketConfig clone preserves `max_message_size` without `security`.
 #[test]
-fn websocket_config_clone_rate_limit() {
+fn websocket_config_clone_max_message_size() {
     let config = WebSocketConfig::default();
     let cloned = config.clone();
-    assert_eq!(
-        config.rate_limit.max_connections,
-        cloned.rate_limit.max_connections
-    );
+    assert_eq!(config.max_message_size, cloned.max_message_size);
 }
 
 #[tokio::test]
@@ -444,204 +249,6 @@ fn app_state_clone() {
     assert!(cloned.config.auth.is_none());
 }
 
-/// Test check_and_record allows first message within limits
-#[test]
-fn check_and_record_first_message_allowed() {
-    let manager = ConnectionManager::new();
-    let config = RateLimitConfig {
-        max_messages_per_second: 10,
-        max_connections: 100,
-        rate_limit_window_seconds: 1,
-        ..Default::default()
-    };
-    assert!(!manager.check_and_record("conn-1", &config));
-}
-
-/// Test check_and_record triggers rate limiting after exceeding limit
-#[test]
-fn check_and_record_exceeds_rate_limit() {
-    let manager = ConnectionManager::new();
-    let config = RateLimitConfig {
-        max_messages_per_second: 2,
-        max_connections: 100,
-        rate_limit_window_seconds: 10,
-        ..Default::default()
-    };
-    assert!(!manager.check_and_record("conn-rate", &config));
-    assert!(!manager.check_and_record("conn-rate", &config));
-    assert!(manager.check_and_record("conn-rate", &config));
-}
-
-/// Test check_and_record respects connection limit
-///
-/// Note: `check_and_record` is a read-only pre-check; `connection_count` is
-/// incremented by `add_connection`. This test simulates active connections
-/// by directly setting `connection_count` to verify the limit check.
-#[test]
-fn check_and_record_exceeds_connection_limit() {
-    let manager = ConnectionManager::new();
-    let config = RateLimitConfig {
-        max_messages_per_second: 100,
-        max_connections: 3,
-        rate_limit_window_seconds: 10,
-        ..Default::default()
-    };
-    // Under the limit: not rate limited
-    manager.connection_count.fetch_add(2, Ordering::SeqCst);
-    assert!(!manager.check_and_record("conn-a", &config));
-    // At the limit: new connection check rejected
-    manager.connection_count.fetch_add(1, Ordering::SeqCst);
-    assert!(manager.check_and_record("conn-d", &config));
-}
-
-/// Test check_and_record tracks independent connections
-#[test]
-fn check_and_record_independent_connections() {
-    let manager = ConnectionManager::new();
-    let config = RateLimitConfig {
-        max_messages_per_second: 1,
-        max_connections: 100,
-        rate_limit_window_seconds: 10,
-        ..Default::default()
-    };
-    assert!(!manager.check_and_record("conn-x", &config));
-    assert!(!manager.check_and_record("conn-y", &config));
-    assert!(manager.check_and_record("conn-x", &config));
-    assert!(manager.check_and_record("conn-y", &config));
-}
-
-/// Test check_and_record with exact connection boundary
-///
-/// Note: `check_and_record` is a read-only pre-check; `connection_count` is
-/// incremented by `add_connection`. This test simulates active connections
-/// by directly setting `connection_count` to verify the boundary check.
-#[test]
-fn check_and_record_exact_connection_boundary() {
-    let manager = ConnectionManager::new();
-    let config = RateLimitConfig {
-        max_messages_per_second: 100,
-        max_connections: 2,
-        rate_limit_window_seconds: 10,
-        ..Default::default()
-    };
-    // Under the limit: not rate limited
-    manager.connection_count.fetch_add(1, Ordering::SeqCst);
-    assert!(!manager.check_and_record("conn-1", &config));
-    // At the limit: new connection check rejected
-    manager.connection_count.fetch_add(1, Ordering::SeqCst);
-    assert!(manager.check_and_record("conn-3", &config));
-}
-
-/// Test check_and_record with exact message rate boundary
-#[test]
-fn check_and_record_exact_message_boundary() {
-    let manager = ConnectionManager::new();
-    let config = RateLimitConfig {
-        max_messages_per_second: 3,
-        max_connections: 100,
-        rate_limit_window_seconds: 10,
-        ..Default::default()
-    };
-    assert!(!manager.check_and_record("conn-msg", &config));
-    assert!(!manager.check_and_record("conn-msg", &config));
-    assert!(!manager.check_and_record("conn-msg", &config));
-    assert!(manager.check_and_record("conn-msg", &config));
-}
-
-/// Test check_and_record resets the counter when the rate limit window elapses.
-///
-/// Covers the window-reset branch (lines 313-315): when
-/// `current_time - last_time >= rate_limit_window_seconds`, the message count
-/// is reset to 0 and the last-message timestamp is refreshed, allowing a
-/// previously rate-limited connection to send again.
-#[test]
-fn check_and_record_resets_after_window_elapsed() {
-    let manager = ConnectionManager::new();
-    let config = RateLimitConfig {
-        max_messages_per_second: 2,
-        max_connections: 100,
-        rate_limit_window_seconds: 10,
-        ..Default::default()
-    };
-
-    // Exhaust the per-connection message budget.
-    assert!(!manager.check_and_record("conn-reset", &config));
-    assert!(!manager.check_and_record("conn-reset", &config));
-    // Third message within the same window → rate limited.
-    assert!(manager.check_and_record("conn-reset", &config));
-
-    // Simulate the window having elapsed by backdating the last-message time.
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let backdated = now.saturating_sub(config.rate_limit_window_seconds + 1);
-    {
-        let map = manager.last_message_time.read().unwrap();
-        if let Some(entry) = map.get("conn-reset") {
-            entry.store(backdated, Ordering::Relaxed);
-        }
-    }
-
-    // After the window has elapsed, the counter resets and the connection
-    // is allowed to send again (not rate limited).
-    assert!(
-        !manager.check_and_record("conn-reset", &config),
-        "Connection should be allowed again after the rate limit window elapses"
-    );
-}
-
-/// Test check_and_record with concurrent connections
-#[test]
-fn check_and_record_concurrent_connections() {
-    use std::thread;
-    let manager = Arc::new(ConnectionManager::new());
-    let config = Arc::new(RateLimitConfig {
-        max_messages_per_second: 100,
-        max_connections: 10,
-        rate_limit_window_seconds: 10,
-        ..Default::default()
-    });
-    let mut handles = vec![];
-    for i in 0..5 {
-        let mgr = manager.clone();
-        let cfg = config.clone();
-        handles.push(thread::spawn(move || {
-            let conn_id = format!("thread-conn-{}", i);
-            mgr.check_and_record(&conn_id, &cfg)
-        }));
-    }
-    let results: Vec<bool> = handles.into_iter().map(|h| h.join().unwrap()).collect();
-    for result in &results {
-        assert!(!result, "All concurrent connections should be allowed");
-    }
-}
-
-/// Test ConnectionManager::remove_connection cleans up rate limit data
-#[tokio::test]
-async fn connection_manager_remove_cleans_up_rate_limit_data() {
-    let manager = ConnectionManager::new();
-    let config = RateLimitConfig::default();
-    let (conn, _) = WebSocketConnection::new("cleanup-test".to_string());
-    manager
-        .add_connection("cleanup-test".to_string(), conn)
-        .await;
-    manager.check_and_record("cleanup-test", &config);
-    manager.remove_connection("cleanup-test").await;
-    assert!(manager
-        .message_counts
-        .read()
-        .unwrap()
-        .get("cleanup-test")
-        .is_none());
-    assert!(manager
-        .last_message_time
-        .read()
-        .unwrap()
-        .get("cleanup-test")
-        .is_none());
-}
-
 /// Test ConnectionManager::broadcast with empty connections
 #[tokio::test]
 async fn connection_manager_broadcast_empty() {
@@ -677,34 +284,21 @@ async fn connection_manager_broadcast_single() {
     }
 }
 
-/// Test AppState::new creates with default config
-#[cfg(feature = "security")]
+/// Test AppState::with_config preserves custom `max_message_size`.
+///
+/// Replaces the old `app_state_with_config_preserves_rate_limit` test
+/// (R-websocket-003): the `RateLimitConfig` struct is gone; we now verify
+/// that the migrated `max_message_size` field survives the round-trip
+/// through `AppState::with_config`.
 #[test]
-fn app_state_new_creates_default_config() {
-    let manager = Arc::new(ConnectionManager::new());
-    let state = AppState::new(manager.clone());
-    assert!(state.config.auth.is_none());
-    assert_eq!(state.config.rate_limit.max_connections, 1000);
-}
-
-/// Test AppState::with_config preserves custom rate_limit config
-#[test]
-fn app_state_with_config_preserves_rate_limit() {
+fn app_state_with_config_preserves_max_message_size() {
     let manager = Arc::new(ConnectionManager::new());
     let config = WebSocketConfig {
-        rate_limit: RateLimitConfig {
-            max_messages_per_second: 50,
-            max_message_size: 2048,
-            max_connections: 500,
-            rate_limit_window_seconds: 30,
-        },
+        max_message_size: 2048,
         ..Default::default()
     };
     let state = AppState::with_config(config, manager.clone());
-    assert_eq!(state.config.rate_limit.max_messages_per_second, 50);
-    assert_eq!(state.config.rate_limit.max_message_size, 2048);
-    assert_eq!(state.config.rate_limit.max_connections, 500);
-    assert_eq!(state.config.rate_limit.rate_limit_window_seconds, 30);
+    assert_eq!(state.config.max_message_size, 2048);
 }
 
 /// Test AppState::with_config preserves custom config (with auth)
@@ -714,18 +308,11 @@ fn app_state_with_config_preserves_settings() {
     let manager = Arc::new(ConnectionManager::new());
     let config = WebSocketConfig {
         auth: None,
-        rate_limit: RateLimitConfig {
-            max_messages_per_second: 50,
-            max_message_size: 2048,
-            max_connections: 500,
-            rate_limit_window_seconds: 30,
-        },
+        max_message_size: 2048,
+        ..Default::default()
     };
     let state = AppState::with_config(config, manager.clone());
-    assert_eq!(state.config.rate_limit.max_messages_per_second, 50);
-    assert_eq!(state.config.rate_limit.max_message_size, 2048);
-    assert_eq!(state.config.rate_limit.max_connections, 500);
-    assert_eq!(state.config.rate_limit.rate_limit_window_seconds, 30);
+    assert_eq!(state.config.max_message_size, 2048);
 }
 
 /// Test AppState clone shares underlying data
@@ -747,30 +334,12 @@ fn app_state_full_config() {
         .expect("valid secret");
     let config = WebSocketConfig {
         auth: Some(auth),
-        rate_limit: RateLimitConfig {
-            max_messages_per_second: 200,
-            max_message_size: 2_097_152,
-            max_connections: 5000,
-            rate_limit_window_seconds: 60,
-        },
+        max_message_size: 2_097_152,
+        ..Default::default()
     };
     let state = AppState::with_config(config, manager);
     assert!(state.config.auth.is_some());
-    assert_eq!(state.config.rate_limit.max_messages_per_second, 200);
-}
-
-/// Test RateLimitConfig Debug output
-#[test]
-fn rate_limit_config_debug_output() {
-    let config = RateLimitConfig {
-        max_messages_per_second: 42,
-        max_message_size: 4096,
-        max_connections: 50,
-        rate_limit_window_seconds: 5,
-    };
-    let debug_str = format!("{:?}", config);
-    assert!(debug_str.contains("42"));
-    assert!(debug_str.contains("4096"));
+    assert_eq!(state.config.max_message_size, 2_097_152);
 }
 
 /// Test WebSocketConnection send with different message types
@@ -831,30 +400,6 @@ async fn websocket_connection_multiple_sends() {
             panic!("Expected Notification");
         }
     }
-}
-
-/// Test RateLimitConfig validate with all maximum valid values
-#[test]
-fn rate_limit_config_all_max_valid() {
-    let config = RateLimitConfig {
-        max_messages_per_second: 1_000_000,
-        max_message_size: 100_000_000,
-        max_connections: 100_000,
-        rate_limit_window_seconds: 86400,
-    };
-    assert!(config.validate().is_ok());
-}
-
-/// Test RateLimitConfig validate with all minimum valid values
-#[test]
-fn rate_limit_config_all_min_valid() {
-    let config = RateLimitConfig {
-        max_messages_per_second: 1,
-        max_message_size: 1,
-        max_connections: 1,
-        rate_limit_window_seconds: 1,
-    };
-    assert!(config.validate().is_ok());
 }
 
 /// Test ConnectionManager::get_connection returns None for removed connection

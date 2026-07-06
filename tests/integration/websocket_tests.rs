@@ -3,7 +3,7 @@
 #[cfg(feature = "websocket")]
 mod websocket_tests {
     use sdforge::websocket::{
-        parse_websocket_message, AppState, ConnectionManager, RateLimitConfig, WebSocketConfig,
+        parse_websocket_message, AppState, ConnectionManager, WebSocketConfig,
         WebSocketConnection, WebSocketMessage,
     };
     use std::sync::{Arc, Mutex};
@@ -36,6 +36,7 @@ mod websocket_tests {
 
     /// 测试带认证头的 WebSocket 连接
     /// 验证 WebSocketConfig 能够配置认证信息
+    #[cfg(feature = "security")]
     #[tokio::test]
     async fn test_websocket_with_auth_headers() {
         // 使用有效的密钥创建认证配置
@@ -45,42 +46,15 @@ mod websocket_tests {
 
         let config = WebSocketConfig {
             auth: Some(auth),
-            rate_limit: RateLimitConfig::default(),
+            ..Default::default()
         };
 
         // 验证认证配置存在
         assert!(config.auth.is_some());
-
-        // 验证限流配置
-        assert!(config.rate_limit.validate().is_ok());
     }
 
-    /// 测试连接拒绝场景
-    /// 验证当达到最大连接数时，新的连接请求被拒绝
-    #[tokio::test]
-    async fn test_websocket_connection_rejection() {
-        let rate_limit = RateLimitConfig {
-            max_connections: 2, // 设置很小的最大连接数
-            max_messages_per_second: 100,
-            max_message_size: 1_048_576,
-            rate_limit_window_seconds: 1,
-        };
-
-        let manager = Arc::new(ConnectionManager::new());
-
-        // 添加两个连接达到上限
-        let (conn1, _) = WebSocketConnection::new("conn-1".to_string());
-        let (conn2, _) = WebSocketConnection::new("conn-2".to_string());
-        manager.add_connection("conn-1".to_string(), conn1).await;
-        manager.add_connection("conn-2".to_string(), conn2).await;
-
-        // 验证连接数达到上限
-        assert_eq!(manager.connection_count().await, 2);
-
-        // 验证 check_and_record 会拒绝新连接
-        let should_reject = manager.check_and_record("conn-3", &rate_limit);
-        assert!(should_reject);
-    }
+    /// 测试连接拒绝场景已移除：依赖已删除的 `check_and_record` 方法，
+    /// 连接级限流改由 limiteron Governor 在 HTTP 中间件层处理。
 
     /// 测试多个并发连接
     /// 验证系统能够同时处理多个 WebSocket 连接
@@ -337,35 +311,6 @@ mod websocket_tests {
         }
     }
 
-    /// 测试空闲超时
-    /// 验证 RateLimitConfig 的时间窗口配置
-    #[tokio::test]
-    async fn test_websocket_idle_timeout() {
-        let rate_limit = RateLimitConfig {
-            max_messages_per_second: 10,
-            max_message_size: 1_048_576,
-            max_connections: 100,
-            rate_limit_window_seconds: 1,
-        };
-
-        let manager = Arc::new(ConnectionManager::new());
-        let (conn, _) = WebSocketConnection::new("idle-conn".to_string());
-
-        // 添加连接
-        manager.add_connection("idle-conn".to_string(), conn).await;
-        assert_eq!(manager.connection_count().await, 1);
-
-        // 在时间窗口内多次检查
-        for _ in 0..5 {
-            let rejected = manager.check_and_record("idle-conn", &rate_limit);
-            // 在时间窗口内不拒绝（因为消息数未超限）
-            assert!(!rejected);
-        }
-
-        // 验证连接仍活跃
-        assert!(manager.get_connection("idle-conn").await.is_some());
-    }
-
     // ============================================================================
     // 断开处理测试
     // ============================================================================
@@ -551,21 +496,8 @@ mod websocket_tests {
     // ============================================================================
     // 配置验证测试
     // ============================================================================
-
-    #[test]
-    fn test_rate_limit_config_default() {
-        let config = RateLimitConfig::default();
-        // Verify it can be created without panicking
-        let _ = config;
-    }
-
-    #[test]
-    fn test_rate_limit_config_validation() {
-        let config = RateLimitConfig::default();
-        let result = config.validate();
-        // Validation should succeed for default config
-        assert!(result.is_ok());
-    }
+    // NOTE: `test_rate_limit_config_default` 和 `test_rate_limit_config_validation`
+    // 已移除（`RateLimitConfig` 结构体已删除，配置验证逻辑迁移到 WebSocketConfig）。
 
     #[test]
     fn test_websocket_config_default() {
@@ -595,59 +527,10 @@ mod websocket_tests {
     // ============================================================================
     // 速率限制测试
     // ============================================================================
-
-    /// 测试速率限制 - 超限检测
-    #[tokio::test]
-    async fn test_rate_limit_exceeded_detection() {
-        let rate_limit = RateLimitConfig {
-            max_messages_per_second: 5,
-            max_message_size: 1_048_576,
-            max_connections: 100,
-            rate_limit_window_seconds: 1,
-        };
-
-        let manager = Arc::new(ConnectionManager::new());
-        let (conn, _) = WebSocketConnection::new("rate-limit-test".to_string());
-        manager
-            .add_connection("rate-limit-test".to_string(), conn)
-            .await;
-
-        // 在限制内发送消息
-        for i in 0..5 {
-            let rejected = manager.check_and_record("rate-limit-test", &rate_limit);
-            assert!(
-                !rejected,
-                "Message {} should not be rejected (within limit)",
-                i
-            );
-        }
-
-        // 超过限制的消息应该被拒绝
-        let rejected = manager.check_and_record("rate-limit-test", &rate_limit);
-        assert!(rejected, "Message 6 should be rejected (exceeded limit)");
-    }
-
-    /// 测试速率限制配置边界值
-    #[tokio::test]
-    async fn test_rate_limit_config_boundaries() {
-        // 测试最小有效配置
-        let min_config = RateLimitConfig {
-            max_messages_per_second: 1,
-            max_message_size: 1,
-            max_connections: 1,
-            rate_limit_window_seconds: 1,
-        };
-        assert!(min_config.validate().is_ok());
-
-        // 测试大配置
-        let max_config = RateLimitConfig {
-            max_messages_per_second: 1_000_000,
-            max_message_size: 100_000_000,
-            max_connections: 100_000,
-            rate_limit_window_seconds: 86400,
-        };
-        assert!(max_config.validate().is_ok());
-    }
+    // NOTE: 连接级速率限制测试（test_rate_limit_exceeded_detection、
+    // test_rate_limit_config_boundaries）已移除。原 `check_and_record` 方法
+    // 依赖已删除的 `RateLimitConfig`，连接级限流算法改由 limiteron Governor
+    // 在 HTTP 中间件层处理（见 design.md D6 "Out of Scope"）。
 
     // ============================================================================
     // 连接生命周期测试
@@ -994,92 +877,10 @@ mod websocket_tests {
     // ============================================================================
     // 速率限制高级测试
     // ============================================================================
-
-    /// 测试速率限制时间窗口重置
-    /// 验证速率限制在时间窗口过期后正确重置
-    /// 注意：此测试验证速率限制的核心行为（达到限制后拒绝），而非窗口重置机制
-    #[tokio::test]
-    async fn test_rate_limit_window_reset() {
-        let rate_limit = RateLimitConfig {
-            max_messages_per_second: 5,
-            max_message_size: 1_048_576,
-            max_connections: 100,
-            rate_limit_window_seconds: 1,
-        };
-
-        let manager = Arc::new(ConnectionManager::new());
-        let (conn, _) = WebSocketConnection::new("window-reset".to_string());
-        manager
-            .add_connection("window-reset".to_string(), conn)
-            .await;
-
-        // 在单个时间窗口内：发送5条消息（应该成功）
-        for i in 0..5 {
-            let rejected = manager.check_and_record("window-reset", &rate_limit);
-            assert!(
-                !rejected,
-                "Message {} should not be rejected within limit",
-                i
-            );
-        }
-
-        // 超过限制：第6条消息应该被拒绝
-        let rejected = manager.check_and_record("window-reset", &rate_limit);
-        assert!(rejected, "Message 6 should be rejected (exceeded limit)");
-
-        // 等待一段时间
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
-        // 使用不同的连接ID测试（避免受之前限流状态影响）
-        let rejected = manager.check_and_record("window-reset-new", &rate_limit);
-        assert!(!rejected, "New connection should not be rejected");
-
-        manager.remove_connection("window-reset").await;
-        manager.remove_connection("window-reset-new").await;
-    }
-
-    /// 测试多连接速率限制
-    /// 验证每个连接都有独立的速率限制计数
-    #[tokio::test]
-    async fn test_rate_limit_per_connection() {
-        let rate_limit = RateLimitConfig {
-            max_messages_per_second: 3,
-            max_message_size: 1_048_576,
-            max_connections: 100,
-            rate_limit_window_seconds: 1,
-        };
-
-        let manager = Arc::new(ConnectionManager::new());
-
-        // 创建两个连接
-        let (conn1, _) = WebSocketConnection::new("rate-conn-1".to_string());
-        let (conn2, _) = WebSocketConnection::new("rate-conn-2".to_string());
-        manager
-            .add_connection("rate-conn-1".to_string(), conn1)
-            .await;
-        manager
-            .add_connection("rate-conn-2".to_string(), conn2)
-            .await;
-
-        // 每个连接发送3条消息（达到限制）
-        for _ in 0..3 {
-            let rejected = manager.check_and_record("rate-conn-1", &rate_limit);
-            assert!(!rejected);
-        }
-        for _ in 0..3 {
-            let rejected = manager.check_and_record("rate-conn-2", &rate_limit);
-            assert!(!rejected);
-        }
-
-        // 两个连接都达到限制
-        let rejected1 = manager.check_and_record("rate-conn-1", &rate_limit);
-        let rejected2 = manager.check_and_record("rate-conn-2", &rate_limit);
-        assert!(rejected1, "Connection 1 should be rate limited");
-        assert!(rejected2, "Connection 2 should be rate limited");
-
-        manager.remove_connection("rate-conn-1").await;
-        manager.remove_connection("rate-conn-2").await;
-    }
+    // NOTE: 连接级速率限制测试（test_rate_limit_window_reset、
+    // test_rate_limit_per_connection）已移除。原 `check_and_record` 方法依赖
+    // 已删除的 `RateLimitConfig`，连接级限流算法改由 limiteron Governor
+    // 在 HTTP 中间件层处理（见 design.md D6 "Out of Scope"）。
 
     // ============================================================================
     // 消息序列化高级测试
@@ -1243,30 +1044,25 @@ mod websocket_tests {
             .await
             .is_some());
 
-        // 验证配置存在
-        assert!(state.config.auth.is_none());
+        // 验证配置存在（max_message_size 始终可用，auth 需要 security feature）
+        assert_eq!(state.config.max_message_size, 1_048_576);
 
         state.manager.remove_connection("app-state-conn").await;
     }
 
     /// 测试 AppState 使用自定义配置
     /// 验证可以创建带有自定义配置的 AppState
+    #[cfg(feature = "security")]
     #[tokio::test]
     async fn test_app_state_custom_config() {
         let auth =
             sdforge::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
                 .expect("valid secret");
 
-        let rate_limit = RateLimitConfig {
-            max_messages_per_second: 200,
-            max_message_size: 2_000_000,
-            max_connections: 500,
-            rate_limit_window_seconds: 2,
-        };
-
         let config = WebSocketConfig {
             auth: Some(auth),
-            rate_limit,
+            max_message_size: 2_000_000,
+            ..Default::default()
         };
 
         let manager = Arc::new(ConnectionManager::new());
@@ -1274,8 +1070,7 @@ mod websocket_tests {
 
         // 验证配置被正确应用
         assert!(state.config.auth.is_some());
-        assert_eq!(state.config.rate_limit.max_messages_per_second, 200);
-        assert_eq!(state.config.rate_limit.max_connections, 500);
+        assert_eq!(state.config.max_message_size, 2_000_000);
     }
 
     // ============================================================================
@@ -1490,10 +1285,10 @@ mod websocket_tests {
         assert!(serde_json::from_str::<WebSocketMessage>(&json).is_ok());
 
         // Response with large result
-        let large_result: Vec<u8> = (0..1000).map(|i| (i % 256) as u8).collect();
+        let large_array: Vec<u32> = (0..1000).collect();
         let resp = WebSocketMessage::Response {
             id: "big-response".to_string(),
-            result: serde_json::json!({"binary": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &large_result)}),
+            result: serde_json::json!({"values": large_array}),
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(serde_json::from_str::<WebSocketMessage>(&json).is_ok());
@@ -1514,46 +1309,33 @@ mod websocket_tests {
 
     /// 测试配置深度克隆
     /// 验证配置对象可以完整克隆
+    #[cfg(feature = "security")]
     #[test]
     fn test_config_deep_clone() {
         let auth =
             sdforge::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
                 .expect("valid secret");
 
-        let rate_limit = RateLimitConfig {
-            max_messages_per_second: 150,
-            max_message_size: 2_000_000,
-            max_connections: 500,
-            rate_limit_window_seconds: 5,
-        };
-
         let config1 = WebSocketConfig {
             auth: Some(auth),
-            rate_limit: rate_limit.clone(),
+            max_message_size: 2_000_000,
+            ..Default::default()
         };
 
         let config2 = config1.clone();
 
         // 验证克隆后的配置值相同
         assert!(config2.auth.is_some());
-        assert_eq!(config2.rate_limit.max_messages_per_second, 150);
-        assert_eq!(config2.rate_limit.max_connections, 500);
+        assert_eq!(config2.max_message_size, 2_000_000);
     }
 
     /// 测试默认配置一致性
-    /// 验证默认配置的值符合预期
+    /// 验证 WebSocketConfig 默认值符合预期
     #[test]
     fn test_default_config_consistency() {
-        let config = RateLimitConfig::default();
+        let config = WebSocketConfig::default();
 
-        // 验证默认值在合理范围内
-        assert!(config.validate().is_ok());
-        assert!(config.max_connections > 0);
-        assert!(config.max_messages_per_second > 0);
-        assert!(config.max_message_size > 0);
-        assert!(config.rate_limit_window_seconds > 0);
-
-        // 验证配置可以多次验证
-        assert!(config.validate().is_ok());
+        // `max_message_size` 默认 1 MiB
+        assert_eq!(config.max_message_size, 1_048_576);
     }
 }

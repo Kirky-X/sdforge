@@ -1,0 +1,219 @@
+// Copyright (c) 2026 Kirky.X
+// SPDX-License-Identifier: MIT
+//! Tests for `LimiteronAdapter` — construction and `RateLimiter` impl.
+//!
+//! These tests use the real `limiteron::Governor` with in-memory storage
+//! (no mocking), because `Governor` is a concrete struct with private
+//! fields and cannot be mocked. See `design.md` D3 for rationale.
+
+use std::sync::Arc;
+
+use axum::body::Body;
+use axum::http::Request;
+use limiteron::Governor;
+
+use crate::security::ratelimit::{LimiteronAdapter, RateLimiter};
+
+// ============================================================================
+// Construction Tests (T007/T008 — new/default)
+// ============================================================================
+
+/// `LimiteronAdapter::new().await` returns a usable instance without panic.
+#[tokio::test]
+async fn new_returns_non_panic_instance() {
+    let adapter = LimiteronAdapter::new().await;
+    drop(adapter);
+}
+
+/// `LimiteronAdapter::default().await` behaves identically to `new().await`.
+#[tokio::test]
+async fn default_matches_new_behavior() {
+    let from_new = LimiteronAdapter::new().await;
+    let from_default = LimiteronAdapter::default().await;
+    drop(from_new);
+    drop(from_default);
+}
+
+// ============================================================================
+// T009 — builder / with_dependencies / RateLimiter impl
+// ============================================================================
+
+/// `LimiteronAdapter::builder().build().await` constructs an instance using
+/// `default_config()` when no custom config is supplied.
+#[tokio::test]
+async fn builder_build_with_default_config_succeeds() {
+    let adapter = LimiteronAdapter::builder().build().await;
+    // Should construct without panic. Verify by running a check.
+    let result = adapter.check("127.0.0.1").await;
+    assert!(result.is_ok(), "builder-built adapter should allow: {:?}", result);
+}
+
+/// `LimiteronAdapter::with_dependencies(Arc<Governor>)` constructs an instance
+/// from a pre-built governor (mode 3: full DI).
+///
+/// We build the governor the same way `new()` does to verify the DI path
+/// accepts it and produces a working adapter.
+#[tokio::test]
+async fn with_dependencies_accepts_prebuilt_governor() {
+    use limiteron::config::{GlobalConfig, Matcher, Rule};
+    use limiteron::storage::{MemoryBanStorage, MemoryStorage};
+    use limiteron::{ActionConfig, BanStorage, FlowControlConfig, LimiterConfig, Storage};
+
+    let config = FlowControlConfig {
+        version: "0.1.0".to_string(),
+        global: GlobalConfig::default(),
+        rules: vec![Rule {
+            id: "di-test".to_string(),
+            name: "DI test rule".to_string(),
+            priority: 100,
+            matchers: vec![Matcher::Ip {
+                ip_ranges: vec!["0.0.0.0/0".to_string()],
+            }],
+            limiters: vec![LimiterConfig::TokenBucket {
+                capacity: 5,
+                refill_rate: 1,
+            }],
+            action: ActionConfig::default(),
+        }],
+    };
+    let storage: Arc<dyn Storage> = Arc::new(MemoryStorage::new());
+    let ban_storage: Arc<dyn BanStorage> = Arc::new(MemoryBanStorage::new());
+    let governor = Governor::builder()
+        .with_config(config)
+        .with_storage(storage)
+        .with_ban_storage(ban_storage)
+        .build()
+        .await
+        .expect("DI test config must be valid");
+
+    let adapter = LimiteronAdapter::with_dependencies(Arc::new(governor));
+    let result = adapter.check("10.0.0.1").await;
+    assert!(result.is_ok(), "DI adapter should allow first request: {:?}", result);
+}
+
+/// `check("127.0.0.1").await` on a fresh adapter returns `Ok(())` because the
+/// default config (TokenBucket capacity=100, refill_rate=10) allows the first
+/// request.
+///
+/// This is the canonical T009 acceptance test from `tasks.md`.
+#[tokio::test]
+async fn check_allows_first_request_with_default_config() {
+    let adapter = LimiteronAdapter::new().await;
+    let result = adapter.check("127.0.0.1").await;
+    assert!(result.is_ok(), "first request should be allowed: {:?}", result);
+}
+
+/// After exhausting the token bucket, subsequent `check()` calls must return
+/// `Err(RateLimitError::Exceeded { .. })`.
+///
+/// This validates the `Decision::Rejected` → `Exceeded` mapping in the
+/// `RateLimiter` impl. We use `with_dependencies` to inject a tight config
+/// (capacity=2, refill_rate=1). limiteron forbids `refill_rate=0`, so we use
+/// `refill_rate=1` (1 token/sec) and fire 5 requests in a tight loop — the
+/// test runs in milliseconds, so at most ~1 refill token could sneak in, but
+/// 5 requests vs capacity 2 guarantees at least 2 rejections.
+#[tokio::test]
+async fn check_returns_exceeded_after_capacity_exhausted() {
+    use limiteron::config::{GlobalConfig, Matcher, Rule};
+    use limiteron::storage::{MemoryBanStorage, MemoryStorage};
+    use limiteron::{ActionConfig, BanStorage, FlowControlConfig, LimiterConfig, Storage};
+
+    let config = FlowControlConfig {
+        version: "0.1.0".to_string(),
+        global: GlobalConfig::default(),
+        rules: vec![Rule {
+            id: "tight".to_string(),
+            name: "tight bucket".to_string(),
+            priority: 100,
+            matchers: vec![Matcher::Ip {
+                ip_ranges: vec!["0.0.0.0/0".to_string()],
+            }],
+            // capacity=2 + refill_rate=1: limiteron rejects refill_rate=0.
+            // 5 rapid requests must yield >=2 rejections even with 1 token
+            // of refill during the test window.
+            limiters: vec![LimiterConfig::TokenBucket {
+                capacity: 2,
+                refill_rate: 1,
+            }],
+            action: ActionConfig::default(),
+        }],
+    };
+    let storage: Arc<dyn Storage> = Arc::new(MemoryStorage::new());
+    let ban_storage: Arc<dyn BanStorage> = Arc::new(MemoryBanStorage::new());
+    let governor = Governor::builder()
+        .with_config(config)
+        .with_storage(storage)
+        .with_ban_storage(ban_storage)
+        // Disable L1 cache: by default Governor caches the first Allowed
+        // decision and returns it for subsequent identical requests, which
+        // would prevent us from observing token-bucket exhaustion.
+        .with_l1_cache_enabled(false)
+        .build()
+        .await
+        .expect("tight config must be valid");
+    let adapter = LimiteronAdapter::with_dependencies(Arc::new(governor));
+
+    // Fire 5 rapid requests against the same IP. capacity=2 means the first
+    // 2 (or 3 with refill) succeed; the rest must be rejected with Exceeded.
+    let mut allowed = 0;
+    let mut rejected_with_exceeded = 0;
+    let mut other = 0;
+    for _ in 0..5 {
+        match adapter.check("192.0.2.1").await {
+            Ok(()) => allowed += 1,
+            Err(crate::security::ratelimit::RateLimitError::Exceeded { .. }) => {
+                rejected_with_exceeded += 1;
+            }
+            Err(other_err) => {
+                other += 1;
+                eprintln!("unexpected error: {:?}", other_err);
+            }
+        }
+    }
+
+    assert_eq!(other, 0, "no unexpected error variants allowed");
+    assert!(
+        rejected_with_exceeded >= 2,
+        "expected at least 2 Exceeded rejections (capacity=2, 5 requests), got allowed={}, exceeded={}",
+        allowed,
+        rejected_with_exceeded
+    );
+}
+
+/// `check_request(req)` extracts the IP from `X-Forwarded-For` (first IP) and
+/// delegates to `check()`. With default config the first request is allowed.
+#[tokio::test]
+async fn check_request_extracts_ip_from_x_forwarded_for() {
+    let adapter = LimiteronAdapter::new().await;
+    let req = Request::builder()
+        .header("x-forwarded-for", "203.0.113.7, 10.0.0.1")
+        .body(Body::empty())
+        .expect("request build");
+    let result = adapter.check_request(&req).await;
+    assert!(result.is_ok(), "check_request should allow: {:?}", result);
+}
+
+/// `check_request(req)` falls back to `X-Real-IP` when `X-Forwarded-For` is
+/// absent.
+#[tokio::test]
+async fn check_request_falls_back_to_x_real_ip() {
+    let adapter = LimiteronAdapter::new().await;
+    let req = Request::builder()
+        .header("x-real-ip", "198.51.100.42")
+        .body(Body::empty())
+        .expect("request build");
+    let result = adapter.check_request(&req).await;
+    assert!(result.is_ok(), "check_request should allow via X-Real-IP: {:?}", result);
+}
+
+/// `check_request(req)` falls back to `"unknown"` when neither header is
+/// present. Default config matches `0.0.0.0/0` so even "unknown" is allowed.
+#[tokio::test]
+async fn check_request_falls_back_to_unknown_identifier() {
+    let adapter = LimiteronAdapter::new().await;
+    let req = Request::builder()
+        .body(Body::empty())
+        .expect("request build");
+    let result = adapter.check_request(&req).await;
+    assert!(result.is_ok(), "check_request should allow unknown: {:?}", result);
+}
