@@ -9,3 +9,4 @@
 //! - `mcp_markdown_tests`: MCP Markdown 生成（T018 添加，`mcp` feature 门控）
 
 mod mod_tests;
+mod swagger_tests;
