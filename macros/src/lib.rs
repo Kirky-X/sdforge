@@ -40,6 +40,7 @@ type ServiceApiArgs = Result<
         Option<String>,
         Option<String>,
         Option<bool>, // no_prefix option
+        Option<bool>, // cli option — emit CliCommandRegistration + CliHandlerRegistration
     ),
     syn::Error,
 >;
@@ -264,6 +265,7 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
     let mut ws_path = None;
     let mut grpc_method = None;
     let mut no_prefix = None;
+    let mut cli = None;
 
     for (key, value) in pairs {
         match key.as_str() {
@@ -307,6 +309,14 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
                     )
                 })?)
             }
+            "cli" => {
+                cli = Some(value.parse::<bool>().map_err(|_| {
+                    syn::Error::new(
+                        proc_macro2::Span::call_site(),
+                        format!("Invalid boolean value for 'cli': {}", value),
+                    )
+                })?)
+            }
             _ => {
                 return Err(syn::Error::new(
                     proc_macro2::Span::call_site(),
@@ -341,6 +351,7 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
         ws_path,
         grpc_method,
         no_prefix,
+        cli,
     ))
 }
 
@@ -646,7 +657,13 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         ws_path,
         grpc_method,
         no_prefix,
+        cli,
     ) = args;
+    // T007: `cli` is parsed but not yet wired into the generated tokens.
+    // T008 adds the `generate_cli_registration` helper; T009 calls it when
+    // `cli == Some(true)`. The binding is referenced here to avoid an
+    // `unused_variable` warning between T007 and T009.
+    let _ = &cli;
     let fn_name = &input.sig.ident;
     let _fn_vis = &input.vis; // Currently unused but kept for future use
     let return_type = &input.sig.output;
