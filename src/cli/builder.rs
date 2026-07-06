@@ -71,6 +71,10 @@ impl CliBuilder {
     /// The top-level command is named `sdforge` (the framework's program
     /// identity). Each registration becomes a SubCommand; argument metadata
     /// is translated per the rules in the module-level docs.
+    ///
+    /// When the `docs` feature is enabled, the `docs` SubCommand (from
+    /// [`crate::cli::docs_subcommand`]) is automatically appended — users
+    /// do not need to register it manually (T021).
     pub fn build(&self) -> clap::Command {
         let mut root = clap::Command::new("sdforge")
             .version(env!("CARGO_PKG_VERSION"))
@@ -78,6 +82,13 @@ impl CliBuilder {
 
         for reg in inventory::iter::<CliCommandRegistration>() {
             root = root.subcommand(build_subcommand(reg));
+        }
+
+        // T021: docs feature 启用时自动注入 docs 子命令。
+        // 用 cfg 门控确保 cli-only 编译时不引入 docs_subcommand 模块依赖。
+        #[cfg(feature = "docs")]
+        {
+            root = root.subcommand(crate::cli::docs_subcommand::docs_subcommand_definition());
         }
 
         root
