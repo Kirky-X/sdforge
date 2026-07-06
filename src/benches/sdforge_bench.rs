@@ -579,6 +579,147 @@ criterion_group!(
 );
 
 // =============================================================================
+// Rate Limit Benchmarks (feature = "ratelimit")
+// =============================================================================
+
+/// Benchmark `LimiteronAdapter::check` performance.
+///
+/// Measures two scenarios (design.md D8):
+/// 1. `ratelimit_governor_allowed`: first check on a fresh identifier (allowed)
+/// 2. `ratelimit_governor_denied`: check after quota exhausted (denied)
+///
+/// Uses a tokio runtime because `LimiteronAdapter::new()` and `check()` are
+/// async. Each iteration uses a unique identifier to avoid cross-iteration
+/// state pollution on the "allowed" path; the "denied" path pre-exhausts a
+/// fixed identifier and then benches the denied check.
+#[cfg(feature = "ratelimit")]
+fn benchmark_limiteron_governor(c: &mut Criterion) {
+    use sdforge::security::ratelimit::{LimiteronAdapter, RateLimiter};
+    use std::sync::Arc;
+    use tokio::runtime::Runtime;
+
+    let rt = Runtime::new().expect("tokio runtime for bench");
+
+    // Pre-construct the adapter (Governor with default config + memory storage).
+    let adapter = rt.block_on(LimiteronAdapter::new());
+    let limiter: Arc<dyn RateLimiter> = Arc::new(adapter);
+
+    // Allowed scenario: unique identifier per iteration → always first call.
+    let mut counter: u64 = 0;
+    c.bench_function("ratelimit_governor_allowed", |b| {
+        b.iter(|| {
+            let id = format!("allowed-{}", counter);
+            counter = counter.wrapping_add(1);
+            rt.block_on(limiter.check(&id)).expect("first call allowed")
+        })
+    });
+
+    // Denied scenario: exhaust a fixed identifier's quota, then bench the
+    // denied check. We loop until `check` returns Err to guarantee the
+    // identifier is rate-limited before measuring.
+    c.bench_function("ratelimit_governor_denied", |b| {
+        // Pre-exhaust: call until denied. Default limiteron config may have a
+        // generous quota, so we cap at 10_000 calls to avoid an infinite loop.
+        for _ in 0..10_000 {
+            if rt.block_on(limiter.check("denied-bench")).is_err() {
+                break;
+            }
+        }
+        b.iter(|| {
+            // Each iteration should return Err (denied).
+            let _ = rt.block_on(limiter.check("denied-bench"));
+        })
+    });
+}
+
+/// Benchmark `RateLimitMiddleware` end-to-end overhead.
+///
+/// Measures the full middleware path (limiter check + inner service call) with
+/// a mock `RateLimiter` that always returns `Ok(())`, so the bench isolates
+/// the middleware's own overhead (clone, async dispatch, response build).
+///
+/// Uses `tower::Layer` + `tower::Service::call` and a tokio runtime to drive
+/// the async future.
+#[cfg(feature = "ratelimit")]
+fn benchmark_rate_limit_middleware(c: &mut Criterion) {
+    use axum::body::Body;
+    use axum::http::Request;
+    use axum::response::Response;
+    use sdforge::security::ratelimit::{RateLimitError, RateLimitLayer, RateLimitMiddleware, RateLimiter};
+    use std::convert::Infallible;
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::Arc;
+    use std::task::{Context, Poll};
+    use tokio::runtime::Runtime;
+    use tower::{Layer, Service};
+
+    /// Mock `RateLimiter` that always approves (returns `Ok(())`).
+    struct AlwaysAllowLimiter;
+
+    impl RateLimiter for AlwaysAllowLimiter {
+        fn check<'a>(
+            &'a self,
+            _identifier: &'a str,
+        ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>> {
+            Box::pin(async { Ok(()) })
+        }
+
+        fn check_request<'a>(
+            &'a self,
+            _req: &'a Request<Body>,
+        ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>> {
+            Box::pin(async { Ok(()) })
+        }
+    }
+
+    /// Minimal `Clone` echo service (mirrors `middleware_tests.rs`).
+    #[derive(Clone)]
+    struct EchoService;
+
+    impl Service<Request<Body>> for EchoService {
+        type Response = Response;
+        type Error = Infallible;
+        type Future = Pin<Box<dyn Future<Output = Result<Response, Infallible>> + Send>>;
+
+        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn call(&mut self, _req: Request<Body>) -> Self::Future {
+            Box::pin(async move {
+                let resp = Response::new(Body::from("ok"));
+                Ok(resp)
+            })
+        }
+    }
+
+    let rt = Runtime::new().expect("tokio runtime for bench");
+    let limiter: Arc<dyn RateLimiter> = Arc::new(AlwaysAllowLimiter);
+    let layer = RateLimitLayer::new(limiter);
+
+    c.bench_function("ratelimit_middleware_passthrough", |b| {
+        b.iter(|| {
+            // Construct a fresh middleware per iteration because `Service::call`
+            // takes `&mut self` and the future owns the request.
+            let mut middleware: RateLimitMiddleware<EchoService> = layer.layer(EchoService);
+            let req = Request::builder()
+                .body(Body::empty())
+                .expect("request build");
+            rt.block_on(middleware.call(req))
+                .expect("middleware must not error")
+        })
+    });
+}
+
+#[cfg(feature = "ratelimit")]
+criterion_group!(
+    ratelimit_benches,
+    benchmark_limiteron_governor,
+    benchmark_rate_limit_middleware,
+);
+
+// =============================================================================
 // HTTP Benchmarks (feature = "http")
 // =============================================================================
 
@@ -698,6 +839,13 @@ fn main() {
         benchmark_jwt_operations(&mut criterion);
         benchmark_bearer_auth(&mut criterion);
         benchmark_lru_cache(&mut criterion);
+    }
+
+    // Rate limit benchmarks (limiteron governor + middleware)
+    #[cfg(feature = "ratelimit")]
+    {
+        benchmark_limiteron_governor(&mut criterion);
+        benchmark_rate_limit_middleware(&mut criterion);
     }
 
     // HTTP benchmarks
