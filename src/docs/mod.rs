@@ -67,7 +67,7 @@ pub fn generate_docs(format: DocFormat) -> String {
             })
         }
         DocFormat::SwaggerUi => generate_swagger_html(),
-        DocFormat::CliMarkdown => String::new(),
+        DocFormat::CliMarkdown => cli_markdown::generate_cli_docs(),
         DocFormat::McpMarkdown => String::new(),
         DocFormat::All => String::new(),
     }
