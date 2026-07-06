@@ -148,3 +148,55 @@ fn test_builder_with_dependencies_injects_state() {
     // 4. `build()` must succeed after state injection (no panic, no error).
     let _cmd = builder.build();
 }
+
+// ============================================================================
+// T021: CliBuilder 自动注入 docs 子命令（docs feature）
+// ============================================================================
+
+/// 当 `docs` feature 启用时，`CliBuilder::build()` 必须自动 append
+/// 名为 `docs` 的 SubCommand（来自 [`crate::cli::docs_subcommand`]
+/// 模块），用户无需手动注册。
+#[cfg(feature = "docs")]
+#[test]
+fn test_builder_includes_docs_subcommand() {
+    let cmd = CliBuilder::new().build();
+    let docs_sub = cmd
+        .find_subcommand("docs")
+        .expect("docs feature 启用时 build() 必须包含 docs 子命令");
+    // 验证子命令名称与 about 描述
+    let about_str = docs_sub
+        .get_about()
+        .map(|s| s.to_string())
+        .unwrap_or_default();
+    assert!(
+        about_str.contains("documentation") || about_str.contains("文档"),
+        "docs 子命令 about 必须包含文档描述，实际: {}",
+        about_str
+    );
+    // 验证 --format 参数被注入
+    assert!(
+        docs_sub
+            .get_arguments()
+            .any(|a| a.get_id().as_str() == "format"),
+        "注入的 docs 子命令必须含 --format 参数"
+    );
+    // 验证 --output 参数被注入
+    assert!(
+        docs_sub
+            .get_arguments()
+            .any(|a| a.get_id().as_str() == "output"),
+        "注入的 docs 子命令必须含 --output 参数"
+    );
+}
+
+/// 当 `docs` feature 未启用时（仅 `cli` feature），`CliBuilder::build()`
+/// **不得**包含 `docs` 子命令——验证特性门控正确性，避免误注入。
+#[cfg(not(feature = "docs"))]
+#[test]
+fn test_builder_excludes_docs_subcommand_when_docs_disabled() {
+    let cmd = CliBuilder::new().build();
+    assert!(
+        cmd.find_subcommand("docs").is_none(),
+        "docs feature 未启用时不应注入 docs 子命令"
+    );
+}
