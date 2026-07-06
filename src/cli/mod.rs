@@ -35,7 +35,7 @@ pub enum CliArgType {
 /// into a `&'static [CliArgInfo]` on `CliCommandRegistration`. All fields
 /// are `&'static str` / `Option<&'static str>` so the struct is `Copy` and
 /// can live in read-only memory.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CliArgInfo {
     /// Argument name as it appears on the command line.
     pub name: &'static str,
