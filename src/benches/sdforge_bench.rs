@@ -410,25 +410,11 @@ criterion_group!(
 // Security Benchmarks (feature = "security")
 // =============================================================================
 
-/// Benchmark for API key auth rate limiting performance
-#[cfg(feature = "security")]
-fn benchmark_rate_limiter(c: &mut Criterion) {
-    use sdforge::security::AppApiKeyAuth;
-
-    let auth = AppApiKeyAuth::new();
-
-    c.bench_function("api_key_auth_validate_first", |b| {
-        b.iter(|| auth.validate_key("test_key_1", "127.0.0.1"))
-    });
-
-    c.bench_function("api_key_auth_validate_existing", |b| {
-        // Pre-populate the key
-        let _ = auth.validate_key("existing_key", "127.0.0.1");
-        b.iter(|| auth.validate_key("existing_key", "127.0.0.1"))
-    });
-}
-
-/// Benchmark for API key validation
+/// Benchmark for API key validation performance.
+///
+/// Merges the former `benchmark_rate_limiter` (first-time/existing key
+/// validation) with the original `benchmark_api_key_validation` (valid/invalid
+/// key validation) into a single bench function covering all four scenarios.
 #[cfg(feature = "security")]
 fn benchmark_api_key_validation(c: &mut Criterion) {
     use sdforge::security::AppApiKeyAuth;
@@ -439,10 +425,23 @@ fn benchmark_api_key_validation(c: &mut Criterion) {
     // Add a test key
     auth.add_key(api_key.to_string(), vec!["read".to_string()]);
 
+    // First-time validation (key not pre-populated in cache)
+    c.bench_function("api_key_auth_validate_first", |b| {
+        b.iter(|| auth.validate_key("test_key_1", "127.0.0.1"))
+    });
+
+    // Existing key validation (pre-populated)
+    c.bench_function("api_key_auth_validate_existing", |b| {
+        let _ = auth.validate_key("existing_key", "127.0.0.1");
+        b.iter(|| auth.validate_key("existing_key", "127.0.0.1"))
+    });
+
+    // Valid key validation (explicitly added)
     c.bench_function("api_key_validate_valid", |b| {
         b.iter(|| auth.validate_key(api_key, "127.0.0.1"))
     });
 
+    // Invalid key validation
     c.bench_function("api_key_validate_invalid", |b| {
         b.iter(|| auth.validate_key("invalid_key", "127.0.0.1"))
     });
@@ -573,7 +572,6 @@ fn benchmark_lru_cache(c: &mut Criterion) {
 #[cfg(feature = "security")]
 criterion_group!(
     security_benches,
-    benchmark_rate_limiter,
     benchmark_api_key_validation,
     benchmark_jwt_operations,
     benchmark_bearer_auth,
@@ -696,7 +694,6 @@ fn main() {
     // Security benchmarks
     #[cfg(feature = "security")]
     {
-        benchmark_rate_limiter(&mut criterion);
         benchmark_api_key_validation(&mut criterion);
         benchmark_jwt_operations(&mut criterion);
         benchmark_bearer_auth(&mut criterion);
