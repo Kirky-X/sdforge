@@ -131,5 +131,16 @@ impl CliCommandRegistration {
     }
 }
 
+// ============================================================================
+// T004: inventory collect — compile-time registration of CLI commands.
+// ============================================================================
+//
+// Mirrors the registration pattern in src/http/mod.rs and src/mcp/mod.rs.
+// `inventory::collect!` declares the type as inventory-collectable; the
+// `#[service_api]` macro (T008) emits `inventory::submit!` blocks at
+// call sites. At runtime, `CliBuilder::build()` (T005) iterates this
+// registry to construct the `clap::Command` tree.
+inventory::collect!(CliCommandRegistration);
+
 #[cfg(test)]
 mod tests;

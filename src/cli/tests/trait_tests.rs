@@ -123,3 +123,50 @@ fn test_cli_command_registration_const_fn() {
     assert_eq!(REG.name, "ping");
     assert_eq!(REG.handler_fn_name, "ping_handler");
 }
+
+// ============================================================================
+// T004: inventory collects CliCommandRegistration submissions
+// ============================================================================
+
+// Test-only registration submitted at module load time. The static
+// lifetime is required by `inventory::submit!`. Doc comments are not
+// applied to macro invocations, hence the plain `//` style here.
+inventory::submit!(
+    CliCommandRegistration::new(
+        "trait_test_command",
+        "v1",
+        "Test command for trait_tests",
+        "trait_test_handler"
+    )
+    .with_args(&[CliArgInfo::new(
+        "input",
+        "Input value",
+        CliArgType::Path,
+        true,
+        None,
+    )])
+);
+
+/// Verify that `inventory::iter::<CliCommandRegistration>()` yields the
+/// statically-submitted test entry. This validates that
+/// `inventory::collect!(CliCommandRegistration)` is in effect.
+#[test]
+fn test_inventory_collects_registration() {
+    let found: Vec<_> = inventory::iter::<CliCommandRegistration>()
+        .filter(|r| r.name == "trait_test_command")
+        .collect();
+
+    assert_eq!(
+        found.len(),
+        1,
+        "expected exactly one `trait_test_command` registration"
+    );
+
+    let reg = &found[0];
+    assert_eq!(reg.version, "v1");
+    assert_eq!(reg.description, "Test command for trait_tests");
+    assert_eq!(reg.handler_fn_name, "trait_test_handler");
+    assert_eq!(reg.args.len(), 1);
+    assert_eq!(reg.args[0].name, "input");
+    assert_eq!(reg.args[0].arg_type, CliArgType::Path);
+}
