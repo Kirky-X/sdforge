@@ -22,7 +22,7 @@ chrono = { version = "~0.4", features = ["serde"] }
 inventory = "0.3"
 
 [features]
-default = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "cache_examples", "grpc_examples", "logging_examples", "openapi_examples", "combined_examples"]
+default = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "cache_examples", "grpc_examples", "logging_examples", "openapi_examples", "cli_examples", "docs_examples", "combined_examples"]
 http_examples = ["sdforge/http"]
 mcp_examples = ["sdforge/mcp"]
 websocket_examples = ["sdforge/websocket"]
@@ -32,6 +32,9 @@ cache_examples = ["sdforge/cache", "sdforge/http"]
 grpc_examples = ["sdforge/grpc"]
 logging_examples = ["sdforge/logging"]
 openapi_examples = ["sdforge/openapi", "http_examples"]
+cli_examples = ["sdforge/cli"]
+docs_examples = ["sdforge/docs"]
 combined_examples = ["http_examples", "mcp_examples", "websocket_examples",
                      "streaming_examples", "security_examples", "cache_examples",
-                     "grpc_examples", "logging_examples", "openapi_examples"]
+                     "grpc_examples", "logging_examples", "openapi_examples",
+                     "cli_examples", "docs_examples"]
