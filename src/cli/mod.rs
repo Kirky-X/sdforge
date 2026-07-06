@@ -71,5 +71,65 @@ impl CliArgInfo {
     }
 }
 
+// ============================================================================
+// T003: CliCommandRegistration
+// ============================================================================
+
+/// Static metadata for a CLI command, registered at compile time via
+/// `inventory::submit!` and collected by `CliBuilder::build()`.
+///
+/// All fields are `&'static` so the registration lives in read-only memory
+/// and the struct is `Copy`. The `args` slice is built by the
+/// `#[service_api]` macro from the function's parameter list (Path/Body
+/// parameters become `CliArgInfo` entries; State parameters are dropped).
+#[derive(Debug, Clone, Copy)]
+pub struct CliCommandRegistration {
+    /// Command name as the user types it (e.g. `echo`, `list`).
+    pub name: &'static str,
+    /// Semver-style version string surfaced in `--version`.
+    pub version: &'static str,
+    /// One-line description rendered in the parent command's `--help`.
+    pub description: &'static str,
+    /// Symbol name of the handler function — used to look up the paired
+    /// `CliHandlerRegistration` at runtime.
+    pub handler_fn_name: &'static str,
+    /// Static slice of argument metadata, sorted in declaration order.
+    pub args: &'static [CliArgInfo],
+}
+
+impl CliCommandRegistration {
+    /// Construct a registration with no arguments.
+    ///
+    /// `const fn` so the macro can emit it inline without runtime cost.
+    pub const fn new(
+        name: &'static str,
+        version: &'static str,
+        description: &'static str,
+        handler_fn_name: &'static str,
+    ) -> Self {
+        Self {
+            name,
+            version,
+            description,
+            handler_fn_name,
+            args: &[],
+        }
+    }
+
+    /// Attach a static argument slice, returning a new registration.
+    ///
+    /// `const fn` so the macro can chain `new(...).with_args(&[...])` at
+    /// compile time.
+    pub const fn with_args(self, args: &'static [CliArgInfo]) -> Self {
+        Self {
+            name: self.name,
+            version: self.version,
+            description: self.description,
+            handler_fn_name: self.handler_fn_name,
+            args,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests;
