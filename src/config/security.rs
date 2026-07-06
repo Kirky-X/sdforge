@@ -31,6 +31,15 @@ pub struct SecurityConfig {
     pub referrer_policy: String,
     /// Permissions-Policy header
     pub permissions_policy: String,
+    /// Optional rate-limit configuration (limiteron).
+    ///
+    /// When `Some`, holds a `FlowControlConfig` that can be applied to a
+    /// limiteron `Governor` via `LimiteronAdapter`. When `None`, no
+    /// rate limiting is configured.
+    ///
+    /// Only present when the `ratelimit` feature is enabled.
+    #[cfg(feature = "ratelimit")]
+    pub rate_limit: Option<limiteron::config::FlowControlConfig>,
 }
 
 impl Default for SecurityConfig {
@@ -47,6 +56,8 @@ impl Default for SecurityConfig {
                 .to_string(),
             referrer_policy: defaults::security_headers::REFERRER_POLICY.to_string(),
             permissions_policy: defaults::security_headers::PERMISSIONS_POLICY.to_string(),
+            #[cfg(feature = "ratelimit")]
+            rate_limit: None,
         }
     }
 }
@@ -65,6 +76,8 @@ impl SecurityConfig {
                 .to_string(),
             referrer_policy: defaults::security_headers::REFERRER_POLICY.to_string(),
             permissions_policy: defaults::security_headers::PERMISSIONS_POLICY.to_string(),
+            #[cfg(feature = "ratelimit")]
+            rate_limit: None,
         }
     }
 
@@ -233,5 +246,32 @@ mod tests {
         assert!(config.validate().is_ok());
         let disabled = SecurityConfig::disabled();
         assert!(disabled.validate().is_ok());
+    }
+
+    /// Test `SecurityConfig::default().rate_limit` is `None` when the
+    /// `ratelimit` feature is enabled.
+    ///
+    /// Covers R-security-config-001: the new optional `rate_limit` field
+    /// defaults to `None` so existing configs are unaffected.
+    #[cfg(feature = "ratelimit")]
+    #[test]
+    fn test_security_config_default_rate_limit_is_none() {
+        let config = SecurityConfig::default();
+        assert!(config.rate_limit.is_none());
+    }
+
+    /// Test `SecurityConfig` can be constructed with a `FlowControlConfig`.
+    ///
+    /// Covers R-security-config-002: users can supply a rate-limit config
+    /// via struct literal construction.
+    #[cfg(feature = "ratelimit")]
+    #[test]
+    fn test_security_config_with_rate_limit() {
+        use limiteron::config::FlowControlConfig;
+        let config = SecurityConfig {
+            rate_limit: Some(FlowControlConfig::default()),
+            ..Default::default()
+        };
+        assert!(config.rate_limit.is_some());
     }
 }
