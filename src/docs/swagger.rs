@@ -53,6 +53,11 @@ async fn serve_swagger_ui(
 ) -> impl IntoResponse {
     let tail = path.as_ref().map(|p| p.as_str()).unwrap_or("");
 
+    // 路径遍历防护：拒绝包含 `..` 的请求，防止读取 Swagger UI 静态包外的文件。
+    if tail.contains("..") {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
     match serve(tail, state) {
         Ok(Some(file)) => (
             StatusCode::OK,
@@ -61,6 +66,10 @@ async fn serve_swagger_ui(
         )
             .into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()).into_response(),
+        Err(error) => {
+            // 不向客户端泄露内部错误详情（tiangang 发现 3），仅记录日志。
+            log::error!("Swagger UI serve failed: {}", error);
+            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+        }
     }
 }

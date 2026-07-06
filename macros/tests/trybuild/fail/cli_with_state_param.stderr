@@ -1,0 +1,13 @@
+error: CLI mode (cli = true) does not support State parameters. Either remove the State parameter, use HTTP/MCP protocol for State injection, or wait for full State injection support via CliBuilder::with_dependencies.
+  --> tests/trybuild/fail/cli_with_state_param.rs:12:10
+   |
+12 | async fn test_cli_state(id: u64, #[state] state: AppState) -> String {
+   |          ^^^^^^^^^^^^^^
+
+warning: unused variable: `state`
+  --> tests/trybuild/fail/cli_with_state_param.rs:12:43
+   |
+12 | async fn test_cli_state(id: u64, #[state] state: AppState) -> String {
+   |                                           ^^^^^ help: if this is intentional, prefix it with an underscore: `_state`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default

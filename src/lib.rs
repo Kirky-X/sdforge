@@ -308,7 +308,10 @@ pub fn init_all_plugins() -> PluginCounts {
         static ROUTES: OnceLock<Mutex<Vec<&'static RouteRegistration>>> = OnceLock::new();
         let routes =
             ROUTES.get_or_init(|| Mutex::new(inventory::iter::<RouteRegistration>().collect()));
-        routes.lock().map(|g| g.len()).unwrap_or(0)
+        routes.lock().map(|g| g.len()).unwrap_or_else(|e| {
+            log::error!("inventory Mutex poisoned: {}", e);
+            0
+        })
     };
     #[cfg(not(feature = "http"))]
     let routes = 0;
@@ -320,7 +323,10 @@ pub fn init_all_plugins() -> PluginCounts {
         static MCP_TOOLS: OnceLock<Mutex<Vec<&'static McpToolRegistration>>> = OnceLock::new();
         let tools = MCP_TOOLS
             .get_or_init(|| Mutex::new(inventory::iter::<McpToolRegistration>().collect()));
-        tools.lock().map(|g| g.len()).unwrap_or(0)
+        tools.lock().map(|g| g.len()).unwrap_or_else(|e| {
+            log::error!("inventory Mutex poisoned: {}", e);
+            0
+        })
     };
     #[cfg(feature = "websocket")]
     let ws_routes = {
@@ -329,7 +335,10 @@ pub fn init_all_plugins() -> PluginCounts {
         static WS_ROUTES: OnceLock<Mutex<Vec<&'static WebSocketRoute>>> = OnceLock::new();
         let routes =
             WS_ROUTES.get_or_init(|| Mutex::new(inventory::iter::<WebSocketRoute>().collect()));
-        routes.lock().map(|g| g.len()).unwrap_or(0)
+        routes.lock().map(|g| g.len()).unwrap_or_else(|e| {
+            log::error!("inventory Mutex poisoned: {}", e);
+            0
+        })
     };
     #[cfg(feature = "grpc")]
     let grpc_routes = {
@@ -338,7 +347,10 @@ pub fn init_all_plugins() -> PluginCounts {
         static GRPC_ROUTES: OnceLock<Mutex<Vec<&'static GrpcRouteRegistration>>> = OnceLock::new();
         let routes = GRPC_ROUTES
             .get_or_init(|| Mutex::new(inventory::iter::<GrpcRouteRegistration>().collect()));
-        routes.lock().map(|g| g.len()).unwrap_or(0)
+        routes.lock().map(|g| g.len()).unwrap_or_else(|e| {
+            log::error!("inventory Mutex poisoned: {}", e);
+            0
+        })
     };
 
     // T010: touch CLI inventory so the linker keeps `inventory::submit!`
@@ -361,7 +373,10 @@ pub fn init_all_plugins() -> PluginCounts {
         let _handlers = CLI_HANDLERS
             .get_or_init(|| Mutex::new(inventory::iter::<CliHandlerRegistration>().collect()));
 
-        cmds.lock().map(|g| g.len()).unwrap_or(0)
+        cmds.lock().map(|g| g.len()).unwrap_or_else(|e| {
+            log::error!("inventory Mutex poisoned: {}", e);
+            0
+        })
     };
 
     PluginCounts {

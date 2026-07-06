@@ -31,7 +31,7 @@ pub use swagger::swagger_ui_router;
 /// | `SwaggerUi` | HTML 入口页（指向 `/swagger-ui/`） | `utoipa-swagger-ui` |
 /// | `CliMarkdown` | CLI 命令手册 Markdown | `clap_markdown::help_markdown_command` |
 /// | `McpMarkdown` | MCP 工具列表 Markdown | `inventory::iter::<McpToolRegistration>` |
-/// | `All` | 以上全部拼接 | 各格式组合 |
+/// | `All` | OpenApi + CliMarkdown + McpMarkdown 拼接（SwaggerUi 为 HTML，需单独访问 /swagger-ui/） | 各格式组合 |
 ///
 /// 默认值为 [`DocFormat::OpenApi`]。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -56,17 +56,15 @@ pub enum DocFormat {
 /// - `SwaggerUi` → HTML 入口页
 /// - `CliMarkdown` → CLI 命令手册
 /// - `McpMarkdown` → MCP 工具列表（需 `mcp` feature，未启用时返回占位提示）
-/// - `All` → 全部格式拼接（OpenApi + CliMarkdown + McpMarkdown）
+/// - `All` → 全部格式拼接（OpenApi + CliMarkdown + McpMarkdown；SwaggerUi 为 HTML，需单独访问 /swagger-ui/）
 ///
-/// 序列化失败时降级为空字符串并 `log::warn!`，不 panic。
+/// OpenAPI 序列化失败时 panic（`utoipa::OpenApi` 序列化失败属于框架 bug，不应静默吞掉）。
 pub fn generate_docs(format: DocFormat) -> String {
     match format {
         DocFormat::OpenApi => {
             let spec = crate::openapi::generate_openapi_spec();
-            serde_json::to_string_pretty(&spec).unwrap_or_else(|e| {
-                log::warn!("OpenAPI 序列化失败: {}", e);
-                String::new()
-            })
+            serde_json::to_string_pretty(&spec)
+                .expect("OpenAPI serialization should not fail — this indicates a framework bug in generate_openapi_spec")
         }
         DocFormat::SwaggerUi => generate_swagger_html(),
         DocFormat::CliMarkdown => cli_markdown::generate_cli_docs(),
@@ -80,6 +78,8 @@ pub fn generate_docs(format: DocFormat) -> String {
             out.push_str(&generate_docs(DocFormat::CliMarkdown));
             out.push_str("\n\n");
             out.push_str(&generate_docs(DocFormat::McpMarkdown));
+            out.push_str("\n\n");
+            out.push_str("<!-- Swagger UI: run with --format swagger or visit /swagger-ui/ for interactive docs -->\n");
             out
         }
     }
@@ -126,6 +126,16 @@ fn generate_swagger_html() -> String {
 /// 调用 [`generate_docs`] 生成内容，再用 `std::fs::write` 写入。
 /// IO 错误直接返回，不吞掉。
 pub fn write_docs(format: DocFormat, output_path: &std::path::Path) -> Result<(), std::io::Error> {
+    // 路径遍历防护：拒绝包含 `..` 的路径，防止写入到工作目录外的位置。
+    if output_path
+        .components()
+        .any(|c| c == std::path::Component::ParentDir)
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "output path must not contain parent directory components (..)",
+        ));
+    }
     let content = generate_docs(format);
     std::fs::write(output_path, content)
 }
