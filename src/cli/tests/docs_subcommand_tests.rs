@@ -99,7 +99,7 @@ fn test_docs_subcommand_writes_file() {
 fn test_docs_subcommand_stdout_when_no_output() {
     let cmd = docs_subcommand_definition();
     let matches = cmd
-        .try_get_matches_from(["docs", "--format", "cli-md"])
+        .try_get_matches_from(["docs", "--format", "cli-markdown"])
         .expect("解析参数失败");
 
     // 必须返回 Ok(()) —— 不验证 stdout 内容，仅验证调用路径无误

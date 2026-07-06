@@ -17,7 +17,7 @@ use crate::docs::{generate_docs, write_docs, DocFormat};
 /// `docs` 子命令支持的格式名称与 [`DocFormat`] 变体的映射。
 ///
 /// `value_parser` 限定 clap 接受的字符串集合，这里用静态切片方便扩展。
-const FORMAT_VALUES: &[&str] = &["openapi", "swagger", "cli-md", "mcp-md", "all"];
+const FORMAT_VALUES: &[&str] = &["openapi", "swagger", "cli-markdown", "mcp-markdown", "all"];
 
 /// 构造 `docs` 子命令的 `clap::Command` 定义。
 ///
@@ -51,8 +51,8 @@ fn parse_format(s: &str) -> DocFormat {
     match s {
         "openapi" => DocFormat::OpenApi,
         "swagger" => DocFormat::SwaggerUi,
-        "cli-md" => DocFormat::CliMarkdown,
-        "mcp-md" => DocFormat::McpMarkdown,
+        "cli-markdown" => DocFormat::CliMarkdown,
+        "mcp-markdown" => DocFormat::McpMarkdown,
         "all" => DocFormat::All,
         // 不可达：clap value_parser 已限定输入集合。
         _ => DocFormat::All,

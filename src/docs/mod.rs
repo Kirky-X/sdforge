@@ -29,7 +29,7 @@ pub use swagger::swagger_ui_router;
 /// |------|----------|------|
 /// | `OpenApi` | OpenAPI 3.1 JSON | `openapi::generate_openapi_spec()` |
 /// | `SwaggerUi` | HTML 入口页（指向 `/swagger-ui/`） | `utoipa-swagger-ui` |
-/// | `CliMarkdown` | CLI 命令手册 Markdown | `clap_markdown::help_markdown` |
+/// | `CliMarkdown` | CLI 命令手册 Markdown | `clap_markdown::help_markdown_command` |
 /// | `McpMarkdown` | MCP 工具列表 Markdown | `inventory::iter::<McpToolRegistration>` |
 /// | `All` | 以上全部拼接 | 各格式组合 |
 ///
