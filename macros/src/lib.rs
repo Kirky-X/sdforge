@@ -661,6 +661,22 @@ fn generate_cli_registration(
     params: &[ParamInfo],
     _path_params: &[String],
 ) -> TokenStream2 {
+    // 检测 State 参数 — CLI 模式当前不支持 State 注入（spec Out of Scope:
+    // "不实现复杂的 State 工厂"）。发编译错误而非生成参数数量不匹配的调用，
+    // 避免休眠 bug（kueiku Bug 1+2: 宏过滤 State 后调用原函数导致编译失败）。
+    let has_state = params
+        .iter()
+        .any(|p| matches!(p.param_kind, ParamKind::State));
+    if has_state {
+        return syn::Error::new(
+            fn_name.span(),
+            "CLI mode (cli = true) does not support State parameters. \
+             Either remove the State parameter, use HTTP/MCP protocol for State injection, \
+             or wait for full State injection support via CliBuilder::with_dependencies.",
+        )
+        .to_compile_error();
+    }
+
     // Filter to CLI-relevant params (Path/Body only). State/Extension are
     // runtime concerns; Query/Header/Cookie/Form are HTTP-specific.
     let cli_params: Vec<&ParamInfo> = params

@@ -54,8 +54,9 @@ fn parse_format(s: &str) -> DocFormat {
         "cli-markdown" => DocFormat::CliMarkdown,
         "mcp-markdown" => DocFormat::McpMarkdown,
         "all" => DocFormat::All,
-        // 不可达：clap value_parser 已限定输入集合。
-        _ => DocFormat::All,
+        // 不可达：clap value_parser 已限定输入集合。用 unreachable! 显性化失败，
+        // 避免未来扩展 FORMAT_VALUES 时遗漏此 match 分支导致静默产出 All 错误文档。
+        _ => unreachable!("clap value_parser 已限定输入集合，得到非法值: {}", s),
     }
 }
 
