@@ -65,11 +65,31 @@ pub fn generate_docs(format: DocFormat) -> String {
                 String::new()
             })
         }
-        DocFormat::SwaggerUi => String::new(),
+        DocFormat::SwaggerUi => generate_swagger_html(),
         DocFormat::CliMarkdown => String::new(),
         DocFormat::McpMarkdown => String::new(),
         DocFormat::All => String::new(),
     }
+}
+
+/// 生成 Swagger UI HTML 入口页。
+///
+/// 返回一个简单的 HTML 页面，包含指向 `/swagger-ui/` 的链接和自动跳转脚本。
+/// 实际的 Swagger UI 界面由 [`swagger_ui_router`] 挂载的 axum Router 提供。
+fn generate_swagger_html() -> String {
+    r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>SDForge API Docs</title>
+    <meta http-equiv="refresh" content="0; url=/swagger-ui/">
+    <script>window.location.replace('/swagger-ui/');</script>
+</head>
+<body>
+    <p>Redirecting to <a href="/swagger-ui/">Swagger UI</a>...</p>
+</body>
+</html>"#
+        .to_string()
 }
 
 /// 将指定格式的文档写入文件。
