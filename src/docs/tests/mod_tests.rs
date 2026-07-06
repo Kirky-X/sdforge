@@ -103,3 +103,25 @@ fn test_write_docs_creates_file() {
         content.chars().next()
     );
 }
+
+// ============================================================================
+// T015: generate_docs 支持 SwaggerUi
+// ============================================================================
+
+/// `generate_docs(SwaggerUi)` 应返回含 `<html` 和 `swagger-ui` 的 HTML 字符串。
+#[test]
+fn test_generate_docs_swagger_returns_html() {
+    let html = generate_docs(DocFormat::SwaggerUi);
+    assert!(!html.is_empty(), "SwaggerUi HTML 不应为空");
+    let lower = html.to_lowercase();
+    assert!(
+        lower.contains("<html"),
+        "SwaggerUi 输出应含 <html 标签，实际: {}",
+        &html[..html.len().min(200)]
+    );
+    assert!(
+        lower.contains("swagger-ui"),
+        "SwaggerUi 输出应含 swagger-ui 链接，实际: {}",
+        &html[..html.len().min(200)]
+    );
+}
