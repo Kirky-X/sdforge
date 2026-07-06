@@ -42,5 +42,31 @@ pub enum DocFormat {
     All,
 }
 
+/// 根据指定格式生成文档字符串。
+///
+/// 各变体分发到对应的生成函数：
+/// - `OpenApi` → `crate::openapi::generate_openapi_spec()` 序列化为 pretty JSON
+/// - `SwaggerUi` → HTML 入口页（T015 填充）
+/// - `CliMarkdown` → CLI 命令手册（T017 填充）
+/// - `McpMarkdown` → MCP 工具列表（T019 填充，需 `mcp` feature）
+/// - `All` → 全部格式拼接（T019 填充）
+///
+/// 序列化失败时降级为空字符串并 `log::warn!`，不 panic。
+pub fn generate_docs(format: DocFormat) -> String {
+    match format {
+        DocFormat::OpenApi => {
+            let spec = crate::openapi::generate_openapi_spec();
+            serde_json::to_string_pretty(&spec).unwrap_or_else(|e| {
+                log::warn!("OpenAPI 序列化失败: {}", e);
+                String::new()
+            })
+        }
+        DocFormat::SwaggerUi => String::new(),
+        DocFormat::CliMarkdown => String::new(),
+        DocFormat::McpMarkdown => String::new(),
+        DocFormat::All => String::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests;

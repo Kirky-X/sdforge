@@ -4,7 +4,7 @@
 //!
 //! 对应任务：T011 / T012 / T013 / T015 / T017 / T019。
 
-use crate::docs::DocFormat;
+use crate::docs::{generate_docs, DocFormat};
 
 // ============================================================================
 // T011: DocFormat 枚举
@@ -51,4 +51,30 @@ fn test_doc_format_variants() {
     // Default 派生 — 默认 OpenApi
     let default = DocFormat::default();
     assert_eq!(default, DocFormat::OpenApi, "Default 应为 OpenApi");
+}
+
+// ============================================================================
+// T012: generate_docs 入口
+// ============================================================================
+
+/// `generate_docs(OpenApi)` 应返回非空 JSON 字符串，首字符为 `{`。
+#[test]
+fn test_generate_docs_openapi_returns_json() {
+    let json = generate_docs(DocFormat::OpenApi);
+    assert!(!json.is_empty(), "OpenApi 文档不应为空");
+    assert!(
+        json.trim_start().starts_with('{'),
+        "OpenApi 文档首字符应为 `{{`，实际首字符: {:?}",
+        json.chars().next()
+    );
+}
+
+/// `generate_docs(CliMarkdown)` 在 T012 阶段返回占位（空字符串），T017 填充后
+/// 返回含 markdown 标记的非空文本。此处先验证不 panic。
+#[test]
+fn test_generate_docs_cli_markdown_returns_md() {
+    let md = generate_docs(DocFormat::CliMarkdown);
+    // T012 阶段：占位返回空字符串，不 panic 即可
+    // T017 填充后：断言含 markdown 标记
+    let _ = md;
 }
