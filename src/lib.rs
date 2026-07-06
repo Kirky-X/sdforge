@@ -258,6 +258,12 @@ pub mod openapi;
 #[cfg(feature = "openapi")]
 pub use openapi::{generate_openapi_spec, OpenApiBuilder, OpenApiPathParam, OpenApiRouteInfo};
 
+/// 统一文档输出模块 — Swagger UI + CLI/MCP Markdown。
+///
+/// 仅当 `docs` feature 启用时可用。T011-T019 实现逐步填充。
+#[cfg(feature = "docs")]
+pub mod docs;
+
 /// 初始化所有已注册的插件，确保它们不会被链接器优化掉。
 ///
 /// This function must be called at least once to ensure that all inventory-based
