@@ -69,6 +69,15 @@ limiteron = { version = "~0.2", default-features = false }
 # OpenAPI 依赖
 utoipa = { version = "~5.5", default-features = false, features = ["macros"] }
 
+# CLI 依赖 - clap 4.6 提供命令行解析（derive feature 用于过程宏派生）
+clap = { version = "~4.6", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "suggestions"] }
+
+# Swagger UI 依赖 - utoipa-swagger-ui 8.0 配合 utoipa 5.5 提供交互式 API 文档
+utoipa-swagger-ui = { version = "~8.0", default-features = false, features = ["axum"] }
+
+# CLI Markdown 文档依赖 - clap-markdown 0.1 从 clap::Command 生成 Markdown 命令手册
+clap-markdown = { version = "~0.1", default-features = false }
+
 # 其他依赖
 url = { version = "~2.5", default-features = false }
 simd-json = { version = "~0.17", default-features = false, features = ["serde_impl"] }
@@ -146,6 +155,13 @@ tonic-prost = { workspace = true, optional = true }
 
 # OpenAPI dependencies
 utoipa = { workspace = true, optional = true }
+
+# CLI dependencies - clap 用于命令行参数解析
+clap = { workspace = true, optional = true }
+
+# Docs dependencies - Swagger UI 和 Markdown 文档生成
+utoipa-swagger-ui = { workspace = true, optional = true }
+clap-markdown = { workspace = true, optional = true }
 
 # Feature dependencies
 chrono = { workspace = true, optional = true }
@@ -262,6 +278,14 @@ grpc = ["http", "tonic", "prost", "tonic-prost"]
 # OpenAPI 特性 - 自动生成 OpenAPI 3.1 规范
 openapi = ["utoipa", "http"]
 
+# CLI 特性 - clap 集成，与 HTTP/MCP 并列的第三种服务入口
+# 依赖 http（复用 axum 类型）+ clap（derive feature）
+cli = ["http", "dep:clap"]
+
+# Docs 特性 - 统一文档输出（Swagger UI + CLI/MCP Markdown）
+# 依赖 openapi（复用 OpenAPI 生成）+ utoipa-swagger-ui + clap-markdown + cli（docs 子命令需要 CLI 框架）
+docs = ["openapi", "dep:utoipa-swagger-ui", "dep:clap-markdown", "cli"]
+
 # Cache 特性 - oxcache 0.3.2 用 minimal feature 提供缓存后端
 cache = ["dep:http", "oxcache/minimal"]
 
@@ -283,6 +307,8 @@ full = [
     "grpc",
     "logging",
     "openapi",
+    "cli",
+    "docs",
 ]
 hex = ["dep:hex"]
 
