@@ -4,31 +4,56 @@
 //!
 //! This module provides utilities for securing API endpoints.
 //! Requires the `http` feature.
+//!
+//! The `ratelimit` submodule (backed by limiteron 0.2.1) is gated by
+//! `feature = "ratelimit"` and is reachable even when the full `security`
+//! feature is off — see `src/lib.rs` for the parent-module gate
+//! (`any(feature = "security", feature = "ratelimit")`).
 
-// Re-export all public APIs from submodules
+// Re-export all public APIs from submodules (full security feature only)
+#[cfg(feature = "security")]
 pub use traits::*;
+#[cfg(feature = "security")]
 pub use types::*;
 
+#[cfg(feature = "security")]
 pub use api_key::{AppApiKeyAuth, AppApiKeyAuthBuilder};
+#[cfg(feature = "security")]
 pub use audit::{AppAuditLogger, AppAuditLoggerBuilder};
+#[cfg(feature = "security")]
 pub use bearer::{generate_secure_jwt_secret, BearerAuth, BearerAuthBuilder};
+#[cfg(feature = "security")]
 pub use middleware::auth_middleware;
 
-// Submodules
+// Submodules (full security feature only — these pull in uuid/hmac/sha2/etc.)
+#[cfg(feature = "security")]
 mod api_key;
+#[cfg(feature = "security")]
 mod api_key_manager;
+#[cfg(feature = "security")]
 mod audit;
+#[cfg(feature = "security")]
 mod bearer;
+#[cfg(feature = "security")]
 mod middleware;
+#[cfg(feature = "security")]
 mod traits;
+#[cfg(feature = "security")]
 mod types;
 
-// Re-export key management types
+// Rate limiting module — backed by limiteron 0.2.1.
+// Available when the `ratelimit` feature is enabled (inherited by `security`).
+#[cfg(feature = "ratelimit")]
+pub mod ratelimit;
+
+// Re-export key management types (full security feature only)
+#[cfg(feature = "security")]
 pub use api_key_manager::{
     ApiKeyMetadata, ApiKeyVersion, LruCacheManager, LruConfig, LruStats, RotationConfig,
 };
 
-// Implement traits for concrete types
+// Implement traits for concrete types (full security feature only)
+#[cfg(feature = "security")]
 impl traits::ApiKeyAuth for AppApiKeyAuth {
     fn validate_key(&self, key: &str, client_ip: &str) -> Option<Vec<String>> {
         AppApiKeyAuth::validate_key(self, key, client_ip)
@@ -41,7 +66,7 @@ impl traits::ApiKeyAuth for AppApiKeyAuth {
 
 // Note: AuditLogger trait implementation is already in audit.rs
 
-#[cfg(test)]
+#[cfg(all(test, feature = "security"))]
 mod tests {
     use super::*;
     use crate::security::traits::ApiKeyAuth;

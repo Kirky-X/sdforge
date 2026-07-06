@@ -3,8 +3,8 @@
 #[cfg(feature = "websocket")]
 mod websocket_tests {
     use sdforge::websocket::{
-        parse_websocket_message, AppState, ConnectionManager, WebSocketConfig,
-        WebSocketConnection, WebSocketMessage,
+        parse_websocket_message, AppState, ConnectionManager, WebSocketConfig, WebSocketConnection,
+        WebSocketMessage,
     };
     use std::sync::{Arc, Mutex};
 

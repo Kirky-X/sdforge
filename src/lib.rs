@@ -136,8 +136,14 @@ pub mod streaming;
 #[cfg(feature = "streaming")]
 pub use streaming::{create_stream_channel, stream_to_sse, StreamEvent, StreamResponse};
 
-/// Security middleware and authentication utilities
-#[cfg(feature = "security")]
+/// Security middleware and authentication utilities.
+///
+/// Available when either `security` or `ratelimit` is enabled: the
+/// `ratelimit` submodule lives under `crate::security::ratelimit` and must be
+/// reachable even when the full `security` feature is off. Non-ratelimit
+/// submodules are individually gated by `feature = "security"` inside
+/// `src/security/mod.rs`.
+#[cfg(any(feature = "security", feature = "ratelimit"))]
 pub mod security;
 
 #[cfg(feature = "security")]
