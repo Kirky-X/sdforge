@@ -9,13 +9,6 @@
 //! `CliHandlerRegistration`. At runtime, [`CliBuilder`] collects the
 //! registrations and constructs a `clap::Command`.
 
-// Temporary: `mod cli;` is declared private in lib.rs (T002–T006/T029
-// infrastructure). Until T010 promotes it to `pub mod cli;` + adds
-// `pub use` re-exports, the public types here are unreachable from outside
-// the crate and Rust's dead-code / unused-import analysis flags them.
-// `#[allow(...)]` will be removed by T010 once the module becomes public.
-#![allow(dead_code, unused_imports)]
-
 // ============================================================================
 // T002: CliArgType + CliArgInfo
 // ============================================================================
