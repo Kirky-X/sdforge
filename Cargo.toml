@@ -129,6 +129,11 @@ required-features = ["cache"]
 name = "basic_cli"
 required-features = ["cli"]
 
+# Swagger UI 示例 — 演示 swagger_ui_router() + axum serve
+[[example]]
+name = "swagger_demo"
+required-features = ["docs"]
+
 [dependencies]
 # Core dependencies (always required)
 serde = { workspace = true }
