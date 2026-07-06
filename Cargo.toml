@@ -417,6 +417,12 @@ name = "openapi_tests"
 path = "tests/integration/openapi_tests.rs"
 required-features = ["http", "openapi"]
 
+# CLI integration tests — verify #[service_api(cli = true)] + CliBuilder pipeline
+[[test]]
+name = "cli_tests"
+path = "tests/integration/cli_tests.rs"
+required-features = ["cli"]
+
 [[test]]
 name = "macro_tests"
 path = "tests/macros/macro_tests.rs"
