@@ -45,7 +45,11 @@ async fn builder_build_with_default_config_succeeds() {
     let adapter = LimiteronAdapter::builder().build().await;
     // Should construct without panic. Verify by running a check.
     let result = adapter.check("127.0.0.1").await;
-    assert!(result.is_ok(), "builder-built adapter should allow: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "builder-built adapter should allow: {:?}",
+        result
+    );
 }
 
 /// `LimiteronAdapter::with_dependencies(Arc<Governor>)` constructs an instance
@@ -88,7 +92,11 @@ async fn with_dependencies_accepts_prebuilt_governor() {
 
     let adapter = LimiteronAdapter::with_dependencies(Arc::new(governor));
     let result = adapter.check("10.0.0.1").await;
-    assert!(result.is_ok(), "DI adapter should allow first request: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "DI adapter should allow first request: {:?}",
+        result
+    );
 }
 
 /// `check("127.0.0.1").await` on a fresh adapter returns `Ok(())` because the
@@ -100,7 +108,11 @@ async fn with_dependencies_accepts_prebuilt_governor() {
 async fn check_allows_first_request_with_default_config() {
     let adapter = LimiteronAdapter::new().await;
     let result = adapter.check("127.0.0.1").await;
-    assert!(result.is_ok(), "first request should be allowed: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "first request should be allowed: {:?}",
+        result
+    );
 }
 
 /// After exhausting the token bucket, subsequent `check()` calls must return
@@ -203,7 +215,11 @@ async fn check_request_falls_back_to_x_real_ip() {
         .body(Body::empty())
         .expect("request build");
     let result = adapter.check_request(&req).await;
-    assert!(result.is_ok(), "check_request should allow via X-Real-IP: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "check_request should allow via X-Real-IP: {:?}",
+        result
+    );
 }
 
 /// `check_request(req)` falls back to `"unknown"` when neither header is
@@ -215,5 +231,9 @@ async fn check_request_falls_back_to_unknown_identifier() {
         .body(Body::empty())
         .expect("request build");
     let result = adapter.check_request(&req).await;
-    assert!(result.is_ok(), "check_request should allow unknown: {:?}", result);
+    assert!(
+        result.is_ok(),
+        "check_request should allow unknown: {:?}",
+        result
+    );
 }

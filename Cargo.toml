@@ -63,6 +63,9 @@ tonic = { version = "~0.14", default-features = false, features = ["transport", 
 prost = { version = "~0.14", default-features = false, features = ["derive"] }
 tonic-prost = { version = "~0.14", default-features = false }
 
+# 流控依赖 - limiteron 0.2.1 提供统一限流/封禁/配额/熔断
+limiteron = { version = "~0.2", default-features = false }
+
 # OpenAPI 依赖
 utoipa = { version = "~5.5", default-features = false, features = ["macros"] }
 
@@ -174,6 +177,9 @@ bincode = { workspace = true, optional = true }
 # SIMD-accelerated JSON (optional, requires SIMD support)
 simd-json = { workspace = true, optional = true }
 
+# Rate limiting dependencies - limiteron 0.2.1 提供统一流控
+limiteron = { workspace = true, optional = true }
+
 [dev-dependencies]
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
@@ -216,6 +222,17 @@ streaming = ["http", "tokio-stream", "futures-util", "chrono"]
 # Timestamp 特性
 timestamp = ["chrono"]
 
+# Rate limiting 特性 - 继承 limiteron 0.2.1 核心流控能力（tower-middleware/ban-manager/quota-control/circuit-breaker）
+# 依赖 http (axum) 因 RateLimiter::check_request 需要 axum::http::Request<Body>
+ratelimit = [
+    "http",
+    "dep:limiteron",
+    "limiteron/tower-middleware",
+    "limiteron/ban-manager",
+    "limiteron/quota-control",
+    "limiteron/circuit-breaker",
+]
+
 # Security 特性
 security = [
     "http",
@@ -233,6 +250,7 @@ security = [
     "cache",
     "hex",
     "base64",
+    "ratelimit",
 ]
 
 # WebSocket 特性

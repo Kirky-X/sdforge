@@ -7,6 +7,9 @@ use thiserror::Error;
 use crate::core::error::context::{ErrorCategory, ErrorContext};
 use crate::core::response::ServiceError;
 
+#[cfg(feature = "ratelimit")]
+use crate::security::ratelimit::RateLimitError;
+
 /// Framework errors
 ///
 /// Represents various error conditions that can occur during request processing.
@@ -479,6 +482,58 @@ impl ApiError {
 impl From<ApiError> for ServiceError {
     fn from(err: ApiError) -> Self {
         err.to_service_error()
+    }
+}
+
+/// Convert a `RateLimitError` into an `ApiError`.
+///
+/// Mapping (see design.md D5):
+/// - `Exceeded { limit, window_seconds }` → `RateLimitExceeded` (HTTP 429)
+/// - `Banned { .. }` → `AccessDenied` (HTTP 403)
+/// - `CircuitOpen` → `ServiceUnavailable` (HTTP 503)
+/// - `QuotaExhausted { used, total }` → `RateLimitExceeded` (semantically
+///   imperfect — `window_seconds` is reused to carry `used`; tracked as
+///   technical debt in design.md D8)
+/// - `Limiteron(e)` → `Internal` with source preserved for error chaining
+///
+/// `RateLimitError` uses `u64` for limit/window counters, while
+/// `ApiError::RateLimitExceeded` uses `u32`. The conversion uses a
+/// saturating cast (`u32::try_from(v).unwrap_or(u32::MAX)`) to avoid silent
+/// truncation on overflow.
+#[cfg(feature = "ratelimit")]
+impl From<RateLimitError> for ApiError {
+    fn from(e: RateLimitError) -> Self {
+        // Saturating cast: u64 → u32, clamping at u32::MAX on overflow.
+        fn cast_u32(v: u64) -> u32 {
+            u32::try_from(v).unwrap_or(u32::MAX)
+        }
+
+        match e {
+            RateLimitError::Exceeded {
+                limit,
+                window_seconds,
+            } => ApiError::RateLimitExceeded {
+                limit: cast_u32(limit),
+                window_seconds: cast_u32(window_seconds),
+            },
+            RateLimitError::Banned { .. } => ApiError::AccessDenied {
+                permission: "rate_limit".to_string(),
+                user_id: None,
+            },
+            RateLimitError::CircuitOpen => ApiError::ServiceUnavailable {
+                service: "circuit_breaker".to_string(),
+                retry_after: None,
+                source: None,
+            },
+            RateLimitError::QuotaExhausted { used, total } => ApiError::RateLimitExceeded {
+                limit: cast_u32(total),
+                window_seconds: cast_u32(used),
+            },
+            RateLimitError::Limiteron(e) => {
+                let message = e.to_string();
+                ApiError::internal_with_source(message, "ratelimit_error", e)
+            }
+        }
     }
 }
 
@@ -1233,5 +1288,114 @@ mod tests {
     fn test_send_sync_bounds() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<ApiError>();
+    }
+
+    // =========================================================================
+    // From<RateLimitError> for ApiError conversion tests
+    // =========================================================================
+
+    /// `RateLimitError::Exceeded` maps to `ApiError::RateLimitExceeded`
+    /// preserving `limit` and `window_seconds` (with u64 → u32 cast).
+    #[cfg(feature = "ratelimit")]
+    #[test]
+    fn ratelimit_exceeded_maps_to_rate_limit_exceeded() {
+        let err = ApiError::from(RateLimitError::Exceeded {
+            limit: 100,
+            window_seconds: 60,
+        });
+        match err {
+            ApiError::RateLimitExceeded {
+                limit,
+                window_seconds,
+            } => {
+                assert_eq!(limit, 100);
+                assert_eq!(window_seconds, 60);
+            }
+            _ => panic!("Expected RateLimitExceeded, got {err:?}"),
+        }
+    }
+
+    /// `RateLimitError::Banned` maps to `ApiError::AccessDenied` with
+    /// `permission = "rate_limit"` and `user_id = None`.
+    #[cfg(feature = "ratelimit")]
+    #[test]
+    fn ratelimit_banned_maps_to_access_denied() {
+        let err = ApiError::from(RateLimitError::Banned {
+            reason: "abuse".to_string(),
+        });
+        match err {
+            ApiError::AccessDenied {
+                permission,
+                user_id,
+            } => {
+                assert_eq!(permission, "rate_limit");
+                assert!(user_id.is_none());
+            }
+            _ => panic!("Expected AccessDenied, got {err:?}"),
+        }
+    }
+
+    /// `RateLimitError::CircuitOpen` maps to `ApiError::ServiceUnavailable`
+    /// with `service = "circuit_breaker"`, no retry_after, no source.
+    #[cfg(feature = "ratelimit")]
+    #[test]
+    fn ratelimit_circuit_open_maps_to_service_unavailable() {
+        let err = ApiError::from(RateLimitError::CircuitOpen);
+        match err {
+            ApiError::ServiceUnavailable {
+                service,
+                retry_after,
+                source,
+            } => {
+                assert_eq!(service, "circuit_breaker");
+                assert!(retry_after.is_none());
+                assert!(source.is_none());
+            }
+            _ => panic!("Expected ServiceUnavailable, got {err:?}"),
+        }
+    }
+
+    /// `RateLimitError::QuotaExhausted { used, total }` maps to
+    /// `ApiError::RateLimitExceeded { limit: total, window_seconds: used }`.
+    /// Semantically imperfect (window_seconds carries `used`) — tracked as
+    /// tech debt in design.md D8.
+    #[cfg(feature = "ratelimit")]
+    #[test]
+    fn ratelimit_quota_exhausted_maps_to_rate_limit_exceeded() {
+        let err = ApiError::from(RateLimitError::QuotaExhausted {
+            used: 50,
+            total: 100,
+        });
+        match err {
+            ApiError::RateLimitExceeded {
+                limit,
+                window_seconds,
+            } => {
+                assert_eq!(limit, 100);
+                assert_eq!(window_seconds, 50);
+            }
+            _ => panic!("Expected RateLimitExceeded, got {err:?}"),
+        }
+    }
+
+    /// u64 → u32 saturating cast: values exceeding `u32::MAX` clamp to
+    /// `u32::MAX` rather than silently truncating.
+    #[cfg(feature = "ratelimit")]
+    #[test]
+    fn ratelimit_exceeded_u64_overflow_saturates_to_u32_max() {
+        let err = ApiError::from(RateLimitError::Exceeded {
+            limit: u64::MAX,
+            window_seconds: u64::MAX,
+        });
+        match err {
+            ApiError::RateLimitExceeded {
+                limit,
+                window_seconds,
+            } => {
+                assert_eq!(limit, u32::MAX);
+                assert_eq!(window_seconds, u32::MAX);
+            }
+            _ => panic!("Expected RateLimitExceeded, got {err:?}"),
+        }
     }
 }

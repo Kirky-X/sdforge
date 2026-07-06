@@ -645,7 +645,9 @@ fn benchmark_rate_limit_middleware(c: &mut Criterion) {
     use axum::body::Body;
     use axum::http::Request;
     use axum::response::Response;
-    use sdforge::security::ratelimit::{RateLimitError, RateLimitLayer, RateLimitMiddleware, RateLimiter};
+    use sdforge::security::ratelimit::{
+        RateLimitError, RateLimitLayer, RateLimitMiddleware, RateLimiter,
+    };
     use std::convert::Infallible;
     use std::future::Future;
     use std::pin::Pin;

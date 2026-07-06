@@ -184,9 +184,7 @@ impl RateLimiter for LimiteronAdapter {
         // not `Sync`, so `&Request<Body>` is not `Send` and cannot cross the
         // `.await` boundary inside a `Send` future.
         let identifier = extract_identifier(req);
-        Box::pin(async move {
-            self.check(&identifier).await
-        })
+        Box::pin(async move { self.check(&identifier).await })
     }
 }
 
