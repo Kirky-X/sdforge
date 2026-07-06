@@ -228,6 +228,14 @@ pub use grpc::sdforge_v1::{
 #[cfg(feature = "http")]
 pub use http::version_routing::{build_version_router, VersionRouterConfig, VersionedRoute};
 
+/// CLI (clap) integration — feature-gated by `cli`.
+///
+/// Declared as a private module so the in-crate test suites can verify the
+/// registration primitives. `T010` will promote this to `pub mod cli;` and
+/// wire the inventory iteration into `init_all_plugins`.
+#[cfg(feature = "cli")]
+mod cli;
+
 /// OpenAPI 3.1 specification generation.
 ///
 /// Only available when the `openapi` feature is enabled. See [`openapi`] module
