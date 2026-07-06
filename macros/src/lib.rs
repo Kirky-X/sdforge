@@ -797,11 +797,6 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         no_prefix,
         cli,
     ) = args;
-    // T007: `cli` is parsed but not yet wired into the generated tokens.
-    // T008 adds the `generate_cli_registration` helper; T009 calls it when
-    // `cli == Some(true)`. The binding is referenced here to avoid an
-    // `unused_variable` warning between T007 and T009.
-    let _ = &cli;
     let fn_name = &input.sig.ident;
     let _fn_vis = &input.vis; // Currently unused but kept for future use
     let return_type = &input.sig.output;
@@ -1518,6 +1513,25 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
+    // T009: when `cli = true`, emit paired CliCommandRegistration +
+    // CliHandlerRegistration inventory submissions. Each emitted item is
+    // individually gated by `#[cfg(feature = "cli")]` inside
+    // `generate_cli_registration`, so downstream crates without the `cli`
+    // feature compile cleanly. `cli == None` or `cli == Some(false)` emits
+    // nothing — the `#[service_api]` macro opts into CLI exposure explicitly.
+    let cli_code = if cli == Some(true) {
+        generate_cli_registration(
+            &name,
+            &version,
+            description.as_deref(),
+            fn_name,
+            &params,
+            &path_params,
+        )
+    } else {
+        quote! {}
+    };
+
     let generated = quote! {
         #openapi_path_attr
         #cleaned_input
@@ -1525,6 +1539,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
         #mcp_code
         #ws_code
         #grpc_code
+        #cli_code
     };
 
     generated.into()

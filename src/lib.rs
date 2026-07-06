@@ -7,6 +7,15 @@
 #![doc(html_root_url = "https://docs.rs/sdforge/0.3.0")]
 #![warn(missing_docs)]
 
+// Allow macro-generated code (which references `sdforge::cli::...`,
+// `sdforge::prelude::ApiError`, etc.) to resolve when the `#[service_api]`
+// macro is expanded inside the sdforge crate itself — e.g. in the in-crate
+// `src/cli/tests/macro_integration_tests.rs` suite. Downstream crates resolve
+// `sdforge::` naturally via the extern prelude; this alias mirrors that for
+// self-references. `pub` visibility still applies, so only `pub` items are
+// reachable through `sdforge::`.
+extern crate self as sdforge;
+
 /// Re-export macros from sdforge-macros for convenient use
 pub use sdforge_macros::{service_api, service_module, test_macro};
 
@@ -230,11 +239,13 @@ pub use http::version_routing::{build_version_router, VersionRouterConfig, Versi
 
 /// CLI (clap) integration — feature-gated by `cli`.
 ///
-/// Declared as a private module so the in-crate test suites can verify the
-/// registration primitives. `T010` will promote this to `pub mod cli;` and
-/// wire the inventory iteration into `init_all_plugins`.
+/// Promoted to `pub mod cli;` in T009 so that macro-generated
+/// `sdforge::cli::CliCommandRegistration` paths (emitted by
+/// `#[service_api(cli = true)]`) resolve both inside the sdforge crate
+/// (via `extern crate self as sdforge;` above) and in downstream crates.
+/// T010 wires the inventory iteration into `init_all_plugins`.
 #[cfg(feature = "cli")]
-mod cli;
+pub mod cli;
 
 /// OpenAPI 3.1 specification generation.
 ///
