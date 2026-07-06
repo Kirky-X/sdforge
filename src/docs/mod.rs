@@ -15,6 +15,8 @@
 //! ```
 
 pub mod cli_markdown;
+#[cfg(feature = "mcp")]
+pub mod mcp_markdown;
 pub mod swagger;
 
 pub use swagger::swagger_ui_router;
