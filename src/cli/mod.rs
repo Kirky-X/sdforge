@@ -142,5 +142,12 @@ impl CliCommandRegistration {
 // registry to construct the `clap::Command` tree.
 inventory::collect!(CliCommandRegistration);
 
+// ============================================================================
+// T005: CliBuilder — runtime collector → clap::Command
+// ============================================================================
+pub mod builder;
+
+pub use builder::CliBuilder;
+
 #[cfg(test)]
 mod tests;
