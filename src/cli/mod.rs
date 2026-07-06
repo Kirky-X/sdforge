@@ -150,6 +150,15 @@ pub mod builder;
 pub use builder::CliBuilder;
 
 // ============================================================================
+// T020: docs subcommand — definition + handler (docs feature only)
+// ============================================================================
+#[cfg(feature = "docs")]
+pub mod docs_subcommand;
+
+#[cfg(feature = "docs")]
+pub use docs_subcommand::{docs_subcommand, docs_subcommand_definition};
+
+// ============================================================================
 // T006: CliHandlerRegistration — closure-based handler dispatch
 // ============================================================================
 pub mod handler;

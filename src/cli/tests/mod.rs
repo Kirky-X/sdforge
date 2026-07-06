@@ -10,6 +10,8 @@
 //! - `integration_tests`: `init_all_plugins` CLI inventory linking
 
 mod builder_tests;
+#[cfg(feature = "docs")]
+mod docs_subcommand_tests;
 mod handler_tests;
 mod integration_tests;
 mod macro_integration_tests;
