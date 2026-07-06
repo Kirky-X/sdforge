@@ -68,5 +68,14 @@ pub fn generate_docs(format: DocFormat) -> String {
     }
 }
 
+/// 将指定格式的文档写入文件。
+///
+/// 调用 [`generate_docs`] 生成内容，再用 `std::fs::write` 写入。
+/// IO 错误直接返回，不吞掉。
+pub fn write_docs(format: DocFormat, output_path: &std::path::Path) -> Result<(), std::io::Error> {
+    let content = generate_docs(format);
+    std::fs::write(output_path, content)
+}
+
 #[cfg(test)]
 mod tests;
