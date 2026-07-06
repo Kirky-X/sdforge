@@ -423,6 +423,12 @@ name = "cli_tests"
 path = "tests/integration/cli_tests.rs"
 required-features = ["cli"]
 
+# Docs integration tests — verify generate_docs / write_docs / swagger_ui_router
+[[test]]
+name = "docs_tests"
+path = "tests/integration/docs_tests.rs"
+required-features = ["docs"]
+
 [[test]]
 name = "macro_tests"
 path = "tests/macros/macro_tests.rs"
