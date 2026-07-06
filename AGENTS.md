@@ -22,6 +22,9 @@ sdforge/
 │   ├── websocket/                # WebSocket 支持
 │   ├── streaming/                # SSE 流式支持
 │   ├── grpc/                     # gRPC 支持
+│   ├── cli/                      # CLI 协议（clap 集成）
+│   ├── docs/                     # 文档输出（Swagger UI + Markdown）
+│   ├── openapi/                  # OpenAPI 3.1 规范生成
 │   ├── config/                   # 配置管理
 │   └── lib.rs                    # 库入口
 ├── macros/                       # 过程宏 crate (1476 行复杂度热点)
@@ -43,12 +46,14 @@ sdforge/
 | 添加新 API | `src/lib.rs` | 定义宏和模块导出 |
 | HTTP 路由 | `src/http/mod.rs` | Axum 路由构建 |
 | MCP 工具 | `src/mcp/mod.rs` | MCP 工具注册 |
+| CLI 命令 | `src/cli/mod.rs` | clap 集成，`CliCommandRegistration`/`CliHandlerRegistration` inventory 注册，`CliBuilder` 构造 `clap::Command`（builder.rs/handler.rs/docs_subcommand.rs） |
+| 文档输出 | `src/docs/mod.rs` | `DocFormat` 枚举 + `generate_docs`/`write_docs` 入口，子模块 swagger.rs（Swagger UI Router）/cli_markdown.rs（clap-markdown）/mcp_markdown.rs（自定义） |
 | 安全功能 | `src/security/` | 认证、授权、速率限制、审计（拆分为 `mod.rs` + 目录模块 `audit/`/`bearer/`/`types/`/`ratelimit/` + `middleware.rs`/`api_key.rs`/`api_key_manager.rs`/`traits.rs`，每个目录模块含 `mod.rs` + `tests/`） |
 | 缓存配置 | `src/cache/` | SyncCache/OxcacheSyncCache (mod.rs) |
 | 流式响应 | `src/streaming/mod.rs` | SSE 实现 |
 | WebSocket | `src/websocket/mod.rs` | WebSocketHandler |
 | 配置加载 | `src/config/mod.rs` | 模块化配置（AppConfig/ServerConfig 等） |
-| 宏定义 | `macros/src/lib.rs` | `#[service_api]` 解析 |
+| 宏定义 | `macros/src/lib.rs` | `#[service_api]` 解析（支持 `cli=true` 参数） |
 
 ## 代码规范
 
@@ -88,6 +93,12 @@ cargo build
 
 # MCP 协议
 cargo build --features mcp
+
+# CLI 模式（clap 集成）
+cargo build --features cli
+
+# 文档输出（Swagger UI + Markdown，自动启用 cli + openapi）
+cargo build --features docs
 
 # 完整功能
 cargo build --features full
@@ -169,6 +180,9 @@ cargo bench --features http
 | streaming | 75+ | `src/streaming/tests/`（sse/stream_builder） |
 | mcp | 多项 | `src/mcp/tests/`（protocol/server/migration/handler） |
 | ratelimit | 11+ | `src/security/ratelimit/tests/`（adapter/middleware/trait） |
+| cli | 25+ | `src/cli/tests/`（trait_tests/builder_tests/handler_tests/macro_integration_tests/integration_tests/docs_subcommand_tests） |
+| docs | 12+ | `src/docs/tests/`（mod_tests/swagger_tests/cli_markdown_tests/mcp_markdown_tests） |
+| 集成测试 | - | `tests/integration/cli_tests.rs`、`tests/integration/docs_tests.rs`（端到端） |
 
 ## 复杂度热点
 
@@ -193,7 +207,7 @@ cargo bench --features http
 
 ### Inventory 注册模式
 - `inventory::submit!()` 用于编译时注册
-- 四种注册类型：HTTP路由、MCP工具、WebSocket路由、gRPC路由
+- 五种注册类型：HTTP路由、MCP工具、WebSocket路由、gRPC路由、CLI命令（+配对的 CliHandlerRegistration 闭包）
 - `init_all_plugins()` 防止链接器优化
 
 ### Feature 依赖图
@@ -210,9 +224,11 @@ websocket ──► http + streaming + tokio-tungstenite, axum-extra, async-trai
 grpc ──► http + tonic, prost, tonic-prost
 openapi ──► utoipa, http
 cache ──► dep:http, oxcache/memory, async-trait（独立，使用外部 http crate 类型而非 sdforge http feature）
+cli ──► http + dep:clap（clap features: std/derive/help/usage/error-context/suggestions）
+docs ──► openapi + dep:utoipa-swagger-ui (axum feature) + dep:clap-markdown + cli（统一文档输出：Swagger UI + CLI/MCP Markdown）
 simd-json ──► dep:simd-json
 hex ──► dep:hex
-full ──► http, mcp, streaming, timestamp, security, cache, websocket, grpc, logging, openapi（不含 simd-json/hex 等工具特性）
+full ──► http, mcp, streaming, timestamp, security, cache, websocket, grpc, logging, openapi, cli, docs（不含 simd-json/hex 等工具特性）
 ```
 
 ## 注意事项
