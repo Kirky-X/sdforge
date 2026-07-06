@@ -5,7 +5,7 @@
 //! Tests are added incrementally as T002/T003/T004 land. This file
 //! currently covers T002 (`CliArgType` + `CliArgInfo`).
 
-use crate::cli::{CliArgInfo, CliArgType};
+use crate::cli::{CliArgInfo, CliArgType, CliCommandRegistration};
 
 // ============================================================================
 // T002: CliArgType variants + CliArgInfo field population
@@ -74,4 +74,52 @@ fn test_cli_arg_info_new_is_const_fn() {
     const ARG: CliArgInfo = CliArgInfo::new("id", "Resource ID", CliArgType::Path, true, None);
     assert_eq!(ARG.name, "id");
     assert_eq!(ARG.arg_type, CliArgType::Path);
+}
+
+// ============================================================================
+// T003: CliCommandRegistration field population
+// ============================================================================
+
+/// Verify `CliCommandRegistration::new` populates all fields and `args`
+/// defaults to an empty slice.
+#[test]
+fn test_cli_command_registration_new() {
+    let reg = CliCommandRegistration::new("echo", "v1", "Echo back input", "echo_handler");
+
+    assert_eq!(reg.name, "echo");
+    assert_eq!(reg.version, "v1");
+    assert_eq!(reg.description, "Echo back input");
+    assert_eq!(reg.handler_fn_name, "echo_handler");
+    assert!(reg.args.is_empty());
+}
+
+/// Verify `CliCommandRegistration::with_args` replaces the args slice.
+#[test]
+fn test_cli_command_registration_with_args() {
+    const ARGS: &[CliArgInfo] = &[
+        CliArgInfo::new("id", "Resource ID", CliArgType::Path, true, None),
+        CliArgInfo::new(
+            "limit",
+            "Max results",
+            CliArgType::Body,
+            false,
+            Some("10"),
+        ),
+    ];
+
+    let reg =
+        CliCommandRegistration::new("list", "v1", "List resources", "list_handler").with_args(ARGS);
+
+    assert_eq!(reg.args.len(), 2);
+    assert_eq!(reg.args[0].name, "id");
+    assert_eq!(reg.args[1].name, "limit");
+}
+
+/// Verify `CliCommandRegistration::new` is usable in a `const` context.
+#[test]
+fn test_cli_command_registration_const_fn() {
+    const REG: CliCommandRegistration =
+        CliCommandRegistration::new("ping", "v1", "Health check", "ping_handler");
+    assert_eq!(REG.name, "ping");
+    assert_eq!(REG.handler_fn_name, "ping_handler");
 }
