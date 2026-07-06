@@ -7,8 +7,10 @@
 //! - `builder_tests`: `CliBuilder` construction and state injection
 //! - `handler_tests`: `CliHandlerRegistration` closure invocation
 //! - `macro_integration_tests`: `#[service_api(cli = true)]` end-to-end
+//! - `integration_tests`: `init_all_plugins` CLI inventory linking
 
 mod builder_tests;
 mod handler_tests;
+mod integration_tests;
 mod macro_integration_tests;
 mod trait_tests;

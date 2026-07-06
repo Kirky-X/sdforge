@@ -58,7 +58,8 @@ macro_rules! impl_default_new {
     feature = "http",
     feature = "mcp",
     feature = "websocket",
-    feature = "grpc"
+    feature = "grpc",
+    feature = "cli"
 ))]
 pub use inventory;
 
@@ -278,7 +279,8 @@ pub use openapi::{generate_openapi_spec, OpenApiBuilder, OpenApiPathParam, OpenA
     feature = "http",
     feature = "mcp",
     feature = "websocket",
-    feature = "grpc"
+    feature = "grpc",
+    feature = "cli"
 ))]
 pub fn init_all_plugins() -> PluginCounts {
     use std::sync::Mutex;
@@ -327,6 +329,29 @@ pub fn init_all_plugins() -> PluginCounts {
         routes.lock().map(|g| g.len()).unwrap_or(0)
     };
 
+    // T010: touch CLI inventory so the linker keeps `inventory::submit!`
+    // blocks emitted by `#[service_api(cli = true)]`. Mirrors the http/mcp/
+    // websocket/grpc blocks above. Both `CliCommandRegistration` and
+    // `CliHandlerRegistration` are collected; the returned count reflects
+    // command registrations (handler registrations are paired 1:1).
+    #[cfg(feature = "cli")]
+    let cli_commands = {
+        use crate::cli::{CliCommandRegistration, CliHandlerRegistration};
+
+        static CLI_CMDS: OnceLock<Mutex<Vec<&'static CliCommandRegistration>>> = OnceLock::new();
+        let cmds = CLI_CMDS
+            .get_or_init(|| Mutex::new(inventory::iter::<CliCommandRegistration>().collect()));
+
+        // Also iterate handler registrations to prevent the linker from
+        // stripping the paired `CliHandlerRegistration` submit blocks.
+        static CLI_HANDLERS: OnceLock<Mutex<Vec<&'static CliHandlerRegistration>>> =
+            OnceLock::new();
+        let _handlers = CLI_HANDLERS
+            .get_or_init(|| Mutex::new(inventory::iter::<CliHandlerRegistration>().collect()));
+
+        cmds.lock().map(|g| g.len()).unwrap_or(0)
+    };
+
     PluginCounts {
         routes,
         #[cfg(feature = "mcp")]
@@ -335,6 +360,8 @@ pub fn init_all_plugins() -> PluginCounts {
         ws_routes,
         #[cfg(feature = "grpc")]
         grpc_routes,
+        #[cfg(feature = "cli")]
+        cli_commands,
     }
 }
 
@@ -367,13 +394,15 @@ pub fn init_all_plugins() -> PluginCounts {
 /// Fields are conditionally compiled based on features:
 /// - `routes`: Always present when any protocol feature is enabled
 /// - `mcp_tools`: Only with `mcp` feature
-/// - `ws_routes`: Only with `websocket` feature  
+/// - `ws_routes`: Only with `websocket` feature
 /// - `grpc_routes`: Only with `grpc` feature
+/// - `cli_commands`: Only with `cli` feature
 #[cfg(any(
     feature = "http",
     feature = "mcp",
     feature = "websocket",
-    feature = "grpc"
+    feature = "grpc",
+    feature = "cli"
 ))]
 pub struct PluginCounts {
     /// Number of registered HTTP routes
@@ -387,6 +416,9 @@ pub struct PluginCounts {
     /// Number of registered gRPC routes
     #[cfg(feature = "grpc")]
     pub grpc_routes: usize,
+    /// Number of registered CLI commands (emitted by `#[service_api(cli = true)]`)
+    #[cfg(feature = "cli")]
+    pub cli_commands: usize,
 }
 
 /// Get all registered WebSocket routes
