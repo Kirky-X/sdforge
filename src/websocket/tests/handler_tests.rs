@@ -309,7 +309,7 @@ fn build_ws_test_server_with_auth() -> axum_test::TestServer {
         .expect("valid secret");
     let config = WebSocketConfig {
         auth: Some(auth),
-        rate_limit: RateLimitConfig::default(),
+        ..Default::default()
     };
     let manager = Arc::new(ConnectionManager::new());
     let app_state = Arc::new(AppState::with_config(config, manager));
