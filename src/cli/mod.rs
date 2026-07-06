@@ -149,5 +149,12 @@ pub mod builder;
 
 pub use builder::CliBuilder;
 
+// ============================================================================
+// T006: CliHandlerRegistration — closure-based handler dispatch
+// ============================================================================
+pub mod handler;
+
+pub use handler::CliHandlerRegistration;
+
 #[cfg(test)]
 mod tests;
