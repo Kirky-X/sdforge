@@ -634,6 +634,144 @@ fn rust_type_to_openapi_schema(rust_type: &str) -> (&'static str, &'static str) 
     }
 }
 
+/// Generate CLI registration tokens for a `#[service_api(cli = true)]` function.
+///
+/// Emits three `#[cfg(feature = "cli")]`-gated items:
+/// 1. `inventory::submit!(CliCommandRegistration { ... })` — metadata
+/// 2. `fn __cli_handler_<fn_name>(...)` — extracts args from a
+///    `HashMap<String, String>`, calls the original function, and maps
+///    `Result<T, ApiError>` → `Result<(), ApiError>`.
+/// 3. `inventory::submit!(CliHandlerRegistration { ... })` — handler pointer
+///
+/// Parameter mapping (mirrors HTTP parameter kinds):
+/// - `ParamKind::Path`  → `CliArgType::Path`, `required = true`
+/// - `ParamKind::Body`  → `CliArgType::Body`, `required = !is_option`
+/// - `State`/`Extension`/`Query`/`Header`/`Cookie`/`Form` → skipped (not
+///   surfaced on the CLI; State injection via `CliBuilder::with_dependencies`
+///   is handled separately).
+///
+/// `_path_params` is accepted for API symmetry with the HTTP codegen path
+/// but unused — `ParamInfo::param_kind` already encodes the Path/Body
+/// classification established by `ParamInfo::from_arg`.
+fn generate_cli_registration(
+    name: &str,
+    version: &str,
+    description: Option<&str>,
+    fn_name: &syn::Ident,
+    params: &[ParamInfo],
+    _path_params: &[String],
+) -> TokenStream2 {
+    // Filter to CLI-relevant params (Path/Body only). State/Extension are
+    // runtime concerns; Query/Header/Cookie/Form are HTTP-specific.
+    let cli_params: Vec<&ParamInfo> = params
+        .iter()
+        .filter(|p| matches!(p.param_kind, ParamKind::Path | ParamKind::Body))
+        .collect();
+
+    // CliArgInfo array elements — one per Path/Body param.
+    let arg_infos = cli_params.iter().map(|p| {
+        let arg_name = &p.name;
+        let arg_type = match p.param_kind {
+            ParamKind::Path => quote! { sdforge::cli::CliArgType::Path },
+            ParamKind::Body => quote! { sdforge::cli::CliArgType::Body },
+            _ => unreachable!("filtered above"),
+        };
+        // Path params are always required; Body params honor Option<T>.
+        let required = if matches!(p.param_kind, ParamKind::Path) {
+            true
+        } else {
+            !p.is_option
+        };
+        quote! {
+            sdforge::cli::CliArgInfo::new(#arg_name, "", #arg_type, #required, None)
+        }
+    });
+
+    // Unique handler function name to avoid collisions across service_api calls.
+    let handler_fn_name = syn::Ident::new(
+        &format!("__cli_handler_{}", fn_name),
+        proc_macro2::Span::call_site(),
+    );
+
+    // Per-parameter extraction code: pull string from HashMap, parse to
+    // the declared Rust type, surface missing/invalid as ApiError::InvalidInput.
+    let param_extractions = cli_params.iter().map(|p| {
+        let pname_str = &p.name;
+        let pname = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+        let pty = &p.ty;
+        let required = if matches!(p.param_kind, ParamKind::Path) {
+            true
+        } else {
+            !p.is_option
+        };
+
+        if required {
+            quote! {
+                let #pname: #pty = args.get(#pname_str)
+                    .ok_or_else(|| sdforge::prelude::ApiError::InvalidInput {
+                        message: format!("missing required argument: {}", #pname_str),
+                        field: Some(#pname_str.to_string()),
+                        value: None,
+                    })?
+                    .parse()
+                    .map_err(|e| sdforge::prelude::ApiError::InvalidInput {
+                        message: format!("invalid argument {}: {}", #pname_str, e),
+                        field: Some(#pname_str.to_string()),
+                        value: None,
+                    })?;
+            }
+        } else {
+            // Option<T> — absent key yields None; present key must parse.
+            quote! {
+                let #pname: #pty = args.get(#pname_str)
+                    .map(|s| s.parse())
+                    .transpose()
+                    .map_err(|e| sdforge::prelude::ApiError::InvalidInput {
+                        message: format!("invalid argument {}: {}", #pname_str, e),
+                        field: Some(#pname_str.to_string()),
+                        value: None,
+                    })?;
+            }
+        }
+    });
+
+    // Identifier list for the original function call.
+    let param_idents: Vec<syn::Ident> = cli_params
+        .iter()
+        .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
+        .collect();
+
+    let fn_name_str = fn_name.to_string();
+    let description_str = description.unwrap_or(name);
+
+    quote! {
+        #[cfg(feature = "cli")]
+        sdforge::inventory::submit!(sdforge::cli::CliCommandRegistration::new(
+            #name,
+            #version,
+            #description_str,
+            #fn_name_str,
+        ).with_args(&[#(#arg_infos),*]));
+
+        #[cfg(feature = "cli")]
+        fn #handler_fn_name(
+            args: std::collections::HashMap<String, String>,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), sdforge::prelude::ApiError>> + Send + 'static>> {
+            Box::pin(async move {
+                #(#param_extractions)*
+                let result = #fn_name(#(#param_idents),*).await;
+                result.map(|_| ())
+            })
+        }
+
+        #[cfg(feature = "cli")]
+        sdforge::inventory::submit!(sdforge::cli::CliHandlerRegistration {
+            name: #name,
+            handler: #handler_fn_name,
+        });
+    }
+}
+
 #[proc_macro_attribute]
 pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = match parse_service_api_args(args.into()) {
@@ -1783,5 +1921,147 @@ mod macro_parsing_tests {
         };
         let cleaned = clean_function_attributes(input);
         assert!(cleaned.sig.inputs.is_empty());
+    }
+
+    // ============================================================================
+    // T008: generate_cli_registration
+    //
+    // Verifies the helper emits paired CliCommandRegistration +
+    // CliHandlerRegistration inventory submissions, maps ParamKind to
+    // CliArgType correctly, and skips State/Extension parameters.
+    // ============================================================================
+
+    /// Build a `ParamInfo` with the minimal fields needed by
+    /// `generate_cli_registration`. The `ty` is synthesized via
+    /// `syn::parse_quote!` so the test does not depend on real AST input.
+    fn make_cli_param(name: &str, kind: ParamKind, is_option: bool) -> ParamInfo {
+        let ty: syn::Type = if is_option {
+            syn::parse_quote!(Option<String>)
+        } else {
+            syn::parse_quote!(u64)
+        };
+        // Compute skip_mcp_schema before moving `kind` into the struct.
+        let skip_mcp_schema = matches!(kind, ParamKind::State | ParamKind::Extension);
+        ParamInfo {
+            name: name.to_string(),
+            ty,
+            param_kind: kind,
+            is_option,
+            is_vec: false,
+            inner_type: if is_option {
+                "String".to_string()
+            } else {
+                "u64".to_string()
+            },
+            explicit_annotation: None,
+            skip_mcp_schema,
+        }
+    }
+
+    /// TokenStream → string with whitespace normalized for substring
+    /// assertions. `quote!` output formatting varies between rustc versions,
+    /// so we collapse runs of whitespace to make `contains` robust.
+    fn normalize_ts(ts: &TokenStream2) -> String {
+        ts.to_string()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    #[test]
+    fn test_generate_cli_registration_emits_command_and_handler() {
+        let fn_name = syn::Ident::new("my_cmd", proc_macro2::Span::call_site());
+        let params = vec![make_cli_param("id", ParamKind::Path, false)];
+        let path_params = vec!["id".to_string()];
+
+        let tokens = generate_cli_registration(
+            "my_cmd",
+            "v1",
+            Some("test description"),
+            &fn_name,
+            &params,
+            &path_params,
+        );
+        let s = normalize_ts(&tokens);
+
+        assert!(
+            s.contains("CliCommandRegistration"),
+            "expected CliCommandRegistration in output: {s}"
+        );
+        assert!(
+            s.contains("CliHandlerRegistration"),
+            "expected CliHandlerRegistration in output: {s}"
+        );
+        assert!(
+            s.contains("inventory :: submit"),
+            "expected inventory::submit in output: {s}"
+        );
+        assert!(
+            s.contains("CliArgType :: Path"),
+            "expected CliArgType::Path for path param: {s}"
+        );
+    }
+
+    #[test]
+    fn test_generate_cli_registration_skips_state_params() {
+        let fn_name = syn::Ident::new("state_cmd", proc_macro2::Span::call_site());
+        let params = vec![
+            make_cli_param("id", ParamKind::Path, false),
+            make_cli_param("state", ParamKind::State, false),
+        ];
+        let path_params = vec!["id".to_string()];
+
+        let tokens =
+            generate_cli_registration("state_cmd", "v1", None, &fn_name, &params, &path_params);
+        let s = normalize_ts(&tokens);
+
+        // The State parameter "state" must NOT appear as a CliArgInfo entry.
+        // We check that the CliArgInfo::new calls do not reference "state".
+        // The handler extraction also must not reference it as an arg name.
+        assert!(
+            !s.contains("CliArgInfo :: new (\"state\""),
+            "state param should be skipped in CliArgInfo: {s}"
+        );
+    }
+
+    #[test]
+    fn test_generate_cli_registration_path_required_body_optional() {
+        let fn_name = syn::Ident::new("mixed_cmd", proc_macro2::Span::call_site());
+        let params = vec![
+            make_cli_param("id", ParamKind::Path, false), // required
+            make_cli_param("name", ParamKind::Body, true), // optional (Option<String>)
+            make_cli_param("count", ParamKind::Body, false), // required
+        ];
+        let path_params = vec!["id".to_string()];
+
+        let tokens =
+            generate_cli_registration("mixed_cmd", "v1", None, &fn_name, &params, &path_params);
+        let s = normalize_ts(&tokens);
+
+        // Path → CliArgType::Path with required=true
+        assert!(s.contains("CliArgType :: Path"), "missing Path: {s}");
+        // Body → CliArgType::Body
+        assert!(s.contains("CliArgType :: Body"), "missing Body: {s}");
+        // The generated code must reference all three non-state params by name
+        // so the handler can extract them from the HashMap.
+        assert!(
+            s.contains("\"id\"") && s.contains("\"name\"") && s.contains("\"count\""),
+            "expected all three param names in output: {s}"
+        );
+    }
+
+    #[test]
+    fn test_generate_cli_registration_no_params() {
+        let fn_name = syn::Ident::new("empty_cmd", proc_macro2::Span::call_site());
+        let params: Vec<ParamInfo> = vec![];
+        let path_params: Vec<String> = vec![];
+
+        let tokens =
+            generate_cli_registration("empty_cmd", "v1", None, &fn_name, &params, &path_params);
+        let s = normalize_ts(&tokens);
+
+        // Even with no args, both registrations must be emitted.
+        assert!(s.contains("CliCommandRegistration"), "missing command: {s}");
+        assert!(s.contains("CliHandlerRegistration"), "missing handler: {s}");
     }
 }
