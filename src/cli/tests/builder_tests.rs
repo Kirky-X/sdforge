@@ -11,6 +11,8 @@
 //! - `CliArgType::State` → dropped (not surfaced on the CLI)
 
 use crate::cli::{CliArgInfo, CliArgType, CliBuilder, CliCommandRegistration};
+use std::any::Any;
+use std::sync::Arc;
 
 // Test-only registration used by `test_builder_collects_commands` to
 // verify the builder picks up `inventory::submit!` entries.
@@ -114,4 +116,51 @@ fn test_builder_collects_commands() {
         !state_present,
         "State arg must not be surfaced on the CLI"
     );
+}
+
+// ============================================================================
+// T029: CliBuilder::with_dependencies — state injection
+// ============================================================================
+
+/// Test-only state type used to verify `with_dependencies` actually stores
+/// the supplied state and makes it retrievable (via `state()`) for handler
+/// invocation. Lives only in this test module.
+struct TestAppState {
+    counter: u32,
+    label: &'static str,
+}
+
+/// Verify `with_dependencies(state)` stores the supplied state in the
+/// builder so that handlers (T006+) can downcast it at call time. Also
+/// verifies `build()` succeeds after state injection — the framework's
+/// "constructor pattern 3" (full DI).
+#[test]
+fn test_builder_with_dependencies_injects_state() {
+    // 1. `new()` starts with no state.
+    let empty = CliBuilder::new();
+    assert!(
+        empty.state().is_none(),
+        "CliBuilder::new() must start with no state"
+    );
+
+    // 2. `with_dependencies(state)` injects state.
+    let state: Arc<dyn Any + Send + Sync> = Arc::new(TestAppState {
+        counter: 42,
+        label: "test",
+    });
+    let builder = CliBuilder::with_dependencies(state);
+    let state_ref = builder
+        .state()
+        .expect("state must be present after with_dependencies");
+
+    // 3. State is downcastable to the original concrete type — confirms
+    //    the Arc<dyn Any + Send + Sync> round-trips correctly.
+    let typed = state_ref
+        .downcast_ref::<TestAppState>()
+        .expect("downcast to TestAppState must succeed");
+    assert_eq!(typed.counter, 42);
+    assert_eq!(typed.label, "test");
+
+    // 4. `build()` must succeed after state injection (no panic, no error).
+    let _cmd = builder.build();
 }

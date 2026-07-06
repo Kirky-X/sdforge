@@ -14,25 +14,55 @@
 //! | `Body`       | `--name <VALUE>` option (default honored) |
 //! | `State`      | dropped (not surfaced; injected via T029) |
 
+use std::any::Any;
+use std::sync::Arc;
+
 use crate::cli::{CliArgType, CliCommandRegistration};
 
 /// Builder that materializes a `clap::Command` from the global
 /// `CliCommandRegistration` registry.
 ///
-/// Constructed via [`CliBuilder::new`] or [`Default::default`]; both yield
-/// an empty builder. [`CliBuilder::build`] then walks inventory to assemble
-/// the final `clap::Command`.
-#[derive(Debug, Default)]
+/// Supports the three construction patterns mandated by the project:
+/// - **Mode 1 (out-of-the-box)**: [`CliBuilder::new`]
+/// - **Mode 2 (builder)**: [`CliBuilder::default`] + (future) chainable setters
+/// - **Mode 3 (full DI)**: [`CliBuilder::with_dependencies`] — injects an
+///   application state `Arc<dyn Any + Send + Sync>` that handlers can
+///   downcast at call time. If a handler requires `State` but no state
+///   was injected, invocation returns `ApiError::Internal`.
+#[derive(Default)]
 pub struct CliBuilder {
-    // T029 will add `state: Option<Arc<dyn Any + Send + Sync>>` here.
+    /// Injected application state, available to handlers via downcast.
+    /// `None` when constructed via `new()`/`default()`.
+    state: Option<Arc<dyn Any + Send + Sync>>,
 }
 
 impl CliBuilder {
-    /// Construct a fresh, empty builder.
+    /// Construct a fresh, empty builder with no injected state.
     ///
     /// Equivalent to [`Default::default`].
     pub fn new() -> Self {
-        Self {}
+        Self { state: None }
+    }
+
+    /// Construct a builder with an injected application state (mode 3 —
+    /// full dependency injection).
+    ///
+    /// The state is stored as `Arc<dyn Any + Send + Sync>` and surfaced
+    /// to handlers via [`Self::state`]. Handlers that declare a `State`
+    /// parameter downcast this `Any` to their concrete state type at call
+    /// time; if `state` is `None` the handler invocation fails with
+    /// `ApiError::Internal`.
+    pub fn with_dependencies(state: Arc<dyn Any + Send + Sync>) -> Self {
+        Self { state: Some(state) }
+    }
+
+    /// Borrow the injected application state, if any.
+    ///
+    /// Returns `None` for builders constructed via [`new`] / [`default`].
+    /// Handler invocation logic (T006+) uses this accessor to downcast
+    /// the state before invoking a `State`-parameterized handler.
+    pub fn state(&self) -> Option<&Arc<dyn Any + Send + Sync>> {
+        self.state.as_ref()
     }
 
     /// Build the final `clap::Command` from all inventory-registered
