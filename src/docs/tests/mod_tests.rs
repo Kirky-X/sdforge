@@ -127,3 +127,56 @@ fn test_generate_docs_swagger_returns_html() {
         &html[..html.len().min(200)]
     );
 }
+
+// ============================================================================
+// T019: generate_docs 支持 McpMarkdown 和 All
+// ============================================================================
+
+/// `generate_docs(McpMarkdown)` 应返回非空字符串。
+///
+/// - `mcp` feature 启用时：含 `# MCP Tools` 标题（由 `generate_mcp_docs` 产生）
+/// - `mcp` feature 未启用时：含占位提示（告知用户需启用 mcp feature）
+#[test]
+fn test_generate_docs_mcp_markdown() {
+    let md = generate_docs(DocFormat::McpMarkdown);
+    assert!(!md.is_empty(), "McpMarkdown 文档不应为空");
+    #[cfg(feature = "mcp")]
+    {
+        assert!(
+            md.contains("# MCP Tools"),
+            "McpMarkdown 应含 `# MCP Tools` 标题，实际: {}",
+            &md[..md.len().min(200)]
+        );
+    }
+    #[cfg(not(feature = "mcp"))]
+    {
+        assert!(
+            md.to_lowercase().contains("mcp"),
+            "McpMarkdown 占位提示应含 `mcp` 字样，实际: {}",
+            &md[..md.len().min(200)]
+        );
+    }
+}
+
+/// `generate_docs(All)` 应返回非空字符串，拼接 OpenApi + CliMarkdown + McpMarkdown。
+///
+/// 验证：
+/// - 含 OpenApi JSON 内容（`{` 字符）
+/// - 含 CliMarkdown 内容（`#` 标题标记）
+#[test]
+fn test_generate_docs_all_combines() {
+    let all = generate_docs(DocFormat::All);
+    assert!(!all.is_empty(), "All 文档不应为空");
+    // 含 OpenApi JSON 内容
+    assert!(
+        all.contains('{'),
+        "All 应含 OpenApi JSON 内容（`{{`），实际: {}",
+        &all[..all.len().min(200)]
+    );
+    // 含 CliMarkdown 内容（`#` 标题）
+    assert!(
+        all.contains('#'),
+        "All 应含 CliMarkdown 标题标记 `#`，实际: {}",
+        &all[..all.len().min(200)]
+    );
+}

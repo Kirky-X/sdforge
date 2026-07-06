@@ -53,10 +53,10 @@ pub enum DocFormat {
 ///
 /// 各变体分发到对应的生成函数：
 /// - `OpenApi` → `crate::openapi::generate_openapi_spec()` 序列化为 pretty JSON
-/// - `SwaggerUi` → HTML 入口页（T015 填充）
-/// - `CliMarkdown` → CLI 命令手册（T017 填充）
-/// - `McpMarkdown` → MCP 工具列表（T019 填充，需 `mcp` feature）
-/// - `All` → 全部格式拼接（T019 填充）
+/// - `SwaggerUi` → HTML 入口页
+/// - `CliMarkdown` → CLI 命令手册
+/// - `McpMarkdown` → MCP 工具列表（需 `mcp` feature，未启用时返回占位提示）
+/// - `All` → 全部格式拼接（OpenApi + CliMarkdown + McpMarkdown）
 ///
 /// 序列化失败时降级为空字符串并 `log::warn!`，不 panic。
 pub fn generate_docs(format: DocFormat) -> String {
@@ -70,8 +70,34 @@ pub fn generate_docs(format: DocFormat) -> String {
         }
         DocFormat::SwaggerUi => generate_swagger_html(),
         DocFormat::CliMarkdown => cli_markdown::generate_cli_docs(),
-        DocFormat::McpMarkdown => String::new(),
-        DocFormat::All => String::new(),
+        DocFormat::McpMarkdown => generate_mcp_markdown(),
+        DocFormat::All => {
+            let mut out = String::new();
+            out.push_str("# OpenAPI Specification\n\n");
+            out.push_str(&generate_docs(DocFormat::OpenApi));
+            out.push_str("\n\n");
+            out.push_str("# CLI Documentation\n\n");
+            out.push_str(&generate_docs(DocFormat::CliMarkdown));
+            out.push_str("\n\n");
+            out.push_str(&generate_docs(DocFormat::McpMarkdown));
+            out
+        }
+    }
+}
+
+/// 生成 MCP 工具列表 Markdown。
+///
+/// - `mcp` feature 启用时：委托给 [`mcp_markdown::generate_mcp_docs`]
+/// - `mcp` feature 未启用时：返回占位提示（告知用户需启用 mcp feature）
+fn generate_mcp_markdown() -> String {
+    #[cfg(feature = "mcp")]
+    {
+        mcp_markdown::generate_mcp_docs()
+    }
+    #[cfg(not(feature = "mcp"))]
+    {
+        "<!-- MCP feature not enabled. Enable `mcp` feature to generate MCP tool documentation. -->\n"
+            .to_string()
     }
 }
 
