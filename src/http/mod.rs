@@ -20,6 +20,24 @@ pub use version_routing::{
     build_version_router, version_redirect_middleware, VersionRouterConfig, VersionedRoute,
 };
 
+// Re-export rate-limit types when the `ratelimit` feature is enabled.
+// Allows downstream users to access `RateLimitLayer`/`RateLimiter`/`LimiteronAdapter`
+// via `sdforge::http::` without reaching into `sdforge::security::ratelimit::`.
+#[cfg(feature = "ratelimit")]
+pub use crate::security::ratelimit::{LimiteronAdapter, RateLimitLayer, RateLimiter};
+
+/// Construct a `RateLimitLayer` from any `RateLimiter`.
+///
+/// Convenience helper: wraps `RateLimitLayer::new` so users can write
+/// `Router::new().layer(rate_limit_layer(limiter))` without importing both
+/// `RateLimitLayer` and the helper trait.
+///
+/// Only available when the `ratelimit` feature is enabled.
+#[cfg(feature = "ratelimit")]
+pub fn rate_limit_layer(limiter: std::sync::Arc<dyn RateLimiter>) -> RateLimitLayer {
+    RateLimitLayer::new(limiter)
+}
+
 /// Request ID header name
 pub(crate) const X_REQUEST_ID: &str = "x-request-id";
 

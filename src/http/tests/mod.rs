@@ -12,6 +12,8 @@
 
 mod config_tests;
 mod middleware_tests;
+#[cfg(feature = "ratelimit")]
+mod ratelimit_tests;
 mod routing_tests;
 
 use super::{HttpRoute, RouteRegistration};
