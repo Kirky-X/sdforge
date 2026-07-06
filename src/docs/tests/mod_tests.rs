@@ -4,7 +4,7 @@
 //!
 //! 对应任务：T011 / T012 / T013 / T015 / T017 / T019。
 
-use crate::docs::{generate_docs, DocFormat};
+use crate::docs::{generate_docs, write_docs, DocFormat};
 
 // ============================================================================
 // T011: DocFormat 枚举
@@ -77,4 +77,29 @@ fn test_generate_docs_cli_markdown_returns_md() {
     // T012 阶段：占位返回空字符串，不 panic 即可
     // T017 填充后：断言含 markdown 标记
     let _ = md;
+}
+
+// ============================================================================
+// T013: write_docs 写文件
+// ============================================================================
+
+/// `write_docs` 应将生成的文档写入指定路径，文件存在且内容非空。
+#[test]
+fn test_write_docs_creates_file() {
+    let dir = tempfile::tempdir().expect("创建临时目录失败");
+    let file_path = dir.path().join("openapi.json");
+
+    write_docs(DocFormat::OpenApi, &file_path).expect("write_docs 应成功");
+
+    // 文件存在
+    assert!(file_path.exists(), "文档文件应被创建: {:?}", file_path);
+
+    // 内容非空
+    let content = std::fs::read_to_string(&file_path).expect("读取写入的文件");
+    assert!(!content.is_empty(), "文档内容不应为空");
+    assert!(
+        content.trim_start().starts_with('{'),
+        "OpenApi 文档首字符应为 `{{`，实际: {:?}",
+        content.chars().next()
+    );
 }
