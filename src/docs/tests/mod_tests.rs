@@ -69,14 +69,16 @@ fn test_generate_docs_openapi_returns_json() {
     );
 }
 
-/// `generate_docs(CliMarkdown)` 在 T012 阶段返回占位（空字符串），T017 填充后
-/// 返回含 markdown 标记的非空文本。此处先验证不 panic。
+/// `generate_docs(CliMarkdown)` 应返回含 markdown 标记（`#` 或 `##`）的非空文本。
 #[test]
 fn test_generate_docs_cli_markdown_returns_md() {
     let md = generate_docs(DocFormat::CliMarkdown);
-    // T012 阶段：占位返回空字符串，不 panic 即可
-    // T017 填充后：断言含 markdown 标记
-    let _ = md;
+    assert!(!md.is_empty(), "CliMarkdown 文档不应为空");
+    assert!(
+        md.contains('#'),
+        "CliMarkdown 文档应含 markdown 标题标记 `#`，实际: {}",
+        &md[..md.len().min(200)]
+    );
 }
 
 // ============================================================================
