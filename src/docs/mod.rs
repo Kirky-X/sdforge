@@ -14,6 +14,10 @@
 //! let md = generate_docs(DocFormat::CliMarkdown);
 //! ```
 
+pub mod swagger;
+
+pub use swagger::swagger_ui_router;
+
 /// 文档输出格式枚举。
 ///
 /// 每个变体对应一种文档生成策略，由 [`generate_docs`] 分发处理：
