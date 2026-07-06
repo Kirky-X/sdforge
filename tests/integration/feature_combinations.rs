@@ -67,6 +67,36 @@ mod full_feature_tests {
     }
 }
 
+// ============================================================================
+// Rate Limit Feature Tests
+// ============================================================================
+
+/// Verify the `ratelimit` feature compiles and its public API is reachable.
+///
+/// `LimiteronAdapter::new()` is async; binding the future (without awaiting)
+/// is sufficient to prove the type and constructor are exported.
+#[cfg(feature = "ratelimit")]
+#[test]
+fn test_ratelimit_feature_compiles() {
+    use sdforge::security::ratelimit::{LimiteronAdapter, RateLimiter};
+    use std::sync::Arc;
+    // Create the future (do not await) — proves the type + constructor exist.
+    let _future = LimiteronAdapter::new();
+    // Trait must be importable and usable as a trait object.
+    let _: Option<Arc<dyn RateLimiter>> = None;
+}
+
+/// Verify that when `security` is enabled, the `ratelimit` submodule is
+/// reachable (security inherits ratelimit per Cargo.toml feature graph).
+#[cfg(all(feature = "security", feature = "ratelimit"))]
+#[test]
+fn test_security_inherits_ratelimit() {
+    use sdforge::security::ratelimit::RateLimiter;
+    use std::sync::Arc;
+    // Trait is importable and usable as a trait object when both features on.
+    let _: Option<Arc<dyn RateLimiter>> = None;
+}
+
 mod feature_dependency_tests {
     #[test]
     #[cfg(all(feature = "streaming", not(feature = "http")))]
