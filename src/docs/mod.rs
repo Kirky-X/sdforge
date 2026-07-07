@@ -10,8 +10,8 @@
 //! ```ignore
 //! use sdforge::docs::{generate_docs, DocFormat};
 //!
-//! let json = generate_docs(DocFormat::OpenApi);
-//! let md = generate_docs(DocFormat::CliMarkdown);
+//! let json = generate_docs(DocFormat::OpenApi).expect("OpenAPI generation");
+//! let md = generate_docs(DocFormat::CliMarkdown).expect("CLI docs generation");
 //! ```
 
 pub mod cli_markdown;
@@ -49,6 +49,17 @@ pub enum DocFormat {
     All,
 }
 
+/// 文档生成 / 写入过程中可能发生的错误。
+#[derive(Debug, thiserror::Error)]
+pub enum DocError {
+    /// OpenAPI JSON 序列化失败（通常表示框架 bug）。
+    #[error("OpenAPI serialization failed: {0}")]
+    Serialization(#[from] serde_json::Error),
+    /// `write_docs` 文件 I/O 失败。
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
 /// 根据指定格式生成文档字符串。
 ///
 /// 各变体分发到对应的生成函数：
@@ -58,29 +69,29 @@ pub enum DocFormat {
 /// - `McpMarkdown` → MCP 工具列表（需 `mcp` feature，未启用时返回占位提示）
 /// - `All` → 全部格式拼接（OpenApi + CliMarkdown + McpMarkdown；SwaggerUi 为 HTML，需单独访问 /swagger-ui/）
 ///
-/// OpenAPI 序列化失败时 panic（`utoipa::OpenApi` 序列化失败属于框架 bug，不应静默吞掉）。
-pub fn generate_docs(format: DocFormat) -> String {
+/// 返回 `Result`，OpenAPI 序列化失败时以 [`DocError::Serialization`] 返回，
+/// 不再 panic。
+pub fn generate_docs(format: DocFormat) -> Result<String, DocError> {
     match format {
         DocFormat::OpenApi => {
             let spec = crate::openapi::generate_openapi_spec();
-            serde_json::to_string_pretty(&spec)
-                .expect("OpenAPI serialization should not fail — this indicates a framework bug in generate_openapi_spec")
+            Ok(serde_json::to_string_pretty(&spec)?)
         }
-        DocFormat::SwaggerUi => generate_swagger_html(),
-        DocFormat::CliMarkdown => cli_markdown::generate_cli_docs(),
-        DocFormat::McpMarkdown => generate_mcp_markdown(),
+        DocFormat::SwaggerUi => Ok(generate_swagger_html()),
+        DocFormat::CliMarkdown => Ok(cli_markdown::generate_cli_docs()),
+        DocFormat::McpMarkdown => Ok(generate_mcp_markdown()),
         DocFormat::All => {
             let mut out = String::new();
             out.push_str("# OpenAPI Specification\n\n");
-            out.push_str(&generate_docs(DocFormat::OpenApi));
+            out.push_str(&generate_docs(DocFormat::OpenApi)?);
             out.push_str("\n\n");
             out.push_str("# CLI Documentation\n\n");
-            out.push_str(&generate_docs(DocFormat::CliMarkdown));
+            out.push_str(&generate_docs(DocFormat::CliMarkdown)?);
             out.push_str("\n\n");
-            out.push_str(&generate_docs(DocFormat::McpMarkdown));
+            out.push_str(&generate_docs(DocFormat::McpMarkdown)?);
             out.push_str("\n\n");
             out.push_str("<!-- Swagger UI: run with --format swagger or visit /swagger-ui/ for interactive docs -->\n");
-            out
+            Ok(out)
         }
     }
 }
@@ -124,20 +135,21 @@ fn generate_swagger_html() -> String {
 /// 将指定格式的文档写入文件。
 ///
 /// 调用 [`generate_docs`] 生成内容，再用 `std::fs::write` 写入。
-/// IO 错误直接返回，不吞掉。
-pub fn write_docs(format: DocFormat, output_path: &std::path::Path) -> Result<(), std::io::Error> {
+/// 生成 / IO 错误均以 [`DocError`] 返回，不吞掉、不 panic。
+pub fn write_docs(format: DocFormat, output_path: &std::path::Path) -> Result<(), DocError> {
     // 路径遍历防护：拒绝包含 `..` 的路径，防止写入到工作目录外的位置。
     if output_path
         .components()
         .any(|c| c == std::path::Component::ParentDir)
     {
-        return Err(std::io::Error::new(
+        return Err(DocError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
             "output path must not contain parent directory components (..)",
-        ));
+        )));
     }
-    let content = generate_docs(format);
-    std::fs::write(output_path, content)
+    let content = generate_docs(format)?;
+    std::fs::write(output_path, content)?;
+    Ok(())
 }
 
 #[cfg(test)]

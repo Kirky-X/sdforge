@@ -78,7 +78,8 @@ pub fn docs_subcommand(matches: &clap::ArgMatches) -> Result<(), ApiError> {
         Some(path) => write_docs(format, path)
             .map_err(|e| ApiError::internal_with_source("docs write failed", "docs_subcommand", e)),
         None => {
-            let content = generate_docs(format);
+            let content = generate_docs(format)
+                .map_err(|e| ApiError::internal_with_source("docs generation failed", "docs_subcommand", e))?;
             println!("{}", content);
             Ok(())
         }

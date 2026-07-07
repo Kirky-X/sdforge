@@ -60,7 +60,7 @@ fn test_doc_format_variants() {
 /// `generate_docs(OpenApi)` 应返回非空 JSON 字符串，首字符为 `{`。
 #[test]
 fn test_generate_docs_openapi_returns_json() {
-    let json = generate_docs(DocFormat::OpenApi);
+    let json = generate_docs(DocFormat::OpenApi).expect("generate_docs OpenApi");
     assert!(!json.is_empty(), "OpenApi 文档不应为空");
     assert!(
         json.trim_start().starts_with('{'),
@@ -72,7 +72,7 @@ fn test_generate_docs_openapi_returns_json() {
 /// `generate_docs(CliMarkdown)` 应返回含 markdown 标记（`#` 或 `##`）的非空文本。
 #[test]
 fn test_generate_docs_cli_markdown_returns_md() {
-    let md = generate_docs(DocFormat::CliMarkdown);
+    let md = generate_docs(DocFormat::CliMarkdown).expect("generate_docs CliMarkdown");
     assert!(!md.is_empty(), "CliMarkdown 文档不应为空");
     assert!(
         md.contains('#'),
@@ -113,7 +113,7 @@ fn test_write_docs_creates_file() {
 /// `generate_docs(SwaggerUi)` 应返回含 `<html` 和 `swagger-ui` 的 HTML 字符串。
 #[test]
 fn test_generate_docs_swagger_returns_html() {
-    let html = generate_docs(DocFormat::SwaggerUi);
+    let html = generate_docs(DocFormat::SwaggerUi).expect("generate_docs SwaggerUi");
     assert!(!html.is_empty(), "SwaggerUi HTML 不应为空");
     let lower = html.to_lowercase();
     assert!(
@@ -138,7 +138,7 @@ fn test_generate_docs_swagger_returns_html() {
 /// - `mcp` feature 未启用时：含占位提示（告知用户需启用 mcp feature）
 #[test]
 fn test_generate_docs_mcp_markdown() {
-    let md = generate_docs(DocFormat::McpMarkdown);
+    let md = generate_docs(DocFormat::McpMarkdown).expect("generate_docs McpMarkdown");
     assert!(!md.is_empty(), "McpMarkdown 文档不应为空");
     #[cfg(feature = "mcp")]
     {
@@ -165,7 +165,7 @@ fn test_generate_docs_mcp_markdown() {
 /// - 含 CliMarkdown 内容（`#` 标题标记）
 #[test]
 fn test_generate_docs_all_combines() {
-    let all = generate_docs(DocFormat::All);
+    let all = generate_docs(DocFormat::All).expect("generate_docs All");
     assert!(!all.is_empty(), "All 文档不应为空");
     // 含 OpenApi JSON 内容
     assert!(
