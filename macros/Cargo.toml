@@ -8,7 +8,7 @@ repository = "https://github.com/Kirky-X/sdforge"
 documentation = "https://docs.rs/sdforge-macros"
 
 [dependencies]
-proc-macro2 = "1.0"
+proc-macro2 = { workspace = true }
 syn = { workspace = true }
 quote = { workspace = true }
 serde = { workspace = true }
