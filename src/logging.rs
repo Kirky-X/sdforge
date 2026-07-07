@@ -378,6 +378,26 @@ mod tests {
         assert!(json.contains("\"message\":\"Failed login attempt\""));
     }
 
+    /// Verify that `write_log_entry` with `LogFormat::Text` and `colored=false`
+    /// produces the plain-text format (lines 252-256 — the non-colored text
+    /// branch).
+    #[test]
+    fn test_write_log_entry_text_format_no_color() {
+        let entry = LogEntry::new(LogLevel::Info, "test_target", "Test message")
+            .with_field("key", "value");
+
+        let mut output = Vec::new();
+        let result = write_log_entry(&mut output, &entry, LogFormat::Text, false);
+
+        assert!(result.is_ok());
+        let written = String::from_utf8(output).unwrap();
+        assert!(written.contains("INFO"), "Should contain log level");
+        assert!(written.contains("test_target"), "Should contain target");
+        assert!(written.contains("Test message"), "Should contain message");
+        // serde_json::Value Display for a string includes quotes: key="value"
+        assert!(written.contains(r#"key="value""#), "Should contain field");
+    }
+
     #[tokio::test]
     async fn test_structured_logger() {
         let config = LoggerConfig {

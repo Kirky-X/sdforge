@@ -334,4 +334,14 @@ mod tests {
             );
         }
     }
+
+    /// Cover the `ValidateConfig for AuthConfig` trait impl (lines 98, 103)
+    /// which delegates to the inherent `validate()` method. Existing tests
+    /// only call the inherent method, leaving the trait impl body uncovered.
+    #[test]
+    fn test_validate_config_trait_for_auth_config() {
+        use crate::config::ValidateConfig;
+        let config = AuthConfig::None;
+        assert!(ValidateConfig::validate(&config).is_ok());
+    }
 }

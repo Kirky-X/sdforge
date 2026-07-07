@@ -233,4 +233,23 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("No valid origins"));
     }
+
+    /// Cover the `after_scheme.is_empty()` branch in `build_cors_layer`
+    /// (line 75) — origin with scheme but no host (e.g. "http://").
+    /// Existing tests cover this branch in `CorsConfig::validate()` but not
+    /// in `build_cors_layer`.
+    #[test]
+    fn test_build_cors_layer_empty_host_rejected() {
+        let config = CorsConfig {
+            allowed_origins: vec!["http://".to_string()],
+            allowed_methods: vec!["GET".to_string()],
+            allowed_headers: vec![],
+        };
+        let result = build_cors_layer(&config);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Must include host"));
+    }
 }

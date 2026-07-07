@@ -822,4 +822,113 @@ mod tests {
             Some(serde_json::json!({"type": "object"}))
         );
     }
+
+    /// Verify that creating a session with a duplicate ID returns
+    /// `ErrorData::invalid_params` (lines 215-223).
+    #[test]
+    fn test_create_session_duplicate_returns_error() {
+        let manager = MrtrSessionManager::new();
+        let session_id = "duplicate-session-id";
+
+        let result1 = manager.create_session(session_id, "test_tool");
+        assert!(result1.is_ok(), "First creation should succeed");
+
+        let result2 = manager.create_session(session_id, "test_tool");
+        assert!(result2.is_err(), "Duplicate creation should fail");
+    }
+
+    // ========================================================================
+    // Mutex poison 分支测试
+    //
+    // MrtrSessionManager 的所有写/读方法在获取 `sessions` 锁时，若锁中毒
+    // （持有锁时 panic），会返回 internal_error 或安全默认值。这些测试
+    // 通过故意 panic 让 Mutex 中毒，验证降级路径。
+    // ========================================================================
+
+    /// Helper: 让 manager 的 sessions Mutex 中毒。
+    fn poison_sessions_mutex(manager: &MrtrSessionManager) {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = manager.sessions.lock().unwrap();
+            panic!("intentional panic to poison sessions mutex");
+        }));
+        assert!(result.is_err(), "poisoning panic should be caught");
+    }
+
+    /// Verify create_session returns internal_error when sessions mutex is poisoned.
+    #[test]
+    fn test_create_session_with_poisoned_mutex() {
+        let manager = MrtrSessionManager::new();
+        poison_sessions_mutex(&manager);
+
+        let result = manager.create_session("s1", "tool");
+        assert!(result.is_err(), "poisoned mutex should yield an error");
+        let err = result.unwrap_err();
+        // internal_error returns an ErrorData; verify its message mentions poison.
+        let err_str = err.to_string();
+        assert!(
+            err_str.contains("poisoned") || err_str.contains("internal"),
+            "Error should mention poisoned lock or internal error, got: {}",
+            err_str
+        );
+    }
+
+    /// Verify resume_session returns internal_error when sessions mutex is poisoned.
+    #[test]
+    fn test_resume_session_with_poisoned_mutex() {
+        let manager = MrtrSessionManager::new();
+        poison_sessions_mutex(&manager);
+
+        let result = manager.resume_session("s1", serde_json::json!({}));
+        assert!(result.is_err(), "poisoned mutex should yield an error");
+    }
+
+    /// Verify get_resume_input returns internal_error when sessions mutex is poisoned.
+    #[test]
+    fn test_get_resume_input_with_poisoned_mutex() {
+        let manager = MrtrSessionManager::new();
+        poison_sessions_mutex(&manager);
+
+        let result = manager.get_resume_input("s1");
+        assert!(result.is_err(), "poisoned mutex should yield an error");
+    }
+
+    /// Verify complete_session returns internal_error when sessions mutex is poisoned.
+    #[test]
+    fn test_complete_session_with_poisoned_mutex() {
+        let manager = MrtrSessionManager::new();
+        poison_sessions_mutex(&manager);
+
+        let result = manager.complete_session("s1");
+        assert!(result.is_err(), "poisoned mutex should yield an error");
+    }
+
+    /// Verify cancel_session returns internal_error when sessions mutex is poisoned.
+    #[test]
+    fn test_cancel_session_with_poisoned_mutex() {
+        let manager = MrtrSessionManager::new();
+        poison_sessions_mutex(&manager);
+
+        let result = manager.cancel_session("s1");
+        assert!(result.is_err(), "poisoned mutex should yield an error");
+    }
+
+    /// Verify cleanup_expired returns 0 when sessions mutex is poisoned.
+    #[test]
+    fn test_cleanup_expired_with_poisoned_mutex() {
+        let manager = MrtrSessionManager::new();
+        poison_sessions_mutex(&manager);
+
+        let cleaned = manager.cleanup_expired();
+        assert_eq!(cleaned, 0, "poisoned mutex should yield 0 cleaned");
+    }
+
+    /// Verify session_count returns 0 when sessions mutex is poisoned.
+    #[test]
+    fn test_session_count_with_poisoned_mutex() {
+        let manager = MrtrSessionManager::new();
+        poison_sessions_mutex(&manager);
+
+        let count = manager.session_count();
+        assert_eq!(count, 0, "poisoned mutex should yield count 0");
+    }
 }

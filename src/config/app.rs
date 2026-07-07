@@ -146,4 +146,14 @@ mod tests {
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 9000);
     }
+
+    /// Cover the `ValidateConfig for AppConfig` trait impl (lines 50, 54)
+    /// which delegates to the inherent `validate()` method. Existing tests
+    /// only call the inherent method, leaving the trait impl body uncovered.
+    #[test]
+    fn test_validate_config_trait_for_app_config() {
+        use crate::config::ValidateConfig;
+        let config = AppConfig::default();
+        assert!(ValidateConfig::validate(&config).is_ok());
+    }
 }

@@ -319,4 +319,14 @@ mod tests {
         );
         assert!(config.cors.is_none(), "Missing cors should default to None");
     }
+
+    /// Cover the `ValidateConfig for ServerConfig` trait impl (lines 70, 73)
+    /// which delegates to the inherent `validate()` method. Existing tests
+    /// only call the inherent method, leaving the trait impl body uncovered.
+    #[test]
+    fn test_validate_config_trait_for_server_config() {
+        use crate::config::ValidateConfig;
+        let config = ServerConfig::default();
+        assert!(ValidateConfig::validate(&config).is_ok());
+    }
 }

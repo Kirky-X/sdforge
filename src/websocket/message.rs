@@ -263,6 +263,18 @@ mod tests {
         assert_eq!(calculate_json_depth("}]}]"), 0);
     }
 
+    /// calculate_json_depth with an escape sequence inside a JSON string —
+    /// exercises the `escaped = false` (line 193) and `escaped = true`
+    /// (line 195) branches for backslash escape handling.
+    #[test]
+    fn calculate_json_depth_with_escape_sequence_in_string() {
+        // Text: {"a":"b\\c"} — the \\ inside the string triggers escape handling.
+        // Returns max_depth=1 (single-level object), not 0.
+        let text = r#"{"a":"b\\c"}"#;
+        let depth = calculate_json_depth(text);
+        assert_eq!(depth, 1, "Single-level JSON with escape should return depth 1");
+    }
+
     /// parse_websocket_message with multiple top-level JSON values — the
     /// streaming parser loop runs more than once, then serde_json::from_str
     /// fails on the trailing data.
