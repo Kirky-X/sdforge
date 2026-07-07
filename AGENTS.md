@@ -48,7 +48,7 @@ sdforge/
 | MCP 工具 | `src/mcp/mod.rs` | MCP 工具注册 |
 | CLI 命令 | `src/cli/mod.rs` | clap 集成，`CliCommandRegistration`/`CliHandlerRegistration` inventory 注册，`CliBuilder` 构造 `clap::Command`（builder.rs/handler.rs/docs_subcommand.rs） |
 | 文档输出 | `src/docs/mod.rs` | `DocFormat` 枚举 + `generate_docs`/`write_docs` 入口，子模块 swagger.rs（Swagger UI Router）/cli_markdown.rs（clap-markdown）/mcp_markdown.rs（自定义） |
-| 安全功能 | `src/security/` | 认证、授权、速率限制、审计（拆分为 `mod.rs` + 目录模块 `audit/`/`bearer/`/`types/`/`ratelimit/` + `middleware.rs`/`api_key.rs`/`api_key_manager.rs`/`traits.rs`，每个目录模块含 `mod.rs` + `tests/`） |
+| 安全功能 | `src/security/` | 认证、授权、速率限制、审计（拆分为 `mod.rs` + 目录模块 `audit/`/`bearer/`/`types/`/`ratelimit/` + `ip_util.rs`/`middleware.rs`/`api_key.rs`/`api_key_manager.rs`/`traits.rs`，每个目录模块含 `mod.rs` + `tests/`；`ip_util.rs` 提供可信代理 IP 提取，被 auth 中间件与 ratelimit 适配器共享） |
 | 缓存配置 | `src/cache/` | SyncCache/OxcacheSyncCache (mod.rs) |
 | 流式响应 | `src/streaming/mod.rs` | SSE 实现 |
 | WebSocket | `src/websocket/mod.rs` | WebSocketHandler |
