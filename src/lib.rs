@@ -265,7 +265,7 @@ pub use openapi::{generate_openapi_spec, OpenApiBuilder, OpenApiPathParam, OpenA
 pub mod docs;
 
 #[cfg(feature = "docs")]
-pub use docs::{generate_docs, write_docs, DocFormat};
+pub use docs::{generate_docs, write_docs, DocError, DocFormat};
 
 #[cfg(feature = "docs")]
 pub use docs::swagger_ui_router;
