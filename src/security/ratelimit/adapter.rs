@@ -76,24 +76,25 @@ fn default_config() -> FlowControlConfig {
 
 /// Extract the client identifier (IP) from an HTTP request.
 ///
-/// Tries `X-Forwarded-For` (first IP in the list) first, then `X-Real-IP`,
-/// then falls back to `"unknown"`. This is intentionally simple — production
-/// users with custom extractor needs should implement their own `RateLimiter`
-/// or use `check()` directly with their own identifier extraction.
+/// Delegates to [`crate::security::ip_util::extract_client_ip_core`] so that
+/// the rate-limit adapter applies the **same spoofing-defense logic** as the
+/// authentication middleware:
+///
+/// 1. The direct TCP peer IP (`ConnectInfo<SocketAddr>`) is the only
+///    unspoofable source.
+/// 2. `X-Forwarded-For` / `X-Real-IP` headers are trusted **only** when the
+///    direct peer is a trusted reverse proxy (private ranges). Otherwise an
+///    attacker could spoof these headers to bypass IP-based rate limits.
+/// 3. When no `ConnectInfo` is available (e.g. test environments without a
+///    real TCP connection), headers are trusted as a last-resort fallback.
+///
+/// Returns `"unknown"` only when no IP can be determined from any source —
+/// in that case all such requests share a single `"unknown"` bucket (which
+/// is the intended conservative behavior: deny-by-shared-limit rather than
+/// allow-by-spoofed-header).
 fn extract_identifier(req: &Request<Body>) -> String {
-    // X-Forwarded-For: client, proxy1, proxy2, ... — take the first (client)
-    if let Some(h) = req.headers().get("x-forwarded-for") {
-        if let Ok(s) = h.to_str() {
-            return s.split(',').next().unwrap_or("unknown").trim().to_string();
-        }
-    }
-    // X-Real-IP: common with nginx reverse proxy
-    if let Some(h) = req.headers().get("x-real-ip") {
-        if let Ok(s) = h.to_str() {
-            return s.trim().to_string();
-        }
-    }
-    "unknown".to_string()
+    crate::security::ip_util::extract_client_ip_core(req)
+        .unwrap_or_else(|| "unknown".to_string())
 }
 
 impl LimiteronAdapter {
@@ -206,7 +207,12 @@ impl LimiteronAdapterBuilder {
 
     /// Build the `LimiteronAdapter` with in-memory storage and the configured
     /// (or default) config.
-    pub async fn build(self) -> LimiteronAdapter {
+    ///
+    /// Returns `Err(RateLimitError)` when the configured `FlowControlConfig`
+    /// fails limiteron's validation (e.g. empty `rules`). This is a
+    /// user-input failure, so we surface it as an explicit `Result` rather
+    /// than panicking (Rule 12: failures must be explicit).
+    pub async fn build(self) -> Result<LimiteronAdapter, RateLimitError> {
         let config = self.config.unwrap_or_else(default_config);
         let storage: Arc<dyn Storage> = Arc::new(MemoryStorage::new());
         let ban_storage: Arc<dyn BanStorage> = Arc::new(MemoryBanStorage::new());
@@ -215,8 +221,7 @@ impl LimiteronAdapterBuilder {
             .with_storage(storage)
             .with_ban_storage(ban_storage)
             .build()
-            .await
-            .expect("builder config must produce a valid FlowControlConfig");
-        LimiteronAdapter::with_dependencies(Arc::new(governor))
+            .await?;
+        Ok(LimiteronAdapter::with_dependencies(Arc::new(governor)))
     }
 }

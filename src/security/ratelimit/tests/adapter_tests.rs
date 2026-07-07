@@ -40,15 +40,48 @@ async fn default_matches_new_behavior() {
 
 /// `LimiteronAdapter::builder().build().await` constructs an instance using
 /// `default_config()` when no custom config is supplied.
+///
+/// HIGH-1 regression: `build()` now returns `Result<LimiteronAdapter,
+/// RateLimitError>` instead of panicking via `.expect()`. Callers must
+/// handle the error path (Rule 12: failures must be explicit).
 #[tokio::test]
 async fn builder_build_with_default_config_succeeds() {
-    let adapter = LimiteronAdapter::builder().build().await;
+    let adapter = LimiteronAdapter::builder()
+        .build()
+        .await
+        .expect("default_config must produce a valid FlowControlConfig");
     // Should construct without panic. Verify by running a check.
     let result = adapter.check("127.0.0.1").await;
     assert!(
         result.is_ok(),
         "builder-built adapter should allow: {:?}",
         result
+    );
+}
+
+/// HIGH-1: `LimiteronAdapter::builder().build()` returns `Err` (not panic)
+/// when the configured `FlowControlConfig` is invalid. We construct an
+/// invalid config with an empty `rules` vec (limiteron's `validate()`
+/// rejects it with "至少需要一个规则").
+#[tokio::test]
+async fn builder_build_returns_err_on_invalid_config() {
+    use limiteron::config::GlobalConfig;
+    use limiteron::FlowControlConfig;
+
+    let invalid_config = FlowControlConfig {
+        version: "0.1.0".to_string(),
+        global: GlobalConfig::default(),
+        rules: vec![], // empty rules → validation failure
+    };
+
+    let result = LimiteronAdapter::builder()
+        .with_config(invalid_config)
+        .build()
+        .await;
+
+    assert!(
+        result.is_err(),
+        "build() with empty rules must return Err, not panic — got Ok"
     );
 }
 
@@ -234,6 +267,112 @@ async fn check_request_falls_back_to_unknown_identifier() {
     assert!(
         result.is_ok(),
         "check_request should allow unknown: {:?}",
+        result
+    );
+}
+
+/// H-1 security regression: a request from a non-trusted direct IP (8.8.8.8)
+/// carrying a spoofed `X-Forwarded-For` header must NOT trust the header.
+/// The identifier extracted must be the direct connection IP, not the
+/// spoofed value. This prevents bypassing rate limits by rotating the
+/// spoofed header.
+///
+/// We verify the fix by configuring a rule that only allows `8.8.8.8` once
+/// (capacity=1) and then sending two requests with the same spoofed header
+/// but expecting both to hit the same `8.8.8.8` bucket → second must be
+/// rejected. Before the fix, the spoofed header would have been trusted,
+/// allowing unlimited requests because each spoofed IP would get its own
+/// bucket.
+#[tokio::test]
+async fn check_request_ignores_spoofed_x_forwarded_for_from_non_trusted_source() {
+    use axum::extract::connect_info::ConnectInfo;
+    use limiteron::config::{GlobalConfig, Matcher, Rule};
+    use limiteron::storage::{MemoryBanStorage, MemoryStorage};
+    use limiteron::{ActionConfig, BanStorage, FlowControlConfig, LimiterConfig, Storage};
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    // capacity=1 + refill_rate=1: 2 rapid requests from the same identifier
+    // must yield at least 1 rejection.
+    let config = FlowControlConfig {
+        version: "0.1.0".to_string(),
+        global: GlobalConfig::default(),
+        rules: vec![Rule {
+            id: "anti-spoof".to_string(),
+            name: "anti-spoofing rule".to_string(),
+            priority: 100,
+            matchers: vec![Matcher::Ip {
+                ip_ranges: vec!["0.0.0.0/0".to_string()],
+            }],
+            limiters: vec![LimiterConfig::TokenBucket {
+                capacity: 1,
+                refill_rate: 1,
+            }],
+            action: ActionConfig::default(),
+        }],
+    };
+    let storage: Arc<dyn Storage> = Arc::new(MemoryStorage::new());
+    let ban_storage: Arc<dyn BanStorage> = Arc::new(MemoryBanStorage::new());
+    let governor = Governor::builder()
+        .with_config(config)
+        .with_storage(storage)
+        .with_ban_storage(ban_storage)
+        .with_l1_cache_enabled(false)
+        .build()
+        .await
+        .expect("anti-spoof config must be valid");
+    let adapter = LimiteronAdapter::with_dependencies(Arc::new(governor));
+
+    // Direct connection from 8.8.8.8 (non-trusted, public IP) with a spoofed
+    // X-Forwarded-For. The fix must extract 8.8.8.8 (direct IP), not 1.2.3.4.
+    let mut req1 = Request::builder()
+        .body(Body::empty())
+        .expect("request build");
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 8080);
+    req1.extensions_mut().insert(ConnectInfo(addr));
+    req1.headers_mut()
+        .insert("X-Forwarded-For", "1.2.3.4".parse().unwrap());
+
+    let mut req2 = Request::builder()
+        .body(Body::empty())
+        .expect("request build");
+    req2.extensions_mut().insert(ConnectInfo(addr));
+    req2.headers_mut()
+        .insert("X-Forwarded-For", "5.6.7.8".parse().unwrap());
+
+    let r1 = adapter.check_request(&req1).await;
+    let r2 = adapter.check_request(&req2).await;
+
+    // Both requests must resolve to the same identifier (8.8.8.8). With
+    // capacity=1, at least one must be rejected. If the spoofed headers
+    // were trusted, both would succeed (different buckets).
+    let rejections = [r1, r2].iter().filter(|r| r.is_err()).count();
+    assert!(
+        rejections >= 1,
+        "expected at least 1 rejection (same direct IP, capacity=1), got 0 — spoofed X-Forwarded-For was likely trusted"
+    );
+}
+
+/// H-1 positive case: a request from a trusted reverse proxy (10.0.0.1)
+/// carrying `X-Forwarded-For: 203.0.113.5` must trust the header and
+/// extract `203.0.113.5` as the client identifier.
+#[tokio::test]
+async fn check_request_trusts_x_forwarded_for_from_trusted_proxy() {
+    use axum::extract::connect_info::ConnectInfo;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    let adapter = LimiteronAdapter::new().await;
+    let mut req = Request::builder()
+        .body(Body::empty())
+        .expect("request build");
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 8080);
+    req.extensions_mut().insert(ConnectInfo(addr));
+    req.headers_mut()
+        .insert("X-Forwarded-For", "203.0.113.5".parse().unwrap());
+
+    let result = adapter.check_request(&req).await;
+    assert!(
+        result.is_ok(),
+        "request via trusted proxy with valid X-Forwarded-For should be allowed: {:?}",
         result
     );
 }
