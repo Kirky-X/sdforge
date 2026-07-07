@@ -22,7 +22,7 @@ use axum::http::{Request, StatusCode};
 use axum::response::Response;
 use tower::{Layer, Service};
 
-use super::RateLimiter;
+use super::{RateLimitError, RateLimiter};
 
 /// Type alias for the boxed future returned by `Service::call`.
 ///
@@ -97,16 +97,69 @@ where
 
         Box::pin(async move {
             // `RateLimiter::check_request` returns a `BoxFuture`, so we
-            // `.await` it directly. On rejection we short-circuit with a 429
-            // response and never touch the inner service.
+            // `.await` it directly. On rejection we short-circuit with a
+            // variant-specific response and never touch the inner service.
             match limiter.check_request(&req).await {
                 Ok(()) => inner.call(req).await,
-                Err(_) => {
-                    let mut resp = Response::new(Body::from("Rate limit exceeded"));
-                    *resp.status_mut() = StatusCode::TOO_MANY_REQUESTS;
-                    Ok(resp)
-                }
+                Err(err) => Ok(rate_limit_rejection_response(err)),
             }
         })
     }
+}
+
+/// Build an HTTP rejection response tailored to the specific `RateLimitError`
+/// variant.
+///
+/// Variant → status code mapping (follows common reverse-proxy semantics):
+///
+/// | Variant          | Status | Retry-After | Rationale                                  |
+/// |------------------|--------|-------------|--------------------------------------------|
+/// | `Exceeded`       | 429    | yes         | Transient rate limit; client should wait.  |
+/// | `Banned`         | 403    | no          | Longer-term block; not a transient limit.  |
+/// | `CircuitOpen`    | 503    | yes         | Backend protection; caller should back off.|
+/// | `QuotaExhausted` | 429    | no          | Quota window boundary unknown to variant.  |
+/// | `Limiteron(_)`   | 500    | no          | Internal limiteron error; not retryable.   |
+///
+/// `Retry-After` is emitted in seconds (RFC 7231 §7.1.3 allows either seconds
+/// or HTTP-date; seconds is simpler and avoids clock-skew issues).
+fn rate_limit_rejection_response(err: RateLimitError) -> Response {
+    let (status, body, retry_after_secs) = match &err {
+        RateLimitError::Exceeded { window_seconds, .. } => (
+            StatusCode::TOO_MANY_REQUESTS,
+            "Rate limit exceeded".to_string(),
+            Some(*window_seconds),
+        ),
+        RateLimitError::Banned { reason } => (
+            StatusCode::FORBIDDEN,
+            format!("Banned: {}", reason),
+            None,
+        ),
+        RateLimitError::CircuitOpen => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Circuit breaker open".to_string(),
+            // No window boundary available; suggest a conservative back-off
+            // so callers don't hammer the breaker while it's half-open.
+            Some(60),
+        ),
+        RateLimitError::QuotaExhausted { .. } => (
+            StatusCode::TOO_MANY_REQUESTS,
+            "Quota exhausted".to_string(),
+            None,
+        ),
+        RateLimitError::Limiteron(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal rate limit error".to_string(),
+            None,
+        ),
+    };
+
+    let mut resp = Response::new(Body::from(body));
+    *resp.status_mut() = status;
+    if let Some(secs) = retry_after_secs {
+        // `secs.to_string()` is a valid HTTP header value (digits only).
+        if let Ok(value) = secs.to_string().parse() {
+            resp.headers_mut().insert("Retry-After", value);
+        }
+    }
+    resp
 }
