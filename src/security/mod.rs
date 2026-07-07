@@ -41,6 +41,12 @@ mod traits;
 #[cfg(feature = "security")]
 mod types;
 
+// Shared IP-extraction utilities — available to both `security` and
+// `ratelimit` features so the rate-limit adapter reuses the same
+// spoofing-defense logic as the auth middleware (single source of truth).
+#[cfg(any(feature = "security", feature = "ratelimit"))]
+mod ip_util;
+
 // Rate limiting module — backed by limiteron 0.2.1.
 // Available when the `ratelimit` feature is enabled (inherited by `security`).
 #[cfg(feature = "ratelimit")]
