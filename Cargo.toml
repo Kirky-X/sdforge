@@ -70,7 +70,8 @@ limiteron = { version = "~0.2", default-features = false }
 utoipa = { version = "~5.5", default-features = false, features = ["macros"] }
 
 # CLI 依赖 - clap 4.6 提供命令行解析（derive feature 用于过程宏派生）
-clap = { version = "~4.6", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "suggestions"] }
+# string feature 启用 Str: From<String>，支持运行时配置程序名（MED-4）
+clap = { version = "~4.6", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "suggestions", "string"] }
 
 # Swagger UI 依赖 - utoipa-swagger-ui 8.0 配合 utoipa 5.5 提供交互式 API 文档
 utoipa-swagger-ui = { version = "~8.0", default-features = false, features = ["axum"] }

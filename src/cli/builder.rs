@@ -24,16 +24,27 @@ use crate::cli::{CliArgType, CliCommandRegistration};
 ///
 /// Supports the three construction patterns mandated by the project:
 /// - **Mode 1 (out-of-the-box)**: [`CliBuilder::new`]
-/// - **Mode 2 (builder)**: [`CliBuilder::default`] + (future) chainable setters
+/// - **Mode 2 (builder)**: [`CliBuilder::default`] + [`Self::with_name`]
 /// - **Mode 3 (full DI)**: [`CliBuilder::with_dependencies`] — injects an
 ///   application state `Arc<dyn Any + Send + Sync>` that handlers can
 ///   downcast at call time. If a handler requires `State` but no state
 ///   was injected, invocation returns `ApiError::Internal`.
-#[derive(Default)]
 pub struct CliBuilder {
     /// Injected application state, available to handlers via downcast.
     /// `None` when constructed via `new()`/`default()`.
     state: Option<Arc<dyn Any + Send + Sync>>,
+    /// CLI program name shown in `--help` / `--version` output.
+    /// Defaults to the crate name (`env!("CARGO_PKG_NAME")`).
+    name: String,
+}
+
+impl Default for CliBuilder {
+    fn default() -> Self {
+        Self {
+            state: None,
+            name: env!("CARGO_PKG_NAME").to_string(),
+        }
+    }
 }
 
 impl CliBuilder {
@@ -41,7 +52,7 @@ impl CliBuilder {
     ///
     /// Equivalent to [`Default::default`].
     pub fn new() -> Self {
-        Self { state: None }
+        Self::default()
     }
 
     /// Construct a builder with an injected application state (mode 3 —
@@ -53,7 +64,20 @@ impl CliBuilder {
     /// time; if `state` is `None` the handler invocation fails with
     /// `ApiError::Internal`.
     pub fn with_dependencies(state: Arc<dyn Any + Send + Sync>) -> Self {
-        Self { state: Some(state) }
+        Self {
+            state: Some(state),
+            name: env!("CARGO_PKG_NAME").to_string(),
+        }
+    }
+
+    /// Set the CLI program name (mode 2 — builder pattern).
+    ///
+    /// Defaults to the crate name. Override when embedding the CLI into a
+    /// host application that needs a custom program identity in `--help` /
+    /// `--version` output.
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = name.into();
+        self
     }
 
     /// Borrow the injected application state, if any.
@@ -68,15 +92,15 @@ impl CliBuilder {
     /// Build the final `clap::Command` from all inventory-registered
     /// `CliCommandRegistration` items.
     ///
-    /// The top-level command is named `sdforge` (the framework's program
-    /// identity). Each registration becomes a SubCommand; argument metadata
-    /// is translated per the rules in the module-level docs.
+    /// The top-level command is named via [`Self::with_name`] (default:
+    /// crate name). Each registration becomes a SubCommand; argument
+    /// metadata is translated per the rules in the module-level docs.
     ///
     /// When the `docs` feature is enabled, the `docs` SubCommand (from
     /// [`crate::cli::docs_subcommand`]) is automatically appended — users
     /// do not need to register it manually (T021).
     pub fn build(&self) -> clap::Command {
-        let mut root = clap::Command::new("sdforge")
+        let mut root = clap::Command::new(self.name.clone())
             .version(env!("CARGO_PKG_VERSION"))
             .about("SDForge multi-protocol CLI");
 
