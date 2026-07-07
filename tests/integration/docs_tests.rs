@@ -36,7 +36,7 @@ async fn docs_test_cmd(name: String) -> Result<String, ApiError> {
 /// `generate_docs(OpenApi)` 必须返回 OpenAPI 3.1 JSON（以 `{` 开头）。
 #[test]
 fn test_generate_docs_openapi_returns_json() {
-    let json = generate_docs(DocFormat::OpenApi);
+    let json = generate_docs(DocFormat::OpenApi).expect("generate_docs OpenApi");
     assert!(
         json.starts_with('{'),
         "OpenAPI output should be JSON object, got: {}",
@@ -47,7 +47,7 @@ fn test_generate_docs_openapi_returns_json() {
 /// `generate_docs(CliMarkdown)` 必须返回非空 Markdown 且包含已注册命令名。
 #[test]
 fn test_generate_docs_cli_markdown_contains_command() {
-    let md = generate_docs(DocFormat::CliMarkdown);
+    let md = generate_docs(DocFormat::CliMarkdown).expect("generate_docs CliMarkdown");
     assert!(!md.is_empty(), "CLI markdown should not be empty");
     assert!(
         md.contains("docs_test_cmd"),
@@ -60,7 +60,7 @@ fn test_generate_docs_cli_markdown_contains_command() {
 /// JSON 标记和已注册 CLI 命令名。
 #[test]
 fn test_generate_docs_all_combines_formats() {
-    let all = generate_docs(DocFormat::All);
+    let all = generate_docs(DocFormat::All).expect("generate_docs All");
     assert!(
         all.contains('{') || all.contains('#'),
         "All format should contain JSON '{{' or markdown '#' markers: {}",
@@ -93,6 +93,6 @@ fn test_write_docs_to_file_roundtrip() {
 /// 两种情况都不得 panic 且返回非空字符串。
 #[test]
 fn test_generate_docs_mcp_markdown_returns_nonempty() {
-    let md = generate_docs(DocFormat::McpMarkdown);
+    let md = generate_docs(DocFormat::McpMarkdown).expect("generate_docs McpMarkdown");
     assert!(!md.is_empty(), "MCP markdown should not be empty");
 }
