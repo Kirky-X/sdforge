@@ -482,6 +482,8 @@ mod tests {
         let _ = counts.ws_routes;
         #[cfg(feature = "grpc")]
         let _ = counts.grpc_routes;
+        #[cfg(feature = "cli")]
+        let _ = counts.cli_commands;
     }
 
     #[test]
@@ -498,6 +500,8 @@ mod tests {
         assert_eq!(first.ws_routes, second.ws_routes);
         #[cfg(feature = "grpc")]
         assert_eq!(first.grpc_routes, second.grpc_routes);
+        #[cfg(feature = "cli")]
+        assert_eq!(first.cli_commands, second.cli_commands);
     }
 
     // ============================================================================

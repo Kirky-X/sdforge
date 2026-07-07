@@ -570,6 +570,25 @@ mod tests {
         }
     }
 
+    /// Test that `From<RateLimitError>` converts the `Limiteron` variant to
+    /// `ApiError::Internal` with source (lines 532-534).
+    #[cfg(feature = "ratelimit")]
+    #[test]
+    fn test_from_ratelimit_error_limiteron_variant() {
+        use crate::security::ratelimit::RateLimitError;
+        use limiteron::FlowGuardError;
+
+        let err = RateLimitError::Limiteron(FlowGuardError::ConfigError(
+            "test config error".to_string(),
+        ));
+        let api_error: ApiError = err.into();
+
+        match api_error {
+            ApiError::Internal { .. } => {}
+            _ => panic!("Expected Internal variant for Limiteron error"),
+        }
+    }
+
     /// Test not_found() constructor.
     #[test]
     fn test_not_found_constructor() {
