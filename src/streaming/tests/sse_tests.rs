@@ -403,3 +403,135 @@ async fn test_stream_response_into_response_err_branch_collected() {
         body_str
     );
 }
+
+// ============================================================================
+// stream_to_sse idle timeout tests
+//
+// stream_to_sse uses a `tokio::select!` with a 30-second sleep to detect an
+// idle source stream. When the source stream goes 30s without producing an
+// item, the sleep branch fires (lines 155-156), sets `timed_out = true`, and
+// returns `None` to exit the loop. After the loop, if `timed_out` is true, an
+// Error event describing the timeout is emitted (lines 184-189).
+//
+// These tests use `tokio::time::pause` + `tokio::time::advance` to simulate
+// the 30-second wait without actually sleeping.
+// ============================================================================
+
+/// Verify that a stream which never yields an item (sender kept alive) is
+/// terminated by the 30-second idle timeout, and that an Error event
+/// describing the timeout is emitted before the completion event.
+#[tokio::test]
+async fn test_stream_to_sse_idle_timeout_emits_error_event() {
+    use futures_util::StreamExt;
+    use std::time::Duration;
+
+    // Keep the sender alive so the source stream never ends on its own;
+    // the idle-timeout branch must be the one that terminates the loop.
+    let (_tx, rx) = mpsc::channel::<i32>(10);
+    let stream = ReceiverStream::new(rx);
+
+    let sse_stream = stream_to_sse(stream, |item| {
+        StreamEvent::data(serde_json::Value::from(item))
+    });
+
+    // Pause the auto-advancing clock so we can fast-forward past the 30s
+    // idle timeout without waiting in real time.
+    tokio::time::pause();
+
+    // Spawn the collection so the runtime can drive the spawned
+    // `stream_to_sse` task concurrently while we advance the clock.
+    let handle = tokio::spawn(async move {
+        sse_stream.map(|r| r.unwrap()).collect::<Vec<String>>().await
+    });
+
+    // Advance the paused clock past the 30-second idle threshold. Yielding
+    // in small steps gives the runtime a chance to wake the sleep future
+    // and run the spawned task.
+    for _ in 0..31 {
+        tokio::time::advance(Duration::from_secs(1)).await;
+        tokio::task::yield_now().await;
+    }
+
+    // The timeout should have fired and the stream should now be complete.
+    let results = tokio::time::timeout(Duration::from_secs(5), handle)
+        .await
+        .expect("collection task did not finish after advancing time")
+        .expect("collection task panicked");
+
+    // Locate the timeout error event. It must mention the idle timeout.
+    let has_timeout_error = results
+        .iter()
+        .any(|r| r.contains("idle timeout") && r.contains(r#""type":"error""#));
+    assert!(
+        has_timeout_error,
+        "Expected an idle-timeout error event in the SSE output, got: {:?}",
+        results,
+    );
+
+    // The completion event must still be the last item emitted.
+    assert!(
+        results
+            .last()
+            .map(|r| r.contains("complete"))
+            .unwrap_or(false),
+        "Expected the final event to be the completion event, got: {:?}",
+        results,
+    );
+}
+
+/// Verify that when the idle timeout fires after at least one data item has
+/// been sent, the timeout error event is still emitted alongside the
+/// pre-timeout data events.
+#[tokio::test]
+async fn test_stream_to_sse_idle_timeout_after_data_event() {
+    use futures_util::StreamExt;
+    use std::time::Duration;
+
+    let (tx, rx) = mpsc::channel::<i32>(10);
+    let stream = ReceiverStream::new(rx);
+
+    let sse_stream = stream_to_sse(stream, |item| {
+        StreamEvent::data(serde_json::Value::from(item))
+    });
+
+    // Send one item before pausing so the data branch is exercised first.
+    tx.send(1).await.unwrap();
+
+    tokio::time::pause();
+
+    let handle = tokio::spawn(async move {
+        sse_stream.map(|r| r.unwrap()).collect::<Vec<String>>().await
+    });
+
+    // Fast-forward past the 30s idle window. The sender is still alive but
+    // produces nothing further, so the timeout branch should fire.
+    for _ in 0..31 {
+        tokio::time::advance(Duration::from_secs(1)).await;
+        tokio::task::yield_now().await;
+    }
+
+    let results = tokio::time::timeout(Duration::from_secs(5), handle)
+        .await
+        .expect("collection task did not finish after advancing time")
+        .expect("collection task panicked");
+
+    // There must be at least one data event for the item we sent.
+    let has_data_event = results
+        .iter()
+        .any(|r| r.contains(r#""type":"data""#) && r.contains("1"));
+    assert!(
+        has_data_event,
+        "Expected a data event for the pre-timeout item, got: {:?}",
+        results,
+    );
+
+    // And there must be a timeout error event.
+    let has_timeout_error = results
+        .iter()
+        .any(|r| r.contains("idle timeout") && r.contains(r#""type":"error""#));
+    assert!(
+        has_timeout_error,
+        "Expected an idle-timeout error event, got: {:?}",
+        results,
+    );
+}

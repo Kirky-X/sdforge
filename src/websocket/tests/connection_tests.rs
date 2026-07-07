@@ -452,3 +452,54 @@ async fn broadcast_cleans_up_failed_connections() {
     assert!(manager.get_connection("doomed-conn").await.is_none());
     assert!(manager.get_connection("healthy-conn").await.is_some());
 }
+
+// ============================================================================
+// RwLock poison branch coverage (lines 196, 212, 229-230)
+//
+// ConnectionManager::add_connection / remove_connection / get_connection each
+// have an `else` branch that handles a poisoned RwLock. These branches were
+// previously uncovered because no test poisons the `connections` RwLock.
+// ============================================================================
+
+/// Cover the RwLock poison branch in `add_connection` (line 196).
+#[tokio::test]
+async fn add_connection_handles_poisoned_lock() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    let manager = ConnectionManager::new();
+    let connections = manager.connections.clone();
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let _guard = connections.write().unwrap();
+        panic!("intentional panic to poison RwLock");
+    }));
+    let (conn, _) = WebSocketConnection::new("poison-test".to_string());
+    manager.add_connection("poison-test".to_string(), conn).await;
+    assert_eq!(manager.connection_count().await, 0);
+}
+
+/// Cover the RwLock poison branch in `remove_connection` (line 212).
+#[tokio::test]
+async fn remove_connection_handles_poisoned_lock() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    let manager = ConnectionManager::new();
+    let connections = manager.connections.clone();
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let _guard = connections.write().unwrap();
+        panic!("intentional panic to poison RwLock");
+    }));
+    manager.remove_connection("any-id").await;
+    assert_eq!(manager.connection_count().await, 0);
+}
+
+/// Cover the RwLock poison branch in `get_connection` (lines 229-230).
+#[tokio::test]
+async fn get_connection_handles_poisoned_lock() {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    let manager = ConnectionManager::new();
+    let connections = manager.connections.clone();
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        let _guard = connections.write().unwrap();
+        panic!("intentional panic to poison RwLock");
+    }));
+    let result = manager.get_connection("any-id").await;
+    assert!(result.is_none());
+}

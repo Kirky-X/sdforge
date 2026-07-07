@@ -382,6 +382,37 @@ mod tests {
         assert_eq!(spec.info.description.as_deref(), Some("desc"));
     }
 
+    /// `to_parameter()` with an unknown schema_type falls back to
+    /// `Type::String` (line 93 — the `_` match arm).
+    #[test]
+    fn to_parameter_unknown_schema_type_falls_back_to_string() {
+        let param = OpenApiPathParam::new("id", "", true, "object", "");
+        let parameter = param.to_parameter();
+        assert_eq!(parameter.name, "id");
+    }
+
+    /// `with_path_params()` constructs a route info with explicit path
+    /// parameters (line 171 — the const fn body). Called at runtime (not
+    /// const context) so tarpaulin attributes the coverage.
+    #[test]
+    fn with_path_params_constructs_route_info() {
+        const PARAMS: &[OpenApiPathParam] =
+            &[OpenApiPathParam::new("id", "user id", true, "integer", "int64")];
+        let route = OpenApiRouteInfo::with_path_params(
+            "/users/{id}",
+            "GET",
+            "Get user",
+            "Retrieve a user by id",
+            "v1",
+            &["users"],
+            PARAMS,
+        );
+        assert_eq!(route.path, "/users/{id}");
+        assert_eq!(route.method, "GET");
+        assert_eq!(route.path_params.len(), 1);
+        assert_eq!(route.path_params[0].name, "id");
+    }
+
     /// `generate_openapi_spec()` should always use the crate title and the
     /// compile-time crate version, regardless of registered routes.
     #[test]

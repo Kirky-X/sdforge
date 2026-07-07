@@ -979,4 +979,184 @@ mod tests {
         assert_eq!(cache.len(), 1);
         assert!(cache.contains("session:1"));
     }
+
+    // ========================================================================
+    // Mutex poison 分支测试
+    //
+    // OxcacheSyncCache 在 set/delete/clear/find_keys_by_pattern/set_many/
+    // delete_many 中先获取 `key_index` 锁。若锁中毒（持有锁时 panic），
+    // 各方法会降级为 backend-only 模式或返回安全默认值。这些测试通过
+    // 故意 panic 让 Mutex 中毒，验证降级路径。
+    // ========================================================================
+
+    /// Helper: 让 cache 的 key_index Mutex 中毒。
+    ///
+    /// 持有锁时 panic 会导致 Mutex 中毒，后续 lock() 调用返回 Err。
+    fn poison_key_index(cache: &OxcacheSyncCache) {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _guard = cache.key_index.lock().unwrap();
+            panic!("intentional panic to poison key_index mutex");
+        }));
+        assert!(result.is_err(), "poisoning panic should be caught");
+    }
+
+    #[test]
+    fn test_set_with_poisoned_mutex_falls_back_to_backend() {
+        let cache = OxcacheSyncCache::new();
+        poison_key_index(&cache);
+
+        // Mutex 中毒后，set 应降级为 backend-only 写入（不更新 index）
+        cache.set("poisoned_key", b"poisoned_value".to_vec());
+
+        // backend 仍然能读到值（通过 contains/get 验证）
+        assert!(cache.contains("poisoned_key"));
+        assert_eq!(cache.get("poisoned_key"), Some(b"poisoned_value".to_vec()));
+    }
+
+    #[test]
+    fn test_delete_with_poisoned_mutex_falls_back_to_backend() {
+        let cache = OxcacheSyncCache::new();
+        // 先写入一个值（此时 Mutex 未中毒）
+        cache.set("to_delete", b"value".to_vec());
+        assert!(cache.contains("to_delete"));
+
+        // 中毒 Mutex
+        poison_key_index(&cache);
+
+        // delete 应降级为 backend-only 删除
+        let deleted = cache.delete("to_delete");
+        assert!(deleted, "delete should report the key existed");
+        assert!(!cache.contains("to_delete"));
+    }
+
+    #[test]
+    fn test_delete_with_poisoned_mutex_nonexistent_key() {
+        let cache = OxcacheSyncCache::new();
+        poison_key_index(&cache);
+
+        // 删除不存在的键，backend.exists 返回 false，应返回 false
+        let deleted = cache.delete("nonexistent_key");
+        assert!(!deleted);
+    }
+
+    #[test]
+    fn test_clear_with_poisoned_mutex_falls_back_to_backend() {
+        let cache = OxcacheSyncCache::new();
+        cache.set("k1", b"v1".to_vec());
+        cache.set("k2", b"v2".to_vec());
+        assert_eq!(cache.len(), 2);
+
+        poison_key_index(&cache);
+
+        // clear 应降级为 backend-only 清空
+        cache.clear();
+        assert_eq!(cache.len(), 0);
+    }
+
+    #[test]
+    fn test_find_keys_by_pattern_with_poisoned_mutex_returns_empty() {
+        let cache = OxcacheSyncCache::new();
+        cache.set("user:1", b"v1".to_vec());
+        cache.set("user:2", b"v2".to_vec());
+
+        poison_key_index(&cache);
+
+        // Mutex 中毒时，find_keys_by_pattern 直接返回空 Vec
+        let keys = cache.find_keys_by_pattern("user:*");
+        assert!(keys.is_empty(), "poisoned mutex should yield empty result");
+    }
+
+    #[test]
+    fn test_set_many_with_poisoned_mutex_falls_back_to_backend() {
+        let cache = OxcacheSyncCache::new();
+        poison_key_index(&cache);
+
+        let items = vec![
+            ("batch_k1".to_string(), b"v1".to_vec()),
+            ("batch_k2".to_string(), b"v2".to_vec()),
+        ];
+        cache.set_many(&items);
+
+        // backend 应能读到写入的值
+        assert!(cache.contains("batch_k1"));
+        assert!(cache.contains("batch_k2"));
+        assert_eq!(cache.get("batch_k2"), Some(b"v2".to_vec()));
+    }
+
+    #[test]
+    fn test_delete_many_with_poisoned_mutex_falls_back_to_backend() {
+        let cache = OxcacheSyncCache::new();
+        // 先写入值（Mutex 未中毒时）
+        cache.set("del_k1", b"v1".to_vec());
+        cache.set("del_k2", b"v2".to_vec());
+        cache.set("del_k3", b"v3".to_vec());
+
+        poison_key_index(&cache);
+
+        // delete_many 应降级为 backend-only 删除
+        let deleted = cache.delete_many(&["del_k1", "del_k3", "nonexistent"]);
+        assert_eq!(deleted, 2, "should report 2 keys deleted");
+        assert!(!cache.contains("del_k1"));
+        assert!(cache.contains("del_k2"));
+        assert!(!cache.contains("del_k3"));
+    }
+
+    #[test]
+    fn test_delete_many_with_poisoned_mutex_all_nonexistent() {
+        let cache = OxcacheSyncCache::new();
+        poison_key_index(&cache);
+
+        // 所有键都不存在时，deleted 应为 0
+        let deleted = cache.delete_many(&["no_k1", "no_k2"]);
+        assert_eq!(deleted, 0);
+    }
+
+    /// Helper: poison the key_index mutex while a key is already in the index.
+    /// Used to verify that find_keys_by_pattern's stale-key cleanup path
+    /// (lines 408-416) is not the only path exercised.
+    #[test]
+    fn test_get_with_poisoned_mutex_still_works() {
+        // get() 不使用 key_index 锁，只读 backend，所以不受中毒影响
+        let cache = OxcacheSyncCache::new();
+        cache.set("k", b"v".to_vec());
+        poison_key_index(&cache);
+
+        // get 应仍然正常工作（不获取 key_index 锁）
+        assert_eq!(cache.get("k"), Some(b"v".to_vec()));
+        assert!(cache.contains("k"));
+    }
+
+    /// Verify that find_keys_by_pattern removes stale keys from the index
+    /// when the backend has evicted them (lines 409-416).
+    #[test]
+    fn test_find_keys_by_pattern_removes_stale_keys() {
+        let cache = OxcacheSyncCache::new();
+
+        // Manually insert keys into the index without setting them in the backend
+        {
+            let mut idx = cache.key_index.lock().unwrap();
+            idx.insert("stale_key_1".to_string());
+            idx.insert("stale_key_2".to_string());
+        }
+
+        // Call find_keys_by_pattern with a glob pattern that matches
+        let result = cache.find_keys_by_pattern("stale_*");
+
+        // The stale keys should not be in the results (backend doesn't have them)
+        assert!(
+            result.is_empty(),
+            "Stale keys should not appear in results"
+        );
+
+        // The stale keys should have been removed from the index
+        let idx = cache.key_index.lock().unwrap();
+        assert!(
+            !idx.contains("stale_key_1"),
+            "Stale key 1 should be removed from index"
+        );
+        assert!(
+            !idx.contains("stale_key_2"),
+            "Stale key 2 should be removed from index"
+        );
+    }
 }
