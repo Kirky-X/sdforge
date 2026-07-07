@@ -210,7 +210,7 @@ limiteron = { workspace = true, optional = true }
 tokio = { workspace = true }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
-sdforge-macros = { version = "0.3.0", path = "./macros" }
+sdforge-macros = { version = "0.3.0", path = "./macros", default-features = false }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }
