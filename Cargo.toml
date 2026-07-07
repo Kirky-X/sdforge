@@ -323,8 +323,8 @@ full = [
 hex = ["dep:hex"]
 
 [build-dependencies]
-tonic-build = "0.14"
-tonic-prost-build = "0.14"
+tonic-build = { version = "0.14", default-features = false }
+tonic-prost-build = { version = "0.14", default-features = false }
 
 [package.metadata.docs.rs]
 all-features = true
