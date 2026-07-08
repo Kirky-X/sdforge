@@ -124,6 +124,9 @@ pub mod prelude {
 /// Core types and utilities
 pub mod core;
 
+/// Domain abstractions consumed by integrations (e.g. `ForgeRateLimiter`).
+pub mod domain;
+
 /// HTTP server and routing
 #[cfg(feature = "http")]
 pub mod http;
