@@ -64,7 +64,10 @@ prost = { version = "~0.14", default-features = false, features = ["derive"] }
 tonic-prost = { version = "~0.14", default-features = false }
 
 # 流控依赖 - limiteron 0.2.1 提供统一限流/封禁/配额/熔断
-limiteron = { version = "~0.2", default-features = false }
+# Uses path until limiteron 0.2.1+kit is published to crates.io; the version
+# constraint is kept so the published artifact resolves the same.
+# Mirrors the trait-kit path dependency pattern (Phase 5).
+limiteron = { version = "~0.2", path = "../limiteron", default-features = false }
 
 # OpenAPI 依赖
 utoipa = { version = "~5.5", default-features = false, features = ["macros"] }
@@ -207,6 +210,13 @@ simd-json = { workspace = true, optional = true }
 # Rate limiting dependencies - limiteron 0.2.1 提供统一流控
 limiteron = { workspace = true, optional = true }
 
+# trait-kit integration (optional, feature-gated via `kit`).
+# Uses path until trait-kit 0.2.2 is published to crates.io; the version
+# constraint is kept so the published artifact resolves the same.
+# Mirrors dbnexus's pattern (Phase 4 of trait-kit-async-integration).
+# default-features = false (Rule 6) — only the `async` feature is pulled in.
+trait-kit = { version = "0.2.2", path = "../trait-kit", features = ["async"], optional = true, default-features = false }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tokio-stream = { workspace = true }
@@ -305,6 +315,18 @@ logging = ["chrono", "tokio"]
 
 # SIMD JSON 特性 - 使用 SIMD 加速的 JSON 序列化/反序列化
 simd-json = ["dep:simd-json"]
+
+# trait-kit 0.2.2 AsyncKit integration (SdforgeModule). Two-layer feature
+# gating mirrors dbnexus's pattern (Phase 4):
+#   - `limiteron-integration`: pulls in `dep:limiteron` only — enough for
+#     `LimiteronForgeAdapter` (which wraps `limiteron::Governor` directly).
+#   - `kit`: full integration — adds `dep:trait-kit` (with `async` feature)
+#     and `limiteron/kit` (so `limiteron::integrations::kit::LimiteronModule`
+#     is visible to `SdforgeModule::dependencies()` and `build()`).
+# `limiteron/kit` is required because `LimiteronModule` is gated behind
+# limiteron's `kit` feature (Phase 3). default-features = false (Rule 6).
+limiteron-integration = ["dep:limiteron"]
+kit = ["dep:trait-kit", "limiteron-integration", "limiteron/kit"]
 
 # Full 特性
 full = [
