@@ -127,6 +127,12 @@ pub mod core;
 /// Domain abstractions consumed by integrations (e.g. `ForgeRateLimiter`).
 pub mod domain;
 
+/// Integration modules connecting sdforge to external frameworks via
+/// trait-kit 0.2.2 `AsyncKit`. Gated by `limiteron-integration` (which `kit`
+/// implies).
+#[cfg(any(feature = "limiteron-integration", feature = "kit"))]
+pub mod integrations;
+
 /// HTTP server and routing
 #[cfg(feature = "http")]
 pub mod http;
