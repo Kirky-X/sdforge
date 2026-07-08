@@ -4,9 +4,14 @@
 //! Integration modules connecting sdforge to external frameworks via
 //! trait-kit 0.2.2 `AsyncKit`.
 //!
-//! Currently houses the [`limiteron_adapter`](crate::integrations::limiteron_adapter)
-//! module (gated by `limiteron-integration`) defining
-//! [`LimiteronForgeAdapter`](crate::integrations::limiteron_adapter::LimiteronForgeAdapter).
+//! - [`limiteron_adapter`](crate::integrations::limiteron_adapter) (gated by
+//!   `limiteron-integration`) defines
+//!   [`LimiteronForgeAdapter`](crate::integrations::limiteron_adapter::LimiteronForgeAdapter).
+//! - [`kit`](crate::integrations::kit) (gated by `kit`) defines
+//!   [`SdforgeModule`](crate::integrations::kit::SdforgeModule).
 
 #[cfg(feature = "limiteron-integration")]
 pub mod limiteron_adapter;
+
+#[cfg(feature = "kit")]
+pub mod kit;
