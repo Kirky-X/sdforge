@@ -1,14 +1,13 @@
 [package]
 name = "sdforge-examples"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "Examples demonstrating SDForge framework functionality"
 license = "MIT"
 repository = "https://github.com/Kirky-X/sdforge"
 keywords = ["examples", "sdforge", "http", "mcp"]
 categories = ["web-programming", "development-tools"]
-
-[workspace]
+publish = false
 
 [dependencies]
 sdforge = { path = ".." }

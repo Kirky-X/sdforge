@@ -438,6 +438,8 @@ cargo clippy --all-features --all-targets
 - [📖 API 文档](https://docs.rs/sdforge)
 - [💡 示例](./examples/)
 
+> **注意**：`sdforge-examples` 已设为 `publish = false` 并纳入 workspace 管理。
+
 ---
 
 ## <span id="contributing">🤝 贡献</span>
