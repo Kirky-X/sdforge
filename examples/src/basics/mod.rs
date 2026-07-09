@@ -33,6 +33,6 @@
 //! - [`types_and_errors`](types_and_errors) - 类型系统和错误处理
 //! - [`response_building`](response_building) - 响应构建示例
 
+pub mod response_building;
 pub mod simple_api;
 pub mod types_and_errors;
-pub mod response_building;

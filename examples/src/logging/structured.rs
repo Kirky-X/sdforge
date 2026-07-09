@@ -60,11 +60,15 @@ pub fn production_config() -> LoggerConfig {
 ///
 /// `LogEntry` 支持链式调用添加字段，字段以 `BTreeMap` 存储（有序输出）。
 pub fn build_log_entry() -> LogEntry {
-    LogEntry::new(LogLevel::Info, "user_service", "User logged in successfully")
-        .with_field("user_id", "12345")
-        .with_field("username", "alice")
-        .with_field("ip_address", "192.168.1.100")
-        .with_field("method", "password")
+    LogEntry::new(
+        LogLevel::Info,
+        "user_service",
+        "User logged in successfully",
+    )
+    .with_field("user_id", "12345")
+    .with_field("username", "alice")
+    .with_field("ip_address", "192.168.1.100")
+    .with_field("method", "password")
 }
 
 /// 演示多字段批量添加。
@@ -76,8 +80,7 @@ pub fn build_log_entry_with_fields() -> LogEntry {
         ("endpoint".to_string(), json!("/api/v1/users")),
     ];
 
-    LogEntry::new(LogLevel::Info, "http", "Request completed")
-        .with_fields(fields)
+    LogEntry::new(LogLevel::Info, "http", "Request completed").with_fields(fields)
 }
 
 // =============================================================================
@@ -300,7 +303,10 @@ mod tests {
     fn test_log_entry_serializes_to_json() {
         let entry = build_log_entry();
         let json = serde_json::to_string(&entry).expect("serialization should succeed");
-        assert!(json.contains("\"level\":\"info\""), "JSON should contain level");
+        assert!(
+            json.contains("\"level\":\"info\""),
+            "JSON should contain level"
+        );
         assert!(
             json.contains("\"target\":\"user_service\""),
             "JSON should contain target"

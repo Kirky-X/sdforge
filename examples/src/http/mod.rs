@@ -27,5 +27,5 @@
 //! 2. 路径参数按名称自动提取
 //! 3. 查询参数自动解析为函数参数
 
-pub mod routing;
 pub mod middleware;
+pub mod routing;

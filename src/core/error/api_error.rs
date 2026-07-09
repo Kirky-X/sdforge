@@ -578,9 +578,8 @@ mod tests {
         use crate::security::ratelimit::RateLimitError;
         use limiteron::FlowGuardError;
 
-        let err = RateLimitError::Limiteron(FlowGuardError::ConfigError(
-            "test config error".to_string(),
-        ));
+        let err =
+            RateLimitError::Limiteron(FlowGuardError::ConfigError("test config error".to_string()));
         let api_error: ApiError = err.into();
 
         match api_error {
