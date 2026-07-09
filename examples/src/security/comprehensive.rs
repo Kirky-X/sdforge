@@ -15,9 +15,9 @@
 //! cargo run --features "http security" --example security/comprehensive
 //! ```
 
+use sdforge::cache::{DashMapCache, SyncCache};
 use sdforge::prelude::*;
 use sdforge::security::{AppApiKeyAuth, AppAuditLogger, AuthContext, AuthMetadata, BearerAuth};
-use sdforge::cache::{DashMapCache, SyncCache};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -135,7 +135,13 @@ async fn get_user(id: u64, state: &AppState) -> Result<UserResponse, ApiError> {
         let ctx = anonymous_context();
         state
             .audit_logger
-            .log(&ctx, "user.get", format!("user:{}", id), true, Some("cache_hit".to_string()))
+            .log(
+                &ctx,
+                "user.get",
+                format!("user:{}", id),
+                true,
+                Some("cache_hit".to_string()),
+            )
             .await;
 
         return Ok(UserResponse {
@@ -171,7 +177,13 @@ async fn get_user(id: u64, state: &AppState) -> Result<UserResponse, ApiError> {
     let ctx = anonymous_context();
     state
         .audit_logger
-        .log(&ctx, "user.get", format!("user:{}", id), true, Some("cache_miss".to_string()))
+        .log(
+            &ctx,
+            "user.get",
+            format!("user:{}", id),
+            true,
+            Some("cache_miss".to_string()),
+        )
         .await;
 
     Ok(UserResponse {
@@ -193,8 +205,8 @@ async fn create_user(
     request: CreateUserRequest,
     state: &AppState,
 ) -> Result<UserResponse, ApiError> {
-    use sdforge::core::validation::MIN_PASSWORD_LENGTH;
     use sdforge::core::validation::validators::{validate_email, validate_length};
+    use sdforge::core::validation::MIN_PASSWORD_LENGTH;
 
     // 1. Validate input manually (in addition to derive Validate)
     if validate_email(&request.email).is_err() {
@@ -308,7 +320,13 @@ async fn delete_user(id: u64, state: &AppState) -> Result<ServiceResponse<()>, A
     let ctx = anonymous_context();
     state
         .audit_logger
-        .log(&ctx, "user.delete", format!("user:{}", id), true, Some("admin_action".to_string()))
+        .log(
+            &ctx,
+            "user.delete",
+            format!("user:{}", id),
+            true,
+            Some("admin_action".to_string()),
+        )
         .await;
 
     Ok(ServiceResponse::success(()))
@@ -357,15 +375,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let ctx = anonymous_context();
     state
         .audit_logger
-        .log(&ctx, "app.start", "application", true, Some("Security example initialized".to_string()))
+        .log(
+            &ctx,
+            "app.start",
+            "application",
+            true,
+            Some("Security example initialized".to_string()),
+        )
         .await;
 
     // Retrieve and display audit logs to demonstrate log retrieval + signature
     let logs = state.audit_logger.get_logs("anonymous");
     println!("✓ Audit Logging configured ({} log entries)", logs.len());
     for log in &logs {
-        let signed = if log.signature().is_some() { "signed" } else { "unsigned" };
-        println!("  - [{}] {} on {} ({})", signed, log.action(), log.resource(), log.timestamp());
+        let signed = if log.signature().is_some() {
+            "signed"
+        } else {
+            "unsigned"
+        };
+        println!(
+            "  - [{}] {} on {} ({})",
+            signed,
+            log.action(),
+            log.resource(),
+            log.timestamp()
+        );
     }
     println!();
 
@@ -422,8 +456,8 @@ mod tests {
 
     #[test]
     fn test_input_validation() {
-        use sdforge::core::validation::MIN_PASSWORD_LENGTH;
         use sdforge::core::validation::validators::{validate_email, validate_length};
+        use sdforge::core::validation::MIN_PASSWORD_LENGTH;
 
         // Valid inputs
         assert!(validate_email("user@example.com").is_ok());
@@ -442,12 +476,21 @@ mod tests {
         // Log an event
         state
             .audit_logger
-            .log(&ctx, "test.action", "test:resource", true, Some("test message".to_string()))
+            .log(
+                &ctx,
+                "test.action",
+                "test:resource",
+                true,
+                Some("test message".to_string()),
+            )
             .await;
 
         // Retrieve logs — should contain the entry we just logged
         let logs = state.audit_logger.get_logs("anonymous");
-        assert!(logs.iter().any(|l| l.action() == "test.action"), "audit log entry not recorded");
+        assert!(
+            logs.iter().any(|l| l.action() == "test.action"),
+            "audit log entry not recorded"
+        );
         assert!(logs.iter().any(|l| l.resource() == "test:resource"));
     }
 
@@ -457,7 +500,10 @@ mod tests {
 
         // Default state seeds two users; id=1 should exist
         let response = get_user(1, &state).await;
-        assert!(response.is_ok(), "get_user should succeed for existing user");
+        assert!(
+            response.is_ok(),
+            "get_user should succeed for existing user"
+        );
         let resp = response.unwrap();
         assert!(resp.success);
         assert_eq!(resp.data.unwrap().username, "admin");

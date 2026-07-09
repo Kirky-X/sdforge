@@ -272,7 +272,10 @@ mod tests {
         // Returns max_depth=1 (single-level object), not 0.
         let text = r#"{"a":"b\\c"}"#;
         let depth = calculate_json_depth(text);
-        assert_eq!(depth, 1, "Single-level JSON with escape should return depth 1");
+        assert_eq!(
+            depth, 1,
+            "Single-level JSON with escape should return depth 1"
+        );
     }
 
     /// parse_websocket_message with multiple top-level JSON values — the

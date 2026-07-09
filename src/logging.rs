@@ -383,8 +383,8 @@ mod tests {
     /// branch).
     #[test]
     fn test_write_log_entry_text_format_no_color() {
-        let entry = LogEntry::new(LogLevel::Info, "test_target", "Test message")
-            .with_field("key", "value");
+        let entry =
+            LogEntry::new(LogLevel::Info, "test_target", "Test message").with_field("key", "value");
 
         let mut output = Vec::new();
         let result = write_log_entry(&mut output, &entry, LogFormat::Text, false);

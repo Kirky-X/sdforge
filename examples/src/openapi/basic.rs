@@ -123,16 +123,14 @@ pub fn demo_spec_to_json() -> String {
 //
 // 对于不由 `#[service_api]` 宏声明的路由（如动态注册的中间件路由），
 // 可以手动通过 `inventory::submit!` 注册 `OpenApiRouteInfo`。
-inventory::submit!(
-    OpenApiRouteInfo::new(
-        "/openapi-demo/manual",
-        "GET",
-        "Manually registered route",
-        "This route was registered via inventory::submit! directly, not via #[service_api]",
-        "v1",
-        &["manual", "demo"]
-    )
-);
+inventory::submit!(OpenApiRouteInfo::new(
+    "/openapi-demo/manual",
+    "GET",
+    "Manually registered route",
+    "This route was registered via inventory::submit! directly, not via #[service_api]",
+    "v1",
+    &["manual", "demo"]
+));
 
 // ============================================================================
 // 单元测试
@@ -146,7 +144,10 @@ mod tests {
     fn default_spec_should_have_title() {
         let spec = demo_default_spec();
         let info = spec.get("info").expect("spec should have info section");
-        let title = info.get("title").and_then(|t| t.as_str()).expect("info should have title");
+        let title = info
+            .get("title")
+            .and_then(|t| t.as_str())
+            .expect("info should have title");
         assert_eq!(title, "SDForge API");
     }
 
@@ -158,10 +159,7 @@ mod tests {
             info.get("title").and_then(|t| t.as_str()),
             Some("Demo Service")
         );
-        assert_eq!(
-            info.get("version").and_then(|v| v.as_str()),
-            Some("1.0.0")
-        );
+        assert_eq!(info.get("version").and_then(|v| v.as_str()), Some("1.0.0"));
         assert_eq!(
             info.get("description").and_then(|d| d.as_str()),
             Some("OpenAPI generation demo from sdforge-examples")

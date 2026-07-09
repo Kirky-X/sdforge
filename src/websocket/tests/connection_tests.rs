@@ -472,7 +472,9 @@ async fn add_connection_handles_poisoned_lock() {
         panic!("intentional panic to poison RwLock");
     }));
     let (conn, _) = WebSocketConnection::new("poison-test".to_string());
-    manager.add_connection("poison-test".to_string(), conn).await;
+    manager
+        .add_connection("poison-test".to_string(), conn)
+        .await;
     assert_eq!(manager.connection_count().await, 0);
 }
 

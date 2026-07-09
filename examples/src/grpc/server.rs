@@ -177,13 +177,19 @@ mod tests {
         let route = create_sample_route();
         // GrpcRoute fields are pub(crate), so we verify via Debug format
         let debug = format!("{:?}", route);
-        assert!(debug.contains("SdForgeService"), "route should contain service name");
+        assert!(
+            debug.contains("SdForgeService"),
+            "route should contain service name"
+        );
     }
 
     #[test]
     fn test_default_server_config_values() {
         let config = default_server_config();
-        assert_eq!(config.max_connections, 1000, "default max_connections should be 1000");
+        assert_eq!(
+            config.max_connections, 1000,
+            "default max_connections should be 1000"
+        );
         assert_eq!(config.timeout_seconds, 30, "default timeout should be 30s");
     }
 

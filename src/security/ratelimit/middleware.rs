@@ -129,11 +129,9 @@ fn rate_limit_rejection_response(err: RateLimitError) -> Response {
             "Rate limit exceeded".to_string(),
             Some(*window_seconds),
         ),
-        RateLimitError::Banned { reason } => (
-            StatusCode::FORBIDDEN,
-            format!("Banned: {}", reason),
-            None,
-        ),
+        RateLimitError::Banned { reason } => {
+            (StatusCode::FORBIDDEN, format!("Banned: {}", reason), None)
+        }
         RateLimitError::CircuitOpen => (
             StatusCode::SERVICE_UNAVAILABLE,
             "Circuit breaker open".to_string(),

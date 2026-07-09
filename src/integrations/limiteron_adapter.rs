@@ -139,8 +139,14 @@ mod tests {
     async fn check_returns_ok_true_when_allowed() {
         let governor = make_governor().await;
         let adapter = LimiteronForgeAdapter::new(Arc::new(governor));
-        let allowed = adapter.check("1.2.3.4").await.expect("check should succeed");
-        assert!(allowed, "first request must be allowed by the 100-token bucket");
+        let allowed = adapter
+            .check("1.2.3.4")
+            .await
+            .expect("check should succeed");
+        assert!(
+            allowed,
+            "first request must be allowed by the 100-token bucket"
+        );
     }
 
     /// R-sdforge-module-002 #3: `record` is a no-op returning `Ok(())`
@@ -165,7 +171,10 @@ mod tests {
         let governor = make_governor().await;
         let adapter = LimiteronForgeAdapter::new(Arc::new(governor));
         let limiter: Arc<dyn ForgeRateLimiter + Send + Sync> = Arc::new(adapter);
-        let allowed = limiter.check("5.6.7.8").await.expect("check via dyn dispatch");
+        let allowed = limiter
+            .check("5.6.7.8")
+            .await
+            .expect("check via dyn dispatch");
         assert!(allowed, "dyn-dispatched check must return Ok(true)");
     }
 

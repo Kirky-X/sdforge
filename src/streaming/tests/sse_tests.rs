@@ -441,7 +441,10 @@ async fn test_stream_to_sse_idle_timeout_emits_error_event() {
     // Spawn the collection so the runtime can drive the spawned
     // `stream_to_sse` task concurrently while we advance the clock.
     let handle = tokio::spawn(async move {
-        sse_stream.map(|r| r.unwrap()).collect::<Vec<String>>().await
+        sse_stream
+            .map(|r| r.unwrap())
+            .collect::<Vec<String>>()
+            .await
     });
 
     // Advance the paused clock past the 30-second idle threshold. Yielding
@@ -500,7 +503,10 @@ async fn test_stream_to_sse_idle_timeout_after_data_event() {
     tokio::time::pause();
 
     let handle = tokio::spawn(async move {
-        sse_stream.map(|r| r.unwrap()).collect::<Vec<String>>().await
+        sse_stream
+            .map(|r| r.unwrap())
+            .collect::<Vec<String>>()
+            .await
     });
 
     // Fast-forward past the 30s idle window. The sender is still alive but

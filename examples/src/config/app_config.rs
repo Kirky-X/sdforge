@@ -135,7 +135,10 @@ pub fn demo_helper_configs() {
         environment: "production".to_string(),
     };
 
-    println!("  ApiConfig: prefix={}, version={}", api_config.prefix, api_config.default_version);
+    println!(
+        "  ApiConfig: prefix={}, version={}",
+        api_config.prefix, api_config.default_version
+    );
     println!("  TracingConfig: enabled={}", tracing.enabled);
     println!("  EnvHelper: environment={}", env.environment);
 }
@@ -173,7 +176,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("💾 模式 3: 序列化/反序列化");
     let json = serialize_config(&custom)?;
     println!("  JSON (前 200 字符):");
-    let preview = if json.len() > 200 { &json[..200] } else { &json };
+    let preview = if json.len() > 200 {
+        &json[..200]
+    } else {
+        &json
+    };
     println!("  {}", preview);
     println!("  ...");
 
@@ -205,8 +212,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (route, secs) in &timeout.route_timeouts {
         println!("    {}: {}s", route, secs);
     }
-    println!("    get_timeout(\"/api/upload\") = {}s", timeout.get_timeout("/api/upload"));
-    println!("    get_timeout(\"/api/unknown\") = {}s (回退到默认)", timeout.get_timeout("/api/unknown"));
+    println!(
+        "    get_timeout(\"/api/upload\") = {}s",
+        timeout.get_timeout("/api/upload")
+    );
+    println!(
+        "    get_timeout(\"/api/unknown\") = {}s (回退到默认)",
+        timeout.get_timeout("/api/unknown")
+    );
 
     println!();
     println!("  辅助配置类型:");
@@ -230,7 +243,10 @@ mod tests {
     fn test_default_config_has_server() {
         let config = default_config();
         // LOW-001: ServerConfig::default() 现在使用 fail-safe 常量（loopback + 8080）
-        assert_eq!(config.server.host, "127.0.0.1", "default host is fail-safe loopback");
+        assert_eq!(
+            config.server.host, "127.0.0.1",
+            "default host is fail-safe loopback"
+        );
         assert_eq!(config.server.port, 8080, "default port is 8080");
     }
 
@@ -242,7 +258,10 @@ mod tests {
         assert_eq!(config.server.request_timeout_secs, 60);
         // AuthConfig::ApiKey variant check
         match &config.authentication {
-            AuthConfig::ApiKey { header_name, prefix } => {
+            AuthConfig::ApiKey {
+                header_name,
+                prefix,
+            } => {
                 assert_eq!(header_name, "X-API-Key");
                 assert_eq!(prefix, "sk_");
             }

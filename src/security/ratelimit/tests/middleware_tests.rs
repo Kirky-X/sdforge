@@ -212,11 +212,9 @@ impl RateLimiter for MockLimiterWithError {
 #[tokio::test]
 async fn middleware_exceeded_returns_429_with_retry_after() {
     let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiterWithError {
-        factory: Box::new(|| {
-            RateLimitError::Exceeded {
-                limit: 100,
-                window_seconds: 60,
-            }
+        factory: Box::new(|| RateLimitError::Exceeded {
+            limit: 100,
+            window_seconds: 60,
         }),
     });
     let layer = RateLimitLayer::new(limiter);
@@ -239,10 +237,8 @@ async fn middleware_exceeded_returns_429_with_retry_after() {
 #[tokio::test]
 async fn middleware_banned_returns_403_without_retry_after() {
     let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiterWithError {
-        factory: Box::new(|| {
-            RateLimitError::Banned {
-                reason: "abuse".to_string(),
-            }
+        factory: Box::new(|| RateLimitError::Banned {
+            reason: "abuse".to_string(),
         }),
     });
     let layer = RateLimitLayer::new(limiter);
@@ -294,11 +290,9 @@ async fn middleware_circuit_open_returns_503_with_retry_after() {
 #[tokio::test]
 async fn middleware_quota_exhausted_returns_429_without_retry_after() {
     let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiterWithError {
-        factory: Box::new(|| {
-            RateLimitError::QuotaExhausted {
-                used: 100,
-                total: 100,
-            }
+        factory: Box::new(|| RateLimitError::QuotaExhausted {
+            used: 100,
+            total: 100,
         }),
     });
     let layer = RateLimitLayer::new(limiter);
@@ -322,9 +316,7 @@ async fn middleware_limiteron_error_returns_500() {
     use limiteron::FlowGuardError;
     let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiterWithError {
         factory: Box::new(|| {
-            RateLimitError::Limiteron(FlowGuardError::ConfigError(
-                "internal".to_string(),
-            ))
+            RateLimitError::Limiteron(FlowGuardError::ConfigError("internal".to_string()))
         }),
     });
     let layer = RateLimitLayer::new(limiter);

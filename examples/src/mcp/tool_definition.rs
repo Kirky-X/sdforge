@@ -255,7 +255,8 @@ async fn mcp_process(request: ProcessRequest) -> Result<serde_json::Value, ApiEr
         if let Some(enrich) = opts.get("enrich").and_then(|v| v.as_bool()) {
             if enrich {
                 result["enriched"] = serde_json::json!(true);
-                result["enrichment_timestamp"] = serde_json::Value::String(chrono::Utc::now().to_rfc3339());
+                result["enrichment_timestamp"] =
+                    serde_json::Value::String(chrono::Utc::now().to_rfc3339());
             }
         }
     }
