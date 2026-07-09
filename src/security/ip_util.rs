@@ -108,10 +108,7 @@ pub(crate) fn is_ip_in_range(ip: &str, cidr: &str) -> bool {
     let mask_bits: u32 = parts[1].parse().unwrap_or(0);
 
     let ip_bytes: Vec<u8> = ip.split('.').filter_map(|s| s.parse().ok()).collect();
-    let net_bytes: Vec<u8> = network
-        .split('.')
-        .filter_map(|s| s.parse().ok())
-        .collect();
+    let net_bytes: Vec<u8> = network.split('.').filter_map(|s| s.parse().ok()).collect();
 
     if ip_bytes.len() != 4 || net_bytes.len() != 4 {
         return false;

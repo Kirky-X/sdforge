@@ -51,10 +51,7 @@ pub fn demo_stateless_handler() -> StatelessServerHandler {
 /// Mcp-Name: get_user
 /// ```
 pub fn demo_expected_headers() -> Vec<(&'static str, &'static str)> {
-    vec![
-        ("Mcp-Method", "tools/call"),
-        ("Mcp-Name", "get_user"),
-    ]
+    vec![("Mcp-Method", "tools/call"), ("Mcp-Name", "get_user")]
 }
 
 /// 演示 `McpHeaderInfo` 的字段结构

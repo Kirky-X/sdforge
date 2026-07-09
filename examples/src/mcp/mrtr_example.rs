@@ -93,9 +93,7 @@ async fn mrtr_approval(request: serde_json::Value) -> Result<serde_json::Value, 
 ///
 /// 重复使用同一 `session_id` 会返回 `invalid_params` 错误，
 /// 避免静默覆盖既有会话。
-pub fn demo_session_conflict_detection(
-    manager: &MrtrSessionManager,
-) -> Result<(), &'static str> {
+pub fn demo_session_conflict_detection(manager: &MrtrSessionManager) -> Result<(), &'static str> {
     // 第一次创建成功
     manager
         .create_session("conflict-test", "demo_tool")
@@ -129,7 +127,11 @@ mod tests {
     fn duplicate_session_id_should_be_rejected() {
         let manager = MrtrSessionManager::new();
         let outcome = demo_session_conflict_detection(&manager);
-        assert!(outcome.is_ok(), "duplicate session_id must be rejected: {:?}", outcome);
+        assert!(
+            outcome.is_ok(),
+            "duplicate session_id must be rejected: {:?}",
+            outcome
+        );
     }
 
     #[test]

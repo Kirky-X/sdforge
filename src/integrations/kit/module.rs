@@ -77,8 +77,7 @@ impl ModuleMeta for SdforgeModule {
         // initializer on older toolchains. OnceLock (stable since 1.70) gives
         // a `&'static` reference to a runtime-constructed `Vec`.
         static DEPS: OnceLock<Vec<(&'static str, TypeId)>> = OnceLock::new();
-        DEPS
-            .get_or_init(|| vec![("limiteron", TypeId::of::<LimiteronModule>())])
+        DEPS.get_or_init(|| vec![("limiteron", TypeId::of::<LimiteronModule>())])
             .as_slice()
     }
 }
@@ -110,7 +109,9 @@ impl AsyncAutoBuilder for SdforgeModule {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use limiteron::config::{Action, ActionConfig, FlowControlConfig, LimiterConfig, Matcher, Rule};
+    use limiteron::config::{
+        Action, ActionConfig, FlowControlConfig, LimiterConfig, Matcher, Rule,
+    };
 
     /// Build a minimal valid `FlowControlConfig` (1 rule matching all IPs with
     /// a permissive token bucket). `FlowControlConfig::default()` has an

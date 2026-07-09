@@ -1143,10 +1143,7 @@ mod tests {
         let result = cache.find_keys_by_pattern("stale_*");
 
         // The stale keys should not be in the results (backend doesn't have them)
-        assert!(
-            result.is_empty(),
-            "Stale keys should not appear in results"
-        );
+        assert!(result.is_empty(), "Stale keys should not appear in results");
 
         // The stale keys should have been removed from the index
         let idx = cache.key_index.lock().unwrap();

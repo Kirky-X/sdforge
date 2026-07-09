@@ -197,7 +197,10 @@ async fn get_item(id: u64) -> Result<DataItem, ApiError> {
     tool_name = "list_items",
     description = "获取数据项列表"
 )]
-async fn list_items(limit: Option<u32>, offset: Option<u32>) -> Result<ListResponse<DataItem>, ApiError> {
+async fn list_items(
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> Result<ListResponse<DataItem>, ApiError> {
     let limit = limit.unwrap_or(10).min(100) as usize;
     let offset = offset.unwrap_or(0) as usize;
     let total = 100;

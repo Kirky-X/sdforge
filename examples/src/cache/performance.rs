@@ -61,8 +61,8 @@ pub struct ComputationResult {
 
 /// Two-level cache system
 pub struct TwoLevelCache {
-    l1_cache: Arc<DashMapCache>,      // Fast, small L1 cache
-    l2_cache: Arc<DashMapCache>,      // Larger, slower L2 cache
+    l1_cache: Arc<DashMapCache>, // Fast, small L1 cache
+    l2_cache: Arc<DashMapCache>, // Larger, slower L2 cache
     l1_max_size: usize,
 }
 
@@ -98,7 +98,7 @@ impl TwoLevelCache {
         if let Ok(serialized) = serde_json::to_vec(value) {
             // Always set in L2
             self.l2_cache.set(key, serialized.clone());
-            
+
             // Set in L1 if under size limit
             if self.l1_cache.len() < self.l1_max_size {
                 self.l1_cache.set(key, serialized);
@@ -160,7 +160,7 @@ impl CacheAsidePattern {
 
         // Compute and cache
         let value = compute_fn().await;
-        
+
         if let Ok(serialized) = serde_json::to_vec(&value) {
             self.cache.set(key, serialized);
         }
@@ -201,15 +201,12 @@ impl WriteThroughPattern {
 // =============================================================================
 
 /// Get product with intelligent caching
-/// 
+///
 /// Demonstrates:
 /// - Two-level caching
 /// - Cache promotion (L2 → L1)
 /// - Serialization/deserialization
-async fn get_product(
-    id: u64,
-    cache: &TwoLevelCache,
-) -> Result<Product, ApiError> {
+async fn get_product(id: u64, cache: &TwoLevelCache) -> Result<Product, ApiError> {
     let cache_key = format!("product:{}", id);
 
     // Try to get from two-level cache
@@ -242,7 +239,7 @@ async fn fetch_product_from_database(id: u64) -> Result<Product, ApiError> {
 }
 
 /// Perform expensive computation with caching
-/// 
+///
 /// Demonstrates:
 /// - Cache-aside pattern
 /// - TTL-based caching
@@ -251,10 +248,9 @@ async fn compute_analytics(
     request: AnalyticsRequest,
     cache_pattern: &CacheAsidePattern,
 ) -> Result<ComputationResult, ApiError> {
-    let cache_key = format!("analytics:{}:{}:{}", 
-        request.metric_type, 
-        request.start_date,
-        request.end_date
+    let cache_key = format!(
+        "analytics:{}:{}:{}",
+        request.metric_type, request.start_date, request.end_date
     );
 
     // Use cache-aside pattern

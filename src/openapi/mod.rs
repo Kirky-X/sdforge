@@ -396,8 +396,9 @@ mod tests {
     /// const context) so tarpaulin attributes the coverage.
     #[test]
     fn with_path_params_constructs_route_info() {
-        const PARAMS: &[OpenApiPathParam] =
-            &[OpenApiPathParam::new("id", "user id", true, "integer", "int64")];
+        const PARAMS: &[OpenApiPathParam] = &[OpenApiPathParam::new(
+            "id", "user id", true, "integer", "int64",
+        )];
         let route = OpenApiRouteInfo::with_path_params(
             "/users/{id}",
             "GET",
