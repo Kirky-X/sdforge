@@ -67,6 +67,7 @@ fn parse_format(s: &str) -> DocFormat {
 /// - 当 `--output` 省略时，调用 [`generate_docs`] 并 `println!` 到 stdout
 ///
 /// IO 错误转换为 [`ApiError::Internal`] 并保留 source 用于错误链。
+#[allow(clippy::result_large_err)]
 pub fn docs_subcommand(matches: &clap::ArgMatches) -> Result<(), ApiError> {
     let format_str = matches
         .get_one::<String>("format")

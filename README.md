@@ -128,18 +128,20 @@ SDForge 使用 Cargo features 进行编译时协议选择和特性组合。
 
 | 特性         | 描述                                     | 依赖                                          |
 |--------------|------------------------------------------|-----------------------------------------------|
-| `http`       | HTTP 服务器 (Axum 0.8.8)                 | axum, tower, tower-http                        |
-| `mcp`        | MCP 协议 (rmcp 0.16, 2026-07-28 规范)    | rmcp |
-| `streaming`  | SSE 流式传输支持                         | tokio-stream, futures-util                    |
+| `http`       | HTTP 服务器 (Axum 0.8.9)                 | axum, tower, tower-http                        |
+| `mcp`        | MCP 协议 (rmcp 2.1, 2026-07-28 规范)     | rmcp, anyhow, http                             |
+| `streaming`  | SSE 流式传输支持                         | tokio-stream, futures-util, chrono             |
 | `timestamp`  | 自动向响应添加时间戳                     | chrono                                        |
 | `logging`    | 结构化请求日志                           | chrono, tokio                                 |
-| `security`   | 安全特性 (认证, 限流)                    | http, cache, uuid, hmac, sha2, chrono, tokio, secrets, zeroize, subtle, once_cell, argon2, password-hash, rand, regex, oxcache/memory, bincode, hex, base64 |
-| `websocket`  | WebSocket 支持                           | tokio-tungstenite, axum-extra                |
-| `grpc`       | gRPC 支持                                | tonic, prost                                 |
-| `cache`      | 缓存支持                                 | dep:http, oxcache/memory, async-trait         |
-| `openapi`    | 自动 OpenAPI 3.1 规范生成                | utoipa, http                                  |
-| `simd-json`  | SIMD 加速 JSON 序列化                   | simd-json                                     |
-| `hex`        | 十六进制编码工具                        | hex                                           |
+| `security`   | 安全特性 (认证, 限流)                    | http, cache, uuid, hmac, sha2, chrono, tokio, subtle, once_cell, rand, regex, oxcache/minimal, bincode, hex, base64, ratelimit |
+| `websocket`  | WebSocket 支持                           | http, streaming, axum-extra, chrono            |
+| `grpc`       | gRPC 支持                                | http, tonic, prost, tonic-prost                |
+| `cache`      | 缓存支持                                 | dep:http, oxcache/minimal                      |
+| `openapi`    | 自动 OpenAPI 3.1 规范生成                | utoipa, http                                   |
+| `cli`        | CLI 集成 (clap 4.6)                      | http, clap                                     |
+| `docs`       | 统一文档输出 (Swagger UI + Markdown)     | openapi, utoipa-swagger-ui, clap-markdown, cli |
+| `simd-json`  | SIMD 加速 JSON 序列化                   | simd-json                                      |
+| `hex`        | 十六进制编码工具                        | hex                                            |
 | `full`       | 启用所有运行时特性（不含 simd-json/hex 等工具特性） | -                                |
 
 ### 🔗 特性依赖
@@ -149,11 +151,14 @@ SDForge 使用 Cargo features 进行编译时协议选择和特性组合。
 - `streaming`: 需要 `http`
 - `timestamp`: 无依赖
 - `logging`: 无依赖
-- `security`: 需要 `http`、`cache`
+- `security`: 需要 `http`、`cache`、`ratelimit`
+- `ratelimit`: 需要 `http`（基于 limiteron 0.2.1）
 - `websocket`: 需要 `http`, `streaming`
 - `grpc`: 需要 `http`
 - `cache`: 独立（使用 http crate 类型，不依赖 sdforge http 特性）
 - `openapi`: 需要 `http`
+- `cli`: 需要 `http`（clap 4.6 derive）
+- `docs`: 需要 `openapi`、`cli`（Swagger UI + Markdown）
 
 ---
 
@@ -494,6 +499,10 @@ sdforge/
 │   ├── websocket/    # WebSocket 支持
 │   ├── grpc/         # gRPC 支持
 │   ├── streaming/    # SSE 流式支持
+│   ├── cli/          # CLI 集成 (clap)
+│   ├── docs/         # 文档生成 (Swagger UI + Markdown)
+│   ├── openapi/      # OpenAPI 3.1 规范生成
+│   ├── domain/       # 领域抽象
 │   ├── config/       # 配置管理
 │   └── lib.rs        # 库入口点
 ├── macros/            # 过程宏 crate
@@ -671,14 +680,14 @@ async fn get_user(id: u64) -> Result<User, ApiError> { /* ... */ }
 
 ## <span id="mcp-migration">🔄 MCP 2026-07-28 迁移指南</span>
 
-v0.2.0 将 MCP 实现从 `mcp-sdk 0.0.3` 完整迁移到 [`rmcp 0.16`](https://crates.io/crates/rmcp)，
+v0.2.0 将 MCP 实现从 `mcp-sdk 0.0.3` 完整迁移到 [`rmcp 2.1`](https://crates.io/crates/rmcp)，
 适配 MCP 2026-07-28 规范。本次迁移为 **BREAKING** 变更。
 
 ### ⚠️ BREAKING 变更
 
 | 旧版本 (v0.1.x)                      | 新版本 (v0.2.0)                              |
 |--------------------------------------|----------------------------------------------|
-| `mcp-sdk = "0.0.3"` 依赖             | `rmcp = "0.16"` 依赖                         |
+| `mcp-sdk = "0.0.3"` 依赖             | `rmcp = "2.1"` 依赖                          |
 | `initialize` 握手流程                | 移除，改用 `server/discover` 端点            |
 | 有状态会话（StatefulServerHandler）  | 无状态适配层（`StatelessServerHandler`）    |
 | `register_mcp(&mut Server)` 签名     | `register_mcp(&mut dyn McpToolRegistry)`     |
