@@ -408,7 +408,7 @@ impl AppAuditLogger {
         }
 
         // Sort by timestamp descending
-        all_logs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        all_logs.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
 
         all_logs
     }
