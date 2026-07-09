@@ -3,7 +3,7 @@
 //! MCP server implementation built on the official rmcp SDK.
 //!
 //! This module provides MCP (Model Context Protocol) server functionality using
-//! the official `rmcp` crate (v0.16+). It supports:
+//! the official `rmcp` crate (v2.1+). It supports:
 //!
 //! - Compile-time tool registration via `inventory`
 //! - Stateful and stateless server modes
