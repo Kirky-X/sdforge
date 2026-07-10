@@ -127,8 +127,8 @@ mod security_tests {
 // Enhanced Security Middleware tests
 #[cfg(feature = "security")]
 mod security_middleware_enhanced_tests {
-    use sdforge::security::ApiKeyMetadata;
     use sdforge::AppApiKeyAuth;
+    use sdforge::security::ApiKeyMetadata;
 
     // ============================================================================
     // ApiKeyMetadata tests

@@ -318,7 +318,7 @@ mod tests {
         // Since 4 chars < 5, returns full string
         let result = truncate_with_ellipsis("你好世界", 5);
         assert_eq!(result.len(), 9); // Full 4 Chinese chars + quotes = 9 bytes
-                                     // Note: The function may or may not truncate depending on byte vs char counting
+        // Note: The function may or may not truncate depending on byte vs char counting
     }
 
     #[test]

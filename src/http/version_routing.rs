@@ -5,7 +5,7 @@
 //! This module provides version-based routing for the HTTP server.
 //! Routes requests based on the API version in the URL path.
 
-use axum::{body::Body, extract::Request, response::Response, routing::MethodRouter, Router};
+use axum::{Router, body::Body, extract::Request, response::Response, routing::MethodRouter};
 
 /// Versioned route structure for API version management
 ///

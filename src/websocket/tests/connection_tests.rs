@@ -82,8 +82,8 @@ fn test_app_state_with_config() {
 /// Test bearer token extraction from Authorization header value
 #[test]
 fn test_bearer_token_extraction() {
-    use axum::http::header::AUTHORIZATION;
     use axum::http::HeaderMap;
+    use axum::http::header::AUTHORIZATION;
     let mut headers = HeaderMap::new();
     headers.insert(AUTHORIZATION, "Bearer my-test-token".parse().unwrap());
     let token = headers
@@ -97,8 +97,8 @@ fn test_bearer_token_extraction() {
 /// Test bearer token extraction fails without Bearer prefix
 #[test]
 fn test_bearer_token_extraction_no_bearer() {
-    use axum::http::header::AUTHORIZATION;
     use axum::http::HeaderMap;
+    use axum::http::header::AUTHORIZATION;
     let mut headers = HeaderMap::new();
     headers.insert(AUTHORIZATION, "Basic abc123".parse().unwrap());
     let token = headers
@@ -464,7 +464,7 @@ async fn broadcast_cleans_up_failed_connections() {
 /// Cover the RwLock poison branch in `add_connection` (line 196).
 #[tokio::test]
 async fn add_connection_handles_poisoned_lock() {
-    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
     let manager = ConnectionManager::new();
     let connections = manager.connections.clone();
     let _ = catch_unwind(AssertUnwindSafe(|| {
@@ -481,7 +481,7 @@ async fn add_connection_handles_poisoned_lock() {
 /// Cover the RwLock poison branch in `remove_connection` (line 212).
 #[tokio::test]
 async fn remove_connection_handles_poisoned_lock() {
-    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
     let manager = ConnectionManager::new();
     let connections = manager.connections.clone();
     let _ = catch_unwind(AssertUnwindSafe(|| {
@@ -495,7 +495,7 @@ async fn remove_connection_handles_poisoned_lock() {
 /// Cover the RwLock poison branch in `get_connection` (lines 229-230).
 #[tokio::test]
 async fn get_connection_handles_poisoned_lock() {
-    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
     let manager = ConnectionManager::new();
     let connections = manager.connections.clone();
     let _ = catch_unwind(AssertUnwindSafe(|| {

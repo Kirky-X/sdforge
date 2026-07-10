@@ -11,12 +11,12 @@
 #[cfg(feature = "http")]
 mod http_protocol_tests {
     use axum::{
+        Router,
         body::Body,
         extract::{Form, Json, Path, Query},
         http::{Request, StatusCode},
         response::IntoResponse,
         routing::{delete, get, patch, post, put},
-        Router,
     };
     use serde::{Deserialize, Serialize};
     use serde_json::json;

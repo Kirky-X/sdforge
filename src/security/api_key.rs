@@ -12,7 +12,7 @@ use crate::cache::SharedCache;
 use crate::security::api_key_manager::{
     ApiKeyMetadata, ApiKeyVersion, LruCacheManager, LruConfig, RotationConfig,
 };
-use crate::security::types::{deserialize_permissions, serialize_permissions, CacheNamespace};
+use crate::security::types::{CacheNamespace, deserialize_permissions, serialize_permissions};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -314,11 +314,7 @@ impl AppApiKeyAuth {
         // Always check valid_keys for constant timing
         let perms = self.valid_keys.get(&store_key).and_then(|data| {
             let p = deserialize_permissions(&data);
-            if p.is_empty() {
-                None
-            } else {
-                Some(p)
-            }
+            if p.is_empty() { None } else { Some(p) }
         });
 
         // Apply delay for constant timing regardless of key validity

@@ -3,7 +3,7 @@
 //! Tests for `stream_to_sse` SSE conversion and `StreamResponse`'s `IntoResponse`
 //! HTTP SSE response impl.
 
-use crate::streaming::{stream_to_sse, StreamEvent, StreamResponse};
+use crate::streaming::{StreamEvent, StreamResponse, stream_to_sse};
 use futures_util::StreamExt;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -316,8 +316,8 @@ async fn test_stream_response_into_response_collects_body() {
 /// SSE message, regardless of how many data items were in the input stream.
 #[tokio::test]
 async fn test_stream_to_sse_always_emits_completion_event() {
-    use futures_util::stream;
     use futures_util::StreamExt;
+    use futures_util::stream;
 
     let values = vec![
         serde_json::json!(1),

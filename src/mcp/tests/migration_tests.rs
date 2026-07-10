@@ -7,7 +7,7 @@
 
 use super::{create_test_metadata, create_test_tool};
 use crate::core::Registration;
-use crate::mcp::{get_mcp_tools, McpToolRegistration};
+use crate::mcp::{McpToolRegistration, get_mcp_tools};
 
 #[test]
 fn test_mcp_tool_registration() {

@@ -157,10 +157,12 @@ mod tests {
         };
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid CORS origin"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid CORS origin")
+        );
     }
 
     #[test]
@@ -213,10 +215,12 @@ mod tests {
         };
         let result = build_cors_layer(&config);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid CORS origin"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid CORS origin")
+        );
     }
 
     #[test]
@@ -247,9 +251,11 @@ mod tests {
         };
         let result = build_cors_layer(&config);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Must include host"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Must include host")
+        );
     }
 }

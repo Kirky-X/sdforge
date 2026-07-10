@@ -11,11 +11,11 @@
 use std::sync::Arc;
 
 #[cfg(feature = "websocket")]
+use crate::websocket::WebSocketConnection;
+#[cfg(feature = "websocket")]
 use crate::websocket::connection::ConnectionManager;
 #[cfg(feature = "websocket")]
 use crate::websocket::message::WebSocketMessage;
-#[cfg(feature = "websocket")]
-use crate::websocket::WebSocketConnection;
 
 #[cfg(feature = "websocket")]
 impl ConnectionManager {

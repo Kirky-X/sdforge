@@ -8,13 +8,13 @@
 
 use std::sync::Arc;
 
+use axum::Extension;
+use axum::Json;
 use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
-use axum::Extension;
-use axum::Json;
-use utoipa_swagger_ui::{serve, Config};
+use utoipa_swagger_ui::{Config, serve};
 
 /// 构建挂载 Swagger UI 的 axum Router。
 ///

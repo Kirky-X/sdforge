@@ -44,7 +44,7 @@ pub use api::{ApiConfig, EnvHelper, TracingConfig};
 pub use app::{AppConfig, AppConfigBuilder};
 pub use auth::AuthConfig;
 pub use cache::CacheConfig;
-pub use cors::{build_cors_layer, CorsConfig};
+pub use cors::{CorsConfig, build_cors_layer};
 pub use security::SecurityConfig;
 pub use server::{ServerConfig, TlsConfig};
 pub use timeout::TimeoutConfig;

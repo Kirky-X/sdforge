@@ -14,10 +14,10 @@
 
 #[cfg(feature = "websocket")]
 use axum::{
+    Router,
     extract::ws::{WebSocket, WebSocketUpgrade},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Router,
 };
 // AUTHORIZATION header is only referenced inside the `security`-gated bearer-token
 // extraction in `ValidatedWebSocketUpgrade::from_request`; gated separately so
@@ -36,7 +36,7 @@ use std::sync::Arc;
 #[cfg(feature = "websocket")]
 use crate::websocket::connection::{AppState, ConnectionManager};
 #[cfg(feature = "websocket")]
-use crate::websocket::message::{parse_websocket_message, WebSocketMessage, MAX_MESSAGE_SIZE};
+use crate::websocket::message::{MAX_MESSAGE_SIZE, WebSocketMessage, parse_websocket_message};
 
 #[cfg(feature = "websocket")]
 use crate::core::ApiMetadata;

@@ -6,7 +6,7 @@
 #[cfg(all(feature = "streaming", feature = "http"))]
 mod streaming_tests {
     use futures_util::StreamExt;
-    use sdforge::streaming::{create_stream_channel, stream_to_sse, StreamEvent, StreamResponse};
+    use sdforge::streaming::{StreamEvent, StreamResponse, create_stream_channel, stream_to_sse};
     use std::time::Duration;
     use tokio_stream::wrappers::ReceiverStream;
 

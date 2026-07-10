@@ -147,7 +147,9 @@ mod tests {
     #[tokio::test]
     #[serial_test::serial]
     async fn init_inklog_logger_is_idempotent() {
-        let _first = init_inklog_logger().await.expect("first init should succeed");
+        let _first = init_inklog_logger()
+            .await
+            .expect("first init should succeed");
         let second = init_inklog_logger().await;
         assert!(
             second.is_ok(),

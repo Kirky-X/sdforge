@@ -6,10 +6,10 @@
 #[cfg(feature = "http")]
 mod http_tests {
     use axum::{
+        Router,
         body::Body,
         http::{Request, StatusCode},
         routing::get,
-        Router,
     };
     use sdforge::http::build;
     use tower::ServiceExt;
@@ -122,10 +122,10 @@ mod http_tests {
     #[tokio::test]
     async fn test_http_request_performance() {
         use axum::{
+            Router,
             body::Body,
             http::{Request, StatusCode},
             routing::get,
-            Router,
         };
         use tower::ServiceExt;
 
@@ -155,10 +155,10 @@ mod http_tests {
     #[tokio::test]
     async fn test_concurrent_http_requests() {
         use axum::{
+            Router,
             body::Body,
             http::{Request, StatusCode},
             routing::get,
-            Router,
         };
         use tower::ServiceExt;
 
@@ -198,10 +198,10 @@ mod http_tests {
     #[tokio::test]
     async fn test_large_response_body() {
         use axum::{
+            Router,
             body::Body,
             http::{Request, StatusCode},
             routing::get,
-            Router,
         };
         use tower::ServiceExt;
 
@@ -233,10 +233,10 @@ mod http_tests {
     #[tokio::test]
     async fn test_multiple_route_patterns() {
         use axum::{
+            Router,
             body::Body,
             http::{Request, StatusCode},
             routing::get,
-            Router,
         };
         use tower::ServiceExt;
 

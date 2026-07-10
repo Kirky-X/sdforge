@@ -16,18 +16,20 @@ use std::sync::Arc;
 
 // Test-only registration used by `test_builder_collects_commands` to
 // verify the builder picks up `inventory::submit!` entries.
-inventory::submit!(CliCommandRegistration::new(
-    "builder_test_command",
-    "v1",
-    "Test command for builder_tests",
-    "builder_test_handler"
-)
-.with_args(&[
-    CliArgInfo::new("id", "Resource ID", CliArgType::Path, true, None),
-    CliArgInfo::new("limit", "Max results", CliArgType::Body, false, Some("10"),),
-    // State args must be dropped by the builder.
-    CliArgInfo::new("state", "App state", CliArgType::State, true, None),
-]));
+inventory::submit!(
+    CliCommandRegistration::new(
+        "builder_test_command",
+        "v1",
+        "Test command for builder_tests",
+        "builder_test_handler"
+    )
+    .with_args(&[
+        CliArgInfo::new("id", "Resource ID", CliArgType::Path, true, None),
+        CliArgInfo::new("limit", "Max results", CliArgType::Body, false, Some("10"),),
+        // State args must be dropped by the builder.
+        CliArgInfo::new("state", "App state", CliArgType::State, true, None),
+    ])
+);
 
 // ============================================================================
 // T005: CliBuilder

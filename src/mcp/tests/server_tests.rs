@@ -3,7 +3,7 @@
 //! Tests for `SdForgeMcpServer`: construction, lookup, and `ServerHandler` integration.
 
 use super::{create_test_metadata, create_test_tool};
-use crate::mcp::{build, McpToolInstance, SdForgeMcpServer};
+use crate::mcp::{McpToolInstance, SdForgeMcpServer, build};
 use rmcp::handler::server::ServerHandler;
 
 #[test]

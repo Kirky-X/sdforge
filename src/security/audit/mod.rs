@@ -6,7 +6,7 @@
 
 use crate::cache::SharedCache;
 use crate::security::types::{
-    deserialize_audit_logs, serialize_audit_logs, AuditLog, AuditResult, AuthContext, AuthMetadata,
+    AuditLog, AuditResult, AuthContext, AuthMetadata, deserialize_audit_logs, serialize_audit_logs,
 };
 use log::warn;
 use once_cell::sync::Lazy;
@@ -303,7 +303,9 @@ impl AppAuditLogger {
                 // Convert string to bytes and use as HMAC key
                 log.generate_signature(signing_key_str.as_bytes());
             } else {
-                warn!("⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY is empty. Audit logs will not be signed.");
+                warn!(
+                    "⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY is empty. Audit logs will not be signed."
+                );
             }
         } else {
             warn!(
@@ -522,8 +524,9 @@ impl crate::security::traits::AuditLogger for AppAuditLogger {
                 // making drops invisible to operators).
                 dropped_log_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 warn!(
-                    "[AuditLogger] WARNING: no tokio runtime available, audit log dropped for action={}"
-                , action);
+                    "[AuditLogger] WARNING: no tokio runtime available, audit log dropped for action={}",
+                    action
+                );
             }
         }
     }

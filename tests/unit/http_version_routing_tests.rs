@@ -3,13 +3,13 @@
 #[cfg(feature = "http")]
 mod version_routing_tests {
     use axum::{
+        Router,
         body::Body,
         http::{Request, StatusCode},
         routing::get,
-        Router,
     };
     use sdforge::http::version_routing::{
-        build_version_router, version_redirect_middleware, VersionRouterConfig, VersionedRoute,
+        VersionRouterConfig, VersionedRoute, build_version_router, version_redirect_middleware,
     };
     use tower::ServiceExt;
 
