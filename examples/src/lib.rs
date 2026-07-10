@@ -9,18 +9,18 @@
 //!
 //! | 模块 | 说明 | 所需 feature |
 //! |------|------|-------------|
-//! | [`basics`](basics) | 基础示例 | `http_examples` |
-//! | [`http`](http) | HTTP 协议 | `http_examples` |
-//! | [`mcp`](mcp) | MCP 协议 | `mcp_examples` |
-//! | [`websocket`](websocket) | WebSocket | `websocket_examples` |
-//! | [`streaming`](streaming) | 流式传输 | `streaming_examples` |
-//! | [`security`](security) | 安全功能 | `security_examples` |
-//! | [`cache`](cache) | 缓存功能 | `cache_examples` |
-//! | [`grpc`](grpc) | gRPC 协议 | `grpc_examples` |
-//! | [`config`](config) | 配置管理 | `http_examples` |
-//! | [`logging`](logging) | 结构化日志 | `logging_examples` |
-//! | [`openapi`](openapi) | OpenAPI 生成 | `openapi_examples` |
-//! | [`combined`](combined) | 组合示例 | `combined_examples` |
+//! | [`basics`] | 基础示例 | `http_examples` |
+//! | [`http`] | HTTP 协议 | `http_examples` |
+//! | [`mcp`] | MCP 协议 | `mcp_examples` |
+//! | [`websocket`] | WebSocket | `websocket_examples` |
+//! | [`streaming`] | 流式传输 | `streaming_examples` |
+//! | [`security`] | 安全功能 | `security_examples` |
+//! | [`cache`] | 缓存功能 | `cache_examples` |
+//! | [`grpc`] | gRPC 协议 | `grpc_examples` |
+//! | [`config`] | 配置管理 | `http_examples` |
+//! | [`logging`] | 结构化日志 | `logging_examples` |
+//! | [`openapi`] | OpenAPI 生成 | `openapi_examples` |
+//! | [`combined`] | 组合示例 | `combined_examples` |
 //!
 //! ## 使用方式
 //!
