@@ -36,7 +36,7 @@
 //!
 //! 4. **Error type is `SdForgeError` (capital F), not `SdforgeError`** — spec
 //!    wrote `Error = SdforgeError`. The actual type is
-//!    [`SdForgeError`](crate::core::error::SdForgeError) (defined at
+//!    [`SdForgeError`] (defined at
 //!    `core/error/sdforge_error.rs`, implements `std::error::Error` via
 //!    thiserror). We use `SdForgeError` as `AsyncAutoBuilder::Error`.
 

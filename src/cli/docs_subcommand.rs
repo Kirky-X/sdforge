@@ -22,7 +22,7 @@ const FORMAT_VALUES: &[&str] = &["openapi", "swagger", "cli-markdown", "mcp-mark
 /// 构造 `docs` 子命令的 `clap::Command` 定义。
 ///
 /// 子命令接受两个参数：
-/// - `--format <VALUE>`：文档格式（见 [`FORMAT_VALUES`]，默认 `all`）
+/// - `--format <VALUE>`：文档格式（见 \[`FORMAT_VALUES`\]，默认 `all`）
 /// - `--output <PATH>`：输出文件路径（省略时输出到 stdout）
 pub fn docs_subcommand_definition() -> clap::Command {
     clap::Command::new("docs")

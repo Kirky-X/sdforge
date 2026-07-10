@@ -30,14 +30,14 @@ use super::{RateLimitError, RateLimiter};
 ///
 /// Holds an `Arc<Governor>` so the same governor can be shared across
 /// handlers/threads. The governor is constructed via `Governor::builder()`
-/// with a minimal valid config (see [`default_config`]) or injected directly
+/// with a minimal valid config (see \[`default_config`\]) or injected directly
 /// via [`Self::with_dependencies`].
 ///
 /// # Why no `Default` impl?
 ///
 /// `Governor::new()` is async and panics with `FlowControlConfig::default()`
 /// (empty `rules` fails validation). We provide [`Self::default()`] (an async
-/// fn) that uses [`default_config`] instead.
+/// fn) that uses \[`default_config`\] instead.
 pub struct LimiteronAdapter {
     /// Shared governor instance. `Arc` because `Governor` is shared across
     /// clones of the adapter and may be accessed concurrently.
@@ -99,7 +99,7 @@ fn extract_identifier(req: &Request<Body>) -> String {
 impl LimiteronAdapter {
     /// Out-of-the-box construction (mode 1).
     ///
-    /// Internally uses `Governor::builder()` with [`default_config`] and
+    /// Internally uses `Governor::builder()` with \[`default_config`\] and
     /// in-memory storage. The default rule is permissive (100 req burst,
     /// 10 req/s refill, match all IPs) — suitable for tests and getting
     /// started. Production should inject a custom config via
@@ -191,7 +191,7 @@ impl RateLimiter for LimiteronAdapter {
 /// Builder for [`LimiteronAdapter`] (mode 2 construction).
 ///
 /// Allows fluent configuration of the `FlowControlConfig` before building.
-/// If no config is set, [`default_config`] is used.
+/// If no config is set, \[`default_config`\] is used.
 #[derive(Default)]
 pub struct LimiteronAdapterBuilder {
     config: Option<FlowControlConfig>,

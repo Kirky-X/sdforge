@@ -6,7 +6,7 @@
 //! `inventory` registration pattern used by HTTP/MCP/WebSocket/gRPC. The
 //! `#[service_api]` macro (when `cli = true`) emits
 //! `inventory::submit!(CliCommandRegistration { ... })` plus a paired
-//! `CliHandlerRegistration`. At runtime, [`CliBuilder`] collects the
+//! `CliHandlerRegistration`. At runtime, \[`CliBuilder`\] collects the
 //! registrations and constructs a `clap::Command`.
 
 // ============================================================================

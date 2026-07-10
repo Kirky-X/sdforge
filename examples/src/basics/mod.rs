@@ -29,9 +29,9 @@
 //!
 //! ## 模块内容
 //!
-//! - [`simple_api`](simple_api) - 简单 API 定义示例
-//! - [`types_and_errors`](types_and_errors) - 类型系统和错误处理
-//! - [`response_building`](response_building) - 响应构建示例
+//! - \[`simple_api`\] - 简单 API 定义示例
+//! - \[`types_and_errors`\] - 类型和错误处理
+//! - \[`response_building`\] - 响应构建示例
 
 pub mod response_building;
 pub mod simple_api;

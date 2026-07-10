@@ -20,6 +20,6 @@
 //!
 //! ## 包含的示例
 //!
-//! - [`basic`](basic) - OpenAPI 基础用法：默认规范生成、自定义 builder、手动注册路由
+//! - \[`basic`\] - OpenAPI 基础用法：默认规范生成、自定义 builder、手动注册路由
 
 pub mod basic;

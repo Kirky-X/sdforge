@@ -7,11 +7,11 @@
 //!
 //! ## 模块结构
 //!
-//! - [`routing`](routing) - HTTP 路由示例
-//!   - [`path_params`](routing/path_params) - 路径参数提取
-//!   - [`query_params`](routing/query_params) - 查询参数提取
-//! - [`middleware`](middleware) - 中间件示例
-//!   - [`cors`](middleware/cors) - CORS 跨域资源共享
+//! - \[`routing`\] - HTTP 路由示例
+//!   - \[`path_params`\] - 路径参数提取
+//!   - \[`query_params`\] - 查询参数提取
+//! - \[`middleware`\] - 中间件示例
+//!   - \[`cors`\] - CORS 跨域资源共享
 //!
 //! ## HTTP 方法
 //!
