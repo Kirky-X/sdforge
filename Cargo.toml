@@ -236,28 +236,30 @@ default = ["http"]
 
 # HTTP 特性 - 启用时编译 axum 等
 http = [
-    "axum",
-    "tower",
-    "tower-http",
-    "inventory",
+    "dep:axum",
+    "dep:tower",
+    "dep:tower-http",
+    "dep:inventory",
     "tokio",
-    "axum-extra",
-    "toml",
-    "regex",
-    "once_cell",
-    "validator",
-    "uuid",
+    "dep:axum-extra",
+    "dep:toml",
+    "dep:regex",
+    "dep:once_cell",
+    "dep:validator",
+    "dep:uuid",
 ]
 
 # MCP 特性 (migrated to official rmcp SDK 2.1.0)
 # http crate needed for MCP 2026-07-28 stateless HTTP header parsing (Mcp-Method/Mcp-Name)
-mcp = ["rmcp", "inventory", "anyhow", "dep:http"]
+mcp = ["dep:rmcp", "dep:inventory", "dep:anyhow", "dep:http"]
 
 # Streaming 特性
-streaming = ["http", "tokio-stream", "futures-util", "chrono"]
+# 独立于 http：核心只用 tokio + tokio-stream + futures-util + chrono
+# impl IntoResponse 已有 #[cfg(feature = "http")] 门控
+streaming = ["dep:tokio", "dep:tokio-stream", "dep:futures-util", "dep:chrono"]
 
 # Timestamp 特性
-timestamp = ["chrono"]
+timestamp = ["dep:chrono"]
 
 # Rate limiting 特性 - 继承 limiteron 0.2.1 核心流控能力（tower-middleware/ban-manager/quota-control/circuit-breaker）
 # 依赖 http (axum) 因 RateLimiter::check_request 需要 axum::http::Request<Body>
@@ -273,35 +275,37 @@ ratelimit = [
 # Security 特性
 security = [
     "http",
-    "uuid",
-    "hmac",
-    "sha2",
-    "chrono",
+    "dep:uuid",
+    "dep:hmac",
+    "dep:sha2",
+    "dep:chrono",
     "tokio",
-    "subtle",
-    "once_cell",
-    "rand",
-    "regex",
+    "dep:subtle",
+    "dep:once_cell",
+    "dep:rand",
+    "dep:regex",
     "oxcache/minimal",
-    "bincode",
+    "dep:bincode",
     "cache",
     "hex",
-    "base64",
+    "dep:base64",
     "ratelimit",
 ]
 
 # WebSocket 特性
-websocket = ["http", "streaming", "axum-extra", "chrono"]
+websocket = ["http", "streaming", "dep:axum-extra", "dep:chrono"]
 
 # gRPC 特性
-grpc = ["http", "tonic", "prost", "tonic-prost"]
+# 独立于 http：grpc 模块只用 tonic + prost + serde_json
+grpc = ["dep:tonic", "dep:prost", "dep:tonic-prost", "dep:inventory"]
 
 # OpenAPI 特性 - 自动生成 OpenAPI 3.1 规范
-openapi = ["utoipa", "http"]
+# 独立于 http：openapi 模块只用 utoipa + inventory + serde_json
+openapi = ["dep:utoipa", "dep:inventory"]
 
 # CLI 特性 - clap 集成，与 HTTP/MCP 并列的第三种服务入口
-# 依赖 http（复用 axum 类型）+ clap（derive feature）
-cli = ["http", "dep:clap"]
+# 独立于 http：cli 模块只用 clap + inventory + crate::core::ApiError
+cli = ["dep:clap", "dep:inventory"]
 
 # Docs 特性 - 统一文档输出（Swagger UI + CLI/MCP Markdown）
 # 依赖 openapi（复用 OpenAPI 生成）+ utoipa-swagger-ui + clap-markdown + cli（docs 子命令需要 CLI 框架）
@@ -311,7 +315,10 @@ docs = ["openapi", "dep:utoipa-swagger-ui", "dep:clap-markdown", "cli"]
 cache = ["dep:http", "oxcache/minimal"]
 
 # Logging 特性
-logging = ["chrono", "tokio"]
+logging = ["dep:chrono", "tokio"]
+
+# tokio feature (enables dep:tokio; referenced by #[cfg(feature = "tokio")] in source)
+tokio = ["dep:tokio"]
 
 # SIMD JSON 特性 - 使用 SIMD 加速的 JSON 序列化/反序列化
 simd-json = ["dep:simd-json"]
