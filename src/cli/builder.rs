@@ -82,7 +82,7 @@ impl CliBuilder {
 
     /// Borrow the injected application state, if any.
     ///
-    /// Returns `None` for builders constructed via [`new`] / [`default`].
+    /// Returns `None` for builders constructed via \[`new`\] / \[`default`\].
     /// Handler invocation logic (T006+) uses this accessor to downcast
     /// the state before invoking a `State`-parameterized handler.
     pub fn state(&self) -> Option<&Arc<dyn Any + Send + Sync>> {
@@ -97,7 +97,7 @@ impl CliBuilder {
     /// metadata is translated per the rules in the module-level docs.
     ///
     /// When the `docs` feature is enabled, the `docs` SubCommand (from
-    /// [`crate::cli::docs_subcommand`]) is automatically appended — users
+    /// [`mod@crate::cli::docs_subcommand`]) is automatically appended — users
     /// do not need to register it manually (T021).
     pub fn build(&self) -> clap::Command {
         let mut root = clap::Command::new(self.name.clone())
