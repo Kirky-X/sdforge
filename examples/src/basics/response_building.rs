@@ -213,7 +213,7 @@ async fn list_items(
                 id,
                 name: format!("Item {}", id),
                 description: format!("Description for item {}", id),
-                enabled: id % 2 == 0,
+                enabled: id.is_multiple_of(2),
             }
         })
         .collect();
