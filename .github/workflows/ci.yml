@@ -151,8 +151,17 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-build-target-
 
-      - name: Install protoc
-        uses: arduino/setup-protoc@v3
+      - name: Install protoc (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc (macOS)
+        if: runner.os == 'macOS'
+        run: brew install protobuf
+
+      - name: Install protoc (Windows)
+        if: runner.os == 'Windows'
+        run: choco install protoc -y
 
       - name: Build
         run: cargo build --all-features --workspace
@@ -199,7 +208,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ matrix.features }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-build-target-${{ replace(matrix.features, ',', '-') }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-build-target-
 
       - name: Install protoc
