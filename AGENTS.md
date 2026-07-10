@@ -215,17 +215,17 @@ cargo bench --features http
 default ──► http
 http ──► axum, tower, tower-http, inventory, tokio, axum-extra, toml, regex, once_cell, validator, uuid, futures
 mcp ──► rmcp, inventory, anyhow, dep:http（独立协议，不依赖 sdforge http feature）
-streaming ──► http + tokio-stream, futures-util, chrono
+streaming ──► dep:tokio + dep:tokio-stream + dep:futures-util + dep:chrono（独立于 http；impl IntoResponse 已有 #[cfg(feature = "http")] 门控）
 timestamp ──► chrono
 logging ──► chrono, tokio
 security ──► http + cache, uuid, hmac, sha2, chrono, tokio, secrets, zeroize, subtle, once_cell, argon2, password-hash, rand, regex, oxcache/memory, bincode, hex, base64, ratelimit
 ratelimit ──► http + dep:limiteron (limiteron/tower-middleware, limiteron/ban-manager, limiteron/quota-control, limiteron/circuit-breaker)
 websocket ──► http + streaming + tokio-tungstenite, axum-extra, async-trait, chrono
-grpc ──► http + tonic, prost, tonic-prost
-openapi ──► utoipa, http
+grpc ──► dep:tonic + dep:prost + dep:tonic-prost + inventory（独立于 http）
+openapi ──► dep:utoipa + inventory（独立于 http）
 cache ──► dep:http, oxcache/memory, async-trait（独立，使用外部 http crate 类型而非 sdforge http feature）
-cli ──► http + dep:clap（clap features: std/derive/help/usage/error-context/suggestions）
-docs ──► openapi + dep:utoipa-swagger-ui (axum feature) + dep:clap-markdown + cli（统一文档输出：Swagger UI + CLI/MCP Markdown）
+cli ──► dep:clap + inventory（独立于 http；clap features: std/derive/help/usage/error-context/suggestions）
+docs ──► openapi + dep:clap-markdown + cli（Swagger UI 子模块需额外启用 http feature；swagger.rs 有 #[cfg(feature = "http")] 门控）
 simd-json ──► dep:simd-json
 hex ──► dep:hex
 full ──► http, mcp, streaming, timestamp, security, cache, websocket, grpc, logging, openapi, cli, docs（不含 simd-json/hex 等工具特性）
@@ -234,7 +234,7 @@ full ──► http, mcp, streaming, timestamp, security, cache, websocket, grpc
 ## 注意事项
 
 1. **宏注册**：使用 `inventory::submit!` 注册路由和工具，需要调用 `init_all_plugins()` 确保链接器不优化掉注册代码
-2. **特性依赖**：`websocket` 依赖 `http` + `streaming`；`grpc` 依赖 `http`
+2. **特性依赖**：`websocket` 依赖 `http` + `streaming`；`cli`/`openapi`/`grpc`/`streaming` 已解耦，可独立于 `http` 编译；`docs` 的 Swagger UI 子模块需 `http`，其余子模块独立
 3. **外部依赖**：`oxcache` 来自 crates.io（0.3.2，features = ["memory"]），不再使用相对路径依赖
 4. **测试**：测试嵌入在源文件中 `#[cfg(test)] mod tests`
 
