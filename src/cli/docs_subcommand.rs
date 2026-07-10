@@ -12,7 +12,7 @@
 use std::path::PathBuf;
 
 use crate::core::ApiError;
-use crate::docs::{generate_docs, write_docs, DocFormat};
+use crate::docs::{DocFormat, generate_docs, write_docs};
 
 /// `docs` 子命令支持的格式名称与 [`DocFormat`] 变体的映射。
 ///

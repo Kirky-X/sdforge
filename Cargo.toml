@@ -219,10 +219,9 @@ limiteron = { workspace = true, optional = true }
 trait-kit = { version = "0.2", features = ["async"], optional = true, default-features = false }
 
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
-# path is used for local workspace resolution; version constraint is kept so
-# the published artifact resolves the same (mirrors sdforge-macros pattern).
+# version-only: path 依赖在 CI 环境不存在，本地开发用 .cargo/config.toml [patch.crates-io] 重定向。
 # default-features = false (Rule 6) — only core logging is pulled in.
-inklog = { version = "0.1", path = "../inklog", default-features = false, optional = true }
+inklog = { version = "0.1", default-features = false, optional = true }
 
 # ICU4X internationalization (optional, feature-gated via `i18n`).
 # icu 2.2 provides locale-aware number/date/plural/collation formatting +

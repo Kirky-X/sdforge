@@ -598,10 +598,12 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed["api"]["name"], "api/v1");
         assert_eq!(parsed["api"]["version"], "2.0.0-beta");
-        assert!(parsed["api"]["description"]
-            .as_str()
-            .unwrap()
-            .contains("世界"));
+        assert!(
+            parsed["api"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("世界")
+        );
     }
 
     /// Test paginated_response with page_size=1 and many items.

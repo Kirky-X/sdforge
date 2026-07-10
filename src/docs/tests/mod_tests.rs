@@ -4,7 +4,7 @@
 //!
 //! 对应任务：T011 / T012 / T013 / T015 / T017 / T019。
 
-use crate::docs::{generate_docs, write_docs, DocFormat};
+use crate::docs::{DocFormat, generate_docs, write_docs};
 
 // ============================================================================
 // T011: DocFormat 枚举

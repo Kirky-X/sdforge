@@ -953,9 +953,11 @@ mod tests {
     #[test]
     fn test_source_none_for_client_errors() {
         assert!(ApiError::not_found("X", None).source().is_none());
-        assert!(ApiError::invalid_input("msg", None, None)
-            .source()
-            .is_none());
+        assert!(
+            ApiError::invalid_input("msg", None, None)
+                .source()
+                .is_none()
+        );
         assert!(ApiError::authentication_failed("r").source().is_none());
         assert!(ApiError::access_denied("p", None).source().is_none());
         assert!(ApiError::rate_limit_exceeded(1, 1).source().is_none());
@@ -1004,24 +1006,36 @@ mod tests {
     /// Test sanitized_message() for client-facing errors returns the full message.
     #[test]
     fn test_sanitized_message_client_errors() {
-        assert!(ApiError::not_found("User", None)
-            .sanitized_message()
-            .contains("User"));
-        assert!(ApiError::invalid_input("bad", None, None)
-            .sanitized_message()
-            .contains("bad"));
-        assert!(ApiError::authentication_failed("expired")
-            .sanitized_message()
-            .contains("expired"));
-        assert!(ApiError::access_denied("read", None)
-            .sanitized_message()
-            .contains("read"));
-        assert!(ApiError::rate_limit_exceeded(1, 1)
-            .sanitized_message()
-            .contains("Rate limit"));
-        assert!(ApiError::validation("email", "bad")
-            .sanitized_message()
-            .contains("email"));
+        assert!(
+            ApiError::not_found("User", None)
+                .sanitized_message()
+                .contains("User")
+        );
+        assert!(
+            ApiError::invalid_input("bad", None, None)
+                .sanitized_message()
+                .contains("bad")
+        );
+        assert!(
+            ApiError::authentication_failed("expired")
+                .sanitized_message()
+                .contains("expired")
+        );
+        assert!(
+            ApiError::access_denied("read", None)
+                .sanitized_message()
+                .contains("read")
+        );
+        assert!(
+            ApiError::rate_limit_exceeded(1, 1)
+                .sanitized_message()
+                .contains("Rate limit")
+        );
+        assert!(
+            ApiError::validation("email", "bad")
+                .sanitized_message()
+                .contains("email")
+        );
     }
 
     /// Test sanitized_message() for Internal strips sensitive details.
@@ -1216,31 +1230,45 @@ mod tests {
     /// Test Display for each variant produces the expected message.
     #[test]
     fn test_display_all_variants() {
-        assert!(ApiError::not_found("User", None)
-            .to_string()
-            .contains("User"));
-        assert!(ApiError::invalid_input("bad", None, None)
-            .to_string()
-            .contains("bad"));
-        assert!(ApiError::authentication_failed("reason")
-            .to_string()
-            .contains("reason"));
-        assert!(ApiError::access_denied("perm", None)
-            .to_string()
-            .contains("perm"));
-        assert!(ApiError::rate_limit_exceeded(1, 1)
-            .to_string()
-            .contains("Rate limit"));
+        assert!(
+            ApiError::not_found("User", None)
+                .to_string()
+                .contains("User")
+        );
+        assert!(
+            ApiError::invalid_input("bad", None, None)
+                .to_string()
+                .contains("bad")
+        );
+        assert!(
+            ApiError::authentication_failed("reason")
+                .to_string()
+                .contains("reason")
+        );
+        assert!(
+            ApiError::access_denied("perm", None)
+                .to_string()
+                .contains("perm")
+        );
+        assert!(
+            ApiError::rate_limit_exceeded(1, 1)
+                .to_string()
+                .contains("Rate limit")
+        );
         assert_eq!(
             ApiError::internal_error("m", "id").to_string(),
             "Internal server error"
         );
-        assert!(ApiError::service_unavailable("svc", None)
-            .to_string()
-            .contains("svc"));
-        assert!(ApiError::validation("field", "c")
-            .to_string()
-            .contains("field"));
+        assert!(
+            ApiError::service_unavailable("svc", None)
+                .to_string()
+                .contains("svc")
+        );
+        assert!(
+            ApiError::validation("field", "c")
+                .to_string()
+                .contains("field")
+        );
     }
 
     /// Test Debug formatting produces a string containing the variant name.

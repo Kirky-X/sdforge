@@ -28,7 +28,7 @@ pub use error::{
 };
 pub use json::{api_metadata_response, error_response, paginated_response, success_response};
 #[cfg(any(feature = "http", feature = "security"))]
-pub use regex_cache::{common, get_regex, RegexCache, RegexCacheStats};
+pub use regex_cache::{RegexCache, RegexCacheStats, common, get_regex};
 pub use registration::Registration;
 pub use response::{ServiceError, ServiceResponse};
 pub use str::{

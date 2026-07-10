@@ -27,11 +27,11 @@ mod grpc_integration_tests {
 
     use sdforge::core::ApiMetadata;
     use sdforge::grpc::sdforge_v1::{
-        sd_forge_service_client::SdForgeServiceClient, CallRequest, InfoRequest,
+        CallRequest, InfoRequest, sd_forge_service_client::SdForgeServiceClient,
     };
     use sdforge::grpc::{GrpcServerConfig, SdForgeGrpcService};
-    use tonic::transport::Channel;
     use tonic::Request;
+    use tonic::transport::Channel;
 
     // ============================================================================
     // Test Configuration Constants

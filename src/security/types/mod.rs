@@ -5,7 +5,7 @@
 //! This module contains all common types used across the security module.
 
 use base64::Engine;
-use serde::{ser::SerializeStruct, Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use uuid::Uuid;
 
 // =============================================================================

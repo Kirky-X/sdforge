@@ -5,8 +5,8 @@
 //! This module provides a centralized way to configure and apply HTTP security headers.
 //! All security headers are defined in one place for consistency.
 
-use axum::http::{header::*, HeaderName, HeaderValue};
 use axum::Router;
+use axum::http::{HeaderName, HeaderValue, header::*};
 use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::config::defaults::security_headers as defaults;
@@ -190,9 +190,11 @@ mod tests {
         };
         let result = headers.validate();
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("Invalid X-Content-Type-Options"));
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Invalid X-Content-Type-Options")
+        );
     }
 
     #[test]

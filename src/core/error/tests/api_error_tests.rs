@@ -342,11 +342,13 @@ fn test_source_returns_some_for_errors_with_source() {
     let internal =
         ApiError::internal_with_source("test message", "ERR001", TestError("test error"));
     assert!(internal.source().is_some());
-    assert!(internal
-        .source()
-        .unwrap()
-        .to_string()
-        .contains("test error"));
+    assert!(
+        internal
+            .source()
+            .unwrap()
+            .to_string()
+            .contains("test error")
+    );
 
     // Test ServiceUnavailable error with source
     let unavailable = ApiError::service_unavailable_with_source(
@@ -355,11 +357,13 @@ fn test_source_returns_some_for_errors_with_source() {
         TestError("service error"),
     );
     assert!(unavailable.source().is_some());
-    assert!(unavailable
-        .source()
-        .unwrap()
-        .to_string()
-        .contains("service error"));
+    assert!(
+        unavailable
+            .source()
+            .unwrap()
+            .to_string()
+            .contains("service error")
+    );
 }
 
 /// Test ErrorCategory derives
@@ -703,10 +707,12 @@ fn test_to_mcp_json_not_found() {
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
     assert_eq!(parsed["error"]["code"], "NOT_FOUND");
-    assert!(parsed["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("user"));
+    assert!(
+        parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("user")
+    );
 }
 
 #[test]
@@ -732,10 +738,12 @@ fn test_to_mcp_json_authentication_failed() {
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
     assert_eq!(parsed["error"]["code"], "AUTHENTICATION_FAILED");
-    assert!(parsed["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("bad token"));
+    assert!(
+        parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("bad token")
+    );
 }
 
 #[test]
@@ -748,10 +756,12 @@ fn test_to_mcp_json_access_denied() {
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
     assert_eq!(parsed["error"]["code"], "ACCESS_DENIED");
-    assert!(parsed["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("admin.write"));
+    assert!(
+        parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("admin.write")
+    );
 }
 
 #[test]
@@ -793,10 +803,12 @@ fn test_to_mcp_json_service_unavailable() {
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
     assert_eq!(parsed["error"]["code"], "SERVICE_UNAVAILABLE");
-    assert!(parsed["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("database"));
+    assert!(
+        parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("database")
+    );
 }
 
 #[test]
@@ -809,14 +821,18 @@ fn test_to_mcp_json_validation_error() {
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
     assert_eq!(parsed["error"]["code"], "VALIDATION_ERROR");
-    assert!(parsed["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("email"));
-    assert!(parsed["error"]["message"]
-        .as_str()
-        .unwrap()
-        .contains("required"));
+    assert!(
+        parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("email")
+    );
+    assert!(
+        parsed["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("required")
+    );
 }
 
 // ========================================================================

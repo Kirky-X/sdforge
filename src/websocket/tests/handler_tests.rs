@@ -1,14 +1,14 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-use crate::core::registration::Registration;
 use crate::core::ApiMetadata;
+use crate::core::registration::Registration;
 use crate::websocket::connection::*;
 use crate::websocket::handler::*;
 use crate::websocket::message::*;
+use axum::Router;
+use axum::http::StatusCode;
 #[cfg(feature = "security")]
 use axum::http::header::AUTHORIZATION;
-use axum::http::StatusCode;
-use axum::Router;
 use futures_util::FutureExt;
 use std::sync::Arc;
 

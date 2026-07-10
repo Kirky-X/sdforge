@@ -3,8 +3,8 @@
 #[cfg(feature = "websocket")]
 mod websocket_tests {
     use sdforge::websocket::{
-        parse_websocket_message, AppState, ConnectionManager, WebSocketConfig, WebSocketConnection,
-        WebSocketMessage,
+        AppState, ConnectionManager, WebSocketConfig, WebSocketConnection, WebSocketMessage,
+        parse_websocket_message,
     };
     use std::sync::{Arc, Mutex};
 
@@ -1038,11 +1038,13 @@ mod websocket_tests {
             .await;
 
         assert_eq!(state.manager.connection_count().await, 1);
-        assert!(state
-            .manager
-            .get_connection("app-state-conn")
-            .await
-            .is_some());
+        assert!(
+            state
+                .manager
+                .get_connection("app-state-conn")
+                .await
+                .is_some()
+        );
 
         // 验证配置存在（max_message_size 始终可用，auth 需要 security feature）
         assert_eq!(state.config.max_message_size, 1_048_576);

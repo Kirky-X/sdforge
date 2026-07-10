@@ -282,10 +282,12 @@ mod tests {
         };
         let result = config.validate();
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid CORS origin"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid CORS origin")
+        );
     }
 
     /// Test ServerConfig with boundary timeout value (exactly 86400) passes

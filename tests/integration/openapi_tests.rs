@@ -12,7 +12,7 @@
 #![cfg(feature = "openapi")]
 
 use sdforge::core::ApiError;
-use sdforge::openapi::{generate_openapi_spec, OpenApiBuilder};
+use sdforge::openapi::{OpenApiBuilder, generate_openapi_spec};
 use sdforge::service_api;
 
 // ============================================================================

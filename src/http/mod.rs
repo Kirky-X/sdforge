@@ -5,9 +5,9 @@
 use crate::config::ConfigError;
 use crate::core::{ApiMetadata, Registration};
 use crate::define_registration;
+use axum::Router;
 use axum::body::Body;
 use axum::routing::MethodRouter;
-use axum::Router;
 use uuid::Uuid;
 
 pub mod response;
@@ -17,7 +17,7 @@ pub mod version_routing;
 pub use response::{build_fallback_response, build_json_response};
 pub use security_headers::SecurityHeaders;
 pub use version_routing::{
-    build_version_router, version_redirect_middleware, VersionRouterConfig, VersionedRoute,
+    VersionRouterConfig, VersionedRoute, build_version_router, version_redirect_middleware,
 };
 
 // Re-export rate-limit types when the `ratelimit` feature is enabled.
@@ -306,7 +306,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     #[cfg(feature = "security")]
     {
         use crate::config::AuthConfig;
-        use crate::security::{auth_middleware, AppApiKeyAuth, AuthContext, AuthError, BearerAuth};
+        use crate::security::{AppApiKeyAuth, AuthContext, AuthError, BearerAuth, auth_middleware};
         use axum::http::HeaderValue;
 
         let auth_config = &config.authentication;

@@ -125,19 +125,21 @@ fn test_cli_command_registration_const_fn() {
 // Test-only registration submitted at module load time. The static
 // lifetime is required by `inventory::submit!`. Doc comments are not
 // applied to macro invocations, hence the plain `//` style here.
-inventory::submit!(CliCommandRegistration::new(
-    "trait_test_command",
-    "v1",
-    "Test command for trait_tests",
-    "trait_test_handler"
-)
-.with_args(&[CliArgInfo::new(
-    "input",
-    "Input value",
-    CliArgType::Path,
-    true,
-    None,
-)]));
+inventory::submit!(
+    CliCommandRegistration::new(
+        "trait_test_command",
+        "v1",
+        "Test command for trait_tests",
+        "trait_test_handler"
+    )
+    .with_args(&[CliArgInfo::new(
+        "input",
+        "Input value",
+        CliArgType::Path,
+        true,
+        None,
+    )])
+);
 
 /// Verify that `inventory::iter::<CliCommandRegistration>()` yields the
 /// statically-submitted test entry. This validates that
