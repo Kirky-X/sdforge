@@ -238,6 +238,16 @@ pub use logging::{
     get_global_logger, init_global_logger, LogEntry, LogLevel, LoggerConfig, StructuredLogger,
 };
 
+/// inklog 结构化日志集成 — 将裸 `log` 输出桥接到 inklog LoggerManager。
+///
+/// 启用 `inklog` feature 后，调用 [`inklog::init_inklog_logger`] 即可
+/// 将 inklog 安装为全局 `log` 后端。此后所有 `log::error!`/`log::warn!`
+/// 等调用自动路由到 inklog 的结构化日志管道，无需修改现有调用点。
+///
+/// 未启用 `inklog` feature 时，此模块不存在，`log` 行为完全不变。
+#[cfg(feature = "inklog")]
+pub mod inklog;
+
 #[cfg(feature = "grpc")]
 pub use grpc::sdforge_v1::{
     sd_forge_service_server::SdForgeServiceServer, CallRequest, CallResponse, InfoRequest,

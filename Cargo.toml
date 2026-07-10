@@ -217,6 +217,12 @@ limiteron = { workspace = true, optional = true }
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
 trait-kit = { version = "0.2.3", features = ["async"], optional = true, default-features = false }
 
+# inklog structured logging integration (optional, feature-gated by `inklog`).
+# path is used for local workspace resolution; version constraint is kept so
+# the published artifact resolves the same (mirrors sdforge-macros pattern).
+# default-features = false (Rule 6) — only core logging is pulled in.
+inklog = { version = "0.1", path = "../inklog", default-features = false, optional = true }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tokio-stream = { workspace = true }
@@ -335,6 +341,11 @@ simd-json = ["dep:simd-json"]
 limiteron-integration = ["dep:limiteron"]
 kit = ["dep:trait-kit", "limiteron-integration", "limiteron/kit"]
 
+# inklog 结构化日志集成 — 将裸 log 输出桥接到 inklog LoggerManager。
+# 启用后通过 init_inklog_logger() 安装 inklog 为全局 log 后端，
+# 现有 log::error!/log::warn! 等调用自动路由到 inklog 管道。
+inklog = ["dep:inklog"]
+
 # Full 特性
 full = [
     "http",
@@ -349,6 +360,7 @@ full = [
     "openapi",
     "cli",
     "docs",
+    "inklog",
 ]
 hex = ["dep:hex"]
 
