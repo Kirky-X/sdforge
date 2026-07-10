@@ -61,6 +61,9 @@ jobs:
           key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-index-
 
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Run clippy
         run: cargo clippy --all-targets --all-features --workspace -- -D warnings
 
@@ -148,6 +151,9 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-build-target-
 
+      - name: Install protoc
+        uses: arduino/setup-protoc@v3
+
       - name: Build
         run: cargo build --all-features --workspace
 
@@ -196,6 +202,9 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ matrix.features }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-build-target-
 
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Run tests with features ${{ matrix.features }}
         run: cargo test --features "${{ matrix.features }}" --workspace
 
@@ -238,6 +247,9 @@ jobs:
 
       - name: Install cargo-tarpaulin
         run: cargo install --locked cargo-tarpaulin
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Generate coverage
         # Use `--features full --lib` instead of `--all-features --workspace` to
@@ -294,6 +306,9 @@ jobs:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-registry-
+
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Build documentation
         run: cargo doc --no-deps --all-features --workspace
