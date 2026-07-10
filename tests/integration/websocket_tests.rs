@@ -53,8 +53,8 @@ mod websocket_tests {
         assert!(config.auth.is_some());
     }
 
-    /// 测试连接拒绝场景已移除：依赖已删除的 `check_and_record` 方法，
-    /// 连接级限流改由 limiteron Governor 在 HTTP 中间件层处理。
+    // 测试连接拒绝场景已移除：依赖已删除的 `check_and_record` 方法，
+    // 连接级限流改由 limiteron Governor 在 HTTP 中间件层处理。
 
     /// 测试多个并发连接
     /// 验证系统能够同时处理多个 WebSocket 连接
