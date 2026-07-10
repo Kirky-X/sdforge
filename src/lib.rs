@@ -276,7 +276,7 @@ pub mod docs;
 #[cfg(feature = "docs")]
 pub use docs::{generate_docs, write_docs, DocError, DocFormat};
 
-#[cfg(feature = "docs")]
+#[cfg(all(feature = "docs", feature = "http"))]
 pub use docs::swagger_ui_router;
 
 /// 初始化所有已注册的插件，确保它们不会被链接器优化掉。
