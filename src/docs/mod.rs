@@ -17,8 +17,10 @@
 pub mod cli_markdown;
 #[cfg(feature = "mcp")]
 pub mod mcp_markdown;
+#[cfg(feature = "http")]
 pub mod swagger;
 
+#[cfg(feature = "http")]
 pub use swagger::swagger_ui_router;
 
 /// 文档输出格式枚举。
@@ -77,7 +79,16 @@ pub fn generate_docs(format: DocFormat) -> Result<String, DocError> {
             let spec = crate::openapi::generate_openapi_spec();
             Ok(serde_json::to_string_pretty(&spec)?)
         }
-        DocFormat::SwaggerUi => Ok(generate_swagger_html()),
+        DocFormat::SwaggerUi => {
+            #[cfg(feature = "http")]
+            {
+                Ok(generate_swagger_html())
+            }
+            #[cfg(not(feature = "http"))]
+            {
+                Ok("<!-- Swagger UI requires the 'http' feature. Enable it to use interactive docs. -->\n".to_string())
+            }
+        }
         DocFormat::CliMarkdown => Ok(cli_markdown::generate_cli_docs()),
         DocFormat::McpMarkdown => Ok(generate_mcp_markdown()),
         DocFormat::All => {
@@ -90,7 +101,14 @@ pub fn generate_docs(format: DocFormat) -> Result<String, DocError> {
             out.push_str("\n\n");
             out.push_str(&generate_docs(DocFormat::McpMarkdown)?);
             out.push_str("\n\n");
-            out.push_str("<!-- Swagger UI: run with --format swagger or visit /swagger-ui/ for interactive docs -->\n");
+            #[cfg(feature = "http")]
+            {
+                out.push_str("<!-- Swagger UI: run with --format swagger or visit /swagger-ui/ for interactive docs -->\n");
+            }
+            #[cfg(not(feature = "http"))]
+            {
+                out.push_str("<!-- Swagger UI requires the 'http' feature. Enable it to use interactive docs. -->\n");
+            }
             Ok(out)
         }
     }
@@ -116,6 +134,7 @@ fn generate_mcp_markdown() -> String {
 ///
 /// 返回一个简单的 HTML 页面，包含指向 `/swagger-ui/` 的链接和自动跳转脚本。
 /// 实际的 Swagger UI 界面由 [`swagger_ui_router`] 挂载的 axum Router 提供。
+#[cfg(feature = "http")]
 fn generate_swagger_html() -> String {
     r#"<!DOCTYPE html>
 <html lang="en">
