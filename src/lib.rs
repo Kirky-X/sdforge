@@ -248,6 +248,14 @@ pub use logging::{
 #[cfg(feature = "inklog")]
 pub mod inklog;
 
+/// ICU4X-backed internationalization — locale-aware HTTP formatting.
+///
+/// 启用 `i18n` feature 后可用。提供 `HttpI18nFormatter`：BCP-47 locale
+/// 管理、Accept-Language 头解析、HTTP 错误消息/数字/时间戳/排序格式化。
+/// 未启用时此模块不存在，默认 features 编译零开销。
+#[cfg(feature = "i18n")]
+pub mod i18n;
+
 #[cfg(feature = "grpc")]
 pub use grpc::sdforge_v1::{
     sd_forge_service_server::SdForgeServiceServer, CallRequest, CallResponse, InfoRequest,

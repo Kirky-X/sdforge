@@ -218,11 +218,17 @@ limiteron = { workspace = true, optional = true }
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
 trait-kit = { version = "0.2", features = ["async"], optional = true, default-features = false }
 
-# inklog structured logging integration (optional, feature-gated by `inklog`).
+# inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # path is used for local workspace resolution; version constraint is kept so
 # the published artifact resolves the same (mirrors sdforge-macros pattern).
 # default-features = false (Rule 6) — only core logging is pulled in.
 inklog = { version = "0.1", path = "../inklog", default-features = false, optional = true }
+
+# ICU4X internationalization (optional, feature-gated via `i18n`).
+# icu 2.2 provides locale-aware number/date/plural/collation formatting +
+# Accept-Language HTTP header parsing for HTTP responses.
+icu = { version = "2.2", optional = true }
+writeable = { version = "0.6", optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
@@ -347,6 +353,11 @@ kit = ["dep:trait-kit", "limiteron-integration", "limiteron/kit"]
 # 现有 log::error!/log::warn! 等调用自动路由到 inklog 管道。
 inklog = ["dep:inklog"]
 
+# ICU4X-backed internationalization: locale-aware HTTP error messages,
+# number/timestamp formatting, plural rules, header collation, and
+# Accept-Language header parsing via the `icu` crate (ICU4X 2.x).
+i18n = ["dep:icu", "dep:writeable"]
+
 # Full 特性
 full = [
     "http",
@@ -362,6 +373,7 @@ full = [
     "cli",
     "docs",
     "inklog",
+    "i18n",
 ]
 hex = ["dep:hex"]
 
