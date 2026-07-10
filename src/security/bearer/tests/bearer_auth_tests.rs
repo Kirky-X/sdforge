@@ -598,9 +598,10 @@ fn test_base64url_decode_empty_string() {
 fn test_validate_token_with_malformed_base64() {
     let auth = BearerAuth::new("MySecureSecret123!@#ABCDEFGHIJKLM");
     // Invalid base64 in payload
-    assert!(auth
-        .validate_token("header.!!!invalid!!!.signature")
-        .is_none());
+    assert!(
+        auth.validate_token("header.!!!invalid!!!.signature")
+            .is_none()
+    );
 }
 
 #[test]

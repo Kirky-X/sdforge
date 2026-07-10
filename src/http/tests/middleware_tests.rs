@@ -4,11 +4,11 @@
 //! JWT and ApiKey auth middleware (security feature), and hot-reload
 //! integration (hot-reload feature).
 
-use axum::body::Body;
 use axum::Router;
+use axum::body::Body;
 
 use crate::config::{AppConfig, AuthConfig, ServerConfig};
-use crate::http::{build_with_config, X_REQUEST_ID};
+use crate::http::{X_REQUEST_ID, build_with_config};
 
 // ============================================================================
 // Request ID Middleware Execution Tests (covers lines 226-244)

@@ -15,7 +15,7 @@ mod mcp_protocol_tests {
     use rmcp::model::{CallToolResult, ContentBlock, ErrorData as McpError};
     use sdforge::core::{ApiMetadata, Registration};
     use sdforge::mcp::{
-        get_mcp_tools, McpToolInstance, McpToolRegistration, SdForgeMcpServer, SdForgeTool,
+        McpToolInstance, McpToolRegistration, SdForgeMcpServer, SdForgeTool, get_mcp_tools,
     };
     use serde_json::Value;
     use std::sync::Arc;
@@ -117,7 +117,7 @@ mod mcp_protocol_tests {
                         return Err(McpError::invalid_params(
                             format!("Unknown operation: {}", op),
                             None,
-                        ))
+                        ));
                     }
                 };
 

@@ -7,7 +7,7 @@ use super::{
     create_test_complete_event, create_test_data_event, create_test_error_event,
     create_test_ping_event,
 };
-use crate::streaming::{create_stream_channel, StreamEvent, StreamResponse};
+use crate::streaming::{StreamEvent, StreamResponse, create_stream_channel};
 use futures_util::StreamExt;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;

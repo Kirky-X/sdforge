@@ -554,9 +554,11 @@ fn test_grpc_error_status_codes() {
 
     // Test validation error
     let validation_err = ApiError::validation_error("INVALID_PARAM", "Parameter validation failed");
-    assert!(validation_err
-        .to_string()
-        .contains("Parameter validation failed"));
+    assert!(
+        validation_err
+            .to_string()
+            .contains("Parameter validation failed")
+    );
 
     // Test not found error
     let not_found_err = ApiError::NotFound {

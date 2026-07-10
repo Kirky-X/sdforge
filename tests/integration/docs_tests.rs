@@ -12,7 +12,7 @@
 
 use sdforge::core::ApiError;
 use sdforge::service_api;
-use sdforge::{generate_docs, write_docs, DocFormat};
+use sdforge::{DocFormat, generate_docs, write_docs};
 
 // ============================================================================
 // Test fixture: 注册测试用 CLI 命令（docs 隐式包含 cli feature）。

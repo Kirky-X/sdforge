@@ -53,16 +53,16 @@ mod tests;
 pub use connection::{AppState, ConnectionManager, WebSocketConfig, WebSocketConnection};
 #[cfg(feature = "websocket")]
 pub use handler::{
-    build, websocket_upgrade, BoxFuture, DefaultWebSocketHandler, ValidatedWebSocketUpgrade,
-    WebSocketHandler, WebSocketRoute,
+    BoxFuture, DefaultWebSocketHandler, ValidatedWebSocketUpgrade, WebSocketHandler,
+    WebSocketRoute, build, websocket_upgrade,
 };
 #[cfg(feature = "websocket")]
 pub use message::{
-    calculate_value_depth, parse_websocket_message, WebSocketMessage, MAX_JSON_DEPTH,
-    MAX_MESSAGE_SIZE,
+    MAX_JSON_DEPTH, MAX_MESSAGE_SIZE, WebSocketMessage, calculate_value_depth,
+    parse_websocket_message,
 };
 // Test-only helpers from `message` module — re-exported under test cfg so the
 // split test files can access them via `use crate::websocket::*`.
 #[cfg(test)]
 #[cfg(feature = "websocket")]
-pub use message::{calculate_json_depth, MAX_STRING_LENGTH};
+pub use message::{MAX_STRING_LENGTH, calculate_json_depth};

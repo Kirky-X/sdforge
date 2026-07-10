@@ -7,7 +7,7 @@
 
 use crate::cache::SharedCache;
 use crate::security::types::{
-    serialize_auth_context, AuthConfigError, AuthContext, AuthMetadata, CacheNamespace,
+    AuthConfigError, AuthContext, AuthMetadata, CacheNamespace, serialize_auth_context,
 };
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;

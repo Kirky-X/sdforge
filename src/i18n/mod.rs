@@ -39,12 +39,12 @@ use std::str::FromStr;
 
 use icu::collator::options::CollatorOptions;
 use icu::collator::{Collator, CollatorBorrowed};
+use icu::datetime::DateTimeFormatter;
 use icu::datetime::fieldsets::YMD;
 use icu::datetime::input::{Date, DateTime, Time};
-use icu::datetime::DateTimeFormatter;
+use icu::decimal::DecimalFormatter;
 use icu::decimal::input::Decimal;
 use icu::decimal::options::DecimalFormatterOptions;
-use icu::decimal::DecimalFormatter;
 use icu::locale::Locale;
 use icu::plurals::{PluralCategory, PluralRules, PluralRulesOptions};
 use thiserror::Error;
@@ -281,10 +281,7 @@ pub fn parse_accept_language(header: &str) -> Vec<String> {
     }
 
     // Stable sort by quality descending (preserves header order for ties).
-    entries.sort_by(|a, b| {
-        b.1.partial_cmp(&a.1)
-            .unwrap_or(Ordering::Equal)
-    });
+    entries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
 
     entries.into_iter().map(|(locale, _)| locale).collect()
 }

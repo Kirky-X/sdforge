@@ -75,7 +75,7 @@ pub mod axum {
 
     /// HTTP routing utilities
     pub mod routing {
-        pub use axum::routing::{get, post, MethodRouter};
+        pub use axum::routing::{MethodRouter, get, post};
     }
 
     /// Extractor utilities for HTTP requests
@@ -144,8 +144,8 @@ pub mod mcp;
 // Re-export rmcp types for convenience (replaces old mcp_sdk re-exports)
 #[cfg(feature = "mcp")]
 pub use mcp::{
-    build, get_mcp_tools, InputRequiredResult, McpHeaderInfo, McpToolInstance, McpToolRegistration,
-    MrtrSession, SdForgeMcpServer, SdForgeTool, StatelessServerHandler,
+    InputRequiredResult, McpHeaderInfo, McpToolInstance, McpToolRegistration, MrtrSession,
+    SdForgeMcpServer, SdForgeTool, StatelessServerHandler, build, get_mcp_tools,
 };
 
 /// Streaming utilities for SSE and streaming responses
@@ -153,7 +153,7 @@ pub use mcp::{
 pub mod streaming;
 
 #[cfg(feature = "streaming")]
-pub use streaming::{create_stream_channel, stream_to_sse, StreamEvent, StreamResponse};
+pub use streaming::{StreamEvent, StreamResponse, create_stream_channel, stream_to_sse};
 
 /// Security middleware and authentication utilities.
 ///
@@ -167,7 +167,6 @@ pub mod security;
 
 #[cfg(feature = "security")]
 pub use security::{
-    auth_middleware,
     // Trait interfaces (feature layer)
     ApiKeyAuth,
     // Concrete implementations (renamed structs)
@@ -186,6 +185,7 @@ pub use security::{
     AuthResult,
     BearerAuth,
     BearerAuthBuilder,
+    auth_middleware,
 };
 
 /// Configuration management
@@ -215,9 +215,8 @@ pub mod websocket;
 
 #[cfg(feature = "websocket")]
 pub use websocket::{
-    parse_websocket_message, websocket_upgrade, BoxFuture, ConnectionManager,
-    ValidatedWebSocketUpgrade, WebSocketConfig, WebSocketConnection, WebSocketHandler,
-    WebSocketMessage, WebSocketRoute,
+    BoxFuture, ConnectionManager, ValidatedWebSocketUpgrade, WebSocketConfig, WebSocketConnection,
+    WebSocketHandler, WebSocketMessage, WebSocketRoute, parse_websocket_message, websocket_upgrade,
 };
 
 /// gRPC server support
@@ -226,7 +225,7 @@ pub mod grpc;
 
 #[cfg(feature = "grpc")]
 pub use grpc::{
-    build_server, build_server_with_config, GrpcRoute, GrpcServerConfig, SdForgeGrpcService,
+    GrpcRoute, GrpcServerConfig, SdForgeGrpcService, build_server, build_server_with_config,
 };
 
 /// Structured logging utilities
@@ -235,7 +234,7 @@ pub mod logging;
 
 #[cfg(feature = "logging")]
 pub use logging::{
-    get_global_logger, init_global_logger, LogEntry, LogLevel, LoggerConfig, StructuredLogger,
+    LogEntry, LogLevel, LoggerConfig, StructuredLogger, get_global_logger, init_global_logger,
 };
 
 /// inklog 结构化日志集成 — 将裸 `log` 输出桥接到 inklog LoggerManager。
@@ -258,12 +257,12 @@ pub mod i18n;
 
 #[cfg(feature = "grpc")]
 pub use grpc::sdforge_v1::{
-    sd_forge_service_server::SdForgeServiceServer, CallRequest, CallResponse, InfoRequest,
-    InfoResponse,
+    CallRequest, CallResponse, InfoRequest, InfoResponse,
+    sd_forge_service_server::SdForgeServiceServer,
 };
 
 #[cfg(feature = "http")]
-pub use http::version_routing::{build_version_router, VersionRouterConfig, VersionedRoute};
+pub use http::version_routing::{VersionRouterConfig, VersionedRoute, build_version_router};
 
 /// CLI (clap) integration — feature-gated by `cli`.
 ///
@@ -283,7 +282,7 @@ pub mod cli;
 pub mod openapi;
 
 #[cfg(feature = "openapi")]
-pub use openapi::{generate_openapi_spec, OpenApiBuilder, OpenApiPathParam, OpenApiRouteInfo};
+pub use openapi::{OpenApiBuilder, OpenApiPathParam, OpenApiRouteInfo, generate_openapi_spec};
 
 /// 统一文档输出模块 — Swagger UI + CLI/MCP Markdown。
 ///
@@ -292,7 +291,7 @@ pub use openapi::{generate_openapi_spec, OpenApiBuilder, OpenApiPathParam, OpenA
 pub mod docs;
 
 #[cfg(feature = "docs")]
-pub use docs::{generate_docs, write_docs, DocError, DocFormat};
+pub use docs::{DocError, DocFormat, generate_docs, write_docs};
 
 #[cfg(all(feature = "docs", feature = "http"))]
 pub use docs::swagger_ui_router;

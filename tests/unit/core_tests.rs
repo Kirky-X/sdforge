@@ -374,7 +374,7 @@ mod api_metadata_enhanced_tests {
 // ServiceResponse comprehensive tests
 #[cfg(test)]
 mod service_response_enhanced_tests {
-    use sdforge::core::{response::ServiceError, ServiceResponse};
+    use sdforge::core::{ServiceResponse, response::ServiceError};
 
     /// Test generic type support - String
     #[test]

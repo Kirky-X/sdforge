@@ -21,7 +21,7 @@ pub use api_key::{AppApiKeyAuth, AppApiKeyAuthBuilder};
 #[cfg(feature = "security")]
 pub use audit::{AppAuditLogger, AppAuditLoggerBuilder};
 #[cfg(feature = "security")]
-pub use bearer::{generate_secure_jwt_secret, BearerAuth, BearerAuthBuilder};
+pub use bearer::{BearerAuth, BearerAuthBuilder, generate_secure_jwt_secret};
 #[cfg(feature = "security")]
 pub use middleware::auth_middleware;
 

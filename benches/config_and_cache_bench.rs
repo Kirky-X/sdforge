@@ -9,7 +9,7 @@
 //! - Builder pattern overhead
 
 #[allow(unused_imports)]
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
 /// Benchmark configuration validation performance
 #[cfg(feature = "http")]

@@ -181,7 +181,7 @@ mod error_handling_tests {
     #[cfg(feature = "http")]
     #[tokio::test]
     async fn test_error_to_http_status_mapping() {
-        use axum::{body::Body, http::Request, http::StatusCode, routing::get, Router};
+        use axum::{Router, body::Body, http::Request, http::StatusCode, routing::get};
 
         // Test NotFound -> 404
         async fn not_found_handler() -> Result<&'static str, ApiError> {

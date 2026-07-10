@@ -8,7 +8,7 @@
 use serde_json;
 
 #[cfg(feature = "grpc")]
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 #[cfg(feature = "grpc")]
 /// gRPC protocol buffer module
 pub mod sdforge_v1 {
@@ -17,8 +17,8 @@ pub mod sdforge_v1 {
 
 #[cfg(feature = "grpc")]
 use sdforge_v1::{
-    sd_forge_service_server::{SdForgeService, SdForgeServiceServer},
     CallRequest, CallResponse, InfoRequest, InfoResponse,
+    sd_forge_service_server::{SdForgeService, SdForgeServiceServer},
 };
 
 #[cfg(feature = "grpc")]

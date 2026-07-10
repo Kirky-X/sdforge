@@ -6,7 +6,7 @@
 //! Coverage: core types, JSON, cache (incl. batch + pattern), security
 //! (API key, JWT, LRU), HTTP router construction, MCP tool registration.
 
-use criterion::{criterion_group, Criterion, Throughput};
+use criterion::{Criterion, Throughput, criterion_group};
 use sdforge::prelude::{ApiError, ServiceError, ServiceResponse};
 use std::collections::HashMap;
 use std::hint::black_box;

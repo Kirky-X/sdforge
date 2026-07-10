@@ -65,8 +65,8 @@ async fn builder_build_with_default_config_succeeds() {
 /// rejects it with "至少需要一个规则").
 #[tokio::test]
 async fn builder_build_returns_err_on_invalid_config() {
-    use limiteron::config::GlobalConfig;
     use limiteron::FlowControlConfig;
+    use limiteron::config::GlobalConfig;
 
     let invalid_config = FlowControlConfig {
         version: "0.1.0".to_string(),

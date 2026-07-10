@@ -6,16 +6,16 @@
 //! and the `ServerHandler` trait implementation that bridges SDForge's tool
 //! registry to rmcp's request/response model.
 
+use rmcp::RoleServer;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
     CallToolRequestParams, CallToolResult, ErrorData, ListToolsResult, PaginatedRequestParams,
     ServerInfo, Tool,
 };
 use rmcp::service::RequestContext;
-use rmcp::RoleServer;
 
 use crate::mcp::get_mcp_tools;
-use crate::mcp::handler::{value_to_json_object_arc, McpToolInstance};
+use crate::mcp::handler::{McpToolInstance, value_to_json_object_arc};
 
 /// MCP server that dispatches to tools registered via SDForge's inventory.
 ///

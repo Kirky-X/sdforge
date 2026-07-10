@@ -4,7 +4,7 @@
 mod mcp_tool_instance_tests {
     use rmcp::model::{CallToolResult, ErrorData as McpError};
     use sdforge::core::ApiMetadata;
-    use sdforge::mcp::{get_mcp_tools, McpToolRegistration, SdForgeTool};
+    use sdforge::mcp::{McpToolRegistration, SdForgeTool, get_mcp_tools};
     use std::sync::Arc;
 
     fn create_echo_tool() -> Arc<dyn SdForgeTool> {

@@ -7,7 +7,7 @@
 mod security_headers_tests {
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
-    use axum::{routing::get, Router};
+    use axum::{Router, routing::get};
     use tower::ServiceExt;
 
     /// Simple test handler
