@@ -327,8 +327,8 @@ async fn get_paginated_data(
 ) -> Result<serde_json::Value, ApiError> {
     let page = page.unwrap_or(1).max(1);
     let page_size = page_size.unwrap_or(20).min(100);
-    let total = 1000;
-    let total_pages = (total + page_size - 1) / page_size;
+    let total: u32 = 1000;
+    let total_pages = total.div_ceil(page_size);
 
     Ok(serde_json::json!({
         "page": page,
