@@ -63,6 +63,7 @@ pub fn build_custom_config() -> AppConfig {
         .authentication(auth)
         .timeout(timeout)
         .build()
+        .expect("config build failed")
 }
 
 // =============================================================================

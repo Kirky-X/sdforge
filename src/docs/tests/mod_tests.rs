@@ -41,7 +41,7 @@ fn test_doc_format_variants() {
     );
 
     // Clone 派生
-    let cloned = openapi.clone();
+    let cloned = openapi;
     assert_eq!(openapi, cloned);
 
     // Copy 派生 — 赋值后原值仍可用
