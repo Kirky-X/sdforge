@@ -67,7 +67,7 @@ tonic-prost = { version = "~0.14", default-features = false }
 # Uses path until limiteron 0.2.1+kit is published to crates.io; the version
 # constraint is kept so the published artifact resolves the same.
 # Mirrors the trait-kit path dependency pattern (Phase 5).
-limiteron = { version = "~0.2", path = "../limiteron", default-features = false }
+limiteron = { version = "~0.2", default-features = false }
 
 # OpenAPI 依赖
 utoipa = { version = "~5.5", default-features = false, features = ["macros"] }
@@ -215,7 +215,7 @@ limiteron = { workspace = true, optional = true }
 # constraint is kept so the published artifact resolves the same.
 # Mirrors dbnexus's pattern (Phase 4 of trait-kit-async-integration).
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
-trait-kit = { version = "0.2.3", path = "../trait-kit", features = ["async"], optional = true, default-features = false }
+trait-kit = { version = "0.2.3", features = ["async"], optional = true, default-features = false }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
