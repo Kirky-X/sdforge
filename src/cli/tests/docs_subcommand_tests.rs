@@ -7,8 +7,6 @@
 //! `--format` 与 `--output` 参数，且 `docs_subcommand(&matches)` 能
 //! 正确分发到 `write_docs` / `generate_docs`。
 
-#![cfg(feature = "docs")]
-
 use crate::cli::docs_subcommand::{docs_subcommand, docs_subcommand_definition};
 
 /// `docs_subcommand_definition()` 返回的命令必须包含 `--format` 长选项。
