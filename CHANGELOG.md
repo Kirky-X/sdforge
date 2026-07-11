@@ -5,6 +5,23 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本规范](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## [Unreleased]
+
+### 概览
+
+本次未发布变更聚焦于 **edition 升级**、**安全基线统一** 与 **日志集成增强**。
+
+#### 变更
+
+- **edition 2024 升级** — 从 edition 2021 升级至 edition 2024，采用最新 Rust 语言特性
+- **rust-version 1.85** — 最低支持的 Rust 版本提升至 1.85（edition 2024 所需）
+- **MIT license 统一** — 所有源文件添加 `SPDX-License-Identifier: MIT` 头，许可证统一为 MIT
+- **inklog 集成** — 新增 `inklog` feature，将裸 `log` 输出桥接到 inklog LoggerManager 结构化日志管道
+- **i18n 国际化** — 新增 `i18n` feature，基于 ICU4X 2.x 提供本地化 HTTP 错误消息和格式化
+- **文档标准化** — README.md 重构为标准格式，新增 CONTRIBUTING.md 和 AGENTS.md
+
+---
+
 ## [0.3.0] - 2026-07-04
 
 ### 概览
