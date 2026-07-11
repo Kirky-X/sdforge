@@ -3,7 +3,7 @@ members = [".", "examples"]
 resolver = "2"
 
 [workspace.package]
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 rust-version = "1.91"
 authors = ["Kirky.X"]
@@ -145,7 +145,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-sdforge-macros = { version = "0.3.2", path = "./macros" }
+sdforge-macros = { version = "0.3.3", path = "./macros" }
 
 # HTTP dependencies
 axum = { workspace = true, optional = true }
@@ -233,7 +233,7 @@ writeable = { version = "0.6", optional = true }
 tokio = { workspace = true, features = ["test-util"] }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
-sdforge-macros = { version = "0.3.2", path = "./macros", default-features = false }
+sdforge-macros = { version = "0.3.3", path = "./macros", default-features = false }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }
