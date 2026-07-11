@@ -4,8 +4,6 @@
 //!
 //! 对应任务：T018。整个文件需 `mcp` feature 门控。
 
-#![cfg(feature = "mcp")]
-
 use crate::core::ApiMetadata;
 use crate::docs::mcp_markdown::generate_mcp_docs;
 use crate::mcp::{McpToolRegistration, SdForgeTool};
