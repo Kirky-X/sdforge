@@ -21,4 +21,4 @@ mod tests;
 pub use api_error::ApiError;
 pub use context::{ErrorCategory, ErrorContext};
 pub use i18n::{Locale, LocalizedError, TranslationStore};
-pub use sdforge_error::SdForgeError;
+pub use sdforge_error::{SdForgeError, SdForgeResult};

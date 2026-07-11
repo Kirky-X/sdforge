@@ -100,7 +100,7 @@ mod core_tests {
     /// Test: Error context with extra information
     #[test]
     fn test_error_context_with_extra() {
-        use sdforge::core::error::ErrorContext;
+        use sdforge::error::ErrorContext;
 
         let ctx = ErrorContext::new()
             .with_extra("field".to_string(), "email".to_string())
@@ -154,7 +154,7 @@ mod core_tests {
     /// Test: Deeply nested error context
     #[test]
     fn test_deeply_nested_error_context() {
-        use sdforge::core::error::ErrorContext;
+        use sdforge::error::ErrorContext;
 
         let mut ctx = ErrorContext::new();
         for i in 0..50 {

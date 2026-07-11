@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::error::Error as StdError;
 
-use crate::core::error::api_error::ApiError;
+use crate::error::api_error::ApiError;
 
 // =============================================================================
 // Internationalization (i18n) Support
