@@ -223,4 +223,29 @@ mod tests {
         assert!(msg.contains("100"));
         assert!(msg.contains("60"));
     }
+
+    /// `ForgeError::internal` constructor maps a `Display`-able error into
+    /// the `Internal` variant and stringifies the message.
+    #[test]
+    fn forge_error_internal_constructor() {
+        let err = ForgeError::internal("backend down");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("backend down"),
+            "Internal variant should embed source message: got {msg}"
+        );
+        assert!(
+            msg.contains("internal error"),
+            "Internal variant should use its Display template: got {msg}"
+        );
+    }
+
+    /// `ForgeError::Banned` variant should round-trip its reason.
+    #[test]
+    fn forge_error_banned_display() {
+        let err = ForgeError::Banned {
+            reason: "abuse".into(),
+        };
+        assert!(err.to_string().contains("abuse"));
+    }
 }

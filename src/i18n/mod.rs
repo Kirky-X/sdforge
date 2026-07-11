@@ -461,4 +461,47 @@ mod tests {
             "apple == apple"
         );
     }
+
+    #[test]
+    fn test_format_timestamp_invalid_date() {
+        let fmt = HttpI18nFormatter::new("en-US").expect("en-US locale");
+        assert!(
+            fmt.format_timestamp(2026, 13, 1).is_err(),
+            "month=13 should return date error"
+        );
+        assert!(
+            fmt.format_timestamp(2026, 2, 30).is_err(),
+            "Feb 30 should return date error"
+        );
+    }
+
+    #[test]
+    fn test_parse_accept_language_whitespace_entries() {
+        let locales = parse_accept_language("  ,  en  ;  q=0.9  ,  ");
+        assert_eq!(
+            locales,
+            vec!["en"],
+            "should handle whitespace-only and trimmed entries: got {locales:?}"
+        );
+    }
+
+    #[test]
+    fn test_parse_accept_language_malformed_q() {
+        let locales = parse_accept_language("fr;q=abc,en;q=0.5");
+        assert_eq!(
+            locales,
+            vec!["fr", "en"],
+            "malformed q= should fall back to default 1.0: got {locales:?}"
+        );
+    }
+
+    #[test]
+    fn test_parse_accept_language_q_zero_mixed() {
+        let locales = parse_accept_language("en;q=0,fr;q=0.5,de");
+        assert_eq!(
+            locales,
+            vec!["de", "fr"],
+            "q=0 excluded, others sorted by q: got {locales:?}"
+        );
+    }
 }
