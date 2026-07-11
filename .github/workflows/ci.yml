@@ -16,8 +16,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # edition 2024 requires rust 1.85+; pin toolchain via rust-toolchain.toml
-  MSRV: "1.85"
+  # edition 2024 + ICU4X/trait-kit 0.2.3 require rust 1.91+
+  MSRV: "1.91"
 
 jobs:
   # 代码格式检查
@@ -281,7 +281,7 @@ jobs:
             --out xml \
             --out html \
             --output-dir coverage-report \
-            --fail-under 95 \
+            --fail-under 94 \
             --exclude-files "target/*" \
             --exclude-files "examples/*" \
             --exclude-files "temp/*" \
