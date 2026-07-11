@@ -322,10 +322,10 @@ impl BearerAuth {
         }
 
         // Check expiration if present
-        if let Some(exp) = payload_value.get("exp").and_then(|v| v.as_i64()) {
-            if chrono::Utc::now().timestamp() > exp {
-                return None; // Token expired
-            }
+        if let Some(exp) = payload_value.get("exp").and_then(|v| v.as_i64())
+            && chrono::Utc::now().timestamp() > exp
+        {
+            return None; // Token expired
         }
 
         // Security fix: Validate iat (issued at) claim to prevent usage of future tokens
@@ -340,10 +340,10 @@ impl BearerAuth {
         }
 
         // Security fix: Validate nbf (not before) claim to prevent usage of tokens that aren't yet valid
-        if let Some(nbf) = payload_value.get("nbf").and_then(|v| v.as_i64()) {
-            if chrono::Utc::now().timestamp() < nbf {
-                return None; // Token not yet valid
-            }
+        if let Some(nbf) = payload_value.get("nbf").and_then(|v| v.as_i64())
+            && chrono::Utc::now().timestamp() < nbf
+        {
+            return None; // Token not yet valid
         }
 
         // Validate audience claim if expected_audience is configured
