@@ -136,12 +136,12 @@ where
         // `security` feature is enabled (see WebSocketConfig), so the entire
         // validation block is gated to match.
         #[cfg(feature = "security")]
-        if let Some(ref state_ref) = app_state {
-            if let Some(ref auth) = state_ref.config.auth {
-                let token = bearer_token.ok_or(StatusCode::UNAUTHORIZED)?;
-                auth.validate_token(&token)
-                    .ok_or(StatusCode::UNAUTHORIZED)?;
-            }
+        if let Some(ref state_ref) = app_state
+            && let Some(ref auth) = state_ref.config.auth
+        {
+            let token = bearer_token.ok_or(StatusCode::UNAUTHORIZED)?;
+            auth.validate_token(&token)
+                .ok_or(StatusCode::UNAUTHORIZED)?;
         }
 
         // Extract WebSocketUpgrade via axum's built-in extractor

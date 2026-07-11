@@ -61,10 +61,10 @@ impl RegexCache {
 
         // Try cache first
         {
-            if let Ok(cache) = self.cache.lock() {
-                if let Some(regex) = cache.get(pattern) {
-                    return Ok(regex.clone());
-                }
+            if let Ok(cache) = self.cache.lock()
+                && let Some(regex) = cache.get(pattern)
+            {
+                return Ok(regex.clone());
             }
             // lock poisoned: 跳过 cache 查询，降级到重新编译
         }

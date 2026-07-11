@@ -333,10 +333,8 @@ impl SyncCache for OxcacheSyncCache {
                     key
                 );
                 let existed = self.backend.exists(key).unwrap_or(false);
-                if existed {
-                    if let Err(e) = self.backend.delete(key) {
-                        log::warn!("cache backend delete failed for key={:?}: {}", key, e);
-                    }
+                if existed && let Err(e) = self.backend.delete(key) {
+                    log::warn!("cache backend delete failed for key={:?}: {}", key, e);
                 }
                 return existed;
             }
