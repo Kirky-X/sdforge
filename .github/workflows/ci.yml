@@ -16,8 +16,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # edition 2024 + ICU4X/trait-kit 0.2.3 require rust 1.91+
-  MSRV: "1.91"
+  # edition 2024 + rust 1.85+ (unified MSRV across base workspace)
+  MSRV: "1.85"
 
 jobs:
   # 代码格式检查
