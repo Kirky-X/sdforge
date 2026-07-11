@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # OpenAPI 自动生成示例模块
 //!
 //! 本模块展示 SDForge v0.2.0 引入的 OpenAPI 3.1 规范自动生成功能。

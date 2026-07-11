@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # HTTP 路由示例模块
 //!
 //! 本模块展示 HTTP 路由的各种配置和使用方式。

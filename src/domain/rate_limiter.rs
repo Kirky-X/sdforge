@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-
 //! Rate limiter abstraction for the trait-kit 0.2.2 `AsyncKit` integration.
 //!
 //! Defines the [`ForgeRateLimiter`] trait — the minimal rate-limiter

@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 简单 API 定义示例
 //!
 //! 本模块演示如何使用 `#[service_api]` 宏定义各种类型的服务 API。

@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 聊天 WebSocket 示例
 //!
 //! 本模块展示如何使用 WebSocket 实现实时聊天功能。

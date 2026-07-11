@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # API Key 认证示例
 //!
 //! 本模块展示如何使用 API Key 进行身份验证。

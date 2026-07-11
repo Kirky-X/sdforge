@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # gRPC 示例模块
 //!
 //! 本模块展示 SDForge gRPC 协议的使用方式。

@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-
 //! `LimiteronForgeAdapter` — adapts `limiteron::Governor` to `ForgeRateLimiter`.
 //!
 //! Phase 5 (T034 Red / T035 Green) of the `trait-kit-async-integration`

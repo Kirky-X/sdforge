@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 应用配置示例
 //!
 //! 本示例展示 SDForge 配置管理的三种使用模式：

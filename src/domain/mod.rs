@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-
 //! Domain layer — abstractions consumed by sdforge integrations.
 //!
 //! Currently houses the [`rate_limiter`](crate::domain::rate_limiter) module

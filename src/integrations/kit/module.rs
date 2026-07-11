@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-
 //! `SdforgeModule` — trait-kit 0.2.2 `AsyncKit` integration for sdforge.
 //!
 //! Phase 5 (T036 Red / T037 Green) of the `trait-kit-async-integration`

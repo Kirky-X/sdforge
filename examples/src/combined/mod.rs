@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 组合示例模块
 //!
 //! 本模块展示如何将多个 SDForge 功能组合在一起，构建完整的应用。

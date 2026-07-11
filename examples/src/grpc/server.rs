@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # gRPC 服务端示例
 //!
 //! 本示例展示如何使用 SDForge 构建 gRPC 服务：

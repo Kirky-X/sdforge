@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 安全模块示例
 //!
 //! 本模块展示 SDForge 框架的安全功能，包括：

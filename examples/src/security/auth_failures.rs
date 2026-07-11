@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 认证失败场景示例
 //!
 //! 本模块展示 401 Unauthorized 和 403 Forbidden 场景的端点配置与错误响应。

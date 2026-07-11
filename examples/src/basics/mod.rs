@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 基础示例模块 (Basics)
 //!
 //! 本模块展示 SDForge 框架的核心基础功能，包括：

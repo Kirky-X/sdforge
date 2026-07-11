@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 基础 WebSocket 示例
 //!
 //! 本模块展示基础的 WebSocket 连接和处理模式。

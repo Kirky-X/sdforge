@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # SDForge Examples - 主入口
 //!
 //! 本程序展示了 SDForge 框架的基本用法。

@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 中间件示例模块
 //!
 //! 本模块展示 HTTP 中间件的使用方式。

@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # MCP 工具定义示例
 //!
 //! 本模块展示如何定义各种类型的 MCP 工具。

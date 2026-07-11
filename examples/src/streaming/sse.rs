@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # Server-Sent Events (SSE) 示例
 //!
 //! 本模块展示如何实现 SSE 流式传输。
