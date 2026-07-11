@@ -7,7 +7,7 @@
 [![docs.rs](https://img.shields.io/docsrs/sdforge.svg)](https://docs.rs/sdforge)
 [![downloads](https://img.shields.io/crates/d/sdforge.svg)](https://crates.io/crates/sdforge)
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
+[![rust](https://img.shields.io/badge/rust-1.91%2B-orange.svg)](https://www.rust-lang.org)
 
 [English](README_EN.md) | 简体中文
 
