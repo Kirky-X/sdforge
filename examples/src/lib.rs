@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # SDForge Examples Library
 //!
 //! 本库包含展示 SDForge 框架功能的示例模块。

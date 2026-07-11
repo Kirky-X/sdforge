@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 流式传输示例模块
 //!
 //! 本模块展示 SDForge 框架的流式传输功能。

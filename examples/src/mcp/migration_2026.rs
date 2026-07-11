@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # MCP 2026-07-28 迁移示例
 //!
 //! 本模块展示从 `mcp-sdk 0.0.3` 迁移到 `rmcp 0.16` 的完整流程，

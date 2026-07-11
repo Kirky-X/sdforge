@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 路径参数提取示例
 //!
 //! 本模块演示如何从 URL 路径中提取参数。

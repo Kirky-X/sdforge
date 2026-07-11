@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # WebSocket 示例模块
 //!
 //! 本模块展示 SDForge 框架的 WebSocket 支持。

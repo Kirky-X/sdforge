@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # Multi Round-Trip Requests (MRTR) 示例
 //!
 //! 本模块展示 SDForge v0.2.0 新增的 MRTR 支持。工具可通过

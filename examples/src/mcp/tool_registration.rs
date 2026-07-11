@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # MCP 工具注册示例
 //!
 //! 本模块展示 MCP 工具的注册机制和最佳实践。

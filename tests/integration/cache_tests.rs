@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! 缓存功能集成测试
 //!
 //! 测试真实的缓存读写、过期、并发和策略功能。
