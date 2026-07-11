@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! 缓存模块 — 同步缓存接口与 oxcache 透传
 //!
 //! 本模块提供：

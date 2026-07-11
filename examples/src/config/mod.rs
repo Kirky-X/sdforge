@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 配置管理示例模块
 //!
 //! 本模块展示 SDForge 配置管理的使用方式。

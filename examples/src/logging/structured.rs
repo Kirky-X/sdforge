@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 结构化日志示例
 //!
 //! 本示例展示 SDForge 结构化日志的使用方式：

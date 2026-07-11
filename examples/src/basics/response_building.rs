@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//!
 //! # 响应构建示例
 //!
 //! 本模块展示如何在 SDForge 中构建各种类型的 HTTP 响应。
