@@ -7,8 +7,6 @@
 //! 中注册 `docs` 子命令，以及 [`docs_subcommand`] 用于解析 `clap::ArgMatches`
 //! 后分发到 [`crate::docs::generate_docs`] 或 [`crate::docs::write_docs`]。
 
-#![cfg(feature = "docs")]
-
 use std::path::PathBuf;
 
 use crate::core::ApiError;

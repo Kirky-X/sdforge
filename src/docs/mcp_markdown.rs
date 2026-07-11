@@ -5,8 +5,6 @@
 //! 整个文件需 `mcp` feature 门控 — 只有同时启用 `docs` + `mcp` 时才编译。
 //! 迭代 `inventory::iter::<McpToolRegistration>`，每个工具输出 Markdown 段落。
 
-#![cfg(feature = "mcp")]
-
 use crate::core::registration::Registration;
 use crate::mcp::McpToolRegistration;
 
