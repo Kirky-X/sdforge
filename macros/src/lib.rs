@@ -4,7 +4,7 @@
 //!
 //! This crate provides procedural macros for the SDForge framework.
 
-#![doc(html_root_url = "https://docs.rs/sdforge-macros/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/sdforge-macros/0.3.3")]
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
