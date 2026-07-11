@@ -16,6 +16,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # edition 2024 requires rust 1.85+; pin toolchain via rust-toolchain.toml
+  MSRV: "1.85"
 
 jobs:
   # 代码格式检查
@@ -42,9 +44,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust (${{ env.MSRV }})
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: ${{ env.MSRV }}
           components: clippy
 
       - name: Cache cargo registry
@@ -283,7 +286,8 @@ jobs:
             --exclude-files "examples/*" \
             --exclude-files "temp/*" \
             --exclude-files "macros/*" \
-            --exclude-files "src/grpc/pb/*"
+            --exclude-files "src/grpc/pb/*" \
+            --exclude-files "src/benches/*"
 
       - name: Upload coverage to Codecov
         if: always()
