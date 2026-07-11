@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-07-12
+
+### Changed
+- MSRV 从 1.91 降回 1.85（与其他 base workspace crate 统一）
+- inklog 依赖版本约束从 "0.1.4" 放宽到 "0.1"（x.x 格式）
+- README 徽章合并为一行格式，移除不存在的 README_EN.md 链接
+- ci.yml MSRV 环境变量更新为 1.85
+- 移除 module.rs 中过时的 TypeId::of const fn 注释
+
 ## [0.3.3] - 2026-07-11
 
 ### 概览
