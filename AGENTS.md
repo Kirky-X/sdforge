@@ -1,34 +1,35 @@
-# SDForge 知识库
+# Agents Guide
 
-**Generated:** 2026-07-04
-**Branch:** main
-**Commit:** b983b72
-**Project:** Rust declarative SDK framework with procedural macros
+**Project:** sdforge 0.3.2
+**License:** MIT
+**Edition:** 2024 (rust-version 1.85)
+**Repository:** https://github.com/Kirky-X/sdforge
 
-## 概览
+## Overview
 
-SDForge 是一个使用过程宏自动生成多协议服务接口（HTTP + MCP）的 Rust 声明式 SDK 框架。核心创新是编译时协议选择——未使用的协议产生零编译代码。
+SDForge 是一个使用过程宏自动生成多协议服务接口（HTTP + MCP + gRPC + WebSocket + CLI）的 Rust 声明式 SDK 框架。核心创新是编译时协议选择——未使用的协议产生零编译代码。
 
-## 结构
+## Project Structure
 
 ```
 sdforge/
 ├── src/                          # 主框架 (175 files, high complexity)
 │   ├── core/                     # 核心类型、错误处理、验证
 │   ├── http/                     # Axum HTTP 协议实现
-│   ├── mcp/                      # MCP 协议实现
+│   ├── mcp/                      # MCP 协议实现 (rmcp 2.1)
 │   ├── security/                 # 认证、速率限制、API Key
 │   ├── cache/                    # Oxcache 缓存集成
 │   ├── websocket/                # WebSocket 支持
 │   ├── streaming/                # SSE 流式支持
-│   ├── grpc/                     # gRPC 支持
+│   ├── grpc/                     # gRPC 支持 (tonic)
 │   ├── cli/                      # CLI 协议（clap 集成）
 │   ├── docs/                     # 文档输出（Swagger UI + Markdown）
 │   ├── openapi/                  # OpenAPI 3.1 规范生成
+│   ├── domain/                   # 领域抽象
 │   ├── config/                   # 配置管理
 │   └── lib.rs                    # 库入口
-├── macros/                       # 过程宏 crate (1476 行复杂度热点)
-│   ├── src/lib.rs                # #[service_api] 宏实现
+├── macros/                       # 过程宏 crate (#[service_api])
+│   ├── src/lib.rs                # 宏实现
 │   └── tests/                    # trybuild 测试
 ├── examples/                     # 示例 (workspace member)
 ├── openspec/                     # OpenSpec 变更管理（历史 specs）
@@ -39,7 +40,7 @@ sdforge/
 └── Cargo.toml                    # Workspace 配置
 ```
 
-## 代码查找
+## Where to Look
 
 | 任务 | 位置 | 说明 |
 |------|------|------|
@@ -55,7 +56,13 @@ sdforge/
 | 配置加载 | `src/config/mod.rs` | 模块化配置（AppConfig/ServerConfig 等） |
 | 宏定义 | `macros/src/lib.rs` | `#[service_api]` 解析（支持 `cli=true` 参数） |
 
-## 代码规范
+## Conventions
+
+- **edition 2024, rust-version 1.85+**
+- **MIT License** — 所有源文件添加 `SPDX-License-Identifier: MIT` 头
+- **依赖必须通过 feature 门控** — 所有可选依赖使用 `optional = true` 并在 `[features]` 中门控
+- **不使用数据库** — 所有数据交互通过 oxcache（内存缓存）完成
+- **混合模块风格** — 同时使用 `mod.rs` 和内联 `.rs` 文件
 
 ### 禁止
 - 空 catch 块 `catch(e) {}`
@@ -105,13 +112,6 @@ cargo build --features full
 
 ```
 
-## 约定
-
-### 模块组织
-- **混合风格**：同时使用 `mod.rs` 和内联 `.rs` 文件
-- `core/` 使用 `mod.rs` 风格
-- `http/` 混合两种风格
-
 ### 错误处理
 ```rust
 use thiserror::Error;
@@ -140,23 +140,20 @@ pub trait RouteRegistration: Send + Sync {
 }
 ```
 
-## 命令
+## Commands
 
 ```bash
-# 构建
-cargo build --features http
-cargo build --features full
+# 构建所有特性
+cargo build --all-features
 
-# 测试
-cargo test --features http
-cargo test --features mcp
-cargo test --features full
+# 测试（推荐使用 --lib 避免 macros trybuild 超时）
+cargo test --all-features --lib
 
 # 格式化
 cargo fmt
 
-# Lint
-cargo clippy --all-features
+# Clippy（零警告零错误）
+cargo clippy --all-features -- -D warnings
 
 # 文档
 cargo doc --no-deps
