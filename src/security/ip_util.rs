@@ -51,22 +51,19 @@ pub(crate) fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
 
     if from_trusted_proxy {
         // Trust X-Forwarded-For (leftmost = original client)
-        if let Some(header) = req.headers().get("X-Forwarded-For") {
-            if let Ok(value) = header.to_str() {
-                if let Some(ip) = value.split(',').next().map(|s| s.trim()) {
-                    if is_valid_ip(ip) {
-                        return Some(ip.to_string());
-                    }
-                }
-            }
+        if let Some(header) = req.headers().get("X-Forwarded-For")
+            && let Ok(value) = header.to_str()
+            && let Some(ip) = value.split(',').next().map(|s| s.trim())
+            && is_valid_ip(ip)
+        {
+            return Some(ip.to_string());
         }
         // Trust X-Real-IP as secondary
-        if let Some(header) = req.headers().get("X-Real-IP") {
-            if let Ok(ip) = header.to_str() {
-                if is_valid_ip(ip) {
-                    return Some(ip.to_string());
-                }
-            }
+        if let Some(header) = req.headers().get("X-Real-IP")
+            && let Ok(ip) = header.to_str()
+            && is_valid_ip(ip)
+        {
+            return Some(ip.to_string());
         }
     }
 
@@ -77,21 +74,18 @@ pub(crate) fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
 
     // Last-resort fallback when no ConnectInfo is available (e.g. test
     // environments without a real TCP connection): trust headers directly.
-    if let Some(header) = req.headers().get("X-Real-IP") {
-        if let Ok(ip) = header.to_str() {
-            if is_valid_ip(ip) {
-                return Some(ip.to_string());
-            }
-        }
+    if let Some(header) = req.headers().get("X-Real-IP")
+        && let Ok(ip) = header.to_str()
+        && is_valid_ip(ip)
+    {
+        return Some(ip.to_string());
     }
-    if let Some(header) = req.headers().get("X-Forwarded-For") {
-        if let Ok(value) = header.to_str() {
-            if let Some(ip) = value.split(',').next().map(|s| s.trim()) {
-                if is_valid_ip(ip) {
-                    return Some(ip.to_string());
-                }
-            }
-        }
+    if let Some(header) = req.headers().get("X-Forwarded-For")
+        && let Ok(value) = header.to_str()
+        && let Some(ip) = value.split(',').next().map(|s| s.trim())
+        && is_valid_ip(ip)
+    {
+        return Some(ip.to_string());
     }
 
     None

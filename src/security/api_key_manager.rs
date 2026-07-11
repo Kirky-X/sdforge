@@ -215,10 +215,10 @@ impl ApiKeyMetadata {
             .unwrap_or_else(|| "none".to_string());
 
         // Deactivate current version
-        if let Some(current_idx) = self.active_version_index {
-            if let Some(current) = self.versions.get_mut(current_idx) {
-                current.deactivate();
-            }
+        if let Some(current_idx) = self.active_version_index
+            && let Some(current) = self.versions.get_mut(current_idx)
+        {
+            current.deactivate();
         }
 
         // Activate new version

@@ -208,13 +208,10 @@ fn find_newer_version(current: &str, supported: &[String]) -> Option<String> {
         if let Some(num) = version
             .strip_prefix('v')
             .and_then(|v| v.parse::<u32>().ok())
+            && num > current_num
+            && (newer.is_none() || num < newer.as_ref().and_then(|v| v[1..].parse::<u32>().ok())?)
         {
-            if num > current_num
-                && (newer.is_none()
-                    || num < newer.as_ref().and_then(|v| v[1..].parse::<u32>().ok())?)
-            {
-                newer = Some(version.clone());
-            }
+            newer = Some(version.clone());
         }
     }
 

@@ -204,17 +204,16 @@ mod cache_tests {
 
         // 模拟过期检查函数
         let is_expired = |cache: &DashMapCache, key: &str| -> bool {
-            if let Some(expiry_bytes) = cache.get(&format!("{}_expiry", key)) {
-                if let Ok(expiry) = String::from_utf8(expiry_bytes)
+            if let Some(expiry_bytes) = cache.get(&format!("{}_expiry", key))
+                && let Ok(expiry) = String::from_utf8(expiry_bytes)
                     .unwrap_or_default()
                     .parse::<u64>()
-                {
-                    let now = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
-                    return now > expiry;
-                }
+            {
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs();
+                return now > expiry;
             }
             false
         };
