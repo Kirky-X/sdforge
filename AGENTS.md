@@ -1,8 +1,8 @@
 # Agents Guide
 
-**Project:** sdforge 0.3.2
+**Project:** sdforge 0.3.3
 **License:** MIT
-**Edition:** 2024 (rust-version 1.85)
+**Edition:** 2024 (rust-version 1.91)
 **Repository:** https://github.com/Kirky-X/sdforge
 
 ## Overview
@@ -58,7 +58,7 @@ sdforge/
 
 ## Conventions
 
-- **edition 2024, rust-version 1.85+**
+- **edition 2024, rust-version 1.91+**
 - **MIT License** — 所有源文件添加 `SPDX-License-Identifier: MIT` 头
 - **依赖必须通过 feature 门控** — 所有可选依赖使用 `optional = true` 并在 `[features]` 中门控
 - **不使用数据库** — 所有数据交互通过 oxcache（内存缓存）完成
