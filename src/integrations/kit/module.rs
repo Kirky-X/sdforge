@@ -72,10 +72,9 @@ impl ModuleMeta for SdforgeModule {
     const NAME: &'static str = "sdforge";
 
     fn dependencies() -> &'static [(&'static str, TypeId)] {
-        // OnceLock lazy init — mirrors dbnexus's pattern (Phase 4). `TypeId::of`
-        // became `const fn` only in Rust 1.91, so we can't use a `static`
-        // initializer on older toolchains. OnceLock (stable since 1.70) gives
-        // a `&'static` reference to a runtime-constructed `Vec`.
+        // OnceLock lazy init — mirrors dbnexus's pattern (Phase 4).
+        // OnceLock (stable since 1.70) gives a `&'static` reference to a
+        // runtime-constructed `Vec`.
         static DEPS: OnceLock<Vec<(&'static str, TypeId)>> = OnceLock::new();
         DEPS.get_or_init(|| vec![("limiteron", TypeId::of::<LimiteronModule>())])
             .as_slice()
