@@ -7,6 +7,12 @@
 
 ## [Unreleased]
 
+### ⚠️ BREAKING CHANGES
+
+- `error` 模块从 `src/core/error/` 迁移到 `src/error/`，导入路径 `crate::core::error::` → `crate::error::`
+- 新增 `SdForgeResult<T>` 类型别名
+- 跨 crate 引用更新：`limiteron::FlowGuardError` → `limiteron::LimiteronError`
+
 ## [0.3.4] - 2026-07-12
 
 ### Changed
