@@ -5,14 +5,12 @@
 //! This module is organized into submodules:
 //! - `types`: Core type definitions like ApiMetadata
 //! - `response`: Response wrappers like ServiceResponse and ServiceError
-//! - `error`: Framework errors like ApiError
 //! - `validation`: Request validation utilities
 //!
 //! # Note on HTTP Support
 //! HTTP-specific response handling is provided in `http::response` module
 //! to avoid HTTP dependencies for non-HTTP protocol implementations.
 
-pub mod error;
 pub mod json;
 #[cfg(any(feature = "http", feature = "security"))]
 pub mod regex_cache;
@@ -23,7 +21,7 @@ pub mod types;
 pub mod validation;
 
 // Re-export types from submodules for convenience
-pub use error::{
+pub use crate::error::{
     ApiError, ErrorCategory, ErrorContext, Locale, LocalizedError, SdForgeError, TranslationStore,
 };
 pub use json::{api_metadata_response, error_response, paginated_response, success_response};

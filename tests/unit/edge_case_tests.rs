@@ -10,14 +10,12 @@
 
 #[cfg(test)]
 mod core_edge_case_tests {
-    use sdforge::core::{
-        error::ErrorContext,
-        str::{
-            format_empty_error, format_env_key, format_invalid_error, format_not_found,
-            format_range_error, format_validation_error, sanitize_for_identifier,
-            truncate_with_ellipsis,
-        },
+    use sdforge::core::str::{
+        format_empty_error, format_env_key, format_invalid_error, format_not_found,
+        format_range_error, format_validation_error, sanitize_for_identifier,
+        truncate_with_ellipsis,
     };
+    use sdforge::error::ErrorContext;
 
     // ============================================================================
     // String Utility Edge Cases

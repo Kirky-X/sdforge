@@ -124,6 +124,12 @@ pub mod prelude {
 /// Core types and utilities
 pub mod core;
 
+/// Framework error types
+///
+/// Provides comprehensive error types for the framework. See `SdForgeError`
+/// for the unified error enum and `SdForgeResult<T>` for the standard result alias.
+pub mod error;
+
 /// Domain abstractions consumed by integrations (e.g. `ForgeRateLimiter`).
 pub mod domain;
 
