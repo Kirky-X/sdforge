@@ -1,8 +1,8 @@
 # Agents Guide
 
-**Project:** sdforge 0.3.3
+**Project:** sdforge 0.3.4
 **License:** MIT
-**Edition:** 2024 (rust-version 1.91)
+**Edition:** 2024 (rust-version 1.85)
 **Repository:** https://github.com/Kirky-X/sdforge
 
 ## Overview
