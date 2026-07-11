@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
 use thiserror::Error;
 
-use crate::core::error::context::{ErrorCategory, ErrorContext};
 use crate::core::response::ServiceError;
+use crate::error::context::{ErrorCategory, ErrorContext};
 
 #[cfg(feature = "ratelimit")]
 use crate::security::ratelimit::RateLimitError;
@@ -540,8 +540,8 @@ impl From<RateLimitError> for ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::error::context::{ErrorCategory, ErrorContext};
     use crate::core::response::ServiceError;
+    use crate::error::context::{ErrorCategory, ErrorContext};
 
     /// A simple source error used to test error chaining.
     #[derive(Debug, thiserror::Error)]
@@ -576,10 +576,10 @@ mod tests {
     #[test]
     fn test_from_ratelimit_error_limiteron_variant() {
         use crate::security::ratelimit::RateLimitError;
-        use limiteron::FlowGuardError;
+        use limiteron::LimiteronError;
 
         let err =
-            RateLimitError::Limiteron(FlowGuardError::ConfigError("test config error".to_string()));
+            RateLimitError::Limiteron(LimiteronError::ConfigError("test config error".to_string()));
         let api_error: ApiError = err.into();
 
         match api_error {

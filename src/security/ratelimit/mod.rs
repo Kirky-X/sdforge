@@ -55,7 +55,7 @@ pub trait RateLimiter: Send + Sync {
 /// Rate limiting error variants aligned with limiteron's `Decision` types.
 ///
 /// `Display` and `std::error::Error` impls are provided by `thiserror::Error`
-/// derive. `From<limiteron::FlowGuardError>` is auto-derived via `#[from]`.
+/// derive. `From<limiteron::LimiteronError>` is auto-derived via `#[from]`.
 #[derive(Debug, thiserror::Error)]
 pub enum RateLimitError {
     /// Request rejected because the rate limit was exceeded.
@@ -83,7 +83,7 @@ pub enum RateLimitError {
         /// Total quota allowance.
         total: u64,
     },
-    /// Wraps a limiteron `FlowGuardError`.
+    /// Wraps a limiteron `LimiteronError`.
     #[error("Limiteron error: {0}")]
-    Limiteron(#[from] limiteron::FlowGuardError),
+    Limiteron(#[from] limiteron::LimiteronError),
 }
