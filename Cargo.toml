@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.package]
 version = "0.3.3"
 edition = "2024"
-rust-version = "1.91"
+rust-version = "1.85"
 authors = ["Kirky.X"]
 license = "MIT"
 repository = "https://github.com/Kirky-X/sdforge"
@@ -221,7 +221,7 @@ trait-kit = { version = "0.2", features = ["async"], optional = true, default-fe
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # version-only: path 依赖在 CI 环境不存在，本地开发用 .cargo/config.toml [patch.crates-io] 重定向。
 # default-features = false (Rule 6) — only core logging is pulled in.
-inklog = { version = "0.1.4", default-features = false, optional = true }
+inklog = { version = "0.1", default-features = false, optional = true }
 
 # ICU4X internationalization (optional, feature-gated via `i18n`).
 # icu 2.2 provides locale-aware number/date/plural/collation formatting +
