@@ -30,7 +30,7 @@ use std::pin::Pin;
 /// defined in the always-compiled `domain` module without pulling in
 /// `limiteron` or other optional crates. Adapter implementations map
 /// provider-specific errors (e.g. `limiteron::LimiteronError`) into the
-/// `Internal` variant — mirroring how `LimiteronModule` maps `KitError` via
+/// `Internal` variant — mirroring how `LimiteronModule` maps `TraitKitError` via
 /// `LimiteronError::ConfigError(format!(...))` (Phase 3 precedent).
 #[derive(Debug, thiserror::Error)]
 pub enum ForgeError {
