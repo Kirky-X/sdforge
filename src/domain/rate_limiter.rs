@@ -29,9 +29,9 @@ use std::pin::Pin;
 /// A small, dependency-free error enum (thiserror-based) so the trait can be
 /// defined in the always-compiled `domain` module without pulling in
 /// `limiteron` or other optional crates. Adapter implementations map
-/// provider-specific errors (e.g. `limiteron::FlowGuardError`) into the
+/// provider-specific errors (e.g. `limiteron::LimiteronError`) into the
 /// `Internal` variant — mirroring how `LimiteronModule` maps `KitError` via
-/// `FlowGuardError::ConfigError(format!(...))` (Phase 3 precedent).
+/// `LimiteronError::ConfigError(format!(...))` (Phase 3 precedent).
 #[derive(Debug, thiserror::Error)]
 pub enum ForgeError {
     /// Rate limit exceeded — the identifier is allowed `limit` requests per
@@ -50,7 +50,7 @@ pub enum ForgeError {
         reason: String,
     },
     /// Wraps any other error surfaced by the underlying rate-limiter provider
-    /// (e.g. `limiteron::FlowGuardError`). The source error is stringified so
+    /// (e.g. `limiteron::LimiteronError`). The source error is stringified so
     /// `ForgeError` stays dependency-free.
     #[error("Rate limiter internal error: {message}")]
     Internal {

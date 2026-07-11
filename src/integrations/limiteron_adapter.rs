@@ -16,7 +16,7 @@
 //! `ForgeError::rate_limiter(message)`. The actual `ForgeError` enum (defined
 //! in T033 at `domain/rate_limiter.rs`) has **no `rate_limiter` constructor**;
 //! the closest semantic match is [`ForgeError::internal(impl Display)`], which
-//! we use for mapping `limiteron::FlowGuardError`. This divergence is
+//! we use for mapping `limiteron::LimiteronError`. This divergence is
 //! documented here rather than silently papered over.
 
 use crate::domain::rate_limiter::{ForgeError, ForgeRateLimiter};

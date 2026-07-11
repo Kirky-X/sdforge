@@ -185,7 +185,7 @@ async fn layer_construction_accepts_arcrate_limiter() {
 
 /// Mock limiter that produces a fresh `RateLimitError` on each check via a
 /// factory closure. `RateLimitError` does not implement `Clone` (and
-/// `FlowGuardError` doesn't either), so we can't hold a single owned copy
+/// `LimiteronError` doesn't either), so we can't hold a single owned copy
 /// and clone it per call. The factory closure lets each test mint a new
 /// owned error of the desired variant.
 struct MockLimiterWithError {
@@ -313,10 +313,10 @@ async fn middleware_quota_exhausted_returns_429_without_retry_after() {
 /// Limiteron (internal error) → 500 Internal Server Error.
 #[tokio::test]
 async fn middleware_limiteron_error_returns_500() {
-    use limiteron::FlowGuardError;
+    use limiteron::LimiteronError;
     let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiterWithError {
         factory: Box::new(|| {
-            RateLimitError::Limiteron(FlowGuardError::ConfigError("internal".to_string()))
+            RateLimitError::Limiteron(LimiteronError::ConfigError("internal".to_string()))
         }),
     });
     let layer = RateLimitLayer::new(limiter);

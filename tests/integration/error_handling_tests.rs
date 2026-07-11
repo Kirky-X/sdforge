@@ -10,8 +10,8 @@
 
 #[cfg(any(feature = "http", feature = "mcp"))]
 mod error_handling_tests {
-    use sdforge::core::error::{ApiError, ErrorCategory, ErrorContext};
     use sdforge::core::response::{ServiceError, ServiceResponse};
+    use sdforge::error::{ApiError, ErrorCategory, ErrorContext};
     use serde_json::json;
     use tower::ServiceExt;
 

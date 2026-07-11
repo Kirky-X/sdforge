@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 use thiserror::Error;
 
-use crate::core::error::api_error::ApiError;
-use crate::core::error::context::ErrorCategory;
 use crate::core::response::ServiceError;
+use crate::error::api_error::ApiError;
+use crate::error::context::ErrorCategory;
 
 /// Unified framework error type that wraps all SDForge errors
 ///
@@ -113,11 +113,14 @@ impl SdForgeError {
     }
 }
 
+/// Convenience alias for `Result<T, SdForgeError>`.
+pub type SdForgeResult<T> = std::result::Result<T, SdForgeError>;
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::error::api_error::ApiError;
-    use crate::core::error::context::ErrorCategory;
+    use crate::error::api_error::ApiError;
+    use crate::error::context::ErrorCategory;
 
     /// Test SdForgeError::internal() constructor creates the Internal variant
     /// with the provided message.
