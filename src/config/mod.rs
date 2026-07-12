@@ -49,6 +49,8 @@ pub use security::SecurityConfig;
 pub use server::{ServerConfig, TlsConfig};
 pub use timeout::TimeoutConfig;
 
+pub use defaults::security_headers;
+
 /// Configuration loading error
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {

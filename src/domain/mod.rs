@@ -7,3 +7,5 @@
 //! `AsyncKit` integration (Phase 5 of `trait-kit-async-integration`).
 
 pub mod rate_limiter;
+
+pub use rate_limiter::{ForgeError, ForgeRateLimiter};

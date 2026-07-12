@@ -23,6 +23,10 @@ pub mod swagger;
 #[cfg(feature = "http")]
 pub use swagger::swagger_ui_router;
 
+pub use cli_markdown::generate_cli_docs;
+#[cfg(feature = "mcp")]
+pub use mcp_markdown::generate_mcp_docs;
+
 /// 文档输出格式枚举。
 ///
 /// 每个变体对应一种文档生成策略，由 [`generate_docs`] 分发处理：

@@ -22,8 +22,8 @@ use axum::http::{Request, StatusCode};
 use axum::response::Response;
 use tower::{Layer, Service};
 
-use crate::security::ratelimit::{RateLimitLayer, RateLimitMiddleware};
-use crate::security::ratelimit::{RateLimitError, RateLimiter};
+use crate::security::{RateLimitLayer, RateLimitMiddleware};
+use crate::security::{RateLimitError, RateLimiter};
 
 // ============================================================================
 // Mocks
