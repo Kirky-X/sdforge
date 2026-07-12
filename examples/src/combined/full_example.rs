@@ -153,7 +153,7 @@ pub struct UserUpdateMessage {
 ///     }
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "health_check",
     version = "v1",
     path = "/health",
@@ -205,7 +205,7 @@ async fn health_check() -> Result<serde_json::Value, ApiError> {
 ///     "created_at": "2024-01-01T00:00:00Z"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_full_user",
     version = "v1",
     path = "/full-users/:id",
@@ -258,7 +258,7 @@ async fn get_full_user(id: u64) -> Result<User, ApiError> {
 ///     "created": true
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "create_full_user",
     version = "v1",
     path = "/full-users",
@@ -308,7 +308,7 @@ async fn create_full_user(request: CreateUserRequest) -> Result<serde_json::Valu
 ///     "updated": true
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "update_full_user",
     version = "v1",
     path = "/full-users/:id",
@@ -360,7 +360,7 @@ async fn update_full_user(
 ///     "audit_logged": true
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "delete_full_user",
     version = "v1",
     path = "/full-users/:id",
@@ -395,7 +395,7 @@ async fn delete_full_user(id: u64) -> Result<serde_json::Value, ApiError> {
 ///     "timestamp": "2024-01-17T12:00:00Z"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "full_example_websocket",
     version = "v1",
     path = "/ws/full-example",
@@ -425,7 +425,7 @@ async fn full_example_websocket() -> Result<String, ApiError> {
 ///     "last_activity": "2024-01-17T12:00:00Z"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "user_activity_stats",
     version = "v1",
     path = "/full-users/stats",

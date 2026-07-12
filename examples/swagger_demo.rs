@@ -17,12 +17,12 @@
 #![cfg(feature = "docs")]
 
 use sdforge::core::ApiError;
-use sdforge::service_api;
+use sdforge::forge;
 use sdforge::swagger_ui_router;
 
 /// Hello endpoint. 注册为 HTTP 路由 /api/v1/hello，会被 generate_openapi_spec()
 /// 收集到 OpenAPI spec 中，Swagger UI 随之展示。
-#[service_api(
+#[forge(
     name = "demo_hello",
     version = "v1",
     path = "/hello",

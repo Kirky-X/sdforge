@@ -7,11 +7,11 @@
 //! ## 自动注册
 //!
 //! SDForge 使用 `inventory` 库实现自动注册。所有带有 `tool_name` 属性的
-//! `#[service_api]` 函数会自动注册到 MCP 服务器。
+//! `#[forge]` 函数会自动注册到 MCP 服务器。
 //!
 //! ## 注册流程
 //!
-//! 1. 编译时：`#[service_api]` 宏生成注册代码
+//! 1. 编译时：`#[forge]` 宏生成注册代码
 //! 2. 运行时：`inventory::submit!` 注册工具
 //! 3. 启动时：`init_all_plugins()` 收集所有注册的工具
 //!
@@ -30,7 +30,7 @@
 //! }
 //!
 //! // 注册
-//! #[service_api(tool_name = "add", ...)]
+//! #[forge(tool_name = "add", ...)]
 //! async fn add(...) { calculator::add(...) }
 //! ```
 //!
@@ -39,7 +39,7 @@
 //! 不指定 `tool_name` 的端点不会注册为 MCP 工具：
 //!
 //! ```rust,ignore
-//! #[service_api(
+//! #[forge(
 //!     name = "http_only",
 //!     tool_name = ...  // 不指定 tool_name
 //! )]
@@ -118,7 +118,7 @@ pub struct DivideRequest {
 /// ```json
 /// {"result": 30}
 /// ```
-#[service_api(
+#[forge(
     name = "mcp_calc_add",
     version = "v1",
     path = "/mcp/calc/add",
@@ -148,7 +148,7 @@ async fn mcp_add(request: AddRequest) -> Result<serde_json::Value, ApiError> {
 /// ```json
 /// {"result": -10}
 /// ```
-#[service_api(
+#[forge(
     name = "mcp_calc_subtract",
     version = "v1",
     path = "/mcp/calc/subtract",
@@ -178,7 +178,7 @@ async fn mcp_subtract(request: SubtractRequest) -> Result<serde_json::Value, Api
 /// ```json
 /// {"result": 200}
 /// ```
-#[service_api(
+#[forge(
     name = "mcp_calc_multiply",
     version = "v1",
     path = "/mcp/calc/multiply",
@@ -211,7 +211,7 @@ async fn mcp_multiply(request: MultiplyRequest) -> Result<serde_json::Value, Api
 ///
 /// # 错误
 /// 除数为零时返回错误。
-#[service_api(
+#[forge(
     name = "mcp_calc_divide",
     version = "v1",
     path = "/mcp/calc/divide",
@@ -249,7 +249,7 @@ async fn mcp_divide(request: DivideRequest) -> Result<serde_json::Value, ApiErro
 ///
 /// # MCP 调用
 /// 此工具不可通过 MCP 调用。
-#[service_api(
+#[forge(
     name = "http_only",
     version = "v1",
     path = "/http-only",
@@ -268,7 +268,7 @@ async fn http_only() -> Result<String, ApiError> {
 /// ```bash
 /// curl http://localhost:3000/api/v1/internal/stats
 /// ```
-#[service_api(
+#[forge(
     name = "internal_stats",
     version = "v1",
     path = "/internal/stats",
@@ -309,7 +309,7 @@ pub struct ReverseRequest {
     pub text: String,
 }
 
-#[service_api(
+#[forge(
     name = "mcp_reverse_string",
     version = "v1",
     path = "/mcp/string/reverse",
@@ -346,7 +346,7 @@ pub struct UppercaseRequest {
     pub text: String,
 }
 
-#[service_api(
+#[forge(
     name = "mcp_uppercase",
     version = "v1",
     path = "/mcp/string/uppercase",

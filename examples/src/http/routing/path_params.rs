@@ -91,7 +91,7 @@ pub struct UpdatePostRequest {
 ///     "name": "User 123"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_user_by_id",
     version = "v1",
     path = "/http-users/:user_id",
@@ -131,7 +131,7 @@ async fn get_user_by_id(user_id: u64) -> Result<serde_json::Value, ApiError> {
 ///     "text": "Comment content"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_user_post_comment",
     version = "v1",
     path = "/users/:user_id/posts/:post_id/comments/:comment_id",
@@ -179,7 +179,7 @@ async fn get_user_post_comment(
 ///     "content": "New Content"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "update_user_post",
     version = "v1",
     path = "/users/:user_id/posts/:post_id",
@@ -225,7 +225,7 @@ async fn update_user_post(
 ///     "posts": []
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_user_posts",
     version = "v1",
     path = "/users/:user_id/posts",
@@ -260,7 +260,7 @@ async fn get_user_posts(
 /// ```bash
 /// curl http://localhost:3000/api/v1/categories/electronics/items/123
 /// ```
-#[service_api(
+#[forge(
     name = "get_category_item",
     version = "v1",
     path = "/categories/:category/items/:id",

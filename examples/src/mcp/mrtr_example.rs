@@ -48,7 +48,7 @@ pub fn demo_create_session(
 ///
 /// 此端点模拟需要额外输入的场景：首次调用返回 `InputRequiredResult`，
 /// 客户端补充输入后通过 `session_id` 恢复执行。
-#[service_api(
+#[forge(
     name = "mrtr_approval",
     version = "v1",
     path = "/mrtr/approval",

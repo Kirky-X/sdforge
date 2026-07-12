@@ -4,7 +4,7 @@
 //!
 //! 本模块展示 SDForge 框架的核心基础功能，包括：
 //!
-//! - **简单 API 定义** - 使用 `#[service_api]` 宏定义基本服务 API
+//! - **简单 API 定义** - 使用 `#[forge]` 宏定义基本服务 API
 //! - **类型系统** - SDForge 提供的核心类型及其用法
 //! - **响应构建** - 如何构建各种类型的响应
 //!
@@ -13,7 +13,7 @@
 //! ```rust,ignore
 //! use sdforge::prelude::*;
 //!
-//! #[service_api(
+//! #[forge(
 //!     name = "hello_world",
 //!     version = "v1",
 //!     path = "/hello",

@@ -149,7 +149,7 @@ pub struct DataItem {
 ///     "enabled": true
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_item",
     version = "v1",
     path = "/items/:id",
@@ -188,7 +188,7 @@ async fn get_item(id: u64) -> Result<DataItem, ApiError> {
 ///     "total": 100
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "list_items",
     version = "v1",
     path = "/items",
@@ -244,7 +244,7 @@ async fn list_items(
 ///     "affected_rows": 1
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "delete_item",
     version = "v1",
     path = "/items/:id",
@@ -282,7 +282,7 @@ async fn delete_item(_id: u64) -> Result<StatusResponse, ApiError> {
 ///     "timestamp": "2024-01-17T12:00:00Z"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_wrapped_item",
     version = "v1",
     path = "/wrapped/items/:id",
@@ -325,7 +325,7 @@ pub struct CreateItemRequest {
     pub enabled: bool,
 }
 
-#[service_api(
+#[forge(
     name = "create_item",
     version = "v1",
     path = "/items",
@@ -359,7 +359,7 @@ pub struct UpdateItemRequest {
     pub enabled: bool,
 }
 
-#[service_api(
+#[forge(
     name = "update_item",
     version = "v1",
     path = "/items/:id",
