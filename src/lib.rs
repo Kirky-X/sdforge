@@ -4,7 +4,7 @@
 //!
 //! This crate provides the runtime types and service builders for the SDForge framework.
 
-#![doc(html_root_url = "https://docs.rs/sdforge/0.4.0")]
+#![doc(html_root_url = "https://docs.rs/sdforge/0.4.1")]
 #![warn(missing_docs)]
 
 // Allow macro-generated code (which references `sdforge::cli::...`,
@@ -134,7 +134,7 @@ pub mod error;
 pub mod domain;
 
 /// Integration modules connecting sdforge to external frameworks via
-/// trait-kit 0.2.2 `AsyncKit`. Gated by `limiteron-integration` (which `kit`
+/// trait-kit 0.3 `AsyncKit`. Gated by `limiteron-integration` (which `kit`
 /// implies).
 #[cfg(any(feature = "limiteron-integration", feature = "kit"))]
 pub mod integrations;

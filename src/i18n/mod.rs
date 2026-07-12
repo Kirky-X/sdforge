@@ -31,8 +31,8 @@
 //! assert_eq!(locales, vec!["en-US", "en", "zh-CN", "zh"]);
 //! ```
 
+#[cfg(test)]
 use std::cmp::Ordering;
-use std::str::FromStr;
 
 use icu::collator::CollatorBorrowed;
 use icu::decimal::DecimalFormatter;

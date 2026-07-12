@@ -7,6 +7,24 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-13
+
+### ⚠️ BREAKING CHANGES（仅影响启用 `kit` feature 的用户）
+
+- trait-kit 0.2 → 0.3（pre-1.0 minor bump，Cargo 视为不兼容）；启用 `kit` feature 的用户需同步升级
+
+### Dependencies
+
+- trait-kit 0.2 → 0.3（对齐 oxcache/dbnexus/inklog/limiteron 依赖链）
+- sdforge-macros 0.4.0 → 0.4.1
+
+### Changed
+
+- 移除未使用导入：`src/security/audit/mod.rs`、`src/http/mod.rs`、`src/i18n/mod.rs`、`src/grpc/tests/grpc_service_tests.rs`
+- `AuthGrpcInterceptor` 可见性从 `struct`（私有）扩展为 `pub(crate) struct`（测试可见性需求）
+- 添加 `#[cfg(test)]` 条件编译标注以隔离测试专用 re-export（`sanitize_error_message`、`make_auth_interceptor`、`Registration`、`Ordering`）
+- 同步更新 7 处源码文档注释中的 `trait-kit 0.2.2` → `trait-kit 0.3` 引用
+
 ## [0.4.0] - 2026-07-13
 
 ### ⚠️ BREAKING CHANGES

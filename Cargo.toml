@@ -3,7 +3,7 @@ members = [".", "examples"]
 resolver = "2"
 
 [workspace.package]
-version = "0.4.0"
+version = "0.4.1"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Kirky.X"]
@@ -51,7 +51,7 @@ base64 = { version = "~0.22", default-features = false, features = ["std", "allo
 # 配置依赖
 toml = { version = "~1.1", default-features = false, features = ["parse", "display"] }
 
-# 缓存依赖 - oxcache 0.3.2 用 minimal feature 提供内存后端 + 序列化 + tracing
+# 缓存依赖 - oxcache 0.3 用 minimal feature 提供内存后端 + 序列化 + tracing
 oxcache = { version = "0.3", default-features = false, features = ["minimal"] }
 http = { version = "~1.4", default-features = false, features = ["std"] }
 bincode = { version = "~2.0", default-features = false, features = ["std", "serde"] }
@@ -198,7 +198,7 @@ base64 = { workspace = true, optional = true }
 # Configuration dependencies
 toml = { workspace = true, optional = true }
 
-# Cache dependencies - oxcache 0.3.2 用 memory feature 提供缓存后端
+# Cache dependencies - oxcache 0.3 用 memory feature 提供缓存后端
 oxcache = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 
@@ -212,11 +212,10 @@ simd-json = { workspace = true, optional = true }
 limiteron = { workspace = true, optional = true }
 
 # trait-kit integration (optional, feature-gated via `kit`).
-# Uses path until trait-kit 0.2.2 is published to crates.io; the version
-# constraint is kept so the published artifact resolves the same.
+# trait-kit 0.3 is published to crates.io.
 # Mirrors dbnexus's pattern (Phase 4 of trait-kit-async-integration).
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
-trait-kit = { version = "0.2", features = ["async"], optional = true, default-features = false }
+trait-kit = { version = "0.3", features = ["async"], optional = true, default-features = false }
 
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # version-only: path 依赖在 CI 环境不存在，本地开发用 .cargo/config.toml [patch.crates-io] 重定向。
@@ -323,7 +322,7 @@ cli = ["dep:clap", "dep:inventory"]
 # 依赖 openapi（复用 OpenAPI 生成）+ utoipa-swagger-ui + clap-markdown + cli（docs 子命令需要 CLI 框架）
 docs = ["openapi", "dep:utoipa-swagger-ui", "dep:clap-markdown", "cli"]
 
-# Cache 特性 - oxcache 0.3.2 用 minimal feature 提供缓存后端
+# Cache 特性 - oxcache 0.3 用 minimal feature 提供缓存后端
 cache = ["dep:http", "oxcache/minimal"]
 
 # Logging 特性
@@ -335,7 +334,7 @@ tokio = ["dep:tokio"]
 # SIMD JSON 特性 - 使用 SIMD 加速的 JSON 序列化/反序列化
 simd-json = ["dep:simd-json"]
 
-# trait-kit 0.2.2 AsyncKit integration (SdforgeModule). Two-layer feature
+# trait-kit 0.3 AsyncKit integration (SdforgeModule). Two-layer feature
 # gating mirrors dbnexus's pattern (Phase 4):
 #   - `limiteron-integration`: pulls in `dep:limiteron` only — enough for
 #     `LimiteronForgeAdapter` (which wraps `limiteron::Governor` directly).

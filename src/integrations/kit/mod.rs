@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! trait-kit 0.2.2 `AsyncKit` integration for sdforge.
+//! trait-kit 0.3 `AsyncKit` integration for sdforge.
 //!
 //! Enable via the `kit` cargo feature. Provides [`SdforgeModule`] — a module
 //! depending on `limiteron::integrations::kit::LimiteronModule` that constructs

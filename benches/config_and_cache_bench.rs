@@ -291,7 +291,7 @@ criterion_main!(
 );
 
 #[cfg(all(feature = "http", not(feature = "cache")))]
-criterion_main!(config_benches, cache_pattern_benches,);
+criterion_main!(config_benches,);
 
 #[cfg(all(not(feature = "http"), feature = "cache"))]
 criterion_main!(cache_pattern_benches, cache_concurrent_benches,);

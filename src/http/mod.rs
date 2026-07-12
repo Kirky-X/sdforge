@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: MIT
 //! HTTP server implementation
 
-use crate::core::{ApiMetadata, Registration};
+use crate::core::ApiMetadata;
 use crate::define_registration;
+#[cfg(test)]
+use crate::core::Registration;
 use axum::routing::MethodRouter;
 
 // Type imports re-exported to test modules via `use super::super::*`.
