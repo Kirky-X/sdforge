@@ -16,10 +16,10 @@
 //!
 //! ### 工具定义
 //!
-//! 使用 `#[service_api]` 宏定义 MCP 工具：
+//! 使用 `#[forge]` 宏定义 MCP 工具：
 //!
 //! ```rust,ignore
-//! #[service_api(
+//! #[forge(
 //!     name = "tool_name",
 //!     tool_name = "mcp_tool_name",  // MCP 工具名
 //!     description = "工具描述",

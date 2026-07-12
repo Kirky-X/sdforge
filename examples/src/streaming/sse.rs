@@ -130,7 +130,7 @@ pub struct ProgressUpdate {
 ///     console.log(`Event ${data.id}: ${data.content}`);
 /// };
 /// ```
-#[service_api(
+#[forge(
     name = "sse_stream",
     version = "v1",
     path = "/stream/events",
@@ -156,7 +156,7 @@ async fn sse_stream() -> Result<String, ApiError> {
 /// data: {"event_id":"evt_002","type":"alert","content":"Alert message"}
 ///
 /// ```
-#[service_api(
+#[forge(
     name = "event_stream",
     version = "v1",
     path = "/stream/subscribe",
@@ -212,7 +212,7 @@ async fn event_stream() -> Result<String, ApiError> {
 ///     eventSource.close();
 /// });
 /// ```
-#[service_api(
+#[forge(
     name = "progress_stream",
     version = "v1",
     path = "/stream/progress/:task_id",
@@ -238,7 +238,7 @@ async fn progress_stream(task_id: String) -> Result<String, ApiError> {
 /// data: {"source":"sensor_2","value":72.1,"unit":"percent"}
 ///
 /// ```
-#[service_api(
+#[forge(
     name = "data_stream",
     version = "v1",
     path = "/stream/data",
@@ -261,7 +261,7 @@ async fn data_stream() -> Result<String, ApiError> {
 /// data: {"timestamp":"2024-01-17T12:00:00Z","latency_ms":15}
 ///
 /// ```
-#[service_api(
+#[forge(
     name = "heartbeat_stream",
     version = "v1",
     path = "/stream/heartbeat",

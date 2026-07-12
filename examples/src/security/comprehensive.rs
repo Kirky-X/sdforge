@@ -108,7 +108,7 @@ fn anonymous_context() -> AuthContext {
 // API Endpoints
 //
 // NOTE: 下面的 handler 接受 `&AppState` 引用参数，不是有效的 axum extractor，
-// 因此不使用 `#[service_api]` 宏注册为 HTTP 端点。它们作为业务逻辑示例，
+// 因此不使用 `#[forge]` 宏注册为 HTTP 端点。它们作为业务逻辑示例，
 // 展示如何在真实应用中组合认证、缓存、审计等横切关注点。
 // =============================================================================
 

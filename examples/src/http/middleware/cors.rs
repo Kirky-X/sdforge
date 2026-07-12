@@ -87,7 +87,7 @@ use sdforge::prelude::*;
 /// Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS
 /// Access-Control-Allow-Headers: Content-Type, Authorization
 /// ```
-#[service_api(
+#[forge(
     name = "public_data",
     version = "v1",
     path = "/public/data",
@@ -121,7 +121,7 @@ async fn public_data() -> Result<serde_json::Value, ApiError> {
 ///     "total": 2
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "public_resources",
     version = "v1",
     path = "/public/resources",
@@ -154,7 +154,7 @@ async fn public_resources() -> Result<serde_json::Value, ApiError> {
 /// ```text
 /// Access-Control-Allow-Origin: https://example.com
 /// ```
-#[service_api(
+#[forge(
     name = "cors_test_get",
     version = "v1",
     path = "/cors/test",
@@ -192,7 +192,7 @@ pub struct CorsTestRequest {
     pub data: String,
 }
 
-#[service_api(
+#[forge(
     name = "cors_test_post",
     version = "v1",
     path = "/cors/test",
@@ -228,7 +228,7 @@ async fn cors_test_post(request: CorsTestRequest) -> Result<serde_json::Value, A
 ///     "accessible": true
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "cors_resource",
     version = "v1",
     path = "/cors/resources/:id",
@@ -265,7 +265,7 @@ async fn cors_resource(id: u64) -> Result<serde_json::Value, ApiError> {
 ///     }
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "api_info",
     version = "v1",
     path = "/api/info",

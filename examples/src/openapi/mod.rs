@@ -6,7 +6,7 @@
 //!
 //! ## 功能概述
 //!
-//! 启用 `openapi` feature 后，每个 `#[service_api]` 宏会在编译时通过
+//! 启用 `openapi` feature 后，每个 `#[forge]` 宏会在编译时通过
 //! `inventory::submit!` 注册一条 `OpenApiRouteInfo`。运行时调用
 //! `generate_openapi_spec()` 即可收集所有路由并生成完整规范。
 //!

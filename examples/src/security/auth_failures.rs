@@ -14,7 +14,7 @@
 //! ## 配置方式
 //!
 //! 认证由 SDForge 的安全中间件 `sdforge::security::auth_middleware` 处理，
-//! 而非 `#[service_api]` 宏属性。中间件在路由层拦截未认证请求并返回 401，
+//! 而非 `#[forge]` 宏属性。中间件在路由层拦截未认证请求并返回 401，
 //! 已认证但权限不足的请求由业务代码返回 403：
 //!
 //! ```rust,ignore
@@ -26,7 +26,7 @@
 //!     .route("/secure", axum::routing::get(secure_endpoint))
 //!     .layer(axum::middleware::from_fn(auth_middleware));
 //!
-//! #[service_api(
+//! #[forge(
 //!     name = "secure_endpoint",
 //!     version = "v1",
 //!     path = "/secure",
@@ -74,7 +74,7 @@ pub struct ForbiddenResponse {
 /// 管理员专用端点
 ///
 /// 需要有效的认证凭证。未认证时由 `auth_middleware` 中间件拦截并返回 401。
-#[service_api(
+#[forge(
     name = "admin_only",
     version = "v1",
     path = "/auth-failures/admin",
@@ -93,7 +93,7 @@ async fn admin_only() -> Result<serde_json::Value, ApiError> {
 /// 超级管理员专用端点
 ///
 /// 需要超级管理员权限。权限不足时返回 403 Forbidden。
-#[service_api(
+#[forge(
     name = "super_admin_only",
     version = "v1",
     path = "/auth-failures/super-admin",

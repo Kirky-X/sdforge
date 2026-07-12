@@ -106,7 +106,7 @@ pub struct ProcessRequest {
 ///
 /// # 响应
 /// `"Hello from MCP!"`
-#[service_api(
+#[forge(
     name = "mcp_hello",
     version = "v1",
     path = "/mcp/hello",
@@ -144,7 +144,7 @@ async fn mcp_hello() -> Result<String, ApiError> {
 /// - `es`: Hola, {name}!
 /// - `fr`: Bonjour, {name}!
 /// - `de`: Hallo, {name}!
-#[service_api(
+#[forge(
     name = "mcp_greet",
     version = "v1",
     path = "/mcp/greet",
@@ -185,7 +185,7 @@ async fn mcp_greet(request: GreetRequest) -> Result<String, ApiError> {
 ///     "value": 42
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "mcp_get_data",
     version = "v1",
     path = "/mcp/data",
@@ -229,7 +229,7 @@ async fn mcp_get_data(id: u64) -> Result<serde_json::Value, ApiError> {
 ///     "validated": true
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "mcp_process",
     version = "v1",
     path = "/mcp/process",
@@ -283,7 +283,7 @@ async fn mcp_process(request: ProcessRequest) -> Result<serde_json::Value, ApiEr
 ///     "formatted": "Wednesday, January 17, 2024"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "mcp_get_time",
     version = "v1",
     path = "/mcp/time",
@@ -332,7 +332,7 @@ pub struct CalculateRequest {
     pub b: f64,
 }
 
-#[service_api(
+#[forge(
     name = "mcp_calculate",
     version = "v1",
     path = "/mcp/calculate",

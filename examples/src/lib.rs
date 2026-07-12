@@ -61,7 +61,7 @@
 //! # Crate 级 lint 配置
 //!
 //! 示例库的 `main()` / `demo_*()` 等函数用于文档展示和教学目的，在 lib
-//! 构建中不会被直接调用，因此允许 `dead_code`。`#[service_api]` 宏生成
+//! 构建中不会被直接调用，因此允许 `dead_code`。`#[forge]` 宏生成
 //! 的 `cfg(feature = "mcp"/"websocket"/...)` 引用的是 sdforge crate 的
 //! features（而非 examples crate 的 `*_examples` features），因此允许
 //! `unexpected_cfgs` 以避免误报警告。

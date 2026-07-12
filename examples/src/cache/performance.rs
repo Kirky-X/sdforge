@@ -196,7 +196,7 @@ impl WriteThroughPattern {
 // API Endpoints
 //
 // NOTE: 下面的 handler 接受 `&TwoLevelCache` / `&CacheAsidePattern` 引用参数，
-// 不是有效的 axum extractor，因此不使用 `#[service_api]` 宏注册为 HTTP 端点。
+// 不是有效的 axum extractor，因此不使用 `#[forge]` 宏注册为 HTTP 端点。
 // 它们作为业务逻辑示例，展示缓存模式的集成方式。
 // =============================================================================
 

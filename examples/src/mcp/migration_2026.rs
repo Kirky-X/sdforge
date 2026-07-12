@@ -70,9 +70,9 @@ pub fn demo_header_info_shape() -> McpHeaderInfo {
 
 /// 迁移后的 MCP 工具端点
 ///
-/// v0.2.0 中 `#[service_api]` 宏自动适配 rmcp，无需手动修改工具定义。
+/// v0.2.0 中 `#[forge]` 宏自动适配 rmcp，无需手动修改工具定义。
 /// 工具通过 `tool_name` 属性自动注册到 MCP 服务器。
-#[service_api(
+#[forge(
     name = "migrated_get_user",
     version = "v1",
     path = "/migrated/users/:id",
@@ -93,7 +93,7 @@ async fn migrated_get_user(id: u64) -> Result<serde_json::Value, ApiError> {
 ///
 /// 2026-07-28 规范移除了 `initialize` 握手，改用 `server/discover`
 /// 端点暴露工具能力。SDForge 的 `StatelessServerHandler` 自动处理此端点。
-#[service_api(
+#[forge(
     name = "discover_endpoint",
     version = "v1",
     path = "/mcp/discover",

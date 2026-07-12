@@ -111,7 +111,7 @@ pub struct StatusUpdate {
 ///     console.log('Received:', data);
 /// };
 /// ```
-#[service_api(
+#[forge(
     name = "websocket_basic",
     version = "v1",
     path = "/ws/basic",
@@ -147,7 +147,7 @@ async fn websocket_basic() -> Result<String, ApiError> {
 ///     "user_id": "user_123"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "websocket_auth",
     version = "v1",
     path = "/ws/auth",
@@ -185,7 +185,7 @@ async fn websocket_auth() -> Result<String, ApiError> {
 ///     "updated_at": "2024-01-17T12:00:00Z"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "websocket_subscribe",
     version = "v1",
     path = "/ws/subscribe",
@@ -214,7 +214,7 @@ async fn websocket_subscribe() -> Result<String, ApiError> {
 ///     "max_message_size": 65536
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "websocket_info",
     version = "v1",
     path = "/ws/info",

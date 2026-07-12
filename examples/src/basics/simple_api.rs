@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: MIT
 //! # 简单 API 定义示例
 //!
-//! 本模块演示如何使用 `#[service_api]` 宏定义各种类型的服务 API。
+//! 本模块演示如何使用 `#[forge]` 宏定义各种类型的服务 API。
 //!
 //! ## 核心概念
 //!
 //! ### 1. 宏属性
 //!
-//! `#[service_api]` 宏是 SDForge 的核心，它接受以下参数：
+//! `#[forge]` 宏是 SDForge 的核心，它接受以下参数：
 //!
 //! | 参数 | 说明 | 示例 |
 //! |------|------|------|
@@ -32,7 +32,7 @@
 //! ### 基本 GET 请求
 //!
 //! ```rust,ignore
-//! #[service_api(
+//! #[forge(
 //!     name = "get_hello",
 //!     version = "v1",
 //!     path = "/hello",
@@ -48,7 +48,7 @@
 //! ### 带路径参数
 //!
 //! ```rust,ignore
-//! #[service_api(
+//! #[forge(
 //!     name = "get_user",
 //!     version = "v1",
 //!     path = "/users/:id",
@@ -71,7 +71,7 @@
 //!     email: String,
 //! }
 //!
-//! #[service_api(
+//! #[forge(
 //!     name = "create_user",
 //!     version = "v1",
 //!     path = "/users",
@@ -166,7 +166,7 @@ pub struct EchoResponse {
 ///     "input": {}
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_hello",
     version = "v1",
     path = "/hello",
@@ -201,7 +201,7 @@ async fn get_hello() -> Result<String, ApiError> {
 ///     "input": {"id": 123}
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_user",
     version = "v1",
     path = "/users/:id",
@@ -246,7 +246,7 @@ async fn get_user(id: u64) -> Result<UserResponse, ApiError> {
 ///     "input": {"id": 1, "include_details": true}
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "create_user",
     version = "v1",
     path = "/users",
@@ -280,7 +280,7 @@ async fn create_user(user: UserRequest) -> Result<UserResponse, ApiError> {
 /// ```bash
 /// curl http://localhost:3000/api/v1/users/1/posts/42
 /// ```
-#[service_api(
+#[forge(
     name = "get_user_post",
     version = "v1",
     path = "/users/:user_id/posts/:post_id",
@@ -315,7 +315,7 @@ async fn get_user_post(user_id: u64, post_id: u64) -> Result<String, ApiError> {
 ///     "received": {"message": "Hello"}
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "post_echo",
     version = "v1",
     path = "/echo",

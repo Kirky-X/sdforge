@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! SDForge CLI 基础示例。
 //!
-//! 演示如何用 `#[service_api(cli = true)]` 定义命令，用 `CliBuilder` 构建
+//! 演示如何用 `#[forge(cli = true)]` 定义命令，用 `CliBuilder` 构建
 //! CLI，解析子命令参数并调用对应 handler。
 //!
 //! ## 运行
@@ -22,10 +22,10 @@
 
 use sdforge::cli::CliBuilder;
 use sdforge::core::ApiError;
-use sdforge::service_api;
+use sdforge::forge;
 
 /// Echo a greeting. `name` 归为 Body 参数 → `--name <VALUE>` 选项（required）。
-#[service_api(
+#[forge(
     name = "echo",
     version = "1.0",
     description = "Echo a greeting",
@@ -36,7 +36,7 @@ async fn echo(name: String) -> Result<String, ApiError> {
 }
 
 /// Custom greeting. `greeting` 归为 Body 参数 → `--greeting <VALUE>` 选项。
-#[service_api(
+#[forge(
     name = "greet",
     version = "1.0",
     description = "Custom greeting",

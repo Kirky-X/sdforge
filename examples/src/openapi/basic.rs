@@ -6,7 +6,7 @@
 //!
 //! ## 功能概述
 //!
-//! 启用 `openapi` feature 后，每个 `#[service_api]` 宏会在编译时通过
+//! 启用 `openapi` feature 后，每个 `#[forge]` 宏会在编译时通过
 //! `inventory::submit!` 注册一条 `OpenApiRouteInfo`。运行时调用
 //! `generate_openapi_spec()` 即可收集所有路由并生成完整规范。
 //!
@@ -49,7 +49,7 @@ use sdforge::prelude::*;
 /// 用户查询端点
 ///
 /// 启用 `openapi` feature 后，此端点会自动出现在生成的 OpenAPI 规范中。
-#[service_api(
+#[forge(
     name = "openapi_get_user",
     version = "v1",
     path = "/openapi-demo/users/:id",
@@ -65,7 +65,7 @@ async fn openapi_get_user(id: u64) -> Result<serde_json::Value, ApiError> {
 }
 
 /// 用户列表端点
-#[service_api(
+#[forge(
     name = "openapi_list_users",
     version = "v1",
     path = "/openapi-demo/users",
@@ -115,18 +115,18 @@ pub fn demo_spec_to_json() -> String {
 }
 
 // ============================================================================
-// 手动注册路由（不使用 #[service_api] 宏的场景）
+// 手动注册路由（不使用 #[forge] 宏的场景）
 // ============================================================================
 
 // 手动注册一条 OpenAPI 路由信息
 //
-// 对于不由 `#[service_api]` 宏声明的路由（如动态注册的中间件路由），
+// 对于不由 `#[forge]` 宏声明的路由（如动态注册的中间件路由），
 // 可以手动通过 `inventory::submit!` 注册 `OpenApiRouteInfo`。
 inventory::submit!(OpenApiRouteInfo::new(
     "/openapi-demo/manual",
     "GET",
     "Manually registered route",
-    "This route was registered via inventory::submit! directly, not via #[service_api]",
+    "This route was registered via inventory::submit! directly, not via #[forge]",
     "v1",
     &["manual", "demo"]
 ));
