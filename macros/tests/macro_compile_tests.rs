@@ -5,8 +5,8 @@
 //! This file contains tests that verify the macro compiles correctly
 //! For full trybuild integration, see the trybuild_tests.rs file
 
-// Test 1: service_api macro with basic arguments
-#[sdforge_macros::service_api(name = "test", version = "v1", description = "Test API")]
+// Test 1: forge macro with basic arguments
+#[sdforge_macros::forge(name = "test", version = "v1", description = "Test API")]
 async fn test_basic_macro() -> String {
     "test".to_string()
 }

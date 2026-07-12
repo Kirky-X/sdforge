@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-use sdforge_macros::service_api;
+use sdforge_macros::forge;
 
-#[service_api(
+#[forge(
     name = "test_full",
     version = "v1",
     description = "Full parameters test"

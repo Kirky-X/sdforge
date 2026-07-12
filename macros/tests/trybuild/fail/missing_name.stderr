@@ -1,7 +1,7 @@
 error: Missing required attribute: name
  --> tests/trybuild/fail/missing_name.rs:5:1
   |
-5 | #[service_api(version = "v1")]
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+5 | #[forge(version = "v1")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^
   |
-  = note: this error originates in the attribute macro `service_api` (in Nightly builds, run with -Z macro-backtrace for more info)
+  = note: this error originates in the attribute macro `forge` (in Nightly builds, run with -Z macro-backtrace for more info)

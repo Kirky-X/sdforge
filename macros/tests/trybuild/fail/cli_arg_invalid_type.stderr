@@ -1,7 +1,7 @@
 error: Invalid boolean value for 'cli': not_bool
  --> tests/trybuild/fail/cli_arg_invalid_type.rs:6:1
   |
-6 | #[service_api(name = "test_cli_bad_type", version = "v1", cli = "not_bool")]
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+6 | #[forge(name = "test_cli_bad_type", version = "v1", cli = "not_bool")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   |
-  = note: this error originates in the attribute macro `service_api` (in Nightly builds, run with -Z macro-backtrace for more info)
+  = note: this error originates in the attribute macro `forge` (in Nightly builds, run with -Z macro-backtrace for more info)
