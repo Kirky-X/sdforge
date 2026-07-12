@@ -26,7 +26,7 @@ fn clean_function_attributes(mut input: ItemFn) -> ItemFn {
     input
 }
 
-/// Type alias for service_api arguments parsing result
+/// Type alias for forge arguments parsing result
 type ServiceApiArgs = Result<
     (
         String,
@@ -250,7 +250,7 @@ const RESERVED_KEYWORDS: &[&str] = &[
 /// Default cache TTL in seconds (5 minutes)
 const DEFAULT_CACHE_TTL: u64 = 300;
 
-/// Parse service_api attributes
+/// Parse forge attributes
 fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
     let pairs = parse_kv_pairs(args)?;
 
@@ -601,7 +601,7 @@ fn extract_path_params(path: &str) -> Vec<String> {
 /// Map a Rust primitive type string to OpenAPI schema (type, format) pair.
 ///
 /// Returns `(schema_type, schema_format)` where `schema_format` is empty when
-/// the type has no finer format. Used by the `#[service_api]` macro to emit
+/// the type has no finer format. Used by the `#[forge]` macro to emit
 /// `OpenApiPathParam` entries with precise schema metadata matching the Rust
 /// handler parameter type.
 ///
@@ -703,7 +703,7 @@ fn generate_cli_registration(
         }
     });
 
-    // Unique handler function name to avoid collisions across service_api calls.
+    // Unique handler function name to avoid collisions across forge calls.
     let handler_fn_name = syn::Ident::new(
         &format!("__cli_handler_{}", fn_name),
         proc_macro2::Span::call_site(),

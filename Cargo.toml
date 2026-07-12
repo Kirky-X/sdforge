@@ -129,7 +129,7 @@ required-features = ["cache"]
 name = "perf_batch_ops"
 required-features = ["cache"]
 
-# CLI 基础示例 — 演示 #[service_api(cli=true)] + CliBuilder 集成
+# CLI 基础示例 — 演示 #[forge(cli=true)] + CliBuilder 集成
 [[example]]
 name = "basic_cli"
 required-features = ["cli"]
@@ -481,7 +481,7 @@ name = "openapi_tests"
 path = "tests/integration/openapi_tests.rs"
 required-features = ["http", "openapi"]
 
-# CLI integration tests — verify #[service_api(cli = true)] + CliBuilder pipeline
+# CLI integration tests — verify #[forge(cli = true)] + CliBuilder pipeline
 [[test]]
 name = "cli_tests"
 path = "tests/integration/cli_tests.rs"
