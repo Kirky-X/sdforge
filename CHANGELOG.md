@@ -7,6 +7,26 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-13
+
+### ⚠️ BREAKING CHANGES
+
+- `#[service_api]` 宏属性名重命名为 `#[forge]`（无向后兼容，用户明确要求单单词化）
+- 所有使用 `#[service_api(...)]` 的代码需迁移为 `#[forge(...)]`
+- 参数键名全部不变（name/version/path/method/cli/description/tool_name/cache_ttl/ws_path/grpc_method/no_prefix/streaming）
+- 内部函数名 `parse_service_api_args` 保持不变（不影响用户 API）
+
+### Changed
+
+- `macros/src/lib.rs`: `pub fn service_api` → `pub fn forge`
+- `src/lib.rs`: re-export `service_api` → `forge`（含 prelude）
+- examples/tests/src 全量迁移 `#[service_api(...)]` → `#[forge(...)]`
+- README.md / README_EN.md / Cargo.toml 注释同步更新
+
+### Dependencies
+
+- sdforge-macros 0.3.5 → 0.4.0
+
 ## [0.3.5] - 2026-07-12
 
 ### Changed
