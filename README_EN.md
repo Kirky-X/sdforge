@@ -8,6 +8,8 @@
 
 </div>
 
+[中文](./README.md)
+
 ## 📋 Table of Contents
 
 <style>
