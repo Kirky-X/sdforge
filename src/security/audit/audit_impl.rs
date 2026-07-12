@@ -30,7 +30,7 @@ use uuid::Uuid;
 ///
 /// Used to detect and redact JWT tokens from error messages to prevent token leakage.
 /// Format: header.payload.signature (each segment is base64url encoded)
-static JWT_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
+pub(crate) static JWT_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
     regex::Regex::new(r#"eyJ[A-Za-z0-9\-_]+\.eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+"#).unwrap()
 });
 
@@ -42,7 +42,7 @@ static JWT_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
 /// - `api_key: xyz789`
 ///
 /// Limited repetition (1-100 chars) prevents ReDoS attacks.
-static SECRET_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
+pub(crate) static SECRET_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
     // Limited repetition to prevent ReDoS attacks
     // Maximum 100 characters after the separator
     regex::Regex::new(r#"(?i)(password|secret|token|key|auth|bearer)\s*[:=]\s*[^,\s}\]]{1,100}"#)
@@ -57,7 +57,7 @@ static SECRET_PATTERN: Lazy<regex::Regex> = Lazy::new(|| {
 /// - `.crt` - Certificate file
 /// - `.p12` - PKCS#12 archive
 /// - `.jks` - Java KeyStore
-static PATH_PATTERN: Lazy<regex::Regex> =
+pub(crate) static PATH_PATTERN: Lazy<regex::Regex> =
     Lazy::new(|| regex::Regex::new(r#"/[a-zA-Z0-9/_.-]+\.(pem|key|crt|p12|jks)"#).unwrap());
 
 /// Pattern to match API keys in error messages (case-insensitive key=value form)
@@ -77,7 +77,7 @@ static SSN_PATTERN: Lazy<regex::Regex> =
 ///
 /// This function helps prevent sensitive data (tokens, passwords, keys) from
 /// being exposed in audit logs.
-fn sanitize_error_message(message: &str) -> String {
+pub(crate) fn sanitize_error_message(message: &str) -> String {
     let mut result = message.to_string();
 
     // Remove JWT tokens
