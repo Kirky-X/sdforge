@@ -508,10 +508,3 @@ debug = true
 [profile.dev.package."*"]
 opt-level = 2
 
-# Patch limiteron to use the local path dependency.
-# The local limiteron has renamed FlowGuardError → LimiteronError (specmark
-# unify-error-naming change); the published crates.io 0.2.x still uses the
-# old name. This patch redirects the workspace dependency to the local crate.
-[patch.crates-io]
-limiteron = { path = "../limiteron" }
-oxcache = { path = "../oxcache" }
