@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 mod types_impl;
-pub use types_impl::{
+pub(crate) use types_impl::{
     deserialize_audit_logs, deserialize_auth_context, deserialize_permissions, parse_audit_log,
     serialize_audit_logs, serialize_auth_context, serialize_permissions,
 };
