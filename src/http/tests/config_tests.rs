@@ -5,7 +5,9 @@
 //! inventory preservation through `build()`.
 
 use crate::config::{AppConfig, AuthConfig, CorsConfig, ServerConfig};
-use crate::http::{build, build_with_config};
+use crate::http::build_with_config;
+#[cfg(any(feature = "mcp", feature = "websocket", feature = "grpc"))]
+use crate::http::build;
 
 /// Test build_with_config with JWT authentication
 #[test]

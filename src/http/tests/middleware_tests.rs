@@ -4,6 +4,7 @@
 //! JWT and ApiKey auth middleware (security feature), and hot-reload
 //! integration (hot-reload feature).
 
+#[cfg(feature = "security")]
 use axum::Router;
 use axum::body::Body;
 
