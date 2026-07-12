@@ -3,7 +3,7 @@
 //! OpenAPI 3.1 specification generation.
 //!
 //! This module provides runtime OpenAPI spec generation from routes registered
-//! via the `inventory` crate. Each `#[service_api]` macro invocation emits an
+//! via the `inventory` crate. Each `#[forge]` macro invocation emits an
 //! `OpenApiRouteInfo` entry when the `openapi` feature is enabled; the entries
 //! are collected at link time and iterated by [`generate_openapi_spec`] to
 //! build a complete [`utoipa::openapi::OpenApi`].
@@ -34,7 +34,7 @@ pub use openapi_impl::generate_openapi_spec;
 /// Static metadata for a single OpenAPI path parameter, embedded in
 /// [`OpenApiRouteInfo`].
 ///
-/// The `#[service_api]` macro emits one `OpenApiPathParam` per path segment
+/// The `#[forge]` macro emits one `OpenApiPathParam` per path segment
 /// (e.g. `/users/{id}` yields a param with `name = "id"`). The schema type and
 /// format are derived from the Rust parameter type at macro-expansion time so
 /// the runtime can build a fully-populated OpenAPI operation without relying
@@ -60,7 +60,7 @@ pub struct OpenApiPathParam {
 
 /// Static metadata for an OpenAPI route, registered via `inventory::submit!`.
 ///
-/// The `#[service_api]` macro generates one `OpenApiRouteInfo` entry per route
+/// The `#[forge]` macro generates one `OpenApiRouteInfo` entry per route
 /// when the `openapi` feature is enabled. Users may also submit entries
 /// manually for routes not declared via the macro.
 #[derive(Debug, Clone, Copy)]
@@ -78,7 +78,7 @@ pub struct OpenApiRouteInfo {
     /// Tags for grouping operations in the rendered spec.
     pub tags: &'static [&'static str],
     /// Path parameters auto-extracted from the route path by the
-    /// `#[service_api]` macro. Empty for routes without path params.
+    /// `#[forge]` macro. Empty for routes without path params.
     pub path_params: &'static [OpenApiPathParam],
 }
 

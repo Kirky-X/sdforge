@@ -5,7 +5,7 @@
 //! A `CliHandlerRegistration` pairs a command name with a `fn` pointer that
 //! takes a `HashMap<String, String>` of CLI-supplied arguments and returns
 //! a boxed future resolving to `Result<(), ApiError>`. The
-//! `#[service_api]` macro (T008) emits `inventory::submit!` blocks pairing
+//! `#[forge]` macro (T008) emits `inventory::submit!` blocks pairing
 //! each `CliCommandRegistration` with one of these handler registrations.
 
 use crate::cli::CliHandlerRegistration;
