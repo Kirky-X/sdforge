@@ -5,7 +5,7 @@
 //! This module contains the feature layer trait interfaces that define
 //! the contracts for authentication and audit logging.
 
-use crate::security::types::AuditLog;
+use crate::security::AuditLog;
 
 /// Feature layer trait for API key authentication.
 ///
