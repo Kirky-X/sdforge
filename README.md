@@ -4,11 +4,11 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/Kirky-X/sdforge/ci.yml?branch=main&label=CI)](https://github.com/Kirky-X/sdforge/actions) [![crates.io](https://img.shields.io/crates/v/sdforge.svg)](https://crates.io/crates/sdforge) [![docs.rs](https://img.shields.io/docsrs/sdforge.svg)](https://docs.rs/sdforge) [![downloads](https://img.shields.io/crates/d/sdforge.svg)](https://crates.io/crates/sdforge) [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)](https://www.rust-lang.org)
 
+[English](./README_EN.md)
+
 **SDForge** 是一个基于 Rust 的声明式 SDK 框架，利用过程宏从统一的函数注解自动生成多协议服务接口（HTTP + MCP + gRPC + WebSocket + CLI）。其核心创新在于通过 Cargo features 进行编译时协议选择——未使用的协议将产生零编译代码。
 
 </div>
-
-[English](./README_EN.md)
 
 ---
 

@@ -4,11 +4,11 @@
 
 [![Crates.io](https://img.shields.io/crates/v/sdforge)](https://crates.io/crates/sdforge) [![Documentation](https://img.shields.io/docsrs/sdforge)](https://docs.rs/sdforge) [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![Build Status](https://img.shields.io/github/actions/workflow/status/Kirky-X/sdforge/ci.yml?branch=main)](https://github.com/Kirky-X/sdforge/actions) [![Rust Version](https://img.shields.io/badge/rust-2021%2B-orange.svg)](https://www.rust-lang.org)
 
+[中文](./README.md)
+
 **SDForge** is a Rust-based declarative SDK framework that uses procedural macros to automatically generate multi-protocol service interfaces (HTTP + MCP) from unified function annotations. The key innovation is compile-time protocol selection via Cargo features—unused protocols produce zero compiled code.
 
 </div>
-
-[中文](./README.md)
 
 ## 📋 Table of Contents
 
@@ -883,7 +883,7 @@ async fn health_check() -> Result<HealthStatus, ApiError> {
 
 <div align="center">
 
-[🔝 Back To Top](#readme) | [🇨🇳 中文版](./README.md)
+[🔝 Back To Top](#readme) | [🇨🇳 中文](./README.md)
 
 </div>
 
