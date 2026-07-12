@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! CLI 端到端集成测试。
 //!
-//! 验证 `#[service_api(cli = true)]` 宏生成的 `CliCommandRegistration` /
+//! 验证 `#[forge(cli = true)]` 宏生成的 `CliCommandRegistration` /
 //! `CliHandlerRegistration` 能被 `CliBuilder::new().build()` 收集并构造为
 //! `clap::Command`，子命令出现在 `--help` 输出中，参数按 Path/Body 规则映射。
 //!
@@ -13,10 +13,10 @@
 
 use sdforge::cli::CliBuilder;
 use sdforge::core::ApiError;
-use sdforge::service_api;
+use sdforge::forge;
 
 // ============================================================================
-// Test fixtures: 用 `#[service_api(cli = true)]` 标注的命令。
+// Test fixtures: 用 `#[forge(cli = true)]` 标注的命令。
 //
 // 宏会 emit `inventory::submit!(CliCommandRegistration { ... })` +
 // `inventory::submit!(CliHandlerRegistration { ... })`，CliBuilder::build()
@@ -24,7 +24,7 @@ use sdforge::service_api;
 // ============================================================================
 
 /// Echo a greeting. `name` 无对应 path 参数，归为 Body → `--name <VALUE>`。
-#[service_api(
+#[forge(
     name = "cli_test_echo",
     version = "1.0",
     description = "Echo a greeting",
@@ -35,7 +35,7 @@ async fn cli_test_echo(name: String) -> Result<String, ApiError> {
 }
 
 /// 无参数命令，验证空 args 注册正确。
-#[service_api(name = "cli_test_ping", version = "1.0", cli = true)]
+#[forge(name = "cli_test_ping", version = "1.0", cli = true)]
 async fn cli_test_ping() -> Result<String, ApiError> {
     Ok("pong".to_string())
 }
