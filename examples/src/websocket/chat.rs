@@ -159,7 +159,7 @@ pub struct MessageResponse {
 ///     user_id: 'user_123'
 /// }));
 /// ```
-#[service_api(
+#[forge(
     name = "chat_ws",
     version = "v1",
     path = "/ws/chat",
@@ -196,7 +196,7 @@ async fn chat_ws() -> Result<String, ApiError> {
 ///     "timestamp": "2024-01-17T12:00:00Z"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "send_message",
     version = "v1",
     path = "/chat/message",
@@ -234,7 +234,7 @@ async fn send_message(message: ChatMessage) -> Result<MessageResponse, ApiError>
 ///     "created_at": "2024-01-01T00:00:00Z"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_room_info",
     version = "v1",
     path = "/chat/rooms/:room",
@@ -271,7 +271,7 @@ async fn get_room_info(room: String) -> Result<serde_json::Value, ApiError> {
 ///     ]
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "list_rooms",
     version = "v1",
     path = "/chat/rooms",
@@ -313,7 +313,7 @@ async fn list_rooms() -> Result<serde_json::Value, ApiError> {
 ///     "has_more": true
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_chat_history",
     version = "v1",
     path = "/chat/rooms/:room/history",

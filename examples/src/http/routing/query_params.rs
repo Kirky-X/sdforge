@@ -102,7 +102,7 @@ pub enum SortOrder {
 ///     ]
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "search_users",
     version = "v1",
     path = "/users/search",
@@ -167,7 +167,7 @@ async fn search_users(
 ///     "items": []
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "list_filtered_items",
     version = "v1",
     path = "/items",
@@ -215,7 +215,7 @@ async fn list_filtered_items(
 ///     "count": 365
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_data_range",
     version = "v1",
     path = "/data/range",
@@ -255,7 +255,7 @@ async fn get_data_range(
 ///     "items": [...]
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_batch_items",
     version = "v1",
     path = "/items/batch",
@@ -312,7 +312,7 @@ async fn get_batch_items(ids: String) -> Result<serde_json::Value, ApiError> {
 ///     "has_prev": true
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_paginated_data",
     version = "v1",
     path = "/paginated",

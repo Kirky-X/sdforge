@@ -93,7 +93,7 @@ pub struct AuthRequest {
 ///     "accessible": "任何人可访问"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "public_data",
     version = "v1",
     path = "/public/data",
@@ -138,7 +138,7 @@ async fn public_data() -> Result<serde_json::Value, ApiError> {
 ///     "error": "无效的 API Key"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "api_key_protected",
     version = "v1",
     path = "/protected/api-key",
@@ -179,7 +179,7 @@ async fn api_key_protected() -> Result<serde_json::Value, ApiError> {
 ///     }
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "bearer_protected",
     version = "v1",
     path = "/protected/bearer",
@@ -221,7 +221,7 @@ async fn bearer_protected() -> Result<serde_json::Value, ApiError> {
 ///     "user_id": "user_123"
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "multi_auth",
     version = "v1",
     path = "/protected/multi",
@@ -260,7 +260,7 @@ pub struct RefreshTokenRequest {
     pub refresh_token: String,
 }
 
-#[service_api(
+#[forge(
     name = "refresh_token",
     version = "v1",
     path = "/auth/refresh",

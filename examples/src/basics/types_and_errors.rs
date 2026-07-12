@@ -8,7 +8,7 @@
 //!
 //! ### ApiError
 //!
-//! `ApiError` 是 SDForge 的核心错误类型，通过 `#[service_api]` 宏自动处理转换。
+//! `ApiError` 是 SDForge 的核心错误类型，通过 `#[forge]` 宏自动处理转换。
 //!
 //! ### ApiMetadata
 //!
@@ -179,7 +179,7 @@ pub struct ValidateUserRequest {
 ///     "available_fields": ["name", "version", "description"]
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_metadata_info",
     version = "v1",
     path = "/meta",
@@ -215,7 +215,7 @@ async fn get_metadata_info() -> Result<serde_json::Value, ApiError> {
 ///     }
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_wrapped_response",
     version = "v1",
     path = "/wrapped",
@@ -257,7 +257,7 @@ async fn get_wrapped_response() -> Result<serde_json::Value, ApiError> {
 ///     "total": 100
 /// }
 /// ```
-#[service_api(
+#[forge(
     name = "get_paginated",
     version = "v1",
     path = "/paginated-items",
@@ -298,7 +298,7 @@ async fn get_paginated(page: u64, per_page: u64) -> Result<serde_json::Value, Ap
 /// # 错误处理
 /// - `id == 0` - 返回 404 Not Found
 /// - `id > 1000` - 返回 UserNotFound 错误 (自动转换)
-#[service_api(
+#[forge(
     name = "get_user_with_error",
     version = "v1",
     path = "/error-users/:id",
@@ -346,7 +346,7 @@ async fn get_user_with_error(id: u64) -> Result<String, ApiError> {
 ///   -H "Content-Type: application/json" \
 ///   -d '{"name": "John", "email": "john@example.com"}'
 /// ```
-#[service_api(
+#[forge(
     name = "validate_user",
     version = "v1",
     path = "/users/validate",
