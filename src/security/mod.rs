@@ -52,6 +52,15 @@ mod ip_util;
 #[cfg(feature = "ratelimit")]
 pub mod ratelimit;
 
+// Re-export rate-limiting types at the `security` module level so callers can
+// use `crate::security::RateLimitError` (two-level) uniformly.
+#[cfg(feature = "ratelimit")]
+pub use ratelimit::{LimiteronAdapter, RateLimitError, RateLimitLayer, RateLimitMiddleware, RateLimiter};
+
+// Re-export the shared IP-extraction helper for crate-internal use.
+#[cfg(any(feature = "security", feature = "ratelimit"))]
+pub(crate) use ip_util::extract_client_ip_core;
+
 // Re-export key management types (full security feature only)
 #[cfg(feature = "security")]
 pub use api_key_manager::{

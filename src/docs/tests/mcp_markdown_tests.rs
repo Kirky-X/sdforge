@@ -5,7 +5,7 @@
 //! 对应任务：T018。整个文件需 `mcp` feature 门控。
 
 use crate::core::ApiMetadata;
-use crate::docs::mcp_markdown::generate_mcp_docs;
+use crate::docs::generate_mcp_docs;
 use crate::mcp::{McpToolRegistration, SdForgeTool};
 use rmcp::model::{CallToolResult, ContentBlock, ErrorData as McpError};
 use serde_json::Value;
