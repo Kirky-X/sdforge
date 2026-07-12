@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Rate limiter abstraction for the trait-kit 0.2.2 `AsyncKit` integration.
+//! Rate limiter abstraction for the trait-kit 0.3 `AsyncKit` integration.
 //!
 //! Defines the [`ForgeRateLimiter`] trait — the minimal rate-limiter
 //! interface sdforge consumes when wiring up `SdforgeModule` (Phase 5 of
@@ -71,7 +71,7 @@ impl ForgeError {
     }
 }
 
-/// Rate limiter abstraction consumed by the trait-kit 0.2.2 `AsyncKit`
+/// Rate limiter abstraction consumed by the trait-kit 0.3 `AsyncKit`
 /// integration (Phase 5 of `trait-kit-async-integration`).
 ///
 /// Defines a minimal, key-based rate-limiter interface: `check` queries

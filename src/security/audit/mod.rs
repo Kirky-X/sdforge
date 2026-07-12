@@ -9,6 +9,7 @@ use crate::security::AuditLog;
 use std::sync::Arc;
 
 mod audit_impl;
+#[cfg(test)]
 pub(crate) use audit_impl::{sanitize_error_message, JWT_PATTERN, SECRET_PATTERN, PATH_PATTERN};
 
 /// Batch of audit logs for async processing.
