@@ -4,7 +4,7 @@
 //!
 //! This module provides Axum middleware for authentication.
 
-use crate::security::types::{AuthContext, AuthResult};
+use crate::security::{AuthContext, AuthResult};
 use axum::{
     body::Body,
     http::{Request, StatusCode},

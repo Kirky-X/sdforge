@@ -34,9 +34,9 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 #[cfg(feature = "websocket")]
-use crate::websocket::connection::{AppState, ConnectionManager};
+use crate::websocket::{AppState, ConnectionManager};
 #[cfg(feature = "websocket")]
-use crate::websocket::message::{MAX_MESSAGE_SIZE, WebSocketMessage, parse_websocket_message};
+use crate::websocket::{MAX_MESSAGE_SIZE, WebSocketMessage, parse_websocket_message};
 
 #[cfg(feature = "websocket")]
 use crate::core::ApiMetadata;
@@ -245,7 +245,7 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
 }
 
 #[cfg(feature = "websocket")]
-use crate::websocket::connection::WebSocketConnection;
+use crate::websocket::WebSocketConnection;
 
 #[cfg(feature = "websocket")]
 /// Build WebSocket router with default connection manager

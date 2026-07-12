@@ -1,7 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-use crate::websocket::connection::*;
-use crate::websocket::message::*;
+use crate::websocket::*;
 use futures_util::FutureExt;
 use std::sync::Arc;
 

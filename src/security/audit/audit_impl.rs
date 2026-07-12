@@ -3,7 +3,7 @@
 
 use super::{AppAuditLogger, AppAuditLoggerBuilder, AuditLogBatch};
 use crate::cache::SharedCache;
-use crate::security::types::{
+use crate::security::{
     AuditLog, AuditResult, AuthContext, AuthMetadata, deserialize_audit_logs, serialize_audit_logs,
 };
 use log::warn;

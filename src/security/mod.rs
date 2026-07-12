@@ -65,7 +65,7 @@ mod security_impl;
 #[cfg(all(test, feature = "security"))]
 mod tests {
     use super::*;
-    use crate::security::traits::ApiKeyAuth;
+    use crate::security::ApiKeyAuth;
 
     /// Trait dispatch path for `validate_key` returns permissions for a valid key.
     /// Uses fully-qualified syntax to force the trait impl in this module.

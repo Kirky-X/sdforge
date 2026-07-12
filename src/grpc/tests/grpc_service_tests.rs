@@ -5,7 +5,7 @@
 //! streaming/protobuf/error-propagation coverage.
 
 use super::super::*;
-use crate::core::registration::Registration;
+use crate::core::Registration;
 
 /// Test GrpcServerConfig default values
 #[test]
