@@ -36,6 +36,12 @@ pub use http_impl::rate_limit_layer;
 // Re-export internal helpers for test access.
 #[cfg(test)]
 pub(crate) use http_impl::{apply_security_headers, get_or_generate_request_id, resolve_route_path};
+#[cfg(all(test, feature = "mcp"))]
+pub(crate) use http_impl::preserve_mcp_inventory;
+#[cfg(all(test, feature = "websocket"))]
+pub(crate) use http_impl::preserve_websocket_inventory;
+#[cfg(all(test, feature = "grpc"))]
+pub(crate) use http_impl::preserve_grpc_inventory;
 
 /// Request ID header name
 pub(crate) const X_REQUEST_ID: &str = "x-request-id";

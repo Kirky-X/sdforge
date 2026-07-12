@@ -23,19 +23,19 @@ impl CacheNamespace {
 // =============================================================================
 
 /// Serialize a list of permissions (Vec<String>) to bytes
-pub(crate) fn serialize_permissions(perms: &[String]) -> Vec<u8> {
+pub fn serialize_permissions(perms: &[String]) -> Vec<u8> {
     bincode::serde::encode_to_vec(perms, bincode::config::standard()).unwrap_or_default()
 }
 
 /// Deserialize a list of permissions from bytes
-pub(crate) fn deserialize_permissions(data: &[u8]) -> Vec<String> {
+pub fn deserialize_permissions(data: &[u8]) -> Vec<String> {
     bincode::serde::decode_from_slice::<Vec<String>, _>(data, bincode::config::standard())
         .map(|(v, _)| v)
         .unwrap_or_default()
 }
 
 /// Serialize AuthContext to bytes using bincode
-pub(crate) fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {
+pub fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {
     bincode::serde::encode_to_vec(ctx, bincode::config::standard()).unwrap_or_default()
 }
 
@@ -44,14 +44,14 @@ pub(crate) fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {
 /// Reserved as the serialization pair for serialize_auth_context.
 /// Kept for future use when AuthContext deserialization from cache is needed.
 #[allow(dead_code)]
-pub(crate) fn deserialize_auth_context(data: &[u8]) -> Option<AuthContext> {
+pub fn deserialize_auth_context(data: &[u8]) -> Option<AuthContext> {
     bincode::serde::decode_from_slice::<AuthContext, _>(data, bincode::config::standard())
         .map(|(v, _)| v)
         .ok()
 }
 
 /// Parse a single AuditLog from a serde_json::Value object.
-pub(crate) fn parse_audit_log(v: &serde_json::Value) -> Option<AuditLog> {
+pub fn parse_audit_log(v: &serde_json::Value) -> Option<AuditLog> {
     let obj = v.as_object()?;
     let id = obj.get("id")?.as_str()?.to_string();
     let timestamp = obj.get("timestamp")?.as_i64()?;
@@ -117,12 +117,12 @@ pub(crate) fn parse_audit_log(v: &serde_json::Value) -> Option<AuditLog> {
 }
 
 /// Serialize audit logs to bytes
-pub(crate) fn serialize_audit_logs(logs: &[AuditLog]) -> Vec<u8> {
+pub fn serialize_audit_logs(logs: &[AuditLog]) -> Vec<u8> {
     serde_json::to_vec(logs).unwrap_or_default()
 }
 
 /// Deserialize audit logs from bytes
-pub(crate) fn deserialize_audit_logs(data: &[u8]) -> Vec<AuditLog> {
+pub fn deserialize_audit_logs(data: &[u8]) -> Vec<AuditLog> {
     match serde_json::from_slice::<serde_json::Value>(data) {
         Ok(serde_json::Value::Array(arr)) => arr.iter().filter_map(parse_audit_log).collect(),
         Ok(serde_json::Value::Object(_)) => {

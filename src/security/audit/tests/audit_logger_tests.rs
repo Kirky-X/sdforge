@@ -4,6 +4,7 @@
 
 use super::super::*;
 use super::make_test_audit_log;
+use crate::security::{AuthContext, AuthMetadata, AuditResult, deserialize_audit_logs, serialize_audit_logs};
 
 #[test]
 fn test_sanitize_error_message() {

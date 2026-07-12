@@ -192,14 +192,14 @@ impl BearerAuth {
     /// Constant-time comparison to prevent timing attacks
     /// Uses the subtle crate for secure constant-time comparison
     #[cfg(feature = "security")]
-    fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
         use subtle::ConstantTimeEq;
         a.ct_eq(b).into()
     }
 
     /// Fallback constant-time comparison when subtle is not available
     #[cfg(not(feature = "security"))]
-    fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
         if a.len() != b.len() {
             return false;
         }
@@ -211,7 +211,7 @@ impl BearerAuth {
     }
 
     /// Base64url decode (JWT uses URL-safe base64)
-    fn base64url_decode(input: &str) -> Option<Vec<u8>> {
+    pub(crate) fn base64url_decode(input: &str) -> Option<Vec<u8>> {
         let mut table = [0u8; 256];
         for (i, b) in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
             .iter()

@@ -14,6 +14,8 @@ mod audit_logger_tests;
 mod builder_tests;
 
 use super::*;
+use crate::security::{AuthMetadata, AuditResult};
+use uuid::Uuid;
 
 // ============================================================================
 // Shared test helpers — accessible by all sub-modules via `super::`
