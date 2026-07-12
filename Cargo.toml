@@ -23,7 +23,7 @@ syn = { version = "~2.0", default-features = false, features = ["full", "extra-t
 quote = { version = "~1.0", default-features = false, features = ["proc-macro"] }
 
 # HTTP 依赖
-axum = { version = "~0.8.9", default-features = false, features = ["http1", "json", "form", "matched-path", "original-uri", "query", "tokio", "tower-log", "tracing", "ws"] }
+axum = { version = "~0.8", default-features = false, features = ["http1", "json", "form", "matched-path", "original-uri", "query", "tokio", "tower-log", "tracing", "ws"] }
 tower = { version = "~0.5", default-features = false, features = ["log", "util", "timeout", "limit", "load-shed", "retry"] }
 tower-http = { version = "~0.7", default-features = false, features = ["cors", "limit", "timeout", "set-header", "compression-gzip", "compression-deflate"] }
 inventory = { version = "~0.3", default-features = false }
@@ -145,7 +145,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-sdforge-macros = { version = "0.3.4", path = "./macros" }
+sdforge-macros = { version = "0.3", path = "./macros" }
 
 # HTTP dependencies
 axum = { workspace = true, optional = true }
@@ -233,7 +233,7 @@ writeable = { version = "0.6", optional = true }
 tokio = { workspace = true, features = ["test-util"] }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
-sdforge-macros = { version = "0.3.4", path = "./macros", default-features = false }
+sdforge-macros = { version = "0.3", path = "./macros", default-features = false }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }
@@ -508,10 +508,3 @@ debug = true
 [profile.dev.package."*"]
 opt-level = 2
 
-# Patch limiteron to use the local path dependency.
-# The local limiteron has renamed FlowGuardError → LimiteronError (specmark
-# unify-error-naming change); the published crates.io 0.2.x still uses the
-# old name. This patch redirects the workspace dependency to the local crate.
-[patch.crates-io]
-limiteron = { path = "../limiteron" }
-oxcache = { path = "../oxcache" }

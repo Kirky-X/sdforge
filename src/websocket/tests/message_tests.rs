@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-use crate::websocket::message::*;
+use crate::websocket::*;
 
 /// Test WebSocketMessage serialization and deserialization
 #[test]
