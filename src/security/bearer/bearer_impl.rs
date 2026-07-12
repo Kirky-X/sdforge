@@ -3,7 +3,7 @@
 
 use super::{BearerAuth, BearerAuthBuilder};
 use crate::cache::SharedCache;
-use crate::security::types::{
+use crate::security::{
     AuthConfigError, AuthContext, AuthMetadata, CacheNamespace, serialize_auth_context,
 };
 use hmac::{Hmac, KeyInit, Mac};

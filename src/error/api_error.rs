@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
 use thiserror::Error;
 
-use crate::core::response::ServiceError;
-use crate::error::context::{ErrorCategory, ErrorContext};
+use crate::core::ServiceError;
+use crate::error::{ErrorCategory, ErrorContext};
 
 #[cfg(feature = "ratelimit")]
 use crate::security::ratelimit::RateLimitError;
@@ -540,8 +540,8 @@ impl From<RateLimitError> for ApiError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::response::ServiceError;
-    use crate::error::context::{ErrorCategory, ErrorContext};
+    use crate::core::ServiceError;
+    use crate::error::{ErrorCategory, ErrorContext};
 
     /// A simple source error used to test error chaining.
     #[derive(Debug, thiserror::Error)]

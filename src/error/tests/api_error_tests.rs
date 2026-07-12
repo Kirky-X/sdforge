@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-use crate::core::response::ServiceError;
+use crate::core::ServiceError;
 use crate::error::*;
 use std::error::Error as StdError;
 
