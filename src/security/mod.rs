@@ -58,17 +58,7 @@ pub use api_key_manager::{
     ApiKeyMetadata, ApiKeyVersion, LruCacheManager, LruConfig, LruStats, RotationConfig,
 };
 
-// Implement traits for concrete types (full security feature only)
-#[cfg(feature = "security")]
-impl traits::ApiKeyAuth for AppApiKeyAuth {
-    fn validate_key(&self, key: &str, client_ip: &str) -> Option<Vec<String>> {
-        AppApiKeyAuth::validate_key(self, key, client_ip)
-    }
-
-    fn add_key(&self, key: impl Into<String>, permissions: Vec<String>) {
-        AppApiKeyAuth::add_key(self, key, permissions);
-    }
-}
+mod security_impl;
 
 // Note: AuditLogger trait implementation is already in audit.rs
 
