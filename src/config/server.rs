@@ -24,7 +24,7 @@ impl Default for ServerConfig {
     /// Fail-safe 默认值：loopback host + 合理 port/timeout
     /// (LOW-001: 避免 derive(Default) 产生空 host/port=0 的无效配置)
     fn default() -> Self {
-        use crate::config::defaults::server::*;
+        use crate::config::{DEFAULT_HOST, DEFAULT_PORT, DEFAULT_REQUEST_TIMEOUT_SECS};
         Self {
             host: DEFAULT_HOST.to_string(),
             port: DEFAULT_PORT,
