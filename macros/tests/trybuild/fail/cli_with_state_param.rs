@@ -4,11 +4,11 @@
 //! error instead of generating a handler call with mismatched argument count
 //! (kueiku Bug 1+2: macro filtered State then called original fn → compile
 //! failure with confusing message about argument count mismatch).
-use sdforge_macros::service_api;
+use sdforge_macros::forge;
 
 struct AppState;
 
-#[service_api(name = "test_cli_state", version = "v1", cli = true)]
+#[forge(name = "test_cli_state", version = "v1", cli = true)]
 async fn test_cli_state(id: u64, #[state] state: AppState) -> String {
     format!("id={}", id)
 }

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! OpenAPI integration tests.
 //!
-//! These tests exercise the end-to-end pipeline: `#[service_api]` macro
+//! These tests exercise the end-to-end pipeline: `#[forge]` macro
 //! emits `OpenApiRouteInfo` entries (when `openapi` feature is enabled),
 //! and `generate_openapi_spec()` collects them via `inventory` to build a
 //! complete `utoipa::openapi::OpenApi` document.
@@ -13,10 +13,10 @@
 
 use sdforge::core::ApiError;
 use sdforge::openapi::{OpenApiBuilder, generate_openapi_spec};
-use sdforge::service_api;
+use sdforge::forge;
 
 // ============================================================================
-// Test fixtures: two `#[service_api]` endpoints.
+// Test fixtures: two `#[forge]` endpoints.
 //
 // These are compiled into the test binary, so their `OpenApiRouteInfo`
 // entries are collected by `inventory` and visible to `generate_openapi_spec`.
@@ -24,7 +24,7 @@ use sdforge::service_api;
 
 /// Fetch a single user by id. The path uses `:id` syntax; the macro converts
 /// it to the OpenAPI `{id}` template form.
-#[service_api(
+#[forge(
     name = "openapi_test_get_user",
     version = "v1",
     path = "/users/:id",
@@ -36,7 +36,7 @@ async fn get_user(id: u64) -> Result<String, ApiError> {
 }
 
 /// List all users. No path parameters.
-#[service_api(
+#[forge(
     name = "openapi_test_list_users",
     version = "v1",
     path = "/users",
@@ -93,7 +93,7 @@ fn path_parameter_endpoint_uses_get_operation() {
 }
 
 /// The summary emitted by the macro must match the `description` argument
-/// passed to `#[service_api]` (the macro currently maps description into the
+/// passed to `#[forge]` (the macro currently maps description into the
 /// `summary` field of `OpenApiRouteInfo`).
 #[test]
 fn endpoint_summary_matches_macro_description() {

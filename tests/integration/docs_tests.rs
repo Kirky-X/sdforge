@@ -11,7 +11,7 @@
 #![cfg(feature = "docs")]
 
 use sdforge::core::ApiError;
-use sdforge::service_api;
+use sdforge::forge;
 use sdforge::{DocFormat, generate_docs, write_docs};
 
 // ============================================================================
@@ -19,7 +19,7 @@ use sdforge::{DocFormat, generate_docs, write_docs};
 // generate_docs(CliMarkdown) 从 inventory 收集 CliCommandRegistration。
 // ============================================================================
 
-#[service_api(
+#[forge(
     name = "docs_test_cmd",
     version = "1.0",
     description = "Test command for docs generation",
