@@ -48,7 +48,7 @@ sdforge = { version = "0.3", features = ["http"] }
 ```rust
 use sdforge::prelude::*;
 
-#[service_api(
+#[forge(
     name = "get_user",
     version = "v1",
     path = "/users/:id",
@@ -77,7 +77,7 @@ async fn main() {
 mod auth_api {
     use super::*;
 
-    #[service_api(
+    #[forge(
         name = "login",
         version = "v1",
         path = "/login",
@@ -165,7 +165,7 @@ sdforge/
 │   ├── domain/       # 领域抽象
 │   ├── config/       # 配置管理
 │   └── lib.rs        # 库入口点
-├── macros/            # 过程宏 crate (#[service_api])
+├── macros/            # 过程宏 crate (#[forge])
 ├── examples/          # 示例 (workspace member)
 ├── docs/              # 文档
 ├── .github/           # GitHub 工作流

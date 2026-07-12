@@ -114,7 +114,7 @@ Define your API with a single macro:
 ```rust
 use sdforge::prelude::*;
 
-#[service_api(
+#[forge(
     name = "get_user",
     version = "v1",
     path = "/users/:id",
@@ -224,7 +224,7 @@ Group related APIs with module prefixes for better organization:
 mod auth_api {
     use super::*;
 
-    #[service_api(
+    #[forge(
         name = "login",
         version = "v1",
         path = "/login",
@@ -235,7 +235,7 @@ mod auth_api {
         Ok(Token::new())
     }
 
-    #[service_api(
+    #[forge(
         name = "logout",
         version = "v1",
         path = "/logout",
@@ -259,7 +259,7 @@ This creates the endpoints:
 Support multiple API versions simultaneously:
 
 ```rust
-#[service_api(
+#[forge(
     name = "get_user",
     version = "v1",
     path = "/users/:id",
@@ -270,7 +270,7 @@ async fn get_user_v1(id: u64) -> Result<UserV1, ApiError> {
     Ok(UserV1 { id, name: "John Doe".into() })
 }
 
-#[service_api(
+#[forge(
     name = "get_user",
     version = "v2",
     path = "/users/:id",
@@ -339,7 +339,7 @@ impl From<MyError> for ServiceError {
 Extract path parameters using Rust naming conventions. The macro automatically maps path segments to function parameters:
 
 ```rust
-#[service_api(
+#[forge(
     name = "get_user",
     version = "v1",
     path = "/users/:id",
@@ -350,7 +350,7 @@ async fn get_user(id: u64) -> Result<User, ApiError> {
     Ok(User { id, name: "John".into() })
 }
 
-#[service_api(
+#[forge(
     name = "get_comment",
     version = "v1",
     path = "/posts/:post_id/comments/:comment_id",
@@ -370,7 +370,7 @@ async fn get_comment(
 For nested resources:
 
 ```rust
-#[service_api(
+#[forge(
     name = "get_nested_resource",
     version = "v1",
     path = "/orgs/:org_id/projects/:project_id/tasks/:task_id",
@@ -540,7 +540,7 @@ SDForge provides comprehensive security features out of the box. Here's how to c
 ```rust
 use sdforge::prelude::*;
 
-#[service_api(
+#[forge(
     name = "secure_endpoint",
     version = "v1",
     path = "/secure",
@@ -624,7 +624,7 @@ let app = build_with_config(&config)?;
 
 ## <span id="openapi-generation">📜 OpenAPI Auto-Generation</span>
 
-SDForge v0.2.0 introduces automatic OpenAPI 3.1 specification generation based on [utoipa 5.5](https://crates.io/crates/utoipa). When the `openapi` feature is enabled, each `#[service_api]` macro registers an `OpenApiRouteInfo` at compile time via `inventory`. At runtime, calling `generate_openapi_spec()` collects all routes and generates a complete specification.
+SDForge v0.2.0 introduces automatic OpenAPI 3.1 specification generation based on [utoipa 5.5](https://crates.io/crates/utoipa). When the `openapi` feature is enabled, each `#[forge]` macro registers an `OpenApiRouteInfo` at compile time via `inventory`. At runtime, calling `generate_openapi_spec()` collects all routes and generates a complete specification.
 
 ### 🔧 Enabling
 
@@ -638,7 +638,7 @@ sdforge = { version = "0.3", features = ["http", "openapi"] }
 ```rust
 use sdforge::openapi::generate_openapi_spec;
 
-// Collect all routes registered via #[service_api] and generate the OpenAPI specification
+// Collect all routes registered via #[forge] and generate the OpenAPI specification
 let spec = generate_openapi_spec();
 
 // Serialize to JSON to write to a file or return to the client
@@ -662,10 +662,10 @@ let spec = OpenApiBuilder::new()
 
 ### 🔗 Macro Integration
 
-When the `openapi` feature is enabled, `#[service_api]` automatically generates registration code—no manual maintenance required:
+When the `openapi` feature is enabled, `#[forge]` automatically generates registration code—no manual maintenance required:
 
 ```rust
-#[service_api(
+#[forge(
     name = "get_user",
     version = "v1",
     path = "/users/:id",
@@ -849,7 +849,7 @@ valgrind --tool=massif target/release/sdforge
 ### 📋 Health Check Endpoint
 
 ```rust
-#[service_api(
+#[forge(
     name = "health_check",
     version = "v1",
     path = "/health",
