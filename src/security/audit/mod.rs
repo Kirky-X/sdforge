@@ -5,7 +5,7 @@
 //! This module provides audit logging with DoS protection and async processing.
 
 use crate::cache::SharedCache;
-use crate::security::types::AuditLog;
+use crate::security::AuditLog;
 use std::sync::Arc;
 
 mod audit_impl;

@@ -303,7 +303,7 @@ async fn test_log_failure_default_message() {
 
 #[test]
 fn test_audit_logger_trait_log() {
-    use crate::security::traits::AuditLogger;
+    use crate::security::AuditLogger;
 
     // Use a runtime to ensure tokio tasks are properly scheduled
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -334,7 +334,7 @@ fn test_audit_logger_trait_log() {
 
 #[test]
 fn test_audit_logger_trait_log_failure() {
-    use crate::security::traits::AuditLogger;
+    use crate::security::AuditLogger;
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
@@ -1127,7 +1127,7 @@ async fn test_worker_no_fallback_does_nothing() {
 
 #[tokio::test]
 async fn test_audit_logger_trait_no_runtime_path() {
-    use crate::security::traits::AuditLogger as AuditLoggerTrait;
+    use crate::security::AuditLogger as AuditLoggerTrait;
 
     // with_limit() calls tokio::spawn(), so we need a runtime.
     // The spawned thread below has NO runtime, testing the no-runtime fallback path.
@@ -1157,7 +1157,7 @@ async fn test_audit_logger_trait_no_runtime_path() {
 
 #[tokio::test]
 async fn test_audit_logger_trait_with_runtime_spawns_task() {
-    use crate::security::traits::AuditLogger as AuditLoggerTrait;
+    use crate::security::AuditLogger as AuditLoggerTrait;
 
     let logger = AppAuditLogger::with_limit(10);
     let log = make_test_audit_log("rt_user", "runtime_action");
