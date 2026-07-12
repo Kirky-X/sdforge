@@ -19,7 +19,7 @@ use std::sync::{Arc, RwLock};
 use limiteron::config::FlowControlConfig;
 
 #[cfg(feature = "websocket")]
-use crate::websocket::message::WebSocketMessage;
+use crate::websocket::WebSocketMessage;
 
 #[cfg(feature = "websocket")]
 /// WebSocket connection

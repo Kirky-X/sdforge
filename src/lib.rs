@@ -143,6 +143,9 @@ pub mod integrations;
 #[cfg(feature = "http")]
 pub mod http;
 
+#[cfg(feature = "http")]
+pub use http::version_routing::{VersionRouterConfig, VersionedRoute, build_version_router};
+
 /// MCP (Model Context Protocol) support — built on official rmcp SDK
 #[cfg(feature = "mcp")]
 pub mod mcp;
@@ -234,6 +237,12 @@ pub use grpc::{
     GrpcRoute, GrpcServerConfig, SdForgeGrpcService, build_server, build_server_with_config,
 };
 
+#[cfg(feature = "grpc")]
+pub use grpc::sdforge_v1::{
+    CallRequest, CallResponse, InfoRequest, InfoResponse,
+    sd_forge_service_server::SdForgeServiceServer,
+};
+
 /// Structured logging utilities
 #[cfg(feature = "logging")]
 pub mod logging;
@@ -260,15 +269,6 @@ pub mod inklog;
 /// 未启用时此模块不存在，默认 features 编译零开销。
 #[cfg(feature = "i18n")]
 pub mod i18n;
-
-#[cfg(feature = "grpc")]
-pub use grpc::sdforge_v1::{
-    CallRequest, CallResponse, InfoRequest, InfoResponse,
-    sd_forge_service_server::SdForgeServiceServer,
-};
-
-#[cfg(feature = "http")]
-pub use http::version_routing::{VersionRouterConfig, VersionedRoute, build_version_router};
 
 /// CLI (clap) integration — feature-gated by `cli`.
 ///

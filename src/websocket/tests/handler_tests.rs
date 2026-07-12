@@ -1,10 +1,8 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
 use crate::core::ApiMetadata;
-use crate::core::registration::Registration;
-use crate::websocket::connection::*;
-use crate::websocket::handler::*;
-use crate::websocket::message::*;
+use crate::core::Registration;
+use crate::websocket::*;
 use axum::Router;
 use axum::http::StatusCode;
 #[cfg(feature = "security")]
