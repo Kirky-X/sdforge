@@ -90,7 +90,7 @@ pub(crate) fn apply_security_headers(router: Router) -> Router {
 /// Uses reference iteration to ensure symbols are preserved
 #[cfg(feature = "mcp")]
 #[inline(never)]
-fn preserve_mcp_inventory() {
+pub(crate) fn preserve_mcp_inventory() {
     // Iterate and count - this forces linker to keep symbols
     let _count = inventory::iter::<crate::mcp::McpToolRegistration>().count();
     let _ = _count; // Suppress unused variable warning
@@ -99,7 +99,7 @@ fn preserve_mcp_inventory() {
 /// Prevent linker from optimizing away WebSocket inventory registrations
 #[cfg(feature = "websocket")]
 #[inline(never)]
-fn preserve_websocket_inventory() {
+pub(crate) fn preserve_websocket_inventory() {
     let _count = inventory::iter::<crate::websocket::WebSocketRoute>().count();
     let _ = _count;
 }
@@ -107,7 +107,7 @@ fn preserve_websocket_inventory() {
 /// Prevent linker from optimizing away gRPC inventory registrations
 #[cfg(feature = "grpc")]
 #[inline(never)]
-fn preserve_grpc_inventory() {
+pub(crate) fn preserve_grpc_inventory() {
     let _count = inventory::iter::<crate::grpc::GrpcRouteRegistration>().count();
     let _ = _count;
 }

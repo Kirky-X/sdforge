@@ -4,6 +4,7 @@
 //! at build time, and audience/issuer configuration.
 
 use super::*;
+use crate::security::AuthConfigError;
 
 #[test]
 fn test_bearer_auth_builder() {

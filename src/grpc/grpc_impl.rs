@@ -163,7 +163,7 @@ impl Default for GrpcServerConfig {
 /// When `auth` is `None`, returns `Ok(())` (no auth required).
 /// When `auth` is `Some`, validates the `authorization` metadata header as a bearer token.
 #[cfg(all(feature = "grpc", feature = "security"))]
-fn make_auth_interceptor(auth: Option<crate::security::BearerAuth>) -> AuthGrpcInterceptor {
+pub(crate) fn make_auth_interceptor(auth: Option<crate::security::BearerAuth>) -> AuthGrpcInterceptor {
     AuthGrpcInterceptor { auth }
 }
 

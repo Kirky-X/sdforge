@@ -5,6 +5,8 @@
 //! and base64url decoding.
 
 use super::*;
+use crate::security::{AuthConfigError, AuthContext, AuthMetadata, CacheNamespace};
+use std::sync::Arc;
 
 // ============================================================================
 // Construction & Secret Validation Tests
