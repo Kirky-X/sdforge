@@ -7,11 +7,24 @@
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-07-12
+
+### Changed
+
+- 导入路径扁平化重构（commit 5deb561）：文件级导入提升到模块级，减少三级 crate 路径
+
 ### ⚠️ BREAKING CHANGES
 
 - `error` 模块从 `src/core/error/` 迁移到 `src/error/`，导入路径 `crate::core::error::` → `crate::error::`
 - 新增 `SdForgeResult<T>` 类型别名
 - 跨 crate 引用更新：`limiteron::FlowGuardError` → `limiteron::LimiteronError`
+
+### Dependencies
+
+- trait-kit 0.2.3 → 0.2.5
+- oxcache 0.3.6 → 0.3.7
+- inklog 0.1.4 → 0.1.6
+- limiteron 0.2.3 → 0.2.4
 
 ## [0.3.4] - 2026-07-12
 
