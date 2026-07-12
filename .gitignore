@@ -252,3 +252,20 @@ di.md
 # Git worktrees for isolated development
 .worktrees/
 .gitnexus
+
+# =============================================================================
+# AI / Agent Tools (not for version control)
+# =============================================================================
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+CODEIUM.md
+.claude/
+.trae/
+.qoder/
+.opencode/
+.cursor/
+.aider/
+.continue/
+.codeium/
+.github/copilot/
