@@ -17,7 +17,7 @@
 extern crate self as sdforge;
 
 /// Re-export macros from sdforge-macros for convenient use
-pub use sdforge_macros::{service_api, service_module, test_macro};
+pub use sdforge_macros::{forge, service_module, test_macro};
 
 /// Macro to implement Default::default() constructor for types
 ///
@@ -118,7 +118,7 @@ pub mod prelude {
     #[cfg(feature = "http")]
     pub use crate::axum::IntoResponse;
 
-    pub use sdforge_macros::{service_api, service_module, test_macro};
+    pub use sdforge_macros::{forge, service_module, test_macro};
 }
 
 /// Core types and utilities
@@ -386,7 +386,7 @@ pub fn init_all_plugins() -> PluginCounts {
     };
 
     // T010: touch CLI inventory so the linker keeps `inventory::submit!`
-    // blocks emitted by `#[service_api(cli = true)]`. Mirrors the http/mcp/
+    // blocks emitted by `#[forge(cli = true)]`. Mirrors the http/mcp/
     // websocket/grpc blocks above. Both `CliCommandRegistration` and
     // `CliHandlerRegistration` are collected; the returned count reflects
     // command registrations (handler registrations are paired 1:1).
@@ -475,7 +475,7 @@ pub struct PluginCounts {
     /// Number of registered gRPC routes
     #[cfg(feature = "grpc")]
     pub grpc_routes: usize,
-    /// Number of registered CLI commands (emitted by `#[service_api(cli = true)]`)
+    /// Number of registered CLI commands (emitted by `#[forge(cli = true)]`)
     #[cfg(feature = "cli")]
     pub cli_commands: usize,
 }

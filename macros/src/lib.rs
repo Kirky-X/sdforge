@@ -634,7 +634,7 @@ fn rust_type_to_openapi_schema(rust_type: &str) -> (&'static str, &'static str) 
     }
 }
 
-/// Generate CLI registration tokens for a `#[service_api(cli = true)]` function.
+/// Generate CLI registration tokens for a `#[forge(cli = true)]` function.
 ///
 /// Emits three `#[cfg(feature = "cli")]`-gated items:
 /// 1. `inventory::submit!(CliCommandRegistration { ... })` — metadata
@@ -789,7 +789,7 @@ fn generate_cli_registration(
 }
 
 #[proc_macro_attribute]
-pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = match parse_service_api_args(args.into()) {
         Ok(args) => args,
         Err(e) => return e.into_compile_error().into(),
@@ -1029,7 +1029,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     // Build description expression
     let description_literal = description.as_deref().unwrap_or(&name);
 
-    // Build OpenAPI path parameter tokens for the `#[service_api]` macro.
+    // Build OpenAPI path parameter tokens for the `#[forge]` macro.
     //
     // Each path parameter (e.g. `/users/:id`) is mapped to an
     // `OpenApiPathParam` entry with name + schema type/format derived from the
@@ -1534,7 +1534,7 @@ pub fn service_api(args: TokenStream, input: TokenStream) -> TokenStream {
     // individually gated by `#[cfg(feature = "cli")]` inside
     // `generate_cli_registration`, so downstream crates without the `cli`
     // feature compile cleanly. `cli == None` or `cli == Some(false)` emits
-    // nothing — the `#[service_api]` macro opts into CLI exposure explicitly.
+    // nothing — the `#[forge]` macro opts into CLI exposure explicitly.
     let cli_code = if cli == Some(true) {
         generate_cli_registration(
             &name,
@@ -1662,7 +1662,7 @@ mod macro_parsing_tests {
     // validate_api_name tests
     //
     // validate_api_name enforces multiple validation rules to prevent code
-    // injection through the #[service_api(name = ...)] attribute. Each test
+    // injection through the #[forge(name = ...)] attribute. Each test
     // targets a specific validation path.
     // ============================================================================
 
