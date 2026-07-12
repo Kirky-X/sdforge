@@ -148,7 +148,7 @@ macro_rules! define_registration {
             }
         }
 
-        impl $crate::core::registration::Registration for $name {
+        impl $crate::core::Registration for $name {
             type Instance = $instance;
             type Metadata = $metadata;
 

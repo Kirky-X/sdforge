@@ -8,7 +8,7 @@ use crate::core::ServiceError;
 use crate::error::{ErrorCategory, ErrorContext};
 
 #[cfg(feature = "ratelimit")]
-use crate::security::ratelimit::RateLimitError;
+use crate::security::RateLimitError;
 
 /// Framework errors
 ///
@@ -575,7 +575,7 @@ mod tests {
     #[cfg(feature = "ratelimit")]
     #[test]
     fn test_from_ratelimit_error_limiteron_variant() {
-        use crate::security::ratelimit::RateLimitError;
+        use crate::security::RateLimitError;
         use limiteron::LimiteronError;
 
         let err =

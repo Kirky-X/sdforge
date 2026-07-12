@@ -19,7 +19,7 @@
 //! we use for mapping `limiteron::LimiteronError`. This divergence is
 //! documented here rather than silently papered over.
 
-use crate::domain::rate_limiter::{ForgeError, ForgeRateLimiter};
+use crate::domain::{ForgeError, ForgeRateLimiter};
 use limiteron::{Decision, Governor, RequestContext};
 use std::future::Future;
 use std::pin::Pin;
@@ -80,7 +80,7 @@ impl ForgeRateLimiter for LimiteronForgeAdapter {
 #[cfg(test)]
 mod tests {
     use super::*; // brings in LimiteronForgeAdapter, ForgeError, ForgeRateLimiter
-    use crate::domain::rate_limiter::ForgeRateLimiter;
+    use crate::domain::ForgeRateLimiter;
     use limiteron::config::{GlobalConfig, Matcher, Rule};
     use limiteron::storage::{MemoryBanStorage, MemoryStorage};
     use limiteron::{

@@ -108,7 +108,7 @@ pub mod axum {
 /// Commonly used types and re-exports
 pub mod prelude {
     #[cfg(feature = "http")]
-    pub use crate::core::validation::validators::{validate_email, validate_length};
+    pub use crate::core::{validate_email, validate_length};
     pub use crate::core::{ApiError, ApiMetadata, ServiceError, ServiceResponse};
     #[cfg(feature = "http")]
     pub use crate::http::{HttpRoute, RouteRegistration};

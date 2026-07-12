@@ -48,9 +48,9 @@ use trait_kit::prelude::*;
 
 use limiteron::integrations::kit::LimiteronModule;
 
-use crate::domain::rate_limiter::ForgeRateLimiter;
+use crate::domain::ForgeRateLimiter;
 use crate::error::SdForgeError;
-use crate::integrations::limiteron_adapter::LimiteronForgeAdapter;
+use crate::integrations::LimiteronForgeAdapter;
 
 /// trait-kit `AsyncKit` module that constructs an sdforge rate-limiter
 /// capability.

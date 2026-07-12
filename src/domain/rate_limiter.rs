@@ -86,7 +86,7 @@ impl ForgeError {
 ///
 /// # Implementations
 ///
-/// - [`LimiteronForgeAdapter`](crate::integrations::limiteron_adapter::LimiteronForgeAdapter)
+/// - [`LimiteronForgeAdapter`](crate::integrations::LimiteronForgeAdapter)
 ///   (gated by the `limiteron-integration` feature) wraps a
 ///   `limiteron::Governor`.
 pub trait ForgeRateLimiter: Send + Sync {

@@ -112,7 +112,7 @@ impl CliBuilder {
         // 用 cfg 门控确保 cli-only 编译时不引入 docs_subcommand 模块依赖。
         #[cfg(feature = "docs")]
         {
-            root = root.subcommand(crate::cli::docs_subcommand::docs_subcommand_definition());
+            root = root.subcommand(crate::cli::docs_subcommand_definition());
         }
 
         root

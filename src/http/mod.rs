@@ -26,7 +26,7 @@ pub use version_routing::{
 // Allows downstream users to access `RateLimitLayer`/`RateLimiter`/`LimiteronAdapter`
 // via `sdforge::http::` without reaching into `sdforge::security::ratelimit::`.
 #[cfg(feature = "ratelimit")]
-pub use crate::security::ratelimit::{LimiteronAdapter, RateLimitLayer, RateLimiter};
+pub use crate::security::{LimiteronAdapter, RateLimitLayer, RateLimiter};
 
 mod http_impl;
 pub use http_impl::{build, build_with_config, build_with_redirect};

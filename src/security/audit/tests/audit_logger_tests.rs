@@ -85,7 +85,7 @@ async fn test_audit_logger() {
     let context = AuthContext {
         user_id: Some("test_user".to_string()),
         permissions: vec![],
-        metadata: crate::security::types::AuthMetadata::default(),
+        metadata: crate::security::AuthMetadata::default(),
     };
 
     logger
@@ -110,7 +110,7 @@ async fn test_clear_logs() {
     let context = AuthContext {
         user_id: Some("test_user".to_string()),
         permissions: vec![],
-        metadata: crate::security::types::AuthMetadata::default(),
+        metadata: crate::security::AuthMetadata::default(),
     };
 
     logger

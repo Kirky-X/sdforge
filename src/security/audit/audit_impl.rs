@@ -435,7 +435,7 @@ impl AppAuditLogger {
 }
 
 /// Implement AuditLogger trait for AppAuditLogger
-impl crate::security::traits::AuditLogger for AppAuditLogger {
+impl crate::security::AuditLogger for AppAuditLogger {
     fn log(&self, log: AuditLog) {
         // Build an AuthContext from the audit log for the async log method
         let context = AuthContext {

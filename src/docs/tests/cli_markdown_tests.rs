@@ -5,7 +5,7 @@
 //! 对应任务：T016。
 
 use crate::cli::CliCommandRegistration;
-use crate::docs::cli_markdown::generate_cli_docs;
+use crate::docs::generate_cli_docs;
 
 // 注册一个测试专用 CLI 命令，用于验证 generate_cli_docs 能从 inventory
 // 收集到命令并输出到 Markdown。命令名 `test_cmd_for_docs` 是唯一的，

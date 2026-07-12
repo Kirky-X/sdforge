@@ -64,7 +64,7 @@ mod tests {
             Ok(AuthContext {
                 user_id: Some("test".to_string()),
                 permissions: vec![],
-                metadata: crate::security::types::AuthMetadata::default(),
+                metadata: crate::security::AuthMetadata::default(),
             })
         };
         let middleware = auth_middleware((), extract_auth);
@@ -89,7 +89,7 @@ mod tests {
     async fn test_auth_middleware_returns_closure() {
         // Verify auth_middleware returns a callable closure
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
-            Err(crate::security::types::AuthError::MissingAuth)
+            Err(crate::security::AuthError::MissingAuth)
         };
         let middleware = auth_middleware((), extract_auth);
 
@@ -118,7 +118,7 @@ mod tests {
             Ok(AuthContext {
                 user_id: Some("user123".to_string()),
                 permissions: vec!["read".to_string()],
-                metadata: crate::security::types::AuthMetadata::default(),
+                metadata: crate::security::AuthMetadata::default(),
             })
         };
 
@@ -140,7 +140,7 @@ mod tests {
     #[tokio::test]
     async fn test_auth_middleware_rejects_invalid_auth() {
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
-            Err(crate::security::types::AuthError::InvalidToken)
+            Err(crate::security::AuthError::InvalidToken)
         };
 
         let middleware = auth_middleware((), extract_auth);
@@ -161,7 +161,7 @@ mod tests {
     #[tokio::test]
     async fn test_auth_middleware_missing_auth_header() {
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
-            Err(crate::security::types::AuthError::MissingAuth)
+            Err(crate::security::AuthError::MissingAuth)
         };
 
         let middleware = auth_middleware((), extract_auth);
@@ -185,7 +185,7 @@ mod tests {
             Ok(AuthContext {
                 user_id: Some("user".to_string()),
                 permissions: vec![],
-                metadata: crate::security::types::AuthMetadata::default(),
+                metadata: crate::security::AuthMetadata::default(),
             })
         };
 
@@ -222,7 +222,7 @@ mod tests {
             Ok(AuthContext {
                 user_id: Some("user".to_string()),
                 permissions: vec!["admin".to_string()],
-                metadata: crate::security::types::AuthMetadata::default(),
+                metadata: crate::security::AuthMetadata::default(),
             })
         };
 
@@ -254,7 +254,7 @@ mod tests {
             Ok(AuthContext {
                 user_id: Some("clone-test".to_string()),
                 permissions: vec![],
-                metadata: crate::security::types::AuthMetadata::default(),
+                metadata: crate::security::AuthMetadata::default(),
             })
         };
 
@@ -284,7 +284,7 @@ mod tests {
             Ok(AuthContext {
                 user_id: Some("test".to_string()),
                 permissions: vec![],
-                metadata: crate::security::types::AuthMetadata::default(),
+                metadata: crate::security::AuthMetadata::default(),
             })
         };
         let middleware = auth_middleware((), extract_auth);
@@ -306,7 +306,7 @@ mod tests {
     #[tokio::test]
     async fn test_auth_middleware_unauthorized_path_via_router() {
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
-            Err(crate::security::types::AuthError::MissingAuth)
+            Err(crate::security::AuthError::MissingAuth)
         };
         let middleware = auth_middleware((), extract_auth);
 

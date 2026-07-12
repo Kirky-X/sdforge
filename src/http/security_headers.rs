@@ -9,7 +9,7 @@ use axum::Router;
 use axum::http::{HeaderName, HeaderValue, header::*};
 use tower_http::set_header::SetResponseHeaderLayer;
 
-use crate::config::defaults::security_headers as defaults;
+use crate::config::security_headers as defaults;
 
 /// Unified security headers configuration
 ///

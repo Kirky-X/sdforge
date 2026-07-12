@@ -6,7 +6,7 @@
 //! `crate::security::ratelimit`.
 
 use crate::http::rate_limit_layer;
-use crate::security::ratelimit::{LimiteronAdapter, RateLimiter};
+use crate::security::{LimiteronAdapter, RateLimiter};
 use std::sync::Arc;
 
 /// Test `rate_limit_layer` constructs a `RateLimitLayer` from a

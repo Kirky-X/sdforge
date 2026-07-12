@@ -40,3 +40,5 @@ pub use validation::{
     MAX_JWT_TOKEN_LENGTH, MAX_PASSWORD_LENGTH, MAX_QUERY_STRING_LENGTH, MAX_REQUEST_BODY_SIZE,
     MAX_TEXT_FIELD_LENGTH, MAX_URI_PATH_LENGTH, MAX_USERNAME_LENGTH, MIN_PASSWORD_LENGTH,
 };
+#[cfg(feature = "http")]
+pub use validation::validators::{validate_email, validate_length};

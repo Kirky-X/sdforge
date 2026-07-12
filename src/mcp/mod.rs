@@ -88,6 +88,8 @@ mod tests;
 #[cfg(feature = "mcp")]
 pub use handler::McpToolInstance;
 #[cfg(feature = "mcp")]
+pub(crate) use handler::value_to_json_object_arc;
+#[cfg(feature = "mcp")]
 pub use headers::McpHeaderInfo;
 #[cfg(feature = "mcp")]
 pub use mrtr::{InputRequiredResult, MrtrSession};

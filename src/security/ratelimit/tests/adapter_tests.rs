@@ -206,7 +206,7 @@ async fn check_returns_exceeded_after_capacity_exhausted() {
     for _ in 0..5 {
         match adapter.check("192.0.2.1").await {
             Ok(()) => allowed += 1,
-            Err(crate::security::ratelimit::RateLimitError::Exceeded { .. }) => {
+            Err(crate::security::RateLimitError::Exceeded { .. }) => {
                 rejected_with_exceeded += 1;
             }
             Err(other_err) => {

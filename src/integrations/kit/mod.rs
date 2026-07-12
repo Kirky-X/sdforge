@@ -5,7 +5,7 @@
 //! Enable via the `kit` cargo feature. Provides [`SdforgeModule`] — a module
 //! depending on `limiteron::integrations::kit::LimiteronModule` that constructs
 //! an `Arc<dyn ForgeRateLimiter + Send + Sync>` capability (wrapping
-//! [`LimiteronForgeAdapter`](crate::integrations::limiteron_adapter::LimiteronForgeAdapter))
+//! [`LimiteronForgeAdapter`](crate::integrations::LimiteronForgeAdapter))
 //! during [`AsyncKit::build`](trait_kit::AsyncKit::build).
 //!
 //! See `specmark/changes/trait-kit-async-integration/specs/sdforge-module/spec.md`
