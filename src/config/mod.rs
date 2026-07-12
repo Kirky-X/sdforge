@@ -51,6 +51,16 @@ pub use timeout::TimeoutConfig;
 
 pub use defaults::security_headers;
 
+// Re-export default constants so callers can use two-level paths
+// (e.g. `crate::config::DEFAULT_HOST`) instead of file-level paths
+// (`crate::config::defaults::server::*`). Cannot re-export the modules
+// themselves as `defaults::cache` / `defaults::server` would clash with
+// the like-named `pub mod cache;` / `pub mod server;` declarations above.
+pub use defaults::cache::{
+    DEFAULT_ENABLED, DEFAULT_MAX_ITEMS, DEFAULT_TTL_SECS, DEFAULT_TRACK_STATS,
+};
+pub use defaults::server::{DEFAULT_HOST, DEFAULT_PORT, DEFAULT_REQUEST_TIMEOUT_SECS};
+
 /// Configuration loading error
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
