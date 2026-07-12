@@ -7,7 +7,7 @@
 //! an actual invocable handler is done via a separate inventory entry. The
 //! macro emits both `inventory::submit!(CliCommandRegistration { ... })`
 //! and `inventory::submit!(CliHandlerRegistration { ... })` for each
-//! `#[service_api(cli = true)]` function.
+//! `#[forge(cli = true)]` function.
 //!
 //! The handler signature takes a `HashMap<String, String>` (the string-typed
 //! argument values parsed by clap) and returns a pinned boxed future. This
@@ -31,7 +31,7 @@ pub type CliHandlerFn = fn(
 ///
 /// Looked up at call time by `name` (matching `CliCommandRegistration::name`)
 /// to dispatch the user's selected subcommand. Submitted at compile time
-/// via `inventory::submit!` from the `#[service_api]` macro.
+/// via `inventory::submit!` from the `#[forge]` macro.
 #[derive(Debug)]
 pub struct CliHandlerRegistration {
     /// Command name this handler serves — must match the paired
