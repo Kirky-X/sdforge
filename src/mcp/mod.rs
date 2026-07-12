@@ -8,7 +8,7 @@
 //! - Compile-time tool registration via `inventory`
 //! - Stateful and stateless server modes
 //! - MCP 2026-07-28 protocol adaptation (headers, cache semantics, MRTR)
-//! - Integration with SDForge's `#[service_api]` macro
+//! - Integration with SDForge's `#[forge]` macro
 //!
 //! # Quick Start
 //!

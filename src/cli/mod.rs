@@ -4,7 +4,7 @@
 //!
 //! This module is gated by the `cli` feature and provides the same compile-time
 //! `inventory` registration pattern used by HTTP/MCP/WebSocket/gRPC. The
-//! `#[service_api]` macro (when `cli = true`) emits
+//! `#[forge]` macro (when `cli = true`) emits
 //! `inventory::submit!(CliCommandRegistration { ... })` plus a paired
 //! `CliHandlerRegistration`. At runtime, \[`CliBuilder`\] collects the
 //! registrations and constructs a `clap::Command`.
@@ -15,7 +15,7 @@
 
 /// Classification of a CLI argument's source.
 ///
-/// Mirrors the HTTP/MCP parameter kinds so the `#[service_api]` macro can
+/// Mirrors the HTTP/MCP parameter kinds so the `#[forge]` macro can
 /// reuse its existing `ParamInfo` infrastructure when emitting CLI
 /// registrations. `State` arguments are never exposed to the end user on
 /// the command line — they are injected by `CliBuilder::with_dependencies`.
@@ -31,7 +31,7 @@ pub enum CliArgType {
 
 /// Static metadata for a single CLI argument.
 ///
-/// Constructed at compile time by the `#[service_api]` macro and collected
+/// Constructed at compile time by the `#[forge]` macro and collected
 /// into a `&'static [CliArgInfo]` on `CliCommandRegistration`. All fields
 /// are `&'static str` / `Option<&'static str>` so the struct is `Copy` and
 /// can live in read-only memory.
@@ -58,7 +58,7 @@ pub struct CliArgInfo {
 ///
 /// All fields are `&'static` so the registration lives in read-only memory
 /// and the struct is `Copy`. The `args` slice is built by the
-/// `#[service_api]` macro from the function's parameter list (Path/Body
+/// `#[forge]` macro from the function's parameter list (Path/Body
 /// parameters become `CliArgInfo` entries; State parameters are dropped).
 #[derive(Debug, Clone, Copy)]
 pub struct CliCommandRegistration {
@@ -83,7 +83,7 @@ mod cli_impl;
 //
 // Mirrors the registration pattern in src/http/mod.rs and src/mcp/mod.rs.
 // `inventory::collect!` declares the type as inventory-collectable; the
-// `#[service_api]` macro (T008) emits `inventory::submit!` blocks at
+// `#[forge]` macro (T008) emits `inventory::submit!` blocks at
 // call sites. At runtime, `CliBuilder::build()` (T005) iterates this
 // registry to construct the `clap::Command` tree.
 inventory::collect!(CliCommandRegistration);

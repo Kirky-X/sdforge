@@ -7,24 +7,24 @@
 //! not strip them, and that `PluginCounts` surfaces a `cli_commands` count.
 //!
 //! Without T010's `init_all_plugins` extension, the `inventory::submit!`
-//! blocks emitted by `#[service_api(cli = true)]` may be optimized away by
+//! blocks emitted by `#[forge(cli = true)]` may be optimized away by
 //! the linker because nothing in the call graph references the CLI inventory
 //! iteration. This suite asserts the integration point exists and works.
 
 use crate::cli::{CliCommandRegistration, CliHandlerRegistration};
 use crate::init_all_plugins;
 use crate::prelude::ApiError;
-use sdforge_macros::service_api;
+use sdforge_macros::forge;
 
 // ============================================================================
-// Fixture: a service_api function with `cli = true`.
+// Fixture: a forge function with `cli = true`.
 //
 // If `init_all_plugins` does not touch CLI inventory, the linker may strip
 // this registration and the `inventory::iter` lookups below would return
 // `None`. The fixture is intentionally distinct from the ones in
 // `macro_integration_tests` so this suite owns its own registration.
 // ============================================================================
-#[service_api(name = "t010_init_cmd", version = "v1", cli = true)]
+#[forge(name = "t010_init_cmd", version = "v1", cli = true)]
 async fn t010_init_cmd() -> Result<String, ApiError> {
     Ok("ok".to_string())
 }

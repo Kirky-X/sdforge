@@ -8,7 +8,7 @@
 #![warn(missing_docs)]
 
 // Allow macro-generated code (which references `sdforge::cli::...`,
-// `sdforge::prelude::ApiError`, etc.) to resolve when the `#[service_api]`
+// `sdforge::prelude::ApiError`, etc.) to resolve when the `#[forge]`
 // macro is expanded inside the sdforge crate itself — e.g. in the in-crate
 // `src/cli/tests/macro_integration_tests.rs` suite. Downstream crates resolve
 // `sdforge::` naturally via the extern prelude; this alias mirrors that for
@@ -274,7 +274,7 @@ pub mod i18n;
 ///
 /// Promoted to `pub mod cli;` in T009 so that macro-generated
 /// `sdforge::cli::CliCommandRegistration` paths (emitted by
-/// `#[service_api(cli = true)]`) resolve both inside the sdforge crate
+/// `#[forge(cli = true)]`) resolve both inside the sdforge crate
 /// (via `extern crate self as sdforge;` above) and in downstream crates.
 /// T010 wires the inventory iteration into `init_all_plugins`.
 #[cfg(feature = "cli")]

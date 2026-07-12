@@ -6,7 +6,7 @@ use super::*;
 impl CliArgInfo {
     /// Construct a new `CliArgInfo`.
     ///
-    /// Marked `const fn` so the `#[service_api]` macro can build argument
+    /// Marked `const fn` so the `#[forge]` macro can build argument
     /// arrays at compile time without runtime cost.
     pub const fn new(
         name: &'static str,

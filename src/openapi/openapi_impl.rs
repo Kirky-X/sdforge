@@ -86,7 +86,7 @@ impl OpenApiRouteInfo {
     }
 
     /// Construct a new route info entry with explicit path parameters.
-    /// Used by the `#[service_api]` macro to pass auto-extracted path
+    /// Used by the `#[forge]` macro to pass auto-extracted path
     /// params (name + schema type/format derived from the Rust handler
     /// signature).
     pub const fn with_path_params(
