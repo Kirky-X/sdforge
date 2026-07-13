@@ -146,4 +146,4 @@ pub struct McpToolRegistration;
 
 mod mcp_impl;
 #[cfg(feature = "mcp")]
-pub use mcp_impl::{build, get_mcp_tools};
+pub use mcp_impl::{build, get_mcp_tools, serve_stdio};

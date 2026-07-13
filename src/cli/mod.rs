@@ -89,6 +89,100 @@ mod cli_impl;
 inventory::collect!(CliCommandRegistration);
 
 // ============================================================================
+// GlobalArg — declarative global CLI argument (avoids direct clap dep)
+// ============================================================================
+
+/// A global CLI argument that applies to all subcommands.
+///
+/// Downstream crates construct this via the builder pattern and pass it to
+/// [`CliBuilder::with_global_arg`]. sdforge translates it into a
+/// `clap::Arg` with `global(true)` at `build()` time, so callers never
+/// need to depend on `clap` directly.
+#[derive(Debug, Clone)]
+pub struct GlobalArg {
+    /// Argument identifier (used with `matches.get_one::<String>(name)`).
+    pub name: &'static str,
+    /// Long flag (e.g. `"db"` → `--db`). Defaults to `name` if `None`.
+    pub long: Option<&'static str>,
+    /// Short flag (e.g. `'d'` → `-d`). `None` skips the short flag.
+    pub short: Option<char>,
+    /// Default value rendered by clap when the argument is omitted.
+    pub default_value: Option<String>,
+    /// Help text shown in `--help` output.
+    pub help: &'static str,
+    /// Whether the argument is inherited by subcommands (clap `global`).
+    pub global: bool,
+}
+
+impl GlobalArg {
+    /// Create a new global arg with the given name and empty defaults.
+    #[must_use]
+    pub fn new(name: &'static str) -> Self {
+        Self {
+            name,
+            long: None,
+            short: None,
+            default_value: None,
+            help: "",
+            global: true,
+        }
+    }
+
+    /// Set the long flag (defaults to `name` when not set).
+    #[must_use]
+    pub fn long(mut self, long: &'static str) -> Self {
+        self.long = Some(long);
+        self
+    }
+
+    /// Set the short flag (e.g. `'d'` → `-d`).
+    #[must_use]
+    pub fn short(mut self, short: char) -> Self {
+        self.short = Some(short);
+        self
+    }
+
+    /// Set the default value when the argument is omitted.
+    /// Accepts `impl Into<String>` so both `&'static str` and runtime
+    /// `String` values work (e.g. `DEFAULT_DEBOUNCE_MS.to_string()`).
+    #[must_use]
+    pub fn default_value(mut self, default: impl Into<String>) -> Self {
+        self.default_value = Some(default.into());
+        self
+    }
+
+    /// Set the help text.
+    #[must_use]
+    pub fn help(mut self, help: &'static str) -> Self {
+        self.help = help;
+        self
+    }
+
+    /// Override the `global` flag (defaults to `true`).
+    #[must_use]
+    pub fn global(mut self, global: bool) -> Self {
+        self.global = global;
+        self
+    }
+
+    /// Translate to a `clap::Arg` at build time.
+    pub(crate) fn to_clap_arg(&self) -> clap::Arg {
+        let long = self.long.unwrap_or(self.name);
+        let mut arg = clap::Arg::new(self.name)
+            .long(long)
+            .help(self.help)
+            .global(self.global);
+        if let Some(short) = self.short {
+            arg = arg.short(short);
+        }
+        if let Some(default) = &self.default_value {
+            arg = arg.default_value(default);
+        }
+        arg
+    }
+}
+
+// ============================================================================
 // T005: CliBuilder — runtime collector → clap::Command
 // ============================================================================
 pub mod builder;

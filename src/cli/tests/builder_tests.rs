@@ -10,7 +10,7 @@
 //! - `CliArgType::Body`  → `--name <VALUE>` option (with default_value if set)
 //! - `CliArgType::State` → dropped (not surfaced on the CLI)
 
-use crate::cli::{CliArgInfo, CliArgType, CliBuilder, CliCommandRegistration};
+use crate::cli::{CliArgInfo, CliArgType, CliBuilder, CliCommandRegistration, GlobalArg};
 use std::any::Any;
 use std::sync::Arc;
 
@@ -200,5 +200,131 @@ fn test_builder_excludes_docs_subcommand_when_docs_disabled() {
     assert!(
         cmd.find_subcommand("docs").is_none(),
         "docs feature 未启用时不应注入 docs 子命令"
+    );
+}
+
+// ============================================================================
+// GlobalArg + CliBuilder::with_global_arg
+// ============================================================================
+
+/// `GlobalArg::new` creates a global arg with sensible defaults: `global`
+/// is `true`, `help` is empty, and `long`/`short`/`default_value` are `None`.
+#[test]
+fn test_global_arg_new_defaults() {
+    let arg = GlobalArg::new("db");
+    assert_eq!(arg.name, "db");
+    assert!(arg.long.is_none());
+    assert!(arg.short.is_none());
+    assert!(arg.default_value.is_none());
+    assert_eq!(arg.help, "");
+    assert!(arg.global, "global should default to true");
+}
+
+/// Builder methods on `GlobalArg` set fields correctly.
+#[test]
+fn test_global_arg_builder_methods() {
+    let arg = GlobalArg::new("config")
+        .long("config")
+        .short('c')
+        .default_value("/etc/app.toml")
+        .help("Path to config file")
+        .global(false);
+    assert_eq!(arg.name, "config");
+    assert_eq!(arg.long, Some("config"));
+    assert_eq!(arg.short, Some('c'));
+    assert_eq!(arg.default_value.as_deref(), Some("/etc/app.toml"));
+    assert_eq!(arg.help, "Path to config file");
+    assert!(!arg.global, "global should be false after .global(false)");
+}
+
+/// `CliBuilder::with_global_arg` adds a global arg to the built command.
+/// The arg must appear in the root command's arguments.
+#[test]
+fn test_builder_with_global_arg_appears_in_root() {
+    let cmd = CliBuilder::new()
+        .with_name("test_app")
+        .with_global_arg(
+            GlobalArg::new("db")
+                .long("db")
+                .default_value("./default.lbug")
+                .help("Database path"),
+        )
+        .build();
+
+    let db_arg = cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "db")
+        .expect("global arg 'db' must appear in root command");
+    assert_eq!(
+        db_arg.get_long(),
+        Some("db"),
+        "long flag must be --db"
+    );
+    let defaults: Vec<String> = db_arg
+        .get_default_values()
+        .iter()
+        .map(|v| v.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(
+        defaults,
+        vec!["./default.lbug".to_string()],
+        "default value must match"
+    );
+}
+
+/// `with_global_arg` can be chained to add multiple global args.
+#[test]
+fn test_builder_with_multiple_global_args() {
+    let cmd = CliBuilder::new()
+        .with_global_arg(GlobalArg::new("db").long("db").default_value("./db"))
+        .with_global_arg(GlobalArg::new("verbose").short('v').help("Verbose output"))
+        .build();
+
+    assert!(
+        cmd.get_arguments().any(|a| a.get_id().as_str() == "db"),
+        "db arg must be present"
+    );
+    assert!(
+        cmd.get_arguments().any(|a| a.get_id().as_str() == "verbose"),
+        "verbose arg must be present"
+    );
+}
+
+/// Global args with `global(true)` are inherited by subcommands — the
+/// value can be provided at the subcommand level.
+#[test]
+fn test_global_arg_inherited_by_subcommand() {
+    let cmd = CliBuilder::new()
+        .with_name("test_app")
+        .with_global_arg(GlobalArg::new("db").long("db").default_value("./default"))
+        .build();
+
+    // Parse args with --db provided at the top level (before subcommand).
+    let matches = cmd.try_get_matches_from(["test_app", "--db", "/custom/path", "builder_test_command", "my_id"]);
+    assert!(matches.is_ok(), "parsing should succeed: {:?}", matches.err());
+    let matches = matches.unwrap();
+
+    let sub = matches.subcommand_matches("builder_test_command").unwrap();
+    let db_val = sub.get_one::<String>("db");
+    assert_eq!(
+        db_val.map(|s| s.as_str()),
+        Some("/custom/path"),
+        "global arg value must be accessible from subcommand matches"
+    );
+}
+
+/// Global arg with no explicit `long` defaults to using `name` as the long flag.
+#[test]
+fn test_global_arg_long_defaults_to_name() {
+    let arg = GlobalArg::new("config").help("Config path");
+    let cmd = CliBuilder::new().with_global_arg(arg).build();
+    let config_arg = cmd
+        .get_arguments()
+        .find(|a| a.get_id().as_str() == "config")
+        .expect("config arg must be present");
+    assert_eq!(
+        config_arg.get_long(),
+        Some("config"),
+        "long flag should default to name when not explicitly set"
     );
 }
