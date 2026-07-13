@@ -17,7 +17,7 @@
 use std::any::Any;
 use std::sync::Arc;
 
-use crate::cli::{CliArgType, CliCommandRegistration};
+use crate::cli::{CliArgType, CliCommandRegistration, GlobalArg};
 
 /// Builder that materializes a `clap::Command` from the global
 /// `CliCommandRegistration` registry.
@@ -36,6 +36,9 @@ pub struct CliBuilder {
     /// CLI program name shown in `--help` / `--version` output.
     /// Defaults to the crate name (`env!("CARGO_PKG_NAME")`).
     name: String,
+    /// Global args applied to the top-level command (inherited by
+    /// subcommands when `GlobalArg::global` is `true`, the default).
+    global_args: Vec<GlobalArg>,
 }
 
 impl Default for CliBuilder {
@@ -43,6 +46,7 @@ impl Default for CliBuilder {
         Self {
             state: None,
             name: env!("CARGO_PKG_NAME").to_string(),
+            global_args: Vec::new(),
         }
     }
 }
@@ -67,6 +71,7 @@ impl CliBuilder {
         Self {
             state: Some(state),
             name: env!("CARGO_PKG_NAME").to_string(),
+            global_args: Vec::new(),
         }
     }
 
@@ -77,6 +82,19 @@ impl CliBuilder {
     /// `--version` output.
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
+        self
+    }
+
+    /// Add a global argument to the top-level command.
+    ///
+    /// Global args are inherited by all subcommands (when
+    /// [`GlobalArg::global`] is `true`, the default). This lets downstream
+    /// crates add `--db`, `--config`, etc. without depending on `clap`
+    /// directly — they construct a [`GlobalArg`] and sdforge translates it
+    /// to `clap::Arg` at `build()` time.
+    #[must_use]
+    pub fn with_global_arg(mut self, arg: GlobalArg) -> Self {
+        self.global_args.push(arg);
         self
     }
 
@@ -113,6 +131,11 @@ impl CliBuilder {
         #[cfg(feature = "docs")]
         {
             root = root.subcommand(crate::cli::docs_subcommand_definition());
+        }
+
+        // Apply global args (added via with_global_arg) to the root command.
+        for arg in &self.global_args {
+            root = root.arg(arg.to_clap_arg());
         }
 
         root

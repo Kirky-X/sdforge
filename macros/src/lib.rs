@@ -1330,13 +1330,13 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         let mcp_tool_impl = if has_state_param {
             // MCP tools with State parameters are not supported - generate a stub that returns error
             quote! {
-                fn call(&self, _input: Option<serde_json::Value>) -> Result<rmcp::model::CallToolResult, rmcp::model::ErrorData> {
-                    Err(rmcp::model::ErrorData::invalid_params("MCP tool with State parameters is not supported. Use HTTP API instead.", None))
+                fn call(&self, _input: Option<serde_json::Value>) -> Result<sdforge::rmcp::model::CallToolResult, sdforge::rmcp::model::ErrorData> {
+                    Err(sdforge::rmcp::model::ErrorData::invalid_params("MCP tool with State parameters is not supported. Use HTTP API instead.", None))
                 }
             }
         } else {
             quote! {
-                fn call(&self, input: Option<serde_json::Value>) -> Result<rmcp::model::CallToolResult, rmcp::model::ErrorData> {
+                fn call(&self, input: Option<serde_json::Value>) -> Result<sdforge::rmcp::model::CallToolResult, sdforge::rmcp::model::ErrorData> {
                     use sdforge::prelude::*;
                     use tokio::runtime::{Handle, Runtime};
 
@@ -1353,24 +1353,24 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                             }
                             Err(_) => {
                                 let rt = Runtime::new()
-                                    .map_err(|e| rmcp::model::ErrorData::internal_error(
+                                    .map_err(|e| sdforge::rmcp::model::ErrorData::internal_error(
                                         format!("Failed to create runtime: {}", e), None))?;
                                 rt.block_on(async { #mcp_call_logic })
                             }
                         };
                     let result = inner_result
-                        .map_err(|e| rmcp::model::ErrorData::internal_error(format!("{}", e), None))?;
+                        .map_err(|e| sdforge::rmcp::model::ErrorData::internal_error(format!("{}", e), None))?;
 
                     match result {
                         Ok(response) => {
                             let response_json = serde_json::to_value(response)
-                                .map_err(|e| rmcp::model::ErrorData::internal_error(
+                                .map_err(|e| sdforge::rmcp::model::ErrorData::internal_error(
                                     format!("Failed to serialize response: {}", e), None))?;
                             Ok({
-                                let mut result = rmcp::model::CallToolResult::success(
-                                    vec![rmcp::model::ContentBlock::text(
+                                let mut result = sdforge::rmcp::model::CallToolResult::success(
+                                    vec![sdforge::rmcp::model::ContentBlock::text(
                                         serde_json::to_string(&response_json)
-                                            .map_err(|e| rmcp::model::ErrorData::internal_error(
+                                            .map_err(|e| sdforge::rmcp::model::ErrorData::internal_error(
                                                 format!("Failed to stringify response: {}", e), None))?,
                                     )],
                                 );
@@ -1389,10 +1389,10 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                                         }
                                     })
                                 });
-                            Ok(rmcp::model::CallToolResult::error(
-                                vec![rmcp::model::ContentBlock::text(
+                            Ok(sdforge::rmcp::model::CallToolResult::error(
+                                vec![sdforge::rmcp::model::ContentBlock::text(
                                     serde_json::to_string(&error_json)
-                                        .map_err(|e| rmcp::model::ErrorData::internal_error(
+                                        .map_err(|e| sdforge::rmcp::model::ErrorData::internal_error(
                                             format!("Failed to stringify error: {}", e), None))?,
                                 )],
                             ))
