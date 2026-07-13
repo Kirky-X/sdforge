@@ -107,9 +107,9 @@ pub mod axum {
 
 /// Commonly used types and re-exports
 pub mod prelude {
+    pub use crate::core::{ApiError, ApiMetadata, ServiceError, ServiceResponse};
     #[cfg(feature = "http")]
     pub use crate::core::{validate_email, validate_length};
-    pub use crate::core::{ApiError, ApiMetadata, ServiceError, ServiceResponse};
     #[cfg(feature = "http")]
     pub use crate::http::{HttpRoute, RouteRegistration};
     #[cfg(feature = "mcp")]
@@ -166,12 +166,18 @@ pub use streaming::{StreamEvent, StreamResponse, create_stream_channel, stream_t
 
 /// Security middleware and authentication utilities.
 ///
-/// Available when either `security` or `ratelimit` is enabled: the
-/// `ratelimit` submodule lives under `crate::security::ratelimit` and must be
-/// reachable even when the full `security` feature is off. Non-ratelimit
-/// submodules are individually gated by `feature = "security"` inside
-/// `src/security/mod.rs`.
-#[cfg(any(feature = "security", feature = "ratelimit"))]
+/// Available when `security`, `ratelimit`, or `ratelimit-http` is enabled:
+/// - `ratelimit`: core `RateLimiter` trait + `LimiteronAdapter` (no HTTP).
+/// - `ratelimit-http`: HTTP integration (Tower middleware, `HttpRequestRateLimiter`).
+/// - `security`: full security suite (auth, audit, API keys, includes `ratelimit-http`).
+///
+/// Non-ratelimit submodules are individually gated by `feature = "security"`
+/// inside `src/security/mod.rs`.
+#[cfg(any(
+    feature = "security",
+    feature = "ratelimit",
+    feature = "ratelimit-http"
+))]
 pub mod security;
 
 #[cfg(feature = "security")]
@@ -488,6 +494,16 @@ pub fn get_websocket_routes() -> Vec<&'static crate::websocket::WebSocketRoute> 
 
 #[cfg(test)]
 mod tests {
+    // `super::*` only used when protocol features are enabled (init_all_plugins
+    // and friends live at crate root). The impl_default_new! tests below are
+    // macro-only and don't need it.
+    #[cfg(any(
+        feature = "http",
+        feature = "mcp",
+        feature = "websocket",
+        feature = "grpc",
+        feature = "cli"
+    ))]
     use super::*;
 
     // ============================================================================
@@ -500,6 +516,13 @@ mod tests {
     // globals.
     // ============================================================================
 
+    #[cfg(any(
+        feature = "http",
+        feature = "mcp",
+        feature = "websocket",
+        feature = "grpc",
+        feature = "cli"
+    ))]
     #[test]
     #[serial_test::serial]
     fn test_init_all_plugins_returns_counts() {
@@ -518,6 +541,13 @@ mod tests {
         let _ = counts.cli_commands;
     }
 
+    #[cfg(any(
+        feature = "http",
+        feature = "mcp",
+        feature = "websocket",
+        feature = "grpc",
+        feature = "cli"
+    ))]
     #[test]
     #[serial_test::serial]
     fn test_init_all_plugins_is_idempotent() {
@@ -631,6 +661,13 @@ mod tests {
 
     /// Test PluginCounts can be constructed via init_all_plugins and the
     /// `routes` field is a non-negative usize.
+    #[cfg(any(
+        feature = "http",
+        feature = "mcp",
+        feature = "websocket",
+        feature = "grpc",
+        feature = "cli"
+    ))]
     #[test]
     #[serial_test::serial]
     fn test_plugin_counts_routes_field_is_usize() {
@@ -645,6 +682,13 @@ mod tests {
     /// Test calling init_all_plugins multiple times returns consistent counts
     /// (idempotency via the internal OnceLocks), verifying the cached
     /// inventory iteration does not change between calls.
+    #[cfg(any(
+        feature = "http",
+        feature = "mcp",
+        feature = "websocket",
+        feature = "grpc",
+        feature = "cli"
+    ))]
     #[test]
     #[serial_test::serial]
     fn test_init_all_plugins_counts_are_stable_across_calls() {

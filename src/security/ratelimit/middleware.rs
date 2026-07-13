@@ -4,14 +4,14 @@
 //!
 //! Provides `RateLimitLayer` (a Tower `Layer`) and `RateLimitMiddleware<S>` (a
 //! Tower `Service<Request<Body>>`). The middleware delegates identifier
-//! extraction + check to an injected `Arc<dyn RateLimiter>`. On rejection the
-//! middleware short-circuits with `StatusCode::TOO_MANY_REQUESTS` (429); on
-//! approval the request is forwarded to the inner service unchanged.
+//! extraction + check to an injected `Arc<dyn HttpRequestRateLimiter>`. On
+//! rejection the middleware short-circuits with `StatusCode::TOO_MANY_REQUESTS`
+//! (429); on approval the request is forwarded to the inner service unchanged.
 //!
 //! See `design.md` D4 for the rationale (returns `BoxFuture`, `.await` in
 //! async block, mirrors Tower ecosystem pattern).
 //!
-//! Requires the `ratelimit` feature.
+//! Requires the `ratelimit-http` feature.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -22,7 +22,7 @@ use axum::http::{Request, StatusCode};
 use axum::response::Response;
 use tower::{Layer, Service};
 
-use super::{RateLimitError, RateLimiter};
+use super::{HttpRequestRateLimiter, RateLimitError};
 
 /// Type alias for the boxed future returned by `Service::call`.
 ///
@@ -32,18 +32,19 @@ type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
 
 /// Tower `Layer` that wraps an inner service with rate-limit enforcement.
 ///
-/// Holds an `Arc<dyn RateLimiter>` so the same limiter can be shared across
-/// multiple routes/services. Cloning is cheap (just bumps the `Arc` refcount).
+/// Holds an `Arc<dyn HttpRequestRateLimiter>` so the same limiter can be
+/// shared across multiple routes/services. Cloning is cheap (just bumps the
+/// `Arc` refcount).
 pub struct RateLimitLayer {
-    limiter: Arc<dyn RateLimiter>,
+    limiter: Arc<dyn HttpRequestRateLimiter>,
 }
 
 impl RateLimitLayer {
-    /// Construct a new `RateLimitLayer` from any `RateLimiter`.
+    /// Construct a new `RateLimitLayer` from any `HttpRequestRateLimiter`.
     ///
     /// The limiter is shared (via `Arc`) across every service produced by
     /// [`Layer::layer`].
-    pub fn new(limiter: Arc<dyn RateLimiter>) -> Self {
+    pub fn new(limiter: Arc<dyn HttpRequestRateLimiter>) -> Self {
         Self { limiter }
     }
 }
@@ -68,7 +69,7 @@ impl<S> Layer<S> for RateLimitLayer {
 #[derive(Clone)]
 pub struct RateLimitMiddleware<S> {
     inner: S,
-    limiter: Arc<dyn RateLimiter>,
+    limiter: Arc<dyn HttpRequestRateLimiter>,
 }
 
 impl<S> Service<Request<Body>> for RateLimitMiddleware<S>
@@ -96,8 +97,8 @@ where
         let mut inner = self.inner.clone();
 
         Box::pin(async move {
-            // `RateLimiter::check_request` returns a `BoxFuture`, so we
-            // `.await` it directly. On rejection we short-circuit with a
+            // `HttpRequestRateLimiter::check_request` returns a `BoxFuture`,
+            // so we `.await` it directly. On rejection we short-circuit with a
             // variant-specific response and never touch the inner service.
             match limiter.check_request(&req).await {
                 Ok(()) => inner.call(req).await,

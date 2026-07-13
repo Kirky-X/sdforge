@@ -8,15 +8,17 @@ use axum::Router;
 use axum::body::Body;
 use uuid::Uuid;
 
-/// Construct a `RateLimitLayer` from any `RateLimiter`.
+/// Construct a `RateLimitLayer` from any `HttpRequestRateLimiter`.
 ///
 /// Convenience helper: wraps `RateLimitLayer::new` so users can write
 /// `Router::new().layer(rate_limit_layer(limiter))` without importing both
-/// `RateLimitLayer` and the helper trait.
+/// `RateLimitLayer` and the `HttpRequestRateLimiter` trait.
 ///
-/// Only available when the `ratelimit` feature is enabled.
-#[cfg(feature = "ratelimit")]
-pub fn rate_limit_layer(limiter: std::sync::Arc<dyn RateLimiter>) -> RateLimitLayer {
+/// Only available when the `ratelimit-http` feature is enabled.
+#[cfg(feature = "ratelimit-http")]
+pub fn rate_limit_layer(
+    limiter: std::sync::Arc<dyn crate::security::HttpRequestRateLimiter>,
+) -> RateLimitLayer {
     RateLimitLayer::new(limiter)
 }
 

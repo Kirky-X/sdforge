@@ -3,9 +3,9 @@
 //! HTTP server implementation
 
 use crate::core::ApiMetadata;
-use crate::define_registration;
 #[cfg(test)]
 use crate::core::Registration;
+use crate::define_registration;
 use axum::routing::MethodRouter;
 
 // Type imports re-exported to test modules via `use super::super::*`.
@@ -24,26 +24,32 @@ pub use version_routing::{
     VersionRouterConfig, VersionedRoute, build_version_router, version_redirect_middleware,
 };
 
-// Re-export rate-limit types when the `ratelimit` feature is enabled.
-// Allows downstream users to access `RateLimitLayer`/`RateLimiter`/`LimiteronAdapter`
-// via `sdforge::http::` without reaching into `sdforge::security::ratelimit::`.
+// Re-export rate-limit types.
+// - Core types (LimiteronAdapter, RateLimiter) available with `ratelimit`.
+// - HTTP middleware (RateLimitLayer) available with `ratelimit-http`.
+// Allows downstream users to access them via `sdforge::http::` without
+// reaching into `sdforge::security::ratelimit::`.
+#[cfg(feature = "ratelimit-http")]
+pub use crate::security::RateLimitLayer;
 #[cfg(feature = "ratelimit")]
-pub use crate::security::{LimiteronAdapter, RateLimitLayer, RateLimiter};
+pub use crate::security::{LimiteronAdapter, RateLimiter};
 
 mod http_impl;
-pub use http_impl::{build, build_with_config, build_with_redirect};
-#[cfg(feature = "ratelimit")]
+#[cfg(feature = "ratelimit-http")]
 pub use http_impl::rate_limit_layer;
+pub use http_impl::{build, build_with_config, build_with_redirect};
 
 // Re-export internal helpers for test access.
-#[cfg(test)]
-pub(crate) use http_impl::{apply_security_headers, get_or_generate_request_id, resolve_route_path};
+#[cfg(all(test, feature = "grpc"))]
+pub(crate) use http_impl::preserve_grpc_inventory;
 #[cfg(all(test, feature = "mcp"))]
 pub(crate) use http_impl::preserve_mcp_inventory;
 #[cfg(all(test, feature = "websocket"))]
 pub(crate) use http_impl::preserve_websocket_inventory;
-#[cfg(all(test, feature = "grpc"))]
-pub(crate) use http_impl::preserve_grpc_inventory;
+#[cfg(test)]
+pub(crate) use http_impl::{
+    apply_security_headers, get_or_generate_request_id, resolve_route_path,
+};
 
 /// Request ID header name
 pub(crate) const X_REQUEST_ID: &str = "x-request-id";

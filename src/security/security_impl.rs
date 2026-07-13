@@ -3,8 +3,8 @@
 
 use super::*;
 
-// Implement traits for concrete types (full security feature only)
-#[cfg(feature = "security")]
+// Implement traits for concrete types (full security feature only).
+// This module is gated on `feature = "security"` in `mod.rs`.
 impl ApiKeyAuth for AppApiKeyAuth {
     fn validate_key(&self, key: &str, client_ip: &str) -> Option<Vec<String>> {
         AppApiKeyAuth::validate_key(self, key, client_ip)

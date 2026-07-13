@@ -16,8 +16,10 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # edition 2024 + rust 1.85+ (unified MSRV across base workspace)
-  MSRV: "1.85"
+  # edition 2024 + rust 1.89+ (unified MSRV across base workspace;
+  # bumped from 1.85 because transitive deps like enum-ordinalize 4.4.1,
+  # axum-test 21.0.0, tonic 0.14.6, time 0.3.53 require rustc 1.88-1.89)
+  MSRV: "1.89"
 
 jobs:
   # 代码格式检查
