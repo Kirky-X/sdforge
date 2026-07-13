@@ -22,7 +22,7 @@ use axum::http::{Request, StatusCode};
 use axum::response::Response;
 use tower::{Layer, Service};
 
-use crate::security::{RateLimitLayer, RateLimitMiddleware};
+use crate::security::{HttpRequestRateLimiter, RateLimitLayer, RateLimitMiddleware};
 use crate::security::{RateLimitError, RateLimiter};
 
 // ============================================================================
@@ -57,7 +57,9 @@ impl RateLimiter for MockLimiter {
             }
         })
     }
+}
 
+impl HttpRequestRateLimiter for MockLimiter {
     fn check_request<'a>(
         &'a self,
         _req: &'a Request<Body>,
@@ -113,7 +115,7 @@ impl Service<Request<Body>> for EchoService {
 /// This is the canonical T010 acceptance test from `tasks.md`.
 #[tokio::test]
 async fn middleware_returns_429_when_limiter_rejects() {
-    let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiter {
+    let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiter {
         should_reject: true,
     });
     let layer = RateLimitLayer::new(limiter);
@@ -142,7 +144,7 @@ async fn middleware_returns_429_when_limiter_rejects() {
 /// This test is the second acceptance criterion from `tasks.md` T011.
 #[tokio::test]
 async fn middleware_forwards_request_when_limiter_approves() {
-    let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiter {
+    let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiter {
         should_reject: false,
     });
     let layer = RateLimitLayer::new(limiter);
@@ -165,12 +167,12 @@ async fn middleware_forwards_request_when_limiter_approves() {
     );
 }
 
-/// `RateLimitLayer::new` must accept `Arc<dyn RateLimiter>` without panic, and
+/// `RateLimitLayer::new` must accept `Arc<dyn HttpRequestRateLimiter>` without panic, and
 /// the produced `Layer` must produce a `RateLimitMiddleware` from any inner
 /// service.
 #[tokio::test]
 async fn layer_construction_accepts_arcrate_limiter() {
-    let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiter {
+    let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiter {
         should_reject: false,
     });
     let _layer = RateLimitLayer::new(limiter);
@@ -199,7 +201,9 @@ impl RateLimiter for MockLimiterWithError {
     ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>> {
         Box::pin(async move { Err((self.factory)()) })
     }
+}
 
+impl HttpRequestRateLimiter for MockLimiterWithError {
     fn check_request<'a>(
         &'a self,
         _req: &'a Request<Body>,
@@ -211,7 +215,7 @@ impl RateLimiter for MockLimiterWithError {
 /// Exceeded → 429 + `Retry-After: <window_seconds>` header.
 #[tokio::test]
 async fn middleware_exceeded_returns_429_with_retry_after() {
-    let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiterWithError {
+    let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiterWithError {
         factory: Box::new(|| RateLimitError::Exceeded {
             limit: 100,
             window_seconds: 60,
@@ -236,7 +240,7 @@ async fn middleware_exceeded_returns_429_with_retry_after() {
 /// Banned → 403 Forbidden (not 429) + no `Retry-After`.
 #[tokio::test]
 async fn middleware_banned_returns_403_without_retry_after() {
-    let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiterWithError {
+    let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiterWithError {
         factory: Box::new(|| RateLimitError::Banned {
             reason: "abuse".to_string(),
         }),
@@ -263,7 +267,7 @@ async fn middleware_banned_returns_403_without_retry_after() {
 /// CircuitOpen → 503 Service Unavailable + `Retry-After` header.
 #[tokio::test]
 async fn middleware_circuit_open_returns_503_with_retry_after() {
-    let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiterWithError {
+    let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiterWithError {
         factory: Box::new(|| RateLimitError::CircuitOpen),
     });
     let layer = RateLimitLayer::new(limiter);
@@ -289,7 +293,7 @@ async fn middleware_circuit_open_returns_503_with_retry_after() {
 /// boundary is not exposed by the error variant).
 #[tokio::test]
 async fn middleware_quota_exhausted_returns_429_without_retry_after() {
-    let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiterWithError {
+    let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiterWithError {
         factory: Box::new(|| RateLimitError::QuotaExhausted {
             used: 100,
             total: 100,
@@ -314,7 +318,7 @@ async fn middleware_quota_exhausted_returns_429_without_retry_after() {
 #[tokio::test]
 async fn middleware_limiteron_error_returns_500() {
     use limiteron::LimiteronError;
-    let limiter: Arc<dyn RateLimiter> = Arc::new(MockLimiterWithError {
+    let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiterWithError {
         factory: Box::new(|| {
             RateLimitError::Limiteron(LimiteronError::ConfigError("internal".to_string()))
         }),

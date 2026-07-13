@@ -34,11 +34,11 @@ pub use str::{
     format_validation_error, sanitize_for_identifier, truncate_with_ellipsis,
 };
 pub use types::ApiMetadata;
+#[cfg(feature = "http")]
+pub use validation::validators::{validate_email, validate_length};
 pub use validation::{
     MAX_API_KEY_LENGTH, MAX_EMAIL_LENGTH, MAX_HEADER_COUNT, MAX_HEADER_NAME_LENGTH,
     MAX_HEADER_VALUE_LENGTH, MAX_JSON_ARRAY_LENGTH, MAX_JSON_DEPTH, MAX_JSON_FIELD_NAME_LENGTH,
     MAX_JWT_TOKEN_LENGTH, MAX_PASSWORD_LENGTH, MAX_QUERY_STRING_LENGTH, MAX_REQUEST_BODY_SIZE,
     MAX_TEXT_FIELD_LENGTH, MAX_URI_PATH_LENGTH, MAX_USERNAME_LENGTH, MIN_PASSWORD_LENGTH,
 };
-#[cfg(feature = "http")]
-pub use validation::validators::{validate_email, validate_length};

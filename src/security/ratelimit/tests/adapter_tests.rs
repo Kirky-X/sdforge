@@ -8,11 +8,17 @@
 
 use std::sync::Arc;
 
+// HTTP types are only needed for `check_request` tests (ratelimit-http feature).
+#[cfg(feature = "ratelimit-http")]
 use axum::body::Body;
+#[cfg(feature = "ratelimit-http")]
 use axum::http::Request;
 use limiteron::Governor;
 
 use crate::security::ratelimit::{LimiteronAdapter, RateLimiter};
+// `HttpRequestRateLimiter` trait is needed for `check_request` tests.
+#[cfg(feature = "ratelimit-http")]
+use crate::security::ratelimit::HttpRequestRateLimiter;
 
 // ============================================================================
 // Construction Tests (T007/T008 — new/default)
@@ -227,6 +233,7 @@ async fn check_returns_exceeded_after_capacity_exhausted() {
 
 /// `check_request(req)` extracts the IP from `X-Forwarded-For` (first IP) and
 /// delegates to `check()`. With default config the first request is allowed.
+#[cfg(feature = "ratelimit-http")]
 #[tokio::test]
 async fn check_request_extracts_ip_from_x_forwarded_for() {
     let adapter = LimiteronAdapter::new().await;
@@ -240,6 +247,7 @@ async fn check_request_extracts_ip_from_x_forwarded_for() {
 
 /// `check_request(req)` falls back to `X-Real-IP` when `X-Forwarded-For` is
 /// absent.
+#[cfg(feature = "ratelimit-http")]
 #[tokio::test]
 async fn check_request_falls_back_to_x_real_ip() {
     let adapter = LimiteronAdapter::new().await;
@@ -257,6 +265,7 @@ async fn check_request_falls_back_to_x_real_ip() {
 
 /// `check_request(req)` falls back to `"unknown"` when neither header is
 /// present. Default config matches `0.0.0.0/0` so even "unknown" is allowed.
+#[cfg(feature = "ratelimit-http")]
 #[tokio::test]
 async fn check_request_falls_back_to_unknown_identifier() {
     let adapter = LimiteronAdapter::new().await;
@@ -283,6 +292,7 @@ async fn check_request_falls_back_to_unknown_identifier() {
 /// rejected. Before the fix, the spoofed header would have been trusted,
 /// allowing unlimited requests because each spoofed IP would get its own
 /// bucket.
+#[cfg(feature = "ratelimit-http")]
 #[tokio::test]
 async fn check_request_ignores_spoofed_x_forwarded_for_from_non_trusted_source() {
     use axum::extract::connect_info::ConnectInfo;
@@ -355,6 +365,7 @@ async fn check_request_ignores_spoofed_x_forwarded_for_from_non_trusted_source()
 /// H-1 positive case: a request from a trusted reverse proxy (10.0.0.1)
 /// carrying `X-Forwarded-For: 203.0.113.5` must trust the header and
 /// extract `203.0.113.5` as the client identifier.
+#[cfg(feature = "ratelimit-http")]
 #[tokio::test]
 async fn check_request_trusts_x_forwarded_for_from_trusted_proxy() {
     use axum::extract::connect_info::ConnectInfo;
