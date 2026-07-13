@@ -150,11 +150,17 @@ pub use http::version_routing::{VersionRouterConfig, VersionedRoute, build_versi
 #[cfg(feature = "mcp")]
 pub mod mcp;
 
+/// Re-export `rmcp` so downstream crates can use `sdforge::rmcp::ServiceExt` /
+/// `sdforge::rmcp::transport::stdio()` etc. without adding a direct `rmcp`
+/// dependency. Only available when the `mcp` feature is enabled.
+#[cfg(feature = "mcp")]
+pub use rmcp;
+
 // Re-export rmcp types for convenience (replaces old mcp_sdk re-exports)
 #[cfg(feature = "mcp")]
 pub use mcp::{
     InputRequiredResult, McpHeaderInfo, McpToolInstance, McpToolRegistration, MrtrSession,
-    SdForgeMcpServer, SdForgeTool, StatelessServerHandler, build, get_mcp_tools,
+    SdForgeMcpServer, SdForgeTool, StatelessServerHandler, build, get_mcp_tools, serve_stdio,
 };
 
 /// Streaming utilities for SSE and streaming responses
@@ -285,6 +291,13 @@ pub mod i18n;
 /// T010 wires the inventory iteration into `init_all_plugins`.
 #[cfg(feature = "cli")]
 pub mod cli;
+
+/// Re-export `clap` so downstream crates can use `sdforge::clap::Arg` /
+/// `sdforge::clap::Command` / `sdforge::clap::ArgMatches` without adding
+/// a direct `clap` dependency. Only available when the `cli` feature is
+/// enabled (sdforge already depends on clap under that feature).
+#[cfg(feature = "cli")]
+pub use clap;
 
 /// OpenAPI 3.1 specification generation.
 ///
