@@ -57,7 +57,7 @@ pub use defaults::security_headers;
 // themselves as `defaults::cache` / `defaults::server` would clash with
 // the like-named `pub mod cache;` / `pub mod server;` declarations above.
 pub use defaults::cache::{
-    DEFAULT_ENABLED, DEFAULT_MAX_ITEMS, DEFAULT_TTL_SECS, DEFAULT_TRACK_STATS,
+    DEFAULT_ENABLED, DEFAULT_MAX_ITEMS, DEFAULT_TRACK_STATS, DEFAULT_TTL_SECS,
 };
 pub use defaults::server::{DEFAULT_HOST, DEFAULT_PORT, DEFAULT_REQUEST_TIMEOUT_SECS};
 

@@ -14,8 +14,8 @@ use rmcp::model::{
 };
 use rmcp::service::RequestContext;
 
-use crate::mcp::get_mcp_tools;
 use crate::mcp::McpToolInstance;
+use crate::mcp::get_mcp_tools;
 use crate::mcp::value_to_json_object_arc;
 
 /// MCP server that dispatches to tools registered via SDForge's inventory.

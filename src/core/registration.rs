@@ -166,7 +166,17 @@ macro_rules! define_registration {
             }
         }
 
-        // Register with inventory for automatic collection
+        // Register with inventory for automatic collection.
+        // Gated by protocol features: inventory is an optional dependency
+        // pulled in by http/mcp/websocket/grpc/cli; tests that exercise the
+        // macro under default-features = [] must still compile.
+        #[cfg(any(
+            feature = "http",
+            feature = "mcp",
+            feature = "websocket",
+            feature = "grpc",
+            feature = "cli"
+        ))]
         inventory::collect!($name);
     };
 }

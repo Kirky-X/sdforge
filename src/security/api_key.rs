@@ -9,9 +9,7 @@
 //! - Automatic key rotation with grace period
 
 use crate::cache::SharedCache;
-use crate::security::{
-    ApiKeyMetadata, ApiKeyVersion, LruCacheManager, LruConfig, RotationConfig,
-};
+use crate::security::{ApiKeyMetadata, ApiKeyVersion, LruCacheManager, LruConfig, RotationConfig};
 use crate::security::{CacheNamespace, deserialize_permissions, serialize_permissions};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
