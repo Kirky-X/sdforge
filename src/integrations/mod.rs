@@ -15,7 +15,7 @@ pub mod limiteron_adapter;
 #[cfg(feature = "kit")]
 pub mod kit;
 
-#[cfg(feature = "limiteron-integration")]
-pub use limiteron_adapter::LimiteronForgeAdapter;
 #[cfg(feature = "kit")]
 pub use kit::SdforgeModule;
+#[cfg(feature = "limiteron-integration")]
+pub use limiteron_adapter::LimiteronForgeAdapter;

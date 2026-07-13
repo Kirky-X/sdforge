@@ -16,11 +16,11 @@ use crate::core::ApiMetadata;
 use crate::define_registration;
 
 mod grpc_impl;
-#[cfg(feature = "grpc")]
-pub use grpc_impl::{build_server, build_server_with_config};
 #[cfg(all(feature = "grpc", feature = "security"))]
 #[cfg(test)]
 pub(crate) use grpc_impl::make_auth_interceptor;
+#[cfg(feature = "grpc")]
+pub use grpc_impl::{build_server, build_server_with_config};
 
 #[cfg(feature = "grpc")]
 /// gRPC service implementation

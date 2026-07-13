@@ -6,19 +6,19 @@
 //! `crate::security::ratelimit`.
 
 use crate::http::rate_limit_layer;
-use crate::security::{LimiteronAdapter, RateLimiter};
+use crate::security::{HttpRequestRateLimiter, LimiteronAdapter};
 use std::sync::Arc;
 
 /// Test `rate_limit_layer` constructs a `RateLimitLayer` from a
 /// `LimiteronAdapter` without panicking.
 ///
 /// Covers R-ratelimit-004: the public `rate_limit_layer` helper accepts any
-/// `Arc<dyn RateLimiter>` and returns a usable `RateLimitLayer`.
-#[cfg(feature = "ratelimit")]
+/// `Arc<dyn HttpRequestRateLimiter>` and returns a usable `RateLimitLayer`.
+#[cfg(feature = "ratelimit-http")]
 #[tokio::test]
 async fn rate_limit_layer_constructs_from_limiteron_adapter() {
     let adapter = LimiteronAdapter::new().await;
-    let limiter: Arc<dyn RateLimiter> = Arc::new(adapter);
+    let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(adapter);
     let layer = rate_limit_layer(limiter);
     // Verify the layer is constructed (no panic, no error).
     let _ = layer;

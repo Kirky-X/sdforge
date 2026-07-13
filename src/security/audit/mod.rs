@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 mod audit_impl;
 #[cfg(test)]
-pub(crate) use audit_impl::{sanitize_error_message, JWT_PATTERN, SECRET_PATTERN, PATH_PATTERN};
+pub(crate) use audit_impl::{JWT_PATTERN, PATH_PATTERN, SECRET_PATTERN, sanitize_error_message};
 
 /// Batch of audit logs for async processing.
 ///

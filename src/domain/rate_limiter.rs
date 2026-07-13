@@ -15,9 +15,11 @@
 //!
 //! sdforge already defines a `RateLimiter` trait at
 //! `src/security/ratelimit/mod.rs` (gated by the `ratelimit` feature). That
-//! trait is HTTP-aware (it has a `check_request(&Request<Body>)` method and
-//! returns `Result<(), RateLimitError>`). `ForgeRateLimiter` is a distinct,
-//! simpler abstraction for the kit integration domain: it is key-based
+//! trait is identifier-based (it has a `check(&str)` method and returns
+//! `Result<(), RateLimitError>`). The HTTP-specific `check_request` method
+//! lives in the separate `HttpRequestRateLimiter` trait (gated by
+//! `ratelimit-http`). `ForgeRateLimiter` is a distinct, simpler abstraction
+//! for the kit integration domain: it is key-based
 //! (`check(&str) -> Result<bool, ForgeError>`) and has a separate `record`
 //! method. The two traits coexist for different purposes — do not merge them.
 

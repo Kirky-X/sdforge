@@ -12,7 +12,7 @@
 
 mod config_tests;
 mod middleware_tests;
-#[cfg(feature = "ratelimit")]
+#[cfg(feature = "ratelimit-http")]
 mod ratelimit_tests;
 mod routing_tests;
 

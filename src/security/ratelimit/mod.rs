@@ -4,22 +4,26 @@
 //!
 //! Provides a unified rate limiting abstraction (`RateLimiter` trait) and a
 //! concrete adapter (`LimiteronAdapter`) wrapping `limiteron::Governor`.
-//! Includes a Tower middleware for HTTP request rate limiting.
 //!
-//! Requires the `ratelimit` feature.
+//! # Feature gating
+//!
+//! - `ratelimit`: Core rate limiting — `RateLimiter` trait (check by
+//!   identifier), `LimiteronAdapter`, `RateLimitError`. No HTTP dependency.
+//! - `ratelimit-http` (implies `ratelimit`): HTTP integration — adds
+//!   `HttpRequestRateLimiter` trait (check_request), Tower middleware
+//!   (`RateLimitLayer`/`RateLimitMiddleware`), and IP-extraction utilities.
 
 use std::future::Future;
 use std::pin::Pin;
-
-use axum::body::Body;
-use axum::http::Request;
 
 // Concrete adapter wrapping `limiteron::Governor`.
 mod adapter;
 pub use adapter::{LimiteronAdapter, LimiteronAdapterBuilder};
 
-// Tower middleware for HTTP rate limiting.
+// Tower middleware for HTTP rate limiting (only with `ratelimit-http`).
+#[cfg(feature = "ratelimit-http")]
 mod middleware;
+#[cfg(feature = "ratelimit-http")]
 pub use middleware::{RateLimitLayer, RateLimitMiddleware};
 
 #[cfg(test)]
@@ -32,6 +36,12 @@ mod tests;
 ///
 /// All methods take `&self` (not `&mut self`) and the trait inherits
 /// `Send + Sync` to support `Arc<dyn RateLimiter>` dependency injection.
+///
+/// # Feature availability
+///
+/// This trait is available with the `ratelimit` feature (no HTTP dependency).
+/// For HTTP request rate limiting, enable `ratelimit-http` and use
+/// [`HttpRequestRateLimiter`].
 pub trait RateLimiter: Send + Sync {
     /// Check whether the given identifier (e.g. IP, user ID) is allowed.
     ///
@@ -41,14 +51,23 @@ pub trait RateLimiter: Send + Sync {
         &'a self,
         identifier: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>>;
+}
 
+/// HTTP request rate limiter abstraction — extends [`RateLimiter`] with
+/// HTTP-specific request checking.
+///
+/// Only available with the `ratelimit-http` feature. Implementors extract the
+/// client identifier (e.g. IP) from an HTTP request and delegate to
+/// [`RateLimiter::check`].
+#[cfg(feature = "ratelimit-http")]
+pub trait HttpRequestRateLimiter: RateLimiter {
     /// Extract the identifier from an HTTP request and check it.
     ///
     /// Default implementors should extract the client IP (or other identifier)
     /// and delegate to `check`.
     fn check_request<'a>(
         &'a self,
-        req: &'a Request<Body>,
+        req: &'a axum::http::Request<axum::body::Body>,
     ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>>;
 }
 

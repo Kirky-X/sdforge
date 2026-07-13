@@ -42,23 +42,29 @@ mod traits;
 mod types;
 
 // Shared IP-extraction utilities — available to both `security` and
-// `ratelimit` features so the rate-limit adapter reuses the same
+// `ratelimit-http` features so the rate-limit adapter reuses the same
 // spoofing-defense logic as the auth middleware (single source of truth).
-#[cfg(any(feature = "security", feature = "ratelimit"))]
+// Pure `ratelimit` (without http) does not need IP extraction because
+// `check(identifier)` receives the identifier directly.
+#[cfg(any(feature = "security", feature = "ratelimit-http"))]
 mod ip_util;
 
 // Rate limiting module — backed by limiteron 0.2.1.
-// Available when the `ratelimit` feature is enabled (inherited by `security`).
+// Available when the `ratelimit` feature is enabled (inherited by
+// `ratelimit-http` and `security`).
 #[cfg(feature = "ratelimit")]
 pub mod ratelimit;
 
-// Re-export rate-limiting types at the `security` module level so callers can
-// use `crate::security::RateLimitError` (two-level) uniformly.
+// Re-export core rate-limiting types (available with `ratelimit` feature).
 #[cfg(feature = "ratelimit")]
-pub use ratelimit::{LimiteronAdapter, RateLimitError, RateLimitLayer, RateLimitMiddleware, RateLimiter};
+pub use ratelimit::{LimiteronAdapter, RateLimitError, RateLimiter};
+
+// Re-export HTTP rate-limiting types (available with `ratelimit-http` feature).
+#[cfg(feature = "ratelimit-http")]
+pub use ratelimit::{HttpRequestRateLimiter, RateLimitLayer, RateLimitMiddleware};
 
 // Re-export the shared IP-extraction helper for crate-internal use.
-#[cfg(any(feature = "security", feature = "ratelimit"))]
+#[cfg(any(feature = "security", feature = "ratelimit-http"))]
 pub(crate) use ip_util::extract_client_ip_core;
 
 // Re-export key management types (full security feature only)
@@ -67,6 +73,8 @@ pub use api_key_manager::{
     ApiKeyMetadata, ApiKeyVersion, LruCacheManager, LruConfig, LruStats, RotationConfig,
 };
 
+// Trait impls for concrete types (full security feature only).
+#[cfg(feature = "security")]
 mod security_impl;
 
 // Note: AuditLogger trait implementation is already in audit.rs

@@ -243,7 +243,7 @@ proptest = { workspace = true }
 url = { workspace = true }
 
 [features]
-default = ["http"]
+default = []
 
 # HTTP 特性 - 启用时编译 axum 等
 http = [
@@ -272,15 +272,23 @@ streaming = ["dep:tokio", "dep:tokio-stream", "dep:futures-util", "dep:chrono"]
 # Timestamp 特性
 timestamp = ["dep:chrono"]
 
-# Rate limiting 特性 - 继承 limiteron 0.2.1 核心流控能力（tower-middleware/ban-manager/quota-control/circuit-breaker）
-# 依赖 http (axum) 因 RateLimiter::check_request 需要 axum::http::Request<Body>
+# Rate limiting 特性 - 纯限流核心（不依赖 http）
+# 仅包含 RateLimiter trait（check 方法）+ LimiteronAdapter + RateLimitError
+# 不依赖 axum/tower，可在非 HTTP 环境（如 gRPC/CLI）中使用
 ratelimit = [
-    "http",
     "dep:limiteron",
-    "limiteron/tower-middleware",
     "limiteron/ban-manager",
     "limiteron/quota-control",
     "limiteron/circuit-breaker",
+]
+
+# HTTP 限流中间件 - Tower middleware + check_request 方法
+# 依赖 http（axum/tower）和 ratelimit（核心 trait）
+# 启用后提供 RateLimitLayer/RateLimitMiddleware/HttpRequestRateLimiter
+ratelimit-http = [
+    "http",
+    "ratelimit",
+    "limiteron/tower-middleware",
 ]
 
 # Security 特性
@@ -300,7 +308,7 @@ security = [
     "cache",
     "hex",
     "dep:base64",
-    "ratelimit",
+    "ratelimit-http",
 ]
 
 # WebSocket 特性
@@ -323,7 +331,8 @@ cli = ["dep:clap", "dep:inventory"]
 docs = ["openapi", "dep:utoipa-swagger-ui", "dep:clap-markdown", "cli"]
 
 # Cache 特性 - oxcache 0.3 用 minimal feature 提供缓存后端
-cache = ["dep:http", "oxcache/minimal"]
+# cache 模块不依赖 http（已验证 src/cache/ 无 http/axum 使用）
+cache = ["oxcache/minimal"]
 
 # Logging 特性
 logging = ["dep:chrono", "tokio"]
@@ -386,6 +395,7 @@ all-features = true
 name = "axiom_bench"
 path = "src/benches/sdforge_bench.rs"
 harness = false
+required-features = ["http"]
 
 # Cache tests
 [[test]]
@@ -444,6 +454,7 @@ path = "tests/integration/websocket_tests.rs"
 [[test]]
 name = "integration_http_mcp"
 path = "tests/integration_http_mcp.rs"
+required-features = ["http", "mcp"]
 
 [[test]]
 name = "http_tests"
@@ -453,10 +464,12 @@ path = "tests/integration/http_tests.rs"
 [[test]]
 name = "config_tests"
 path = "tests/unit/config_tests.rs"
+required-features = ["http"]
 
 [[test]]
 name = "core_tests"
 path = "tests/unit/core_tests.rs"
+required-features = ["http"]
 
 [[test]]
 name = "edge_case_tests"

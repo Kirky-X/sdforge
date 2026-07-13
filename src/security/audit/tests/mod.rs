@@ -14,7 +14,7 @@ mod audit_logger_tests;
 mod builder_tests;
 
 use super::*;
-use crate::security::{AuthMetadata, AuditResult};
+use crate::security::{AuditResult, AuthMetadata};
 use uuid::Uuid;
 
 // ============================================================================

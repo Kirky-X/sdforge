@@ -640,13 +640,13 @@ fn benchmark_limiteron_governor(c: &mut Criterion) {
 ///
 /// Uses `tower::Layer` + `tower::Service::call` and a tokio runtime to drive
 /// the async future.
-#[cfg(feature = "ratelimit")]
+#[cfg(feature = "ratelimit-http")]
 fn benchmark_rate_limit_middleware(c: &mut Criterion) {
     use axum::body::Body;
     use axum::http::Request;
     use axum::response::Response;
     use sdforge::security::ratelimit::{
-        RateLimitError, RateLimitLayer, RateLimitMiddleware, RateLimiter,
+        HttpRequestRateLimiter, RateLimitError, RateLimitLayer, RateLimitMiddleware, RateLimiter,
     };
     use std::convert::Infallible;
     use std::future::Future;
@@ -666,7 +666,9 @@ fn benchmark_rate_limit_middleware(c: &mut Criterion) {
         ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>> {
             Box::pin(async { Ok(()) })
         }
+    }
 
+    impl HttpRequestRateLimiter for AlwaysAllowLimiter {
         fn check_request<'a>(
             &'a self,
             _req: &'a Request<Body>,
@@ -697,7 +699,7 @@ fn benchmark_rate_limit_middleware(c: &mut Criterion) {
     }
 
     let rt = Runtime::new().expect("tokio runtime for bench");
-    let limiter: Arc<dyn RateLimiter> = Arc::new(AlwaysAllowLimiter);
+    let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(AlwaysAllowLimiter);
     let layer = RateLimitLayer::new(limiter);
 
     c.bench_function("ratelimit_middleware_passthrough", |b| {
@@ -715,11 +717,7 @@ fn benchmark_rate_limit_middleware(c: &mut Criterion) {
 }
 
 #[cfg(feature = "ratelimit")]
-criterion_group!(
-    ratelimit_benches,
-    benchmark_limiteron_governor,
-    benchmark_rate_limit_middleware,
-);
+criterion_group!(ratelimit_benches, benchmark_limiteron_governor,);
 
 // =============================================================================
 // HTTP Benchmarks (feature = "http")
@@ -847,6 +845,9 @@ fn main() {
     #[cfg(feature = "ratelimit")]
     {
         benchmark_limiteron_governor(&mut criterion);
+    }
+    #[cfg(feature = "ratelimit-http")]
+    {
         benchmark_rate_limit_middleware(&mut criterion);
     }
 

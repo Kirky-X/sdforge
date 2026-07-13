@@ -9,14 +9,22 @@
 //! See `design.md` D3 for the rationale behind the construction pattern
 //! (async `new()` / `default()` + sync `with_dependencies`).
 //!
-//! Requires the `ratelimit` feature.
+//! # Feature gating
+//!
+//! - `ratelimit`: `RateLimiter` impl (check by identifier) — always available.
+//! - `ratelimit-http`: `HttpRequestRateLimiter` impl (check_request) — adds
+//!   HTTP request IP extraction and delegation to `check`.
 
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
+// HTTP types are only needed for `HttpRequestRateLimiter` (check_request).
+#[cfg(feature = "ratelimit-http")]
 use axum::body::Body;
+#[cfg(feature = "ratelimit-http")]
 use axum::http::Request;
+
 use limiteron::config::{GlobalConfig, Matcher, Rule};
 use limiteron::storage::{MemoryBanStorage, MemoryStorage};
 use limiteron::{
@@ -24,6 +32,8 @@ use limiteron::{
     Storage,
 };
 
+#[cfg(feature = "ratelimit-http")]
+use super::HttpRequestRateLimiter;
 use super::{RateLimitError, RateLimiter};
 
 /// Production [`RateLimiter`] backed by a [`limiteron::Governor`].
@@ -92,6 +102,7 @@ fn default_config() -> FlowControlConfig {
 /// in that case all such requests share a single `"unknown"` bucket (which
 /// is the intended conservative behavior: deny-by-shared-limit rather than
 /// allow-by-spoofed-header).
+#[cfg(feature = "ratelimit-http")]
 fn extract_identifier(req: &Request<Body>) -> String {
     crate::security::extract_client_ip_core(req).unwrap_or_else(|| "unknown".to_string())
 }
@@ -174,7 +185,11 @@ impl RateLimiter for LimiteronAdapter {
             }
         })
     }
+}
 
+/// HTTP request rate limiter impl — only available with `ratelimit-http`.
+#[cfg(feature = "ratelimit-http")]
+impl HttpRequestRateLimiter for LimiteronAdapter {
     fn check_request<'a>(
         &'a self,
         req: &'a Request<Body>,

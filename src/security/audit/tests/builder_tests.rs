@@ -4,7 +4,7 @@
 
 use super::super::*;
 use super::make_test_audit_log;
-use crate::security::{AuthMetadata, AuditResult, serialize_audit_logs};
+use crate::security::{AuditResult, AuthMetadata, serialize_audit_logs};
 
 // ============================================================================
 // AppAuditLoggerBuilder Tests

@@ -22,7 +22,9 @@ pub struct CacheConfig {
 
 impl Default for CacheConfig {
     fn default() -> Self {
-        use crate::config::{DEFAULT_ENABLED, DEFAULT_MAX_ITEMS, DEFAULT_TTL_SECS, DEFAULT_TRACK_STATS};
+        use crate::config::{
+            DEFAULT_ENABLED, DEFAULT_MAX_ITEMS, DEFAULT_TRACK_STATS, DEFAULT_TTL_SECS,
+        };
         Self {
             enabled: DEFAULT_ENABLED,
             default_ttl_secs: DEFAULT_TTL_SECS,

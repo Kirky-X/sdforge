@@ -12,8 +12,8 @@
 #![cfg(feature = "openapi")]
 
 use sdforge::core::ApiError;
-use sdforge::openapi::{OpenApiBuilder, generate_openapi_spec};
 use sdforge::forge;
+use sdforge::openapi::{OpenApiBuilder, generate_openapi_spec};
 
 // ============================================================================
 // Test fixtures: two `#[forge]` endpoints.
