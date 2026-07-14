@@ -7,6 +7,20 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-15
+
+### Added
+
+- `cli::GlobalArg` — typed wrapper for clap global arguments with `long`, `default_value`, `help` builders
+- `CliBuilder::with_global_arg()` — register global args on the top-level Command (inherited by subcommands)
+- `mcp::serve_stdio()` — convenience wrapper around `rmcp::ServiceExt` + `rmcp::transport::stdio()`
+- `pub use clap;` re-export (gated by `cli` feature) — downstream crates can use `sdforge::clap::Command` without a direct clap dep
+- `pub use rmcp;` re-export (gated by `mcp` feature) — downstream crates can use `sdforge::rmcp` without a direct rmcp dep
+
+### Changed
+
+- regex `~1.12` → `~1.13`
+
 ## [0.4.1] - 2026-07-13
 
 ### ⚠️ BREAKING CHANGES（仅影响启用 `kit` feature 的用户）
