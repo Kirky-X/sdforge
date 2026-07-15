@@ -13,6 +13,10 @@ mod error_handling_tests {
     use sdforge::core::response::{ServiceError, ServiceResponse};
     use sdforge::error::{ApiError, ErrorCategory, ErrorContext};
     use serde_json::json;
+
+    // `tower::ServiceExt` provides `Router::oneshot` used only by the HTTP status
+    // mapping test below; it is only linked under the `http` feature.
+    #[cfg(feature = "http")]
     use tower::ServiceExt;
 
     // ============================================================================
