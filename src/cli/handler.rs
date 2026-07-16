@@ -9,23 +9,12 @@
 //! and `inventory::submit!(CliHandlerRegistration { ... })` for each
 //! `#[forge(cli = true)]` function.
 //!
-//! The handler signature takes a `HashMap<String, String>` (the string-typed
-//! argument values parsed by clap) and returns a pinned boxed future. This
-//! mirrors the design trade-off noted in `design.md` (A3): type-safety is
-//! traded for inventory simplicity — argument deserialization happens inside
-//! the macro-generated closure.
+//! The handler uses the unified `core::HandlerFn` signature
+//! `(HandlerArgs, HandlerState) -> HandlerFuture`, returning
+//! `Result<Value, ApiError>` — the same contract shared with gRPC, so a single
+//! `#[forge]` function is callable from either protocol with zero duplication.
 
-use crate::prelude::ApiError;
-use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
-
-/// Type alias for the handler function pointer.
-///
-/// `fn(HashMap<String, String>) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + 'static>>`
-pub type CliHandlerFn = fn(
-    HashMap<String, String>,
-) -> Pin<Box<dyn Future<Output = Result<(), ApiError>> + Send + 'static>>;
+use crate::core::HandlerFn;
 
 /// Static registration pairing a command name with its handler closure.
 ///
@@ -37,10 +26,10 @@ pub struct CliHandlerRegistration {
     /// Command name this handler serves — must match the paired
     /// `CliCommandRegistration::name`.
     pub name: &'static str,
-    /// Function pointer wrapping the macro-generated async closure.
-    /// The closure receives the parsed CLI args as a `HashMap<String, String>`
-    /// and resolves to `Result<(), ApiError>`.
-    pub handler: CliHandlerFn,
+    /// Unified handler pointer (`core::HandlerFn`). The macro-generated fn
+    /// extracts CLI args from `HandlerArgs`, awaits the forge function, and
+    /// serializes its return value to `serde_json::Value`.
+    pub handler: HandlerFn,
 }
 
 inventory::collect!(CliHandlerRegistration);
