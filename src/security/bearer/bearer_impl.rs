@@ -32,12 +32,41 @@ impl BearerAuth {
     /// Returns `AuthConfigError::MissingCharacterClass` if secret lacks required character types
     pub fn try_new(secret: impl Into<String>) -> Result<Self, AuthConfigError> {
         let secret_str = secret.into();
+        Self::validate_secret_bytes(secret_str.as_bytes())?;
 
-        if secret_str.len() < 32 {
+        let cache = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
+        Ok(Self {
+            secret: secret_str.into_bytes(),
+            valid_tokens: cache.clone(),
+            blacklisted_tokens: cache,
+            expected_audience: None,
+            expected_issuer: None,
+        })
+    }
+
+    /// Validate a JWT signing secret against the security policy.
+    ///
+    /// Shared by `try_new` and `with_dependencies` so that the DI entry point
+    /// cannot be used to bypass the complexity requirements enforced by the
+    /// regular constructors (vuln-0005).
+    ///
+    /// Rules:
+    /// - At least 32 bytes long
+    /// - Valid UTF-8 (so character-class checks are well-defined)
+    /// - Contains at least one uppercase letter
+    /// - Contains at least one lowercase letter
+    /// - Contains at least one ASCII digit
+    /// - Contains at least one non-alphanumeric character (special)
+    fn validate_secret_bytes(secret: &[u8]) -> Result<(), AuthConfigError> {
+        if secret.len() < 32 {
             return Err(AuthConfigError::SecretTooShort {
-                length: secret_str.len(),
+                length: secret.len(),
             });
         }
+
+        let secret_str = std::str::from_utf8(secret).map_err(|_| {
+            AuthConfigError::InvalidSecret("secret must be valid UTF-8".to_string())
+        })?;
 
         if !secret_str.chars().any(|c| c.is_uppercase()) {
             return Err(AuthConfigError::MissingCharacterClass {
@@ -59,15 +88,7 @@ impl BearerAuth {
                 required_type: "special character",
             });
         }
-
-        let cache = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
-        Ok(Self {
-            secret: secret_str.into_bytes(),
-            valid_tokens: cache.clone(),
-            blacklisted_tokens: cache,
-            expected_audience: None,
-            expected_issuer: None,
-        })
+        Ok(())
     }
 
     /// Create bearer authentication with audience validation
@@ -111,7 +132,7 @@ impl BearerAuth {
     ///
     /// # Arguments
     ///
-    /// * `secret` - JWT signing secret as bytes
+    /// * `secret` - JWT signing secret as bytes (must meet complexity requirements)
     /// * `valid_tokens` - Cache for valid tokens (shared across instances)
     /// * `blacklisted_tokens` - Cache for blacklisted tokens (shared across instances)
     /// * `expected_audience` - Optional expected audience claim for validation
@@ -121,12 +142,20 @@ impl BearerAuth {
     ///
     /// Returns a `BearerAuth` instance configured with the provided dependencies.
     ///
-    /// # Security Note
+    /// # Errors
     ///
-    /// This method does not validate the secret. The caller is responsible for
-    /// ensuring the secret meets security requirements when using this method.
-    /// For production use, prefer `new()`, `try_new()`, or `builder()` which
-    /// enforce secret validation.
+    /// Returns `AuthConfigError::SecretTooShort` if secret is less than 32 bytes.
+    /// Returns `AuthConfigError::InvalidSecret` if secret is not valid UTF-8.
+    /// Returns `AuthConfigError::MissingCharacterClass` if secret lacks any
+    /// required character class (uppercase / lowercase / digit / special).
+    ///
+    /// # Security
+    ///
+    /// The secret is validated against the same complexity policy as `try_new`:
+    /// at least 32 bytes, valid UTF-8, and containing at least one uppercase
+    /// letter, one lowercase letter, one digit, and one special character.
+    /// This closes the DI bypass that previously allowed callers to skip
+    /// validation (vuln-0005).
     ///
     /// # Examples
     ///
@@ -139,12 +168,13 @@ impl BearerAuth {
     /// let blacklisted_tokens = Arc::new(DashMapCache::new()) as _;
     ///
     /// let auth = BearerAuth::with_dependencies(
-    ///     b"my-secret-key".to_vec(),
+    ///     b"MySecureSecret123!@#ABCDEFGHIJKLM".to_vec(),
     ///     valid_tokens,
     ///     blacklisted_tokens,
     ///     Some("my-api".to_string()),
     ///     Some("my-issuer".to_string()),
-    /// );
+    /// )
+    /// .expect("valid secret must pass validation");
     /// let _ = auth;
     /// ```
     pub fn with_dependencies(
@@ -153,14 +183,15 @@ impl BearerAuth {
         blacklisted_tokens: SharedCache,
         expected_audience: Option<String>,
         expected_issuer: Option<String>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, AuthConfigError> {
+        Self::validate_secret_bytes(&secret)?;
+        Ok(Self {
             secret,
             valid_tokens,
             blacklisted_tokens,
             expected_audience,
             expected_issuer,
-        }
+        })
     }
 
     /// Create a builder for configuring BearerAuth.
