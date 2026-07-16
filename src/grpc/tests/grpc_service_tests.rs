@@ -29,6 +29,8 @@ fn test_grpc_server_config_with_auth() {
         require_auth: true,
         auth: Some(auth),
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
     assert!(config.auth.is_some());
 }
@@ -364,6 +366,8 @@ fn test_grpc_config_zero_timeout() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
 
     assert_eq!(config.timeout_seconds, 0);
@@ -379,6 +383,8 @@ fn test_grpc_config_large_max_connections() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
 
     assert_eq!(config.max_connections, 100000);
@@ -393,6 +399,8 @@ fn test_grpc_config_boundary_values() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
 
     let config2 = GrpcServerConfig {
@@ -402,6 +410,8 @@ fn test_grpc_config_boundary_values() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
 
     assert_eq!(config1.max_connections, 1);
@@ -851,6 +861,8 @@ fn test_grpc_server_config_clone() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
 
     let cloned = config.clone();
@@ -868,6 +880,8 @@ fn test_grpc_server_config_equality() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
 
     let config2 = GrpcServerConfig {
@@ -877,6 +891,8 @@ fn test_grpc_server_config_equality() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
 
     assert_eq!(config1.max_connections, config2.max_connections);
@@ -892,6 +908,8 @@ fn test_grpc_server_config_with_minimal_connections() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
 
     assert_eq!(config.max_connections, 1);
@@ -906,6 +924,8 @@ fn test_grpc_server_config_with_zero_timeout() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
 
     assert_eq!(config.timeout_seconds, 0);
@@ -920,6 +940,8 @@ fn test_grpc_server_config_timeout_edge_cases() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
 
     let long_timeout = GrpcServerConfig {
@@ -929,6 +951,8 @@ fn test_grpc_server_config_timeout_edge_cases() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
 
     assert_eq!(short_timeout.timeout_seconds, 1);
@@ -944,6 +968,8 @@ fn test_grpc_server_config_auth_none() {
         require_auth: false,
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
 
     assert!(config.auth.is_none());
@@ -1500,6 +1526,8 @@ async fn test_build_server_with_config_zero_values_starts_serving() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
     let result = tokio::time::timeout(
         Duration::from_millis(200),
@@ -1528,6 +1556,8 @@ async fn test_build_server_with_config_large_values_starts_serving() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
     let result = tokio::time::timeout(
         Duration::from_millis(200),
@@ -1557,6 +1587,8 @@ async fn test_build_server_with_config_minimal_positive_values() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     };
     let result = tokio::time::timeout(
         Duration::from_millis(200),
@@ -1601,7 +1633,10 @@ async fn test_vuln0006_rejects_require_auth_without_auth_config() {
         ..Default::default()
     };
     let result = build_server_with_config("127.0.0.1:0", config).await;
-    assert!(result.is_err(), "must reject require_auth=true with auth=None");
+    assert!(
+        result.is_err(),
+        "must reject require_auth=true with auth=None"
+    );
     let err_msg = result.unwrap_err().to_string();
     assert!(
         err_msg.contains("requires authentication"),

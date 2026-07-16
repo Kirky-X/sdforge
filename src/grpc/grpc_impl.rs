@@ -37,6 +37,10 @@ pub struct SdForgeGrpcService {
     handlers: OnceLock<HashMap<&'static str, HandlerFn>>,
     /// Lazy-built `method -> body_param name` lookup table.
     body_params: OnceLock<HashMap<&'static str, Option<&'static str>>>,
+    /// Optional rate limiter (vuln-0006). When `Some`, each `call` request
+    /// is checked against the limiter using the client's remote address.
+    #[cfg(feature = "ratelimit")]
+    rate_limiter: Option<std::sync::Arc<dyn crate::security::ratelimit::RateLimiter>>,
 }
 
 #[cfg(feature = "grpc")]
@@ -46,6 +50,8 @@ impl Default for SdForgeGrpcService {
             state: None,
             handlers: OnceLock::new(),
             body_params: OnceLock::new(),
+            #[cfg(feature = "ratelimit")]
+            rate_limiter: None,
         }
     }
 }
@@ -60,6 +66,25 @@ impl SdForgeGrpcService {
             state,
             handlers: OnceLock::new(),
             body_params: OnceLock::new(),
+            #[cfg(feature = "ratelimit")]
+            rate_limiter: None,
+        }
+    }
+
+    /// Construct a service with injected application state and rate limiter
+    /// (vuln-0006). Used by `build_server_with_config` when `ratelimit`
+    /// feature is enabled to pass `GrpcServerConfig.rate_limiter` through.
+    #[cfg(feature = "ratelimit")]
+    #[must_use]
+    pub fn with_state_and_rate_limiter(
+        state: HandlerState,
+        rate_limiter: Option<std::sync::Arc<dyn crate::security::ratelimit::RateLimiter>>,
+    ) -> Self {
+        Self {
+            state,
+            handlers: OnceLock::new(),
+            body_params: OnceLock::new(),
+            rate_limiter,
         }
     }
 
@@ -89,6 +114,47 @@ impl SdForgeGrpcService {
 #[tonic::async_trait]
 impl SdForgeService for SdForgeGrpcService {
     async fn call(&self, request: Request<CallRequest>) -> Result<Response<CallResponse>, Status> {
+        // vuln-0006: rate limit check before any handler dispatch.
+        // Extract client IP from tonic's remote_addr (set by transport layer
+        // from the actual TCP connection — unspoofable, unlike headers).
+        #[cfg(feature = "ratelimit")]
+        if let Some(ref limiter) = self.rate_limiter {
+            let identifier = request
+                .remote_addr()
+                .map(|addr| addr.ip().to_string())
+                .unwrap_or_else(|| "unknown".to_string());
+            if let Err(e) = limiter.check(&identifier).await {
+                use crate::security::ratelimit::RateLimitError;
+                let msg = match e {
+                    RateLimitError::Exceeded {
+                        limit,
+                        window_seconds,
+                    } => {
+                        format!(
+                            "rate limit exceeded: {} per {}s (client: {})",
+                            limit, window_seconds, identifier
+                        )
+                    }
+                    RateLimitError::Banned { reason } => {
+                        format!("client banned: {} (client: {})", reason, identifier)
+                    }
+                    RateLimitError::CircuitOpen => {
+                        format!("circuit breaker open (client: {})", identifier)
+                    }
+                    RateLimitError::QuotaExhausted { used, total } => {
+                        format!(
+                            "quota exhausted: {}/{} (client: {})",
+                            used, total, identifier
+                        )
+                    }
+                    RateLimitError::Limiteron(e) => {
+                        format!("rate limiter error: {} (client: {})", e, identifier)
+                    }
+                };
+                return Err(Status::resource_exhausted(msg));
+            }
+        }
+
         let req = request.into_inner();
 
         // R-grpc-001: lookup handler by method name
@@ -104,7 +170,12 @@ impl SdForgeService for SdForgeGrpcService {
         // R-grpc-003: parameters → args, data → body_param key
         let mut args: HandlerArgs = req.parameters.into_iter().collect();
         if !req.data.is_empty() {
-            match self.body_params().get(req.method.as_str()).copied().flatten() {
+            match self
+                .body_params()
+                .get(req.method.as_str())
+                .copied()
+                .flatten()
+            {
                 Some(bp) => {
                     args.insert(bp.to_string(), req.data);
                 }
@@ -220,7 +291,9 @@ impl GrpcRoute {
 /// configure authentication. Use [`build_server_with_config`] with a
 /// [`GrpcServerConfig`] that has `auth` configured instead.
 #[cfg(feature = "grpc")]
-#[deprecated(note = "use build_server_with_config with auth configured; build_server starts an unauthenticated server")]
+#[deprecated(
+    note = "use build_server_with_config with auth configured; build_server starts an unauthenticated server"
+)]
 pub async fn build_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Security fix: Validate address format before parsing to prevent information disclosure
     let addr = match addr.parse::<std::net::SocketAddr>() {
@@ -283,6 +356,11 @@ pub async fn build_server_with_config(
     }
     // T008: pass `config.state` into the service so handlers with State
     // parameters can downcast it at call time.
+    // vuln-0006: pass `config.rate_limiter` when `ratelimit` feature is enabled.
+    #[cfg(feature = "ratelimit")]
+    let service =
+        SdForgeGrpcService::with_state_and_rate_limiter(config.state, config.rate_limiter);
+    #[cfg(not(feature = "ratelimit"))]
     let service = SdForgeGrpcService::with_state(config.state);
 
     // Build server with optional JWT auth interceptor
@@ -319,6 +397,8 @@ impl Default for GrpcServerConfig {
             #[cfg(feature = "security")]
             auth: None,
             state: None,
+            #[cfg(feature = "ratelimit")]
+            rate_limiter: None,
         }
     }
 }
@@ -362,9 +442,7 @@ impl tonic::service::Interceptor for AuthGrpcInterceptor {
 impl SdForgeGrpcService {
     /// Test-only accessor: borrow the body_param map.
     #[cfg(test)]
-    pub(crate) fn body_params_map(
-        &self,
-    ) -> &HashMap<&'static str, Option<&'static str>> {
+    pub(crate) fn body_params_map(&self) -> &HashMap<&'static str, Option<&'static str>> {
         self.body_params()
     }
 }
@@ -398,10 +476,7 @@ mod tests {
 
     /// Handler that always returns `Err(NotFound)` — verifies the error →
     /// `success:false` + `status_code:404` + `Status::ok` mapping (R-grpc-005).
-    fn not_found_handler(
-        _args: HandlerArgs,
-        _state: HandlerState,
-    ) -> crate::core::HandlerFuture {
+    fn not_found_handler(_args: HandlerArgs, _state: HandlerState) -> crate::core::HandlerFuture {
         Box::pin(async {
             Err(ApiError::NotFound {
                 resource: "test_resource".to_string(),
@@ -594,12 +669,7 @@ mod tests {
                 },
                 422,
             ),
-            (
-                ApiError::AuthenticationFailed {
-                    reason: "x".into(),
-                },
-                401,
-            ),
+            (ApiError::AuthenticationFailed { reason: "x".into() }, 401),
             (
                 ApiError::AccessDenied {
                     permission: "x".into(),
@@ -655,5 +725,192 @@ mod tests {
         let borrowed = service.state.clone().unwrap();
         let downcast = borrowed.downcast_ref::<i32>();
         assert_eq!(downcast, Some(&42_i32));
+    }
+
+    // ========================================================================
+    // vuln-0006: gRPC rate limiting tests
+    // ========================================================================
+    #[cfg(feature = "ratelimit")]
+    mod vuln_0006_ratelimit_tests {
+        use super::*;
+        use crate::security::ratelimit::{RateLimitError, RateLimiter};
+        use std::future::Future;
+        use std::pin::Pin;
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        /// Mock rate limiter that always allows. Verifies that gRPC calls
+        /// proceed normally when the rate limit is not exceeded.
+        struct AlwaysAllowLimiter;
+
+        impl RateLimiter for AlwaysAllowLimiter {
+            fn check<'a>(
+                &'a self,
+                _identifier: &'a str,
+            ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>> {
+                Box::pin(async { Ok(()) })
+            }
+        }
+
+        /// Mock rate limiter that always rejects with `Exceeded`. Verifies
+        /// that gRPC calls are rejected with `Status::resource_exhausted`.
+        struct AlwaysRejectLimiter;
+
+        impl RateLimiter for AlwaysRejectLimiter {
+            fn check<'a>(
+                &'a self,
+                _identifier: &'a str,
+            ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>> {
+                Box::pin(async {
+                    Err(RateLimitError::Exceeded {
+                        limit: 10,
+                        window_seconds: 60,
+                    })
+                })
+            }
+        }
+
+        /// Mock rate limiter that counts check calls. Verifies the limiter
+        /// is actually invoked once per gRPC call.
+        struct CountingLimiter {
+            count: AtomicU32,
+        }
+
+        impl RateLimiter for CountingLimiter {
+            fn check<'a>(
+                &'a self,
+                _identifier: &'a str,
+            ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>> {
+                self.count.fetch_add(1, Ordering::SeqCst);
+                Box::pin(async { Ok(()) })
+            }
+        }
+
+        #[tokio::test]
+        async fn call_without_rate_limiter_proceeds_normally() {
+            // Baseline: no rate limiter → call should succeed as before.
+            let service = SdForgeGrpcService::default();
+            let mut params = HashMap::new();
+            params.insert("msg".to_string(), "hello".to_string());
+            let req = Request::new(CallRequest {
+                method: "test_echo".to_string(),
+                parameters: params,
+                data: String::new(),
+            });
+            let resp = service.call(req).await.unwrap().into_inner();
+            assert!(resp.success);
+            assert_eq!(resp.data, "hello");
+        }
+
+        #[tokio::test]
+        async fn call_with_allowing_limiter_proceeds_normally() {
+            // vuln-0006: rate limiter that allows → call should succeed.
+            let limiter: Arc<dyn RateLimiter> = Arc::new(AlwaysAllowLimiter);
+            let service = SdForgeGrpcService::with_state_and_rate_limiter(None, Some(limiter));
+            let mut params = HashMap::new();
+            params.insert("msg".to_string(), "allowed".to_string());
+            let req = Request::new(CallRequest {
+                method: "test_echo".to_string(),
+                parameters: params,
+                data: String::new(),
+            });
+            let resp = service.call(req).await.unwrap().into_inner();
+            assert!(resp.success);
+            assert_eq!(resp.data, "allowed");
+        }
+
+        #[tokio::test]
+        async fn call_with_rejecting_limiter_returns_resource_exhausted() {
+            // vuln-0006: rate limiter that rejects → Status::resource_exhausted.
+            // The handler must NOT be invoked (rate limit check is before dispatch).
+            let limiter: Arc<dyn RateLimiter> = Arc::new(AlwaysRejectLimiter);
+            let service = SdForgeGrpcService::with_state_and_rate_limiter(None, Some(limiter));
+            let req = Request::new(CallRequest {
+                method: "test_echo".to_string(),
+                parameters: HashMap::new(),
+                data: String::new(),
+            });
+            let err = service.call(req).await.unwrap_err();
+            assert_eq!(
+                err.code(),
+                tonic::Code::ResourceExhausted,
+                "vuln-0006: rejected rate limit must return ResourceExhausted, got {:?}",
+                err.code()
+            );
+            assert!(
+                err.message().contains("rate limit exceeded"),
+                "error message should mention rate limit, got: {}",
+                err.message()
+            );
+        }
+
+        #[tokio::test]
+        async fn call_with_rate_limiter_invokes_check_once_per_call() {
+            // vuln-0006: verify the limiter is actually called exactly once
+            // per gRPC call (not zero times due to a bug, not multiple times).
+            let limiter = Arc::new(CountingLimiter {
+                count: AtomicU32::new(0),
+            });
+            let count_clone = Arc::clone(&limiter);
+            let limiter_dyn: Arc<dyn RateLimiter> = limiter as Arc<dyn RateLimiter>;
+            let service = SdForgeGrpcService::with_state_and_rate_limiter(None, Some(limiter_dyn));
+
+            let req = Request::new(CallRequest {
+                method: "test_echo".to_string(),
+                parameters: HashMap::new(),
+                data: String::new(),
+            });
+            let _ = service.call(req).await;
+
+            assert_eq!(
+                count_clone.count.load(Ordering::SeqCst),
+                1,
+                "vuln-0006: rate limiter check must be called exactly once per gRPC call"
+            );
+        }
+
+        #[tokio::test]
+        async fn call_with_banned_limiter_returns_resource_exhausted() {
+            // vuln-0006: banned identifier → ResourceExhausted with ban reason.
+            struct AlwaysBannedLimiter;
+            impl RateLimiter for AlwaysBannedLimiter {
+                fn check<'a>(
+                    &'a self,
+                    _identifier: &'a str,
+                ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>>
+                {
+                    Box::pin(async {
+                        Err(RateLimitError::Banned {
+                            reason: "abuse detected".to_string(),
+                        })
+                    })
+                }
+            }
+            let limiter: Arc<dyn RateLimiter> = Arc::new(AlwaysBannedLimiter);
+            let service = SdForgeGrpcService::with_state_and_rate_limiter(None, Some(limiter));
+            let req = Request::new(CallRequest {
+                method: "test_echo".to_string(),
+                parameters: HashMap::new(),
+                data: String::new(),
+            });
+            let err = service.call(req).await.unwrap_err();
+            assert_eq!(err.code(), tonic::Code::ResourceExhausted);
+            assert!(
+                err.message().contains("banned") && err.message().contains("abuse detected"),
+                "error should mention ban reason, got: {}",
+                err.message()
+            );
+        }
+
+        #[test]
+        fn default_config_has_no_rate_limiter() {
+            // vuln-0006: default GrpcServerConfig.rate_limiter is None
+            // (opt-in, backward compatible).
+            let config = GrpcServerConfig::default();
+            assert!(
+                config.rate_limiter.is_none(),
+                "default config should not enable rate limiting"
+            );
+        }
     }
 }
