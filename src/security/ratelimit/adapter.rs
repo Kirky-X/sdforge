@@ -122,6 +122,7 @@ impl LimiteronAdapter {
             .with_config(default_config())
             .with_storage(storage)
             .with_ban_storage(ban_storage)
+            .with_l1_cache_enabled(false)
             .build()
             .await
             .expect("default_config() must produce a valid FlowControlConfig");
@@ -234,6 +235,7 @@ impl LimiteronAdapterBuilder {
             .with_config(config)
             .with_storage(storage)
             .with_ban_storage(ban_storage)
+            .with_l1_cache_enabled(false)
             .build()
             .await?;
         Ok(LimiteronAdapter::with_dependencies(Arc::new(governor)))
