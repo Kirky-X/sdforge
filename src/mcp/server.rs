@@ -178,6 +178,18 @@ impl SdForgeMcpServer {
         let instance = self
             .find_tool(name)
             .ok_or_else(|| ErrorData::invalid_params(format!("tool not found: {}", name), None))?;
+
+        // vuln-0002: validate arguments against the tool's input_schema before
+        // dispatch. Closes the gap where hand-written `SdForgeTool` impls that
+        // forgot to validate arguments in `call()` would accept arbitrary input.
+        // Macros-generated tools already enforce `#[serde(deny_unknown_fields)]`,
+        // but this entry-point check defends against hand-written tools and
+        // provides defense-in-depth for all code paths.
+        if let Some(ref args) = arguments {
+            let schema = instance.tool().input_schema();
+            super::schema_validation::validate_arguments(&schema, args)?;
+        }
+
         instance.tool().call(arguments)
     }
 }
@@ -504,8 +516,9 @@ mod tests {
     #[test]
     fn test_call_tool_internal_accepts_payload_under_limit() {
         let server = SdForgeMcpServer::new();
-        // 512 KiB string — well under the 1 MiB limit.
-        let ok_payload = serde_json::Value::String("x".repeat(512 * 1024));
+        // 512 KiB object — well under the 1 MiB limit, and matches the
+        // coverage_test_tool's input_schema (`{"type": "object"}`).
+        let ok_payload = serde_json::json!({"data": "x".repeat(512 * 1024)});
         let result = server.call_tool_internal("coverage_test_tool", Some(ok_payload));
         assert!(
             result.is_ok(),

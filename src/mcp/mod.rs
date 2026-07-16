@@ -74,6 +74,8 @@ pub mod stateless;
 #[cfg(feature = "mcp")]
 mod handler;
 #[cfg(feature = "mcp")]
+mod schema_validation;
+#[cfg(feature = "mcp")]
 mod server;
 
 // Test module (only compiled in test builds).
