@@ -20,6 +20,7 @@ mod grpc_impl;
 #[cfg(test)]
 pub(crate) use grpc_impl::make_auth_interceptor;
 #[cfg(feature = "grpc")]
+#[allow(deprecated)]
 pub use grpc_impl::{build_server, build_server_with_config, SdForgeGrpcService};
 
 #[cfg(feature = "grpc")]
@@ -51,6 +52,12 @@ pub struct GrpcServerConfig {
     pub max_connections: usize,
     /// Request timeout in seconds
     pub timeout_seconds: u64,
+    /// Whether authentication is required to start the server (vuln-0006).
+    ///
+    /// Defaults to `true` (secure default). When `true`, `build_server_with_config`
+    /// refuses to start if `auth` is `None`, preventing accidental deployment of
+    /// an unauthenticated gRPC server. Set to `false` for development/test only.
+    pub require_auth: bool,
     /// Optional JWT authentication.
     /// When `Some`, all gRPC requests must include a valid JWT bearer token
     /// in the `authorization` metadata header.

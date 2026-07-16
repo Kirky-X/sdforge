@@ -502,6 +502,7 @@ mod grpc_integration_tests {
         let config = GrpcServerConfig {
             max_connections: 500,
             timeout_seconds: 60,
+            require_auth: false,
             #[cfg(feature = "security")]
             auth: None,
             state: None,
@@ -959,6 +960,7 @@ mod grpc_integration_tests {
         let config = GrpcServerConfig {
             max_connections: 100,
             timeout_seconds: 60,
+            require_auth: true,
             auth: Some(auth),
             state: None,
         };
@@ -1130,6 +1132,7 @@ mod grpc_integration_tests {
         let config = GrpcServerConfig {
             max_connections: 200,
             timeout_seconds: 45,
+            require_auth: false,
             #[cfg(feature = "security")]
             auth: None,
             state: None,

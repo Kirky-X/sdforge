@@ -24,6 +24,7 @@
 //! ```
 
 use sdforge::core::ApiMetadata;
+#[allow(deprecated)]
 use sdforge::grpc::{
     build_server, build_server_with_config, GrpcRoute, GrpcServerConfig, SdForgeGrpcService,
 };
@@ -69,6 +70,7 @@ pub fn custom_server_config() -> GrpcServerConfig {
     GrpcServerConfig {
         max_connections: 200,
         timeout_seconds: 60,
+        require_auth: false,
         #[cfg(feature = "security_examples")]
         auth: None,
         state: None,
@@ -98,6 +100,7 @@ pub fn default_service() -> SdForgeGrpcService {
 /// # Errors
 ///
 /// 当地址格式无效或 tonic 运行出错时返回错误。
+#[allow(deprecated)]
 pub async fn start_default(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
     build_server(addr).await
 }
