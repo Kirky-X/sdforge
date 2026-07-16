@@ -1486,6 +1486,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         let mcp_call_logic = if !mcp_params.is_empty() {
             quote! {
                 #[derive(serde::Deserialize)]
+                #[serde(deny_unknown_fields)]
                 struct Params {
                     #(pub #mcp_param_names: #mcp_param_types),*
                 }

@@ -18,6 +18,16 @@ use crate::mcp::McpToolInstance;
 use crate::mcp::get_mcp_tools;
 use crate::mcp::value_to_json_object_arc;
 
+/// Maximum allowed size (in bytes) for `call_tool` arguments payloads.
+///
+/// Defends against memory-exhaustion attacks where a client submits a huge
+/// JSON blob to `tools/call`. The limit is applied to the serialized JSON
+/// length before the arguments reach the tool implementation.
+///
+/// 1 MiB matches the typical MCP server default and leaves ample headroom
+/// for legitimate tool inputs (most tool calls are < 4 KiB).
+pub const MAX_ARGUMENTS_SIZE_BYTES: usize = 0x10_0000;
+
 /// MCP server that dispatches to tools registered via SDForge's inventory.
 ///
 /// This struct implements `rmcp::handler::server::ServerHandler` so it can be
@@ -135,25 +145,39 @@ impl SdForgeMcpServer {
     /// Returns the `CallToolResult` on success or `ErrorData` on failure.
     /// This is the internal entry point; the public `ServerHandler::call_tool`
     /// delegates here after extracting parameters from `CallToolRequestParams`.
+    ///
+    /// # Security
+    ///
+    /// - Arguments payload size is capped at [`MAX_ARGUMENTS_SIZE_BYTES`].
+    ///   Larger payloads are rejected with `invalid_params` before reaching
+    ///   the tool implementation (DoS defense).
+    /// - Unknown tool names return a generic `"tool not found"` error without
+    ///   listing registered tools (information disclosure defense).
     pub fn call_tool_internal(
         &self,
         name: &str,
         arguments: Option<serde_json::Value>,
     ) -> Result<CallToolResult, ErrorData> {
-        let instance = self.find_tool(name).ok_or_else(|| {
-            ErrorData::invalid_params(
-                format!(
-                    "Tool '{}' not found. Registered tools: {}",
-                    name,
-                    self.tools
-                        .iter()
-                        .map(|t| t.tool().name())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-                None,
-            )
-        })?;
+        // vuln-0002: reject oversized argument payloads before any dispatch.
+        if let Some(ref args) = arguments {
+            let size = serde_json::to_vec(args).map(|v| v.len()).unwrap_or(0);
+            if size > MAX_ARGUMENTS_SIZE_BYTES {
+                return Err(ErrorData::invalid_params(
+                    format!(
+                        "arguments payload size ({}) exceeds maximum allowed size ({})",
+                        size, MAX_ARGUMENTS_SIZE_BYTES
+                    ),
+                    None,
+                ));
+            }
+        }
+
+        // vuln-0002: do not leak the registered tool list in the error
+        // message — a generic "tool not found" is sufficient for clients
+        // while denying an attacker an inventory enumeration vector.
+        let instance = self
+            .find_tool(name)
+            .ok_or_else(|| ErrorData::invalid_params(format!("tool not found: {}", name), None))?;
         instance.tool().call(arguments)
     }
 }
@@ -377,7 +401,8 @@ mod tests {
     /// Test `ServerHandler::call_tool` with a nonexistent tool name.
     ///
     /// Verifies the error path: `call_tool_internal` returns `ErrorData::invalid_params`
-    /// with a message listing registered tools.
+    /// with a generic "tool not found" message. The message must NOT leak the
+    /// registered tool list (vuln-0002: information disclosure defense).
     #[tokio::test]
     async fn test_server_handler_call_tool_nonexistent() {
         let server = SdForgeMcpServer::new();
@@ -397,10 +422,15 @@ mod tests {
             "Error message should contain 'not found', got: {}",
             error.message
         );
-        // The error message should list registered tools
+        // vuln-0002: error message MUST NOT enumerate registered tools.
         assert!(
-            error.message.contains("coverage_test_tool"),
-            "Error message should list registered tools, got: {}",
+            !error.message.contains("coverage_test_tool"),
+            "Error message must not leak registered tool names, got: {}",
+            error.message
+        );
+        assert!(
+            !error.message.contains("Registered tools"),
+            "Error message must not contain 'Registered tools' list, got: {}",
             error.message
         );
     }
@@ -442,5 +472,74 @@ mod tests {
             result.is_ok(),
             "call_tool with task metadata should succeed for coverage_test_tool"
         );
+    }
+
+    // ========================================================================
+    // vuln-0002 security tests: argument size limit + non-disclosure
+    // ========================================================================
+
+    /// Verify `call_tool_internal` rejects argument payloads larger than
+    /// `MAX_ARGUMENTS_SIZE_BYTES` (1 MiB) with `invalid_params`.
+    ///
+    /// A 2 MiB string value must be rejected before reaching the tool.
+    #[test]
+    fn test_call_tool_internal_rejects_oversized_arguments() {
+        let server = SdForgeMcpServer::new();
+        // Build a payload well over the 1 MiB limit.
+        let oversized = serde_json::Value::String("x".repeat(2 * 1024 * 1024));
+        let result = server.call_tool_internal("coverage_test_tool", Some(oversized));
+        assert!(
+            result.is_err(),
+            "oversized arguments payload must be rejected"
+        );
+        let err = result.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("exceeds maximum") || msg.contains("payload size"),
+            "error should mention size limit, got: {msg}"
+        );
+    }
+
+    /// Verify `call_tool_internal` accepts payloads just under the size limit.
+    #[test]
+    fn test_call_tool_internal_accepts_payload_under_limit() {
+        let server = SdForgeMcpServer::new();
+        // 512 KiB string — well under the 1 MiB limit.
+        let ok_payload = serde_json::Value::String("x".repeat(512 * 1024));
+        let result = server.call_tool_internal("coverage_test_tool", Some(ok_payload));
+        assert!(
+            result.is_ok(),
+            "payload under the size limit should be accepted"
+        );
+    }
+
+    /// Verify `call_tool_internal` returns a generic `tool not found` error
+    /// and does NOT enumerate registered tool names (vuln-0002 fix).
+    #[test]
+    fn test_call_tool_internal_does_not_leak_tool_list() {
+        let server = SdForgeMcpServer::new();
+        let result = server.call_tool_internal("nonexistent_tool_xyz", None);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("not found"),
+            "error should mention 'not found', got: {msg}"
+        );
+        // The error must not leak the registered tool inventory.
+        assert!(
+            !msg.contains("coverage_test_tool"),
+            "error must not leak registered tool names, got: {msg}"
+        );
+        assert!(
+            !msg.contains("Registered tools"),
+            "error must not contain 'Registered tools' phrase, got: {msg}"
+        );
+    }
+
+    /// Verify `MAX_ARGUMENTS_SIZE_BYTES` is exactly 1 MiB (documented contract).
+    #[test]
+    fn test_max_arguments_size_bytes_is_one_mib() {
+        assert_eq!(MAX_ARGUMENTS_SIZE_BYTES, 1024 * 1024);
     }
 }
