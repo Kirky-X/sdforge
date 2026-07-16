@@ -58,6 +58,8 @@ pub enum McpHeaderError {
     MissingToolName,
     /// The method value is not a valid MCP method.
     InvalidMethod(String),
+    /// The `Mcp-Name` header value is not a valid tool name (vuln-0004).
+    InvalidToolName(String),
 }
 
 impl std::fmt::Display for McpHeaderError {
@@ -68,6 +70,7 @@ impl std::fmt::Display for McpHeaderError {
                 write!(f, "missing required header: Mcp-Name for tools/call method")
             }
             Self::InvalidMethod(m) => write!(f, "invalid MCP method: {}", m),
+            Self::InvalidToolName(n) => write!(f, "invalid MCP tool name: {}", n),
         }
     }
 }
@@ -92,6 +95,7 @@ pub const MCP_METHOD_PING: &str = "ping";
 /// - `MissingMethod` if the `Mcp-Method` header is absent.
 /// - `MissingToolName` if `Mcp-Method` is `tools/call` but `Mcp-Name` is absent.
 /// - `InvalidMethod` if the method value is not a recognized MCP method.
+/// - `InvalidToolName` if the `Mcp-Name` value fails `is_valid_tool_name`.
 ///
 /// # Example
 ///
@@ -126,6 +130,11 @@ pub fn parse_mcp_headers(headers: &HeaderMap) -> Result<McpHeaderInfo, McpHeader
                 .and_then(|v: &http::HeaderValue| v.to_str().ok())
                 .ok_or(McpHeaderError::MissingToolName)?
                 .to_string();
+            // vuln-0004: validate tool name to prevent path traversal,
+            // injection, control characters, and DoS via oversized names.
+            if !is_valid_tool_name(&tool_name) {
+                return Err(McpHeaderError::InvalidToolName(tool_name));
+            }
             Ok(McpHeaderInfo {
                 method,
                 tool_name: Some(tool_name),
@@ -141,6 +150,26 @@ pub fn is_valid_method(method: &str) -> bool {
         method,
         MCP_METHOD_TOOLS_LIST | MCP_METHOD_TOOLS_CALL | MCP_METHOD_PING
     )
+}
+
+/// Maximum allowed length for a tool name in the `Mcp-Name` header.
+///
+/// 128 characters is generous for any reasonable tool name while bounding
+/// memory and log storage to prevent DoS.
+pub const MAX_TOOL_NAME_LEN: usize = 128;
+
+/// Check if a tool name is valid for the `Mcp-Name` header (vuln-0004).
+///
+/// A valid tool name:
+/// - Is 1–128 characters long (prevents empty names and DoS via oversized names)
+/// - Contains only ASCII alphanumeric, underscore, hyphen, and dot characters
+///   (prevents path traversal, injection, header smuggling, and control chars)
+pub fn is_valid_tool_name(name: &str) -> bool {
+    if name.is_empty() || name.len() > MAX_TOOL_NAME_LEN {
+        return false;
+    }
+    name.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
 }
 
 #[cfg(test)]
@@ -268,6 +297,10 @@ mod tests {
             format!("{}", McpHeaderError::InvalidMethod("bad".to_string())),
             "invalid MCP method: bad"
         );
+        assert_eq!(
+            format!("{}", McpHeaderError::InvalidToolName("bad/name".to_string())),
+            "invalid MCP tool name: bad/name"
+        );
     }
 
     #[test]
@@ -283,5 +316,85 @@ mod tests {
         let headers = make_headers(Some("TOOLS/LIST"), None);
         let result = parse_mcp_headers(&headers);
         assert!(result.is_err());
+    }
+
+    // ========================================================================
+    // vuln-0004 regression tests: tool name validation
+    //
+    // parse_mcp_headers previously accepted any string as the Mcp-Name
+    // header value, allowing path traversal (../etc/passwd), injection
+    // characters (; ' "), control characters, and oversized names (DoS).
+    // The fix adds is_valid_tool_name and rejects invalid names with
+    // InvalidToolName error.
+    // ========================================================================
+
+    #[test]
+    fn test_vuln0004_is_valid_tool_name_accepts_simple_names() {
+        assert!(is_valid_tool_name("my_tool"));
+        assert!(is_valid_tool_name("get-weather"));
+        assert!(is_valid_tool_name("tool123"));
+        assert!(is_valid_tool_name("my.tool"));
+        assert!(is_valid_tool_name("a"));
+    }
+
+    #[test]
+    fn test_vuln0004_is_valid_tool_name_rejects_empty() {
+        assert!(!is_valid_tool_name(""));
+    }
+
+    #[test]
+    fn test_vuln0004_is_valid_tool_name_rejects_oversized() {
+        let long_name = "a".repeat(MAX_TOOL_NAME_LEN + 1);
+        assert!(!is_valid_tool_name(&long_name));
+    }
+
+    #[test]
+    fn test_vuln0004_is_valid_tool_name_accepts_at_max_length() {
+        let max_name = "a".repeat(MAX_TOOL_NAME_LEN);
+        assert!(is_valid_tool_name(&max_name));
+    }
+
+    #[test]
+    fn test_vuln0004_is_valid_tool_name_rejects_path_traversal() {
+        assert!(!is_valid_tool_name("../etc/passwd"));
+        assert!(!is_valid_tool_name("my/tool"));
+        assert!(!is_valid_tool_name("my\\tool"));
+    }
+
+    #[test]
+    fn test_vuln0004_is_valid_tool_name_rejects_special_chars() {
+        assert!(!is_valid_tool_name("my tool")); // space
+        assert!(!is_valid_tool_name("my;tool")); // semicolon
+        assert!(!is_valid_tool_name("my'tool")); // single quote
+        assert!(!is_valid_tool_name("my\"tool")); // double quote
+    }
+
+    #[test]
+    fn test_vuln0004_parse_rejects_invalid_tool_name_path_traversal() {
+        let headers = make_headers(Some("tools/call"), Some("../etc/passwd"));
+        let err = parse_mcp_headers(&headers).unwrap_err();
+        assert!(matches!(err, McpHeaderError::InvalidToolName(_)));
+    }
+
+    #[test]
+    fn test_vuln0004_parse_rejects_empty_tool_name() {
+        let headers = make_headers(Some("tools/call"), Some(""));
+        let err = parse_mcp_headers(&headers).unwrap_err();
+        assert!(matches!(err, McpHeaderError::InvalidToolName(_)));
+    }
+
+    #[test]
+    fn test_vuln0004_parse_rejects_oversized_tool_name() {
+        let long_name = "a".repeat(MAX_TOOL_NAME_LEN + 1);
+        let headers = make_headers(Some("tools/call"), Some(&long_name));
+        let err = parse_mcp_headers(&headers).unwrap_err();
+        assert!(matches!(err, McpHeaderError::InvalidToolName(_)));
+    }
+
+    #[test]
+    fn test_vuln0004_parse_accepts_valid_tool_name() {
+        let headers = make_headers(Some("tools/call"), Some("my_valid_tool"));
+        let info = parse_mcp_headers(&headers).unwrap();
+        assert_eq!(info.tool_name, Some("my_valid_tool".to_string()));
     }
 }
