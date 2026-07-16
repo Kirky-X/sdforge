@@ -231,6 +231,94 @@ async fn check_returns_exceeded_after_capacity_exhausted() {
     );
 }
 
+// ============================================================================
+// vuln-0007: L1 cache must be disabled in production Governor construction
+// ============================================================================
+
+/// vuln-0007: `LimiteronAdapterBuilder::build()` must disable L1 cache.
+///
+/// Without `.with_l1_cache_enabled(false)`, the Governor caches the first
+/// `Allowed` decision and returns it for all subsequent identical requests,
+/// allowing rate-limit bypass. This test verifies that `build()` produces
+/// an adapter where token-bucket exhaustion is observable (i.e., L1 cache
+/// is disabled).
+#[tokio::test]
+async fn test_vuln0007_build_disables_l1_cache() {
+    use limiteron::config::{GlobalConfig, Matcher, Rule};
+    use limiteron::{ActionConfig, FlowControlConfig, LimiterConfig};
+
+    let tight_config = FlowControlConfig {
+        version: "0.1.0".to_string(),
+        global: GlobalConfig::default(),
+        rules: vec![Rule {
+            id: "vuln-0007".to_string(),
+            name: "vuln-0007 tight bucket".to_string(),
+            priority: 100,
+            matchers: vec![Matcher::Ip {
+                ip_ranges: vec!["0.0.0.0/0".to_string()],
+            }],
+            limiters: vec![LimiterConfig::TokenBucket {
+                capacity: 1,
+                refill_rate: 1,
+            }],
+            action: ActionConfig::default(),
+        }],
+    };
+
+    let adapter = LimiteronAdapter::builder()
+        .with_config(tight_config)
+        .build()
+        .await
+        .expect("tight config must be valid");
+
+    // Fire 5 rapid requests. With L1 cache disabled (fix), at most 2 allowed
+    // (1 capacity + ~1 refill). With L1 cache enabled (bug), all 5 cached
+    // as Allowed -> 0 rejections.
+    let mut rejections = 0;
+    for _ in 0..5 {
+        if adapter.check("192.0.2.1").await.is_err() {
+            rejections += 1;
+        }
+    }
+
+    assert!(
+        rejections >= 2,
+        "expected at least 2 rejections (capacity=1, 5 requests, L1 cache disabled), got {} \
+         — L1 cache may be enabled",
+        rejections
+    );
+}
+
+/// vuln-0007: `LimiteronAdapter::new()` must disable L1 cache.
+///
+/// Same vulnerability as `build()` — `new()` constructs a Governor without
+/// `.with_l1_cache_enabled(false)`, allowing rate-limit bypass via cached
+/// decisions. We verify by sending 110 requests against the default config
+/// (capacity=100, refill_rate=10). With L1 cache disabled, at least 1
+/// request must be rejected. With L1 cache enabled, all 110 are cached
+/// as Allowed -> 0 rejections.
+#[tokio::test]
+async fn test_vuln0007_new_disables_l1_cache() {
+    let adapter = LimiteronAdapter::new().await;
+
+    // Default config: capacity=100, refill_rate=10. Send 110 rapid requests.
+    // With L1 cache disabled: ~100 allowed, ~10 rejected (test runs in <1ms,
+    // so refill is negligible). With L1 cache enabled: all 110 cached -> 0
+    // rejections.
+    let mut rejections = 0;
+    for _ in 0..110 {
+        if adapter.check("127.0.0.1").await.is_err() {
+            rejections += 1;
+        }
+    }
+
+    assert!(
+        rejections >= 1,
+        "expected at least 1 rejection (capacity=100, 110 requests, L1 cache disabled), got 0 \
+         — L1 cache may be enabled"
+    );
+}
+
 /// `check_request(req)` extracts the IP from `X-Forwarded-For` (first IP) and
 /// delegates to `check()`. With default config the first request is allowed.
 #[cfg(feature = "ratelimit-http")]
