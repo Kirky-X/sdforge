@@ -264,6 +264,7 @@ pub use websocket::{
 pub mod grpc;
 
 #[cfg(feature = "grpc")]
+#[allow(deprecated)]
 pub use grpc::{
     GrpcRoute, GrpcServerConfig, SdForgeGrpcService, build_server, build_server_with_config,
 };
