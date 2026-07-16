@@ -23,6 +23,12 @@ pub(crate) use grpc_impl::make_auth_interceptor;
 pub use grpc_impl::{build_server, build_server_with_config};
 
 #[cfg(feature = "grpc")]
+/// gRPC handler registration (links `CallRequest.method` → forge handler).
+pub mod handler;
+#[cfg(feature = "grpc")]
+pub use handler::GrpcHandlerRegistration;
+
+#[cfg(feature = "grpc")]
 /// gRPC service implementation
 #[derive(Debug, Default)]
 pub struct SdForgeGrpcService {
