@@ -295,13 +295,11 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
                         None => return Err(AuthError::MissingAuth),
                     };
 
-                    let client_ip = req
-                        .headers()
-                        .get("x-forwarded-for")
-                        .or_else(|| req.headers().get("x-real-ip"))
-                        .and_then(|v: &HeaderValue| v.to_str().ok())
-                        .unwrap_or("unknown")
-                        .to_string();
+                    // Use trusted-proxy-aware IP extraction (vuln-0001 fix):
+                    // direct header reads allow IP spoofing; extract_client_ip_core
+                    // only trusts X-Forwarded-For / X-Real-IP from trusted proxies.
+                    let client_ip = crate::security::extract_client_ip_core(req)
+                        .unwrap_or_else(|| "unknown".to_string());
 
                     // Security fix: Validate prefix is not empty before checking
                     // This prevents authentication bypass when prefix is empty

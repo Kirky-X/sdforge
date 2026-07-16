@@ -395,3 +395,75 @@ async fn test_apikey_auth_with_x_real_ip_header() {
 
     assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
 }
+
+// ============================================================================
+// vuln-0001 regression tests: API key auth must use extract_client_ip_core
+//
+// The extract_auth closure previously read X-Forwarded-For / X-Real-IP
+// headers directly, allowing an attacker to spoof these headers to bypass
+// IP-based checks. The fix routes IP extraction through
+// extract_client_ip_core, which only trusts forwarded headers from trusted
+// reverse proxies (private IP ranges).
+//
+// The spoofing defense itself is verified by the 15+ tests in
+// src/security/ip_util.rs (e.g. test_extract_client_ip_non_trusted_proxy_
+// ignores_headers). These tests verify the auth middleware code path
+// functions correctly when extract_client_ip_core is used.
+// ============================================================================
+
+/// Verify the auth middleware handles a request with ConnectInfo from a
+/// non-trusted proxy and spoofed X-Forwarded-For / X-Real-IP headers.
+/// With the fix, extract_client_ip_core ignores the spoofed headers
+/// (8.8.8.8 is not a trusted proxy) and returns the direct connection IP.
+/// The auth result (401 for unregistered key) is unchanged, but the code
+/// path through extract_client_ip_core must not panic or misbehave.
+#[cfg(feature = "security")]
+#[tokio::test]
+async fn test_vuln0001_apikey_auth_with_spoofed_headers_from_non_trusted_proxy() {
+    use axum::extract::connect_info::ConnectInfo;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    let router = build_apikey_test_router("X-API-Key", "key-");
+
+    let mut req = axum::http::Request::builder()
+        .uri("/cov-test-route")
+        .header("X-API-Key", "key-test")
+        .header("x-forwarded-for", "1.2.3.4")
+        .header("x-real-ip", "5.6.7.8")
+        .body(Body::empty())
+        .unwrap();
+    // Direct connection from a non-trusted proxy (public IP 8.8.8.8).
+    // extract_client_ip_core must ignore the spoofed forwarded headers.
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8)), 8080);
+    req.extensions_mut().insert(ConnectInfo(addr));
+
+    let response = tower::ServiceExt::oneshot(router, req).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+}
+
+/// Verify the auth middleware handles a request with ConnectInfo from a
+/// trusted proxy (10.0.0.1) and legitimate X-Forwarded-For header.
+/// extract_client_ip_core trusts the header and returns the forwarded IP.
+/// The auth result (401 for unregistered key) is unchanged.
+#[cfg(feature = "security")]
+#[tokio::test]
+async fn test_vuln0001_apikey_auth_with_trusted_proxy_forwarded_header() {
+    use axum::extract::connect_info::ConnectInfo;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+    let router = build_apikey_test_router("X-API-Key", "key-");
+
+    let mut req = axum::http::Request::builder()
+        .uri("/cov-test-route")
+        .header("X-API-Key", "key-test")
+        .header("x-forwarded-for", "203.0.113.50")
+        .body(Body::empty())
+        .unwrap();
+    // Direct connection from a trusted reverse proxy (10.0.0.1).
+    // extract_client_ip_core trusts X-Forwarded-For and returns 203.0.113.50.
+    let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1)), 8080);
+    req.extensions_mut().insert(ConnectInfo(addr));
+
+    let response = tower::ServiceExt::oneshot(router, req).await.unwrap();
+    assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
+}
