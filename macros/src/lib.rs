@@ -4,7 +4,7 @@
 //!
 //! This crate provides procedural macros for the SDForge framework.
 
-#![doc(html_root_url = "https://docs.rs/sdforge-macros/0.4.1")]
+#![doc(html_root_url = "https://docs.rs/sdforge-macros/0.5.0")]
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -634,24 +634,81 @@ fn rust_type_to_openapi_schema(rust_type: &str) -> (&'static str, &'static str) 
     }
 }
 
+/// Extract the inner `T` from a `Arc<T>` type (T011).
+///
+/// Returns `Some(&syn::Type)` when `ty` is `Arc<T>` (any path-qualified
+/// `Arc` with exactly one angle-bracketed type argument), `None` otherwise.
+/// Used by `generate_handler_closure` to emit `downcast_state::<T>(state)`
+/// for `#[state]` parameters — State params must be `Arc<T>` so the runtime
+/// `Any` downcast in `core::downcast_state` can recover the concrete `T`.
+fn extract_arc_inner_type(ty: &syn::Type) -> Option<&syn::Type> {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            if segment.ident == "Arc" {
+                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
+                    for arg in &args.args {
+                        if let syn::GenericArgument::Type(inner_ty) = arg {
+                            return Some(inner_ty);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Generate the unified handler closure shared by CLI and gRPC registrations (D3).
 ///
 /// Emits a named function `#handler_fn_name` with signature
 /// `(HandlerArgs, HandlerState) -> HandlerFuture` that:
-/// 1. extracts Path/Body params from `args` (string → typed via `parse`),
-/// 2. awaits the original forge function,
-/// 3. serializes the return value via `serde_json::to_value` (requires `T: Serialize`).
+/// 1. downcasts State params from `state` via `downcast_state::<T>(state)?`,
+/// 2. extracts Path/Body params from `args` (string → typed via `parse`),
+/// 3. awaits the original forge function (passing all params in declaration order),
+/// 4. serializes the return value via `serde_json::to_value` (requires `T: Serialize`).
 ///
-/// State params are intentionally NOT handled here (T011 adds `downcast_state`);
-/// callers that reject State (CLI today) do so before invoking this helper.
+/// State params must be declared as `Arc<T>`; if not, a compile error is
+/// emitted pointing at the function name. State params are never surfaced
+/// on the CLI (filtered out of `CliArgInfo` by `generate_cli_registration`),
+/// but ARE resolved here via `downcast_state` so the handler receives the
+/// concrete `Arc<T>` directly.
 fn generate_handler_closure(
     fn_name: &syn::Ident,
     handler_fn_name: &syn::Ident,
     params: &[ParamInfo],
     _path_params: &[String],
 ) -> TokenStream2 {
-    // Only Path/Body params participate in value extraction; State/Query/...
-    // are skipped here. State injection arrives in T011 via downcast_state.
+    // Validate State params are Arc<T> — emit compile_error if not.
+    for p in params
+        .iter()
+        .filter(|p| matches!(p.param_kind, ParamKind::State))
+    {
+        if extract_arc_inner_type(&p.ty).is_none() {
+            return syn::Error::new(
+                fn_name.span(),
+                "State parameters must be of the form `Arc<T>` to support safe downcast",
+            )
+            .to_compile_error();
+        }
+    }
+
+    // State params are downcast from HandlerState via downcast_state::<T>().
+    let state_params: Vec<&ParamInfo> = params
+        .iter()
+        .filter(|p| matches!(p.param_kind, ParamKind::State))
+        .collect();
+
+    let state_extractions = state_params.iter().map(|p| {
+        let pname = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+        let pty = &p.ty;
+        // unwrap is safe — we validated Arc<T> above and returned early otherwise.
+        let inner_ty = extract_arc_inner_type(pty).expect("validated Arc<T> above");
+        quote! {
+            let #pname: #pty = sdforge::core::downcast_state::<#inner_ty>(state)?;
+        }
+    });
+
+    // Path/Body params participate in value extraction from HandlerArgs.
     let handler_params: Vec<&ParamInfo> = params
         .iter()
         .filter(|p| matches!(p.param_kind, ParamKind::Path | ParamKind::Body))
@@ -697,19 +754,29 @@ fn generate_handler_closure(
         }
     });
 
-    let param_idents: Vec<syn::Ident> = handler_params
+    // Call idents preserve original declaration order (State + Path/Body
+    // interleaved as the user wrote them). This is strictly more correct
+    // than "state first" — it handles any parameter ordering.
+    let call_idents: Vec<syn::Ident> = params
         .iter()
+        .filter(|p| {
+            matches!(
+                p.param_kind,
+                ParamKind::Path | ParamKind::Body | ParamKind::State
+            )
+        })
         .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
         .collect();
 
     quote! {
         fn #handler_fn_name(
             args: sdforge::core::HandlerArgs,
-            _state: sdforge::core::HandlerState,
+            state: sdforge::core::HandlerState,
         ) -> sdforge::core::HandlerFuture {
             Box::pin(async move {
+                #(#state_extractions)*
                 #(#param_extractions)*
-                let result = #fn_name(#(#param_idents),*).await;
+                let result = #fn_name(#(#call_idents),*).await;
                 result.and_then(|v| serde_json::to_value(&v).map_err(|e| {
                     sdforge::prelude::ApiError::internal_error(
                         format!("failed to serialize handler return value: {e}"),
@@ -718,6 +785,65 @@ fn generate_handler_closure(
                 }))
             })
         }
+    }
+}
+
+/// Derive the gRPC body parameter name for a `#[forge(grpc_method = "...")]`
+/// function: the first `ParamKind::Body` parameter's name (the request
+/// payload), or `None` when no Body param exists. The gRPC `Call` handler uses
+/// this to route `CallRequest.data` into the correct handler argument.
+fn derive_body_param(params: &[ParamInfo]) -> Option<String> {
+    params
+        .iter()
+        .find(|p| matches!(p.param_kind, ParamKind::Body))
+        .map(|p| p.name.clone())
+}
+
+/// Generate gRPC handler registration tokens for a `#[forge(grpc_method)]`
+/// function (T005).
+///
+/// Emits two `#[cfg(feature = "grpc")]`-gated items:
+/// 1. `fn __grpc_handler_<fn_name>(...)` — the unified handler closure
+///    `(HandlerArgs, HandlerState) -> HandlerFuture`, shared with CLI via
+///    `generate_handler_closure`.
+/// 2. `inventory::submit!(GrpcHandlerRegistration { method, handler,
+///    body_param })` — links `CallRequest.method` → this handler at runtime
+///    (consumed by `SdForgeGrpcService::call` in T007).
+///
+/// `body_param` is derived from the first `ParamKind::Body` param; `None`
+/// when the handler takes no Body arg. NOTE: `quote!` interpolates `Option<T>`
+/// by emitting the inner value for `Some` and *nothing* for `None`, so we
+/// construct the `Some("x")` / `None` literal explicitly to match the
+/// `Option<&'static str>` field type.
+fn generate_grpc_handler_registration(
+    fn_name: &syn::Ident,
+    grpc_method: &str,
+    params: &[ParamInfo],
+    path_params: &[String],
+) -> TokenStream2 {
+    let grpc_handler_fn_name = syn::Ident::new(
+        &format!("__grpc_handler_{}", fn_name),
+        proc_macro2::Span::call_site(),
+    );
+    let handler_fn_def =
+        generate_handler_closure(fn_name, &grpc_handler_fn_name, params, path_params);
+    // quote! does NOT render `None` for Option<T>, so build the field value
+    // explicitly to satisfy `body_param: Option<&'static str>`.
+    let body_param: TokenStream2 = match derive_body_param(params) {
+        Some(name) => quote! { Some(#name) },
+        None => quote! { None },
+    };
+
+    quote! {
+        #[cfg(feature = "grpc")]
+        #handler_fn_def
+
+        #[cfg(feature = "grpc")]
+        sdforge::inventory::submit!(sdforge::grpc::GrpcHandlerRegistration {
+            method: #grpc_method,
+            handler: #grpc_handler_fn_name,
+            body_param: #body_param,
+        });
     }
 }
 
@@ -733,9 +859,12 @@ fn generate_handler_closure(
 /// Parameter mapping (mirrors HTTP parameter kinds):
 /// - `ParamKind::Path`  → `CliArgType::Path`, `required = true`
 /// - `ParamKind::Body`  → `CliArgType::Body`, `required = !is_option`
-/// - `State`/`Extension`/`Query`/`Header`/`Cookie`/`Form` → skipped (not
-///   surfaced on the CLI; State injection via `CliBuilder::with_dependencies`
-///   is handled separately).
+/// - `State` → not surfaced on CLI (no `CliArgInfo`), but resolved inside
+///   the handler closure via `downcast_state::<T>(state)` (T011). The full
+///   `params` slice (including State) is passed to `generate_handler_closure`
+///   so the closure can emit downcast code; `cli_params` here filters to
+///   Path/Body only for `CliArgInfo`.
+/// - `Extension`/`Query`/`Header`/`Cookie`/`Form` → skipped (HTTP-specific).
 ///
 /// `_path_params` is accepted for API symmetry with the HTTP codegen path
 /// but unused — `ParamInfo::param_kind` already encodes the Path/Body
@@ -748,24 +877,27 @@ fn generate_cli_registration(
     params: &[ParamInfo],
     _path_params: &[String],
 ) -> TokenStream2 {
-    // 检测 State 参数 — CLI 模式当前不支持 State 注入（spec Out of Scope:
-    // "不实现复杂的 State 工厂"）。发编译错误而非生成参数数量不匹配的调用，
-    // 避免休眠 bug（kueiku Bug 1+2: 宏过滤 State 后调用原函数导致编译失败）。
-    let has_state = params
+    // Validate State params are Arc<T> — emit compile_error UNCONDITIONALLY
+    // (before the #[cfg(feature = "cli")] gate) so the error surfaces even
+    // when the cli feature is disabled (e.g., in the macro crate's trybuild
+    // tests). State params must be Arc<T> so downcast_state can recover the
+    // concrete T at runtime (T011).
+    for p in params
         .iter()
-        .any(|p| matches!(p.param_kind, ParamKind::State));
-    if has_state {
-        return syn::Error::new(
-            fn_name.span(),
-            "CLI mode (cli = true) does not support State parameters. \
-             Either remove the State parameter, use HTTP/MCP protocol for State injection, \
-             or wait for full State injection support via CliBuilder::with_dependencies.",
-        )
-        .to_compile_error();
+        .filter(|p| matches!(p.param_kind, ParamKind::State))
+    {
+        if extract_arc_inner_type(&p.ty).is_none() {
+            return syn::Error::new(
+                fn_name.span(),
+                "State parameters must be of the form `Arc<T>` to support safe downcast",
+            )
+            .to_compile_error();
+        }
     }
 
-    // Filter to CLI-relevant params (Path/Body only). State/Extension are
-    // runtime concerns; Query/Header/Cookie/Form are HTTP-specific.
+    // CliArgInfo is built from Path/Body only — State params are not surfaced
+    // on the CLI. The handler closure (generate_handler_closure) still
+    // receives the full `params` slice and emits `downcast_state` for State.
     let cli_params: Vec<&ParamInfo> = params
         .iter()
         .filter(|p| matches!(p.param_kind, ParamKind::Path | ParamKind::Body))
@@ -1275,10 +1407,23 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        // Combine route creation function and registration
+        // Combine route creation function and registration.
+        //
+        // The HTTP-specific items (route creation fn, metadata fn, and the
+        // `RouteRegistration` inventory submission) are gated by
+        // `#[cfg(feature = "http")]` so that downstream crates enabling only
+        // `mcp` (or `grpc`/`cli`) without `http` don't get compile errors
+        // from `sdforge::http::HttpRoute` / `sdforge::axum` not existing.
+        // The OpenAPI entry is gated only by `#[cfg(feature = "openapi")]`
+        // because it uses string literals (path/method/description) baked at
+        // macro expansion time and references `sdforge::openapi::...` types
+        // that exist whenever `openapi` is enabled, independent of `http`.
         quote! {
+            #[cfg(feature = "http")]
             #route_creation
+            #[cfg(feature = "http")]
             #metadata_fn_decl
+            #[cfg(feature = "http")]
             sdforge::inventory::submit!(sdforge::http::RouteRegistration::new(
                 #name,
                 #version,
@@ -1347,9 +1492,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
                 let params: Params = match input {
                     Some(v) => serde_json::from_value(v)
-                        .map_err(|e| anyhow::anyhow!("Failed to parse input: {}", e))?,
+                        .map_err(|e| sdforge::anyhow::anyhow!("Failed to parse input: {}", e))?,
                     None => {
-                        return Err(anyhow::anyhow!("Missing input parameters"));
+                        return Err(sdforge::anyhow::anyhow!("Missing input parameters"));
                     }
                 };
 
@@ -1381,7 +1526,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                     // Calling Runtime::new().block_on() from within an existing
                     // runtime panics with "Cannot start a runtime from within a
                     // runtime". Use block_in_place on the current handle instead.
-                    let inner_result: Result<Result<_, ApiError>, anyhow::Error> =
+                    let inner_result: Result<Result<_, ApiError>, sdforge::anyhow::Error> =
                         match Handle::try_current() {
                             Ok(handle) => {
                                 tokio::task::block_in_place(|| {
@@ -1536,7 +1681,13 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    let grpc_code = if grpc_method.is_some() {
+    let grpc_code = if let Some(grpc_method_name) = grpc_method.as_deref() {
+        // T005: emit the GrpcHandlerRegistration (method → handler link) so
+        // SdForgeGrpcService::call (T007) can route CallRequest to the forge
+        // fn instead of the legacy stub. The GrpcRouteRegistration below
+        // carries only metadata; this adds the invocable handler pointer.
+        let grpc_handler_reg =
+            generate_grpc_handler_registration(fn_name, grpc_method_name, &params, &path_params);
         quote! {
             #[cfg(feature = "grpc")]
             fn #grpc_create_fn_name() -> sdforge::grpc::GrpcRoute {
@@ -1561,6 +1712,8 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 #grpc_create_fn_name,
                 #grpc_metadata_fn_name,
             ));
+
+            #grpc_handler_reg
         }
     } else {
         quote! {}
@@ -2002,11 +2155,13 @@ mod macro_parsing_tests {
     /// Build a `ParamInfo` with the minimal fields needed by
     /// `generate_cli_registration`. The `ty` is synthesized via
     /// `syn::parse_quote!` so the test does not depend on real AST input.
+    /// State params use `Arc<Db>` (T011) so `extract_arc_inner_type` can
+    /// resolve the inner `Db` type for `downcast_state::<Db>`.
     fn make_cli_param(name: &str, kind: ParamKind, is_option: bool) -> ParamInfo {
-        let ty: syn::Type = if is_option {
-            syn::parse_quote!(Option<String>)
-        } else {
-            syn::parse_quote!(u64)
+        let ty: syn::Type = match kind {
+            ParamKind::State => syn::parse_quote!(Arc<Db>),
+            _ if is_option => syn::parse_quote!(Option<String>),
+            _ => syn::parse_quote!(u64),
         };
         // Compute skip_mcp_schema before moving `kind` into the struct.
         let skip_mcp_schema = matches!(kind, ParamKind::State | ParamKind::Extension);
@@ -2084,11 +2239,23 @@ mod macro_parsing_tests {
         let s = normalize_ts(&tokens);
 
         // The State parameter "state" must NOT appear as a CliArgInfo entry.
-        // We check that the CliArgInfo::new calls do not reference "state".
-        // The handler extraction also must not reference it as an arg name.
+        // State params are not surfaced on the CLI — they're resolved at
+        // handler call time via downcast_state (T011).
         assert!(
             !s.contains("CliArgInfo :: new (\"state\""),
             "state param should be skipped in CliArgInfo: {s}"
+        );
+
+        // T011: State params ARE resolved in the handler closure via
+        // downcast_state. The closure emits `downcast_state::<Db>(state)`
+        // (Db is the inner type of Arc<Db>).
+        assert!(
+            s.contains("downcast_state"),
+            "handler closure must emit downcast_state for State param: {s}"
+        );
+        assert!(
+            s.contains("Db"),
+            "downcast_state must reference the Arc<Db> inner type (Db): {s}"
         );
     }
 
@@ -2131,6 +2298,69 @@ mod macro_parsing_tests {
         // Even with no args, both registrations must be emitted.
         assert!(s.contains("CliCommandRegistration"), "missing command: {s}");
         assert!(s.contains("CliHandlerRegistration"), "missing handler: {s}");
+    }
+
+    // ========================================================================
+    // T005: generate_grpc_handler_registration
+    // ========================================================================
+
+    /// gRPC handler registration must submit `GrpcHandlerRegistration` with
+    /// the configured `grpc_method` name, a named handler fn, and a
+    /// `body_param` derived from the first `ParamKind::Body` param.
+    #[test]
+    fn test_generate_grpc_handler_registration_emits_handler_and_body_param() {
+        let fn_name = syn::Ident::new("embed", proc_macro2::Span::call_site());
+        let params = vec![make_cli_param("payload", ParamKind::Body, false)];
+        let path_params = vec!["payload".to_string()];
+
+        let tokens = generate_grpc_handler_registration(&fn_name, "embed", &params, &path_params);
+        let s = normalize_ts(&tokens);
+
+        assert!(
+            s.contains("GrpcHandlerRegistration"),
+            "must submit GrpcHandlerRegistration: {s}"
+        );
+        assert!(
+            s.contains("inventory :: submit"),
+            "must use inventory::submit: {s}"
+        );
+        assert!(
+            s.contains("method : \"embed\""),
+            "method field must be the grpc_method name: {s}"
+        );
+        assert!(
+            s.contains("__grpc_handler_embed"),
+            "handler fn must be named __grpc_handler_embed: {s}"
+        );
+        assert!(
+            s.contains("body_param : Some (\"payload\")"),
+            "body_param must be Some(\"payload\") for a Body param: {s}"
+        );
+        assert!(
+            s.contains("HandlerArgs"),
+            "handler must use the unified HandlerArgs signature: {s}"
+        );
+    }
+
+    /// Without a `ParamKind::Body` param, `body_param` must be `None`
+    /// (not omitted — the field is non-optional at the struct level).
+    #[test]
+    fn test_generate_grpc_handler_registration_body_param_none_without_body() {
+        let fn_name = syn::Ident::new("ping", proc_macro2::Span::call_site());
+        let params: Vec<ParamInfo> = vec![];
+        let path_params = vec![];
+
+        let tokens = generate_grpc_handler_registration(&fn_name, "ping", &params, &path_params);
+        let s = normalize_ts(&tokens);
+
+        assert!(
+            s.contains("body_param : None"),
+            "body_param must be None when no Body param exists: {s}"
+        );
+        assert!(
+            s.contains("method : \"ping\""),
+            "method must still be set: {s}"
+        );
     }
 }
 
