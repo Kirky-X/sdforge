@@ -11,6 +11,7 @@
 //! HTTP-specific response handling is provided in `http::response` module
 //! to avoid HTTP dependencies for non-HTTP protocol implementations.
 
+pub mod handler;
 pub mod json;
 #[cfg(any(feature = "http", feature = "security"))]
 pub mod regex_cache;
@@ -23,6 +24,9 @@ pub mod validation;
 // Re-export types from submodules for convenience
 pub use crate::error::{
     ApiError, ErrorCategory, ErrorContext, Locale, LocalizedError, SdForgeError, TranslationStore,
+};
+pub use handler::{
+    HandlerArgs, HandlerFn, HandlerFuture, HandlerOutput, HandlerState, extract_value,
 };
 pub use json::{api_metadata_response, error_response, paginated_response, success_response};
 #[cfg(any(feature = "http", feature = "security"))]
