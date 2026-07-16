@@ -25,6 +25,34 @@ use std::time::{Duration, Instant};
 /// Default session timeout: 300 seconds (per MCP 2026-07-28 spec).
 pub const DEFAULT_SESSION_TIMEOUT: Duration = Duration::from_secs(300);
 
+/// Maximum accepted size (in bytes) for a `resume_session` payload.
+///
+/// 1 MiB. Larger payloads are rejected before any session lookup so a
+/// malicious client cannot exhaust server memory or use oversized-payload
+/// errors to enumerate session existence.
+pub const MAX_RESUME_PAYLOAD_SIZE_BYTES: usize = 0x10_0000;
+
+/// Maximum accepted JSON nesting depth for a `resume_session` payload.
+///
+/// 64 levels. Deeper payloads are rejected to prevent stack overflow during
+/// recursive (de)serialization. The limit is intentionally larger than any
+/// reasonable tool input schema but small enough to be safe under the
+/// default thread stack size.
+pub const MAX_RESUME_PAYLOAD_DEPTH: usize = 64;
+
+/// Measure the maximum nesting depth of a JSON value.
+///
+/// Scalars (null, bool, number, string) have depth 0. Arrays and objects
+/// contribute 1 plus the maximum depth of their children. Empty arrays and
+/// objects have depth 1.
+fn json_depth(value: &Value) -> usize {
+    match value {
+        Value::Array(items) => 1 + items.iter().map(json_depth).max().unwrap_or(0),
+        Value::Object(map) => 1 + map.values().map(json_depth).max().unwrap_or(0),
+        _ => 0,
+    }
+}
+
 /// Result returned when a tool needs additional input.
 #[derive(Debug, Clone)]
 pub struct InputRequiredResult {
@@ -234,7 +262,38 @@ impl MrtrSessionManager {
     }
 
     /// Resume a session with client input.
+    ///
+    /// The payload is validated against [`MAX_RESUME_PAYLOAD_SIZE_BYTES`] and
+    /// [`MAX_RESUME_PAYLOAD_DEPTH`] **before** the session is looked up, so
+    /// that an oversized or deeply nested payload cannot be used to enumerate
+    /// session existence via error-timing side channels.
     pub fn resume_session(&self, session_id: &str, input: Value) -> Result<(), ErrorData> {
+        // 1. Size check (reject before touching sessions map).
+        let payload_size = serde_json::to_vec(&input)
+            .map(|v| v.len())
+            .unwrap_or(usize::MAX);
+        if payload_size > MAX_RESUME_PAYLOAD_SIZE_BYTES {
+            return Err(ErrorData::invalid_params(
+                format!(
+                    "resume payload size {} bytes exceeds maximum {} bytes",
+                    payload_size, MAX_RESUME_PAYLOAD_SIZE_BYTES
+                ),
+                None,
+            ));
+        }
+
+        // 2. Depth check (reject before touching sessions map).
+        let depth = json_depth(&input);
+        if depth > MAX_RESUME_PAYLOAD_DEPTH {
+            return Err(ErrorData::invalid_params(
+                format!(
+                    "resume payload depth {} exceeds maximum {}",
+                    depth, MAX_RESUME_PAYLOAD_DEPTH
+                ),
+                None,
+            ));
+        }
+
         let mut sessions = self
             .sessions
             .lock()
@@ -930,5 +989,135 @@ mod tests {
 
         let count = manager.session_count();
         assert_eq!(count, 0, "poisoned mutex should yield count 0");
+    }
+
+    // ========================================================================
+    // vuln-0003 regression tests: MRTR resume_session payload limits
+    //
+    // resume_session previously accepted any `serde_json::Value` without
+    // bounding payload size or nesting depth, allowing a client to crash
+    // the server via memory exhaustion (huge JSON blob) or stack overflow
+    // (deeply nested JSON).
+    // ========================================================================
+
+    /// Build a manager with a single pending session for resume tests.
+    fn manager_with_pending_session() -> MrtrSessionManager {
+        let manager = MrtrSessionManager::new();
+        manager
+            .create_session("s1", "tool")
+            .expect("create_session must succeed");
+        manager
+    }
+
+    /// Verify that a normal-sized, shallow payload is accepted.
+    #[test]
+    fn test_vuln0003_resume_accepts_normal_payload() {
+        let manager = manager_with_pending_session();
+        let result = manager.resume_session("s1", serde_json::json!({"input": "value"}));
+        assert!(result.is_ok(), "normal payload must be accepted");
+    }
+
+    /// Verify that a payload at exactly the size limit is accepted.
+    #[test]
+    fn test_vuln0003_resume_accepts_payload_at_size_limit() {
+        let manager = manager_with_pending_session();
+        // Build a payload whose serialized size is exactly
+        // MAX_RESUME_PAYLOAD_SIZE_BYTES. A JSON string of N ASCII chars
+        // serializes to N + 2 bytes (quotes) under serde_json::to_vec, so
+        // N = MAX - 2 yields exactly MAX bytes.
+        let n = MAX_RESUME_PAYLOAD_SIZE_BYTES - 2;
+        let payload = Value::String("a".repeat(n));
+        // Sanity-check the size.
+        let size = serde_json::to_vec(&payload).map(|v| v.len()).unwrap();
+        assert_eq!(size, MAX_RESUME_PAYLOAD_SIZE_BYTES);
+        let result = manager.resume_session("s1", payload);
+        assert!(
+            result.is_ok(),
+            "payload at exactly the size limit must be accepted"
+        );
+    }
+
+    /// Verify that a payload larger than MAX_RESUME_PAYLOAD_SIZE_BYTES is
+    /// rejected with an invalid_params error mentioning the size.
+    #[test]
+    fn test_vuln0003_resume_rejects_oversized_payload() {
+        let manager = manager_with_pending_session();
+        // Build a payload 1 byte over the limit (string of N+1 chars where
+        // N = MAX - 2 gives exactly MAX bytes; N+1 = MAX - 1 chars gives
+        // MAX + 1 bytes including quotes).
+        let n = MAX_RESUME_PAYLOAD_SIZE_BYTES - 1;
+        let payload = Value::String("a".repeat(n));
+        let size = serde_json::to_vec(&payload).map(|v| v.len()).unwrap();
+        assert_eq!(size, MAX_RESUME_PAYLOAD_SIZE_BYTES + 1);
+        let result = manager.resume_session("s1", payload);
+        assert!(result.is_err(), "oversized payload must be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("exceeds maximum"),
+            "error should mention size limit, got: {err}"
+        );
+        // The session must still be Pending (resume must not have run).
+        assert_eq!(manager.get_session("s1"), Some(SessionState::Pending));
+    }
+
+    /// Build a JSON value nested exactly `depth` levels deep.
+    ///
+    /// `nested_value(1)` = `{"a": "v"}` (depth 1).
+    /// `nested_value(n)` = `{"a": nested_value(n-1)}` (depth n).
+    fn nested_value(depth: usize) -> Value {
+        let mut value = Value::String("v".to_string());
+        for _ in 0..depth {
+            value = serde_json::json!({ "a": value });
+        }
+        value
+    }
+
+    /// Verify that a payload nested exactly MAX_RESUME_PAYLOAD_DEPTH levels
+    /// deep is accepted (boundary case).
+    #[test]
+    fn test_vuln0003_resume_accepts_payload_at_depth_limit() {
+        let manager = manager_with_pending_session();
+        let payload = nested_value(MAX_RESUME_PAYLOAD_DEPTH);
+        let result = manager.resume_session("s1", payload);
+        assert!(
+            result.is_ok(),
+            "payload at exactly the depth limit must be accepted"
+        );
+    }
+
+    /// Verify that a payload nested deeper than MAX_RESUME_PAYLOAD_DEPTH is
+    /// rejected with an invalid_params error mentioning the depth.
+    #[test]
+    fn test_vuln0003_resume_rejects_deeply_nested_payload() {
+        let manager = manager_with_pending_session();
+        let payload = nested_value(MAX_RESUME_PAYLOAD_DEPTH + 1);
+        let result = manager.resume_session("s1", payload);
+        assert!(result.is_err(), "deeply nested payload must be rejected");
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("depth"),
+            "error should mention depth, got: {err}"
+        );
+        // The session must still be Pending (resume must not have run).
+        assert_eq!(manager.get_session("s1"), Some(SessionState::Pending));
+    }
+
+    /// Verify that oversized payload rejection runs before session lookup so
+    /// an attacker cannot use the size error to enumerate session existence.
+    #[test]
+    fn test_vuln0003_resume_oversized_rejected_for_nonexistent_session() {
+        let manager = MrtrSessionManager::new();
+        // No session exists; oversized payload should still be rejected.
+        let n = MAX_RESUME_PAYLOAD_SIZE_BYTES + 100;
+        let payload = Value::String("a".repeat(n));
+        let result = manager.resume_session("nonexistent", payload);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        // The size error must take precedence over the session-not-found
+        // error so session existence is not leaked via error timing/order.
+        assert!(
+            err.contains("exceeds maximum"),
+            "size check must run before session lookup, got: {err}"
+        );
     }
 }
