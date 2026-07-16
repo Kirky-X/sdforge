@@ -4,7 +4,7 @@
 //!
 //! This crate provides the runtime types and service builders for the SDForge framework.
 
-#![doc(html_root_url = "https://docs.rs/sdforge/0.4.2")]
+#![doc(html_root_url = "https://docs.rs/sdforge/0.5.0")]
 #![warn(missing_docs)]
 
 // Allow macro-generated code (which references `sdforge::cli::...`,
@@ -54,12 +54,18 @@ macro_rules! impl_default_new {
 }
 
 /// Re-export inventory for use in generated code
+///
+/// Downstream crates (including sdforge-examples) should use `sdforge::inventory`
+/// instead of adding a direct `inventory` dependency. Available whenever any
+/// protocol feature that relies on inventory-based registration is enabled
+/// (http/mcp/websocket/grpc/cli/openapi/docs).
 #[cfg(any(
     feature = "http",
     feature = "mcp",
     feature = "websocket",
     feature = "grpc",
-    feature = "cli"
+    feature = "cli",
+    feature = "openapi"
 ))]
 pub use inventory;
 
@@ -119,6 +125,19 @@ pub mod prelude {
     pub use crate::axum::IntoResponse;
 
     pub use sdforge_macros::{forge, service_module, test_macro};
+
+    // Re-export framework crates so macro-generated code (e.g. `utoipa::path`
+    // attribute emitted by `#[forge]` when `openapi` is enabled, or
+    // `anyhow::anyhow!` emitted by `#[forge(tool_name = ...)]` when `mcp` is
+    // enabled) resolves in downstream crates that write
+    // `use sdforge::prelude::*;` at the top of files using `#[forge]`.
+    // Without these re-exports, downstream would need direct Cargo deps on
+    // `utoipa`/`anyhow` solely for the macro-generated attribute / type to
+    // resolve — which defeats sdforge's "no framework deps" goal.
+    #[cfg(feature = "openapi")]
+    pub use crate::utoipa;
+    #[cfg(feature = "mcp")]
+    pub use crate::anyhow;
 }
 
 /// Core types and utilities
@@ -299,6 +318,33 @@ pub mod cli;
 #[cfg(feature = "cli")]
 pub use clap;
 
+/// Re-export `tonic` so downstream crates can build gRPC clients
+/// (`tonic::transport::Channel`, `tonic::Request`, etc.) and servers
+/// without adding a direct `tonic` dependency. Only available when the
+/// `grpc` feature is enabled.
+#[cfg(feature = "grpc")]
+pub use tonic;
+
+/// Re-export `prost` so downstream crates can derive protobuf messages
+/// without adding a direct `prost` dependency. Only available when the
+/// `grpc` feature is enabled.
+#[cfg(feature = "grpc")]
+pub use prost;
+
+/// Re-export `utoipa` so downstream crates can use `utoipa::ToSchema` /
+/// `utoipa::OpenApi` derive macros without adding a direct `utoipa`
+/// dependency. Only available when the `openapi` feature is enabled.
+#[cfg(feature = "openapi")]
+pub use utoipa;
+
+/// Re-export `anyhow` so downstream crates using `#[forge(tool_name = "...")]`
+/// (which emits `sdforge::anyhow::anyhow!` / `sdforge::anyhow::Error` in
+/// generated MCP tool impls) don't need a direct `anyhow` dependency.
+/// Only available when the `mcp` feature is enabled (sdforge already
+/// depends on anyhow under that feature).
+#[cfg(feature = "mcp")]
+pub use anyhow;
+
 /// OpenAPI 3.1 specification generation.
 ///
 /// Only available when the `openapi` feature is enabled. See [`openapi`] module
@@ -404,6 +450,26 @@ pub fn init_all_plugins() -> PluginCounts {
         })
     };
 
+    // T015: touch `GrpcHandlerRegistration` inventory so the linker keeps
+    // `inventory::submit!` blocks emitted by `#[forge(grpc_method = "...")]`.
+    // Mirrors the http/mcp/websocket/grpc-route/cli blocks above. Without
+    // this, release builds (LTO + opt-level=z) may strip the handler
+    // registrations, leaving `SdForgeGrpcService::call` unable to find any
+    // method at runtime.
+    #[cfg(feature = "grpc")]
+    let grpc_handlers = {
+        use crate::grpc::GrpcHandlerRegistration;
+
+        static GRPC_HANDLERS: OnceLock<Mutex<Vec<&'static GrpcHandlerRegistration>>> =
+            OnceLock::new();
+        let handlers = GRPC_HANDLERS
+            .get_or_init(|| Mutex::new(inventory::iter::<GrpcHandlerRegistration>().collect()));
+        handlers.lock().map(|g| g.len()).unwrap_or_else(|e| {
+            log::error!("inventory Mutex poisoned: {}", e);
+            0
+        })
+    };
+
     // T010: touch CLI inventory so the linker keeps `inventory::submit!`
     // blocks emitted by `#[forge(cli = true)]`. Mirrors the http/mcp/
     // websocket/grpc blocks above. Both `CliCommandRegistration` and
@@ -438,6 +504,8 @@ pub fn init_all_plugins() -> PluginCounts {
         ws_routes,
         #[cfg(feature = "grpc")]
         grpc_routes,
+        #[cfg(feature = "grpc")]
+        grpc_handlers,
         #[cfg(feature = "cli")]
         cli_commands,
     }
@@ -474,6 +542,7 @@ pub fn init_all_plugins() -> PluginCounts {
 /// - `mcp_tools`: Only with `mcp` feature
 /// - `ws_routes`: Only with `websocket` feature
 /// - `grpc_routes`: Only with `grpc` feature
+/// - `grpc_handlers`: Only with `grpc` feature (emitted by `#[forge(grpc_method = "...")]`)
 /// - `cli_commands`: Only with `cli` feature
 #[cfg(any(
     feature = "http",
@@ -494,6 +563,9 @@ pub struct PluginCounts {
     /// Number of registered gRPC routes
     #[cfg(feature = "grpc")]
     pub grpc_routes: usize,
+    /// Number of registered gRPC handlers (emitted by `#[forge(grpc_method = "...")]`)
+    #[cfg(feature = "grpc")]
+    pub grpc_handlers: usize,
     /// Number of registered CLI commands (emitted by `#[forge(cli = true)]`)
     #[cfg(feature = "cli")]
     pub cli_commands: usize,
@@ -550,6 +622,8 @@ mod tests {
         let _ = counts.ws_routes;
         #[cfg(feature = "grpc")]
         let _ = counts.grpc_routes;
+        #[cfg(feature = "grpc")]
+        let _ = counts.grpc_handlers;
         #[cfg(feature = "cli")]
         let _ = counts.cli_commands;
     }
@@ -575,6 +649,8 @@ mod tests {
         assert_eq!(first.ws_routes, second.ws_routes);
         #[cfg(feature = "grpc")]
         assert_eq!(first.grpc_routes, second.grpc_routes);
+        #[cfg(feature = "grpc")]
+        assert_eq!(first.grpc_handlers, second.grpc_handlers);
         #[cfg(feature = "cli")]
         assert_eq!(first.cli_commands, second.cli_commands);
     }

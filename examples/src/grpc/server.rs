@@ -71,6 +71,7 @@ pub fn custom_server_config() -> GrpcServerConfig {
         timeout_seconds: 60,
         #[cfg(feature = "security_examples")]
         auth: None,
+        state: None,
     }
 }
 

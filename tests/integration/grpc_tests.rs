@@ -34,6 +34,30 @@ mod grpc_integration_tests {
     use tonic::transport::Channel;
 
     // ============================================================================
+    // T012: Test handler registered for integration tests.
+    //
+    // The new `call` routing (T007) returns `Status::not_found` for methods
+    // not in the `GrpcHandlerRegistration` inventory. Integration tests that
+    // previously asserted the stub's `{"result":"processed"}` response now
+    // call this registered handler so they continue to exercise the success
+    // path (real routing, not the stub).
+    // ============================================================================
+
+    fn integration_test_echo_handler(
+        args: std::collections::HashMap<String, String>,
+        _state: sdforge::core::HandlerState,
+    ) -> sdforge::core::HandlerFuture {
+        let msg = args.get("msg").cloned().unwrap_or_else(|| "default".to_string());
+        Box::pin(async move { Ok(serde_json::Value::String(msg)) })
+    }
+
+    sdforge::inventory::submit!(sdforge::grpc::GrpcHandlerRegistration {
+        method: "integration_test_echo",
+        handler: integration_test_echo_handler,
+        body_param: None,
+    });
+
+    // ============================================================================
     // Test Configuration Constants
     // ============================================================================
 
@@ -480,6 +504,7 @@ mod grpc_integration_tests {
             timeout_seconds: 60,
             #[cfg(feature = "security")]
             auth: None,
+            state: None,
         };
 
         assert_eq!(
@@ -786,7 +811,14 @@ mod grpc_integration_tests {
     async fn test_grpc_response_success_flag() {
         let (mut client, _server_addr) = setup_grpc_test_server().await;
 
-        let request = create_test_call_request("success_test", HashMap::new(), "");
+        // T012: call a REGISTERED handler so the new routing returns success
+        // (the old stub returned success for any method name, but the new
+        // routing returns Status::not_found for unregistered methods).
+        let request = create_test_call_request(
+            "integration_test_echo",
+            HashMap::from([("msg".to_string(), "hi".to_string())]),
+            "",
+        );
 
         let result = client.call(Request::new(request)).await;
 
@@ -808,32 +840,51 @@ mod grpc_integration_tests {
 
     /// Test: gRPC response data format
     ///
-    /// Verifies that response data contains expected fields.
+    /// Verifies that response data is the smart-extracted handler return
+    /// value (String → raw, others → JSON). With the new routing (T007),
+    /// `data` is no longer a JSON object containing `{"method":..., "result":"processed"}`
+    /// — it's the handler's `Value::String` output extracted via
+    /// `extract_value`.
     #[tokio::test]
     #[ignore = "environmental issue: real network binding to 127.0.0.1:0, hangs in CI/sandboxed environments"]
     async fn test_grpc_response_data_format() {
         let (mut client, _server_addr) = setup_grpc_test_server().await;
 
-        let request = create_test_call_request("data_format_test", HashMap::new(), "");
+        // T012: call a registered handler — the stub `processed` response is gone.
+        let request = create_test_call_request(
+            "integration_test_echo",
+            HashMap::from([("msg".to_string(), "hello".to_string())]),
+            "",
+        );
 
         let result = client.call(Request::new(request)).await;
 
         assert!(result.is_ok(), "Call should succeed");
         let response = result.unwrap().into_inner();
 
-        // Verify response data is valid JSON containing method info
-        let data: serde_json::Value =
-            serde_json::from_str(&response.data).expect("Response data should be valid JSON");
+        // R-grpc-004: smart extract_value — String return → raw string (no quotes).
+        assert_eq!(response.data, "hello");
+        assert!(response.success);
+    }
 
-        assert!(
-            data.get("method").is_some(),
-            "Response data should contain method field"
-        );
-        assert_eq!(
-            data.get("result").and_then(|v| v.as_str()),
-            Some("processed"),
-            "Response data should contain processed result"
-        );
+    /// Test: unregistered method returns Status::not_found
+    ///
+    /// Replaces the old stub tests that called arbitrary method names and
+    /// expected success. With the new routing (R-grpc-001/005), unregistered
+    /// methods are correctly rejected.
+    #[tokio::test]
+    #[ignore = "environmental issue: real network binding to 127.0.0.1:0, hangs in CI/sandboxed environments"]
+    async fn test_grpc_unregistered_method_returns_not_found() {
+        let (mut client, _server_addr) = setup_grpc_test_server().await;
+
+        let request = create_test_call_request("definitely_not_registered", HashMap::new(), "");
+
+        let result = client.call(Request::new(request)).await;
+
+        assert!(result.is_err(), "Unregistered method should error");
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::NotFound);
+        assert!(err.message().contains("definitely_not_registered"));
     }
 
     // ============================================================================
@@ -909,6 +960,7 @@ mod grpc_integration_tests {
             max_connections: 100,
             timeout_seconds: 60,
             auth: Some(auth),
+            state: None,
         };
 
         assert!(config.auth.is_some(), "Config should have auth when set");
@@ -1080,6 +1132,7 @@ mod grpc_integration_tests {
             timeout_seconds: 45,
             #[cfg(feature = "security")]
             auth: None,
+            state: None,
         };
 
         assert_eq!(config.max_connections, 200);

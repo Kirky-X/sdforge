@@ -190,6 +190,13 @@ pub mod builder;
 pub use builder::CliBuilder;
 
 // ============================================================================
+// T009: CLI dispatch — route ArgMatches to the registered forge handler
+// ============================================================================
+pub mod dispatch;
+
+pub use dispatch::dispatch;
+
+// ============================================================================
 // T020: docs subcommand — definition + handler (docs feature only)
 // ============================================================================
 #[cfg(feature = "docs")]

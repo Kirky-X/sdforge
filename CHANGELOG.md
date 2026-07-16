@@ -7,6 +7,40 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-17
+
+### ⚠️ BREAKING CHANGES
+
+specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协议运行时 dispatch：
+
+- **`CliHandlerFn` 删除** — 不再有独立的 CLI handler 函数指针类型。CLI handler 现在通过 `CliHandlerRegistration` 复用统一的 `HandlerFn` 签名（与 HTTP / gRPC / MCP 一致）
+- **handler 签名统一** — 所有协议的 handler 现在遵循 `fn(HandlerArgs, HandlerState) -> HandlerFuture` 契约。`HandlerArgs` 自动从 clap / tonic / axum extractor 构造；`HandlerState` 通过 `downcast_state::<T>()` 注入。返回类型约束为 `T: Serialize`
+- **`GrpcServerConfig.state` 新增** — `GrpcServerConfig` 增加 `state: Option<Arc<dyn Any + Send + Sync>>` 字段，用于向 gRPC handler 注入应用状态（与 `CliBuilder::with_dependencies` 对齐）
+- **`#[cfg(feature = "http")]` 门控 HTTP 代码生成** — `#[forge(path=..., method=...)]` 生成的 HTTP 路由注册代码现在被 `#[cfg(feature = "http")]` 包裹。下游 crate 启用 `mcp` 或 `grpc` 单独 feature 时不再因 `sdforge::http` / `sdforge::axum` 不存在而编译失败（feature 隔离）
+
+### Added
+
+- **`CliBuilder::execute()`** — 一站式 CLI 入口（决策 D6：async）：`build() → get_matches() → dispatch() → extract_value() → println! → std::process::exit(0/1)`。返回 `!`，调用方只需 `#[tokio::main] async fn main() { cli.execute().await }`
+- **`sdforge::cli::dispatch`** — 暴露的自由 dispatch 函数（位于 `src/cli/dispatch.rs`，由 `cli::mod.rs` re-export），供不退出的自定义调用场景使用（R-cli-001）；`CliBuilder::execute()` 内部即调用此函数
+- **`core::extract_value(&Value)`** — 智能返回值提取：`Value::String` → 原始串（无引号）；其他 → JSON 序列化（H3 智能提取）
+- **`core::downcast_state::<T>(HandlerState)`** — 运行时 state 类型转换，handler 中通过 `#[state] db: Arc<Db>` 参数声明，宏生成 `let db = downcast_state::<Db>(state)?;`
+- **`pub use anyhow;` re-export**（gated by `mcp`）— `#[forge(tool_name = "...")]` 宏生成的 MCP tool impl 引用 `sdforge::anyhow::anyhow!` / `sdforge::anyhow::Error`，下游无需直接依赖 anyhow
+- **`pub use tonic;` re-export**（gated by `grpc`）— 下游可使用 `sdforge::tonic::transport::Channel` 等
+- **`pub use prost;` re-export**（gated by `grpc`）— 下游可派生 protobuf 消息
+- **`pub use utoipa;` re-export**（gated by `openapi`）— 下游可使用 `#[utoipa::ToSchema]` 等 derive 宏
+- **`prelude` 新增 re-export**：`pub use utoipa`（`openapi`）、`pub use anyhow`（`mcp`）— 让 `use sdforge::prelude::*;` 的下游 crate 中宏生成的 `#[utoipa::path]` 属性和 `anyhow::anyhow!` 调用都能解析，**无需下游 Cargo.toml 直接依赖任何框架库**
+- **examples 综合测试** `examples/tests/comprehensive_features.rs` — 77 个测试覆盖全部 feature 的 re-export 可访问性、example 类型可构造性、inventory 注册计数、`#[forge]` 跨协议 dispatch（cli/grpc/mcp/openapi/http 从下游 crate 注册）
+
+### Changed
+
+- **logging feature 补 `dep:once_cell`** — `src/logging.rs` 使用 `once_cell::sync::OnceCell` 作为 `GLOBAL_LOGGER`，但 `logging` feature 未声明 `dep:once_cell`，导致 `--features logging` 单独编译失败。现已修正
+- **macros 版本** 0.4.2 → 0.5.0
+
+### Fixed
+
+- 修复 `#[forge]` 宏生成代码中裸 `anyhow::anyhow!` / `anyhow::Error` 引用 → 改为 `sdforge::anyhow::anyhow!` / `sdforge::anyhow::Error`，下游无需直接依赖 anyhow
+- 修复 `logging` feature 缺 `dep:once_cell` 导致单独编译失败（之前依赖 `http` feature 间接启用 `once_cell`）
+
 ## [0.4.2] - 2026-07-15
 
 ### Added
