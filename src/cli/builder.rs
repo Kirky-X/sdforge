@@ -140,6 +140,37 @@ impl CliBuilder {
 
         root
     }
+
+    /// One-shot async runner: parse args, dispatch to handler, print result, exit.
+    ///
+    /// Consumes `self`, builds the `clap::Command`, dispatches the selected
+    /// subcommand to its handler, and prints the result. On success, the
+    /// handler's `Value` output is smart-extracted via `extract_value`:
+    /// `Value::String` → raw string to stdout (no quotes); other → JSON to
+    /// stdout. On error, `error: <e>` is printed to stderr.
+    ///
+    /// Exits with code 0 on success, 1 on error. The `-> !` return type
+    /// guarantees the function never returns normally.
+    ///
+    /// # Async runtime
+    ///
+    /// Requires a tokio runtime — the caller's `main()` should be
+    /// `#[tokio::main] async fn main() { cli.execute().await }`.
+    pub async fn execute(self) -> ! {
+        let cmd = self.build();
+        let matches = cmd.get_matches();
+        match crate::cli::dispatch::dispatch(&matches, self.state).await {
+            Ok((_name, value)) => {
+                let out = crate::core::extract_value(&value);
+                println!("{out}");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
 }
 
 /// Translate a single `CliCommandRegistration` into a `clap::Command`

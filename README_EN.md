@@ -98,7 +98,7 @@ Add SDForge to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.3", features = ["http"] }
+sdforge = { version = "0.5", features = ["http"] }
 ```
 
 </div>
@@ -183,7 +183,7 @@ For traditional REST APIs:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.3", features = ["http"] }
+sdforge = { version = "0.5", features = ["http"] }
 ```
 
 ### 🤖 MCP Only
@@ -192,7 +192,7 @@ For AI tool integration:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.3", features = ["mcp"] }
+sdforge = { version = "0.5", features = ["mcp"] }
 ```
 
 ### 🔄 Both Protocols
@@ -201,7 +201,7 @@ Exposure via both HTTP and MCP from the same code:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.3", features = ["http", "mcp"] }
+sdforge = { version = "0.5", features = ["http", "mcp"] }
 ```
 
 ### 🎯 Full Features
@@ -210,7 +210,80 @@ All capabilities enabled:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.3", features = ["full"] }
+sdforge = { version = "0.5", features = ["full"] }
+```
+
+### 🛰️ gRPC Dispatch
+
+With the `grpc` feature enabled, `#[forge(grpc_method = "...")]` registers a
+`GrpcHandlerRegistration` via inventory. `SdForgeGrpcService::call()` routes
+`CallRequest` to the matching handler. Return types must satisfy
+`serde::Serialize`; errors must be `ApiError`:
+
+```toml
+[dependencies]
+sdforge = { version = "0.5", features = ["grpc"] }
+```
+
+```rust
+use sdforge::prelude::*;
+use sdforge::forge;
+
+#[forge(
+    name = "grpc_echo",
+    version = "v1",
+    grpc_method = "comprehensive.echo",
+    description = "gRPC echo handler"
+)]
+async fn echo(msg: String) -> Result<serde_json::Value, ApiError> {
+    Ok(serde_json::json!({ "echo": msg }))
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    sdforge::init_all_plugins();
+    let server = sdforge::grpc::SdForgeGrpcServer::default();
+    server.serve("0.0.0.0:50051").await?;
+    Ok(())
+}
+```
+
+### 🖥️ CLI Dispatch
+
+With the `cli` feature enabled, `#[forge(cli = true)]` emits paired
+`CliCommandRegistration` + `CliHandlerRegistration` inventory submissions.
+`CliBuilder::execute()` is a one-shot runner that handles build / parse /
+dispatch / output / exit. Returning `Value::String` prints the raw string
+(no quotes); other types are JSON-serialized:
+
+```toml
+[dependencies]
+sdforge = { version = "0.5", features = ["cli"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+```
+
+```rust
+use sdforge::cli::CliBuilder;
+use sdforge::core::ApiError;
+use sdforge::forge;
+
+#[forge(name = "echo", version = "1.0", description = "Echo a greeting", cli = true)]
+async fn echo(name: String) -> Result<String, ApiError> {
+    Ok(format!("Hello, {}!", name))
+}
+
+#[tokio::main]
+async fn main() {
+    sdforge::init_all_plugins();
+    // execute() returns `!`: it calls std::process::exit(0/1) internally,
+    // so callers don't need to match on the result.
+    CliBuilder::new().execute().await;
+}
+```
+
+```sh
+# Run: cargo run --example basic_cli --features cli -- echo --name world
+# Output: Hello, world!   (no quotes — smart Value::String extraction)
 ```
 
 ---
@@ -630,7 +703,7 @@ SDForge v0.2.0 introduces automatic OpenAPI 3.1 specification generation based o
 
 ```toml
 [dependencies]
-sdforge = { version = "0.3", features = ["http", "openapi"] }
+sdforge = { version = "0.5", features = ["http", "openapi"] }
 ```
 
 ### 🚀 Basic Usage

@@ -20,20 +20,13 @@ mod grpc_impl;
 #[cfg(test)]
 pub(crate) use grpc_impl::make_auth_interceptor;
 #[cfg(feature = "grpc")]
-pub use grpc_impl::{build_server, build_server_with_config};
+pub use grpc_impl::{build_server, build_server_with_config, SdForgeGrpcService};
 
 #[cfg(feature = "grpc")]
 /// gRPC handler registration (links `CallRequest.method` → forge handler).
 pub mod handler;
 #[cfg(feature = "grpc")]
 pub use handler::GrpcHandlerRegistration;
-
-#[cfg(feature = "grpc")]
-/// gRPC service implementation
-#[derive(Debug, Default)]
-pub struct SdForgeGrpcService {
-    // Add service state if needed
-}
 
 #[cfg(feature = "grpc")]
 /// gRPC route registration
@@ -63,6 +56,12 @@ pub struct GrpcServerConfig {
     /// in the `authorization` metadata header.
     #[cfg(feature = "security")]
     pub auth: Option<crate::security::BearerAuth>,
+    /// Optional application state injected into `SdForgeGrpcService`.
+    ///
+    /// Mirrors `CliBuilder::with_dependencies`. Handlers with a `State`
+    /// parameter downcast this `Arc<dyn Any>` to their concrete type at
+    /// call time. Available without the `security` feature (design D5).
+    pub state: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
 }
 
 /// gRPC authentication interceptor

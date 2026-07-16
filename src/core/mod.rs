@@ -26,7 +26,8 @@ pub use crate::error::{
     ApiError, ErrorCategory, ErrorContext, Locale, LocalizedError, SdForgeError, TranslationStore,
 };
 pub use handler::{
-    HandlerArgs, HandlerFn, HandlerFuture, HandlerOutput, HandlerState, extract_value,
+    HandlerArgs, HandlerFn, HandlerFuture, HandlerOutput, HandlerState, downcast_state,
+    extract_value,
 };
 pub use json::{api_metadata_response, error_response, paginated_response, success_response};
 #[cfg(any(feature = "http", feature = "security"))]

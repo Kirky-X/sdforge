@@ -17,23 +17,47 @@ serde_json = "~1.0"
 thiserror = "~2.0"
 uuid = { version = "~1.23", features = ["v4"] }
 chrono = { version = "~0.4", features = ["serde"] }
-# inventory: needed for manual OpenApiRouteInfo registration in openapi/basic.rs
-inventory = "0.3"
+# Note: `inventory`, `axum`, `clap`, `rmcp`, `tonic`, `prost`, `utoipa` are
+# re-exported by sdforge (sdforge::inventory, sdforge::axum, sdforge::clap,
+# sdforge::rmcp, sdforge::tonic, sdforge::prost, sdforge::utoipa). Downstream
+# crates must NOT add direct dependencies on these framework libraries.
 
 [features]
 default = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "cache_examples", "grpc_examples", "logging_examples", "openapi_examples", "cli_examples", "docs_examples", "combined_examples"]
-http_examples = ["sdforge/http"]
-mcp_examples = ["sdforge/mcp"]
-websocket_examples = ["sdforge/websocket"]
-streaming_examples = ["sdforge/streaming"]
-security_examples = ["sdforge/security"]
-cache_examples = ["sdforge/cache", "sdforge/http"]
-grpc_examples = ["sdforge/grpc"]
-logging_examples = ["sdforge/logging"]
-openapi_examples = ["sdforge/openapi", "http_examples"]
-cli_examples = ["sdforge/cli"]
-docs_examples = ["sdforge/docs"]
+# `*_examples` features are the user-facing toggle (kept for backward
+# compatibility). Each enables both the sdforge feature AND the local
+# alias feature (e.g. `cli`) so that `#[cfg(feature = "cli")]` emitted by
+# `#[forge(cli = true)]` macro resolves to true in this downstream crate.
+http_examples = ["http"]
+mcp_examples = ["mcp"]
+websocket_examples = ["websocket"]
+streaming_examples = ["streaming"]
+security_examples = ["security"]
+cache_examples = ["cache", "http_examples"]
+grpc_examples = ["grpc"]
+logging_examples = ["logging"]
+openapi_examples = ["openapi", "http_examples"]
+cli_examples = ["cli"]
+docs_examples = ["docs"]
 combined_examples = ["http_examples", "mcp_examples", "websocket_examples",
                      "streaming_examples", "security_examples", "cache_examples",
                      "grpc_examples", "logging_examples", "openapi_examples",
                      "cli_examples", "docs_examples"]
+
+# sdforge feature aliases — each enables the corresponding sdforge feature.
+# The `#[forge]` macro generates `#[cfg(feature = "cli")]` /
+# `#[cfg(feature = "mcp")]` / `#[cfg(feature = "grpc")]` /
+# `#[cfg(feature = "websocket")]` gates that check the *current* crate's
+# features. Without these aliases, downstream crates would need to add
+# `cli = ["sdforge/cli"]` etc. manually.
+http = ["sdforge/http"]
+mcp = ["sdforge/mcp"]
+websocket = ["sdforge/websocket"]
+streaming = ["sdforge/streaming"]
+security = ["sdforge/security"]
+cache = ["sdforge/cache"]
+grpc = ["sdforge/grpc"]
+logging = ["sdforge/logging"]
+openapi = ["sdforge/openapi"]
+cli = ["sdforge/cli"]
+docs = ["sdforge/docs"]
