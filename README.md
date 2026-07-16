@@ -38,7 +38,7 @@ cargo add sdforge
 
 ```toml
 [dependencies]
-sdforge = { version = "0.3", features = ["http"] }
+sdforge = { version = "0.5", features = ["http"] }
 ```
 
 ### 基础使用
@@ -88,6 +88,76 @@ mod auth_api {
     }
 }
 // 端点: /auth/api/v1/login
+```
+
+### gRPC Dispatch
+
+启用 `grpc` feature 后，`#[forge(grpc_method = "...")]` 会通过 inventory 注册到
+`SdForgeGrpcService`，由其 `call()` 方法路由到对应 handler。返回值需满足
+`serde::Serialize`，错误类型需为 `ApiError`：
+
+```toml
+[dependencies]
+sdforge = { version = "0.5", features = ["grpc"] }
+```
+
+```rust
+use sdforge::prelude::*;
+use sdforge::forge;
+
+#[forge(
+    name = "grpc_echo",
+    version = "v1",
+    grpc_method = "comprehensive.echo",
+    description = "gRPC echo handler"
+)]
+async fn echo(msg: String) -> Result<serde_json::Value, ApiError> {
+    Ok(serde_json::json!({ "echo": msg }))
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    sdforge::init_all_plugins();
+    let server = sdforge::grpc::SdForgeGrpcServer::default();
+    server.serve("0.0.0.0:50051").await?;
+    Ok(())
+}
+```
+
+### CLI Dispatch
+
+启用 `cli` feature 后，`#[forge(cli = true)]` 会注册 `CliCommandRegistration` +
+`CliHandlerRegistration`，由 `CliBuilder::execute()` 一站式完成 build / parse /
+dispatch / 输出 / 退出。返回 `Value::String` 时输出原始串（不带引号），其他类型
+输出 JSON：
+
+```toml
+[dependencies]
+sdforge = { version = "0.5", features = ["cli"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+```
+
+```rust
+use sdforge::cli::CliBuilder;
+use sdforge::core::ApiError;
+use sdforge::forge;
+
+#[forge(name = "echo", version = "1.0", description = "Echo a greeting", cli = true)]
+async fn echo(name: String) -> Result<String, ApiError> {
+    Ok(format!("Hello, {}!", name))
+}
+
+#[tokio::main]
+async fn main() {
+    sdforge::init_all_plugins();
+    // execute() 返回 `!`：内部 std::process::exit(0/1)，调用方无需 match
+    CliBuilder::new().execute().await;
+}
+```
+
+```sh
+# 运行：cargo run --example basic_cli --features cli -- echo --name world
+# 输出：Hello, world!   （无引号 —— 智能提取 Value::String）
 ```
 
 ## 🔧 特性标志

@@ -3,7 +3,7 @@ members = [".", "examples"]
 resolver = "2"
 
 [workspace.package]
-version = "0.4.2"
+version = "0.5.0"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Kirky.X"]
@@ -145,7 +145,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-sdforge-macros = { version = "0.4", path = "./macros" }
+sdforge-macros = { version = "0.5", path = "./macros" }
 
 # HTTP dependencies
 axum = { workspace = true, optional = true }
@@ -233,7 +233,7 @@ writeable = { version = "0.6", optional = true }
 tokio = { workspace = true, features = ["test-util"] }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
-sdforge-macros = { version = "0.4", path = "./macros", default-features = false }
+sdforge-macros = { version = "0.5", path = "./macros", default-features = false }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }
@@ -316,8 +316,8 @@ security = [
 websocket = ["http", "streaming", "dep:axum-extra", "dep:chrono"]
 
 # gRPC 特性
-# 独立于 http：grpc 模块只用 tonic + prost + serde_json
-grpc = ["dep:tonic", "dep:prost", "dep:tonic-prost", "dep:inventory"]
+# 独立于 http：grpc 模块只用 tonic + prost + serde_json + futures-util (catch_unwind)
+grpc = ["dep:tonic", "dep:prost", "dep:tonic-prost", "dep:inventory", "dep:futures-util"]
 
 # OpenAPI 特性 - 自动生成 OpenAPI 3.1 规范
 # 独立于 http：openapi 模块只用 utoipa + inventory + serde_json
@@ -336,7 +336,11 @@ docs = ["openapi", "dep:utoipa-swagger-ui", "dep:clap-markdown", "cli"]
 cache = ["oxcache/minimal"]
 
 # Logging 特性
-logging = ["dep:chrono", "tokio"]
+# `dep:once_cell` is required because `src/logging.rs` uses
+# `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
+# `--features logging` alone (without `http`, which also enables once_cell)
+# fails with "cannot find module or crate `once_cell`".
+logging = ["dep:chrono", "dep:once_cell", "tokio"]
 
 # tokio feature (enables dep:tokio; referenced by #[cfg(feature = "tokio")] in source)
 tokio = ["dep:tokio"]

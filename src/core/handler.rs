@@ -57,6 +57,32 @@ pub fn extract_value(v: &Value) -> String {
     }
 }
 
+/// Downcast `HandlerState` to a concrete `Arc<T>`.
+///
+/// Returns `Err(ApiError::Internal{...})` when:
+/// - `state` is `None` (no state was injected via `CliBuilder::with_dependencies` / `GrpcServerConfig.state`)
+/// - downcast fails (state was injected but as a different type)
+///
+/// Handlers declare a `#[state] db: Arc<Db>` parameter; the macro emits
+/// `let db = downcast_state::<Db>(state)?;` so the handler receives the
+/// concrete `Arc<Db>` directly.
+pub fn downcast_state<T: Any + Send + Sync + 'static>(
+    state: HandlerState,
+) -> Result<Arc<T>, ApiError> {
+    let arc = state.ok_or_else(|| {
+        ApiError::internal_error(
+            "handler requires application state but none was injected",
+            "forge.state_missing",
+        )
+    })?;
+    arc.downcast::<T>().map_err(|_| {
+        ApiError::internal_error(
+            "handler state type mismatch (downcast failed)",
+            "forge.state_type_mismatch",
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,5 +123,44 @@ mod tests {
         // 函数指针类型可构造并赋值给 HandlerFn —— 编译期验证签名正确。
         // （core 不门控，不能假设 tokio runtime，故不实际驱动 future。）
         let _f: HandlerFn = |_args, _state| Box::pin(async { Ok(Value::Null) });
+    }
+
+    // ========================================================================
+    // T011: downcast_state
+    // ========================================================================
+
+    #[test]
+    fn downcast_state_none_returns_internal_error() {
+        // state = None → handler requires state but none injected.
+        let result = downcast_state::<i32>(None);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ApiError::Internal { error_id, .. } => {
+                assert_eq!(error_id, "forge.state_missing");
+            }
+            other => panic!("expected ApiError::Internal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn downcast_state_wrong_type_returns_internal_error() {
+        // Inject Arc<i32> but request Arc<String> → downcast fails.
+        let state: HandlerState = Some(Arc::new(42_i32));
+        let result = downcast_state::<String>(state);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ApiError::Internal { error_id, .. } => {
+                assert_eq!(error_id, "forge.state_type_mismatch");
+            }
+            other => panic!("expected ApiError::Internal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn downcast_state_correct_type_returns_arc() {
+        // Inject Arc<i32> and downcast to i32 → recover the concrete Arc.
+        let state: HandlerState = Some(Arc::new(42_i32));
+        let arc = downcast_state::<i32>(state).expect("downcast to i32 must succeed");
+        assert_eq!(*arc, 42);
     }
 }

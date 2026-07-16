@@ -27,6 +27,7 @@ fn test_grpc_server_config_with_auth() {
         max_connections: 500,
         timeout_seconds: 60,
         auth: Some(auth),
+        state: None,
     };
     assert!(config.auth.is_some());
 }
@@ -142,10 +143,10 @@ async fn test_grpc_service_call_method() {
     let service = SdForgeGrpcService::default();
 
     let mut parameters = HashMap::new();
-    parameters.insert("key".to_string(), "value".to_string());
+    parameters.insert("msg".to_string(), "value".to_string());
 
     let request = CallRequest {
-        method: "test_method".to_string(),
+        method: "test_echo".to_string(),
         parameters,
         data: "".to_string(),
     };
@@ -172,11 +173,10 @@ async fn test_grpc_service_call_with_empty_method() {
         data: "".to_string(),
     };
 
+    // Unregistered method → Status::not_found (R-grpc-001)
     let result = service.call(Request::new(request)).await;
-    assert!(result.is_ok());
-
-    let response = result.unwrap().into_inner();
-    assert!(response.success);
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
 }
 
 #[tokio::test]
@@ -187,21 +187,12 @@ async fn test_grpc_service_call_with_complex_parameters() {
     let service = SdForgeGrpcService::default();
 
     let mut parameters = HashMap::new();
-    parameters.insert("user_id".to_string(), "123".to_string());
-    parameters.insert("name".to_string(), "Test User".to_string());
-    parameters.insert("active".to_string(), "true".to_string());
-
-    let complex_data = serde_json::json!({
-        "user_id": 123,
-        "name": "Test User",
-        "active": true,
-        "tags": ["tag1", "tag2"]
-    });
+    parameters.insert("msg".to_string(), "complex_value".to_string());
 
     let request = CallRequest {
-        method: "update_user".to_string(),
+        method: "test_echo".to_string(),
         parameters,
-        data: complex_data.to_string(),
+        data: "".to_string(),
     };
 
     let result = service.call(Request::new(request)).await;
@@ -209,9 +200,7 @@ async fn test_grpc_service_call_with_complex_parameters() {
 
     let response = result.unwrap().into_inner();
     assert!(response.success);
-
-    let response_data: serde_json::Value = serde_json::from_str(&response.data).unwrap();
-    assert_eq!(response_data["method"], "update_user");
+    assert_eq!(response.data, "complex_value");
 }
 
 #[tokio::test]
@@ -246,9 +235,11 @@ async fn test_grpc_service_get_info_methods_list() {
     assert!(result.is_ok());
 
     let response = result.unwrap().into_inner();
-    assert!(response.methods.contains(&"Call".to_string()));
-    assert!(response.methods.contains(&"GetInfo".to_string()));
-    assert_eq!(response.methods.len(), 2);
+    // methods now reflects registered handler names, not ["Call", "GetInfo"].
+    // test_echo is registered via inventory in grpc_impl::tests.
+    assert!(response.methods.contains(&"test_echo".to_string()));
+    assert!(response.methods.contains(&"test_body".to_string()));
+    assert!(!response.methods.is_empty());
 }
 
 // ============================================================================
@@ -262,21 +253,16 @@ async fn test_grpc_service_call_with_invalid_json() {
 
     let service = SdForgeGrpcService::default();
 
-    let mut parameters = HashMap::new();
-    parameters.insert("key".to_string(), "value".to_string());
-
     let request = CallRequest {
         method: "test".to_string(),
-        parameters,
+        parameters: HashMap::new(),
         data: "invalid json {{{".to_string(),
     };
 
+    // Unregistered method → Status::not_found (R-grpc-001)
     let result = service.call(Request::new(request)).await;
-    assert!(result.is_ok());
-
-    let response = result.unwrap().into_inner();
-    assert!(response.success);
-    assert!(response.data.contains("processed"));
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
 }
 
 #[tokio::test]
@@ -288,13 +274,10 @@ async fn test_grpc_service_call_with_large_payload() {
 
     let large_data = "x".repeat(1000);
 
-    let mut parameters = HashMap::new();
-    parameters.insert("data".to_string(), large_data.clone());
-
     let request = CallRequest {
-        method: "large_payload".to_string(),
-        parameters,
-        data: large_data,
+        method: "test_body".to_string(),
+        parameters: HashMap::new(),
+        data: large_data.clone(),
     };
 
     let result = service.call(Request::new(request)).await;
@@ -302,6 +285,7 @@ async fn test_grpc_service_call_with_large_payload() {
 
     let response = result.unwrap().into_inner();
     assert!(response.success);
+    assert_eq!(response.data, large_data);
 }
 
 // ============================================================================
@@ -377,6 +361,7 @@ fn test_grpc_config_zero_timeout() {
         timeout_seconds: 0,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
 
     assert_eq!(config.timeout_seconds, 0);
@@ -390,6 +375,7 @@ fn test_grpc_config_large_max_connections() {
         timeout_seconds: 30,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
 
     assert_eq!(config.max_connections, 100000);
@@ -402,6 +388,7 @@ fn test_grpc_config_boundary_values() {
         timeout_seconds: 1,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
 
     let config2 = GrpcServerConfig {
@@ -409,6 +396,7 @@ fn test_grpc_config_boundary_values() {
         timeout_seconds: u64::MAX,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
 
     assert_eq!(config1.max_connections, 1);
@@ -856,6 +844,7 @@ fn test_grpc_server_config_clone() {
         timeout_seconds: 45,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
 
     let cloned = config.clone();
@@ -871,6 +860,7 @@ fn test_grpc_server_config_equality() {
         timeout_seconds: 30,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
 
     let config2 = GrpcServerConfig {
@@ -878,6 +868,7 @@ fn test_grpc_server_config_equality() {
         timeout_seconds: 30,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
 
     assert_eq!(config1.max_connections, config2.max_connections);
@@ -891,6 +882,7 @@ fn test_grpc_server_config_with_minimal_connections() {
         timeout_seconds: 30,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
 
     assert_eq!(config.max_connections, 1);
@@ -903,6 +895,7 @@ fn test_grpc_server_config_with_zero_timeout() {
         timeout_seconds: 0,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
 
     assert_eq!(config.timeout_seconds, 0);
@@ -915,6 +908,7 @@ fn test_grpc_server_config_timeout_edge_cases() {
         timeout_seconds: 1,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
 
     let long_timeout = GrpcServerConfig {
@@ -922,6 +916,7 @@ fn test_grpc_server_config_timeout_edge_cases() {
         timeout_seconds: 86400,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
 
     assert_eq!(short_timeout.timeout_seconds, 1);
@@ -935,6 +930,7 @@ fn test_grpc_server_config_auth_none() {
         max_connections: 100,
         timeout_seconds: 30,
         auth: None,
+        state: None,
     };
 
     assert!(config.auth.is_none());
@@ -950,14 +946,6 @@ fn test_sd_forge_grpc_service_default_is_send_sync() {
     assert_send_sync::<SdForgeGrpcService>();
 }
 
-#[test]
-fn test_sd_forge_grpc_service_debug_impl() {
-    let service = SdForgeGrpcService::default();
-    let debug_str = format!("{:?}", service);
-
-    assert!(debug_str.contains("SdForgeGrpcService"));
-}
-
 #[tokio::test]
 async fn test_grpc_service_call_with_special_characters_in_method() {
     use std::collections::HashMap;
@@ -971,11 +959,10 @@ async fn test_grpc_service_call_with_special_characters_in_method() {
         data: "".to_string(),
     };
 
+    // Unregistered method → Status::not_found (R-grpc-001)
     let result = service.call(Request::new(request)).await;
-    assert!(result.is_ok());
-
-    let response = result.unwrap().into_inner();
-    assert!(response.success);
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
 }
 
 #[tokio::test]
@@ -991,11 +978,10 @@ async fn test_grpc_service_call_with_unicode_method() {
         data: "".to_string(),
     };
 
+    // Unregistered method → Status::not_found (R-grpc-001)
     let result = service.call(Request::new(request)).await;
-    assert!(result.is_ok());
-
-    let response = result.unwrap().into_inner();
-    assert!(response.success);
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
 }
 
 #[tokio::test]
@@ -1012,12 +998,10 @@ async fn test_grpc_service_call_with_very_long_method_name() {
         data: "".to_string(),
     };
 
+    // Unregistered method → Status::not_found (R-grpc-001)
     let result = service.call(Request::new(request)).await;
-    assert!(result.is_ok());
-
-    let response = result.unwrap().into_inner();
-    assert!(response.success);
-    assert!(response.data.contains(&long_method));
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
 }
 
 #[tokio::test]
@@ -1028,13 +1012,10 @@ async fn test_grpc_service_call_with_parameters_containing_special_values() {
     let service = SdForgeGrpcService::default();
 
     let mut parameters = HashMap::new();
-    parameters.insert("null_value".to_string(), "null".to_string());
-    parameters.insert("empty_string".to_string(), "".to_string());
-    parameters.insert("whitespace".to_string(), "   ".to_string());
-    parameters.insert("json_like".to_string(), r#"{"key":"value"}"#.to_string());
+    parameters.insert("msg".to_string(), r#"{"key":"value"}"#.to_string());
 
     let request = CallRequest {
-        method: "test_params".to_string(),
+        method: "test_echo".to_string(),
         parameters,
         data: "".to_string(),
     };
@@ -1044,6 +1025,7 @@ async fn test_grpc_service_call_with_parameters_containing_special_values() {
 
     let response = result.unwrap().into_inner();
     assert!(response.success);
+    assert_eq!(response.data, r#"{"key":"value"}"#);
 }
 
 #[tokio::test]
@@ -1054,13 +1036,16 @@ async fn test_grpc_service_call_with_empty_parameters() {
     let service = SdForgeGrpcService::default();
 
     let request = CallRequest {
-        method: "empty_params".to_string(),
+        method: "test_echo".to_string(),
         parameters: HashMap::new(),
         data: "".to_string(),
     };
 
     let result = service.call(Request::new(request)).await;
     assert!(result.is_ok());
+
+    let response = result.unwrap().into_inner();
+    assert!(response.success);
 }
 
 #[tokio::test]
@@ -1185,17 +1170,20 @@ async fn test_call_response_data_contains_method() {
 
     let service = SdForgeGrpcService::default();
 
+    let mut parameters = HashMap::new();
+    parameters.insert("msg".to_string(), "my_custom_method".to_string());
+
     let request = CallRequest {
-        method: "my_custom_method".to_string(),
-        parameters: HashMap::new(),
+        method: "test_echo".to_string(),
+        parameters,
         data: "".to_string(),
     };
 
     let result = service.call(Request::new(request)).await.unwrap();
     let response = result.into_inner();
 
-    let data: serde_json::Value = serde_json::from_str(&response.data).unwrap();
-    assert_eq!(data["method"], "my_custom_method");
+    // R-grpc-004: String return → raw string (no JSON wrapper)
+    assert_eq!(response.data, "my_custom_method");
 }
 
 #[tokio::test]
@@ -1205,17 +1193,20 @@ async fn test_call_response_data_contains_result() {
 
     let service = SdForgeGrpcService::default();
 
+    let mut parameters = HashMap::new();
+    parameters.insert("msg".to_string(), "processed".to_string());
+
     let request = CallRequest {
-        method: "test".to_string(),
-        parameters: HashMap::new(),
+        method: "test_echo".to_string(),
+        parameters,
         data: "".to_string(),
     };
 
     let result = service.call(Request::new(request)).await.unwrap();
     let response = result.into_inner();
 
-    let data: serde_json::Value = serde_json::from_str(&response.data).unwrap();
-    assert_eq!(data["result"], "processed");
+    // R-grpc-004: String return → raw string
+    assert_eq!(response.data, "processed");
 }
 
 #[tokio::test]
@@ -1226,7 +1217,7 @@ async fn test_call_response_status_code() {
     let service = SdForgeGrpcService::default();
 
     let request = CallRequest {
-        method: "test".to_string(),
+        method: "test_echo".to_string(),
         parameters: HashMap::new(),
         data: "".to_string(),
     };
@@ -1245,7 +1236,7 @@ async fn test_call_response_error_field_empty_on_success() {
     let service = SdForgeGrpcService::default();
 
     let request = CallRequest {
-        method: "test".to_string(),
+        method: "test_echo".to_string(),
         parameters: HashMap::new(),
         data: "".to_string(),
     };
@@ -1302,7 +1293,8 @@ async fn test_info_response_methods_count() {
     let result = service.get_info(Request::new(request)).await.unwrap();
     let response = result.into_inner();
 
-    assert_eq!(response.methods.len(), 2);
+    // methods now reflects registered handler count (≥1 from grpc_impl::tests).
+    assert!(!response.methods.is_empty());
 }
 
 #[tokio::test]
@@ -1359,9 +1351,11 @@ async fn test_grpc_service_concurrent_calls() {
     for i in 0..10 {
         let service_clone = service.clone();
         let handle = tokio::spawn(async move {
+            let mut params = HashMap::new();
+            params.insert("msg".to_string(), format!("concurrent_{}", i));
             let request = CallRequest {
-                method: format!("concurrent_method_{}", i),
-                parameters: HashMap::new(),
+                method: "test_echo".to_string(),
+                parameters: params,
                 data: "".to_string(),
             };
             service_clone.call(Request::new(request)).await
@@ -1485,6 +1479,7 @@ async fn test_build_server_with_config_zero_values_starts_serving() {
         timeout_seconds: 0,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
     let result = tokio::time::timeout(
         Duration::from_millis(200),
@@ -1511,6 +1506,7 @@ async fn test_build_server_with_config_large_values_starts_serving() {
         timeout_seconds: 300,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
     let result = tokio::time::timeout(
         Duration::from_millis(200),
@@ -1538,6 +1534,7 @@ async fn test_build_server_with_config_minimal_positive_values() {
         timeout_seconds: 1,
         #[cfg(feature = "security")]
         auth: None,
+        state: None,
     };
     let result = tokio::time::timeout(
         Duration::from_millis(200),

@@ -7,7 +7,7 @@
 //! ## 功能概述
 //!
 //! 启用 `openapi` feature 后，每个 `#[forge]` 宏会在编译时通过
-//! `inventory::submit!` 注册一条 `OpenApiRouteInfo`。运行时调用
+//! `sdforge::inventory::submit!` 注册一条 `OpenApiRouteInfo`。运行时调用
 //! `generate_openapi_spec()` 即可收集所有路由并生成完整规范。
 //!
 //! ## 启用方式
@@ -121,12 +121,13 @@ pub fn demo_spec_to_json() -> String {
 // 手动注册一条 OpenAPI 路由信息
 //
 // 对于不由 `#[forge]` 宏声明的路由（如动态注册的中间件路由），
-// 可以手动通过 `inventory::submit!` 注册 `OpenApiRouteInfo`。
-inventory::submit!(OpenApiRouteInfo::new(
+// 可以手动通过 `sdforge::inventory::submit!` 注册 `OpenApiRouteInfo`。
+// 此处使用 sdforge 的 re-export，避免 examples crate 直接依赖 inventory。
+sdforge::inventory::submit!(OpenApiRouteInfo::new(
     "/openapi-demo/manual",
     "GET",
     "Manually registered route",
-    "This route was registered via inventory::submit! directly, not via #[forge]",
+    "This route was registered via sdforge::inventory::submit! directly, not via #[forge]",
     "v1",
     &["manual", "demo"]
 ));
