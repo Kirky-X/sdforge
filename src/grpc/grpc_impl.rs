@@ -213,7 +213,14 @@ impl GrpcRoute {
 }
 
 /// Build gRPC server
+///
+/// # Deprecated
+///
+/// `build_server` starts an **unauthenticated** gRPC server with no way to
+/// configure authentication. Use [`build_server_with_config`] with a
+/// [`GrpcServerConfig`] that has `auth` configured instead.
 #[cfg(feature = "grpc")]
+#[deprecated(note = "use build_server_with_config with auth configured; build_server starts an unauthenticated server")]
 pub async fn build_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Security fix: Validate address format before parsing to prevent information disclosure
     let addr = match addr.parse::<std::net::SocketAddr>() {
@@ -240,6 +247,13 @@ pub async fn build_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> 
 ///
 /// When `config.auth` is `Some`, all gRPC requests must include a valid JWT bearer token
 /// in the `authorization` metadata header. Invalid tokens result in `UNAUTHENTICATED` status.
+///
+/// # Security (vuln-0006)
+///
+/// When `config.require_auth` is `true` (the default) and `config.auth` is `None`,
+/// this function refuses to start, preventing accidental deployment of an
+/// unauthenticated gRPC server. Set `require_auth = false` only for
+/// development/test environments.
 #[cfg(feature = "grpc")]
 pub async fn build_server_with_config(
     addr: &str,
@@ -255,6 +269,18 @@ pub async fn build_server_with_config(
             )));
         }
     };
+
+    // vuln-0006: refuse to start an unauthenticated server when require_auth is true.
+    // This check runs after address validation (so invalid addresses still report
+    // the address error) but before any server binding (so it fails fast).
+    #[cfg(feature = "security")]
+    if config.require_auth && config.auth.is_none() {
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "gRPC server requires authentication but no auth configured \
+             (set GrpcServerConfig.require_auth = false to override)",
+        )));
+    }
     // T008: pass `config.state` into the service so handlers with State
     // parameters can downcast it at call time.
     let service = SdForgeGrpcService::with_state(config.state);
@@ -289,6 +315,7 @@ impl Default for GrpcServerConfig {
         Self {
             max_connections: 1000,
             timeout_seconds: 30,
+            require_auth: true, // vuln-0006: secure default
             #[cfg(feature = "security")]
             auth: None,
             state: None,

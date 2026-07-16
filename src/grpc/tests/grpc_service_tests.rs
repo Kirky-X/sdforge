@@ -26,6 +26,7 @@ fn test_grpc_server_config_with_auth() {
     let config = GrpcServerConfig {
         max_connections: 500,
         timeout_seconds: 60,
+        require_auth: true,
         auth: Some(auth),
         state: None,
     };
@@ -359,6 +360,7 @@ fn test_grpc_config_zero_timeout() {
     let config = GrpcServerConfig {
         max_connections: 100,
         timeout_seconds: 0,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -373,6 +375,7 @@ fn test_grpc_config_large_max_connections() {
     let config = GrpcServerConfig {
         max_connections: 100000,
         timeout_seconds: 30,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -386,6 +389,7 @@ fn test_grpc_config_boundary_values() {
     let config1 = GrpcServerConfig {
         max_connections: 1,
         timeout_seconds: 1,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -394,6 +398,7 @@ fn test_grpc_config_boundary_values() {
     let config2 = GrpcServerConfig {
         max_connections: usize::MAX,
         timeout_seconds: u64::MAX,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -842,6 +847,7 @@ fn test_grpc_server_config_clone() {
     let config = GrpcServerConfig {
         max_connections: 500,
         timeout_seconds: 45,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -858,6 +864,7 @@ fn test_grpc_server_config_equality() {
     let config1 = GrpcServerConfig {
         max_connections: 100,
         timeout_seconds: 30,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -866,6 +873,7 @@ fn test_grpc_server_config_equality() {
     let config2 = GrpcServerConfig {
         max_connections: 100,
         timeout_seconds: 30,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -880,6 +888,7 @@ fn test_grpc_server_config_with_minimal_connections() {
     let config = GrpcServerConfig {
         max_connections: 1,
         timeout_seconds: 30,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -893,6 +902,7 @@ fn test_grpc_server_config_with_zero_timeout() {
     let config = GrpcServerConfig {
         max_connections: 100,
         timeout_seconds: 0,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -906,6 +916,7 @@ fn test_grpc_server_config_timeout_edge_cases() {
     let short_timeout = GrpcServerConfig {
         max_connections: 100,
         timeout_seconds: 1,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -914,6 +925,7 @@ fn test_grpc_server_config_timeout_edge_cases() {
     let long_timeout = GrpcServerConfig {
         max_connections: 100,
         timeout_seconds: 86400,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -929,6 +941,7 @@ fn test_grpc_server_config_auth_none() {
     let config = GrpcServerConfig {
         max_connections: 100,
         timeout_seconds: 30,
+        require_auth: false,
         auth: None,
         state: None,
     };
@@ -1396,6 +1409,7 @@ async fn test_grpc_service_concurrent_get_info() {
 
 /// Test build_server rejects invalid address format
 #[tokio::test]
+#[allow(deprecated)]
 async fn test_build_server_invalid_address() {
     let result = build_server("not_a_valid_address").await;
     assert!(result.is_err(), "Should reject invalid address");
@@ -1431,6 +1445,7 @@ async fn test_build_server_with_config_invalid_address() {
 /// started successfully and was still running — if it had failed to bind,
 /// it would have returned Err before the timeout.
 #[tokio::test]
+#[allow(deprecated)]
 async fn test_build_server_starts_serving_on_valid_address() {
     use std::time::Duration;
 
@@ -1451,7 +1466,11 @@ async fn test_build_server_starts_serving_on_valid_address() {
 async fn test_build_server_with_config_default_starts_serving() {
     use std::time::Duration;
 
-    let config = GrpcServerConfig::default();
+    // require_auth: false to allow starting without auth (test only)
+    let config = GrpcServerConfig {
+        require_auth: false,
+        ..Default::default()
+    };
     let result = tokio::time::timeout(
         Duration::from_millis(200),
         build_server_with_config("127.0.0.1:0", config),
@@ -1477,6 +1496,7 @@ async fn test_build_server_with_config_zero_values_starts_serving() {
     let config = GrpcServerConfig {
         max_connections: 0,
         timeout_seconds: 0,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -1504,6 +1524,7 @@ async fn test_build_server_with_config_large_values_starts_serving() {
     let config = GrpcServerConfig {
         max_connections: 10000,
         timeout_seconds: 300,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -1532,6 +1553,7 @@ async fn test_build_server_with_config_minimal_positive_values() {
     let config = GrpcServerConfig {
         max_connections: 1,
         timeout_seconds: 1,
+        require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
         state: None,
@@ -1545,6 +1567,92 @@ async fn test_build_server_with_config_minimal_positive_values() {
     match result {
         Ok(Ok(())) => panic!("Server unexpectedly returned Ok before timeout"),
         Ok(Err(e)) => panic!("Server with minimal config failed to start: {}", e),
+        Err(_elapsed) => { /* Expected: server still running */ }
+    }
+}
+
+// ============================================================================
+// vuln-0006 regression tests: GrpcServerConfig require_auth secure default
+//
+// GrpcServerConfig::default() previously set auth: None with no flag to
+// prevent starting an unauthenticated server. The fix adds require_auth
+// (default true) — build_server_with_config refuses to start when
+// require_auth is true and auth is None. build_server is deprecated.
+// ============================================================================
+
+/// Verify the default config has require_auth = true (secure default).
+#[test]
+fn test_vuln0006_default_config_requires_auth() {
+    let config = GrpcServerConfig::default();
+    assert!(
+        config.require_auth,
+        "default config must require auth (secure default)"
+    );
+}
+
+/// Verify build_server_with_config rejects require_auth=true with auth=None.
+/// The function must return Err immediately (before binding) so no port
+/// is occupied and the error message guides the developer.
+#[cfg(feature = "security")]
+#[tokio::test]
+async fn test_vuln0006_rejects_require_auth_without_auth_config() {
+    let config = GrpcServerConfig {
+        require_auth: true,
+        ..Default::default()
+    };
+    let result = build_server_with_config("127.0.0.1:0", config).await;
+    assert!(result.is_err(), "must reject require_auth=true with auth=None");
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("requires authentication"),
+        "error should mention authentication requirement, got: {err_msg}"
+    );
+}
+
+/// Verify build_server_with_config accepts require_auth=true when auth is
+/// configured (server starts serving, indicated by timeout).
+#[cfg(feature = "security")]
+#[tokio::test]
+async fn test_vuln0006_accepts_require_auth_with_auth_config() {
+    use std::time::Duration;
+
+    let auth = crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+        .expect("valid secret");
+    let config = GrpcServerConfig {
+        require_auth: true,
+        auth: Some(auth),
+        ..Default::default()
+    };
+    let result = tokio::time::timeout(
+        Duration::from_millis(200),
+        build_server_with_config("127.0.0.1:0", config),
+    )
+    .await;
+    match result {
+        Ok(Ok(())) => panic!("Server unexpectedly returned Ok before timeout"),
+        Ok(Err(e)) => panic!("Server with auth failed to start: {}", e),
+        Err(_elapsed) => { /* Expected: server still running */ }
+    }
+}
+
+/// Verify build_server_with_config accepts require_auth=false without auth
+/// (server starts serving, indicated by timeout).
+#[tokio::test]
+async fn test_vuln0006_accepts_require_auth_false_without_auth() {
+    use std::time::Duration;
+
+    let config = GrpcServerConfig {
+        require_auth: false,
+        ..Default::default()
+    };
+    let result = tokio::time::timeout(
+        Duration::from_millis(200),
+        build_server_with_config("127.0.0.1:0", config),
+    )
+    .await;
+    match result {
+        Ok(Ok(())) => panic!("Server unexpectedly returned Ok before timeout"),
+        Ok(Err(e)) => panic!("Server with require_auth=false failed to start: {}", e),
         Err(_elapsed) => { /* Expected: server still running */ }
     }
 }
