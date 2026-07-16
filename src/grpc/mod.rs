@@ -21,7 +21,7 @@ mod grpc_impl;
 pub(crate) use grpc_impl::make_auth_interceptor;
 #[cfg(feature = "grpc")]
 #[allow(deprecated)]
-pub use grpc_impl::{build_server, build_server_with_config, SdForgeGrpcService};
+pub use grpc_impl::{SdForgeGrpcService, build_server, build_server_with_config};
 
 #[cfg(feature = "grpc")]
 /// gRPC handler registration (links `CallRequest.method` → forge handler).
@@ -69,6 +69,21 @@ pub struct GrpcServerConfig {
     /// parameter downcast this `Arc<dyn Any>` to their concrete type at
     /// call time. Available without the `security` feature (design D5).
     pub state: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
+    /// Optional rate limiter for gRPC requests (vuln-0006).
+    ///
+    /// When `Some`, each incoming gRPC `call` request is checked against
+    /// the rate limiter using the client's remote address as the identifier.
+    /// Requests that exceed the limit are rejected with
+    /// `Status::resource_exhausted`. This closes the DoS vector identified
+    /// in vuln-0006 (gRPC had no rate limiting while HTTP had).
+    ///
+    /// # Feature availability
+    ///
+    /// Only available when both `grpc` and `ratelimit` features are enabled.
+    /// The `ratelimit` feature is independent of `http` (no axum dependency),
+    /// so gRPC-only builds can still use rate limiting.
+    #[cfg(feature = "ratelimit")]
+    pub rate_limiter: Option<std::sync::Arc<dyn crate::security::ratelimit::RateLimiter>>,
 }
 
 /// gRPC authentication interceptor
