@@ -1,4 +1,4 @@
-error: CLI mode (cli = true) does not support State parameters. Either remove the State parameter, use HTTP/MCP protocol for State injection, or wait for full State injection support via CliBuilder::with_dependencies.
+error: State parameters must be of the form `Arc<T>` to support safe downcast
   --> tests/trybuild/fail/cli_with_state_param.rs:12:10
    |
 12 | async fn test_cli_state(id: u64, #[state] state: AppState) -> String {
