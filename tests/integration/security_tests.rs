@@ -409,7 +409,8 @@ mod security_tests {
             blacklisted_tokens,
             Some("my-api".to_string()),
             Some("my-issuer".to_string()),
-        );
+        )
+        .expect("valid secret must pass validation");
 
         // Register and verify
         let context = create_test_context(Some("dep_user"));

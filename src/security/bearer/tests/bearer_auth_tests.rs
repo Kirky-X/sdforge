@@ -96,15 +96,17 @@ fn test_bearer_auth_with_dependencies() {
     let valid_tokens = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
     let blacklisted_tokens = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
 
+    let secret = b"MySecureSecret123!@#ABCDEFGHIJKLM".to_vec();
     let auth = BearerAuth::with_dependencies(
-        b"test-secret-bytes".to_vec(),
+        secret.clone(),
         valid_tokens.clone(),
         blacklisted_tokens.clone(),
         Some("aud".to_string()),
         Some("iss".to_string()),
-    );
+    )
+    .expect("valid secret must pass validation");
 
-    assert_eq!(auth.secret, b"test-secret-bytes".to_vec());
+    assert_eq!(auth.secret, secret);
     assert_eq!(auth.expected_audience, Some("aud".to_string()));
     assert_eq!(auth.expected_issuer, Some("iss".to_string()));
 }
@@ -114,13 +116,15 @@ fn test_bearer_auth_with_dependencies_all_none() {
     let valid_tokens = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
     let blacklisted_tokens = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
 
+    let secret = b"MySecureSecret123!@#ABCDEFGHIJKLM".to_vec();
     let auth = BearerAuth::with_dependencies(
-        b"test-secret".to_vec(),
+        secret,
         valid_tokens,
         blacklisted_tokens,
         None,
         None,
-    );
+    )
+    .expect("valid secret must pass validation");
 
     assert!(auth.expected_audience.is_none());
     assert!(auth.expected_issuer.is_none());
@@ -395,7 +399,8 @@ fn test_invalidate_token_blacklists() {
         blacklisted_tokens.clone(),
         None,
         None,
-    );
+    )
+    .expect("valid secret must pass validation");
 
     let payload = serde_json::json!({
         "sub": "user123",
@@ -433,7 +438,8 @@ fn test_invalidate_token_blacklist_blocks_token() {
         blacklisted_tokens.clone(),
         None,
         None,
-    );
+    )
+    .expect("valid secret must pass validation");
 
     let payload = serde_json::json!({
         "sub": "user123",
@@ -841,7 +847,8 @@ fn test_verify_blacklisted_token_rejected() {
         blacklisted_tokens.clone(),
         None,
         None,
-    );
+    )
+    .expect("valid secret must pass validation");
 
     let payload = serde_json::json!({
         "sub": "user123",
@@ -944,12 +951,13 @@ fn test_bearer_auth_with_custom_caches() {
     let custom_blacklist_cache = Arc::new(DashMapCache::new()) as SharedCache;
 
     let auth = BearerAuth::with_dependencies(
-        b"custom-secret-key-with-all-required-classes-123!@#".to_vec(),
+        b"CustomSecretKeyWithAllRequiredClasses123!@#".to_vec(),
         custom_valid_cache.clone(),
         custom_blacklist_cache.clone(),
         Some("custom-audience".to_string()),
         Some("custom-issuer".to_string()),
-    );
+    )
+    .expect("valid secret must pass validation");
 
     assert_eq!(auth.expected_audience, Some("custom-audience".to_string()));
     assert_eq!(auth.expected_issuer, Some("custom-issuer".to_string()));
@@ -1213,4 +1221,176 @@ fn test_validate_token_issuer_not_string() {
     let token = create_test_jwt(secret.as_bytes(), &payload);
     // iss as number → token_iss is None → mismatch → rejected
     assert!(auth.validate_token(&token).is_none());
+}
+
+// ============================================================================
+// vuln-0005 regression tests: BearerAuth::with_dependencies secret validation
+//
+// `with_dependencies` previously accepted any `Vec<u8>` secret without
+// validation, allowing callers to bypass the `try_new` complexity
+// requirements (≥32 chars + 4 character classes). These tests verify that
+// `with_dependencies` now enforces the same rules as `try_new`.
+// ============================================================================
+
+/// Build the shared caches used by `with_dependencies`.
+fn make_test_caches() -> (SharedCache, SharedCache) {
+    (
+        Arc::new(crate::cache::DashMapCache::new()) as SharedCache,
+        Arc::new(crate::cache::DashMapCache::new()) as SharedCache,
+    )
+}
+
+/// A valid 32+ char secret with all four character classes.
+const VALID_SECRET: &[u8] = b"MySecureSecret123!@#ABCDEFGHIJKLM";
+
+/// Verify that a valid secret is accepted by `with_dependencies`.
+#[test]
+fn test_vuln0005_with_dependencies_accepts_valid_secret() {
+    let (valid_tokens, blacklisted_tokens) = make_test_caches();
+    let result = BearerAuth::with_dependencies(
+        VALID_SECRET.to_vec(),
+        valid_tokens,
+        blacklisted_tokens,
+        Some("aud".to_string()),
+        Some("iss".to_string()),
+    );
+    assert!(result.is_ok(), "valid secret must be accepted");
+    let auth = result.unwrap();
+    assert_eq!(auth.secret, VALID_SECRET.to_vec());
+    assert_eq!(auth.expected_audience, Some("aud".to_string()));
+    assert_eq!(auth.expected_issuer, Some("iss".to_string()));
+}
+
+/// Verify that a too-short secret (<32 bytes) is rejected.
+#[test]
+fn test_vuln0005_with_dependencies_rejects_short_secret() {
+    let (valid_tokens, blacklisted_tokens) = make_test_caches();
+    let result = BearerAuth::with_dependencies(
+        b"Short123!@#".to_vec(), // 11 bytes, too short
+        valid_tokens,
+        blacklisted_tokens,
+        None,
+        None,
+    );
+    assert!(matches!(
+        result,
+        Err(AuthConfigError::SecretTooShort { length: 11 })
+    ));
+}
+
+/// Verify that a secret missing an uppercase letter is rejected.
+#[test]
+fn test_vuln0005_with_dependencies_rejects_no_uppercase() {
+    let (valid_tokens, blacklisted_tokens) = make_test_caches();
+    // 34 chars, no uppercase
+    let secret = b"mysecret123!@#abcdefghijklmnopqrstuv";
+    let result = BearerAuth::with_dependencies(
+        secret.to_vec(),
+        valid_tokens,
+        blacklisted_tokens,
+        None,
+        None,
+    );
+    assert!(matches!(
+        result,
+        Err(AuthConfigError::MissingCharacterClass { required_type: "uppercase letter" })
+    ));
+}
+
+/// Verify that a secret missing a lowercase letter is rejected.
+#[test]
+fn test_vuln0005_with_dependencies_rejects_no_lowercase() {
+    let (valid_tokens, blacklisted_tokens) = make_test_caches();
+    // 34 chars, no lowercase
+    let secret = b"MYSECRET123!@#ABCDEFGHIJKLMNOPQRSTUV";
+    let result = BearerAuth::with_dependencies(
+        secret.to_vec(),
+        valid_tokens,
+        blacklisted_tokens,
+        None,
+        None,
+    );
+    assert!(matches!(
+        result,
+        Err(AuthConfigError::MissingCharacterClass { required_type: "lowercase letter" })
+    ));
+}
+
+/// Verify that a secret missing a digit is rejected.
+#[test]
+fn test_vuln0005_with_dependencies_rejects_no_digit() {
+    let (valid_tokens, blacklisted_tokens) = make_test_caches();
+    // 34 chars, no digit
+    let secret = b"MySecureSecret!@#ABCDEFGHIJKLMNOPQRSTUV";
+    let result = BearerAuth::with_dependencies(
+        secret.to_vec(),
+        valid_tokens,
+        blacklisted_tokens,
+        None,
+        None,
+    );
+    assert!(matches!(
+        result,
+        Err(AuthConfigError::MissingCharacterClass { required_type: "digit" })
+    ));
+}
+
+/// Verify that a secret missing a special character is rejected.
+#[test]
+fn test_vuln0005_with_dependencies_rejects_no_special() {
+    let (valid_tokens, blacklisted_tokens) = make_test_caches();
+    // 34 chars, no special char
+    let secret = b"MySecureSecret123ABCDEFGHIJKLMNOPQRSTUV";
+    let result = BearerAuth::with_dependencies(
+        secret.to_vec(),
+        valid_tokens,
+        blacklisted_tokens,
+        None,
+        None,
+    );
+    assert!(matches!(
+        result,
+        Err(AuthConfigError::MissingCharacterClass { required_type: "special character" })
+    ));
+}
+
+/// Verify that non-UTF8 secret bytes are rejected (with_dependencies takes
+/// `Vec<u8>` so callers could supply invalid UTF-8; validation must reject).
+#[test]
+fn test_vuln0005_with_dependencies_rejects_non_utf8() {
+    let (valid_tokens, blacklisted_tokens) = make_test_caches();
+    // 32 bytes with all required classes on the ASCII portion, but contains
+    // a non-UTF8 continuation byte (0xFF) that prevents str::from_utf8.
+    let mut secret = b"MySecureSecret123!@#ABCDEFGHIJKLM".to_vec();
+    secret.push(0xFF); // invalid UTF-8 continuation
+    let result = BearerAuth::with_dependencies(
+        secret,
+        valid_tokens,
+        blacklisted_tokens,
+        None,
+        None,
+    );
+    assert!(
+        matches!(result, Err(AuthConfigError::InvalidSecret(_))),
+        "non-UTF8 secret must be rejected, got: {:?}",
+        result.err()
+    );
+}
+
+/// Verify that a secret exactly 32 bytes long with all character classes
+/// is accepted (boundary case).
+#[test]
+fn test_vuln0005_with_dependencies_accepts_exactly_32_bytes() {
+    let (valid_tokens, blacklisted_tokens) = make_test_caches();
+    // Exactly 32 chars with all 4 classes
+    let secret = b"Abcdefghijklmnopqrstuvwx123456!@";
+    assert_eq!(secret.len(), 32);
+    let result = BearerAuth::with_dependencies(
+        secret.to_vec(),
+        valid_tokens,
+        blacklisted_tokens,
+        None,
+        None,
+    );
+    assert!(result.is_ok(), "32-byte secret with all classes must be accepted");
 }
