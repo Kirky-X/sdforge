@@ -634,6 +634,93 @@ fn rust_type_to_openapi_schema(rust_type: &str) -> (&'static str, &'static str) 
     }
 }
 
+/// Generate the unified handler closure shared by CLI and gRPC registrations (D3).
+///
+/// Emits a named function `#handler_fn_name` with signature
+/// `(HandlerArgs, HandlerState) -> HandlerFuture` that:
+/// 1. extracts Path/Body params from `args` (string → typed via `parse`),
+/// 2. awaits the original forge function,
+/// 3. serializes the return value via `serde_json::to_value` (requires `T: Serialize`).
+///
+/// State params are intentionally NOT handled here (T011 adds `downcast_state`);
+/// callers that reject State (CLI today) do so before invoking this helper.
+fn generate_handler_closure(
+    fn_name: &syn::Ident,
+    handler_fn_name: &syn::Ident,
+    params: &[ParamInfo],
+    _path_params: &[String],
+) -> TokenStream2 {
+    // Only Path/Body params participate in value extraction; State/Query/...
+    // are skipped here. State injection arrives in T011 via downcast_state.
+    let handler_params: Vec<&ParamInfo> = params
+        .iter()
+        .filter(|p| matches!(p.param_kind, ParamKind::Path | ParamKind::Body))
+        .collect();
+
+    let param_extractions = handler_params.iter().map(|p| {
+        let pname_str = &p.name;
+        let pname = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+        let pty = &p.ty;
+        let required = if matches!(p.param_kind, ParamKind::Path) {
+            true
+        } else {
+            !p.is_option
+        };
+
+        if required {
+            quote! {
+                let #pname: #pty = args.get(#pname_str)
+                    .ok_or_else(|| sdforge::prelude::ApiError::InvalidInput {
+                        message: format!("missing required argument: {}", #pname_str),
+                        field: Some(#pname_str.to_string()),
+                        value: None,
+                    })?
+                    .parse()
+                    .map_err(|e| sdforge::prelude::ApiError::InvalidInput {
+                        message: format!("invalid argument {}: {}", #pname_str, e),
+                        field: Some(#pname_str.to_string()),
+                        value: None,
+                    })?;
+            }
+        } else {
+            // Option<T> — absent key yields None; present key must parse.
+            quote! {
+                let #pname: #pty = args.get(#pname_str)
+                    .map(|s| s.parse())
+                    .transpose()
+                    .map_err(|e| sdforge::prelude::ApiError::InvalidInput {
+                        message: format!("invalid argument {}: {}", #pname_str, e),
+                        field: Some(#pname_str.to_string()),
+                        value: None,
+                    })?;
+            }
+        }
+    });
+
+    let param_idents: Vec<syn::Ident> = handler_params
+        .iter()
+        .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
+        .collect();
+
+    quote! {
+        fn #handler_fn_name(
+            args: sdforge::core::HandlerArgs,
+            _state: sdforge::core::HandlerState,
+        ) -> sdforge::core::HandlerFuture {
+            Box::pin(async move {
+                #(#param_extractions)*
+                let result = #fn_name(#(#param_idents),*).await;
+                result.and_then(|v| serde_json::to_value(&v).map_err(|e| {
+                    sdforge::prelude::ApiError::internal_error(
+                        format!("failed to serialize handler return value: {e}"),
+                        "forge.serialize_return_value",
+                    )
+                }))
+            })
+        }
+    }
+}
+
 /// Generate CLI registration tokens for a `#[forge(cli = true)]` function.
 ///
 /// Emits three `#[cfg(feature = "cli")]`-gated items:
@@ -709,53 +796,11 @@ fn generate_cli_registration(
         proc_macro2::Span::call_site(),
     );
 
-    // Per-parameter extraction code: pull string from HashMap, parse to
-    // the declared Rust type, surface missing/invalid as ApiError::InvalidInput.
-    let param_extractions = cli_params.iter().map(|p| {
-        let pname_str = &p.name;
-        let pname = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
-        let pty = &p.ty;
-        let required = if matches!(p.param_kind, ParamKind::Path) {
-            true
-        } else {
-            !p.is_option
-        };
-
-        if required {
-            quote! {
-                let #pname: #pty = args.get(#pname_str)
-                    .ok_or_else(|| sdforge::prelude::ApiError::InvalidInput {
-                        message: format!("missing required argument: {}", #pname_str),
-                        field: Some(#pname_str.to_string()),
-                        value: None,
-                    })?
-                    .parse()
-                    .map_err(|e| sdforge::prelude::ApiError::InvalidInput {
-                        message: format!("invalid argument {}: {}", #pname_str, e),
-                        field: Some(#pname_str.to_string()),
-                        value: None,
-                    })?;
-            }
-        } else {
-            // Option<T> — absent key yields None; present key must parse.
-            quote! {
-                let #pname: #pty = args.get(#pname_str)
-                    .map(|s| s.parse())
-                    .transpose()
-                    .map_err(|e| sdforge::prelude::ApiError::InvalidInput {
-                        message: format!("invalid argument {}: {}", #pname_str, e),
-                        field: Some(#pname_str.to_string()),
-                        value: None,
-                    })?;
-            }
-        }
-    });
-
-    // Identifier list for the original function call.
-    let param_idents: Vec<syn::Ident> = cli_params
-        .iter()
-        .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
-        .collect();
+    // Unified handler closure (D3) — shared with gRPC. The named fn has
+    // signature (HandlerArgs, HandlerState) -> HandlerFuture, extracts
+    // Path/Body params, awaits the forge fn, and serializes its return value
+    // via serde_json::to_value (requires T: Serialize).
+    let handler_fn_def = generate_handler_closure(fn_name, &handler_fn_name, params, _path_params);
 
     let fn_name_str = fn_name.to_string();
     let description_str = description.unwrap_or(name);
@@ -770,15 +815,7 @@ fn generate_cli_registration(
         ).with_args(&[#(#arg_infos),*]));
 
         #[cfg(feature = "cli")]
-        fn #handler_fn_name(
-            args: std::collections::HashMap<String, String>,
-        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), sdforge::prelude::ApiError>> + Send + 'static>> {
-            Box::pin(async move {
-                #(#param_extractions)*
-                let result = #fn_name(#(#param_idents),*).await;
-                result.map(|_| ())
-            })
-        }
+        #handler_fn_def
 
         #[cfg(feature = "cli")]
         sdforge::inventory::submit!(sdforge::cli::CliHandlerRegistration {
@@ -2094,5 +2131,50 @@ mod macro_parsing_tests {
         // Even with no args, both registrations must be emitted.
         assert!(s.contains("CliCommandRegistration"), "missing command: {s}");
         assert!(s.contains("CliHandlerRegistration"), "missing handler: {s}");
+    }
+}
+
+#[cfg(test)]
+mod handler_closure_tests {
+    use super::*;
+
+    /// Verify the unified handler closure serializes its return value (D3.2)
+    /// instead of discarding it, and uses the unified signature (D3.1).
+    #[test]
+    fn handler_closure_serializes_return_value() {
+        let fn_name = syn::Ident::new("echo", proc_macro2::Span::call_site());
+        let handler_fn_name = syn::Ident::new("__cli_handler_echo", proc_macro2::Span::call_site());
+        let params: Vec<ParamInfo> = vec![];
+        let tokens = generate_handler_closure(&fn_name, &handler_fn_name, &params, &[]);
+        let s = tokens.to_string();
+
+        // D3.2: return value serialized via serde_json::to_value (T: Serialize).
+        assert!(
+            s.contains("to_value"),
+            "expected serde_json::to_value in closure body: {s}"
+        );
+        assert!(
+            s.contains("and_then"),
+            "expected and_then to serialize Ok return value: {s}"
+        );
+        // Old contract discarded the return value via .map(|_| ()) — must be gone.
+        assert!(
+            !s.contains("| _ | ()"),
+            "closure must not discard return value (.map(|_| ())): {s}"
+        );
+    }
+
+    #[test]
+    fn handler_closure_uses_unified_signature() {
+        let fn_name = syn::Ident::new("ping", proc_macro2::Span::call_site());
+        let handler_fn_name = syn::Ident::new("__cli_handler_ping", proc_macro2::Span::call_site());
+        let params: Vec<ParamInfo> = vec![];
+        let tokens = generate_handler_closure(&fn_name, &handler_fn_name, &params, &[]);
+        let s = tokens.to_string();
+
+        // D3.1: signature upgraded to unified (HandlerArgs, HandlerState) -> HandlerFuture.
+        assert!(s.contains("HandlerArgs"), "missing HandlerArgs: {s}");
+        assert!(s.contains("HandlerState"), "missing HandlerState: {s}");
+        assert!(s.contains("HandlerFuture"), "missing HandlerFuture: {s}");
     }
 }
