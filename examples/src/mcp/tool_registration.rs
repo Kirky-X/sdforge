@@ -56,7 +56,7 @@
 //! 4. **类型安全** - 使用强类型参数
 
 use sdforge::prelude::*;
-use serde::{Deserialize, Serialize};
+use sdforge::serde::{Deserialize, Serialize};
 
 // ============================================================================
 // 计算器工具请求类型

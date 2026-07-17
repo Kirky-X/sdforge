@@ -69,6 +69,21 @@ macro_rules! impl_default_new {
 ))]
 pub use inventory;
 
+/// Re-export serde for use in example and downstream type references.
+///
+/// Scope: only type references (L1) — e.g. `use sdforge::serde::Deserialize`.
+/// Macro invocations (`serde::Serialize!` etc.) and derive attribute paths
+/// (`#[derive(serde::Serialize)]`) still resolve via the canonical crate
+/// path; downstream crates must keep a direct `serde` dependency for those
+/// uses. This re-export narrows, not eliminates, the direct-dependency
+/// surface.
+///
+/// Unconditional (no `#[cfg(feature = "...")]` gate) because `serde` is a
+/// required dependency of sdforge (not optional), used across every feature.
+/// Other re-exports are feature-gated because the underlying crate is
+/// optional; serde is always present, so the gate would be a no-op.
+pub use serde;
+
 /// Re-export tokio_stream for use in generated code
 #[cfg(feature = "streaming")]
 pub use tokio_stream;

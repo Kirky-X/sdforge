@@ -18,7 +18,7 @@
 
 use sdforge::cache::{DashMapCache, SyncCache};
 use sdforge::prelude::*;
-use serde::{Deserialize, Serialize};
+use sdforge::serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 

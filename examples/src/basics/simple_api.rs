@@ -86,7 +86,7 @@
 //! ```
 
 use sdforge::prelude::*;
-use serde::{Deserialize, Serialize};
+use sdforge::serde::{Deserialize, Serialize};
 
 // ============================================================================
 // 响应类型定义

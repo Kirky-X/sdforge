@@ -37,7 +37,7 @@
 //! ```
 
 use sdforge::prelude::*;
-use serde::{Deserialize, Serialize};
+use sdforge::serde::{Deserialize, Serialize};
 
 // ============================================================================
 // 错误响应类型定义

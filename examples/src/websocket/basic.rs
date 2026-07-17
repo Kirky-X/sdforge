@@ -52,7 +52,7 @@
 //! - 服务器不可用
 
 use sdforge::prelude::*;
-use serde::{Deserialize, Serialize};
+use sdforge::serde::{Deserialize, Serialize};
 
 // ============================================================================
 // 消息类型定义

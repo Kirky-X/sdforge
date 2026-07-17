@@ -18,7 +18,7 @@
 use sdforge::cache::{DashMapCache, SyncCache};
 use sdforge::prelude::*;
 use sdforge::security::{AppApiKeyAuth, AppAuditLogger, AuthContext, AuthMetadata, BearerAuth};
-use serde::{Deserialize, Serialize};
+use sdforge::serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 // =============================================================================

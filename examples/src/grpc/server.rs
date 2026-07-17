@@ -74,6 +74,8 @@ pub fn custom_server_config() -> GrpcServerConfig {
         #[cfg(feature = "security_examples")]
         auth: None,
         state: None,
+        #[cfg(feature = "ratelimit")]
+        rate_limiter: None,
     }
 }
 
