@@ -298,7 +298,10 @@ mod tests {
             "invalid MCP method: bad"
         );
         assert_eq!(
-            format!("{}", McpHeaderError::InvalidToolName("bad/name".to_string())),
+            format!(
+                "{}",
+                McpHeaderError::InvalidToolName("bad/name".to_string())
+            ),
             "invalid MCP tool name: bad/name"
         );
     }

@@ -72,7 +72,9 @@ pub fn build() -> SdForgeMcpServer {
 /// # }
 /// ```
 #[cfg(feature = "mcp")]
-pub async fn serve_stdio(server: SdForgeMcpServer) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn serve_stdio(
+    server: SdForgeMcpServer,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use rmcp::ServiceExt;
     let transport = rmcp::transport::stdio();
     let service = server.serve(transport).await?;

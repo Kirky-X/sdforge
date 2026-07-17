@@ -47,7 +47,10 @@ mod grpc_integration_tests {
         args: std::collections::HashMap<String, String>,
         _state: sdforge::core::HandlerState,
     ) -> sdforge::core::HandlerFuture {
-        let msg = args.get("msg").cloned().unwrap_or_else(|| "default".to_string());
+        let msg = args
+            .get("msg")
+            .cloned()
+            .unwrap_or_else(|| "default".to_string());
         Box::pin(async move { Ok(serde_json::Value::String(msg)) })
     }
 
