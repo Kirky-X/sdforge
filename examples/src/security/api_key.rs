@@ -43,7 +43,7 @@
 //! 4. **最小权限** - 为每个 Key 设置最小必要权限
 
 use sdforge::prelude::*;
-use serde::{Deserialize, Serialize};
+use sdforge::serde::{Deserialize, Serialize};
 
 // ============================================================================
 // 认证相关类型定义

@@ -49,7 +49,7 @@
 //! 5. 关闭连接
 
 use sdforge::prelude::*;
-use serde::{Deserialize, Serialize};
+use sdforge::serde::{Deserialize, Serialize};
 
 // ============================================================================
 // 聊天消息类型定义

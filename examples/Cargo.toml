@@ -54,10 +54,17 @@ http = ["sdforge/http"]
 mcp = ["sdforge/mcp"]
 websocket = ["sdforge/websocket"]
 streaming = ["sdforge/streaming"]
-security = ["sdforge/security"]
+# `security` enables `ratelimit` locally so that `#[cfg(feature = "ratelimit")]`
+# gates in example code align with sdforge's `security → ratelimit-http →
+# ratelimit` feature chain (fixes GrpcServerConfig.rate_limiter field mismatch).
+security = ["sdforge/security", "ratelimit"]
 cache = ["sdforge/cache"]
 grpc = ["sdforge/grpc"]
 logging = ["sdforge/logging"]
 openapi = ["sdforge/openapi"]
 cli = ["sdforge/cli"]
 docs = ["sdforge/docs"]
+# ratelimit alias — enables sdforge's pure rate-limit core (no http dep).
+# Required so that `#[cfg(feature = "ratelimit")]` in example code matches
+# sdforge's `GrpcServerConfig.rate_limiter` field gate.
+ratelimit = ["sdforge/ratelimit"]

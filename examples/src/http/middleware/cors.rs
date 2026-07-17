@@ -187,7 +187,7 @@ async fn cors_test_get() -> Result<serde_json::Value, ApiError> {
 /// Access-Control-Allow-Origin: https://example.com
 /// Access-Control-Allow-Methods: GET, POST
 /// ```
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, sdforge::serde::Deserialize)]
 pub struct CorsTestRequest {
     pub data: String,
 }
