@@ -539,7 +539,7 @@ pub fn init_all_plugins() -> PluginCounts {
 ///
 /// fn main() {
 ///     let counts = init_all_plugins();
-///     
+///
 ///     println!("Registered:");
 ///     println!("  HTTP routes: {}", counts.routes);
 ///     #[cfg(feature = "mcp")]
