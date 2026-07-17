@@ -7,7 +7,7 @@
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-07-17
+## [0.4.3] - 2026-07-17
 
 ### ⚠️ BREAKING CHANGES
 
@@ -34,7 +34,7 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 ### Changed
 
 - **logging feature 补 `dep:once_cell`** — `src/logging.rs` 使用 `once_cell::sync::OnceCell` 作为 `GLOBAL_LOGGER`，但 `logging` feature 未声明 `dep:once_cell`，导致 `--features logging` 单独编译失败。现已修正
-- **macros 版本** 0.4.2 → 0.5.0
+- **macros 版本** 0.4.2 → 0.4.3
 
 ### Fixed
 
