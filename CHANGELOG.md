@@ -5,6 +5,12 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本规范](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## [Unreleased]
+
+### Security
+
+- **[LOW-1 披露]** 补公开 `deny.toml` 中 `bincode` [RUSTSEC-2025-0141](https://rustsec.org/advisories/RUSTSEC-2025-0141.html)（unmaintained）的 ignore 决策（此前未在 CHANGELOG 披露）。bincode v2.0.1 为本 crate 直接依赖（`Cargo.toml`），其维护团队因 doxxing/harassment 事件永久停维，公告标注 "No safe upgrade available"。短期保留（功能稳定 + cargo-deny 持续监控公告），中期评估迁移至 `postcard` / `bitcode` / `rkyv`。本次仅透明化已知风险，无主动安全行为变更。
+
 ## [0.4.4] - 2026-07-18
 
 ### Fixed
