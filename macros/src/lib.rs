@@ -1096,7 +1096,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     let mcp_schema_required: Vec<String> = params
         .iter()
         .filter(|p| !p.skip_mcp_schema && !p.is_option)
-        .map(|p| format!("\"{}\"", p.name))
+        .map(|p| p.name.to_string())
         .collect();
 
     // Pre-compute properties JSON to avoid macro nesting issues

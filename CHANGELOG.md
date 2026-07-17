@@ -10,6 +10,7 @@
 ### Fixed
 
 - **[HIGH-2]** `extract_client_ip_core` 收紧：无 `ConnectInfo` 时不再 last-resort 信任 `X-Forwarded-For` / `X-Real-IP` 头，直接返回 `None`（调用方 fallback 至 `"unknown"`）。消除未配置 `ConnectInfo` 部署下 IP 限流/封禁被伪造头绕过的向量。两处生产调用点（`http_impl` 鉴权、`ratelimit` 适配器）已对 `None` 安全兜底，无 panic 风险。
+- **[vuln0002 schema]** `#[forge]` 宏生成 `input_schema` 的 `required` 字段元素不再带多余引号。此前 `macros/src/lib.rs` 对字段名 `format!("\"{}\"", name)` 手动加引号，叠加 `serde_json::json!` 宏二次加引号，致 `required: ["\"message\""]`（元素内容带引号），`schema_validation` 永远匹配不上 args key，对 `#[forge]` 工具的 required / unknown-field 校验形同虚设。改为 `name.to_string()` 后校验生效（`test_vuln0002_valid_field_accepted` / `test_vuln0002_unknown_field_rejected` 转绿，cargo test --all-features 全量 0 failed）。
 
 ### Changed
 
