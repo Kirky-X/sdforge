@@ -21,9 +21,10 @@ use axum::http::Request;
 ///    direct peer is a trusted reverse proxy (private ranges: 10/8,
 ///    172.16/12, 192.168/16, 127.0.0.1). Otherwise an attacker could spoof
 ///    these headers to bypass IP-based checks.
-/// 3. When no `ConnectInfo` is available (e.g. test environments without a
-///    real TCP connection), headers are trusted as a last-resort fallback.
-///    Production deployments should always configure `ConnectInfo`.
+/// 3. When no `ConnectInfo` is available, forwarded headers are NOT trusted
+///    (trivially spoofable without a verified TCP peer). Returns `None` and
+///    callers fall back to "unknown". Production deployments MUST configure
+///    `ConnectInfo` for usable IP-based checks.
 ///
 /// Returns `None` only when no IP can be determined from any source.
 pub(crate) fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
@@ -72,22 +73,10 @@ pub(crate) fn extract_client_ip_core(req: &Request<Body>) -> Option<String> {
         return Some(ip);
     }
 
-    // Last-resort fallback when no ConnectInfo is available (e.g. test
-    // environments without a real TCP connection): trust headers directly.
-    if let Some(header) = req.headers().get("X-Real-IP")
-        && let Ok(ip) = header.to_str()
-        && is_valid_ip(ip)
-    {
-        return Some(ip.to_string());
-    }
-    if let Some(header) = req.headers().get("X-Forwarded-For")
-        && let Ok(value) = header.to_str()
-        && let Some(ip) = value.split(',').next().map(|s| s.trim())
-        && is_valid_ip(ip)
-    {
-        return Some(ip.to_string());
-    }
-
+    // No ConnectInfo available: do NOT trust forwarded headers. Without a
+    // verified TCP peer, X-Forwarded-For / X-Real-IP are attacker-controlled
+    // and trivially spoofable. Return None so callers fall back to "unknown"
+    // rather than trusting forged input (HIGH-2 hardening).
     None
 }
 
@@ -329,18 +318,19 @@ mod tests {
 
     #[test]
     fn test_extract_client_ip_x_forwarded_for_single() {
-        // No ConnectInfo: fallback path trusts X-Forwarded-For directly
+        // No ConnectInfo: forwarded headers must NOT be trusted (HIGH-2)
         let mut req = Request::new(Body::empty());
         req.headers_mut()
             .insert("X-Forwarded-For", "8.8.8.8".parse().unwrap());
 
         let ip = extract_client_ip_core(&req);
-        assert_eq!(ip, Some("8.8.8.8".to_string()));
+        assert_eq!(ip, None);
     }
 
     #[test]
     fn test_extract_client_ip_x_forwarded_for_multiple() {
-        // No ConnectInfo: fallback path returns leftmost valid IP
+        // No ConnectInfo: forwarded headers must NOT be trusted even when
+        // well-formed (HIGH-2 hardening against IP spoofing)
         let mut req = Request::new(Body::empty());
         req.headers_mut().insert(
             "X-Forwarded-For",
@@ -348,7 +338,7 @@ mod tests {
         );
 
         let ip = extract_client_ip_core(&req);
-        assert_eq!(ip, Some("8.8.8.8".to_string()));
+        assert_eq!(ip, None);
     }
 
     #[test]
@@ -386,12 +376,13 @@ mod tests {
 
     #[test]
     fn test_extract_client_ip_x_real_ip() {
+        // No ConnectInfo: X-Real-IP must NOT be trusted (HIGH-2)
         let mut req = Request::new(Body::empty());
         req.headers_mut()
             .insert("X-Real-IP", "8.8.8.8".parse().unwrap());
 
         let ip = extract_client_ip_core(&req);
-        assert_eq!(ip, Some("8.8.8.8".to_string()));
+        assert_eq!(ip, None);
     }
 
     #[test]

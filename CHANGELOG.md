@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **[HIGH-2]** `extract_client_ip_core` 收紧：无 `ConnectInfo` 时不再 last-resort 信任 `X-Forwarded-For` / `X-Real-IP` 头，直接返回 `None`（调用方 fallback 至 `"unknown"`）。消除未配置 `ConnectInfo` 部署下 IP 限流/封禁被伪造头绕过的向量。两处生产调用点（`http_impl` 鉴权、`ratelimit` 适配器）已对 `None` 安全兜底，无 panic 风险。
+
+### Changed
+
+- **BREAKING** `ApiError::Internal.context` 字段类型 `Option<ErrorContext>` → `Option<Box<ErrorContext>>`。消除 clippy 1.96 `result_large_err`（`ErrorContext` 含 `HashMap` 致 `ApiError` enum 变体超 128 字节阈值）。所有构造点（生产代码 `error/api_error.rs` + 集成测试）已同步 `Some(Box::new(ctx))`。
+- clippy 1.96 兼容（语义不变）：`mcp/schema_validation.rs` 嵌套 `if let` → let-chain（edition 2024，消 `collapsible_if`）；`examples/tests/comprehensive_features.rs` `iter().any(|m| *m == x)` → `contains(&x)`（消 `manual_contains`）。
+- `tests/integration/grpc_tests.rs` 3 处 `GrpcServerConfig` 构造补全 `rate_limiter` 字段（`None`）——该字段由 vuln-0006 引入，但测试构造此前被 clippy 门禁阻断从未编译，本次同步修复。
+
 ## [0.4.3] - 2026-07-17
 
 ### ⚠️ BREAKING CHANGES

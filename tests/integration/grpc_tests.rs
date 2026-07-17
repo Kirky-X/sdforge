@@ -508,6 +508,8 @@ mod grpc_integration_tests {
             require_auth: false,
             #[cfg(feature = "security")]
             auth: None,
+            #[cfg(feature = "ratelimit")]
+            rate_limiter: None,
             state: None,
         };
 
@@ -965,6 +967,8 @@ mod grpc_integration_tests {
             timeout_seconds: 60,
             require_auth: true,
             auth: Some(auth),
+            #[cfg(feature = "ratelimit")]
+            rate_limiter: None,
             state: None,
         };
 
@@ -1138,6 +1142,8 @@ mod grpc_integration_tests {
             require_auth: false,
             #[cfg(feature = "security")]
             auth: None,
+            #[cfg(feature = "ratelimit")]
+            rate_limiter: None,
             state: None,
         };
 

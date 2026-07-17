@@ -682,7 +682,7 @@ mod error_handling_tests {
             message: "Detailed error message".to_string(),
             error_id: "ERR_ALL_FIELDS".to_string(),
             source: Some(Box::new(SourceError("original error"))),
-            context: Some(context),
+            context: Some(Box::new(context)),
         };
 
         // Verify source is accessible
