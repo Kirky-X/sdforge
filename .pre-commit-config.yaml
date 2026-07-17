@@ -18,7 +18,8 @@ repos:
       - id: check-merge-conflict
         args: ['--assume-in-merge']
       - id: no-commit-to-branch
-        args: ['--branch', 'main', '--branch', 'master']
+        args: ['--branch', 'master']
+        # Only protect master branch, allow main for development（对齐 oxcache/limiteron/inklog/dbnexus 5 仓库统一治理，符合 git.md「直接在主分支工作」）
 
   # 2. Detect secrets (with baseline for known false positives)
   - repo: https://github.com/Yelp/detect-secrets
