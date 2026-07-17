@@ -174,9 +174,6 @@ mod vuln0002_security_tests {
         let server = server_with_tool();
         let args = serde_json::json!({ "different_field": "value" });
         let result = server.call_tool_internal("vuln0002_echo", Some(args));
-        assert!(
-            result.is_err(),
-            "missing required field must be rejected"
-        );
+        assert!(result.is_err(), "missing required field must be rejected");
     }
 }

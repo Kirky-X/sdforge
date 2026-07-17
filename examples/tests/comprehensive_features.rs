@@ -195,7 +195,10 @@ fn http_types_and_errors_app_error_constructible() {
     use sdforge_examples::basics::types_and_errors::AppError;
     let err = AppError::UserNotFound { user_id: 42 };
     let msg = err.to_string();
-    assert!(msg.contains("42"), "AppError message should contain user_id");
+    assert!(
+        msg.contains("42"),
+        "AppError message should contain user_id"
+    );
 }
 
 #[cfg(feature = "http_examples")]
@@ -333,15 +336,14 @@ fn mcp_tool_registration_request_types_constructible() {
 #[cfg(feature = "mcp_examples")]
 #[test]
 fn mcp_migration_2026_stateless_handler_constructs() {
-    use sdforge_examples::mcp::migration_2026::{demo_expected_headers, demo_header_info_shape,
-        demo_stateless_handler};
+    use sdforge_examples::mcp::migration_2026::{
+        demo_expected_headers, demo_header_info_shape, demo_stateless_handler,
+    };
     // demo_stateless_handler constructs a StatelessServerHandler via sdforge::mcp::build().
     let _handler = demo_stateless_handler();
     let headers = demo_expected_headers();
     assert!(
-        headers
-            .iter()
-            .any(|(k, _)| *k == "Mcp-Method"),
+        headers.iter().any(|(k, _)| *k == "Mcp-Method"),
         "expected headers should contain Mcp-Method"
     );
     let info = demo_header_info_shape();
@@ -353,8 +355,9 @@ fn mcp_migration_2026_stateless_handler_constructs() {
 #[tokio::test]
 async fn mcp_mrtr_session_manager_creates_sessions() {
     use sdforge::mcp::mrtr::MrtrSessionManager;
-    use sdforge_examples::mcp::mrtr_example::{demo_create_session,
-        demo_session_conflict_detection};
+    use sdforge_examples::mcp::mrtr_example::{
+        demo_create_session, demo_session_conflict_detection,
+    };
     let manager = MrtrSessionManager::new();
     let result = demo_create_session(&manager, "test-session-ax3", "demo_tool");
     let result = result.expect("session creation should succeed");
@@ -398,7 +401,10 @@ fn websocket_ws_message_constructible_and_serializable() {
     };
     // The struct uses #[serde(rename = "type")] so JSON should contain "type".
     let json = serde_json::to_string(&msg).expect("WsMessage should serialize");
-    assert!(json.contains("\"type\""), "serialized WsMessage should use 'type' field name");
+    assert!(
+        json.contains("\"type\""),
+        "serialized WsMessage should use 'type' field name"
+    );
     let parsed: WsMessage = serde_json::from_str(&json).expect("WsMessage should deserialize");
     assert_eq!(parsed.content, "Hello WebSocket");
 
@@ -456,7 +462,10 @@ fn streaming_event_types_constructible_and_serializable() {
     };
     // The struct uses #[serde(rename = "type")].
     let json = serde_json::to_string(&event).expect("StreamEvent should serialize");
-    assert!(json.contains("\"type\""), "serialized StreamEvent should use 'type' field name");
+    assert!(
+        json.contains("\"type\""),
+        "serialized StreamEvent should use 'type' field name"
+    );
     let parsed: StreamEvent = serde_json::from_str(&json).expect("StreamEvent should deserialize");
     assert_eq!(parsed.id, "evt_001");
 
@@ -609,7 +618,10 @@ async fn cache_two_level_cache_set_get_product() {
     assert_eq!(retrieved.name, "Widget");
     // Stats should reflect L2 population (L1 may or may not have it depending on size).
     let stats = cache.stats();
-    assert!(stats.l2_size > 0, "L2 cache should have at least 1 entry after set");
+    assert!(
+        stats.l2_size > 0,
+        "L2 cache should have at least 1 entry after set"
+    );
 }
 
 #[cfg(feature = "cache_examples")]
@@ -627,7 +639,10 @@ async fn cache_two_level_cache_invalidate() {
     cache.set("product:1", &product).await;
     cache.invalidate("product:1").await;
     let retrieved: Option<Product> = cache.get("product:1").await;
-    assert!(retrieved.is_none(), "cache entry should be gone after invalidate");
+    assert!(
+        retrieved.is_none(),
+        "cache entry should be gone after invalidate"
+    );
 }
 
 #[cfg(feature = "cache_examples")]
@@ -823,9 +838,7 @@ fn logging_global_logger_accessor_returns_option() {
 fn openapi_default_spec_has_sdforge_api_title() {
     use sdforge_examples::openapi::basic::demo_default_spec;
     let spec = demo_default_spec();
-    let info = spec
-        .get("info")
-        .expect("spec should have an info section");
+    let info = spec.get("info").expect("spec should have an info section");
     let title = info
         .get("title")
         .and_then(|t| t.as_str())
@@ -845,10 +858,7 @@ fn openapi_custom_spec_reflects_builder_inputs() {
         info.get("title").and_then(|t| t.as_str()),
         Some("Demo Service")
     );
-    assert_eq!(
-        info.get("version").and_then(|v| v.as_str()),
-        Some("1.0.0")
-    );
+    assert_eq!(info.get("version").and_then(|v| v.as_str()), Some("1.0.0"));
     assert_eq!(
         info.get("description").and_then(|d| d.as_str()),
         Some("OpenAPI generation demo from sdforge-examples")
@@ -870,9 +880,7 @@ fn openapi_spec_to_json_is_valid_json() {
 fn openapi_manual_route_is_registered() {
     use sdforge_examples::openapi::basic::demo_default_spec;
     let spec = demo_default_spec();
-    let paths = spec
-        .get("paths")
-        .expect("spec should have a paths section");
+    let paths = spec.get("paths").expect("spec should have a paths section");
     assert!(
         paths.get("/openapi-demo/manual").is_some(),
         "manually registered route /openapi-demo/manual should appear in paths"
@@ -1053,7 +1061,10 @@ fn combined_full_example_request_types_constructible() {
     };
     // UserUpdateMessage uses #[serde(rename = "type")].
     let json = serde_json::to_string(&msg).expect("UserUpdateMessage should serialize");
-    assert!(json.contains("\"type\""), "serialized UserUpdateMessage should use 'type' field");
+    assert!(
+        json.contains("\"type\""),
+        "serialized UserUpdateMessage should use 'type' field"
+    );
 }
 
 #[cfg(feature = "combined_examples")]
@@ -1174,9 +1185,7 @@ async fn comprehensive_cli_ping() -> Result<String, ApiError> {
     description = "gRPC echo handler for comprehensive dispatch test",
     grpc_method = "comprehensive.echo"
 )]
-async fn comprehensive_grpc_echo(
-    msg: String,
-) -> Result<serde_json::Value, ApiError> {
+async fn comprehensive_grpc_echo(msg: String) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({ "echo": msg }))
 }
 

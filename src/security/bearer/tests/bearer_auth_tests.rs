@@ -117,14 +117,8 @@ fn test_bearer_auth_with_dependencies_all_none() {
     let blacklisted_tokens = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
 
     let secret = b"MySecureSecret123!@#ABCDEFGHIJKLM".to_vec();
-    let auth = BearerAuth::with_dependencies(
-        secret,
-        valid_tokens,
-        blacklisted_tokens,
-        None,
-        None,
-    )
-    .expect("valid secret must pass validation");
+    let auth = BearerAuth::with_dependencies(secret, valid_tokens, blacklisted_tokens, None, None)
+        .expect("valid secret must pass validation");
 
     assert!(auth.expected_audience.is_none());
     assert!(auth.expected_issuer.is_none());
@@ -1293,7 +1287,9 @@ fn test_vuln0005_with_dependencies_rejects_no_uppercase() {
     );
     assert!(matches!(
         result,
-        Err(AuthConfigError::MissingCharacterClass { required_type: "uppercase letter" })
+        Err(AuthConfigError::MissingCharacterClass {
+            required_type: "uppercase letter"
+        })
     ));
 }
 
@@ -1312,7 +1308,9 @@ fn test_vuln0005_with_dependencies_rejects_no_lowercase() {
     );
     assert!(matches!(
         result,
-        Err(AuthConfigError::MissingCharacterClass { required_type: "lowercase letter" })
+        Err(AuthConfigError::MissingCharacterClass {
+            required_type: "lowercase letter"
+        })
     ));
 }
 
@@ -1331,7 +1329,9 @@ fn test_vuln0005_with_dependencies_rejects_no_digit() {
     );
     assert!(matches!(
         result,
-        Err(AuthConfigError::MissingCharacterClass { required_type: "digit" })
+        Err(AuthConfigError::MissingCharacterClass {
+            required_type: "digit"
+        })
     ));
 }
 
@@ -1350,7 +1350,9 @@ fn test_vuln0005_with_dependencies_rejects_no_special() {
     );
     assert!(matches!(
         result,
-        Err(AuthConfigError::MissingCharacterClass { required_type: "special character" })
+        Err(AuthConfigError::MissingCharacterClass {
+            required_type: "special character"
+        })
     ));
 }
 
@@ -1363,13 +1365,8 @@ fn test_vuln0005_with_dependencies_rejects_non_utf8() {
     // a non-UTF8 continuation byte (0xFF) that prevents str::from_utf8.
     let mut secret = b"MySecureSecret123!@#ABCDEFGHIJKLM".to_vec();
     secret.push(0xFF); // invalid UTF-8 continuation
-    let result = BearerAuth::with_dependencies(
-        secret,
-        valid_tokens,
-        blacklisted_tokens,
-        None,
-        None,
-    );
+    let result =
+        BearerAuth::with_dependencies(secret, valid_tokens, blacklisted_tokens, None, None);
     assert!(
         matches!(result, Err(AuthConfigError::InvalidSecret(_))),
         "non-UTF8 secret must be rejected, got: {:?}",
@@ -1392,5 +1389,8 @@ fn test_vuln0005_with_dependencies_accepts_exactly_32_bytes() {
         None,
         None,
     );
-    assert!(result.is_ok(), "32-byte secret with all classes must be accepted");
+    assert!(
+        result.is_ok(),
+        "32-byte secret with all classes must be accepted"
+    );
 }
