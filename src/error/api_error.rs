@@ -75,7 +75,7 @@ pub enum ApiError {
         #[serde(skip)]
         source: Option<Box<dyn StdError + Send + Sync>>,
         /// Optional context information
-        context: Option<ErrorContext>,
+        context: Option<Box<ErrorContext>>,
     },
 
     /// Service unavailable
@@ -201,7 +201,7 @@ impl ApiError {
             message: message.into(),
             error_id: error_id.into(),
             source: None,
-            context: Some(context),
+            context: Some(Box::new(context)),
         }
     }
 
@@ -223,7 +223,7 @@ impl ApiError {
             message: message.into(),
             error_id: error_id.into(),
             source: Some(Box::new(source)),
-            context: Some(context),
+            context: Some(Box::new(context)),
         }
     }
 

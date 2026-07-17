@@ -1301,7 +1301,7 @@ fn grpc_dispatch_handler_registration_iter_finds_comprehensive_echo() {
         .map(|r| r.method)
         .collect();
     assert!(
-        methods.iter().any(|m| *m == "comprehensive.echo"),
+        methods.contains(&"comprehensive.echo"),
         "GrpcHandlerRegistration for 'comprehensive.echo' must be in inventory, got: {:?}",
         methods
     );

@@ -64,34 +64,34 @@ pub(crate) fn validate_arguments(schema: &Value, arguments: &Value) -> Result<()
     };
 
     // 1. Type check
-    if let Some(type_value) = schema_obj.get("type") {
-        if !check_type(type_value, arguments) {
-            return Err(ErrorData::invalid_params(
-                format!(
-                    "arguments type mismatch: schema requires type {}, got {}",
-                    type_value,
-                    json_type_name(arguments)
-                ),
-                None,
-            ));
-        }
+    if let Some(type_value) = schema_obj.get("type")
+        && !check_type(type_value, arguments)
+    {
+        return Err(ErrorData::invalid_params(
+            format!(
+                "arguments type mismatch: schema requires type {}, got {}",
+                type_value,
+                json_type_name(arguments)
+            ),
+            None,
+        ));
     }
 
     // 2. Required fields check (only when arguments is an object)
-    if let Some(required) = schema_obj.get("required").and_then(|v| v.as_array()) {
-        if let Some(args_obj) = arguments.as_object() {
-            for req in required {
-                if let Some(field) = req.as_str() {
-                    if !args_obj.contains_key(field) {
-                        return Err(ErrorData::invalid_params(
-                            format!(
-                                "missing required field: '{}' (required by tool input_schema)",
-                                field
-                            ),
-                            None,
-                        ));
-                    }
-                }
+    if let Some(required) = schema_obj.get("required").and_then(|v| v.as_array())
+        && let Some(args_obj) = arguments.as_object()
+    {
+        for req in required {
+            if let Some(field) = req.as_str()
+                && !args_obj.contains_key(field)
+            {
+                return Err(ErrorData::invalid_params(
+                    format!(
+                        "missing required field: '{}' (required by tool input_schema)",
+                        field
+                    ),
+                    None,
+                ));
             }
         }
     }
