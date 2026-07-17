@@ -524,4 +524,3 @@ debug = true
 
 [profile.dev.package."*"]
 opt-level = 2
-
