@@ -62,7 +62,7 @@ mod performance_benchmarks {
         use serde_json;
 
         let response = ServiceResponse::success("test data".to_string());
-        
+
         let start = std::time::Instant::now();
         let iterations = 10_000;
 
@@ -174,7 +174,7 @@ mod performance_benchmarks {
             .route("/api/v2/users", get(h3));
 
         let routes = vec!["/api/v1/users", "/api/v1/posts", "/api/v2/users"];
-        
+
         let start = std::time::Instant::now();
         let iterations = 300; // 100 per route
 
@@ -283,7 +283,7 @@ mod performance_benchmarks {
         for i in 0..iterations {
             // Create error
             let error = ApiError::not_found("Resource", Some("id"));
-            
+
             // Create response
             let response = ServiceResponse::<String>::error(
                 sdforge::core::response::ServiceError::new("CODE", "msg", 500)
@@ -312,7 +312,7 @@ mod performance_benchmarks {
         use sdforge::core::ServiceResponse;
 
         let large_data = "x".repeat(1_000_000); // 1MB
-        
+
         let start = std::time::Instant::now();
         let iterations = 100;
 
