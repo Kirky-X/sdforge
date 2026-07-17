@@ -19,6 +19,14 @@ use sdforge_v1::{
     sd_forge_service_server::{SdForgeService, SdForgeServiceServer},
 };
 
+/// gRPC 参数载荷大小上限（与 MCP `MAX_ARGUMENTS_SIZE_BYTES` 对齐，1 MiB）。
+///
+/// vuln-0002 补强：gRPC `call` 路径此前跳过 MCP 的 schema/大小校验，
+/// 攻击者可通过 `parameters`/`data` 推送超大载荷触发 DoS。
+/// 此处施加与 MCP 一致的大小上限作为纵深防御。
+#[cfg(feature = "grpc")]
+const MAX_GRPC_ARGUMENTS_SIZE_BYTES: usize = 0x10_0000;
+
 /// gRPC service implementation.
 ///
 /// Holds an optional application state (mirrors `CliBuilder::with_dependencies`)
@@ -156,6 +164,16 @@ impl SdForgeService for SdForgeGrpcService {
         }
 
         let req = request.into_inner();
+
+        // vuln-0002 补强：gRPC 路径此前跳过 MCP 的大小校验。
+        // 在 handler 调用前对 parameters + data 总大小设上限，防止超大载荷 DoS。
+        let payload_size = req.parameters.values().map(|v| v.len()).sum::<usize>() + req.data.len();
+        if payload_size > MAX_GRPC_ARGUMENTS_SIZE_BYTES {
+            return Err(Status::invalid_argument(format!(
+                "arguments payload size ({}) exceeds maximum allowed size ({})",
+                payload_size, MAX_GRPC_ARGUMENTS_SIZE_BYTES
+            )));
+        }
 
         // R-grpc-001: lookup handler by method name
         let handler = self.handlers().get(req.method.as_str()).copied().ok_or_else(

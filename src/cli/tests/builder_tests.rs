@@ -255,11 +255,7 @@ fn test_builder_with_global_arg_appears_in_root() {
         .get_arguments()
         .find(|a| a.get_id().as_str() == "db")
         .expect("global arg 'db' must appear in root command");
-    assert_eq!(
-        db_arg.get_long(),
-        Some("db"),
-        "long flag must be --db"
-    );
+    assert_eq!(db_arg.get_long(), Some("db"), "long flag must be --db");
     let defaults: Vec<String> = db_arg
         .get_default_values()
         .iter()
@@ -285,7 +281,8 @@ fn test_builder_with_multiple_global_args() {
         "db arg must be present"
     );
     assert!(
-        cmd.get_arguments().any(|a| a.get_id().as_str() == "verbose"),
+        cmd.get_arguments()
+            .any(|a| a.get_id().as_str() == "verbose"),
         "verbose arg must be present"
     );
 }
@@ -300,8 +297,18 @@ fn test_global_arg_inherited_by_subcommand() {
         .build();
 
     // Parse args with --db provided at the top level (before subcommand).
-    let matches = cmd.try_get_matches_from(["test_app", "--db", "/custom/path", "builder_test_command", "my_id"]);
-    assert!(matches.is_ok(), "parsing should succeed: {:?}", matches.err());
+    let matches = cmd.try_get_matches_from([
+        "test_app",
+        "--db",
+        "/custom/path",
+        "builder_test_command",
+        "my_id",
+    ]);
+    assert!(
+        matches.is_ok(),
+        "parsing should succeed: {:?}",
+        matches.err()
+    );
     let matches = matches.unwrap();
 
     let sub = matches.subcommand_matches("builder_test_command").unwrap();

@@ -149,10 +149,10 @@ pub mod prelude {
     // Without these re-exports, downstream would need direct Cargo deps on
     // `utoipa`/`anyhow` solely for the macro-generated attribute / type to
     // resolve — which defeats sdforge's "no framework deps" goal.
-    #[cfg(feature = "openapi")]
-    pub use crate::utoipa;
     #[cfg(feature = "mcp")]
     pub use crate::anyhow;
+    #[cfg(feature = "openapi")]
+    pub use crate::utoipa;
 }
 
 /// Core types and utilities

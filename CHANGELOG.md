@@ -40,6 +40,12 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 
 - 修复 `#[forge]` 宏生成代码中裸 `anyhow::anyhow!` / `anyhow::Error` 引用 → 改为 `sdforge::anyhow::anyhow!` / `sdforge::anyhow::Error`，下游无需直接依赖 anyhow
 - 修复 `logging` feature 缺 `dep:once_cell` 导致单独编译失败（之前依赖 `http` feature 间接启用 `once_cell`）
+- **[vuln-0002 补强]** gRPC `call` 路径新增参数载荷大小上限（1 MiB，与 MCP `MAX_ARGUMENTS_SIZE_BYTES` 对齐），关闭此前绕过 MCP schema/大小校验的超大载荷 DoS 向量
+- **[版本修正]** 发布版本号由误标的 0.5.0 修正为 0.4.3（Cargo.toml / macros / CHANGELOG 一致）
+
+### ⚠️ Known Limitations（本次发布披露）
+
+- **[HIGH-2]** `extract_client_ip_core` 在无 `ConnectInfo`（未配置 axum `with_make_service_with_connect_info`）的部署下，last-resort fallback 会直接信任 `X-Forwarded-For` / `X-Real-IP` 头。这是有意的文档化权衡（无 ConnectInfo 时无法获取真实 TCP 对端 IP），但意味着此类部署的 IP 限流/封禁可被伪造头绕过。生产部署**必须**配置 `ConnectInfo` 以启用不可伪造的 TCP 对端 IP 提取。后续版本计划将 fallback 改为仅在显式配置「无代理受信」时生效。
 
 ## [0.4.2] - 2026-07-15
 
