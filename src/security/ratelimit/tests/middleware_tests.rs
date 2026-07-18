@@ -105,8 +105,7 @@ impl Service<Request<Body>> for EchoService {
 }
 
 // ============================================================================
-// T010 — TDD-Red: these tests must compile and fail (panic via `todo!()`).
-// T011 — TDD-Green: replace `todo!()` with the real implementation.
+// T010/T011 — RateLimitMiddleware behavior tests (limiter reject/allow paths)
 // ============================================================================
 
 /// When the limiter rejects (returns `Err`), the middleware must short-circuit
