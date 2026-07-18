@@ -201,7 +201,7 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 
 #### 依赖变更
 
-- **新增**：`oxcache = { version = "0.3.2", features = ["memory"] }`（来自 crates.io）
+- **新增**：`oxcache = { version = "0.3", features = ["memory"] }`（来自 crates.io）
 - **移除**：`dashmap`、`confers`、`schemars`、`clap`、`tera`、`walkdir`
 - **移除特性**：`validation`、`schema`、`watch`、`audit`、`hot-reload`、`cli`
 
@@ -229,7 +229,7 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 #### BREAKING 变更 ⚠️
 
 **MCP SDK 迁移（mcp-sdk 0.0.3 → rmcp 0.16）：**
-- 移除 `mcp-sdk = "0.0.3"` 依赖，新增 `rmcp = { version = "~0.16", features = ["server"] }`
+- 移除 `mcp-sdk = "0.0"` 依赖，新增 `rmcp = { version = "0.16", features = ["server"] }`
 - 移除 `initialize` 握手流程，改用 `server/discover` 端点（适配 MCP 2026-07-28 规范）
 - 新增 `StatelessServerHandler` 无状态适配层，实现 `rmcp::ServerHandler` trait
 - `RouteRegistration::register_mcp` 签名从 `fn register_mcp(&self, server: &mut Server)` 改为 `fn register_mcp(&self, registry: &mut dyn McpToolRegistry)`

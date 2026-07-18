@@ -762,7 +762,7 @@ v0.2.0 fully migrates the MCP implementation from `mcp-sdk 0.0.3` to [`rmcp 0.16
 
 | Old Version (v0.1.x)                  | New Version (v0.2.0)                          |
 |----------------------------------------|-----------------------------------------------|
-| `mcp-sdk = "0.0.3"` dependency          | `rmcp = "0.16"` dependency                    |
+| `mcp-sdk = "0.0"` dependency          | `rmcp = "0.16"` dependency                    |
 | `initialize` handshake flow             | Removed, replaced with `server/discover` endpoint |
 | Stateful sessions (`StatefulServerHandler`) | Stateless adapter layer (`StatelessServerHandler`) |
 | `register_mcp(&mut Server)` signature   | `register_mcp(&mut dyn McpToolRegistry)`      |
