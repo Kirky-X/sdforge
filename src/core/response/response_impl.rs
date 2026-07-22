@@ -13,6 +13,36 @@ where
             success: true,
             data: Some(data),
             error: None,
+            status_code: None,
+            #[cfg(feature = "timestamp")]
+            timestamp: Some(chrono::Utc::now().timestamp()),
+        }
+    }
+
+    /// Create a successful response with an explicit success status code.
+    ///
+    /// Dynamic entry point for runtime-decided status codes (upsert 201/200,
+    /// conditional requests 304, async tasks 202, etc.). The `code` is stored
+    /// in `status_code` and takes precedence over any macro-level `status`
+    /// argument at response-build time (see `with_status_code_opt`).
+    ///
+    /// LOW-4: `debug_assert` enforces the HTTP status code range `100..=999`
+    /// in debug builds. Out-of-range codes are a programmer error (the macro
+    /// `status` argument is range-checked at compile time; this guard catches
+    /// runtime callers that bypass the macro). Release builds keep the value
+    /// as-is to avoid breaking forward compatibility with future HTTP
+    /// extensions, but the assertion makes bugs visible during development.
+    pub fn success_with_status(data: T, code: u16) -> Self {
+        debug_assert!(
+            (100..=999).contains(&code),
+            "success_with_status code must be in 100..=999, got {}",
+            code
+        );
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+            status_code: Some(code),
             #[cfg(feature = "timestamp")]
             timestamp: Some(chrono::Utc::now().timestamp()),
         }
@@ -24,9 +54,33 @@ where
             success: false,
             data: None,
             error: Some(error),
+            status_code: None,
             #[cfg(feature = "timestamp")]
             timestamp: Some(chrono::Utc::now().timestamp()),
         }
+    }
+
+    /// Returns the success-side status code, if any.
+    ///
+    /// `None` means the status code is decided by the macro `status` argument
+    /// (for bare return types) or defaults to 200. `Some(code)` means the
+    /// response should be built with that code, overriding the macro default.
+    pub fn status_code(&self) -> Option<u16> {
+        self.status_code
+    }
+
+    /// Merge a fallback status code into the response when none is set.
+    ///
+    /// Used by the `#[forge]` macro handler: the macro `status` argument is
+    /// passed here as the fallback, and an explicit `success_with_status`
+    /// value already on the response takes precedence (field > macro > 200).
+    /// Only fills the field when `self.status_code.is_none()`; passing
+    /// `None` is a no-op (leaves the field as-is).
+    pub fn with_status_code_opt(mut self, code: Option<u16>) -> Self {
+        if self.status_code.is_none() {
+            self.status_code = code;
+        }
+        self
     }
 
     /// Check if the response is successful

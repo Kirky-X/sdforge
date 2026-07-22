@@ -21,6 +21,11 @@ pub struct ServiceResponse<T = serde_json::Value> {
     /// Error details
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) error: Option<ServiceError>,
+    /// 成功响应的 HTTP/gRPC 状态码；None 表示由宏 `status` 参数或默认 200 决定。
+    /// `#[serde(default)]` + `skip_serializing_if` 保证反序列化向后兼容、
+    /// 序列化无该键时输出与现状逐字节一致（零破坏）。
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub(crate) status_code: Option<u16>,
     /// Response timestamp
     #[cfg(feature = "timestamp")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -280,5 +285,119 @@ mod tests {
         assert!(debug.contains("DEBUG_CODE"));
         assert!(debug.contains("debug message"));
         assert!(debug.contains("418"));
+    }
+
+    // ============================================================================
+    // forge-success-status-code: status_code field + constructors
+    //
+    // R-core-response-001: 字段与零破坏序列化
+    // R-core-response-002: success_with_status 动态构造器
+    // R-core-response-003: with_status_code_opt 合并语义（字段优先）
+    // R-core-response-004: status_code 访问器
+    // ============================================================================
+
+    /// R-core-response-001: success("x") 序列化结果不含 status_code 键。
+    #[test]
+    fn test_status_code_field_absent_on_success() {
+        let response = ServiceResponse::success("x");
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(
+            !json.contains("status_code"),
+            "status_code should be omitted when None (zero-breaking): {}",
+            json
+        );
+    }
+
+    /// R-core-response-001: 反序列化历史 JSON（无 status_code 键）成功且字段为 None。
+    #[test]
+    fn test_status_code_field_backward_compatible_deserialization() {
+        let json = r#"{"success":true,"data":"x"}"#;
+        let response: ServiceResponse<String> = serde_json::from_str(json).unwrap();
+        assert!(response.is_success());
+        assert_eq!(response.data(), Some(&"x".to_string()));
+        assert_eq!(response.status_code(), None);
+    }
+
+    /// R-core-response-002: success_with_status 构造 success=true 且 status_code=Some(code)。
+    #[test]
+    fn test_success_with_status_sets_field() {
+        let response = ServiceResponse::success_with_status("x", 201);
+        assert!(response.is_success());
+        assert_eq!(response.status_code(), Some(201));
+        assert_eq!(response.data(), Some(&"x"));
+    }
+
+    /// R-core-response-002: code 取合法边界 100、999 时正常构造。
+    #[test]
+    fn test_success_with_status_boundary_codes() {
+        for code in [100u16, 999] {
+            let response = ServiceResponse::success_with_status("x", code);
+            assert_eq!(response.status_code(), Some(code));
+        }
+    }
+
+    /// R-core-response-003: with_status_code_opt 在字段 None 时填入。
+    #[test]
+    fn test_with_status_code_opt_fills_when_none() {
+        let response = ServiceResponse::success("x").with_status_code_opt(Some(201));
+        assert_eq!(response.status_code(), Some(201));
+    }
+
+    /// R-core-response-003: 字段优先 — 已有值时不被 with_status_code_opt 覆盖。
+    #[test]
+    fn test_with_status_code_opt_does_not_overwrite_existing() {
+        let response = ServiceResponse::success_with_status("x", 200)
+            .with_status_code_opt(Some(201));
+        assert_eq!(
+            response.status_code(),
+            Some(200),
+            "field-set status_code must take precedence over macro fallback"
+        );
+    }
+
+    /// R-core-response-003: with_status_code_opt(None) 不改字段（None 不改）。
+    #[test]
+    fn test_with_status_code_opt_none_is_noop() {
+        let response = ServiceResponse::success("x").with_status_code_opt(None);
+        assert_eq!(response.status_code(), None);
+    }
+
+    /// R-core-response-004: success("x").status_code() == None。
+    #[test]
+    fn test_status_code_accessor_none_on_success() {
+        assert_eq!(ServiceResponse::success("x").status_code(), None);
+    }
+
+    /// R-core-response-004: success_with_status("x", 201).status_code() == Some(201)。
+    #[test]
+    fn test_status_code_accessor_some_on_success_with_status() {
+        assert_eq!(
+            ServiceResponse::success_with_status("x", 201).status_code(),
+            Some(201)
+        );
+    }
+
+    /// 错误响应的 status_code 也应为 None（错误侧走 ServiceError.http_status）。
+    #[test]
+    fn test_status_code_none_on_error_response() {
+        let err = ServiceError::new("ERR", "msg", 500);
+        let response = ServiceResponse::<String>::error(err);
+        assert_eq!(response.status_code(), None);
+    }
+
+    /// success_with_status 序列化包含 status_code 键（与 success 的零破坏行为对比）。
+    #[test]
+    fn test_success_with_status_serializes_status_code() {
+        let response = ServiceResponse::success_with_status("x", 201);
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"status_code\":201"), "json: {}", json);
+    }
+
+    /// 反序列化含 status_code 的 JSON 时字段正确还原。
+    #[test]
+    fn test_status_code_deserialization_roundtrip() {
+        let json = r#"{"success":true,"data":"x","status_code":201}"#;
+        let response: ServiceResponse<String> = serde_json::from_str(json).unwrap();
+        assert_eq!(response.status_code(), Some(201));
     }
 }

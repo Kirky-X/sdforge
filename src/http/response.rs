@@ -67,7 +67,23 @@ where
     T: Serialize,
 {
     fn into_response(self) -> axum::response::Response {
-        let status = self.error.as_ref().map(|e| e.http_status).unwrap_or(200);
+        // 优先级链（LOW-3 防御性修复）：
+        //   - 成功路径（error.is_none()）：status_code 字段 > 200
+        //     success_with_status 设置的字段直接生效；未设置则默认 200。
+        //   - 错误路径（error.is_some()）：始终使用 error.http_status，
+        //     绝不读取 status_code 字段。此前实现 `status_code.or_else(|| error.http_status)`
+        //     在理论上允许成功侧字段覆盖错误状态码（虽然 ServiceResponse::error
+        //     构造器把 status_code 设为 None，但防御性编程要求错误路径
+        //     不依赖该不变量 — 任何意外同时设置两者的代码路径都会被
+        //     此处的显式分支挡住，保证错误响应始终使用错误状态码）。
+        let status = if self.error.is_none() {
+            self.status_code.unwrap_or(200)
+        } else {
+            self.error
+                .as_ref()
+                .map(|e| e.http_status)
+                .unwrap_or(500)
+        };
 
         if let Some(ref error) = self.error {
             let error_response = ServiceResponse::<serde_json::Value>::error(error.clone());
@@ -444,5 +460,53 @@ mod tests {
         // Status 1000 is invalid (> 999), triggering the fallback.
         let resp = build_json_response(1000, &Payload { value: 42 }, "overflow status");
         let _ = resp.status();
+    }
+
+    // ============================================================================
+    // forge-success-status-code: ServiceResponse::into_response status_code 优先级
+    //
+    // R-http-protocol-001: 成功侧 status_code 字段优先
+    // R-http-protocol-002: 错误侧不回归
+    // R-http-protocol-003: 默认 200 零破坏
+    // ============================================================================
+
+    /// R-http-protocol-001: success_with_status("x", 201) → HTTP 201。
+    #[test]
+    fn test_service_response_into_response_with_status_code() {
+        let resp = ServiceResponse::success_with_status("x", 201).into_response();
+        assert_eq!(resp.status(), axum::http::StatusCode::CREATED);
+    }
+
+    /// R-http-protocol-001: 边界码 100/999 也能正确传递。
+    #[test]
+    fn test_service_response_into_response_status_code_boundaries() {
+        let resp = ServiceResponse::success_with_status("x", 100).into_response();
+        assert_eq!(
+            resp.status(),
+            axum::http::StatusCode::from_u16(100).unwrap()
+        );
+        let resp = ServiceResponse::success_with_status("x", 999).into_response();
+        assert_eq!(
+            resp.status(),
+            axum::http::StatusCode::from_u16(999).unwrap()
+        );
+    }
+
+    /// R-http-protocol-002: 错误侧仍按 ServiceError.http_status 取值（不回归）。
+    #[test]
+    fn test_service_response_into_response_error_status_no_regression() {
+        let err = crate::core::ServiceError::new("E", "m", 418);
+        let resp = ServiceResponse::<String>::error(err).into_response();
+        assert_eq!(
+            resp.status(),
+            axum::http::StatusCode::from_u16(418).unwrap()
+        );
+    }
+
+    /// R-http-protocol-003: 无 status_code 字段且无 error → 200（零破坏）。
+    #[test]
+    fn test_service_response_into_response_default_200_no_regression() {
+        let resp = ServiceResponse::success("x").into_response();
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
     }
 }

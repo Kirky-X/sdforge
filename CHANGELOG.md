@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **feat: add custom success status code support for `#[forge]` macro** — `#[forge(status = <code>)]` 静态声明（如 `status = 201` 用于 POST 创建）+ `ServiceResponse::success_with_status(data, code)` 动态控制；零破坏现有 API（默认 200）；HTTP/gRPC 协议拉通；OpenAPI response code 同步
+
 ## [0.4.7] - 2026-07-23
 
 ### Changed

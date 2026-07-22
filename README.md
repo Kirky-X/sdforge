@@ -90,6 +90,20 @@ mod auth_api {
 // 端点: /auth/api/v1/login
 ```
 
+### `#[forge]` 宏参数
+
+| 参数           | 说明                                                        | 必填 | 默认值 |
+|----------------|-------------------------------------------------------------|------|--------|
+| `name`         | 端点名称                                                    | 是   | -      |
+| `version`      | API 版本                                                    | 是   | -      |
+| `path`         | HTTP 路径（如 `/users/:id`）                                | 否   | -      |
+| `method`       | HTTP 方法（GET/POST/PUT/DELETE 等）                         | 否   | GET    |
+| `status`       | 显式声明成功状态码（如 201 用于 POST 创建）                 | 否   | 200    |
+| `description`  | 端点描述                                                    | 否   | -      |
+| `tool_name`    | MCP 工具名称                                                | 否   | -      |
+| `grpc_method`  | gRPC 方法名（启用 `grpc` feature 时生效）                   | 否   | -      |
+| `cli`          | 是否注册为 CLI 命令（启用 `cli` feature 时生效）            | 否   | false  |
+
 ### gRPC Dispatch
 
 启用 `grpc` feature 后，`#[forge(grpc_method = "...")]` 会通过 inventory 注册到

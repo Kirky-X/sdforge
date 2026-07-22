@@ -11,8 +11,8 @@ use crate::core::HandlerFn;
 
 /// Registration linking a gRPC `CallRequest.method` to a forge handler.
 ///
-/// All fields are `Copy` (`&'static str` / `fn` pointer / `Option<&str>`) so the
-/// registration lives in read-only memory.
+/// All fields are `Copy` (`&'static str` / `fn` pointer / `Option<&str>` /
+/// `Option<u16>`) so the registration lives in read-only memory.
 #[derive(Debug, Clone, Copy)]
 pub struct GrpcHandlerRegistration {
     /// `CallRequest.method` match key (= the forge macro's `grpc_method` value).
@@ -22,6 +22,13 @@ pub struct GrpcHandlerRegistration {
     /// Body parameter name, if any. gRPC injects `CallRequest.data` into this
     /// key. `None` means no Body parameter — the `data` field is rejected.
     pub body_param: Option<&'static str>,
+    /// Macro-level `status` argument (e.g. `#[forge(status = 201)]`) carried
+    /// into the gRPC layer so the gRPC success path can mirror the HTTP
+    /// success code. Applied as the fallback when the handler's returned
+    /// `ServiceResponse` does not carry its own `status_code` field —
+    /// priority chain: `ServiceResponse.status_code` > `default_status` > 200.
+    /// `None` means no macro `status` was declared (default 200).
+    pub default_status: Option<u16>,
 }
 
 inventory::collect!(GrpcHandlerRegistration);
@@ -49,6 +56,7 @@ mod tests {
             method: "test_probe",
             handler: dummy_handler,
             body_param: None,
+            default_status: None,
         }
     }
 
