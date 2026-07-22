@@ -41,6 +41,7 @@ type ServiceApiArgs = Result<
         Option<String>,
         Option<bool>, // no_prefix option
         Option<bool>, // cli option — emit CliCommandRegistration + CliHandlerRegistration
+        Option<u16>,  // status option — explicit success status code (e.g. 201 for POST create)
     ),
     syn::Error,
 >;
@@ -266,6 +267,7 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
     let mut grpc_method = None;
     let mut no_prefix = None;
     let mut cli = None;
+    let mut status = None;
 
     for (key, value) in pairs {
         match key.as_str() {
@@ -317,6 +319,29 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
                     )
                 })?)
             }
+            "status" => {
+                // M-1/LOW-1: 解析为 u16 后立即校验范围 100..=999，使错误消息
+                // 与实际校验逻辑一致（此前消息声称 100..=999 但未实际检查）。
+                let parsed = value.parse::<u16>().map_err(|_| {
+                    syn::Error::new(
+                        proc_macro2::Span::call_site(),
+                        format!(
+                            "Invalid status code (must be a u16 in 100..=999): {}",
+                            value
+                        ),
+                    )
+                })?;
+                if !(100..=999).contains(&parsed) {
+                    return Err(syn::Error::new(
+                        proc_macro2::Span::call_site(),
+                        format!(
+                            "status code {} is out of range (must be in 100..=999): {}",
+                            parsed, value
+                        ),
+                    ));
+                }
+                status = Some(parsed);
+            }
             _ => {
                 return Err(syn::Error::new(
                     proc_macro2::Span::call_site(),
@@ -352,7 +377,62 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
         grpc_method,
         no_prefix,
         cli,
+        status,
     ))
+}
+
+/// Detect whether a function return type is `ServiceResponse` (possibly wrapped in `Result`).
+///
+/// Returns `true` for `-> ServiceResponse<T>`, `-> Result<ServiceResponse<T>, E>`.
+/// Returns `false` for `-> Result<User, E>`, `-> User`, or unit return types.
+///
+/// Used by the `#[forge]` handler generator to decide between the
+/// `ServiceResponse` code path (which respects `status_code` field + macro
+/// `status` fallback via `with_status_code_opt`) and the bare `T: Serialize`
+/// code path (which injects the macro `status` directly into a `StatusCode`).
+fn detect_service_response(return_type: &syn::ReturnType) -> bool {
+    let inner_ty = match return_type {
+        syn::ReturnType::Type(_, ty) => ty.as_ref(),
+        syn::ReturnType::Default => return false,
+    };
+    // If the return type is `Result<T, E>`, extract `T` (the Ok variant type)
+    // before checking for `ServiceResponse`. Mirrors the `is_result` parsing
+    // pattern above so `Result<ServiceResponse<T>, E>` is detected.
+    let target_ty = extract_result_ok_type(inner_ty).unwrap_or(inner_ty);
+    matches!(
+        target_ty,
+        syn::Type::Path(syn::TypePath {
+            qself: None,
+            path: syn::Path { segments, .. }
+        }) if segments
+            .last()
+            .map(|s| s.ident == "ServiceResponse")
+            .unwrap_or(false)
+    )
+}
+
+/// Extract the `T` from a `Result<T, E>` type, if `ty` is `Result<..>`.
+///
+/// Returns `Some(&T)` when `ty` is `Result<T, E>`; `None` otherwise (including
+/// when the generic arguments are not in the expected shape, so the caller
+/// falls back to treating `ty` itself as the target type).
+fn extract_result_ok_type(ty: &syn::Type) -> Option<&syn::Type> {
+    if let syn::Type::Path(syn::TypePath {
+        qself: None,
+        path: syn::Path { segments, .. },
+    }) = ty
+    {
+        if segments.last()?.ident == "Result" {
+            if let Some(syn::PathArguments::AngleBracketed(args)) =
+                segments.last().map(|s| &s.arguments)
+            {
+                if let Some(syn::GenericArgument::Type(t)) = args.args.first() {
+                    return Some(t);
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Parse service_module attributes
@@ -386,7 +466,6 @@ enum ParamKind {
     Path,
     Query,
     Header,
-    Cookie,
     Form,
     Body,
     /// Extension state injection (extracted via Extension<T>)
@@ -403,7 +482,6 @@ impl std::fmt::Display for ParamKind {
             ParamKind::Path => write!(f, "path"),
             ParamKind::Query => write!(f, "query"),
             ParamKind::Header => write!(f, "header"),
-            ParamKind::Cookie => write!(f, "cookie"),
             ParamKind::Form => write!(f, "form"),
             ParamKind::Body => write!(f, "body"),
             ParamKind::State => write!(f, "state"),
@@ -536,7 +614,6 @@ impl ParamInfo {
                                         "path" => Some(ParamKind::Path),
                                         "query" => Some(ParamKind::Query),
                                         "header" => Some(ParamKind::Header),
-                                        "cookie" => Some(ParamKind::Cookie),
                                         "form" => Some(ParamKind::Form),
                                         "body" => Some(ParamKind::Body),
                                         "state" => Some(ParamKind::State),
@@ -807,19 +884,25 @@ fn derive_body_param(params: &[ParamInfo]) -> Option<String> {
 ///    `(HandlerArgs, HandlerState) -> HandlerFuture`, shared with CLI via
 ///    `generate_handler_closure`.
 /// 2. `inventory::submit!(GrpcHandlerRegistration { method, handler,
-///    body_param })` — links `CallRequest.method` → this handler at runtime
-///    (consumed by `SdForgeGrpcService::call` in T007).
+///    body_param, default_status })` — links `CallRequest.method` → this
+///    handler at runtime (consumed by `SdForgeGrpcService::call` in T007).
 ///
 /// `body_param` is derived from the first `ParamKind::Body` param; `None`
 /// when the handler takes no Body arg. NOTE: `quote!` interpolates `Option<T>`
 /// by emitting the inner value for `Some` and *nothing* for `None`, so we
 /// construct the `Some("x")` / `None` literal explicitly to match the
 /// `Option<&'static str>` field type.
+///
+/// `default_status` (H-1) carries the macro-level `#[forge(status = <code>)]`
+/// argument into the gRPC layer. The gRPC success path applies the priority
+/// chain: `ServiceResponse.status_code` field > `default_status` > 200. See
+/// `extract_status_code` + `SdForgeGrpcService::call` for the consumer.
 fn generate_grpc_handler_registration(
     fn_name: &syn::Ident,
     grpc_method: &str,
     params: &[ParamInfo],
     path_params: &[String],
+    status: Option<u16>,
 ) -> TokenStream2 {
     let grpc_handler_fn_name = syn::Ident::new(
         &format!("__grpc_handler_{}", fn_name),
@@ -833,6 +916,12 @@ fn generate_grpc_handler_registration(
         Some(name) => quote! { Some(#name) },
         None => quote! { None },
     };
+    // H-1: 同样需要显式构造 `Option<u16>` 字面量以匹配
+    // `default_status: Option<u16>` 字段类型。
+    let default_status: TokenStream2 = match status {
+        Some(code) => quote! { Some(#code as u16) },
+        None => quote! { None },
+    };
 
     quote! {
         #[cfg(feature = "grpc")]
@@ -843,6 +932,7 @@ fn generate_grpc_handler_registration(
             method: #grpc_method,
             handler: #grpc_handler_fn_name,
             body_param: #body_param,
+            default_status: #default_status,
         });
     }
 }
@@ -864,7 +954,7 @@ fn generate_grpc_handler_registration(
 ///   `params` slice (including State) is passed to `generate_handler_closure`
 ///   so the closure can emit downcast code; `cli_params` here filters to
 ///   Path/Body only for `CliArgInfo`.
-/// - `Extension`/`Query`/`Header`/`Cookie`/`Form` → skipped (HTTP-specific).
+/// - `Extension`/`Query`/`Header`/`Form` → skipped (HTTP-specific).
 ///
 /// `_path_params` is accepted for API symmetry with the HTTP codegen path
 /// but unused — `ParamInfo::param_kind` already encodes the Path/Body
@@ -981,6 +1071,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         grpc_method,
         no_prefix,
         cli,
+        status,
     ) = args;
     let fn_name = &input.sig.ident;
     let _fn_vis = &input.vis; // Currently unused but kept for future use
@@ -1043,7 +1134,6 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 ParamKind::Header => {
                     quote! { #name_ident: sdforge::axum::extract::TypedHeader<#ty> }
                 }
-                ParamKind::Cookie => quote! { #name_ident: sdforge::axum::extract::Cookie },
                 ParamKind::Form => quote! { #name_ident: sdforge::axum::extract::Form<#ty> },
                 ParamKind::Body => {
                     if is_streaming {
@@ -1233,16 +1323,25 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     // utoipa and registers a `__path` struct, making the route discoverable
     // by utoipa-aware tooling. The path uses `{id}` OpenAPI templating
     // (already produced by `convert_axum_path`); responses use a minimal
-    // `200` entry without `body = ...` so handler return types are NOT
-    // required to derive `ToSchema`.
+    // entry without `body = ...` so handler return types are NOT required
+    // to derive `ToSchema`.
+    //
+    // M-2: `status` code is no longer hard-coded to 200 — when the macro
+    // `status` argument is set (e.g. `#[forge(status = 201)]`), the OpenAPI
+    // response entry uses that code so the spec matches the actual HTTP
+    // success code clients will receive. Defaults to 200 when unset.
     let openapi_path_attr = if path.is_some() && method.is_some() {
         let method_ident = syn::Ident::new(&http_method_lower, proc_macro2::Span::call_site());
+        let openapi_path_status = match &status {
+            Some(code) => *code,
+            None => 200u16,
+        };
         quote! {
             #[cfg_attr(feature = "openapi", utoipa::path(
                 #method_ident,
                 path = #http_path,
                 responses(
-                    (status = 200, description = #description_literal)
+                    (status = #openapi_path_status, description = #description_literal)
                 )
             ))]
         }
@@ -1286,7 +1385,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                         ParamKind::Body => quote! { #name_ident.0 },
                         // State/Extension use Extension extractor, extract .0 for inner type
                         ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
-                        // Path, Query, Form, Header, Cookie need .0 extraction
+                        // Path, Query, Form, Header need .0 extraction
                         _ => quote! { #name_ident.0 },
                     }
                 })
@@ -1334,6 +1433,18 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 }
                 syn::ReturnType::Default => false,
             };
+            let is_service_response = detect_service_response(return_type);
+
+            // Build the macro-level `status` argument as an `Option<u16>` token
+            // stream. Consumed by `with_status_code_opt` (ServiceResponse path)
+            // as the fallback when the response's own `status_code` field is
+            // None, and by `StatusCode::from_u16` (bare-type path) as the
+            // injected success status. `as u16` ensures the literal is typed
+            // so type inference resolves to `Option<u16>` in both positions.
+            let status_expr = match &status {
+                Some(code) => quote! { Some(#code as u16) },
+                None => quote! { None },
+            };
 
             // Build parameter call arguments with proper extraction
             let param_call_args: Vec<_> = params
@@ -1345,34 +1456,67 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                         ParamKind::Body => quote! { #name_ident.0 },
                         // State/Extension use Extension extractor, extract .0 for inner type
                         ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
-                        // Path, Query, Form, Header, Cookie need .0 extraction
+                        // Path, Query, Form, Header need .0 extraction
                         _ => quote! { #name_ident.0 },
                     }
                 })
                 .collect();
 
-            let handler_closure = if is_result {
-                quote! {
+            // Generate handler closure along the is_result × is_service_response
+            // matrix. ServiceResponse path delegates to ServiceResponse's own
+            // IntoResponse (which reads status_code field > error http_status >
+            // 200); the macro `status` only fills in when the field is None.
+            // Bare-type path injects the macro `status` directly into a
+            // StatusCode tuple response; non-numeric codes fall back to 200.
+            let handler_closure = match (is_result, is_service_response) {
+                (true, true) => quote! {
                     |#(#param_patterns),*| {
                         async move {
                             use sdforge::prelude::*;
                             match #fn_name(#(#param_call_args),*).await {
-                                Ok(value) => sdforge::axum::extract::Json(value).into_response(),
+                                Ok(value) => value.with_status_code_opt(#status_expr).into_response(),
                                 Err(e) => e.into_response(),
                             }
                         }
                     }
-                }
-            } else {
-                quote! {
+                },
+                (true, false) => quote! {
+                    |#(#param_patterns),*| {
+                        async move {
+                            use sdforge::prelude::*;
+                            match #fn_name(#(#param_call_args),*).await {
+                                Ok(value) => (
+                                    sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
+                                        .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
+                                    sdforge::axum::extract::Json(value),
+                                ).into_response(),
+                                Err(e) => e.into_response(),
+                            }
+                        }
+                    }
+                },
+                (false, true) => quote! {
                     |#(#param_patterns),*| {
                         async move {
                             use sdforge::prelude::*;
                             let result = #fn_name(#(#param_call_args),*).await;
-                            sdforge::axum::extract::Json(result).into_response()
+                            result.with_status_code_opt(#status_expr).into_response()
                         }
                     }
-                }
+                },
+                (false, false) => quote! {
+                    |#(#param_patterns),*| {
+                        async move {
+                            use sdforge::prelude::*;
+                            let result = #fn_name(#(#param_call_args),*).await;
+                            (
+                                sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
+                                    .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
+                                sdforge::axum::extract::Json(result),
+                            ).into_response()
+                        }
+                    }
+                },
             };
 
             quote! {
@@ -1418,6 +1562,16 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         // because it uses string literals (path/method/description) baked at
         // macro expansion time and references `sdforge::openapi::...` types
         // that exist whenever `openapi` is enabled, independent of `http`.
+
+        // forge-success-status-code: build the `Option<u16>` token for the
+        // OpenAPI route info. When `#[forge(status = <code>)]` is specified,
+        // the generated OpenAPI spec uses that code as the response key
+        // (e.g. `"201"`) instead of the default `"200"`.
+        let openapi_status_expr = match &status {
+            Some(code) => quote! { Some(#code as u16) },
+            None => quote! { None },
+        };
+
         quote! {
             #[cfg(feature = "http")]
             #route_creation
@@ -1437,8 +1591,12 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             // are sourced from the same macro arguments as the HTTP route
             // above; tags is kept empty so users can group routes via the
             // utoipa tag API.
+            //
+            // forge-success-status-code: `with_path_params_and_status` passes
+            // the declared `status` so the OpenAPI response key matches the
+            // actual HTTP success code clients will receive.
             #[cfg(feature = "openapi")]
-            sdforge::inventory::submit!(sdforge::openapi::OpenApiRouteInfo::with_path_params(
+            sdforge::inventory::submit!(sdforge::openapi::OpenApiRouteInfo::with_path_params_and_status(
                 #http_path,
                 #http_method_upper,
                 #description_literal,
@@ -1446,6 +1604,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 #version,
                 &[],
                 &[#(#openapi_path_params_tokens),*],
+                #openapi_status_expr,
             ));
         }
     } else {
@@ -1687,8 +1846,15 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         // SdForgeGrpcService::call (T007) can route CallRequest to the forge
         // fn instead of the legacy stub. The GrpcRouteRegistration below
         // carries only metadata; this adds the invocable handler pointer.
-        let grpc_handler_reg =
-            generate_grpc_handler_registration(fn_name, grpc_method_name, &params, &path_params);
+        // H-1: pass the macro-level `status` argument so the gRPC layer can
+        // mirror the HTTP success code (priority chain: field > macro > 200).
+        let grpc_handler_reg = generate_grpc_handler_registration(
+            fn_name,
+            grpc_method_name,
+            &params,
+            &path_params,
+            status,
+        );
         quote! {
             #[cfg(feature = "grpc")]
             fn #grpc_create_fn_name() -> sdforge::grpc::GrpcRoute {
@@ -2314,7 +2480,8 @@ mod macro_parsing_tests {
         let params = vec![make_cli_param("payload", ParamKind::Body, false)];
         let path_params = vec!["payload".to_string()];
 
-        let tokens = generate_grpc_handler_registration(&fn_name, "embed", &params, &path_params);
+        let tokens =
+            generate_grpc_handler_registration(&fn_name, "embed", &params, &path_params, None);
         let s = normalize_ts(&tokens);
 
         assert!(
@@ -2337,6 +2504,11 @@ mod macro_parsing_tests {
             s.contains("body_param : Some (\"payload\")"),
             "body_param must be Some(\"payload\") for a Body param: {s}"
         );
+        // H-1: default_status must be emitted (None when no macro status arg)
+        assert!(
+            s.contains("default_status : None"),
+            "default_status must be None when no macro status arg: {s}"
+        );
         assert!(
             s.contains("HandlerArgs"),
             "handler must use the unified HandlerArgs signature: {s}"
@@ -2351,7 +2523,8 @@ mod macro_parsing_tests {
         let params: Vec<ParamInfo> = vec![];
         let path_params = vec![];
 
-        let tokens = generate_grpc_handler_registration(&fn_name, "ping", &params, &path_params);
+        let tokens =
+            generate_grpc_handler_registration(&fn_name, "ping", &params, &path_params, None);
         let s = normalize_ts(&tokens);
 
         assert!(
@@ -2362,6 +2535,93 @@ mod macro_parsing_tests {
             s.contains("method : \"ping\""),
             "method must still be set: {s}"
         );
+        // H-1: default_status must also be None
+        assert!(
+            s.contains("default_status : None"),
+            "default_status must be None when no macro status arg: {s}"
+        );
+    }
+
+    /// H-1: when `status = Some(code)` is passed, the generated
+    /// `GrpcHandlerRegistration` must carry `default_status: Some(<code>)`.
+    #[test]
+    fn test_generate_grpc_handler_registration_emits_default_status_when_set() {
+        let fn_name = syn::Ident::new("create", proc_macro2::Span::call_site());
+        let params: Vec<ParamInfo> = vec![];
+        let path_params = vec![];
+
+        let tokens = generate_grpc_handler_registration(
+            &fn_name,
+            "create",
+            &params,
+            &path_params,
+            Some(201u16),
+        );
+        let s = normalize_ts(&tokens);
+
+        // `quote!` interpolates `u16` literals with the `u16` suffix, and the
+        // macro emits `Some(#code as u16)` to ensure type inference resolves
+        // to `Option<u16>` in the consumer position — so the normalized
+        // output is `Some (201u16 as u16)`.
+        assert!(
+            s.contains("default_status : Some (201u16 as u16)"),
+            "default_status must be Some(201u16 as u16) when macro status=201: {s}"
+        );
+    }
+
+    // ========================================================================
+    // forge-success-status-code: detect_service_response 返回类型检测
+    //
+    // R-forge-macro-002: 检测 fn 返回类型是否为 ServiceResponse（含 Result 包装）
+    // ========================================================================
+
+    /// 解析 `-> T` 形式的返回类型字符串为 syn::ReturnType。
+    fn parse_return_type(src: &str) -> syn::ReturnType {
+        let item_fn: syn::ItemFn = syn::parse_str(&format!("async fn _probe() {} {{}}", src))
+            .expect("failed to parse return type");
+        item_fn.sig.output
+    }
+
+    /// R-forge-macro-002: `-> ServiceResponse<T>` → true。
+    #[test]
+    fn test_detect_service_response_bare() {
+        let rt = parse_return_type("-> ServiceResponse<String>");
+        assert!(detect_service_response(&rt));
+    }
+
+    /// R-forge-macro-002: `-> Result<ServiceResponse<T>, E>` → true。
+    #[test]
+    fn test_detect_service_response_result_wrapped() {
+        let rt = parse_return_type("-> Result<ServiceResponse<String>, ApiError>");
+        assert!(detect_service_response(&rt));
+    }
+
+    /// R-forge-macro-002: `-> Result<User, E>` → false。
+    #[test]
+    fn test_detect_service_response_result_of_bare_type() {
+        let rt = parse_return_type("-> Result<User, ApiError>");
+        assert!(!detect_service_response(&rt));
+    }
+
+    /// R-forge-macro-002: `-> User` → false。
+    #[test]
+    fn test_detect_service_response_plain_bare_type() {
+        let rt = parse_return_type("-> User");
+        assert!(!detect_service_response(&rt));
+    }
+
+    /// R-forge-macro-002: 无返回类型（unit）→ false。
+    #[test]
+    fn test_detect_service_response_unit_return() {
+        let rt = syn::ReturnType::Default;
+        assert!(!detect_service_response(&rt));
+    }
+
+    /// R-forge-macro-002: `-> ServiceResponse` 无泛型参数 → true。
+    #[test]
+    fn test_detect_service_response_no_generic_param() {
+        let rt = parse_return_type("-> ServiceResponse");
+        assert!(detect_service_response(&rt));
     }
 }
 

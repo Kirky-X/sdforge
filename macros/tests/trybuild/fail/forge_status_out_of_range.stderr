@@ -1,0 +1,7 @@
+error: status code 99 is out of range (must be in 100..=999): 99
+ --> tests/trybuild/fail/forge_status_out_of_range.rs:6:1
+  |
+6 | #[forge(name = "test_status_out_of_range", version = "v1", status = 99)]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `forge` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -213,6 +213,20 @@ All capabilities enabled:
 sdforge = { version = "0.5", features = ["full"] }
 ```
 
+### 🔧 `#[forge]` Macro Parameters
+
+| Parameter      | Description                                                        | Required | Default |
+|----------------|--------------------------------------------------------------------|----------|---------|
+| `name`         | Endpoint name                                                      | Yes      | -       |
+| `version`      | API version                                                        | Yes      | -       |
+| `path`         | HTTP path (e.g., `/users/:id`)                                     | No       | -       |
+| `method`       | HTTP method (GET/POST/PUT/DELETE, etc.)                            | No       | GET     |
+| `status`       | Explicit success status code (e.g., 201 for POST create)          | No       | 200     |
+| `description`  | Endpoint description                                               | No       | -       |
+| `tool_name`    | MCP tool name                                                      | No       | -       |
+| `grpc_method`  | gRPC method name (effective when `grpc` feature is enabled)        | No       | -       |
+| `cli`          | Register as CLI command (effective when `cli` feature is enabled)  | No       | false   |
+
 ### 🛰️ gRPC Dispatch
 
 With the `grpc` feature enabled, `#[forge(grpc_method = "...")]` registers a

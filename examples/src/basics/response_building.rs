@@ -386,3 +386,74 @@ async fn update_item(
         timestamp,
     })
 }
+
+// ============================================================================
+// 自定义成功状态码（#[forge(status = ...)] + ServiceResponse::success_with_status）
+// ============================================================================
+
+/// 创建数据项（静态声明 201）
+///
+/// 演示：通过 `#[forge(status = 201)]` 静态声明成功状态码，
+/// 适用于 POST 创建资源时返回 201 Created。
+///
+/// # HTTP 用法
+/// ```bash
+/// curl -X POST http://localhost:3000/api/v1/items-with-status \
+///   -H "Content-Type: application/json" \
+///   -d '{"name": "New Item", "description": "New Description", "enabled": true}'
+/// ```
+///
+/// # 响应
+/// HTTP 201 Created，Body 为创建的资源（裸类型，由宏注入 status）。
+#[forge(
+    name = "create_item_with_status",
+    version = "v1",
+    path = "/items-with-status",
+    method = "POST",
+    status = 201,
+    tool_name = "create_item_with_status",
+    description = "创建数据项（静态 201）"
+)]
+async fn create_item_with_status(request: CreateItemRequest) -> Result<DataItem, ApiError> {
+    Ok(DataItem {
+        id: 100,
+        name: request.name,
+        description: request.description,
+        enabled: request.enabled,
+    })
+}
+
+/// 创建数据项（动态状态码）
+///
+/// 演示：通过 `ServiceResponse::success_with_status(data, code)` 在运行时
+/// 动态决定成功状态码，适用于 upsert（存在则 200，新建则 201）等场景。
+///
+/// # HTTP 用法
+/// ```bash
+/// curl -X POST http://localhost:3000/api/v1/items-dynamic-status \
+///   -H "Content-Type: application/json" \
+///   -d '{"name": "New Item", "description": "New Description", "enabled": true}'
+/// ```
+///
+/// # 响应
+/// HTTP 201 Created，Body 为 `ServiceResponse` 包装结构（含 `status_code` 字段）。
+#[forge(
+    name = "create_item_dynamic_status",
+    version = "v1",
+    path = "/items-dynamic-status",
+    method = "POST",
+    tool_name = "create_item_dynamic_status",
+    description = "创建数据项（动态状态码）"
+)]
+async fn create_item_dynamic_status(
+    request: CreateItemRequest,
+) -> Result<ServiceResponse<DataItem>, ApiError> {
+    let item = DataItem {
+        id: 200,
+        name: request.name,
+        description: request.description,
+        enabled: request.enabled,
+    };
+    // Dynamic entry: code decided at runtime, takes precedence over macro `status`.
+    Ok(ServiceResponse::success_with_status(item, 201))
+}

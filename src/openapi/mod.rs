@@ -80,6 +80,10 @@ pub struct OpenApiRouteInfo {
     /// Path parameters auto-extracted from the route path by the
     /// `#[forge]` macro. Empty for routes without path params.
     pub path_params: &'static [OpenApiPathParam],
+    /// Explicit success status code from `#[forge(status = <code>)]`.
+    /// When `Some`, the OpenAPI response key uses this code (e.g. `201`)
+    /// instead of the default `200`. `None` keeps backward-compatible `200`.
+    pub success_status: Option<u16>,
 }
 
 inventory::collect!(OpenApiRouteInfo);
@@ -121,6 +125,21 @@ inventory::submit!(OpenApiRouteInfo::with_path_params(
     &[OpenApiPathParam::new(
         "id", "User ID", true, "integer", "uint64"
     ),],
+));
+
+// forge-success-status-code: Register a test-only route with an explicit
+// success status code (201) to verify that the OpenAPI spec emits a `"201"`
+// response key instead of the default `"200"`.
+#[cfg(test)]
+inventory::submit!(OpenApiRouteInfo::with_path_params_and_status(
+    "/__openapi_status_201_test__",
+    "POST",
+    "Status 201 test marker",
+    "Route with success_status=Some(201) registered by src/openapi/mod.rs tests.",
+    "test",
+    &["test"],
+    &[],
+    Some(201u16),
 ));
 
 #[cfg(test)]
@@ -443,6 +462,141 @@ mod tests {
         assert_eq!(
             id_param["schema"]["format"], "uint64",
             "schema format must be uint64"
+        );
+    }
+
+    // ========================================================================
+    // forge-success-status-code: OpenAPI response code generation tests
+    // ========================================================================
+
+    /// `OpenApiRouteInfo::new()` should default `success_status` to `None`.
+    #[test]
+    fn new_defaults_success_status_to_none() {
+        let info = OpenApiRouteInfo::new("/x", "GET", "s", "d", "v1", &[]);
+        assert!(
+            info.success_status.is_none(),
+            "new() must default success_status to None"
+        );
+    }
+
+    /// `OpenApiRouteInfo::with_path_params()` should default `success_status`
+    /// to `None` (backward-compatible with pre-status-code routes).
+    #[test]
+    fn with_path_params_defaults_success_status_to_none() {
+        const PARAMS: &[OpenApiPathParam] =
+            &[OpenApiPathParam::new("id", "", true, "integer", "uint64")];
+        const INFO: OpenApiRouteInfo =
+            OpenApiRouteInfo::with_path_params("/x/{id}", "GET", "s", "d", "v1", &[], PARAMS);
+        assert!(
+            INFO.success_status.is_none(),
+            "with_path_params must default success_status to None"
+        );
+    }
+
+    /// `OpenApiRouteInfo::with_path_params_and_status()` should store the
+    /// provided `success_status`.
+    #[test]
+    fn with_path_params_and_status_stores_status() {
+        const PARAMS: &[OpenApiPathParam] = &[];
+        const INFO: OpenApiRouteInfo = OpenApiRouteInfo::with_path_params_and_status(
+            "/create",
+            "POST",
+            "s",
+            "d",
+            "v1",
+            &[],
+            PARAMS,
+            Some(201u16),
+        );
+        assert_eq!(
+            INFO.success_status,
+            Some(201),
+            "with_path_params_and_status must store success_status"
+        );
+    }
+
+    /// `with_path_params_and_status()` with `None` should behave like
+    /// `with_path_params()` (backward-compatible default).
+    #[test]
+    fn with_path_params_and_status_none_is_default() {
+        const INFO: OpenApiRouteInfo = OpenApiRouteInfo::with_path_params_and_status(
+            "/x",
+            "GET",
+            "s",
+            "d",
+            "v1",
+            &[],
+            &[],
+            None,
+        );
+        assert!(INFO.success_status.is_none());
+    }
+
+    /// R-openapi-generation-001: `#[forge(status = 201)]` should produce an
+    /// OpenAPI spec where the route's `responses` object contains a `"201"`
+    /// key (not `"200"`).
+    ///
+    /// Uses the test-only route `/__openapi_status_201_test__` registered
+    /// above with `success_status: Some(201)`.
+    #[test]
+    fn generated_spec_contains_201_response_for_status_route() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+        let paths_obj = paths_json
+            .as_object()
+            .expect("paths is a JSON object")
+            .clone();
+        let route_key = "/__openapi_status_201_test__";
+        let route = paths_obj
+            .get(route_key)
+            .unwrap_or_else(|| panic!("expected route {} in paths", route_key));
+        let post_op = route
+            .get("post")
+            .unwrap_or_else(|| panic!("expected POST operation on {}", route_key));
+        let responses = post_op
+            .get("responses")
+            .unwrap_or_else(|| panic!("expected responses object on {}", route_key));
+        assert!(
+            responses.get("201").is_some(),
+            "expected \"201\" response key on {}, got: {}",
+            route_key,
+            serde_json::to_string_pretty(&responses).unwrap()
+        );
+        assert!(
+            responses.get("200").is_none(),
+            "must NOT have \"200\" response key when status=201 is declared, got: {}",
+            serde_json::to_string_pretty(&responses).unwrap()
+        );
+    }
+
+    /// R-openapi-generation-002: Routes without `status` should produce a
+    /// `"200"` response key (backward-compatible with pre-change behavior).
+    ///
+    /// Uses the test-only route `/__openapi_test_marker__` registered above
+    /// with default `success_status: None`.
+    #[test]
+    fn generated_spec_contains_200_response_for_default_route() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+        let paths_obj = paths_json
+            .as_object()
+            .expect("paths is a JSON object")
+            .clone();
+        let route_key = "/__openapi_test_marker__";
+        let route = paths_obj
+            .get(route_key)
+            .unwrap_or_else(|| panic!("expected route {} in paths", route_key));
+        let get_op = route
+            .get("get")
+            .unwrap_or_else(|| panic!("expected GET operation on {}", route_key));
+        let responses = get_op
+            .get("responses")
+            .unwrap_or_else(|| panic!("expected responses object on {}", route_key));
+        assert!(
+            responses.get("200").is_some(),
+            "expected \"200\" response key on {} (default), got: {}",
+            route_key,
+            serde_json::to_string_pretty(&responses).unwrap()
         );
     }
 }

@@ -270,3 +270,11 @@ CODEIUM.md
 .codeium/
 .github/copilot/
 strix_runs
+
+# =============================================================================
+# Specmark / CodeNexus workspaces (rule 27 — never tracked)
+# =============================================================================
+specmark/
+**/specmark/
+.codenexus/
+**/.codenexus/
