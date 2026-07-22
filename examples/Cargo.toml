@@ -11,12 +11,12 @@ publish = false
 
 [dependencies]
 sdforge = { path = ".." }
-tokio = { version = "~1.52", features = ["rt", "rt-multi-thread", "macros"] }
-serde = { version = "~1.0", default-features = false, features = ["std", "derive"] }
-serde_json = "~1.0"
-thiserror = "~2.0"
-uuid = { version = "~1.23", features = ["v4"] }
-chrono = { version = "~0.4", features = ["serde"] }
+tokio = { version = "1.52", features = ["rt", "rt-multi-thread", "macros"] }
+serde = { version = "1.0", default-features = false, features = ["std", "derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+uuid = { version = "1.23", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
 # Note: `inventory`, `axum`, `clap`, `rmcp`, `tonic`, `prost`, `utoipa` are
 # re-exported by sdforge (sdforge::inventory, sdforge::axum, sdforge::clap,
 # sdforge::rmcp, sdforge::tonic, sdforge::prost, sdforge::utoipa). Downstream

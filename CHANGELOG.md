@@ -7,9 +7,17 @@
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-07-23
+
+### Changed
+
+- 依赖版本约束移除波浪号（`~`）：`[workspace.dependencies]` 全部 41 项及 `examples/Cargo.toml` 6 项统一改为 Major.Minor 精确格式（如 `tokio ~1.52`→`1.52`、`serde ~1.0`→`1.0`、`tonic ~0.14`→`0.14`、`rmcp ~2.2`→`2.2` 等）
+- 依赖刷新：移除波浪号上限后 `cargo update` 将 `tokio 1.52.4`→`1.53.1`、`uuid 1.23.5`→`1.24.0`（此前被 `~` 约束锁死在 1.52/1.23 小版本内）
+
 ### Security
 
 - **[LOW-1 披露]** 补公开 `deny.toml` 中 `bincode` [RUSTSEC-2025-0141](https://rustsec.org/advisories/RUSTSEC-2025-0141.html)（unmaintained）的 ignore 决策（此前未在 CHANGELOG 披露）。bincode v2.0.1 为本 crate 直接依赖（`Cargo.toml`），其维护团队因 doxxing/harassment 事件永久停维，公告标注 "No safe upgrade available"。短期保留（功能稳定 + cargo-deny 持续监控公告），中期评估迁移至 `postcard` / `bitcode` / `rkyv`。本次仅透明化已知风险，无主动安全行为变更。
+- `cargo deny check advisories bans` 通过，无已知漏洞
 
 ## [0.4.6] - 2026-07-22
 
