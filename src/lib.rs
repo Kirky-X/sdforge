@@ -4,7 +4,7 @@
 //!
 //! This crate provides the runtime types and service builders for the SDForge framework.
 
-#![doc(html_root_url = "https://docs.rs/sdforge/0.5.0")]
+#![doc(html_root_url = "https://docs.rs/sdforge/0.4.5")]
 #![warn(missing_docs)]
 
 // Allow macro-generated code (which references `sdforge::cli::...`,

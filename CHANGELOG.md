@@ -7,13 +7,19 @@
 
 ## [Unreleased]
 
+### Security
+
+- **[LOW-1 披露]** 补公开 `deny.toml` 中 `bincode` [RUSTSEC-2025-0141](https://rustsec.org/advisories/RUSTSEC-2025-0141.html)（unmaintained）的 ignore 决策（此前未在 CHANGELOG 披露）。bincode v2.0.1 为本 crate 直接依赖（`Cargo.toml`），其维护团队因 doxxing/harassment 事件永久停维，公告标注 "No safe upgrade available"。短期保留（功能稳定 + cargo-deny 持续监控公告），中期评估迁移至 `postcard` / `bitcode` / `rkyv`。本次仅透明化已知风险，无主动安全行为变更。
+
+## [0.4.5] - 2026-07-22
+
 ### 测试
 
 - 新增 `tests/e2e_advanced.rs`（178 个测试）：覆盖 cache_advanced、config_advanced、error_advanced、ratelimit_error_advanced、logging_advanced、i18n_advanced、security_advanced、ratelimit_advanced、regex_cache_advanced、plugin_init_advanced、cross_module_advanced、validation_constants_advanced 共 12 个模块的未覆盖场景
 
-### Security
+### 维护
 
-- **[LOW-1 披露]** 补公开 `deny.toml` 中 `bincode` [RUSTSEC-2025-0141](https://rustsec.org/advisories/RUSTSEC-2025-0141.html)（unmaintained）的 ignore 决策（此前未在 CHANGELOG 披露）。bincode v2.0.1 为本 crate 直接依赖（`Cargo.toml`），其维护团队因 doxxing/harassment 事件永久停维，公告标注 "No safe upgrade available"。短期保留（功能稳定 + cargo-deny 持续监控公告），中期评估迁移至 `postcard` / `bitcode` / `rkyv`。本次仅透明化已知风险，无主动安全行为变更。
+- 移除未使用依赖：serde（examples）
 
 ## [0.4.4] - 2026-07-18
 
