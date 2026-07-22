@@ -11,6 +11,14 @@
 
 - **[LOW-1 披露]** 补公开 `deny.toml` 中 `bincode` [RUSTSEC-2025-0141](https://rustsec.org/advisories/RUSTSEC-2025-0141.html)（unmaintained）的 ignore 决策（此前未在 CHANGELOG 披露）。bincode v2.0.1 为本 crate 直接依赖（`Cargo.toml`），其维护团队因 doxxing/harassment 事件永久停维，公告标注 "No safe upgrade available"。短期保留（功能稳定 + cargo-deny 持续监控公告），中期评估迁移至 `postcard` / `bitcode` / `rkyv`。本次仅透明化已知风险，无主动安全行为变更。
 
+## [0.4.6] - 2026-07-22
+
+### Fixed
+
+- 修复 CI Clippy Lint job 失败：MSRV 从 1.89 升至 1.94（inklog 0.1.11+ 要求 rustc 1.94，`--all-features` CI 启用了可选的 inklog 依赖）
+- 恢复 examples/Cargo.toml 的 `serde` 依赖：0.4.5 误删 serde 导致 `#[derive(Serialize, Deserialize)]` 编译失败（E0463: can't find crate for `serde`），影响 CI Build job 和 Release verify job
+- 修复 `tests/e2e_advanced.rs` 中 17 个 clippy lint（MSRV 升级后新暴露）：移除 Copy 类型 `RegexCacheStats` 上的 `.clone()`、将 16 个常量断言转为编译时 `const { assert!(..) }` 块
+
 ## [0.4.5] - 2026-07-22
 
 ### 测试
