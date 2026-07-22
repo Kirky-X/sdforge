@@ -498,6 +498,13 @@ name = "openapi_tests"
 path = "tests/integration/openapi_tests.rs"
 required-features = ["http", "openapi"]
 
+# forge-success-status-code: e2e tests for `#[forge(status = <code>)]` and
+# `ServiceResponse::success_with_status` across the HTTP protocol.
+[[test]]
+name = "status_code_tests"
+path = "tests/integration/status_code_tests.rs"
+required-features = ["http"]
+
 # CLI integration tests — verify #[forge(cli = true)] + CliBuilder pipeline
 [[test]]
 name = "cli_tests"

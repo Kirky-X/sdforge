@@ -58,6 +58,7 @@ mod grpc_integration_tests {
         method: "integration_test_echo",
         handler: integration_test_echo_handler,
         body_param: None,
+        default_status: None,
     });
 
     // ============================================================================
@@ -1149,5 +1150,149 @@ mod grpc_integration_tests {
 
         assert_eq!(config.max_connections, 200);
         assert_eq!(config.timeout_seconds, 45);
+    }
+}
+
+// ============================================================================
+// forge-success-status-code: gRPC status_code e2e tests
+//
+// Verifies that `CallResponse.status_code` correctly reflects the
+// `ServiceResponse.status_code` field when the handler returns a
+// ServiceResponse, and defaults to 200 for bare types.
+// ============================================================================
+
+#[cfg(feature = "grpc")]
+mod grpc_status_code_tests {
+    use sdforge::core::{HandlerArgs, HandlerFuture, HandlerState, ServiceResponse};
+    use sdforge::grpc::sdforge_v1::{
+        CallRequest, CallResponse, sd_forge_service_server::SdForgeService,
+    };
+    use sdforge::grpc::SdForgeGrpcService;
+    use serde::Serialize;
+    use tonic::Request;
+
+    #[derive(Debug, Serialize)]
+    struct User {
+        id: u64,
+        name: String,
+    }
+
+    /// Handler that returns a `ServiceResponse` with `status_code = 201`.
+    fn status_code_handler(
+        _args: HandlerArgs,
+        _state: HandlerState,
+    ) -> HandlerFuture {
+        Box::pin(async move {
+            let user = User {
+                id: 1,
+                name: "Alice".to_string(),
+            };
+            let resp = ServiceResponse::success_with_status(user, 201);
+            Ok(serde_json::to_value(resp).unwrap())
+        })
+    }
+
+    sdforge::inventory::submit!(sdforge::grpc::GrpcHandlerRegistration {
+        method: "status_code_test_create",
+        handler: status_code_handler,
+        body_param: None,
+        default_status: None,
+    });
+
+    /// Handler that returns a `ServiceResponse` without `status_code` (None).
+    fn service_response_no_status_handler(
+        _args: HandlerArgs,
+        _state: HandlerState,
+    ) -> HandlerFuture {
+        Box::pin(async move {
+            let user = User {
+                id: 2,
+                name: "Bob".to_string(),
+            };
+            let resp = ServiceResponse::success(user);
+            Ok(serde_json::to_value(resp).unwrap())
+        })
+    }
+
+    sdforge::inventory::submit!(sdforge::grpc::GrpcHandlerRegistration {
+        method: "status_code_test_no_status",
+        handler: service_response_no_status_handler,
+        body_param: None,
+        default_status: None,
+    });
+
+    /// Handler that returns a bare type (no ServiceResponse wrapper).
+    fn bare_type_handler(
+        _args: HandlerArgs,
+        _state: HandlerState,
+    ) -> HandlerFuture {
+        Box::pin(async move {
+            let user = User {
+                id: 3,
+                name: "Charlie".to_string(),
+            };
+            Ok(serde_json::to_value(user).unwrap())
+        })
+    }
+
+    sdforge::inventory::submit!(sdforge::grpc::GrpcHandlerRegistration {
+        method: "status_code_test_bare_type",
+        handler: bare_type_handler,
+        body_param: None,
+        default_status: None,
+    });
+
+    /// Helper: call a method on the gRPC service directly (no server needed).
+    async fn call_method(method: &str) -> CallResponse {
+        let service = SdForgeGrpcService::default();
+        let request = Request::new(CallRequest {
+            method: method.to_string(),
+            parameters: std::collections::HashMap::new(),
+            data: String::new(),
+        });
+        let response = service.call(request).await.unwrap();
+        response.into_inner()
+    }
+
+    /// T012 (a): Handler returning `ServiceResponse::success_with_status(_, 201)`
+    /// → `CallResponse.status_code == 201`.
+    #[tokio::test]
+    async fn test_grpc_service_response_with_status_201() {
+        let response = call_method("status_code_test_create").await;
+        assert!(
+            response.success,
+            "expected success=true, got: {:?}",
+            response
+        );
+        assert_eq!(
+            response.status_code, 201,
+            "expected status_code=201 from ServiceResponse::success_with_status(_, 201)"
+        );
+    }
+
+    /// T012 (b): Handler returning `ServiceResponse::success(_)` (no status_code)
+    /// → `CallResponse.status_code == 200` (default).
+    #[tokio::test]
+    async fn test_grpc_service_response_without_status_defaults_200() {
+        let response = call_method("status_code_test_no_status").await;
+        assert!(response.success);
+        assert_eq!(
+            response.status_code, 200,
+            "expected default status_code=200 when ServiceResponse has no status_code field"
+        );
+    }
+
+    /// T012 (c): Handler returning a bare type → `CallResponse.status_code == 200`.
+    #[tokio::test]
+    async fn test_grpc_bare_type_defaults_200() {
+        let response = call_method("status_code_test_bare_type").await;
+        assert!(
+            response.success,
+            "bare type should still report success=true"
+        );
+        assert_eq!(
+            response.status_code, 200,
+            "bare type (no ServiceResponse) must default to status_code=200"
+        );
     }
 }

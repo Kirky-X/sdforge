@@ -1,0 +1,7 @@
+error: Invalid status code (must be a u16 in 100..=999): abc
+ --> tests/trybuild/fail/forge_status_invalid_type.rs:6:1
+  |
+6 | #[forge(name = "test_status_bad_type", version = "v1", status = "abc")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `forge` (in Nightly builds, run with -Z macro-backtrace for more info)

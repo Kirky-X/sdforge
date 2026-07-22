@@ -5,6 +5,7 @@ use super::*;
 use utoipa::openapi::path::{
     HttpMethod, OperationBuilder, Parameter, ParameterBuilder, ParameterIn, Paths,
 };
+use utoipa::openapi::response::ResponseBuilder;
 use utoipa::openapi::schema::{ObjectBuilder, SchemaFormat, SchemaType, Type};
 use utoipa::openapi::{Info, InfoBuilder, OpenApi, Required};
 
@@ -82,6 +83,7 @@ impl OpenApiRouteInfo {
             version,
             tags,
             path_params: &[],
+            success_status: None,
         }
     }
 
@@ -106,6 +108,34 @@ impl OpenApiRouteInfo {
             version,
             tags,
             path_params,
+            success_status: None,
+        }
+    }
+
+    /// Construct a new route info entry with path parameters and an explicit
+    /// success status code (from `#[forge(status = <code>)]`).
+    ///
+    /// When `success_status` is `Some(code)`, the OpenAPI response key uses
+    /// that code (e.g. `"201"`) instead of the default `"200"`.
+    pub const fn with_path_params_and_status(
+        path: &'static str,
+        method: &'static str,
+        summary: &'static str,
+        description: &'static str,
+        version: &'static str,
+        tags: &'static [&'static str],
+        path_params: &'static [OpenApiPathParam],
+        success_status: Option<u16>,
+    ) -> Self {
+        Self {
+            path,
+            method,
+            summary,
+            description,
+            version,
+            tags,
+            path_params,
+            success_status,
         }
     }
 
@@ -185,6 +215,18 @@ impl OpenApiBuilder {
             for param in route.path_params {
                 operation_builder = operation_builder.parameter(param.to_parameter());
             }
+            // forge-success-status-code: emit a response entry keyed by the
+            // declared success status (from `#[forge(status = <code>)]`) or
+            // default `200` when not specified. This makes the OpenAPI doc
+            // accurately reflect the HTTP success code clients will receive.
+            let status_code = route.success_status.unwrap_or(200);
+            let response = ResponseBuilder::new()
+                .description("Successful response")
+                .build();
+            operation_builder = operation_builder.response(
+                status_code.to_string(),
+                response,
+            );
             let operation = operation_builder.build();
             paths.add_path_operation(route.path, vec![route.http_method()], operation);
         }
