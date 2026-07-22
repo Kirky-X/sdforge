@@ -92,11 +92,20 @@ pub use tokio_stream;
 #[cfg(feature = "http")]
 pub mod axum {
     pub use axum::body::Body;
+    pub use axum::Router;
     pub use axum::response::IntoResponse;
+    pub use axum::response::Response;
 
     /// HTTP routing utilities
     pub mod routing {
         pub use axum::routing::{MethodRouter, get, post};
+    }
+
+    /// Middleware utilities — `from_fn` + `Next` for authoring layered handlers.
+    /// Lets downstream write `sdforge::axum::middleware::from_fn(...)` without a
+    /// direct axum dep.
+    pub mod middleware {
+        pub use axum::middleware::{from_fn, Next};
     }
 
     /// Extractor utilities for HTTP requests
@@ -125,6 +134,17 @@ pub mod axum {
 
     pub use axum::serve;
 }
+
+/// Re-export `tower` / `tower-http` as top-level crates so downstream HTTP
+/// services can reach `sdforge::tower::ServiceExt`, `sdforge::tower_http::cors::CorsLayer`,
+/// etc. without a direct Cargo dep on tower/tower-http. Unlike axum (high
+/// breaking-change rate → curated facade in `pub mod axum`), these crates are
+/// low-churn and stable enough to expose wholesale.
+#[cfg(feature = "http")]
+pub use tower;
+
+#[cfg(feature = "http")]
+pub use tower_http;
 
 /// Commonly used types and re-exports
 pub mod prelude {
@@ -802,5 +822,49 @@ mod tests {
         let c = init_all_plugins();
         assert_eq!(a.routes, b.routes);
         assert_eq!(b.routes, c.routes);
+    }
+}
+
+/// Compile-time + runtime assertions that the `sdforge` re-export facade
+/// exposes the axum/tower surface downstream HTTP services need. Each test
+/// pins one re-export point from `expose-axum-tower-reexports`; if a symbol
+/// goes missing the module fails to compile (Red).
+#[cfg(all(test, feature = "http"))]
+mod reexport_tests {
+    use crate::axum;
+
+    #[test]
+    fn router_reexport_resolves() {
+        let _router: axum::Router = axum::Router::new();
+    }
+
+    #[test]
+    fn middleware_reexport_resolves() {
+        // axum 0.8 `from_fn` has an uninferable generic `T` outside a Router
+        // context, so it cannot be constructed in isolation. The `use` below pins
+        // the path: if axum removes `from_fn`, compilation fails with E0432
+        // (unresolved import). `#[allow(unused_imports)]` only silences the
+        // unused-name warning; it does NOT weaken the unresolved-import check
+        // that actually pins `from_fn`. `Next` is exercised as a typed parameter.
+        #[allow(unused_imports)]
+        use crate::axum::middleware::{from_fn, Next};
+        #[allow(dead_code)]
+        fn _next_typed(_next: Next) {}
+    }
+
+    #[test]
+    fn response_reexport_resolves() {
+        fn _handler() -> axum::Response {
+            unimplemented!()
+        }
+        let _f: fn() -> axum::Response = _handler;
+    }
+
+    #[test]
+    fn tower_reexports_resolve() {
+        // Construct to pin path resolution + feature availability
+        // (tower `util` → ServiceBuilder; tower-http `cors` → CorsLayer).
+        let _sb = crate::tower::ServiceBuilder::new();
+        let _cl = crate::tower_http::cors::CorsLayer::new();
     }
 }
