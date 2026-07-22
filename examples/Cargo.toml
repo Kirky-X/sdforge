@@ -12,6 +12,7 @@ publish = false
 [dependencies]
 sdforge = { path = ".." }
 tokio = { version = "~1.52", features = ["rt", "rt-multi-thread", "macros"] }
+serde = { version = "~1.0", default-features = false, features = ["std", "derive"] }
 serde_json = "~1.0"
 thiserror = "~2.0"
 uuid = { version = "~1.23", features = ["v4"] }
