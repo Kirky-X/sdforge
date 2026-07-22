@@ -1766,9 +1766,9 @@ mod regex_cache_advanced {
         let cache = RegexCache::with_capacity(100);
         cache.get_or_compile(r"^\d+$").expect("compile");
         let stats = cache.stats();
-        let cloned = stats.clone();
-        assert_eq!(cloned.total_patterns, stats.total_patterns);
-        assert_eq!(cloned.max_capacity, stats.max_capacity);
+        let copied = stats;
+        assert_eq!(copied.total_patterns, stats.total_patterns);
+        assert_eq!(copied.max_capacity, stats.max_capacity);
     }
 }
 
@@ -2062,22 +2062,22 @@ mod validation_constants_advanced {
 
     #[test]
     fn test_validation_constants_are_positive() {
-        assert!(MAX_REQUEST_BODY_SIZE > 0);
-        assert!(MAX_HEADER_NAME_LENGTH > 0);
-        assert!(MAX_HEADER_VALUE_LENGTH > 0);
-        assert!(MAX_URI_PATH_LENGTH > 0);
-        assert!(MAX_QUERY_STRING_LENGTH > 0);
-        assert!(MAX_HEADER_COUNT > 0);
-        assert!(MAX_API_KEY_LENGTH > 0);
-        assert!(MAX_JWT_TOKEN_LENGTH > 0);
-        assert!(MAX_USERNAME_LENGTH > 0);
-        assert!(MAX_EMAIL_LENGTH > 0);
-        assert!(MAX_PASSWORD_LENGTH > 0);
-        assert!(MIN_PASSWORD_LENGTH > 0);
-        assert!(MAX_TEXT_FIELD_LENGTH > 0);
-        assert!(MAX_JSON_FIELD_NAME_LENGTH > 0);
-        assert!(MAX_JSON_ARRAY_LENGTH > 0);
-        assert!(MAX_JSON_DEPTH > 0);
+        const { assert!(MAX_REQUEST_BODY_SIZE > 0) };
+        const { assert!(MAX_HEADER_NAME_LENGTH > 0) };
+        const { assert!(MAX_HEADER_VALUE_LENGTH > 0) };
+        const { assert!(MAX_URI_PATH_LENGTH > 0) };
+        const { assert!(MAX_QUERY_STRING_LENGTH > 0) };
+        const { assert!(MAX_HEADER_COUNT > 0) };
+        const { assert!(MAX_API_KEY_LENGTH > 0) };
+        const { assert!(MAX_JWT_TOKEN_LENGTH > 0) };
+        const { assert!(MAX_USERNAME_LENGTH > 0) };
+        const { assert!(MAX_EMAIL_LENGTH > 0) };
+        const { assert!(MAX_PASSWORD_LENGTH > 0) };
+        const { assert!(MIN_PASSWORD_LENGTH > 0) };
+        const { assert!(MAX_TEXT_FIELD_LENGTH > 0) };
+        const { assert!(MAX_JSON_FIELD_NAME_LENGTH > 0) };
+        const { assert!(MAX_JSON_ARRAY_LENGTH > 0) };
+        const { assert!(MAX_JSON_DEPTH > 0) };
     }
 
     #[test]
