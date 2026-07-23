@@ -1164,10 +1164,10 @@ mod grpc_integration_tests {
 #[cfg(feature = "grpc")]
 mod grpc_status_code_tests {
     use sdforge::core::{HandlerArgs, HandlerFuture, HandlerState, ServiceResponse};
+    use sdforge::grpc::SdForgeGrpcService;
     use sdforge::grpc::sdforge_v1::{
         CallRequest, CallResponse, sd_forge_service_server::SdForgeService,
     };
-    use sdforge::grpc::SdForgeGrpcService;
     use serde::Serialize;
     use tonic::Request;
 
@@ -1178,10 +1178,7 @@ mod grpc_status_code_tests {
     }
 
     /// Handler that returns a `ServiceResponse` with `status_code = 201`.
-    fn status_code_handler(
-        _args: HandlerArgs,
-        _state: HandlerState,
-    ) -> HandlerFuture {
+    fn status_code_handler(_args: HandlerArgs, _state: HandlerState) -> HandlerFuture {
         Box::pin(async move {
             let user = User {
                 id: 1,
@@ -1222,10 +1219,7 @@ mod grpc_status_code_tests {
     });
 
     /// Handler that returns a bare type (no ServiceResponse wrapper).
-    fn bare_type_handler(
-        _args: HandlerArgs,
-        _state: HandlerState,
-    ) -> HandlerFuture {
+    fn bare_type_handler(_args: HandlerArgs, _state: HandlerState) -> HandlerFuture {
         Box::pin(async move {
             let user = User {
                 id: 3,
