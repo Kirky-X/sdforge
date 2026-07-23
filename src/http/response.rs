@@ -79,10 +79,7 @@ where
         let status = if self.error.is_none() {
             self.status_code.unwrap_or(200)
         } else {
-            self.error
-                .as_ref()
-                .map(|e| e.http_status)
-                .unwrap_or(500)
+            self.error.as_ref().map(|e| e.http_status).unwrap_or(500)
         };
 
         if let Some(ref error) = self.error {

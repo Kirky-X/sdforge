@@ -117,6 +117,14 @@ impl OpenApiRouteInfo {
     ///
     /// When `success_status` is `Some(code)`, the OpenAPI response key uses
     /// that code (e.g. `"201"`) instead of the default `"200"`.
+    //
+    // All 8 parameters map 1:1 to `OpenApiRouteInfo` fields. This is a `const
+    // fn` invoked from macro-generated `inventory::submit!` call sites (see
+    // `macros/src/lib.rs`) and const-context tests, where a builder or params
+    // struct cannot be used. Refactoring to a struct parameter would change the
+    // public API and require regenerating the proc-macro call sites, so the
+    // argument count is accepted here.
+    #[allow(clippy::too_many_arguments)]
     pub const fn with_path_params_and_status(
         path: &'static str,
         method: &'static str,
@@ -223,10 +231,7 @@ impl OpenApiBuilder {
             let response = ResponseBuilder::new()
                 .description("Successful response")
                 .build();
-            operation_builder = operation_builder.response(
-                status_code.to_string(),
-                response,
-            );
+            operation_builder = operation_builder.response(status_code.to_string(), response);
             let operation = operation_builder.build();
             paths.add_path_operation(route.path, vec![route.http_method()], operation);
         }

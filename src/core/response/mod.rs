@@ -346,8 +346,8 @@ mod tests {
     /// R-core-response-003: 字段优先 — 已有值时不被 with_status_code_opt 覆盖。
     #[test]
     fn test_with_status_code_opt_does_not_overwrite_existing() {
-        let response = ServiceResponse::success_with_status("x", 200)
-            .with_status_code_opt(Some(201));
+        let response =
+            ServiceResponse::success_with_status("x", 200).with_status_code_opt(Some(201));
         assert_eq!(
             response.status_code(),
             Some(200),
