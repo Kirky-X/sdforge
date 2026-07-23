@@ -91,8 +91,8 @@ pub use tokio_stream;
 /// Re-export axum types for use in generated code
 #[cfg(feature = "http")]
 pub mod axum {
-    pub use axum::body::Body;
     pub use axum::Router;
+    pub use axum::body::Body;
     pub use axum::response::IntoResponse;
     pub use axum::response::Response;
 
@@ -105,7 +105,7 @@ pub mod axum {
     /// Lets downstream write `sdforge::axum::middleware::from_fn(...)` without a
     /// direct axum dep.
     pub mod middleware {
-        pub use axum::middleware::{from_fn, Next};
+        pub use axum::middleware::{Next, from_fn};
     }
 
     /// Extractor utilities for HTTP requests
@@ -847,7 +847,7 @@ mod reexport_tests {
         // unused-name warning; it does NOT weaken the unresolved-import check
         // that actually pins `from_fn`. `Next` is exercised as a typed parameter.
         #[allow(unused_imports)]
-        use crate::axum::middleware::{from_fn, Next};
+        use crate::axum::middleware::{Next, from_fn};
         #[allow(dead_code)]
         fn _next_typed(_next: Next) {}
     }
