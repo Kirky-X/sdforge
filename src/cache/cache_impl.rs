@@ -118,14 +118,14 @@ impl SyncCache for OxcacheSyncCache {
                     "cache key_index poisoned; set falling back to backend-only for key={:?}",
                     key
                 );
-                if let Err(e) = self.backend.set(key, value, None) {
+                if let Err(e) = self.backend.set(Arc::from(key), Arc::new(value), None) {
                     log::warn!("cache backend set failed for key={:?}: {}", key, e);
                 }
                 return;
             }
         };
         // HIGH-002: 不静默吞掉 backend 错误；失败时不更新 index 以保持一致
-        if let Err(e) = self.backend.set(key, value, None) {
+        if let Err(e) = self.backend.set(Arc::from(key), Arc::new(value), None) {
             log::warn!("cache backend set failed for key={:?}: {}", key, e);
             return;
         }
@@ -245,7 +245,7 @@ impl SyncCache for OxcacheSyncCache {
                     items.len()
                 );
                 for (key, value) in items {
-                    if let Err(e) = self.backend.set(key, value.clone(), None) {
+                    if let Err(e) = self.backend.set(Arc::from(key.as_str()), Arc::new(value.clone()), None) {
                         log::warn!("cache backend set failed for key={:?}: {}", key, e);
                     }
                 }
@@ -255,7 +255,7 @@ impl SyncCache for OxcacheSyncCache {
         // 先执行所有 backend 写入，成功后才更新 index，避免部分失败导致 index 与 backend 不一致
         let mut succeeded: Vec<&String> = Vec::with_capacity(items.len());
         for (key, value) in items {
-            if let Err(e) = self.backend.set(key, value.clone(), None) {
+            if let Err(e) = self.backend.set(Arc::from(key.as_str()), Arc::new(value.clone()), None) {
                 log::warn!("cache backend set failed for key={:?}: {}", key, e);
             } else {
                 succeeded.push(key);
