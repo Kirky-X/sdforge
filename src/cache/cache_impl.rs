@@ -245,7 +245,10 @@ impl SyncCache for OxcacheSyncCache {
                     items.len()
                 );
                 for (key, value) in items {
-                    if let Err(e) = self.backend.set(Arc::from(key.as_str()), Arc::new(value.clone()), None) {
+                    if let Err(e) =
+                        self.backend
+                            .set(Arc::from(key.as_str()), Arc::new(value.clone()), None)
+                    {
                         log::warn!("cache backend set failed for key={:?}: {}", key, e);
                     }
                 }
@@ -255,7 +258,10 @@ impl SyncCache for OxcacheSyncCache {
         // 先执行所有 backend 写入，成功后才更新 index，避免部分失败导致 index 与 backend 不一致
         let mut succeeded: Vec<&String> = Vec::with_capacity(items.len());
         for (key, value) in items {
-            if let Err(e) = self.backend.set(Arc::from(key.as_str()), Arc::new(value.clone()), None) {
+            if let Err(e) = self
+                .backend
+                .set(Arc::from(key.as_str()), Arc::new(value.clone()), None)
+            {
                 log::warn!("cache backend set failed for key={:?}: {}", key, e);
             } else {
                 succeeded.push(key);
