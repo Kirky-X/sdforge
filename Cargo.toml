@@ -52,7 +52,7 @@ base64 = { version = "0.22", default-features = false, features = ["std", "alloc
 toml = { version = "1.1", default-features = false, features = ["parse", "display"] }
 
 # 缓存依赖 - oxcache 0.3 用 minimal feature 提供内存后端 + 序列化 + tracing
-oxcache = { version = "0.3", default-features = false, features = ["minimal"] }
+oxcache = { version = "0.4", path = "../oxcache", default-features = false, features = ["minimal"] }
 http = { version = "1.4", default-features = false, features = ["std"] }
 bincode = { version = "2.0", default-features = false, features = ["std", "serde"] }
 
@@ -221,7 +221,7 @@ trait-kit = { path = "../trait-kit", features = ["async"], optional = true, defa
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # version-only: path 依赖在 CI 环境不存在，本地开发用 .cargo/config.toml [patch.crates-io] 重定向。
 # default-features = false (Rule 6) — only core logging is pulled in.
-inklog = { version = "0.1", default-features = false, optional = true }
+inklog = { version = "0.2", path = "../inklog", default-features = false, optional = true }
 
 # ICU4X internationalization (optional, feature-gated via `i18n`).
 # icu 2.2 provides locale-aware number/date/plural/collation formatting +
