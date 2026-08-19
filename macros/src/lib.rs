@@ -1123,6 +1123,15 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Build parameter patterns based on type
     // For streaming endpoints, body params should use raw Value (no Json wrapper)
+    // diting HIGH-001 修复：axum 的 `Path<T>` 单值提取器无法处理多路径参数
+    //（url_params.len() != 1 时对每个参数都反序列化失败 → 恒 400）。
+    // 多路径参数改为生成单个 `Path<(T1, T2, ...)>` 元组提取器，在闭包体内按序解构。
+    let multi_path = params
+        .iter()
+        .filter(|p| matches!(p.param_kind, ParamKind::Path))
+        .count()
+        > 1;
+
     let param_patterns: Vec<_> = params
         .iter()
         .map(|p| {
@@ -1154,6 +1163,45 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         })
         .collect();
+
+    // 闭包参数：多路径参数时用单个元组提取器替换全部路径参数位置，
+    // 并放在**首个路径参数的原位**（保持 body 等提取器位于末尾，
+    // 否则 axum 要求 body 提取器必须最后的约束会被破坏）
+    let mut closure_params = Vec::new();
+    if multi_path {
+        let p_tys = params
+            .iter()
+            .filter(|p| matches!(p.param_kind, ParamKind::Path))
+            .map(|p| &p.ty);
+        let tuple_pat = quote! { _forge_path: sdforge::axum::extract::Path<(#(#p_tys,)*)> };
+        let mut inserted = false;
+        for (idx, p) in params.iter().enumerate() {
+            if matches!(p.param_kind, ParamKind::Path) {
+                if !inserted {
+                    closure_params.push(tuple_pat.clone());
+                    inserted = true;
+                }
+            } else {
+                closure_params.push(param_patterns[idx].clone());
+            }
+        }
+    } else {
+        closure_params.clone_from(&param_patterns);
+    }
+
+    // 闭包体内的路径参数解构语句（非多路径时为空）
+    let path_destructure: proc_macro2::TokenStream = if multi_path {
+        let p_names = params
+            .iter()
+            .filter(|p| matches!(p.param_kind, ParamKind::Path))
+            .map(|p| {
+                let n = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+                quote! { #n }
+            });
+        quote! { let (#(#p_names,)*) = _forge_path.0; }
+    } else {
+        proc_macro2::TokenStream::new()
+    };
 
     // Build parameter unwrapping logic
     // All parameter types use the same unwrapping pattern: extract .0 field
@@ -1385,6 +1433,8 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                         ParamKind::Body => quote! { #name_ident.0 },
                         // State/Extension use Extension extractor, extract .0 for inner type
                         ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
+                        // 多路径参数：使用闭包体内解构出的局部变量（不再取 .0）
+                        ParamKind::Path if multi_path => quote! { #name_ident },
                         // Path, Query, Form, Header need .0 extraction
                         _ => quote! { #name_ident.0 },
                     }
@@ -1392,9 +1442,10 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 .collect();
 
             let handler_closure = quote! {
-                |#(#param_patterns),*| {
+                |#(#closure_params),*| {
                     async move {
                         use sdforge::prelude::*;
+                        #path_destructure
                         match #fn_name(#(#param_call_args),*).await {
                             Ok(stream) => stream.into_response(),
                             Err(e) => e.into_response(),
@@ -1456,6 +1507,8 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                         ParamKind::Body => quote! { #name_ident.0 },
                         // State/Extension use Extension extractor, extract .0 for inner type
                         ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
+                        // 多路径参数：使用闭包体内解构出的局部变量（不再取 .0）
+                        ParamKind::Path if multi_path => quote! { #name_ident },
                         // Path, Query, Form, Header need .0 extraction
                         _ => quote! { #name_ident.0 },
                     }
@@ -1470,9 +1523,10 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             // StatusCode tuple response; non-numeric codes fall back to 200.
             let handler_closure = match (is_result, is_service_response) {
                 (true, true) => quote! {
-                    |#(#param_patterns),*| {
+                    |#(#closure_params),*| {
                         async move {
                             use sdforge::prelude::*;
+                            #path_destructure
                             match #fn_name(#(#param_call_args),*).await {
                                 Ok(value) => value.with_status_code_opt(#status_expr).into_response(),
                                 Err(e) => e.into_response(),
@@ -1481,9 +1535,10 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 },
                 (true, false) => quote! {
-                    |#(#param_patterns),*| {
+                    |#(#closure_params),*| {
                         async move {
                             use sdforge::prelude::*;
+                            #path_destructure
                             match #fn_name(#(#param_call_args),*).await {
                                 Ok(value) => (
                                     sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
@@ -1496,18 +1551,20 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 },
                 (false, true) => quote! {
-                    |#(#param_patterns),*| {
+                    |#(#closure_params),*| {
                         async move {
                             use sdforge::prelude::*;
+                            #path_destructure
                             let result = #fn_name(#(#param_call_args),*).await;
                             result.with_status_code_opt(#status_expr).into_response()
                         }
                     }
                 },
                 (false, false) => quote! {
-                    |#(#param_patterns),*| {
+                    |#(#closure_params),*| {
                         async move {
                             use sdforge::prelude::*;
+                            #path_destructure
                             let result = #fn_name(#(#param_call_args),*).await;
                             (
                                 sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))

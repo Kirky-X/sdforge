@@ -97,13 +97,28 @@ impl WebSocketHandler for DefaultWebSocketHandler {
 pub struct ValidatedWebSocketUpgrade {
     ws: WebSocketUpgrade,
     manager: Arc<ConnectionManager>,
+    /// 该路由对应的自定义消息处理器；由 `build()` 链路注入。
+    /// 为 `None` 时回退到 `DefaultWebSocketHandler`（diting HIGH-002 修复）。
+    handler: Option<Arc<dyn WebSocketHandler>>,
+}
+
+#[cfg(feature = "websocket")]
+impl ValidatedWebSocketUpgrade {
+    /// 为本次升级绑定自定义消息处理器（`build()` 在按路由注册时注入）。
+    pub fn with_handler(mut self, handler: Arc<dyn WebSocketHandler>) -> Self {
+        self.handler = Some(handler);
+        self
+    }
 }
 
 #[cfg(feature = "websocket")]
 impl IntoResponse for ValidatedWebSocketUpgrade {
     fn into_response(self) -> Response {
+        let handler = self
+            .handler
+            .unwrap_or_else(|| Arc::new(DefaultWebSocketHandler));
         self.ws
-            .on_upgrade(move |socket| handle_socket(socket, self.manager.clone()))
+            .on_upgrade(move |socket| handle_socket(socket, self.manager.clone(), handler))
     }
 }
 
@@ -154,7 +169,11 @@ where
             .map(|s| s.manager.clone())
             .unwrap_or_else(|| Arc::new(ConnectionManager::new()));
 
-        Ok(Self { ws, manager })
+        Ok(Self {
+            ws,
+            manager,
+            handler: None,
+        })
     }
 }
 
@@ -169,7 +188,11 @@ pub async fn websocket_upgrade(ws: ValidatedWebSocketUpgrade) -> impl IntoRespon
 }
 
 #[cfg(feature = "websocket")]
-async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
+async fn handle_socket(
+    mut socket: WebSocket,
+    manager: Arc<ConnectionManager>,
+    handler: Arc<dyn WebSocketHandler>,
+) {
     let conn_id = uuid::Uuid::new_v4().to_string();
     let (conn, _receiver) = WebSocketConnection::new(conn_id.clone());
     manager.add_connection(conn_id.clone(), conn).await;
@@ -188,8 +211,8 @@ async fn handle_socket(mut socket: WebSocket, manager: Arc<ConnectionManager>) {
 
                     match parse_websocket_message(text) {
                         Ok(ws_msg) => {
-                            // Handle message with default handler
-                            let handler = DefaultWebSocketHandler;
+                            // 使用该连接路由绑定的自定义 handler（diting HIGH-002 修复）；
+                            // 未注入时回退到 DefaultWebSocketHandler
                             let response = handler.handle(ws_msg).await;
                             // Use map_err to convert serialization errors to error messages
                             let response_json = match serde_json::to_string(&response) {
@@ -266,9 +289,14 @@ pub fn build() -> Router {
     for route in inventory::iter::<WebSocketRoute> {
         // Use the registration name to construct the path
         let path = format!("/{}", route.name);
+        // 将路由的自定义 handler 注入升级提取器，使连接真正分发到用户 handler
+        // （diting HIGH-002 修复）
         router = router.route(
             &path,
-            axum::routing::get(websocket_upgrade).with_state(state.clone()),
+            axum::routing::get(move |ws: ValidatedWebSocketUpgrade| async move {
+                ws.with_handler((route.create_fn)())
+            })
+            .with_state(state.clone()),
         );
     }
 
