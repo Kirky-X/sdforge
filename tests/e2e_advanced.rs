@@ -298,6 +298,7 @@ mod config_advanced {
         let config = AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "".to_string(),
+            keys: vec![],
         };
         let result = config.validate();
         assert!(result.is_err());
@@ -309,6 +310,7 @@ mod config_advanced {
         let config = AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "sk-".to_string(),
+            keys: vec![],
         };
         assert!(config.validate().is_ok());
     }

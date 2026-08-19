@@ -135,6 +135,38 @@ impl AppApiKeyAuth {
         );
     }
 
+    /// 记录该 key_hash 的过期时间（UNIX 秒）—— validate_key 强制过期的反向索引
+    /// （diting HIGH-004 修复：此前 ttl 只写进版本元数据，校验路径从不检查）
+    fn set_expiry_index(&self, key_hash: &str, ttl: Duration) {
+        let expiry_epoch = std::time::SystemTime::now()
+            .checked_add(ttl)
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs())
+            .unwrap_or(u64::MAX);
+        if let Ok(bytes) = bincode::serde::encode_to_vec(expiry_epoch, bincode::config::standard())
+        {
+            self.key_metadata
+                .set(&format!("expires:{}", key_hash), bytes);
+        }
+    }
+
+    /// 该 key_hash 是否已过期（无过期索引视为永不过期）
+    fn is_hash_expired(&self, key_hash: &str) -> bool {
+        let Some(data) = self.key_metadata.get(&format!("expires:{}", key_hash)) else {
+            return false;
+        };
+        let Ok((expiry_epoch, _)) =
+            bincode::serde::decode_from_slice::<u64, _>(&data, bincode::config::standard())
+        else {
+            return false;
+        };
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        now >= expiry_epoch
+    }
+
     /// Add a versioned API key with metadata
     ///
     /// This method supports key rotation by storing multiple versions of the same key.
@@ -163,6 +195,11 @@ impl AppApiKeyAuth {
             &CacheNamespace::ApiKey.key(&key_hash),
             serialize_permissions(&permissions),
         );
+
+        // 带 ttl 的版本：登记过期反向索引，validate_key 据此强制过期（HIGH-004）
+        if let Some(ttl) = ttl {
+            self.set_expiry_index(&key_hash, ttl);
+        }
 
         // Create or update metadata
         let metadata_key = format!("metadata:{}", key_id);
@@ -253,6 +290,11 @@ impl AppApiKeyAuth {
             serialize_permissions(&new_permissions),
         );
 
+        // 轮换生成的版本按 rotation_interval 登记过期（HIGH-004）
+        if let Some(ttl) = ttl {
+            self.set_expiry_index(&new_key_hash, ttl);
+        }
+
         // Save updated metadata
         self.key_metadata.set(
             &metadata_key,
@@ -314,6 +356,14 @@ impl AppApiKeyAuth {
             let p = deserialize_permissions(&data);
             if p.is_empty() { None } else { Some(p) }
         });
+
+        // diting HIGH-004：强制过期——带 ttl 的版本到期后立即失效
+        //（过期判断与 perms 查询解耦，恒定时间延迟对两种结果一致）
+        let perms = if self.is_hash_expired(&key_hash) {
+            None
+        } else {
+            perms
+        };
 
         // Apply delay for constant timing regardless of key validity
         Self::apply_constant_time_delay(start);
@@ -472,6 +522,28 @@ mod tests {
         let auth = AppApiKeyAuth::new();
         let perms = auth.validate_key("invalid_key", "127.0.0.1");
         assert!(perms.is_none());
+    }
+
+    /// diting HIGH-004 回归：带 ttl 的版本到期后 validate_key 必须拒绝
+    #[test]
+    fn test_validate_key_enforces_expiry() {
+        let auth = AppApiKeyAuth::new();
+        // ttl = 0 → 立即过期
+        auth.add_key_version(
+            "exp-key",
+            "expiring_key",
+            vec!["read".to_string()],
+            "v1",
+            Some(Duration::from_millis(0)),
+        );
+        assert!(
+            auth.validate_key("expiring_key", "127.0.0.1").is_none(),
+            "expired key must be rejected"
+        );
+
+        // 无 ttl 的 key 不受影响
+        auth.add_key("permanent_key", vec!["read".to_string()]);
+        assert!(auth.validate_key("permanent_key", "127.0.0.1").is_some());
     }
 
     #[test]

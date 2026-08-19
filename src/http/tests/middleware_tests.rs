@@ -8,7 +8,7 @@
 use axum::Router;
 use axum::body::Body;
 
-use crate::config::{AppConfig, AuthConfig, ServerConfig};
+use crate::config::{ApiKeySeed, AppConfig, AuthConfig, ServerConfig};
 use crate::http::{X_REQUEST_ID, build_with_config};
 
 // ============================================================================
@@ -275,6 +275,10 @@ fn build_apikey_test_router(header_name: &str, prefix: &str) -> Router {
         authentication: AuthConfig::ApiKey {
             header_name: header_name.to_string(),
             prefix: prefix.to_string(),
+            keys: vec![ApiKeySeed {
+                key: "test-key-0123456789abcdef".to_string(),
+                permissions: vec![],
+            }],
         },
         timeout: None,
     };

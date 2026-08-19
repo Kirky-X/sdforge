@@ -278,3 +278,8 @@ specmark/
 **/specmark/
 .codenexus/
 **/.codenexus/
+
+# =============================================================================
+# Reviews (security/quality scan artifacts — never tracked)
+# =============================================================================
+reviews/

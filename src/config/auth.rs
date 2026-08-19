@@ -6,6 +6,19 @@
 
 use serde::{Deserialize, Serialize};
 
+/// ApiKey 认证的种子键条目（diting HIGH-003 修复）。
+///
+/// 此前 `AuthConfig::ApiKey` 只携带 header/prefix，无任何键材料，
+/// `build_with_config` 会创建空 key store → 整条 API 被 401 锁死且无播种途径。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ApiKeySeed {
+    /// API key 明文（构建时以哈希形式写入 key store，不落盘）
+    pub key: String,
+    /// 该 key 的权限列表（空表示仅认证不放权）
+    #[serde(default)]
+    pub permissions: Vec<String>,
+}
+
 /// Authentication configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(tag = "type")]
@@ -18,6 +31,10 @@ pub enum AuthConfig {
         header_name: String,
         /// Prefix for the API key value
         prefix: String,
+        /// 种子键列表（serde 缺省为空，向后兼容；
+        /// 为空时构建会显式报错而非静默 401 锁死）
+        #[serde(default)]
+        keys: Vec<ApiKeySeed>,
     },
     /// JWT authentication
     #[serde(rename = "jwt")]
@@ -117,6 +134,7 @@ mod tests {
             AuthConfig::ApiKey {
                 header_name,
                 prefix,
+                ..
             } => {
                 assert_eq!(header_name, "Authorization");
                 assert_eq!(prefix, "Bearer ");
@@ -156,6 +174,7 @@ mod tests {
         let config = AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "sk-".to_string(),
+            keys: vec![],
         };
         assert!(config.validate().is_ok());
     }
@@ -166,6 +185,7 @@ mod tests {
         let config = AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "".to_string(),
+            keys: vec![],
         };
         let result = config.validate();
         assert!(result.is_err());
@@ -194,6 +214,7 @@ mod tests {
         let config = AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "sk-".to_string(),
+            keys: vec![],
         };
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("api_key"));
@@ -203,6 +224,7 @@ mod tests {
             AuthConfig::ApiKey {
                 header_name,
                 prefix,
+                ..
             } => {
                 assert_eq!(header_name, "X-API-Key");
                 assert_eq!(prefix, "sk-");

@@ -277,9 +277,23 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         if let AuthConfig::ApiKey {
             header_name,
             prefix,
+            keys,
         } = auth_config
         {
+            // diting HIGH-003：播种配置声明的 key；为空时显式构建错误，
+            // 不再静默创建空 key store 把整条 API 锁死在 401。
+            if keys.is_empty() {
+                return Err(ConfigError::ValidationError(
+                    "ApiKey auth is configured but no keys are provided: add `keys` entries \
+                     (AuthConfig::ApiKey { keys: vec![ApiKeySeed { key, permissions }], .. }) \
+                     so the API is not silently locked out"
+                        .to_string(),
+                ));
+            }
             let auth = Arc::new(AppApiKeyAuth::new());
+            for seed in keys {
+                auth.add_key(seed.key.clone(), seed.permissions.clone());
+            }
             let auth_clone = auth.clone();
             let header_name = header_name.clone();
             let prefix = prefix.clone();
