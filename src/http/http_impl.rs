@@ -325,7 +325,13 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
             let middleware = auth_middleware(auth_clone, extract_auth);
             router = router.layer(axum::middleware::from_fn(middleware));
         } else if let AuthConfig::Jwt { secret, .. } = auth_config {
-            let auth = Arc::new(BearerAuth::new(secret));
+            // 使用 try_new 而非 new：AuthConfig::validate() 接受的 secret（仅长度+弱词校验）
+            // 可能不满足 BearerAuth 的强复杂度要求，`new` 会在启动时 panic；
+            // 改为返回构建错误，由调用方处理而非崩溃（diting HIGH-005）。
+            let auth = Arc::new(
+                BearerAuth::try_new(secret)
+                    .map_err(|e| ConfigError::ValidationError(e.to_string()))?,
+            );
             let auth_clone = auth.clone();
             let extract_auth =
                 move |req: &axum::http::Request<Body>| -> Result<AuthContext, AuthError> {
