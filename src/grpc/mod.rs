@@ -5,9 +5,9 @@
 //! This module provides gRPC protocol support using tonic.
 
 #[cfg(feature = "grpc")]
-/// gRPC protocol buffer module
+/// gRPC protocol buffer module（生成物位于 OUT_DIR，见 build.rs）
 pub mod sdforge_v1 {
-    include!("pb/sdforge.v1.rs");
+    include!(concat!(env!("OUT_DIR"), "/sdforge.v1.rs"));
 }
 
 #[cfg(feature = "grpc")]

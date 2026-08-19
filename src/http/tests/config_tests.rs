@@ -4,7 +4,7 @@
 //! `CorsConfig` combinations, middleware layer wiring, and feature-gated
 //! inventory preservation through `build()`.
 
-use crate::config::{AppConfig, AuthConfig, CorsConfig, ServerConfig};
+use crate::config::{ApiKeySeed, AppConfig, AuthConfig, CorsConfig, ServerConfig};
 #[cfg(any(feature = "mcp", feature = "websocket", feature = "grpc"))]
 use crate::http::build;
 use crate::http::build_with_config;
@@ -42,6 +42,10 @@ fn test_build_with_config_api_key() {
         authentication: AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "key-".to_string(),
+            keys: vec![ApiKeySeed {
+                key: "test-key-0123456789abcdef".to_string(),
+                permissions: vec!["read".to_string()],
+            }],
         },
         timeout: None,
     };
@@ -275,6 +279,10 @@ fn test_build_with_config_api_key_empty_prefix() {
         authentication: AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "".to_string(),
+            keys: vec![ApiKeySeed {
+                key: "test-key-0123456789abcdef".to_string(),
+                permissions: vec!["read".to_string()],
+            }],
         },
         timeout: None,
     };
@@ -296,6 +304,10 @@ fn test_build_with_config_api_key_long_prefix() {
         authentication: AuthConfig::ApiKey {
             header_name: "X-Custom-API-Key".to_string(),
             prefix: "Bearer-api-key-".to_string(),
+            keys: vec![ApiKeySeed {
+                key: "test-key-0123456789abcdef".to_string(),
+                permissions: vec!["read".to_string()],
+            }],
         },
         timeout: None,
     };
@@ -317,6 +329,10 @@ fn test_build_with_config_api_key_special_chars() {
         authentication: AuthConfig::ApiKey {
             header_name: "X-Api-Key".to_string(),
             prefix: "key_123-".to_string(),
+            keys: vec![ApiKeySeed {
+                key: "test-key-0123456789abcdef".to_string(),
+                permissions: vec!["read".to_string()],
+            }],
         },
         timeout: None,
     };
@@ -467,6 +483,10 @@ fn test_build_with_config_full_api_key_cors() {
         authentication: AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "sk-".to_string(),
+            keys: vec![ApiKeySeed {
+                key: "test-key-0123456789abcdef".to_string(),
+                permissions: vec!["read".to_string()],
+            }],
         },
         timeout: None,
     };
