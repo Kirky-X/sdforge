@@ -43,7 +43,11 @@ impl Serialize for ApiKeyVersion {
         state.serialize_field("permissions", &self.permissions)?;
         let created_nanos = self.created_at.elapsed().as_nanos() as i64;
         state.serialize_field("created_at", &created_nanos)?;
-        let expires_nanos = self.expires_at.map(|i| i.elapsed().as_nanos() as i64);
+        // 注意：对将来的 expires_at 时刻，`elapsed()` 会饱和为 0，导致持久化后
+        // 还原出的按键立即过期。这里改存"剩余时长"（diting HIGH-004 修复）。
+        let expires_nanos = self
+            .expires_at
+            .map(|i| i.saturating_duration_since(Instant::now()).as_nanos() as i64);
         state.serialize_field("expires_at", &expires_nanos)?;
         state.serialize_field("is_active", &self.is_active)?;
         state.end()
@@ -71,9 +75,10 @@ impl<'de> Deserialize<'de> for ApiKeyVersion {
             key_hash: helper.key_hash,
             permissions: helper.permissions,
             created_at: Instant::now() - Duration::from_nanos(helper.created_at as u64),
+            // 与 serialize 对应：expires_at 存的是"剩余时长"，还原时做加法（HIGH-004 修复）
             expires_at: helper
                 .expires_at
-                .map(|n| Instant::now() - Duration::from_nanos(n as u64)),
+                .map(|n| Instant::now() + Duration::from_nanos(n as u64)),
             is_active: helper.is_active,
         })
     }
