@@ -1165,21 +1165,63 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         .collect();
 
     // 闭包参数：多路径参数时用单个元组提取器替换全部路径参数位置，
-    // 并放在**首个路径参数的原位**（保持 body 等提取器位于末尾，
-    // 否则 axum 要求 body 提取器必须最后的约束会被破坏）
+    // Query 参数（diting HIGH-001 Query 部分）：serde_urlencoded 顶层按 map 反序列化，
+    // 标量 `Query<T>`（String/Option<u32> 等）必然失败 → 恒 400。
+    // 有 Query 参数时生成路由级结构体，统一单个 `Query<__ForgeQueryParams>` 提取后按字段解构。
+    let query_params: Vec<_> = params
+        .iter()
+        .filter(|p| matches!(p.param_kind, ParamKind::Query))
+        .collect();
+    let has_query = !query_params.is_empty();
+    let query_struct_ident = syn::Ident::new("__ForgeQueryParams", proc_macro2::Span::call_site());
+    let q_field_idents: Vec<_> = query_params
+        .iter()
+        .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
+        .collect();
+    let q_field_tys: Vec<_> = query_params.iter().map(|p| &p.ty).collect();
+
+    // 生成的查询结构体定义（无 Query 参数时为空）。`::serde::` 要求用户 crate 直接依赖
+    // serde —— 与 Json body 参数类型需要 derive(Deserialize) 的既有要求一致。
+    let query_struct_def: proc_macro2::TokenStream = if has_query {
+        quote! {
+            #[derive(::serde::Deserialize)]
+            #[allow(dead_code)]
+            struct #query_struct_ident {
+                #(#q_field_idents: #q_field_tys,)*
+            }
+        }
+    } else {
+        proc_macro2::TokenStream::new()
+    };
+
     let mut closure_params = Vec::new();
-    if multi_path {
-        let p_tys = params
-            .iter()
-            .filter(|p| matches!(p.param_kind, ParamKind::Path))
-            .map(|p| &p.ty);
-        let tuple_pat = quote! { _forge_path: sdforge::axum::extract::Path<(#(#p_tys,)*)> };
-        let mut inserted = false;
+    if multi_path || has_query {
+        let tuple_pat = if multi_path {
+            let p_tys = params
+                .iter()
+                .filter(|p| matches!(p.param_kind, ParamKind::Path))
+                .map(|p| &p.ty);
+            Some(quote! { _forge_path: sdforge::axum::extract::Path<(#(#p_tys,)*)> })
+        } else {
+            None
+        };
+        let query_pat = if has_query {
+            Some(quote! { _forge_query: sdforge::axum::extract::Query<#query_struct_ident> })
+        } else {
+            None
+        };
+        let mut path_inserted = false;
+        let mut query_inserted = false;
         for (idx, p) in params.iter().enumerate() {
-            if matches!(p.param_kind, ParamKind::Path) {
-                if !inserted {
-                    closure_params.push(tuple_pat.clone());
-                    inserted = true;
+            if multi_path && matches!(p.param_kind, ParamKind::Path) {
+                if !path_inserted {
+                    closure_params.push(tuple_pat.clone().unwrap());
+                    path_inserted = true;
+                }
+            } else if has_query && matches!(p.param_kind, ParamKind::Query) {
+                if !query_inserted {
+                    closure_params.push(query_pat.clone().unwrap());
+                    query_inserted = true;
                 }
             } else {
                 closure_params.push(param_patterns[idx].clone());
@@ -1189,8 +1231,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         closure_params.clone_from(&param_patterns);
     }
 
-    // 闭包体内的路径参数解构语句（非多路径时为空）
-    let path_destructure: proc_macro2::TokenStream = if multi_path {
+    // 闭包体内统一的前置解构语句（路径元组 + 查询结构体，均可能为空）
+    let mut prelude_stmts: Vec<proc_macro2::TokenStream> = Vec::new();
+    if multi_path {
         let p_names = params
             .iter()
             .filter(|p| matches!(p.param_kind, ParamKind::Path))
@@ -1198,10 +1241,14 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 let n = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
                 quote! { #n }
             });
-        quote! { let (#(#p_names,)*) = _forge_path.0; }
-    } else {
-        proc_macro2::TokenStream::new()
-    };
+        prelude_stmts.push(quote! { let (#(#p_names,)*) = _forge_path.0; });
+    }
+    if has_query {
+        prelude_stmts.push(quote! {
+            let #query_struct_ident { #(#q_field_idents,)* } = _forge_query.0;
+        });
+    }
+    let path_destructure: proc_macro2::TokenStream = quote! { #(#prelude_stmts)* };
 
     // Build parameter unwrapping logic
     // All parameter types use the same unwrapping pattern: extract .0 field
@@ -1435,6 +1482,8 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                         ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
                         // 多路径参数：使用闭包体内解构出的局部变量（不再取 .0）
                         ParamKind::Path if multi_path => quote! { #name_ident },
+                        // Query 参数经生成的结构体解构，同样使用局部变量
+                        ParamKind::Query if has_query => quote! { #name_ident },
                         // Path, Query, Form, Header need .0 extraction
                         _ => quote! { #name_ident.0 },
                     }
@@ -1456,6 +1505,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
             quote! {
                 fn #register_fn_name() -> sdforge::http::HttpRoute {
+                    #query_struct_def
                     sdforge::http::HttpRoute::new(
                         #http_path.to_string(),
                         {
@@ -1509,6 +1559,8 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                         ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
                         // 多路径参数：使用闭包体内解构出的局部变量（不再取 .0）
                         ParamKind::Path if multi_path => quote! { #name_ident },
+                        // Query 参数经生成的结构体解构，同样使用局部变量
+                        ParamKind::Query if has_query => quote! { #name_ident },
                         // Path, Query, Form, Header need .0 extraction
                         _ => quote! { #name_ident.0 },
                     }
@@ -1578,6 +1630,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
             quote! {
                 fn #register_fn_name() -> sdforge::http::HttpRoute {
+                    #query_struct_def
                     sdforge::http::HttpRoute::new(
                         #http_path.to_string(),
                         {

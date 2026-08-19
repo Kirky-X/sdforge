@@ -15,7 +15,8 @@
 //! ```
 
 use sdforge::config::{
-    ApiConfig, AppConfig, AuthConfig, EnvHelper, ServerConfig, TimeoutConfig, TracingConfig,
+    ApiConfig, ApiKeySeed, AppConfig, AuthConfig, EnvHelper, ServerConfig, TimeoutConfig,
+    TracingConfig,
 };
 
 // =============================================================================
@@ -50,6 +51,11 @@ pub fn build_custom_config() -> AppConfig {
     let auth = AuthConfig::ApiKey {
         header_name: "X-API-Key".to_string(),
         prefix: "sk_".to_string(),
+        // HIGH-003 修复后：配置里声明种子键，避免空 key store 把 API 锁死在 401
+        keys: vec![ApiKeySeed {
+            key: "sk_demo_0123456789abcdef".to_string(),
+            permissions: vec!["read".to_string()],
+        }],
     };
 
     let timeout = TimeoutConfig {
@@ -102,6 +108,7 @@ pub fn demo_auth_configs() -> Vec<AuthConfig> {
         AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "sk_".to_string(),
+            keys: vec![],
         },
         AuthConfig::Jwt {
             secret: "a-very-long-and-secure-jwt-secret-key-32+chars!".to_string(),
@@ -261,6 +268,7 @@ mod tests {
             AuthConfig::ApiKey {
                 header_name,
                 prefix,
+                ..
             } => {
                 assert_eq!(header_name, "X-API-Key");
                 assert_eq!(prefix, "sk_");

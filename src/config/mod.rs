@@ -42,7 +42,7 @@ pub mod defaults;
 // Re-export all configuration types
 pub use api::{ApiConfig, EnvHelper, TracingConfig};
 pub use app::{AppConfig, AppConfigBuilder};
-pub use auth::AuthConfig;
+pub use auth::{ApiKeySeed, AuthConfig};
 pub use cache::CacheConfig;
 pub use cors::{CorsConfig, build_cors_layer};
 pub use security::SecurityConfig;
@@ -128,6 +128,7 @@ mod tests {
             AuthConfig::ApiKey {
                 header_name,
                 prefix,
+                ..
             } => {
                 assert_eq!(header_name, "X-API-Key");
                 assert_eq!(prefix, "key-");
@@ -217,6 +218,10 @@ mod tests {
             .authentication(AuthConfig::ApiKey {
                 header_name: "X-Auth".to_string(),
                 prefix: "token-".to_string(),
+                keys: vec![ApiKeySeed {
+                    key: "test-key-0123456789abcdef".to_string(),
+                    permissions: vec![],
+                }],
             })
             .timeout(TimeoutConfig::default())
             .build();
@@ -295,6 +300,10 @@ mod tests {
             authentication: AuthConfig::ApiKey {
                 header_name: "X-API-Key".to_string(),
                 prefix: "sk-".to_string(),
+                keys: vec![ApiKeySeed {
+                    key: "test-key-0123456789abcdef".to_string(),
+                    permissions: vec![],
+                }],
             },
             timeout: Some(TimeoutConfig::default()),
         };
@@ -328,6 +337,10 @@ mod tests {
             authentication: AuthConfig::ApiKey {
                 header_name: "X-API-Key".to_string(),
                 prefix: "".to_string(),
+                keys: vec![ApiKeySeed {
+                    key: "test-key-0123456789abcdef".to_string(),
+                    permissions: vec![],
+                }],
             },
             timeout: None,
         };
