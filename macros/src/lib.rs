@@ -402,6 +402,7 @@ fn detect_service_response(return_type: &syn::ReturnType) -> bool {
     matches!(
         target_ty,
         syn::Type::Path(syn::TypePath {
+            attrs: _,
             qself: None,
             path: syn::Path { segments, .. }
         }) if segments
@@ -418,6 +419,7 @@ fn detect_service_response(return_type: &syn::ReturnType) -> bool {
 /// falls back to treating `ty` itself as the target type).
 fn extract_result_ok_type(ty: &syn::Type) -> Option<&syn::Type> {
     if let syn::Type::Path(syn::TypePath {
+        attrs: _,
         qself: None,
         path: syn::Path { segments, .. },
     }) = ty
@@ -1429,7 +1431,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         } else {
             let is_result = match return_type {
                 syn::ReturnType::Type(_, ty) => {
-                    matches!(ty.as_ref(), syn::Type::Path(syn::TypePath { qself: None, path: syn::Path { segments, .. } }) if segments.iter().any(|s| s.ident == "Result"))
+                    matches!(ty.as_ref(), syn::Type::Path(syn::TypePath { attrs: _, qself: None, path: syn::Path { segments, .. } }) if segments.iter().any(|s| s.ident == "Result"))
                 }
                 syn::ReturnType::Default => false,
             };
