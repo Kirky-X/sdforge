@@ -3,7 +3,7 @@
 
 use super::*;
 use std::collections::{HashMap, HashSet};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// 规范化缓存键，确保一致的格式
 ///
