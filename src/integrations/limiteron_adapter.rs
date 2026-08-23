@@ -71,8 +71,9 @@ impl ForgeRateLimiter for LimiteronForgeAdapter {
         &'a self,
         _key: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<(), ForgeError>> + Send + 'a>> {
-        // No-op: Governor::check is atomic (check + consume together).
-        // There is no separate `record` method on `Governor`.
+        // 文档化 no-op（非观测丢失）：Governor::check 原子地完成
+        // check + consume，请求观察已被 check 提交；不存在独立的
+        // `record` 方法，故此处不产生任何状态变化。
         Box::pin(async move { Ok(()) })
     }
 }

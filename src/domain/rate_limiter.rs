@@ -114,8 +114,13 @@ pub trait ForgeRateLimiter: Send + Sync {
     ///
     /// Some rate-limiter backends combine check + consume into a single
     /// atomic operation (e.g. limiteron's `Governor::check`); for those
-    /// backends, `record` may be a no-op. The separation in the trait
-    /// accommodates backends that distinguish "peek" from "commit".
+    /// backends, `record` is a **documented no-op** — the observation was
+    /// already committed atomically by the preceding `check`, so skipping
+    /// `record` does **not** lose any telemetry or accounting. The separation
+    /// in the trait accommodates backends that distinguish "peek" (check
+    /// only) from "commit" (record). Callers should treat `check` as the
+    /// state-changing operation and `record` as an optional post-observation
+    /// hook, never as the sole commit point.
     ///
     /// # Arguments
     ///
