@@ -53,12 +53,14 @@ mod config_tests {
         let config = AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "key1".to_string(),
+            keys: vec![],
         };
 
         match config {
             AuthConfig::ApiKey {
                 header_name,
                 prefix,
+                keys: _,
             } => {
                 assert_eq!(header_name, "X-API-Key");
                 assert_eq!(prefix, "key1");
@@ -221,11 +223,13 @@ mod config_enhanced_tests {
         let standard = AuthConfig::ApiKey {
             header_name: "Authorization".to_string(),
             prefix: "Bearer".to_string(),
+            keys: vec![],
         };
         match &standard {
             AuthConfig::ApiKey {
                 header_name,
                 prefix,
+                keys: _,
             } => {
                 assert_eq!(header_name, "Authorization");
                 assert_eq!(prefix, "Bearer");
@@ -237,6 +241,7 @@ mod config_enhanced_tests {
         let custom_header = AuthConfig::ApiKey {
             header_name: "X-Custom-Auth".to_string(),
             prefix: "Token".to_string(),
+            keys: vec![],
         };
         match &custom_header {
             AuthConfig::ApiKey { header_name, .. } => {
@@ -249,6 +254,7 @@ mod config_enhanced_tests {
         let empty_prefix = AuthConfig::ApiKey {
             header_name: "Authorization".to_string(),
             prefix: "".to_string(),
+            keys: vec![],
         };
         match &empty_prefix {
             AuthConfig::ApiKey { prefix, .. } => {
@@ -302,6 +308,7 @@ mod config_enhanced_tests {
         let api_key = AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "key".to_string(),
+            keys: vec![],
         };
         let cloned = api_key.clone();
 
@@ -310,10 +317,12 @@ mod config_enhanced_tests {
                 AuthConfig::ApiKey {
                     header_name: h1,
                     prefix: p1,
+                    keys: _,
                 },
                 AuthConfig::ApiKey {
                     header_name: h2,
                     prefix: p2,
+                    keys: _,
                 },
             ) => {
                 assert_eq!(h1, h2);
@@ -409,11 +418,13 @@ mod config_enhanced_tests {
         let auth_empty = AuthConfig::ApiKey {
             header_name: "".to_string(),
             prefix: "".to_string(),
+            keys: vec![],
         };
         match &auth_empty {
             AuthConfig::ApiKey {
                 header_name,
                 prefix,
+                keys: _,
             } => {
                 assert_eq!(header_name, "");
                 assert_eq!(prefix, "");
@@ -438,11 +449,13 @@ mod config_enhanced_tests {
         let auth_unicode = AuthConfig::ApiKey {
             header_name: "认证头".to_string(),
             prefix: "令牌".to_string(),
+            keys: vec![],
         };
         match &auth_unicode {
             AuthConfig::ApiKey {
                 header_name,
                 prefix,
+                keys: _,
             } => {
                 assert_eq!(header_name, "认证头");
                 assert_eq!(prefix, "令牌");
@@ -467,11 +480,13 @@ mod config_enhanced_tests {
         let auth_special = AuthConfig::ApiKey {
             header_name: "X-API-<Key>&Test\"Quote".to_string(),
             prefix: "Bearer'token".to_string(),
+            keys: vec![],
         };
         match &auth_special {
             AuthConfig::ApiKey {
                 header_name,
                 prefix,
+                keys: _,
             } => {
                 assert_eq!(header_name, "X-API-<Key>&Test\"Quote");
                 assert_eq!(prefix, "Bearer'token");

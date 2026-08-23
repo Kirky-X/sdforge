@@ -29,6 +29,7 @@ fn benchmark_config_validation(c: &mut Criterion) {
         authentication: AuthConfig::ApiKey {
             header_name: "X-Auth".to_string(),
             prefix: "Bearer ".to_string(),
+            keys: vec![],
         },
         timeout: None,
     };
@@ -48,6 +49,7 @@ fn benchmark_config_validation(c: &mut Criterion) {
         authentication: AuthConfig::ApiKey {
             header_name: "X-Auth".to_string(),
             prefix: "".to_string(), // Invalid: empty prefix
+            keys: vec![],
         },
         timeout: None,
     };
@@ -78,6 +80,7 @@ fn benchmark_builder_with_validation(c: &mut Criterion) {
                 .authentication(AuthConfig::ApiKey {
                     header_name: "X-Auth".to_string(),
                     prefix: "Bearer ".to_string(),
+                    keys: vec![],
                 })
                 .build()
         })
