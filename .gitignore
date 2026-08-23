@@ -234,7 +234,7 @@ docs/superpowers/
 # Standard Git Exclusions
 # =============================================================================
 .git/
-.gitattributes
+# 注意：.gitattributes 必须版本化（跨平台换行策略），不在此忽略
 .gitignore
 .gitmodules
 
