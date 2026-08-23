@@ -198,12 +198,14 @@ mod config_tests {
         let config = AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "key1".to_string(),
+            keys: vec![],
         };
 
         match config {
             AuthConfig::ApiKey {
                 header_name,
                 prefix,
+                keys: _,
             } => {
                 assert_eq!(header_name, "X-API-Key");
                 assert_eq!(prefix, "key1");
