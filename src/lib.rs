@@ -855,7 +855,7 @@ mod reexport_tests {
     #[test]
     fn response_reexport_resolves() {
         fn _handler() -> axum::Response {
-            unimplemented!()
+            unreachable!("type-only test handler")
         }
         let _f: fn() -> axum::Response = _handler;
     }
