@@ -3,7 +3,7 @@ members = [".", "examples"]
 resolver = "2"
 
 [workspace.package]
-version = "0.4.7"
+version = "0.5.0-rc.1"
 edition = "2024"
 rust-version = "1.85"
 authors = ["Kirky.X"]
@@ -52,7 +52,7 @@ base64 = { version = "0.23", default-features = false, features = ["std", "alloc
 toml = { version = "1.1", default-features = false, features = ["parse", "display"] }
 
 # 缓存依赖 - oxcache 0.3 用 minimal feature 提供内存后端 + 序列化 + tracing
-oxcache = { version = "0.4", path = "../oxcache", default-features = false, features = ["minimal"] }
+oxcache = { version = "0.5.0-rc.1", path = "../oxcache", default-features = false, features = ["minimal"] }
 http = { version = "1.4", default-features = false, features = ["std"] }
 bincode = { version = "2.0", default-features = false, features = ["std", "serde"] }
 
@@ -68,7 +68,7 @@ tonic-prost = { version = "0.14", default-features = false }
 # Uses path until limiteron 0.2.1+kit is published to crates.io; the version
 # constraint is kept so the published artifact resolves the same.
 # Mirrors the trait-kit path dependency pattern (Phase 5).
-limiteron = { path = "../limiteron", version = "0.2", default-features = false }
+limiteron = { path = "../limiteron", version = "0.3.0-rc.1", default-features = false }
 
 # OpenAPI 依赖
 utoipa = { version = "5.5", default-features = false, features = ["macros"] }
@@ -216,12 +216,12 @@ limiteron = { workspace = true, optional = true }
 # trait-kit 0.3 is published to crates.io.
 # Mirrors dbnexus's pattern (Phase 4 of trait-kit-async-integration).
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
-trait-kit = { path = "../trait-kit", features = ["async"], optional = true, default-features = false }
+trait-kit = { path = "../trait-kit", version = "0.5.0-rc.1", features = ["async"], optional = true, default-features = false }
 
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # version-only: path 依赖在 CI 环境不存在，本地开发用 .cargo/config.toml [patch.crates-io] 重定向。
 # default-features = false (Rule 6) — only core logging is pulled in.
-inklog = { version = "0.2", path = "../inklog", default-features = false, optional = true }
+inklog = { version = "0.3.0-rc.1", path = "../inklog", default-features = false, optional = true }
 
 # ICU4X internationalization (optional, feature-gated via `i18n`).
 # icu 2.2 provides locale-aware number/date/plural/collation formatting +
