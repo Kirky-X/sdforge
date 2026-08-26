@@ -1184,12 +1184,29 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // 生成的查询结构体定义（无 Query 参数时为空）。`::serde::` 要求用户 crate 直接依赖
     // serde —— 与 Json body 参数类型需要 derive(Deserialize) 的既有要求一致。
+    //
+    // 每个字段使用 `#[serde(flatten)]`：这样无论查询参数是标量
+    // （如 `limit: Option<u32>`）还是结构体（如 `opts: ExportQueryOpts`），
+    // serde_urlencoded 都会把查询串的键平铺到该字段上，结构体字段即可被直接解析，
+    // 而不是要求嵌套的 `opts[...]=` 形式（否则会 400）。
+    let query_struct_fields: proc_macro2::TokenStream = if has_query {
+        let mut out = proc_macro2::TokenStream::new();
+        for (ident, ty) in q_field_idents.iter().zip(q_field_tys.iter()) {
+            out.extend(quote! {
+                #[serde(flatten)]
+                #ident: #ty,
+            });
+        }
+        out
+    } else {
+        proc_macro2::TokenStream::new()
+    };
     let query_struct_def: proc_macro2::TokenStream = if has_query {
         quote! {
             #[derive(::serde::Deserialize)]
             #[allow(dead_code)]
             struct #query_struct_ident {
-                #(#q_field_idents: #q_field_tys,)*
+                #query_struct_fields
             }
         }
     } else {
