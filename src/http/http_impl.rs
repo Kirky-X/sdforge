@@ -164,20 +164,34 @@ pub fn build() -> Router {
     // are appended after RouteRegistration entries, so they take precedence
     // — which matches the expectation that explicit registrations override
     // macro-generated ones.
-    let mut seen: std::collections::HashMap<String, HttpRoute> =
+    //
+    // CRITICAL: dedup must group by path but MERGE MethodRouters, never
+    // discard entries. Keying by path alone silently dropped distinct
+    // methods on the same path (e.g. GET list + POST create on
+    // `/api/x/resources`), turning the dropped method into 405 responses.
+    // `MethodRouter::merge` keeps per-method "later wins" semantics while
+    // preserving coexisting methods on one path.
+    let mut seen: std::collections::HashMap<String, MethodRouter> =
         std::collections::HashMap::with_capacity(routes.len());
     for route in routes {
         let prefix = route.module_prefix.as_deref();
         let full_path = resolve_route_path(&route.path, prefix);
-        seen.insert(full_path, route);
+        match seen.get_mut(&full_path) {
+            Some(existing) => {
+                *existing = std::mem::take(existing).merge(route.handler);
+            }
+            None => {
+                seen.insert(full_path, route.handler);
+            }
+        }
     }
 
     // Sort by full path for deterministic router construction order.
     let mut deduped: Vec<_> = seen.into_iter().collect();
     deduped.sort_by(|a, b| a.0.cmp(&b.0));
 
-    for (full_path, route) in deduped {
-        router = router.route(&full_path, route.handler);
+    for (full_path, handler) in deduped {
+        router = router.route(&full_path, handler);
     }
 
     router
