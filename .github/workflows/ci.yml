@@ -280,7 +280,7 @@ jobs:
             --lcov \
             --html \
             --output-dir coverage-report \
-            --fail-under 94 \
+            --fail-under-lines 94 \
             --exclude-files "target/*" \
             --exclude-files "examples/*" \
             --exclude-files "temp/*" \
