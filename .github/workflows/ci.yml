@@ -263,25 +263,22 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-build-target-
 
-      - name: Install cargo-tarpaulin
-        run: cargo install --locked cargo-tarpaulin
+      - name: Install cargo-llvm-cov
+        run: cargo install --locked cargo-llvm-cov
 
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Generate coverage
-        # Use `--features full --lib` instead of `--all-features --workspace` to
-        # avoid timeouts on the macros crate's trybuild integration tests, which
-        # spawn child processes that exceed tarpaulin's test-response timeout.
-        # The .tarpaulin.toml at the repo root already excludes
-        # `src/grpc/pb/*` (auto-generated protobuf) and `macros/*`.
+        # llvm-cov（cargo-tarpaulin 已弃用）：`--features full --lib` 避免
+        # macros crate 的 trybuild 集成测试超时；`--exclude-files` 与旧
+        # tarpaulin 排除集对齐（protobuf 生成码、examples、macros、benches）。
         run: |
-          cargo tarpaulin \
+          cargo llvm-cov \
             --features full \
             --lib \
-            --timeout 120 \
-            --out xml \
-            --out html \
+            --lcov \
+            --html \
             --output-dir coverage-report \
             --fail-under 94 \
             --exclude-files "target/*" \
