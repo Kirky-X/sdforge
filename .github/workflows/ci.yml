@@ -281,8 +281,7 @@ jobs:
             --html \
             --output-dir coverage-report \
             --fail-under-lines 94 \
-            --ignore-filename-regex "(examples/|temp/|macros/|src/grpc/pb/|src/benches/)" \
-            --exclude-files "src/benches/*"
+            --ignore-filename-regex "(examples/|temp/|macros/|src/grpc/pb/|src/benches/)"
 
       - name: Upload coverage to Codecov
         if: always()
