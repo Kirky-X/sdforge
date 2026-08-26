@@ -263,40 +263,32 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-build-target-
 
-      - name: Install cargo-tarpaulin
-        run: cargo install --locked cargo-tarpaulin
+      - name: Install cargo-llvm-cov
+        run: cargo install --locked cargo-llvm-cov
 
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
       - name: Generate coverage
-        # Use `--features full --lib` instead of `--all-features --workspace` to
-        # avoid timeouts on the macros crate's trybuild integration tests, which
-        # spawn child processes that exceed tarpaulin's test-response timeout.
-        # The .tarpaulin.toml at the repo root already excludes
-        # `src/grpc/pb/*` (auto-generated protobuf) and `macros/*`.
+        # llvm-cov（cargo-tarpaulin 已弃用）：`--features full --lib` 避免
+        # macros crate 的 trybuild 集成测试超时；排除集与旧 tarpaulin 对齐
+        # （protobuf 生成码、examples、macros、benches）。
         run: |
-          cargo tarpaulin \
+          mkdir -p coverage-report
+          cargo llvm-cov \
             --features full \
             --lib \
-            --timeout 120 \
-            --out xml \
-            --out html \
-            --output-dir coverage-report \
-            --fail-under 94 \
-            --exclude-files "target/*" \
-            --exclude-files "examples/*" \
-            --exclude-files "temp/*" \
-            --exclude-files "macros/*" \
-            --exclude-files "src/grpc/pb/*" \
-            --exclude-files "src/benches/*"
+            --lcov \
+            --output-path coverage-report/lcov.info \
+            --fail-under-lines 94 \
+            --ignore-filename-regex "(examples/|temp/|macros/|src/grpc/pb/|src/benches/)"
 
       - name: Upload coverage to Codecov
         if: always()
         uses: codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f  # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage-report/cobertura.xml
+          files: coverage-report/lcov.info
           fail_ci_if_error: true
           flags: unittests
 
