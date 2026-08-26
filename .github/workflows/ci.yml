@@ -278,8 +278,7 @@ jobs:
             --features full \
             --lib \
             --lcov \
-            --html \
-            --output-dir coverage-report \
+            --output-path coverage-report/lcov.info \
             --fail-under-lines 94 \
             --ignore-filename-regex "(examples/|temp/|macros/|src/grpc/pb/|src/benches/)"
 
@@ -288,7 +287,7 @@ jobs:
         uses: codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f  # v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage-report/cobertura.xml
+          files: coverage-report/lcov.info
           fail_ci_if_error: true
           flags: unittests
 
