@@ -271,9 +271,10 @@ jobs:
 
       - name: Generate coverage
         # llvm-cov（cargo-tarpaulin 已弃用）：`--features full --lib` 避免
-        # macros crate 的 trybuild 集成测试超时；`--exclude-files` 与旧
-        # tarpaulin 排除集对齐（protobuf 生成码、examples、macros、benches）。
+        # macros crate 的 trybuild 集成测试超时；排除集与旧 tarpaulin 对齐
+        # （protobuf 生成码、examples、macros、benches）。
         run: |
+          mkdir -p coverage-report
           cargo llvm-cov \
             --features full \
             --lib \
