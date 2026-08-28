@@ -152,7 +152,7 @@ async fn search_users(
 ///
 /// # HTTP 用法
 /// ```bash
-/// curl "http://localhost:3000/api/v1/items?published=true&category=tech&sort=created_at&order=desc"
+/// curl "http://localhost:3000/api/v1/filtered-items?published=true&category=tech&sort=created_at&order=desc"
 /// ```
 ///
 /// # 响应示例
@@ -170,7 +170,7 @@ async fn search_users(
 #[forge(
     name = "list_filtered_items",
     version = "v1",
-    path = "/items",
+    path = "/filtered-items",
     method = "GET",
     tool_name = "list_filtered_items",
     description = "获取过滤后的项目列表"
