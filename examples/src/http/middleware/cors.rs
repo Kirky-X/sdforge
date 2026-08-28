@@ -61,7 +61,7 @@ use sdforge::prelude::*;
 // API 端点定义
 // ============================================================================
 
-/// 公开数据端点
+/// 公开数据端点（CORS 演示专用）
 ///
 /// 此端点：
 /// - 允许所有来源访问 (CORS: `Access-Control-Allow-Origin: *`)
@@ -70,7 +70,7 @@ use sdforge::prelude::*;
 ///
 /// # HTTP 用法
 /// ```bash
-/// curl http://localhost:3000/api/v1/public/data
+/// curl http://localhost:3000/api/v1/cors/public-data
 /// ```
 ///
 /// # 响应示例
@@ -88,11 +88,11 @@ use sdforge::prelude::*;
 /// Access-Control-Allow-Headers: Content-Type, Authorization
 /// ```
 #[forge(
-    name = "public_data",
+    name = "cors_public_data",
     version = "v1",
-    path = "/public/data",
+    path = "/cors/public-data",
     method = "GET",
-    tool_name = "public_data",
+    tool_name = "cors_public_data",
     description = "公开数据端点"
 )]
 async fn public_data() -> Result<serde_json::Value, ApiError> {
