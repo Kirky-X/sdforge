@@ -320,6 +320,7 @@ mod tests {
             let result = config.validate();
             assert!(
                 result.is_err(),
+                // codeql[rust/cleartext-logging]: 测试用假 secret，非生产泄漏
                 "Expected weak secret '{}' to be rejected",
                 weak_secret
             );
@@ -349,6 +350,7 @@ mod tests {
             let result = config.validate();
             assert!(
                 result.is_ok(),
+                // codeql[rust/cleartext-logging]: 测试用假 secret，非生产泄漏
                 "Expected strong secret '{}' ({} chars) to be accepted, got: {:?}",
                 strong_secret,
                 strong_secret.len(),
