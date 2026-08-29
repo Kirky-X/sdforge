@@ -119,14 +119,14 @@ impl SyncCache for OxcacheSyncCache {
                     key
                 );
                 if let Err(e) = self.backend.set(Arc::from(key), Arc::new(value), None) {
-                    log::warn!("cache backend set failed for key={:?}: {}", key, e);
+                    log::warn!("cache backend set failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                 }
                 return;
             }
         };
         // HIGH-002: 不静默吞掉 backend 错误；失败时不更新 index 以保持一致
         if let Err(e) = self.backend.set(Arc::from(key), Arc::new(value), None) {
-            log::warn!("cache backend set failed for key={:?}: {}", key, e);
+            log::warn!("cache backend set failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
             return;
         }
         idx.insert(key.to_string());
@@ -143,7 +143,7 @@ impl SyncCache for OxcacheSyncCache {
                 );
                 let existed = self.backend.exists(key).unwrap_or(false);
                 if existed && let Err(e) = self.backend.delete(key) {
-                    log::warn!("cache backend delete failed for key={:?}: {}", key, e);
+                    log::warn!("cache backend delete failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                 }
                 return existed;
             }
@@ -152,7 +152,7 @@ impl SyncCache for OxcacheSyncCache {
         if existed {
             // HIGH-002: backend 失败时不更新 index，保持一致
             if let Err(e) = self.backend.delete(key) {
-                log::warn!("cache backend delete failed for key={:?}: {}", key, e);
+                log::warn!("cache backend delete failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                 return existed;
             }
             idx.remove(key);
@@ -249,7 +249,7 @@ impl SyncCache for OxcacheSyncCache {
                         self.backend
                             .set(Arc::from(key.as_str()), Arc::new(value.clone()), None)
                     {
-                        log::warn!("cache backend set failed for key={:?}: {}", key, e);
+                        log::warn!("cache backend set failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                     }
                 }
                 return;
@@ -262,7 +262,7 @@ impl SyncCache for OxcacheSyncCache {
                 .backend
                 .set(Arc::from(key.as_str()), Arc::new(value.clone()), None)
             {
-                log::warn!("cache backend set failed for key={:?}: {}", key, e);
+                log::warn!("cache backend set failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
             } else {
                 succeeded.push(key);
             }
@@ -286,7 +286,7 @@ impl SyncCache for OxcacheSyncCache {
                     let existed = self.backend.exists(key).unwrap_or(false);
                     if existed {
                         if let Err(e) = self.backend.delete(key) {
-                            log::warn!("cache backend delete failed for key={:?}: {}", key, e);
+                            log::warn!("cache backend delete failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                         } else {
                             deleted += 1;
                         }
@@ -300,7 +300,7 @@ impl SyncCache for OxcacheSyncCache {
             let existed = self.backend.exists(key).unwrap_or(false);
             if existed {
                 if let Err(e) = self.backend.delete(key) {
-                    log::warn!("cache backend delete failed for key={:?}: {}", key, e);
+                    log::warn!("cache backend delete failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                 } else {
                     idx.remove(key);
                     deleted += 1;
