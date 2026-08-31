@@ -37,7 +37,7 @@ tokio-stream = { version = "0.1", default-features = false }
 uuid = { version = "1.23", default-features = false, features = ["std", "v4"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "serde", "clock"] }
 regex = { version = "1.13", default-features = false, features = ["std", "perf"] }
-validator = { version = "0.20", default-features = false, features = ["derive"] }
+validator = { version = "0.21", default-features = false, features = ["derive"] }
 once_cell = { version = "1.21", default-features = false, features = ["std"] }
 
 # 安全依赖
