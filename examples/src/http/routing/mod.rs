@@ -15,7 +15,7 @@
 //! ```
 //!
 //! 函数签名:
-//! ```rust,ignore
+//! ```text
 //! async fn get_user_post(user_id: u64, post_id: u64) -> Result<...>
 //! ```
 //!

@@ -31,7 +31,8 @@
 //!
 //! ### 基本 GET 请求
 //!
-//! ```rust,ignore
+//! ```text
+//! # use sdforge::prelude::ApiError;
 //! #[forge(
 //!     name = "get_hello",
 //!     version = "v1",
@@ -47,7 +48,8 @@
 //!
 //! ### 带路径参数
 //!
-//! ```rust,ignore
+//! ```text
+//! # use sdforge::prelude::ApiError;
 //! #[forge(
 //!     name = "get_user",
 //!     version = "v1",
@@ -64,7 +66,8 @@
 //!
 //! ### 带请求体
 //!
-//! ```rust,ignore
+//! ```text
+//! # use sdforge::prelude::ApiError;
 //! #[derive(Debug, Deserialize)]
 //! struct CreateUserRequest {
 //!     name: String,

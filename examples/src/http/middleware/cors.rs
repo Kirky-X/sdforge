@@ -23,21 +23,21 @@
 //!
 //! ### 1. 公开 API (允许所有来源)
 //!
-//! ```rust,ignore
+//! ```text
 //! CorsLayer::new()
 //!     .allow_origin(tower_http::cors::Any)
 //! ```
 //!
 //! ### 2. 指定来源
 //!
-//! ```rust,ignore
+//! ```text
 //! CorsLayer::new()
 //!     .allow_origin("https://example.com".parse::<AllowedOrigins>().unwrap())
 //! ```
 //!
 //! ### 3. 带凭证的 CORS
 //!
-//! ```rust,ignore
+//! ```text
 //! CorsLayer::new()
 //!     .allow_origin("https://example.com")
 //!     .allow_credentials(true)

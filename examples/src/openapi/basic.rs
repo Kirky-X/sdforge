@@ -19,7 +19,7 @@
 //!
 //! ## 基本用法
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! use sdforge::openapi::generate_openapi_spec;
 //!
 //! let spec = generate_openapi_spec();
@@ -29,7 +29,7 @@
 //!
 //! ## 自定义元信息
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! use sdforge::openapi::OpenApiBuilder;
 //!
 //! let spec = OpenApiBuilder::new()

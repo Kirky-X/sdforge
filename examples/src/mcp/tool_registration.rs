@@ -21,7 +21,7 @@
 //!
 //! 将相关工具放在同一模块中：
 //!
-//! ```rust,ignore
+//! ```text
 //! // calc.rs
 //! mod calculator {
 //!     pub fn add(request: ...) -> Result<...> { ... }
@@ -38,7 +38,8 @@
 //!
 //! 不指定 `tool_name` 的端点不会注册为 MCP 工具：
 //!
-//! ```rust,ignore
+//! ```text
+//! # use sdforge::prelude::ApiError;
 //! #[forge(
 //!     name = "http_only",
 //!     tool_name = ...  // 不指定 tool_name

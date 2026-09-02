@@ -17,14 +17,15 @@
 //! 而非 `#[forge]` 宏属性。中间件在路由层拦截未认证请求并返回 401，
 //! 已认证但权限不足的请求由业务代码返回 403：
 //!
-//! ```rust,ignore
+//! ```text
+//! # use sdforge::prelude::ApiError;
 //! use sdforge::security::auth_middleware;
-//! use axum::{Router, middleware::from_fn};
+//! use sdforge::axum::{Router, middleware::from_fn, routing::get};
 //!
 //! // 在路由上挂载认证中间件
 //! let protected = Router::new()
-//!     .route("/secure", axum::routing::get(secure_endpoint))
-//!     .layer(axum::middleware::from_fn(auth_middleware));
+//!     .route("/secure", get(secure_endpoint))
+//!     .layer(from_fn(auth_middleware));
 //!
 //! #[forge(
 //!     name = "secure_endpoint",
@@ -33,7 +34,7 @@
 //!     method = "GET",
 //!     description = "Endpoint protected by auth middleware"
 //! )]
-//! async fn secure_endpoint() -> Result<_, ApiError> { ... }
+//! async fn secure_endpoint() -> Result<serde_json::Value, ApiError> { Ok(serde_json::json!({})) }
 //! ```
 
 use sdforge::prelude::*;

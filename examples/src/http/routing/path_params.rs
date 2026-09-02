@@ -12,7 +12,7 @@
 //! GET /users/123
 //! ```
 //!
-//! ```rust,ignore
+//! ```text
 //! async fn get_user(id: u64) -> Result<...>
 //! ```
 //!
@@ -22,7 +22,7 @@
 //! GET /items/abc-123
 //! ```
 //!
-//! ```rust,ignore
+//! ```text
 //! async fn get_item(id: String) -> Result<...>
 //! ```
 //!
@@ -32,7 +32,7 @@
 //! GET /users/123/posts/456/comments/789
 //! ```
 //!
-//! ```rust,ignore
+//! ```text
 //! async fn get_comment(user_id: u64, post_id: u64, comment_id: u64) -> Result<...>
 //! ```
 //!
