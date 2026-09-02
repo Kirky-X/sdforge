@@ -22,7 +22,8 @@
 //!
 //! ### 1. 直接返回 ApiError
 //!
-//! ```rust,ignore
+//! ```text
+//! # use sdforge::prelude::ApiError;
 //! async fn get_user(id: u64) -> Result<UserResponse, ApiError> {
 //!     if id == 0 {
 //!         return Err(ApiError::NotFound {
@@ -36,7 +37,8 @@
 //!
 //! ### 2. 使用自定义错误类型
 //!
-//! ```rust,ignore
+//! ```text
+//! # use sdforge::prelude::ApiError;
 //! use thiserror::Error;
 //!
 //! #[derive(Debug, Error)]
@@ -56,7 +58,8 @@
 //!
 //! ### 3. 使用 ? 运算符自动转换
 //!
-//! ```rust,ignore
+//! ```text
+//! # use sdforge::prelude::ApiError;
 //! async fn get_user(id: u64) -> Result<UserResponse, ApiError> {
 //!     let user = find_user(id)?; // 自动转换为 ApiError
 //!     Ok(user)
@@ -85,7 +88,7 @@ pub enum AppError {
     /// 用户不存在错误
     ///
     /// # 示例
-    /// ```rust,ignore
+    /// ```text
     /// AppError::UserNotFound { user_id: 123 }
     /// ```
     #[error("用户不存在: {user_id}")]
@@ -107,7 +110,7 @@ pub enum AppError {
     /// 数据库错误
     ///
     /// # 示例
-    /// ```rust,ignore
+    /// ```text
     /// AppError::DatabaseError { details: "Connection timeout".into() }
     /// ```
     #[error("数据库错误: {details}")]

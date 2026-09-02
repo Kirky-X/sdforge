@@ -18,7 +18,7 @@
 //! GET /search?q=keyword
 //! ```
 //!
-//! ```rust,ignore
+//! ```text
 //! async fn search(q: String) -> Result<...>
 //! ```
 //!
@@ -28,13 +28,13 @@
 //! GET /items?limit=10
 //! ```
 //!
-//! ```rust,ignore
+//! ```text
 //! async fn list_items(limit: Option<u32>) -> Result<...>
 //! ```
 //!
 //! ### 3. 带默认值的参数
 //!
-//! ```rust,ignore
+//! ```text
 //! async fn list_items(limit: Option<u32>) -> Result<...> {
 //!     let limit = limit.unwrap_or(10); // 默认 10
 //! }

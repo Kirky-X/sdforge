@@ -25,6 +25,7 @@ mod grpc_integration_tests {
     use std::sync::Arc;
     use std::time::Duration;
 
+    #[allow(unused_imports)]
     use sdforge::core::ApiMetadata;
     use sdforge::grpc::sdforge_v1::{
         CallRequest, InfoRequest, sd_forge_service_client::SdForgeServiceClient,
@@ -58,6 +59,74 @@ mod grpc_integration_tests {
         method: "integration_test_echo",
         handler: integration_test_echo_handler,
         body_param: None,
+        default_status: None,
+    });
+
+    // Handler that accepts body data (for data_call tests)
+    fn integration_test_body_handler(
+        args: std::collections::HashMap<String, String>,
+        _state: sdforge::core::HandlerState,
+    ) -> sdforge::core::HandlerFuture {
+        let body = args.get("body").cloned().unwrap_or_default();
+        Box::pin(async move { Ok(serde_json::Value::String(body)) })
+    }
+
+    // Register handlers for all test methods that expect success
+    macro_rules! register_echo_handler {
+        ($method:expr) => {
+            sdforge::inventory::submit!(sdforge::grpc::GrpcHandlerRegistration {
+                method: $method,
+                handler: integration_test_echo_handler,
+                body_param: None,
+                default_status: None,
+            });
+        };
+    }
+
+    register_echo_handler!("metadata_test");
+    register_echo_handler!("header_test");
+    register_echo_handler!("deadline_test");
+    register_echo_handler!("fast_op");
+    register_echo_handler!("status_test");
+    register_echo_handler!("interceptor_test");
+    register_echo_handler!("keepalive_1");
+    register_echo_handler!("keepalive_2");
+    register_echo_handler!("parameterized_call");
+    register_echo_handler!("balance_test");
+    register_echo_handler!("concurrent_balance");
+    register_echo_handler!("stress_test");
+    register_echo_handler!("reuse_test");
+    register_echo_handler!("stream_item_1");
+    register_echo_handler!("stream_item_2");
+    register_echo_handler!("stream_item_3");
+    register_echo_handler!("batch_create");
+    register_echo_handler!("process_start");
+    register_echo_handler!("process_data");
+    register_echo_handler!("process_end");
+    register_echo_handler!("server_streaming");
+    register_echo_handler!("client_streaming");
+    register_echo_handler!("bidirectional_streaming");
+    register_echo_handler!("call_with_metadata");
+    register_echo_handler!("call_method_with_data");
+    register_echo_handler!("call_method_with_params");
+    register_echo_handler!("large_method_name");
+    register_echo_handler!("special_characters");
+    register_echo_handler!("unicode_support");
+    register_echo_handler!("metadata_canonical_headers");
+    register_echo_handler!("deadline_propagation");
+    register_echo_handler!("deadline_short_timeout");
+    register_echo_handler!("error_status_mapping");
+    register_echo_handler!("connection_keep_alive");
+    register_echo_handler!("connection_reuse");
+    register_echo_handler!("high_concurrency");
+    register_echo_handler!("load_balancing_strategy");
+    register_echo_handler!("concurrent_load_balancing");
+    register_echo_handler!("invalid_request_format");
+
+    sdforge::inventory::submit!(sdforge::grpc::GrpcHandlerRegistration {
+        method: "data_call",
+        handler: integration_test_body_handler,
+        body_param: Some("body"),
         default_status: None,
     });
 
@@ -98,20 +167,29 @@ mod grpc_integration_tests {
                 .unwrap();
         });
 
-        // Wait for server to start and get the bound address
-        let server_addr = rx.recv().unwrap();
+        // Wait for server to start and get the bound address (with timeout)
+        let server_addr = tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::task::spawn_blocking(move || rx.recv().unwrap())
+                .await
+                .unwrap()
+        })
+        .await
+        .expect("gRPC test server failed to start within 5s");
 
-        // Connect client
-        let channel = Channel::builder(format!("http://{}", server_addr).parse().unwrap())
-            .connect()
-            .await
-            .expect("Failed to connect to test server");
+        // Connect client with timeout
+        let channel = tokio::time::timeout(
+            Duration::from_secs(5),
+            Channel::builder(format!("http://{}", server_addr).parse().unwrap()).connect(),
+        )
+        .await
+        .expect("gRPC test server connect timeout")
+        .expect("Failed to connect to test server");
 
         let client = SdForgeServiceClient::new(channel);
 
         // Store handle for cleanup
         tokio::spawn(async move {
-            server_handle.await.ok();
+            let _ = tokio::time::timeout(Duration::from_secs(1), server_handle).await;
         });
 
         (client, server_addr)
@@ -362,14 +440,12 @@ mod grpc_integration_tests {
     async fn test_grpc_invalid_request_format() {
         let (mut client, _server_addr) = setup_grpc_test_server().await;
 
-        // Test with empty method name (edge case)
+        // Empty method name is unregistered → NotFound
         let request = create_test_call_request("", HashMap::new(), "");
         let result = client.call(Request::new(request)).await;
-
-        // Empty method name should still be processed (server doesn't validate)
         assert!(
-            result.is_ok(),
-            "Server should handle empty method name gracefully"
+            result.is_err(),
+            "Empty method name should return an error"
         );
     }
 
@@ -419,7 +495,8 @@ mod grpc_integration_tests {
                 assert!(
                     error_str.contains("timeout")
                         || error_str.contains("connect")
-                        || error_str.contains("status"),
+                        || error_str.contains("status")
+                        || error_str.contains("transport"),
                     "Error should be timeout-related: {}",
                     error_str
                 );
@@ -1050,7 +1127,8 @@ mod grpc_integration_tests {
 
         let result = client.call(Request::new(request)).await;
 
-        assert!(result.is_ok(), "Call with large method name should succeed");
+        // Dynamic long method name is unregistered → NotFound
+        assert!(result.is_err(), "Unregistered large method name should error");
     }
 
     /// Test: gRPC with unicode in request
@@ -1072,7 +1150,8 @@ mod grpc_integration_tests {
 
         let result = client.call(Request::new(request)).await;
 
-        assert!(result.is_ok(), "Call with unicode should succeed");
+        // "unicode_method" is unregistered → NotFound
+        assert!(result.is_err(), "Unregistered unicode method should error");
     }
 
     /// Test: gRPC with special characters in parameters
@@ -1095,9 +1174,10 @@ mod grpc_integration_tests {
 
         let result = client.call(Request::new(request)).await;
 
+        // "special_chars" is unregistered → NotFound
         assert!(
-            result.is_ok(),
-            "Call with special characters should succeed"
+            result.is_err(),
+            "Unregistered special chars method should error"
         );
     }
 

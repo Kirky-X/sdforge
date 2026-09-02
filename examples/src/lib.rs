@@ -33,7 +33,7 @@
 //!
 //! ### 使用示例代码
 //!
-//! ```rust,ignore
+//! ```text
 //! use sdforge_examples::basics::simple_api::{get_hello, get_user};
 //! use sdforge_examples::http::routing::path_params::get_user_by_id;
 //! ```

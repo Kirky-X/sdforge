@@ -18,7 +18,9 @@
 //!
 //! 使用 `#[forge]` 宏定义 MCP 工具：
 //!
-//! ```rust,ignore
+//! ```text
+//! # use serde_json;
+//! # use sdforge::prelude::ApiError;
 //! #[forge(
 //!     name = "tool_name",
 //!     tool_name = "mcp_tool_name",  // MCP 工具名

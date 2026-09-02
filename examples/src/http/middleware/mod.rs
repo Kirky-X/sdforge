@@ -26,7 +26,7 @@
 //!
 //! 中间件通常在应用初始化时配置：
 //!
-//! ```rust,ignore
+//! ```text
 //! // 配置 CORS
 //! let cors = CorsLayer::new()
 //!     .allow_origin("https://example.com")

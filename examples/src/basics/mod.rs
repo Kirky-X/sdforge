@@ -10,8 +10,9 @@
 //!
 //! ## 快速开始
 //!
-//! ```rust,ignore
-//! use sdforge::prelude::*;
+//! ```rust,no_run
+//! # use sdforge::prelude::ApiError;
+ //! use sdforge::prelude::*;
 //!
 //! #[forge(
 //!     name = "hello_world",

@@ -8,7 +8,8 @@
 //!
 //! ### 1. 简单字符串响应
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # use sdforge::prelude::ApiError;
 //! async fn simple() -> Result<String, ApiError> {
 //!     Ok("Hello".to_string())
 //! }
@@ -16,7 +17,8 @@
 //!
 //! ### 2. JSON 结构体响应
 //!
-//! ```rust,ignore
+//! ```text
+//! # use sdforge::prelude::ApiError;
 //! #[derive(Serialize)]
 //! struct Response {
 //!     message: String,
@@ -30,7 +32,9 @@
 //!
 //! ### 3. 任意 JSON Value
 //!
-//! ```rust,ignore
+//! ```rust,no_run
+//! # use serde_json;
+//! # use sdforge::prelude::ApiError;
 //! async fn json_value() -> Result<serde_json::Value, ApiError> {
 //!     Ok(serde_json::json!({ "key": "value" }))
 //! }
