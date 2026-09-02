@@ -283,3 +283,6 @@ specmark/
 # Reviews (security/quality scan artifacts — never tracked)
 # =============================================================================
 reviews/
+
+# WorkBuddy AI local notes
+.workbuddy-ai/
