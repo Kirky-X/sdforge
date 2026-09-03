@@ -58,6 +58,31 @@
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     use std::env;
+    // 显式引用 sdforge_examples 的子模块，确保 #[forge] 宏生成的 inventory
+    // 段链接进当前 binary（否则 LTO 会移除未直接调用的代码，inventory 段会丢失）。
+    #[cfg(feature = "http_examples")]
+    {
+        // basics / http / config 子模块（pub mod）会被解析为 use 语句的根命名空间。
+        // 这里通过 take 一下 mod 内的 pub struct，强制子模块被包含进二进制。
+        let _: fn() -> _ = || {
+            let _: Option<sdforge_examples::basics::simple_api::UserResponse> = None;
+            let _: Option<sdforge_examples::http::routing::path_params::UpdatePostRequest> = None;
+            let _: Option<sdforge_examples::http::routing::query_params::SortOrder> = None;
+        };
+    }
+    #[cfg(feature = "mcp_examples")]
+    {
+        let _: Option<sdforge_examples::mcp::tool_definition::GreetRequest> = None;
+    }
+    #[cfg(feature = "websocket_examples")]
+    {
+        let _: Option<sdforge_examples::websocket::basic::WsMessage> = None;
+    }
+    #[cfg(feature = "security_examples")]
+    {
+        let _: Option<sdforge_examples::security::api_key::AuthContext> = None;
+    }
+
     // 初始化所有注册的插件
     let counts = sdforge::init_all_plugins();
 

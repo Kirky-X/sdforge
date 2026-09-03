@@ -4,10 +4,12 @@ use crate::core::ApiMetadata;
 use crate::core::Registration;
 use crate::websocket::*;
 use axum::Router;
+#[cfg(feature = "security")]
 use axum::http::StatusCode;
 #[cfg(feature = "security")]
 use axum::http::header::AUTHORIZATION;
 use futures_util::FutureExt;
+#[cfg(feature = "security")]
 use std::sync::Arc;
 
 /// Test DefaultWebSocketHandler
