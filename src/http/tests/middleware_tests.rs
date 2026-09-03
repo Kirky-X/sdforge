@@ -8,7 +8,10 @@
 use axum::Router;
 use axum::body::Body;
 
+#[cfg(feature = "security")]
 use crate::config::{ApiKeySeed, AppConfig, AuthConfig, ServerConfig};
+#[cfg(not(feature = "security"))]
+use crate::config::{AppConfig, AuthConfig, ServerConfig};
 use crate::http::{X_REQUEST_ID, build_with_config};
 
 // ============================================================================

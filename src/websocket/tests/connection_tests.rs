@@ -289,6 +289,7 @@ async fn connection_manager_broadcast_single() {
 /// (R-websocket-003): the `RateLimitConfig` struct is gone; we now verify
 /// that the migrated `max_message_size` field survives the round-trip
 /// through `AppState::with_config`.
+#[cfg(feature = "websocket")]
 #[test]
 fn app_state_with_config_preserves_max_message_size() {
     let manager = Arc::new(ConnectionManager::new());

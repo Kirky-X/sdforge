@@ -18,10 +18,10 @@
 
 use sdforge::core::ApiError;
 use sdforge::forge;
-use sdforge::swagger_ui_router;
 
 /// Hello endpoint. 注册为 HTTP 路由 /api/v1/hello，会被 generate_openapi_spec()
 /// 收集到 OpenAPI spec 中，Swagger UI 随之展示。
+#[allow(dead_code)]
 #[forge(
     name = "demo_hello",
     version = "v1",
@@ -35,27 +35,43 @@ async fn hello() -> Result<String, ApiError> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // init_all_plugins 触碰 inventory 注册，确保 HTTP 路由 + OpenAPI 路由信息
-    // 不被链接器优化掉。
-    sdforge::init_all_plugins();
+    #[cfg(not(feature = "http"))]
+    {
+        println!(
+            "swagger_demo 需要 'http' feature。请使用：cargo run --example swagger_demo --features \"docs http\""
+        );
+        return Ok(());
+    }
+    #[cfg(feature = "http")]
+    {
+        // init_all_plugins 触碰 inventory 注册，确保 HTTP 路由 + OpenAPI 路由信息
+        // 不被链接器优化掉。
+        sdforge::init_all_plugins();
 
-    // swagger_ui_router 挂载：
-    //  - /api-docs/openapi.json  → OpenAPI 3.1 JSON（动态生成）
-    //  - /swagger-ui/           → Swagger UI 首页
-    //  - /swagger-ui/*rest      → Swagger UI 静态资源
-    let app = swagger_ui_router();
+        // swagger_ui_router 挂载：
+        //  - /api-docs/openapi.json  → OpenAPI 3.1 JSON（动态生成）
+        //  - /swagger-ui/           → Swagger UI 首页
+        //  - /swagger-ui/*rest      → Swagger UI 静态资源
+        let app = sdforge::swagger_ui_router();
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:8080").await?;
-    println!("===========================================");
-    println!("  SDForge Swagger UI Demo");
-    println!("===========================================");
-    println!();
-    println!("Swagger UI:  http://127.0.0.1:8080/swagger-ui/");
-    println!("OpenAPI JSON: http://127.0.0.1:8080/api-docs/openapi.json");
-    println!();
-    println!("按 Ctrl+C 停止");
-    println!("===========================================");
+        // 端口可通过 SDFORGE_HTTP_PORT 环境变量覆盖（默认 8080），
+        // 便于在 8080 已被其他服务占用的环境运行 example。
+        let port: u16 = std::env::var("SDFORGE_HTTP_PORT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(8080);
+        let listener = tokio::net::TcpListener::bind(&format!("127.0.0.1:{port}")).await?;
+        println!("===========================================");
+        println!("  SDForge Swagger UI Demo");
+        println!("===========================================");
+        println!();
+        println!("Swagger UI:  http://127.0.0.1:{port}/swagger-ui/");
+        println!("OpenAPI JSON: http://127.0.0.1:{port}/api-docs/openapi.json");
+        println!();
+        println!("按 Ctrl+C 停止");
+        println!("===========================================");
 
-    sdforge::axum::serve(listener, app).await?;
-    Ok(())
+        sdforge::axum::serve(listener, app).await?;
+        Ok(())
+    }
 }

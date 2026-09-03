@@ -12,7 +12,7 @@
 //!
 //! ```rust,no_run
 //! # use sdforge::prelude::ApiError;
- //! use sdforge::prelude::*;
+//! use sdforge::prelude::*;
 //!
 //! #[forge(
 //!     name = "hello_world",

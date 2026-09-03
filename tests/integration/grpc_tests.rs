@@ -443,10 +443,7 @@ mod grpc_integration_tests {
         // Empty method name is unregistered → NotFound
         let request = create_test_call_request("", HashMap::new(), "");
         let result = client.call(Request::new(request)).await;
-        assert!(
-            result.is_err(),
-            "Empty method name should return an error"
-        );
+        assert!(result.is_err(), "Empty method name should return an error");
     }
 
     /// Test: gRPC service unavailable - server shutdown simulation
@@ -1128,7 +1125,10 @@ mod grpc_integration_tests {
         let result = client.call(Request::new(request)).await;
 
         // Dynamic long method name is unregistered → NotFound
-        assert!(result.is_err(), "Unregistered large method name should error");
+        assert!(
+            result.is_err(),
+            "Unregistered large method name should error"
+        );
     }
 
     /// Test: gRPC with unicode in request

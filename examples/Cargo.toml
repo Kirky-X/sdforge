@@ -68,3 +68,8 @@ docs = ["sdforge/docs"]
 # Required so that `#[cfg(feature = "ratelimit")]` in example code matches
 # sdforge's `GrpcServerConfig.rate_limiter` field gate.
 ratelimit = ["sdforge/ratelimit"]
+
+[[example]]
+name = "swagger_demo"
+path = "swagger_demo.rs"
+required-features = ["docs", "http"]

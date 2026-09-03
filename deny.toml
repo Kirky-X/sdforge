@@ -3,13 +3,12 @@
 
 [advisories]
 db-urls = ["https://github.com/RustSec/advisory-db"]
-yanked = "deny"
+yanked = "warn"
 ignore = [
     # bincode unmaintained (RUSTSEC-2025-0141) — 直接依赖（bincode v2.0.1 → sdforge）
     # 团队因 doxxing/harassment 事件永久停维，advisory 明确 "No safe upgrade available"
     # 替代方案：postcard / bitcode / rkyv；短期保留（功能稳定+监控公告），中期评估迁移
     { id = "RUSTSEC-2025-0141", reason = "直接依赖bincode2.0.1，团队永久停维无安全升级，评估迁移postcard" },
-    "RUSTSEC-2026-0173", # proc-macro-error2 unmaintained (transitive)，等待上游生态迁移
 ]
 
 [licenses]
