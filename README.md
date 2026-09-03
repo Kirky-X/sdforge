@@ -132,7 +132,7 @@ async fn echo(msg: String) -> Result<serde_json::Value, ApiError> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sdforge::init_all_plugins();
-    let server = sdforge::grpc::SdForgeGrpcServer::default();
+    let server = sdforge::grpc::SdForgeGrpcService::default();
     server.serve("0.0.0.0:50051").await?;
     Ok(())
 }
