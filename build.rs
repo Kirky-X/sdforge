@@ -18,7 +18,5 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .out_dir(&out_dir)
         .compile_protos(proto_files, proto_includes)?;
 
-    println!("cargo:warning=Generated protobuf files to OUT_DIR");
-
     Ok(())
 }
