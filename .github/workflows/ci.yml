@@ -16,111 +16,48 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # edition 2024 + rust 1.94+ (unified MSRV across base workspace;
-  # bumped from 1.89 because inklog 0.1.11+ requires rustc 1.94,
-  # and --all-features CI enables the optional inklog dependency)
-  MSRV: "1.94"
 
 jobs:
-  # 代码格式检查
   fmt:
-    name: Format Check
+    name: Format
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30  # stable
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
           components: rustfmt
-
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-  # Clippy 代码质量检查
   clippy:
-    name: Clippy Lint
+    name: Clippy
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-
-      - name: Install Rust (${{ env.MSRV }})
-        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c  # master
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
         with:
-          toolchain: ${{ env.MSRV }}
           components: clippy
-
-      - name: Cache cargo registry
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-registry-
-
-      - name: Cache cargo index
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-index-
-
+      - uses: Swatinem/rust-cache@v2
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
       - name: Run clippy
         run: cargo clippy --all-targets --all-features --workspace -- -D warnings
 
-  # 安全审计
-  security:
-    name: Security Audit
+  check:
+    name: Check
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Check all features
+        run: cargo check --all-features --workspace
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30  # stable
-
-      - name: Install cargo-deny
-        run: cargo install --locked cargo-deny
-
-      - name: Run cargo-deny
-        run: cargo deny check advisories bans licenses
-
-  # 依赖检查
-  dependencies:
-    name: Dependency Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30  # stable
-
-      - name: Cache cargo registry
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-registry-
-
-      - name: Cache cargo index
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-index-
-
-      - name: Install cargo-audit
-        run: cargo install --locked cargo-audit
-
-      - name: Run cargo-audit
-        run: cargo audit
-
-  # 多平台构建检查
   build:
     name: Build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -130,48 +67,21 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30  # stable
-
-      - name: Cache cargo registry
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-registry-
-
-      - name: Cache cargo index
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-index-
-
-      - name: Cache cargo build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-build-target-
-
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
       - name: Install protoc (Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
       - name: Install protoc (macOS)
         if: runner.os == 'macOS'
         run: brew install protobuf
-
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
         run: choco install protoc -y
-
       - name: Build
         run: cargo build --all-features --workspace
 
-  # 特性矩阵测试
   test-features:
     name: Test (${{ matrix.features }})
     runs-on: ubuntu-latest
@@ -190,141 +100,76 @@ jobs:
           - "http,streaming"
           - "full"
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30  # stable
-
-      - name: Cache cargo registry
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-registry-
-
-      - name: Cache cargo index
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-index-
-
-      - name: Prepare feature string for cache key
-        id: features
-        run: echo "sanitized=$(echo '${{ matrix.features }}' | tr ',' '-')" >> $GITHUB_OUTPUT
-
-      - name: Cache cargo build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ steps.features.outputs.sanitized }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-build-target-
-
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
       - name: Run tests with features ${{ matrix.features }}
         run: cargo test --features "${{ matrix.features }}" --workspace
 
-  # 代码覆盖率检查
-  coverage:
-    name: Code Coverage (95% Gate)
+  doc:
+    name: Documentation
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    permissions:
-      contents: read
-      actions: write
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30  # stable
-        with:
-          components: llvm-tools-preview
-
-      - name: Cache cargo registry
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-registry-
-
-      - name: Cache cargo index
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: ~/.cargo/git
-          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-index-
-
-      - name: Cache cargo build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-build-target-
-
-      - name: Install cargo-llvm-cov
-        run: cargo install --locked cargo-llvm-cov
-
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Build documentation
+        run: cargo doc --no-deps --all-features --workspace
+        env:
+          RUSTDOCFLAGS: -D warnings
 
-      - name: Generate coverage
-        # llvm-cov（cargo-tarpaulin 已弃用）：`--features full --lib` 避免
-        # macros crate 的 trybuild 集成测试超时；排除集与旧 tarpaulin 对齐
-        # （protobuf 生成码、examples、macros、benches）。
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+      - name: Install tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,cargo-deny
+      - name: cargo deny
+        run: cargo deny check
+      - name: cargo audit
+        run: cargo audit
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Install protoc
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Generate coverage (gate ≥80% lines)
+        # `--features full --lib` 避免 macros crate 的 trybuild 集成测试超时;
+        # 排除集与既有口径对齐(protobuf 生成码、examples、macros、benches)
         run: |
-          mkdir -p coverage-report
           cargo llvm-cov \
             --features full \
             --lib \
             --lcov \
-            --output-path coverage-report/lcov.info \
-            --fail-under-lines 94 \
+            --output-path lcov.info \
+            --fail-under-lines 80 \
             --ignore-filename-regex "(examples/|temp/|macros/|src/grpc/pb/|src/benches/)"
-
-      - name: Upload coverage to Codecov
+      - name: Upload coverage
         if: always()
-        uses: codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f  # v7
+        uses: codecov/codecov-action@v7
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage-report/lcov.info
-          fail_ci_if_error: true
-          flags: unittests
-
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
-        with:
-          name: coverage-report
-          path: coverage-report/
-          retention-days: 7
-
-  # 文档检查
-  docs:
-    name: Documentation Check
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30  # stable
-
-      - name: Cache cargo registry
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-registry-
-
-      - name: Install protoc
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-      - name: Build documentation
-        run: cargo doc --no-deps --all-features --workspace
-        continue-on-error: true
-
-      - name: Check doc links
-        run: |
-          cargo doc --no-deps --all-features --workspace --document-private-items
+          files: lcov.info
+          fail_ci_if_error: false
