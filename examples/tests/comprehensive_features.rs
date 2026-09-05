@@ -980,7 +980,7 @@ fn cli_init_all_plugins_returns_accessible_counts() {
 #[cfg(feature = "docs_examples")]
 #[test]
 fn docs_generate_openapi_format_is_callable() {
-    use sdforge::docs::{generate_docs, DocFormat};
+    use sdforge::docs::{DocFormat, generate_docs};
     let result = generate_docs(DocFormat::OpenApi);
     let content = result.expect("generate_docs(OpenApi) should succeed");
     assert!(
@@ -992,7 +992,7 @@ fn docs_generate_openapi_format_is_callable() {
 #[cfg(feature = "docs_examples")]
 #[test]
 fn docs_generate_cli_markdown_is_callable() {
-    use sdforge::docs::{generate_docs, DocFormat};
+    use sdforge::docs::{DocFormat, generate_docs};
     let result = generate_docs(DocFormat::CliMarkdown);
     let content = result.expect("generate_docs(CliMarkdown) should succeed");
     // CLI markdown should contain some heading or command reference.

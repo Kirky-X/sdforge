@@ -1,11 +1,11 @@
 [workspace]
-members = [".", "examples"]
+members = [".", "examples", "macros"]
 resolver = "2"
 
 [workspace.package]
 version = "0.5.0-rc.2"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.97.1"
 authors = ["Kirky.X"]
 license = "MIT"
 repository = "https://github.com/Kirky-X/sdforge"
@@ -97,11 +97,15 @@ trybuild = { version = "1.0", default-features = false }
 proptest = { version = "1.11", default-features = false, features = ["std", "alloc", "bit-set"] }
 pretty_assertions = { version = "1.4", default-features = false, features = ["std"] }
 
+[workspace.lints.rust]
+
+[workspace.lints.clippy]
 
 [package]
 name = "sdforge"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -109,6 +113,9 @@ keywords = ["api", "http", "mcp", "macro", "framework"]
 categories = ["web-programming", "development-tools"]
 description = "Multi-protocol SDK framework with unified macro configuration"
 documentation = "https://docs.rs/sdforge"
+
+[lints]
+workspace = true
 
 [lib]
 path = "src/lib.rs"
@@ -219,7 +226,7 @@ limiteron = { workspace = true, optional = true }
 trait-kit = { version = "0.5.0-rc.2", path = "../trait-kit", features = ["async"], optional = true, default-features = false }
 
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
-# version-only: path 依赖在 CI 环境不存在，本地开发用 .cargo/config.toml [patch.crates-io] 重定向。
+# path + version 双写:path 供本地开发,publish 时自动剥离。
 # default-features = false (Rule 6) — only core logging is pulled in.
 inklog = { version = "0.3.0-rc.2", path = "../inklog", default-features = false, optional = true }
 
@@ -522,12 +529,10 @@ name = "macro_tests"
 path = "tests/macros/macro_tests.rs"
 
 [profile.release]
-lto = true
+opt-level = 3
+lto = "fat"
 codegen-units = 1
-opt-level = "z"
+strip = true
 
-[profile.dev]
-debug = true
-
-[profile.dev.package."*"]
-opt-level = 2
+[profile.bench]
+inherits = "release"

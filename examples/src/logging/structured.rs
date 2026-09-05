@@ -16,8 +16,8 @@
 //! ```
 
 use sdforge::logging::{
-    get_global_logger, init_global_logger, LogEntry, LogFormat, LogLevel, LoggerConfig,
-    StructuredLogger,
+    LogEntry, LogFormat, LogLevel, LoggerConfig, StructuredLogger, get_global_logger,
+    init_global_logger,
 };
 use serde_json::json;
 
@@ -157,10 +157,13 @@ pub fn setup_global_logger() -> Result<(), Box<dyn std::error::Error>> {
 
 /// 通过全局日志器记录日志（如果已初始化）。
 pub fn log_via_global(message: &str) {
-    if let Some(logger) = get_global_logger() {
-        logger.info("global_demo", message, vec![]);
-    } else {
-        eprintln!("[fallback] global logger not initialized: {}", message);
+    match get_global_logger() {
+        Some(logger) => {
+            logger.info("global_demo", message, vec![]);
+        }
+        _ => {
+            eprintln!("[fallback] global logger not initialized: {}", message);
+        }
     }
 }
 

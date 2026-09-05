@@ -9,7 +9,7 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_macro_input, FnArg, ItemFn, ItemMod, Pat};
+use syn::{FnArg, ItemFn, ItemMod, Pat, parse_macro_input};
 
 /// Remove #[state] and #[param] attributes from function parameters.
 /// These attributes are only used by the macro for parameter kind inference
@@ -39,9 +39,9 @@ type ServiceApiArgs = Result<
         Option<u64>,
         Option<String>,
         Option<String>,
-        Option<bool>, // no_prefix option
-        Option<bool>, // cli option — emit CliCommandRegistration + CliHandlerRegistration
-        Option<u16>,  // status option — explicit success status code (e.g. 201 for POST create)
+        Option<bool>,   // no_prefix option
+        Option<bool>,   // cli option — emit CliCommandRegistration + CliHandlerRegistration
+        Option<u16>,    // status option — explicit success status code (e.g. 201 for POST create)
         Option<String>, // i18n_key — runtime translation key for description
     ),
     syn::Error,
@@ -350,7 +350,7 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
                 return Err(syn::Error::new(
                     proc_macro2::Span::call_site(),
                     format!("Unknown attribute: {}", key),
-                ))
+                ));
             }
         }
     }
@@ -428,16 +428,12 @@ fn extract_result_ok_type(ty: &syn::Type) -> Option<&syn::Type> {
         qself: None,
         path: syn::Path { segments, .. },
     }) = ty
+        && segments.last()?.ident == "Result"
+        && let Some(syn::PathArguments::AngleBracketed(args)) =
+            segments.last().map(|s| &s.arguments)
+        && let Some(syn::GenericArgument::Type(t)) = args.args.first()
     {
-        if segments.last()?.ident == "Result" {
-            if let Some(syn::PathArguments::AngleBracketed(args)) =
-                segments.last().map(|s| &s.arguments)
-            {
-                if let Some(syn::GenericArgument::Type(t)) = args.args.first() {
-                    return Some(t);
-                }
-            }
-        }
+        return Some(t);
     }
     None
 }
@@ -455,7 +451,7 @@ fn parse_service_module_args(args: TokenStream2) -> Result<String, syn::Error> {
                 return Err(syn::Error::new(
                     proc_macro2::Span::call_site(),
                     format!("Unknown attribute: {}", key),
-                ))
+                ));
             }
         }
     }
@@ -610,25 +606,23 @@ impl ParamInfo {
                     syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
                 ) {
                     for meta_item in meta {
-                        if let syn::Meta::NameValue(name_value) = meta_item {
-                            if name_value.path.is_ident("kind") {
-                                if let syn::Expr::Lit(syn::ExprLit {
-                                    lit: syn::Lit::Str(lit_str),
-                                    ..
-                                }) = &name_value.value
-                                {
-                                    return match lit_str.value().as_str() {
-                                        "path" => Some(ParamKind::Path),
-                                        "query" => Some(ParamKind::Query),
-                                        "header" => Some(ParamKind::Header),
-                                        "form" => Some(ParamKind::Form),
-                                        "body" => Some(ParamKind::Body),
-                                        "state" => Some(ParamKind::State),
-                                        "extension" => Some(ParamKind::Extension),
-                                        _ => None,
-                                    };
-                                }
-                            }
+                        if let syn::Meta::NameValue(name_value) = meta_item
+                            && name_value.path.is_ident("kind")
+                            && let syn::Expr::Lit(syn::ExprLit {
+                                lit: syn::Lit::Str(lit_str),
+                                ..
+                            }) = &name_value.value
+                        {
+                            return match lit_str.value().as_str() {
+                                "path" => Some(ParamKind::Path),
+                                "query" => Some(ParamKind::Query),
+                                "header" => Some(ParamKind::Header),
+                                "form" => Some(ParamKind::Form),
+                                "body" => Some(ParamKind::Body),
+                                "state" => Some(ParamKind::State),
+                                "extension" => Some(ParamKind::Extension),
+                                _ => None,
+                            };
                         }
                     }
                 }
@@ -726,16 +720,14 @@ fn rust_type_to_openapi_schema(rust_type: &str) -> (&'static str, &'static str) 
 /// for `#[state]` parameters — State params must be `Arc<T>` so the runtime
 /// `Any` downcast in `core::downcast_state` can recover the concrete `T`.
 fn extract_arc_inner_type(ty: &syn::Type) -> Option<&syn::Type> {
-    if let syn::Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.last() {
-            if segment.ident == "Arc" {
-                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                    for arg in &args.args {
-                        if let syn::GenericArgument::Type(inner_ty) = arg {
-                            return Some(inner_ty);
-                        }
-                    }
-                }
+    if let syn::Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+        && segment.ident == "Arc"
+        && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+    {
+        for arg in &args.args {
+            if let syn::GenericArgument::Type(inner_ty) = arg {
+                return Some(inner_ty);
             }
         }
     }
@@ -1103,10 +1095,10 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         .inputs
         .iter()
         .filter_map(|arg| {
-            if let FnArg::Typed(pat_type) = arg {
-                if let Pat::Ident(pat_ident) = &*pat_type.pat {
-                    return Some(pat_ident.ident.to_string());
-                }
+            if let FnArg::Typed(pat_type) = arg
+                && let Pat::Ident(pat_ident) = &*pat_type.pat
+            {
+                return Some(pat_ident.ident.to_string());
             }
             None
         })
@@ -1419,7 +1411,6 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         Some(key) => quote! { Some(#key.to_string()) },
         None => quote! { None },
     };
-
 
     // Build OpenAPI path parameter tokens for the `#[forge]` macro.
     //
@@ -2217,10 +2208,12 @@ mod macro_parsing_tests {
     fn test_validate_api_name_empty_rejected() {
         let result = validate_api_name("");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("API name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("API name cannot be empty")
+        );
     }
 
     #[test]
@@ -2228,10 +2221,12 @@ mod macro_parsing_tests {
         // After trimming quotes and whitespace, this becomes empty.
         let result = validate_api_name("\"\"");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("API name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("API name cannot be empty")
+        );
     }
 
     #[test]
@@ -2257,30 +2252,36 @@ mod macro_parsing_tests {
     fn test_validate_api_name_invalid_chars_hyphen_rejected() {
         let result = validate_api_name("test-api");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("invalid characters"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("invalid characters")
+        );
     }
 
     #[test]
     fn test_validate_api_name_invalid_chars_dot_rejected() {
         let result = validate_api_name("test.api");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("invalid characters"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("invalid characters")
+        );
     }
 
     #[test]
     fn test_validate_api_name_starting_with_digit_rejected() {
         let result = validate_api_name("1api");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("must start with a letter or underscore"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("must start with a letter or underscore")
+        );
     }
 
     #[test]
@@ -2299,10 +2300,12 @@ mod macro_parsing_tests {
         // (they are not alphanumeric or underscore).
         let result = validate_api_name("test\x00name");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("invalid characters"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("invalid characters")
+        );
     }
 
     // ============================================================================
@@ -2353,10 +2356,12 @@ mod macro_parsing_tests {
     fn test_validate_version_empty_rejected() {
         let result = validate_version("");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("API version cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("API version cannot be empty")
+        );
     }
 
     #[test]
@@ -2373,20 +2378,24 @@ mod macro_parsing_tests {
         // Internal spaces are not alphanumeric, dots, or hyphens.
         let result = validate_version("v1 2");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("invalid characters"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("invalid characters")
+        );
     }
 
     #[test]
     fn test_validate_version_invalid_chars_slash_rejected() {
         let result = validate_version("v1/2");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("invalid characters"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("invalid characters")
+        );
     }
 
     // ============================================================================
@@ -2554,8 +2563,15 @@ mod macro_parsing_tests {
         ];
         let path_params = vec!["id".to_string()];
 
-        let tokens =
-            generate_cli_registration("state_cmd", "v1", None, &fn_name, &params, &path_params, None);
+        let tokens = generate_cli_registration(
+            "state_cmd",
+            "v1",
+            None,
+            &fn_name,
+            &params,
+            &path_params,
+            None,
+        );
         let s = normalize_ts(&tokens);
 
         // The State parameter "state" must NOT appear as a CliArgInfo entry.
@@ -2589,8 +2605,15 @@ mod macro_parsing_tests {
         ];
         let path_params = vec!["id".to_string()];
 
-        let tokens =
-            generate_cli_registration("mixed_cmd", "v1", None, &fn_name, &params, &path_params, None);
+        let tokens = generate_cli_registration(
+            "mixed_cmd",
+            "v1",
+            None,
+            &fn_name,
+            &params,
+            &path_params,
+            None,
+        );
         let s = normalize_ts(&tokens);
 
         // Path → CliArgType::Path with required=true
@@ -2611,8 +2634,15 @@ mod macro_parsing_tests {
         let params: Vec<ParamInfo> = vec![];
         let path_params: Vec<String> = vec![];
 
-        let tokens =
-            generate_cli_registration("empty_cmd", "v1", None, &fn_name, &params, &path_params, None);
+        let tokens = generate_cli_registration(
+            "empty_cmd",
+            "v1",
+            None,
+            &fn_name,
+            &params,
+            &path_params,
+            None,
+        );
         let s = normalize_ts(&tokens);
 
         // Even with no args, both registrations must be emitted.

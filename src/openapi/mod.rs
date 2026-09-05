@@ -88,7 +88,7 @@ pub struct OpenApiRouteInfo {
 
 inventory::collect!(OpenApiRouteInfo);
 
-/// Builder for constructing an [`OpenApi`] specification with custom metadata.
+/// Builder for constructing an `OpenApi` specification with custom metadata.
 ///
 /// Routes are always collected from the global `inventory` registry; the
 /// builder only controls the top-level `info` section (title, version,

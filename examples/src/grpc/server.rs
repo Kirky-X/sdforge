@@ -26,7 +26,7 @@
 use sdforge::core::ApiMetadata;
 #[allow(deprecated)]
 use sdforge::grpc::{
-    build_server, build_server_with_config, GrpcRoute, GrpcServerConfig, SdForgeGrpcService,
+    GrpcRoute, GrpcServerConfig, SdForgeGrpcService, build_server, build_server_with_config,
 };
 
 // =============================================================================

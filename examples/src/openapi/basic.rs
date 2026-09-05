@@ -39,7 +39,7 @@
 //!     .build();
 //! ```
 
-use sdforge::openapi::{generate_openapi_spec, OpenApiBuilder, OpenApiRouteInfo};
+use sdforge::openapi::{OpenApiBuilder, OpenApiRouteInfo, generate_openapi_spec};
 use sdforge::prelude::*;
 
 // ============================================================================

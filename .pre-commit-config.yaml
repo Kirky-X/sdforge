@@ -1,9 +1,6 @@
-# Pre-commit hooks for SDForge Rust Project
-# Install: pip install pre-commit && pre-commit install
-# Docs: https://pre-commit.com/
-
+# pre-commit 配置 — 7 仓库统一基线(见 base/CONFIG_BASELINE.md)
+# 安装: pip install pre-commit && pre-commit install --install-hooks
 repos:
-  # 1. Basic file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
@@ -18,38 +15,40 @@ repos:
       - id: check-merge-conflict
         args: ['--assume-in-merge']
       - id: no-commit-to-branch
-        args: ['--branch', 'master']
-        # Only protect master branch, allow main for development（对齐 oxcache/limiteron/inklog/dbnexus 5 仓库统一治理，符合 git.md「直接在主分支工作」）
+        args: ['--branch', 'main', '--branch', 'master']
 
-  # 2. Detect secrets (with baseline for known false positives)
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
       - id: detect-secrets
-        args: [--baseline, .secrets.baseline]
+        args: [--exclude-files, tests/, --exclude-files, examples/]
         exclude: '^Cargo\.lock$'
 
-  # 3. Rust formatting and checks
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.28.0
+    hooks:
+      - id: typos
+
   - repo: local
     hooks:
       - id: cargo-fmt
         name: Format Rust code
-        description: Run rustfmt on Rust files (workspace only)
-        entry: cargo fmt -- --check
+        description: Run rustfmt on Rust files
+        entry: cargo fmt --all -- --check
         language: system
         types: [rust]
         pass_filenames: false
 
       - id: cargo-check
         name: cargo check
-        entry: cargo check --all-features --workspace
+        entry: cargo check --all-features
         language: system
         types: [rust]
         pass_filenames: false
 
       - id: cargo-clippy
         name: cargo clippy
-        entry: cargo clippy --all-targets --all-features --workspace -- -D warnings
+        entry: cargo clippy --all-targets --all-features -- -D warnings
         language: system
         types: [rust]
         pass_filenames: false

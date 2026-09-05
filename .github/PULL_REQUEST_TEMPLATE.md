@@ -1,31 +1,29 @@
-<!-- PR 模板：提交前请填写。保留必要项，删除不适用的章节。 -->
+## 变更描述
 
-## 变更说明
-
-<!-- 这个 PR 做了什么？为什么？链接相关 issue: closes #123 -->
+<!-- 简要描述本次 PR 做了什么,以及为什么 -->
 
 ## 变更类型
 
-- [ ] feat 新功能
-- [ ] fix 缺陷修复
-- [ ] refactor 重构（无行为变化）
-- [ ] perf 性能优化
-- [ ] docs 文档
-- [ ] test 测试
-- [ ] ci CI/构建
-- [ ] chore 杂项
-- [ ] breaking 破坏性变更
+- [ ] feat: 新功能
+- [ ] fix: Bug 修复
+- [ ] refactor: 重构
+- [ ] perf: 性能优化
+- [ ] docs: 文档
+- [ ] test: 测试
+- [ ] chore: 杂项
+- [ ] ci: CI/CD
+- [ ] breaking: 破坏性变更
 
-## 自检清单
+## 检查清单
 
-- [ ] 提交信息遵循 Conventional Commits（`type(scope): subject`）
-- [ ] 已为新功能编写/更新测试，覆盖率不低于 80%
-- [ ] 本地已运行：`cargo fmt --check` + `cargo clippy --all-features` + `cargo test --features full`，零告警通过
-- [ ] 所有特性组合编译通过（http / mcp / http,mcp / full 等）
-- [ ] 无硬编码密钥、密码、令牌
-- [ ] 日志/错误响应中无 PII 泄露
-- [ ] 已更新受影响的文档 / README
+- [ ] 代码通过 `cargo fmt --all -- --check`
+- [ ] 代码通过 `cargo clippy --all-targets -- <feature 组合> -- -D warnings`
+- [ ] 测试通过 `cargo test --workspace <feature 组合>`
+- [ ] 新增功能有对应的测试覆盖
+- [ ] 新增功能有对应的示例
+- [ ] 文档已更新(如有需要)
+- [ ] CHANGELOG.md 已更新(如为用户可见变更)
 
-## 风险与回滚
+## 相关 Issue
 
-<!-- 破坏性变更？兼容性影响？回滚方式？如无可写"无"。 -->
+<!-- 关联的 issue 编号,例如 Closes #123 -->
