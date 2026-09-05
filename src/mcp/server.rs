@@ -127,10 +127,8 @@ impl SdForgeMcpServer {
         // Translate description at runtime using i18n registry.
         // Falls back to the compile-time English default when no
         // translation is registered for the active locale.
-        let translated_desc = crate::i18n::translate_or_fallback(
-            tool.description(),
-            instance.metadata().i18n_key(),
-        );
+        let translated_desc =
+            crate::i18n::translate_or_fallback(tool.description(), instance.metadata().i18n_key());
         model.description = Some(translated_desc.into());
         model.input_schema = input_schema;
         model
@@ -155,7 +153,7 @@ impl SdForgeMcpServer {
     ///
     /// # Security
     ///
-    /// - Arguments payload size is capped at [`MAX_ARGUMENTS_SIZE_BYTES`].
+    /// - Arguments payload size is capped at `MAX_ARGUMENTS_SIZE_BYTES`.
     ///   Larger payloads are rejected with `invalid_params` before reaching
     ///   the tool implementation (DoS defense).
     /// - Unknown tool names return a generic `"tool not found"` error without

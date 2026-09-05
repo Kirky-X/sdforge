@@ -1,13 +1,17 @@
 [package]
 name = "sdforge-examples"
-version = "0.2.1"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 description = "Examples demonstrating SDForge framework functionality"
 license = "MIT"
 repository = "https://github.com/Kirky-X/sdforge"
 keywords = ["examples", "sdforge", "http", "mcp"]
 categories = ["web-programming", "development-tools"]
 publish = false
+
+[lints]
+workspace = true
 
 [dependencies]
 sdforge = { path = ".." }
@@ -17,10 +21,14 @@ serde_json = "1.0"
 thiserror = "2.0"
 uuid = { version = "1.23", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
-# Note: `inventory`, `axum`, `clap`, `rmcp`, `tonic`, `prost`, `utoipa` are
+# Note: `inventory`, `axum`, `clap`, `rmcp`, `tonic`, `prost` are
 # re-exported by sdforge (sdforge::inventory, sdforge::axum, sdforge::clap,
-# sdforge::rmcp, sdforge::tonic, sdforge::prost, sdforge::utoipa). Downstream
+# sdforge::rmcp, sdforge::tonic, sdforge::prost). Downstream
 # crates must NOT add direct dependencies on these framework libraries.
+# Exception: `utoipa` — when this crate enables sdforge's `openapi` feature,
+# the `#[forge]` macro emits `#[cfg_attr(feature = "openapi", utoipa::path(...))]`,
+# which requires `utoipa` to be resolvable in the current crate.
+utoipa = { workspace = true }
 
 [features]
 default = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "cache_examples", "grpc_examples", "logging_examples", "openapi_examples", "cli_examples", "docs_examples", "combined_examples"]

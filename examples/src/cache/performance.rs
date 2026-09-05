@@ -152,10 +152,10 @@ impl CacheAsidePattern {
         T: Cacheable + Clone,
     {
         // Try cache first
-        if let Some(data) = self.cache.get(key) {
-            if let Ok(value) = serde_json::from_slice::<T>(&data) {
-                return value;
-            }
+        if let Some(data) = self.cache.get(key)
+            && let Ok(value) = serde_json::from_slice::<T>(&data)
+        {
+            return value;
         }
 
         // Compute and cache

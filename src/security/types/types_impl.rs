@@ -22,7 +22,7 @@ impl CacheNamespace {
 // Serialization Helpers for Cache Storage
 // =============================================================================
 
-/// Serialize a list of permissions (Vec<String>) to bytes
+/// Serialize a list of permissions (`Vec<String>`) to bytes
 pub fn serialize_permissions(perms: &[String]) -> Vec<u8> {
     bincode::serde::encode_to_vec(perms, bincode::config::standard()).unwrap_or_default()
 }

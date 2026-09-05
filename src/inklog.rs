@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! inklog 结构化日志集成 — 将裸 `log` 输出桥接到 inklog LoggerManager。
 //!
-//! 启用 `inklog` feature 后，此模块提供 [`init_inklog_logger`] 函数，
+//! 启用 `inklog` feature 后，此模块提供 [`init_inklog_logger`](crate::inklog::init_inklog_logger) 函数，
 //! 将 inklog 安装为全局 `log` crate 后端。此后 sdforge 中所有
 //! `log::error!`/`log::warn!`/`log::info!` 等调用自动路由到 inklog 的
 //! 结构化日志管道（console + async sinks），无需修改任何现有调用点。

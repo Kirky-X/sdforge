@@ -205,8 +205,8 @@ async fn create_user(
     request: CreateUserRequest,
     state: &AppState,
 ) -> Result<UserResponse, ApiError> {
-    use sdforge::core::validation::validators::{validate_email, validate_length};
     use sdforge::core::validation::MIN_PASSWORD_LENGTH;
+    use sdforge::core::validation::validators::{validate_email, validate_length};
 
     // 1. Validate input manually (in addition to derive Validate)
     if validate_email(&request.email).is_err() {
@@ -456,8 +456,8 @@ mod tests {
 
     #[test]
     fn test_input_validation() {
-        use sdforge::core::validation::validators::{validate_email, validate_length};
         use sdforge::core::validation::MIN_PASSWORD_LENGTH;
+        use sdforge::core::validation::validators::{validate_email, validate_length};
 
         // Valid inputs
         assert!(validate_email("user@example.com").is_ok());

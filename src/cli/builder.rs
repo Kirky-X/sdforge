@@ -179,10 +179,7 @@ fn build_subcommand(reg: &CliCommandRegistration) -> clap::Command {
     // Translate description at runtime using i18n registry.
     // Falls back to the compile-time English default when no
     // translation is registered for the active locale.
-    let translated_desc = crate::i18n::translate_or_fallback(
-        reg.description,
-        reg.i18n_key,
-    );
+    let translated_desc = crate::i18n::translate_or_fallback(reg.description, reg.i18n_key);
     let mut sub = clap::Command::new(reg.name)
         .version(reg.version)
         .about(translated_desc);

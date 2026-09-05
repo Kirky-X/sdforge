@@ -73,10 +73,8 @@ static REGISTRY: LazyLock<Mutex<TranslationRegistry>> = LazyLock::new(|| {
 /// ```
 pub fn register_translation(locale: &str, key: &str, value: &str) {
     let mut reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
-    reg.translations.insert(
-        (locale.to_string(), key.to_string()),
-        value.to_string(),
-    );
+    reg.translations
+        .insert((locale.to_string(), key.to_string()), value.to_string());
 }
 
 /// Set the active locale for translation lookups.
@@ -233,10 +231,7 @@ mod translation_tests {
 
     #[test]
     fn test_translate_or_fallback_no_key() {
-        assert_eq!(
-            translate_or_fallback("default text", None),
-            "default text"
-        );
+        assert_eq!(translate_or_fallback("default text", None), "default text");
     }
 
     #[test]

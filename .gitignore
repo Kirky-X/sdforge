@@ -1,106 +1,70 @@
 # =============================================================================
-# Axiom - Multi-protocol Declarative SDK Framework
-# =============================================================================
-# This .gitignore is optimized for Rust project development
-# Organized by category for easy maintenance
+# sdforge — .gitignore
+# 结构:统一公共段(7 仓库同源,见 base/CONFIG_BASELINE.md)+ 仓库特有段
+# 注意:Cargo.lock 与 rust-toolchain.toml 纳入版本控制,不再忽略
 # =============================================================================
 
 # =============================================================================
-# Build Artifacts (Rust specific)
+# 统一公共段
 # =============================================================================
-target/
+
+# --- Build artifacts (Rust) ---
+/target
+/debug
+/release
 **/*.rs.bk
 
-# Cargo build outputs
-**/Cargo.lock
-*.rlib
-*.rmeta
-*.so
-*.a
-*.o
-*.dylib
-*.dll
-
-# Cargo profile outputs (code coverage)
-profraw/
-profdata/
-
-# Cargo sparse registry protocol
+# Cargo 本地覆盖(.cargo/config.toml 等机器特定配置)
 .cargo/
 
-# =============================================================================
-# Generated Documentation
-# =============================================================================
-doc/
-docs/book/
-target/doc/
-# Specific docs are gitignored
-docs/ettara.md
-docs/prd.md
-docs/task.md
-docs/tdd.md
-docs/test.md
-docs/uat.md
+# --- Code coverage ---
 coverage/
+*.profraw
+*.profdata
+*.gcda
+*.gcno
+lcov.info
 *.lcov
 htmlcov/
 tarpaulin-report.html
 
-# Generated API documentation (root-level only, not src/openapi/)
-/openapi/
-/swagger/
-
-# =============================================================================
-# IDE & Editors
-# =============================================================================
+# --- IDE & Editors ---
 .idea/
 .vscode/
+.vscodeignore
+.idea_modules/
+*.code-workspace
+*.sublime-*
+.nvimrc
 *.swp
 *.swo
 *~
-.nvimrc
-*.sublime-*
-.idea_modules/
-*.code-workspace
-.vscodeignore
+.un~
+Session.vim
+.netrwhist
 
-# =============================================================================
-# OS Generated
-# =============================================================================
+# --- OS generated ---
 .DS_Store
 Thumbs.db
 Desktop.ini
 ehthumbs.db
-$RECYCLE.BIN/
-*.lnk
 
-# =============================================================================
-# Logs
-# =============================================================================
+# --- Logs ---
 *.log
 logs/
 *.pid
 *.seed
-debug.log
 
-# =============================================================================
-# Temporary Files
-# =============================================================================
+# --- Temporary files ---
 *.tmp
 *.temp
 *.bak
-*.backup
-*backup*
-tmp/
-temp/
-temp/
-work/
 *.orig
 *.rej
+tmp/
+temp/
 
-# =============================================================================
-# Environment & Secrets (never commit these)
-# =============================================================================
+# --- Environment & secrets (never commit) ---
 .env
 .env.local
 .env.*.local
@@ -111,178 +75,91 @@ work/
 *.crt
 *.secret
 *.credentials
+.pre-commit-check.log
 
-# =============================================================================
-# Local Configuration (machine-specific settings)
-# =============================================================================
+# --- Local config / AI assistant files (kept local only) ---
 .local-registry/
 .claude/
-CLAUDE.md
-IFLOW.md
-
-# AI Assistant Configuration
-openspec/
-specmark/
-.iflow/
-AGENTS.md
-.opencode/
-.sisyphus/
-
-# Dependency databases
-requirements.db
-
-# Rust toolchain override
-rust-toolchain
-rust-toolchain.toml
-
-# =============================================================================
-# Testing
-# =============================================================================
-# Test outputs
-test-results/
-**/test/
-
-# Benchmark results
-benches/results/
-*.benches
-
-# Load test results
-load-test-results/
-
-# =============================================================================
-# Pre-commit
-# =============================================================================
-.pre-commit-check.log
-.pre-commit-hooks.yaml
-
-# =============================================================================
-# Linter & Formatter Cache
-# =============================================================================
-.ruff_cache/
-.pyright/
-
-# =============================================================================
-# Database Files (development)
-# =============================================================================
-*.db
-*.sqlite
-*.sqlite3
-*.db-journal
-
-# =============================================================================
-# Binary & Executable Files (except source)
-# =============================================================================
-*.exe
-*.dll
-*.so
-*.dylib
-*.bin
-*.app
-
-# =============================================================================
-# Backup Files (various editors)
-# =============================================================================
-*~
-.#*
-.#*
-*#
-.bak~
-$$
-.DS_Store?
-ehthumbs.db
-Icon?
-Thumbs.db:encryptable
-Desktop.ini:encryptable
-
-# Vim
-*.un~
-Session.vim
-.netrwhist
-
-# Emacs
-*~
-\#*#
-.#*
-
-# =============================================================================
-# Project Exclusions (specific paths)
-# =============================================================================
-# Generated files
-*.generated.rs
-
-# Local development notes
-DEV_NOTES.md
-TODO.md
-CODE_REVIEW_REPORT.md
-
-# Project documentation
-docs/ettara.md
-docs/prd.md
-docs/task.md
-docs/tdd.md
-docs/test.md
-docs/uat.md
-
-# Superpowers plans and specs
-docs/superpowers/
-
-# CI/CD local testing
-.github/workflows/tests/
-.github/workflows/local/
-
-# =============================================================================
-# Standard Git Exclusions
-# =============================================================================
-.git/
-# 注意：.gitattributes 必须版本化（跨平台换行策略），不在此忽略
-.gitignore
-.gitmodules
-
-# =============================================================================
-# End of .gitignore
-# =============================================================================
-.trae/
-
-# =============================================================================
-# Local Development (Qoder)
-# =============================================================================
-.qoder/
-di.md
-
-# Git worktrees for isolated development
-.worktrees/
-.gitnexus
-
-# =============================================================================
-# AI / Agent Tools (not for version control)
-# =============================================================================
-AGENTS.md
-CLAUDE.md
-GEMINI.md
-CODEIUM.md
-.claude/
-.trae/
 .qoder/
 .opencode/
 .cursor/
 .aider/
 .continue/
 .codeium/
+.iflow/
+.sisyphus/
 .github/copilot/
-strix_runs
-
-# =============================================================================
-# Specmark / CodeNexus workspaces (rule 27 — never tracked)
-# =============================================================================
+CLAUDE.md
+IFLOW.md
+GEMINI.md
+CODEIUM.md
+AGENTS.md
+openspec/
 specmark/
 **/specmark/
 .codenexus/
 **/.codenexus/
+strix_runs
 
-# =============================================================================
-# Reviews (security/quality scan artifacts — never tracked)
-# =============================================================================
+# --- Isolated dev workspaces ---
+.worktrees/
+.gitnexus
+
+# --- Reviews / security scan artifacts (never tracked) ---
 reviews/
+.mimosa/
 
-# WorkBuddy AI local notes
+# --- WorkBuddy AI local notes ---
 .workbuddy-ai/
+
+# =============================================================================
+# 仓库特有段(sdforge)
+# =============================================================================
+
+# --- Rust build byproducts ---
+*.rlib
+*.rmeta
+*.so
+*.a
+*.o
+*.dylib
+*.dll
+*.exe
+*.bin
+*.app
+
+# --- Generated API documentation(根目录生成物;src/openapi/ 源码不受影响) ---
+/openapi/
+/swagger/
+
+# --- 本仓内部文档草稿(定稿前不入库) ---
+doc/
+docs/book/
+docs/ettara.md
+docs/prd.md
+docs/task.md
+docs/tdd.md
+docs/test.md
+docs/uat.md
+docs/superpowers/
+
+# --- 本地开发笔记 ---
+DEV_NOTES.md
+TODO.md
+CODE_REVIEW_REPORT.md
+di.md
+
+# --- 本地 CI / 测试 / 基准产物 ---
+.github/workflows/tests/
+.github/workflows/local/
+benches/results/
+load-test-results/
+test-results/
+
+# --- 本地数据库文件 ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- 生成代码 ---
+*.generated.rs
