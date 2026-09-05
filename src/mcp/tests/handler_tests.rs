@@ -25,6 +25,7 @@ fn test_api_metadata_accessors() {
         description: String::new(),
         cache_ttl: Some(300),
         is_streaming: true,
+        i18n_key: None,
     };
     assert_eq!(metadata.name(), "my_api");
     assert_eq!(metadata.version(), "v2");
@@ -252,6 +253,7 @@ fn test_metadata_with_cache_ttl() {
         description: String::new(),
         cache_ttl: Some(600),
         is_streaming: false,
+        i18n_key: None,
     };
     assert_eq!(metadata.cache_ttl(), Some(600));
 }
@@ -264,6 +266,7 @@ fn test_metadata_streaming_flag() {
         description: String::new(),
         cache_ttl: None,
         is_streaming: true,
+        i18n_key: None,
     };
     assert!(metadata.is_streaming());
 }

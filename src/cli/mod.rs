@@ -73,6 +73,12 @@ pub struct CliCommandRegistration {
     pub handler_fn_name: &'static str,
     /// Static slice of argument metadata, sorted in declaration order.
     pub args: &'static [CliArgInfo],
+    /// Optional i18n key for runtime translation of the description.
+    ///
+    /// When set, `build_subcommand` looks up a translation via
+    /// `sdforge::i18n::translate_or_fallback` using the active locale.
+    /// Falls back to the English `description` when no translation is found.
+    pub i18n_key: Option<&'static str>,
 }
 
 mod cli_impl;

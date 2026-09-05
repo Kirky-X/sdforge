@@ -41,6 +41,7 @@ fn create_test_mcp_metadata_for_docs() -> ApiMetadata {
         description: "A test MCP tool for docs generation".to_string(),
         cache_ttl: None,
         is_streaming: false,
+        i18n_key: None,
     }
 }
 

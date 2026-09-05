@@ -41,6 +41,7 @@ fn test_http_route_creation() {
             description: "Test API".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
         None,
     );
@@ -85,6 +86,7 @@ fn test_route_registration() {
                     description: "".to_string(),
                     cache_ttl: None,
                     is_streaming: false,
+                    i18n_key: None,
                 },
                 None,
             )
@@ -95,6 +97,7 @@ fn test_route_registration() {
             description: "".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
     );
 
@@ -160,6 +163,7 @@ fn test_http_route_with_module_prefix() {
             description: "Users API".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
         Some("v1".to_string()),
     );
@@ -183,6 +187,7 @@ fn test_http_route_handler_accessor() {
             description: "".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
         None,
     );
@@ -203,6 +208,7 @@ fn test_http_route_clone() {
             description: "Clone test".to_string(),
             cache_ttl: Some(60),
             is_streaming: false,
+            i18n_key: None,
         },
         Some("api".to_string()),
     );
@@ -224,6 +230,7 @@ fn test_http_route_debug() {
             description: "Debug test".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
         None,
     );
@@ -252,6 +259,7 @@ fn test_route_registration_name_accessor() {
                     description: "".to_string(),
                     cache_ttl: None,
                     is_streaming: false,
+                    i18n_key: None,
                 },
                 None,
             )
@@ -262,6 +270,7 @@ fn test_route_registration_name_accessor() {
             description: "".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
     );
 
@@ -284,6 +293,7 @@ fn test_route_registration_create() {
                     description: "Create test".to_string(),
                     cache_ttl: None,
                     is_streaming: false,
+                    i18n_key: None,
                 },
                 None,
             )
@@ -294,6 +304,7 @@ fn test_route_registration_create() {
             description: "Create test".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
     );
 
@@ -417,6 +428,7 @@ fn test_route_registration_metadata() {
                     description: "Metadata test".to_string(),
                     cache_ttl: Some(300),
                     is_streaming: true,
+                    i18n_key: None,
                 },
                 None,
             )
@@ -427,6 +439,7 @@ fn test_route_registration_metadata() {
             description: "Metadata test".to_string(),
             cache_ttl: Some(300),
             is_streaming: true,
+            i18n_key: None,
         },
     );
 
@@ -452,6 +465,7 @@ fn test_route_registration_debug() {
                     description: "".to_string(),
                     cache_ttl: None,
                     is_streaming: false,
+                    i18n_key: None,
                 },
                 None,
             )
@@ -462,6 +476,7 @@ fn test_route_registration_debug() {
             description: "".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
     );
 
@@ -486,6 +501,7 @@ fn test_route_registration_clone() {
                     description: "".to_string(),
                     cache_ttl: None,
                     is_streaming: false,
+                    i18n_key: None,
                 },
                 None,
             )
@@ -496,6 +512,7 @@ fn test_route_registration_clone() {
             description: "".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
     );
 
@@ -520,6 +537,7 @@ fn test_route_registration_copy() {
                     description: "".to_string(),
                     cache_ttl: None,
                     is_streaming: false,
+                    i18n_key: None,
                 },
                 None,
             )
@@ -530,6 +548,7 @@ fn test_route_registration_copy() {
             description: "".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
     );
 
@@ -553,6 +572,7 @@ fn test_http_route_with_root_path() {
             description: "Root path".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
         None,
     );
@@ -572,6 +592,7 @@ fn test_http_route_with_nested_path() {
             description: "Nested path".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
         Some("api".to_string()),
     );
@@ -592,6 +613,7 @@ fn test_http_route_with_regex_path() {
             description: "Wildcard path".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
         None,
     );
@@ -611,6 +633,7 @@ fn test_http_route_metadata_accessors() {
             description: "Full metadata test".to_string(),
             cache_ttl: Some(600),
             is_streaming: true,
+            i18n_key: None,
         },
         Some("v2".to_string()),
     );

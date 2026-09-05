@@ -39,6 +39,7 @@ fn coverage_test_route_create() -> HttpRoute {
             description: "Coverage test route".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
         None,
     )
@@ -51,6 +52,7 @@ fn coverage_test_route_metadata() -> ApiMetadata {
         description: "Coverage test route".to_string(),
         cache_ttl: None,
         is_streaming: false,
+        i18n_key: None,
     }
 }
 

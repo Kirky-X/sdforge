@@ -124,7 +124,14 @@ impl SdForgeMcpServer {
         let input_schema = value_to_json_object_arc(tool.input_schema());
         let mut model = Tool::default();
         model.name = tool.name().to_string().into();
-        model.description = Some(tool.description().to_string().into());
+        // Translate description at runtime using i18n registry.
+        // Falls back to the compile-time English default when no
+        // translation is registered for the active locale.
+        let translated_desc = crate::i18n::translate_or_fallback(
+            tool.description(),
+            instance.metadata().i18n_key(),
+        );
+        model.description = Some(translated_desc.into());
         model.input_schema = input_schema;
         model
     }

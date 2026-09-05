@@ -60,6 +60,7 @@ fn test_websocket_route_structure() {
         description: "WebSocket handler".to_string(),
         cache_ttl: None,
         is_streaming: true,
+        i18n_key: None,
     });
 
     assert_eq!(route.name(), "/ws");
@@ -187,6 +188,7 @@ fn websocket_route_custom_handler() {
             description: "Echo handler".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
     );
     assert_eq!(route.name(), "/echo");
