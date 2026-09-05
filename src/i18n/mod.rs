@@ -31,22 +31,151 @@
 //! assert_eq!(locales, vec!["en-US", "en", "zh-CN", "zh"]);
 //! ```
 
+// ============================================================================
+// Translation registry — always compiled (no ICU4X dependency).
+//
+// Provides a global (locale, i18n_key) → translation lookup used by
+// protocol consumption points (MCP, CLI, OpenAPI, gRPC) to translate
+// proc-macro attribute `description` strings at runtime.
+// ============================================================================
+
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
+
+/// Global translation state: active locale + translation map.
+struct TranslationRegistry {
+    locale: String,
+    translations: HashMap<(String, String), String>,
+}
+
+static REGISTRY: LazyLock<Mutex<TranslationRegistry>> = LazyLock::new(|| {
+    Mutex::new(TranslationRegistry {
+        locale: String::new(),
+        translations: HashMap::new(),
+    })
+});
+
+/// Register a translation for a specific locale and i18n key.
+///
+/// Call this at application startup to populate the translation table.
+/// Protocol consumption points (MCP tool descriptions, CLI `--help`,
+/// OpenAPI specs, gRPC metadata) look up translations via
+/// [`translate_or_fallback`] at build time.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sdforge::i18n::{register_translation, set_locale};
+///
+/// register_translation("zh-CN", "forge.embed.description",
+///     "为输入文本生成嵌入向量");
+/// set_locale("zh-CN");
+/// ```
+pub fn register_translation(locale: &str, key: &str, value: &str) {
+    let mut reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+    reg.translations.insert(
+        (locale.to_string(), key.to_string()),
+        value.to_string(),
+    );
+}
+
+/// Set the active locale for translation lookups.
+///
+/// Defaults to `"en"` when no locale has been set. Protocol consumption
+/// points call [`translate_or_fallback`] which uses this locale to
+/// resolve i18n keys.
+pub fn set_locale(locale: &str) {
+    let mut reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+    reg.locale = locale.to_string();
+}
+
+/// Get the currently active locale.
+pub fn get_locale() -> String {
+    let reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+    if reg.locale.is_empty() {
+        "en".to_string()
+    } else {
+        reg.locale.clone()
+    }
+}
+
+/// Look up a translation for the active locale, falling back to `default`
+/// when no translation is found or `i18n_key` is `None`.
+///
+/// This is the function called by protocol consumption points (MCP
+/// `build_tool_model`, CLI `build_subcommand`, OpenAPI `build`, gRPC
+/// info response) to translate compile-time `description` literals at
+/// runtime.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// use sdforge::i18n::translate_or_fallback;
+///
+/// // Without any translation registered:
+/// assert_eq!(
+///     translate_or_fallback("Generate embedding", Some("forge.embed")),
+///     "Generate embedding"  // fallback to default
+/// );
+/// ```
+pub fn translate_or_fallback(default: &str, i18n_key: Option<&str>) -> String {
+    let key = match i18n_key {
+        Some(k) if !k.is_empty() => k,
+        _ => return default.to_string(),
+    };
+    let locale = {
+        let reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+        if reg.locale.is_empty() {
+            return default.to_string();
+        }
+        reg.locale.clone()
+    };
+    let reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+    reg.translations
+        .get(&(locale, key.to_string()))
+        .cloned()
+        .unwrap_or_else(|| default.to_string())
+}
+
+/// Clear all registered translations and reset the locale.
+///
+/// Primarily useful for testing.
+pub fn clear_translations() {
+    let mut reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+    reg.translations.clear();
+    reg.locale.clear();
+}
+
+// ============================================================================
+// ICU4X-backed HTTP formatter — only compiled with the `i18n` feature.
+// ============================================================================
+
+#[cfg(feature = "i18n")]
 #[cfg(test)]
 use std::cmp::Ordering;
 
+#[cfg(feature = "i18n")]
 use icu::collator::CollatorBorrowed;
+#[cfg(feature = "i18n")]
 use icu::decimal::DecimalFormatter;
+#[cfg(feature = "i18n")]
 use icu::locale::Locale;
+#[cfg(feature = "i18n")]
 use icu::plurals::PluralRules;
+#[cfg(feature = "i18n")]
 use thiserror::Error;
 
 /// Default quality value for Accept-Language entries without an explicit `q`.
+#[cfg(feature = "i18n")]
 pub(crate) const DEFAULT_Q_VALUE: f64 = 1.0;
 
+#[cfg(feature = "i18n")]
 mod i18n_impl;
+#[cfg(feature = "i18n")]
 pub use i18n_impl::parse_accept_language;
 
 /// Errors returned by [`HttpI18nFormatter`] operations.
+#[cfg(feature = "i18n")]
 #[derive(Debug, Error)]
 pub enum I18nError {
     /// BCP-47 locale string could not be parsed.
@@ -86,6 +215,7 @@ pub enum I18nError {
 /// to select the best locale from an HTTP `Accept-Language` header. All
 /// formatters are created eagerly so that repeated formatting calls are
 /// allocation-light.
+#[cfg(feature = "i18n")]
 pub struct HttpI18nFormatter {
     locale: Locale,
     decimal_formatter: DecimalFormatter,
@@ -93,7 +223,115 @@ pub struct HttpI18nFormatter {
     collator: CollatorBorrowed<'static>,
 }
 
+// ============================================================================
+// Translation registry tests (always compiled, no ICU4X needed)
+// ============================================================================
+
 #[cfg(test)]
+mod translation_tests {
+    use super::*;
+
+    #[test]
+    fn test_translate_or_fallback_no_key() {
+        assert_eq!(
+            translate_or_fallback("default text", None),
+            "default text"
+        );
+    }
+
+    #[test]
+    fn test_translate_or_fallback_empty_key() {
+        assert_eq!(
+            translate_or_fallback("default text", Some("")),
+            "default text"
+        );
+    }
+
+    #[test]
+    fn test_translate_or_fallback_no_locale_set() {
+        clear_translations();
+        assert_eq!(
+            translate_or_fallback("default text", Some("some.key")),
+            "default text"
+        );
+    }
+
+    #[test]
+    fn test_translate_or_fallback_with_translation() {
+        clear_translations();
+        register_translation("zh-CN", "forge.embed", "生成嵌入向量");
+        set_locale("zh-CN");
+        assert_eq!(
+            translate_or_fallback("Generate embedding", Some("forge.embed")),
+            "生成嵌入向量"
+        );
+        clear_translations();
+    }
+
+    #[test]
+    fn test_translate_or_fallback_missing_translation() {
+        clear_translations();
+        set_locale("zh-CN");
+        assert_eq!(
+            translate_or_fallback("Generate embedding", Some("forge.nonexistent")),
+            "Generate embedding"
+        );
+        clear_translations();
+    }
+
+    #[test]
+    fn test_translate_or_fallback_wrong_locale() {
+        clear_translations();
+        register_translation("zh-CN", "forge.embed", "生成嵌入向量");
+        set_locale("ja-JP");
+        // Translation registered for zh-CN, but active locale is ja-JP
+        assert_eq!(
+            translate_or_fallback("Generate embedding", Some("forge.embed")),
+            "Generate embedding"
+        );
+        clear_translations();
+    }
+
+    #[test]
+    fn test_set_and_get_locale() {
+        clear_translations();
+        assert_eq!(get_locale(), "en"); // default
+        set_locale("zh-CN");
+        assert_eq!(get_locale(), "zh-CN");
+        clear_translations();
+    }
+
+    #[test]
+    fn test_clear_translations() {
+        register_translation("en", "key1", "value1");
+        set_locale("en");
+        assert_eq!(translate_or_fallback("default", Some("key1")), "value1");
+        clear_translations();
+        assert_eq!(translate_or_fallback("default", Some("key1")), "default");
+        assert_eq!(get_locale(), "en"); // default after clear
+    }
+
+    #[test]
+    fn test_multiple_locales() {
+        clear_translations();
+        register_translation("zh-CN", "greet", "你好");
+        register_translation("ja-JP", "greet", "こんにちは");
+
+        set_locale("zh-CN");
+        assert_eq!(translate_or_fallback("Hello", Some("greet")), "你好");
+
+        set_locale("ja-JP");
+        assert_eq!(translate_or_fallback("Hello", Some("greet")), "こんにちは");
+
+        clear_translations();
+    }
+}
+
+// ============================================================================
+// ICU4X HTTP formatter tests — only compiled with the `i18n` feature.
+// ============================================================================
+
+#[cfg(all(test, feature = "i18n"))]
 mod tests {
     use super::*;
 

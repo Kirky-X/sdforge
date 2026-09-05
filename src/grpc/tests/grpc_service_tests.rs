@@ -104,6 +104,7 @@ fn test_grpc_route_structure() {
             description: "Test gRPC service".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         },
     };
 
@@ -124,6 +125,7 @@ fn test_grpc_route_metadata_accessors() {
             description: "API service".to_string(),
             cache_ttl: Some(300),
             is_streaming: false,
+            i18n_key: None,
         },
     };
 
@@ -307,6 +309,7 @@ fn test_grpc_route_with_streaming_metadata() {
             description: "Streaming API".to_string(),
             cache_ttl: None,
             is_streaming: true,
+            i18n_key: None,
         },
     };
 
@@ -326,6 +329,7 @@ fn test_grpc_route_with_cache_ttl() {
             description: "Cached API".to_string(),
             cache_ttl: Some(600),
             is_streaming: false,
+            i18n_key: None,
         },
     };
 
@@ -345,6 +349,7 @@ fn test_grpc_route_metadata_cloning() {
             description: "Test".to_string(),
             cache_ttl: Some(300),
             is_streaming: false,
+            i18n_key: None,
         },
     };
 
@@ -738,6 +743,7 @@ fn test_grpc_route_registration_new() {
             description: "Test route".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         });
 
     assert_eq!(registration.name(), "test_route");
@@ -777,6 +783,7 @@ fn test_grpc_route_registration_create() {
             description: "Factory created".to_string(),
             cache_ttl: Some(300),
             is_streaming: false,
+            i18n_key: None,
         });
     let route = registration.create();
 

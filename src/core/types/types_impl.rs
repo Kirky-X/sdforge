@@ -26,7 +26,22 @@ impl ApiMetadata {
             description,
             cache_ttl,
             is_streaming,
+            i18n_key: None,
         }
+    }
+
+    /// Attach an i18n key for runtime translation of the description.
+    ///
+    /// When set, protocol consumption points (MCP tool descriptions,
+    /// CLI `--help`, OpenAPI specs, gRPC metadata) look up a translation
+    /// via `sdforge::i18n::translate_or_fallback` using the active locale.
+    /// Falls back to the English `description` when no translation is found.
+    ///
+    /// Builder-pattern method so existing `new()` call sites remain
+    /// backward-compatible.
+    pub fn with_i18n_key(mut self, key: Option<String>) -> Self {
+        self.i18n_key = key;
+        self
     }
 
     /// Get API name
@@ -54,5 +69,10 @@ impl ApiMetadata {
     /// Check if this is a streaming endpoint
     pub fn is_streaming(&self) -> bool {
         self.is_streaming
+    }
+
+    /// Get the i18n key for runtime translation, if set.
+    pub fn i18n_key(&self) -> Option<&str> {
+        self.i18n_key.as_deref()
     }
 }

@@ -61,6 +61,7 @@ pub(super) fn create_test_metadata() -> ApiMetadata {
         description: "A test tool".to_string(),
         cache_ttl: None,
         is_streaming: false,
+        i18n_key: None,
     }
 }
 
@@ -95,6 +96,7 @@ fn create_coverage_test_metadata() -> ApiMetadata {
         description: "A tool registered for inventory coverage".to_string(),
         cache_ttl: None,
         is_streaming: false,
+        i18n_key: None,
     }
 }
 

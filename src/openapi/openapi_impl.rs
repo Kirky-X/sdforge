@@ -209,6 +209,12 @@ impl OpenApiBuilder {
 
         let mut paths = Paths::new();
         for route in inventory::iter::<OpenApiRouteInfo> {
+            // Translate description at runtime using i18n registry.
+            // OpenApiRouteInfo doesn't carry i18n_key directly; the
+            // translation is keyed by description content when the
+            // route was generated from a #[forge] macro with i18n_key.
+            // For now, the English default is used (OpenAPI specs are
+            // typically generated once at build time, not per-request).
             let mut operation_builder = OperationBuilder::new()
                 .summary(Some(route.summary.to_string()))
                 .description(Some(route.description.to_string()))

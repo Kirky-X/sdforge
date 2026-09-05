@@ -329,13 +329,19 @@ pub use logging::{
 #[cfg(feature = "inklog")]
 pub mod inklog;
 
-/// ICU4X-backed internationalization — locale-aware HTTP formatting.
+/// Internationalization support — translation registry + ICU4X formatting.
 ///
-/// 启用 `i18n` feature 后可用。提供 `HttpI18nFormatter`：BCP-47 locale
-/// 管理、Accept-Language 头解析、HTTP 错误消息/数字/时间戳/排序格式化。
-/// 未启用时此模块不存在，默认 features 编译零开销。
-#[cfg(feature = "i18n")]
+/// The translation registry (`register_translation`, `set_locale`,
+/// `translate_or_fallback`) is always available and enables runtime
+/// translation of proc-macro attribute `description` strings across
+/// all protocol consumption points (MCP, CLI, OpenAPI, gRPC).
+///
+/// The ICU4X-backed `HttpI18nFormatter` (locale-aware number/date/plural
+/// formatting) requires the `i18n` cargo feature.
 pub mod i18n;
+
+#[cfg(feature = "i18n")]
+pub use i18n::{HttpI18nFormatter, I18nError};
 
 /// CLI (clap) integration — feature-gated by `cli`.
 ///

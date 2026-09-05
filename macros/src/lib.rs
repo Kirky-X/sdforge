@@ -42,6 +42,7 @@ type ServiceApiArgs = Result<
         Option<bool>, // no_prefix option
         Option<bool>, // cli option — emit CliCommandRegistration + CliHandlerRegistration
         Option<u16>,  // status option — explicit success status code (e.g. 201 for POST create)
+        Option<String>, // i18n_key — runtime translation key for description
     ),
     syn::Error,
 >;
@@ -127,6 +128,7 @@ fn api_metadata_tokens(
     description: TokenStream2,
     cache_ttl: TokenStream2,
     is_streaming: TokenStream2,
+    i18n_key: TokenStream2,
 ) -> Result<TokenStream2, syn::Error> {
     // Validate and sanitize inputs at compile time to prevent code injection
     // These validations will cause compilation to fail if inputs are invalid
@@ -140,7 +142,7 @@ fn api_metadata_tokens(
             #description.to_string(),
             #cache_ttl,
             #is_streaming,
-        )
+        ).with_i18n_key(#i18n_key)
     })
 }
 
@@ -268,6 +270,7 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
     let mut no_prefix = None;
     let mut cli = None;
     let mut status = None;
+    let mut i18n_key = None;
 
     for (key, value) in pairs {
         match key.as_str() {
@@ -303,6 +306,7 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
             }
             "ws_path" => ws_path = Some(value),
             "grpc_method" => grpc_method = Some(value),
+            "i18n_key" => i18n_key = Some(value),
             "no_prefix" => {
                 no_prefix = Some(value.parse::<bool>().map_err(|_| {
                     syn::Error::new(
@@ -378,6 +382,7 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
         no_prefix,
         cli,
         status,
+        i18n_key,
     ))
 }
 
@@ -968,6 +973,7 @@ fn generate_cli_registration(
     fn_name: &syn::Ident,
     params: &[ParamInfo],
     _path_params: &[String],
+    i18n_key: Option<&str>,
 ) -> TokenStream2 {
     // Validate State params are Arc<T> — emit compile_error UNCONDITIONALLY
     // (before the #[cfg(feature = "cli")] gate) so the error surfaces even
@@ -1029,6 +1035,11 @@ fn generate_cli_registration(
     let fn_name_str = fn_name.to_string();
     let description_str = description.unwrap_or(name);
 
+    let i18n_key_cli_expr = match i18n_key {
+        Some(key) => quote! { Some(#key) },
+        None => quote! { None },
+    };
+
     quote! {
         #[cfg(feature = "cli")]
         sdforge::inventory::submit!(sdforge::cli::CliCommandRegistration::new(
@@ -1036,7 +1047,7 @@ fn generate_cli_registration(
             #version,
             #description_str,
             #fn_name_str,
-        ).with_args(&[#(#arg_infos),*]));
+        ).with_args(&[#(#arg_infos),*]).with_i18n_key(#i18n_key_cli_expr));
 
         #[cfg(feature = "cli")]
         #handler_fn_def
@@ -1074,6 +1085,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         no_prefix,
         cli,
         status,
+        i18n_key,
     ) = args;
     let fn_name = &input.sig.ident;
     let _fn_vis = &input.vis; // Currently unused but kept for future use
@@ -1402,6 +1414,13 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     // Build description expression
     let description_literal = description.as_deref().unwrap_or(&name);
 
+    // Build i18n_key expression for runtime translation lookup
+    let i18n_key_expr = match &i18n_key {
+        Some(key) => quote! { Some(#key.to_string()) },
+        None => quote! { None },
+    };
+
+
     // Build OpenAPI path parameter tokens for the `#[forge]` macro.
     //
     // Each path parameter (e.g. `/users/:id`) is mapped to an
@@ -1472,6 +1491,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { #description_literal },
             quote! { None },
             quote! { true },
+            i18n_key_expr.clone(),
         ) {
             Ok(tokens) => tokens,
             Err(e) => return e.into_compile_error().into(),
@@ -1483,6 +1503,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { #description_literal },
             quote! { #cache_ttl_expr },
             quote! { false },
+            i18n_key_expr.clone(),
         ) {
             Ok(tokens) => tokens,
             Err(e) => return e.into_compile_error().into(),
@@ -1747,6 +1768,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! { #description_literal },
         quote! { #cache_ttl_expr },
         quote! { false },
+        i18n_key_expr.clone(),
     ) {
         Ok(tokens) => tokens,
         Err(e) => return e.into_compile_error().into(),
@@ -2029,6 +2051,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             fn_name,
             &params,
             &path_params,
+            i18n_key.as_deref(),
         )
     } else {
         quote! {}
@@ -2500,6 +2523,7 @@ mod macro_parsing_tests {
             &fn_name,
             &params,
             &path_params,
+            None,
         );
         let s = normalize_ts(&tokens);
 
@@ -2531,7 +2555,7 @@ mod macro_parsing_tests {
         let path_params = vec!["id".to_string()];
 
         let tokens =
-            generate_cli_registration("state_cmd", "v1", None, &fn_name, &params, &path_params);
+            generate_cli_registration("state_cmd", "v1", None, &fn_name, &params, &path_params, None);
         let s = normalize_ts(&tokens);
 
         // The State parameter "state" must NOT appear as a CliArgInfo entry.
@@ -2566,7 +2590,7 @@ mod macro_parsing_tests {
         let path_params = vec!["id".to_string()];
 
         let tokens =
-            generate_cli_registration("mixed_cmd", "v1", None, &fn_name, &params, &path_params);
+            generate_cli_registration("mixed_cmd", "v1", None, &fn_name, &params, &path_params, None);
         let s = normalize_ts(&tokens);
 
         // Path → CliArgType::Path with required=true
@@ -2588,7 +2612,7 @@ mod macro_parsing_tests {
         let path_params: Vec<String> = vec![];
 
         let tokens =
-            generate_cli_registration("empty_cmd", "v1", None, &fn_name, &params, &path_params);
+            generate_cli_registration("empty_cmd", "v1", None, &fn_name, &params, &path_params, None);
         let s = normalize_ts(&tokens);
 
         // Even with no args, both registrations must be emitted.

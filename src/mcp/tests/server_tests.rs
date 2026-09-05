@@ -212,6 +212,7 @@ mod vuln_0002_schema_validation_tests {
             description: "test".to_string(),
             cache_ttl: None,
             is_streaming: false,
+            i18n_key: None,
         };
         let instance = McpToolInstance::new(tool, metadata);
         SdForgeMcpServer::with_tools(vec![instance])
