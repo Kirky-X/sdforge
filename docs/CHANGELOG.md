@@ -7,9 +7,28 @@
 
 ## [Unreleased]
 
+_暂无变更。_
+
+---
+
+## [0.5.0-rc.2] - 2026-09-07
+
 ### Added
 
-- **feat: add custom success status code support for `#[forge]` macro** — `#[forge(status = <code>)]` 静态声明（如 `status = 201` 用于 POST 创建）+ `ServiceResponse::success_with_status(data, code)` 动态控制；零破坏现有 API（默认 200）；HTTP/gRPC 协议拉通；OpenAPI response code 同步
+- **custom success status code support for `#[forge]` macro** — `#[forge(status = <code>)]` 静态声明（如 `status = 201` 用于 POST 创建）+ `ServiceResponse::success_with_status(data, code)` 动态控制；零破坏现有 API（默认 200）；HTTP/gRPC 协议拉通；OpenAPI response code 同步
+
+### Changed
+
+- 依赖升级：rmcp 2.2→3.2（MRTR 模型：call_tool 返回 CallToolResponse 枚举、ListToolsResult 新增 result_type/ttl_ms/cache_scope）、simd-json 0.17→0.18、validator 0.20→0.21、icu 2.2→2.3.1、tokio 1.52→1.53；axum-test 保持 ^21（22 全 rc）
+- 版本号递增至 `0.5.0-rc.2`（下一个 minor 预发布）
+
+### 测试
+
+- E2E 目录承载迁移：tests/e2e_advanced.rs 迁入 tests/e2e/ 并 `[[test]]` 注册（178 测试零损失）；docs/TEST_SCENARIOS.md 场景固化（12 域）；deny licenses clarify ×4
+
+### 文档
+
+- rmcp 版本描述 2.1→3.2（6 处）；安装示例统一 0.5.0-rc.2；CONTRIBUTING MSRV 对齐 1.97.1；sdforge-macros html_root_url 对齐
 
 ## [0.4.7] - 2026-07-23
 
