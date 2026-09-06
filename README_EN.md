@@ -60,7 +60,7 @@
 | **🎯 Unified Interface Definition** | Single macro configuration for HTTP, MCP, gRPC, WebSocket, and CLI |
 | **⚡ Compile-Time Protocol Selection** | Feature-gated code generation with zero runtime overhead for unused protocols |
 | **🔒 Type Safety** | Compile-time validation of interface definitions |
-| **🌐 Multi-Protocol Support** | HTTP (Axum), MCP (rmcp 2.1), gRPC (tonic), WebSocket, SSE streaming, CLI (clap) |
+| **🌐 Multi-Protocol Support** | HTTP (Axum), MCP (rmcp 3.2), gRPC (tonic), WebSocket, SSE streaming, CLI (clap) |
 | **🧩 Modular Design** | Feature-based architecture allows selecting only needed functionality |
 | **🛡️ Security Features** | Built-in authentication (Bearer/API Key), rate limiting (limiteron), audit logging |
 | **💾 Caching** | In-memory caching (oxcache), no external database required |
@@ -115,7 +115,7 @@ Or add it to your `Cargo.toml` manually:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["http"] }
+sdforge = { version = "0.5.0-rc.2", features = ["http"] }
 ```
 
 > Note: `sdforge` enables no features by default (`default = []`); enable protocol features explicitly as needed.
@@ -331,28 +331,28 @@ impl From<MyError> for ServiceError {
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["http"] }
+sdforge = { version = "0.5.0-rc.2", features = ["http"] }
 ```
 
 **MCP only** — for AI tool integration:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["mcp"] }
+sdforge = { version = "0.5.0-rc.2", features = ["mcp"] }
 ```
 
 **Both protocols** — expose the same code via HTTP and MCP:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["http", "mcp"] }
+sdforge = { version = "0.5.0-rc.2", features = ["http", "mcp"] }
 ```
 
 **Full features** — all capabilities enabled:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["full"] }
+sdforge = { version = "0.5.0-rc.2", features = ["full"] }
 ```
 
 ### 🛰️ gRPC Dispatch
@@ -363,7 +363,7 @@ handler. Return types must satisfy `serde::Serialize`; errors must be `ApiError`
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["grpc"] }
+sdforge = { version = "0.5.0-rc.2", features = ["grpc"] }
 ```
 
 ```rust
@@ -399,7 +399,7 @@ dispatch / output / exit. Returning `Value::String` prints the raw string
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["cli"] }
+sdforge = { version = "0.5.0-rc.2", features = ["cli"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -436,7 +436,7 @@ SDForge uses Cargo features for compile-time protocol selection and feature comp
 | Feature          | Description                                          | Default |
 |------------------|------------------------------------------------------|---------|
 | `http`           | HTTP server (Axum 0.8)                               | ❌      |
-| `mcp`            | MCP protocol (rmcp 2.1, 2026-07-28 spec)             | ❌      |
+| `mcp`            | MCP protocol (rmcp 3.2, 2026-07-28 spec)             | ❌      |
 | `streaming`      | SSE streaming support                                | ❌      |
 | `timestamp`      | Auto-add timestamp to responses                      | ❌      |
 | `logging`        | Structured request logging                           | ❌      |
@@ -611,7 +611,7 @@ SDForge generates OpenAPI 3.1 specifications automatically based on [utoipa 5.5]
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["http", "openapi"] }
+sdforge = { version = "0.5.0-rc.2", features = ["http", "openapi"] }
 ```
 
 ### 🚀 Basic Usage
@@ -664,7 +664,7 @@ The code above automatically submits `OpenApiRouteInfo { path: "/users/{id}", me
 
 ## 🔄 MCP 2026-07-28 Migration Guide
 
-v0.2.0 fully migrated the MCP implementation from `mcp-sdk 0.0.3` to the official [`rmcp`](https://crates.io/crates/rmcp) SDK (currently rmcp 2.1), adapting to the MCP 2026-07-28 specification. This migration is a **BREAKING** change.
+v0.2.0 fully migrated the MCP implementation from `mcp-sdk 0.0.3` to the official [`rmcp`](https://crates.io/crates/rmcp) SDK (currently rmcp 3.2), adapting to the MCP 2026-07-28 specification. This migration is a **BREAKING** change.
 
 ### ⚠️ BREAKING Changes
 

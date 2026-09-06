@@ -60,7 +60,7 @@
 | **🎯 统一接口定义** | 针对 HTTP、MCP、gRPC、WebSocket、CLI 的单一宏配置 |
 | **⚡ 编译时协议选择** | 通过 Feature 控制代码生成，未使用的协议零运行时开销 |
 | **🔒 类型安全** | 接口定义的编译时验证 |
-| **🌐 多协议支持** | HTTP (Axum)、MCP (rmcp 2.1)、gRPC (tonic)、WebSocket、SSE 流式传输、CLI (clap) |
+| **🌐 多协议支持** | HTTP (Axum)、MCP (rmcp 3.2)、gRPC (tonic)、WebSocket、SSE 流式传输、CLI (clap) |
 | **🧩 模块化设计** | 基于 Feature 的架构，允许仅选择所需功能 |
 | **🛡️ 安全特性** | 内置认证（Bearer/API Key）、限流（limiteron）、审计日志 |
 | **💾 缓存** | 基于内存缓存（oxcache），无需外部数据库 |
@@ -115,7 +115,7 @@ cargo add sdforge
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["http"] }
+sdforge = { version = "0.5.0-rc.2", features = ["http"] }
 ```
 
 > 注意：`sdforge` 默认不启用任何特性（`default = []`），需按需显式启用协议特性。
@@ -331,28 +331,28 @@ impl From<MyError> for ServiceError {
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["http"] }
+sdforge = { version = "0.5.0-rc.2", features = ["http"] }
 ```
 
 **仅 MCP** — AI 工具集成：
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["mcp"] }
+sdforge = { version = "0.5.0-rc.2", features = ["mcp"] }
 ```
 
 **双协议** — 同一份代码同时通过 HTTP 与 MCP 暴露：
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["http", "mcp"] }
+sdforge = { version = "0.5.0-rc.2", features = ["http", "mcp"] }
 ```
 
 **全量特性** — 启用全部能力：
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["full"] }
+sdforge = { version = "0.5.0-rc.2", features = ["full"] }
 ```
 
 ### 🛰️ gRPC Dispatch
@@ -363,7 +363,7 @@ sdforge = { version = "0.5", features = ["full"] }
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["grpc"] }
+sdforge = { version = "0.5.0-rc.2", features = ["grpc"] }
 ```
 
 ```rust
@@ -398,7 +398,7 @@ dispatch / 输出 / 退出。返回 `Value::String` 时输出原始串（不带�
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["cli"] }
+sdforge = { version = "0.5.0-rc.2", features = ["cli"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -434,7 +434,7 @@ SDForge 使用 Cargo features 进行编译时协议选择和特性组合。
 | 特性             | 描述                                     | 默认   |
 |------------------|------------------------------------------|--------|
 | `http`           | HTTP 服务器 (Axum 0.8)                   | ❌     |
-| `mcp`            | MCP 协议 (rmcp 2.1, 2026-07-28 规范)     | ❌     |
+| `mcp`            | MCP 协议 (rmcp 3.2, 2026-07-28 规范)     | ❌     |
 | `streaming`      | SSE 流式传输支持                         | ❌     |
 | `timestamp`      | 自动向响应添加时间戳                     | ❌     |
 | `logging`        | 结构化请求日志                           | ❌     |
@@ -609,7 +609,7 @@ SDForge 基于 [utoipa 5.5](https://crates.io/crates/utoipa) 自动生成 OpenAP
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["http", "openapi"] }
+sdforge = { version = "0.5.0-rc.2", features = ["http", "openapi"] }
 ```
 
 ### 🚀 基本用法
@@ -662,7 +662,7 @@ async fn get_user(id: u64) -> Result<User, ApiError> { /* ... */ }
 
 ## 🔄 MCP 2026-07-28 迁移指南
 
-v0.2.0 将 MCP 实现从 `mcp-sdk 0.0.3` 全面迁移至官方 [`rmcp`](https://crates.io/crates/rmcp) SDK（当前为 rmcp 2.1），适配 MCP 2026-07-28 规范。该迁移是一次 **BREAKING** 变更。
+v0.2.0 将 MCP 实现从 `mcp-sdk 0.0.3` 全面迁移至官方 [`rmcp`](https://crates.io/crates/rmcp) SDK（当前为 rmcp 3.2），适配 MCP 2026-07-28 规范。该迁移是一次 **BREAKING** 变更。
 
 ### ⚠️ BREAKING 变更
 

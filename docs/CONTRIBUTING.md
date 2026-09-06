@@ -23,7 +23,7 @@ SDForge 是一个基于 Rust 的声明式多协议 SDK 框架。无论是修复 
 
 ### 前置条件
 
-- **Rust 1.85+**（edition 2024，工具链见 `rust-toolchain.toml`）
+- **Rust 1.97.1+**（edition 2024，工具链见 `rust-toolchain.toml`）
 - **protoc**（gRPC 特性编译需要，`sudo apt-get install protobuf-compiler`）
 - **pre-commit hooks**（安装：`./scripts/install-pre-commit.sh`）
 - 安全与质量工具：
