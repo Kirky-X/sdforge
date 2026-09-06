@@ -33,9 +33,10 @@ impl ApiMetadata {
     /// Attach an i18n key for runtime translation of the description.
     ///
     /// When set, protocol consumption points (MCP tool descriptions,
-    /// CLI `--help`, OpenAPI specs, gRPC metadata) look up a translation
-    /// via `sdforge::i18n::translate_or_fallback` using the active locale.
-    /// Falls back to the English `description` when no translation is found.
+    /// CLI `--help`; OpenAPI specs and gRPC metadata are planned) look up
+    /// a translation via `sdforge::i18n::translate_or_fallback` using the
+    /// active locale. Falls back to the English `description` when no
+    /// translation is found.
     ///
     /// Builder-pattern method so existing `new()` call sites remain
     /// backward-compatible.

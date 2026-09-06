@@ -23,9 +23,9 @@ pub struct ApiMetadata {
     /// Optional i18n key for runtime translation of the description.
     ///
     /// When set, protocol consumption points (MCP `build_tool_model`,
-    /// CLI `build_subcommand`, OpenAPI `build`, gRPC info) look up a
-    /// translation via `sdforge::i18n::translate_or_fallback` using the
-    /// active locale. When no translation is found, the English
+    /// CLI `build_subcommand`; OpenAPI `build` and gRPC info are planned)
+    /// look up a translation via `sdforge::i18n::translate_or_fallback`
+    /// using the active locale. When no translation is found, the English
     /// `description` is used as fallback.
     pub(crate) i18n_key: Option<String>,
 }
