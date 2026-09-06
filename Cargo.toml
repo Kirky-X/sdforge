@@ -528,6 +528,16 @@ required-features = ["docs"]
 name = "macro_tests"
 path = "tests/macros/macro_tests.rs"
 
+# ============================================================================
+# 测试目标显式注册（阶段 2 验收）
+# ============================================================================
+# e2e_advanced 迁入 tests/e2e/ 目录承载（e2e_* 不得裸放顶层）；迁入子目录后
+# 脱离 Cargo 自动发现范围，不注册则 178 个测试静默消失。文件内每个 mod 独立
+# #[cfg(feature = ...)] 门控，任意 feature 子集可编译，无需 required-features。
+[[test]]
+name = "e2e_advanced"
+path = "tests/e2e/e2e_advanced.rs"
+
 [profile.release]
 opt-level = 3
 lto = "fat"
