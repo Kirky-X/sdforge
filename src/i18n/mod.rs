@@ -100,10 +100,15 @@ pub fn get_locale() -> String {
 /// Look up a translation for the active locale, falling back to `default`
 /// when no translation is found or `i18n_key` is `None`.
 ///
-/// This is the function called by protocol consumption points (MCP
-/// `build_tool_model`, CLI `build_subcommand`, OpenAPI `build`, gRPC
-/// info response) to translate compile-time `description` literals at
-/// runtime.
+/// The active locale is only initialized by `set_locale`. Before the first
+/// `set_locale` call the registry has no active locale and this function
+/// returns `default` directly without consulting the table — translations
+/// registered for `"en"` stay dormant until `set_locale("en")` is called.
+///
+/// This is the function called by protocol consumption points — MCP
+/// `build_tool_model` and CLI `build_subcommand` are wired up today
+/// (OpenAPI `build` and the gRPC info response are planned) — to translate
+/// compile-time `description` literals at runtime.
 ///
 /// # Examples
 ///
@@ -229,6 +234,17 @@ pub struct HttpI18nFormatter {
 mod translation_tests {
     use super::*;
 
+    /// `REGISTRY` 的逻辑状态（locale + 翻译表）是进程级全局的，Mutex 只保证
+    /// 内存安全、不隔离逻辑状态；并行 harness 下各用例互相踩踏（实测
+    /// `cargo test --lib translation_tests` 约 4/10 概率失败）→ 以进程级锁
+    /// 将触碰全局状态的用例串行化。锁顺序恒为 `REGISTRY_LOCK` → `REGISTRY`
+    /// （用例内先取本锁再调 `clear_translations` 等），无反向获取，无死锁面。
+    static REGISTRY_LOCK: Mutex<()> = Mutex::new(());
+
+    fn registry_guard() -> std::sync::MutexGuard<'static, ()> {
+        REGISTRY_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     #[test]
     fn test_translate_or_fallback_no_key() {
         assert_eq!(translate_or_fallback("default text", None), "default text");
@@ -244,6 +260,7 @@ mod translation_tests {
 
     #[test]
     fn test_translate_or_fallback_no_locale_set() {
+        let _guard = registry_guard();
         clear_translations();
         assert_eq!(
             translate_or_fallback("default text", Some("some.key")),
@@ -253,6 +270,7 @@ mod translation_tests {
 
     #[test]
     fn test_translate_or_fallback_with_translation() {
+        let _guard = registry_guard();
         clear_translations();
         register_translation("zh-CN", "forge.embed", "生成嵌入向量");
         set_locale("zh-CN");
@@ -265,6 +283,7 @@ mod translation_tests {
 
     #[test]
     fn test_translate_or_fallback_missing_translation() {
+        let _guard = registry_guard();
         clear_translations();
         set_locale("zh-CN");
         assert_eq!(
@@ -276,6 +295,7 @@ mod translation_tests {
 
     #[test]
     fn test_translate_or_fallback_wrong_locale() {
+        let _guard = registry_guard();
         clear_translations();
         register_translation("zh-CN", "forge.embed", "生成嵌入向量");
         set_locale("ja-JP");
@@ -289,6 +309,7 @@ mod translation_tests {
 
     #[test]
     fn test_set_and_get_locale() {
+        let _guard = registry_guard();
         clear_translations();
         assert_eq!(get_locale(), "en"); // default
         set_locale("zh-CN");
@@ -298,6 +319,7 @@ mod translation_tests {
 
     #[test]
     fn test_clear_translations() {
+        let _guard = registry_guard();
         register_translation("en", "key1", "value1");
         set_locale("en");
         assert_eq!(translate_or_fallback("default", Some("key1")), "value1");
@@ -308,6 +330,7 @@ mod translation_tests {
 
     #[test]
     fn test_multiple_locales() {
+        let _guard = registry_guard();
         clear_translations();
         register_translation("zh-CN", "greet", "你好");
         register_translation("ja-JP", "greet", "こんにちは");

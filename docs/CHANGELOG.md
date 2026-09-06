@@ -16,6 +16,8 @@ _暂无变更。_
 ### Added
 
 - **custom success status code support for `#[forge]` macro** — `#[forge(status = <code>)]` 静态声明（如 `status = 201` 用于 POST 创建）+ `ServiceResponse::success_with_status(data, code)` 动态控制；零破坏现有 API（默认 200）；HTTP/gRPC 协议拉通；OpenAPI response code 同步
+- **`#[forge]` 宏 `i18n_key` 参数 + `sdforge::i18n` 翻译注册表** — description 运行时翻译（MCP `build_tool_model` / CLI `build_subcommand` 已接入，OpenAPI/gRPC 计划中）；新增公共 API：`register_translation` / `set_locale` / `get_locale` / `translate_or_fallback` / `clear_translations`、`ApiMetadata::with_i18n_key()` / `i18n_key()`；`pub mod i18n` 由 `#[cfg(feature = "i18n")]` 调整为无条件编译
+  - 迁移提示：`CliCommandRegistration` 新增 `pub i18n_key: Option<&'static str>` 字段——对结构体字面量构造方是字段新增（补 `i18n_key: None` 即可），经 `new()` / builder 路径的调用方无需改动
 
 ### Changed
 

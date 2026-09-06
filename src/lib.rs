@@ -333,8 +333,9 @@ pub mod inklog;
 ///
 /// The translation registry (`register_translation`, `set_locale`,
 /// `translate_or_fallback`) is always available and enables runtime
-/// translation of proc-macro attribute `description` strings across
-/// all protocol consumption points (MCP, CLI, OpenAPI, gRPC).
+/// translation of proc-macro attribute `description` strings at the
+/// wired-up protocol consumption points (MCP, CLI; OpenAPI and gRPC
+/// integration is planned).
 ///
 /// The ICU4X-backed `HttpI18nFormatter` (locale-aware number/date/plural
 /// formatting) requires the `i18n` cargo feature.
