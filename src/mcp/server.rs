@@ -9,8 +9,8 @@
 use rmcp::RoleServer;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, ErrorData, ListToolsResult, PaginatedRequestParams,
-    ServerInfo, Tool,
+    CallToolRequestParams, CallToolResponse, CallToolResult, ErrorData, ListToolsResult,
+    PaginatedRequestParams, ServerInfo, Tool,
 };
 use rmcp::service::RequestContext;
 
@@ -219,6 +219,9 @@ impl ServerHandler for SdForgeMcpServer {
             meta: None,
             next_cursor: None,
             tools,
+            result_type: None,
+            ttl_ms: None,
+            cache_scope: None,
         })
     }
 
@@ -226,19 +229,20 @@ impl ServerHandler for SdForgeMcpServer {
         &self,
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> Result<CallToolResult, ErrorData> {
+    ) -> Result<CallToolResponse, ErrorData> {
         // request.name is Cow<'static, str>; use deref via as_ref() to get &str.
         let name: &str = request.name.as_ref();
         // request.arguments is Option<JsonObject> (Map<String, Value>); convert to Value.
         let arguments = request.arguments.map(serde_json::Value::Object);
         self.call_tool_internal(name, arguments)
+            .map(CallToolResponse::Complete)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rmcp::model::{NumberOrString, TaskMetadata};
+    use rmcp::model::NumberOrString;
     use rmcp::service::serve_directly;
 
     /// Dummy transport error type for test transport.
@@ -375,13 +379,16 @@ mod tests {
         assert!(result.is_ok(), "call_tool should succeed for valid tool");
 
         let tool_result = result.unwrap();
+        let CallToolResponse::Complete(complete) = tool_result else {
+            panic!("expected Complete response for successful tool call");
+        };
         // coverage_test_tool returns empty content
         assert!(
-            tool_result.content.is_empty(),
+            complete.content.is_empty(),
             "coverage_test_tool should return empty content"
         );
         assert!(
-            tool_result.is_error.is_none(),
+            complete.is_error.is_none(),
             "is_error should be None for successful call"
         );
     }
@@ -469,18 +476,18 @@ mod tests {
         );
     }
 
-    /// Test `ServerHandler::call_tool` with task metadata.
+    /// Test `ServerHandler::call_tool` with request state.
     ///
-    /// Verifies that the `task` field in `CallToolRequestParams` is accepted
-    /// (even though the current implementation doesn't use it).
+    /// Verifies that the `request_state` field in `CallToolRequestParams` is
+    /// accepted (even though the current implementation doesn't use it).
     #[tokio::test]
-    async fn test_server_handler_call_tool_with_task_metadata() {
+    async fn test_server_handler_call_tool_with_request_state() {
         let server = SdForgeMcpServer::new();
         let context = make_test_context();
 
         let request = {
             let mut params = CallToolRequestParams::new("coverage_test_tool");
-            params.task = Some(TaskMetadata::new());
+            params.request_state = Some("state-abc".to_string());
             params
         };
 

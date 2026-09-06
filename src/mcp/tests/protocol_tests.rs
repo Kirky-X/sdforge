@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! Tests for MCP protocol types: `CallToolResult`, `Content`, `ErrorData` (McpError).
 
-use rmcp::model::{CallToolResult, ContentBlock, ErrorData as McpError, Meta};
+use rmcp::model::{CallToolResult, ContentBlock, ErrorData as McpError, MetaObject};
 
 #[test]
 fn test_content_text_helper() {
@@ -28,7 +28,7 @@ fn test_call_tool_result_error() {
 fn test_call_tool_result_with_meta() {
     let mut result = CallToolResult::success(vec![]);
     result.is_error = None;
-    result.meta = Some(Meta::default());
+    result.meta = Some(MetaObject::default());
     assert!(result.meta.is_some());
 }
 
