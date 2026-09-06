@@ -19,7 +19,7 @@ use crate::mcp::SdForgeMcpServer;
 use rmcp::RoleServer;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, ErrorData, InitializeResult, ListToolsResult,
+    CallToolRequestParams, CallToolResponse, ErrorData, InitializeResult, ListToolsResult,
     PaginatedRequestParams, ServerInfo,
 };
 use rmcp::service::RequestContext;
@@ -97,7 +97,7 @@ impl ServerHandler for StatelessServerHandler {
         &self,
         request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
-    ) -> Result<CallToolResult, ErrorData> {
+    ) -> Result<CallToolResponse, ErrorData> {
         self.inner.call_tool(request, context).await
     }
 }
@@ -335,7 +335,7 @@ mod tests {
     /// Test `ServerHandler::call_tool` with a valid tool name.
     ///
     /// Verifies that calling the registered `coverage_test_tool` succeeds
-    /// and returns a `CallToolResult`.
+    /// and returns a `CallToolResponse::Complete` result.
     #[tokio::test]
     async fn test_stateless_call_tool_with_valid_name() {
         let handler = StatelessServerHandler::from_registry();
@@ -347,13 +347,16 @@ mod tests {
         assert!(result.is_ok(), "call_tool with valid name should succeed");
 
         let tool_result = result.unwrap();
+        let CallToolResponse::Complete(complete) = tool_result else {
+            panic!("expected Complete response for successful tool call");
+        };
         // coverage_test_tool returns an empty content vec
         assert!(
-            tool_result.content.is_empty(),
+            complete.content.is_empty(),
             "coverage_test_tool should return empty content"
         );
         assert!(
-            tool_result.is_error.is_none(),
+            complete.is_error.is_none(),
             "is_error should be None for a successful call"
         );
     }
