@@ -40,7 +40,7 @@ cargo add sdforge
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5", features = ["http"] }
+sdforge = { version = "0.5.0-rc.2", features = ["http"] }
 ```
 
 > `sdforge` 默认不启用任何特性（`default = []`），需按需显式启用。
