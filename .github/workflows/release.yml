@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -23,13 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
-
       - name: Install protoc (for grpc feature)
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
       - name: Verify build (full features)
         run: cargo build --release --features full --workspace
-
       - name: Verify tests pass
         run: cargo test --features full --workspace --no-fail-fast
 
@@ -41,7 +39,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.97.1
-
       - name: Install protoc (for grpc feature)
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
@@ -61,7 +58,6 @@ jobs:
         id: ver
         run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
-      # 幂等守卫:crates.io 已存在该版本则跳过发布(本地 publish 后推 tag 的场景)
       - name: Check already published
         id: published
         run: |
@@ -71,7 +67,6 @@ jobs:
           echo "main_exists=$([[ "$CODE" == "200" ]] && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "macros_exists=$([[ "$CODE_M" == "200" ]] && echo true || echo false)" >> $GITHUB_OUTPUT
 
-      # macros 必须先发布,sdforge 主 crate 才能 cargo package / cargo publish
       - name: Publish sdforge-macros
         if: steps.check_token.outputs.has_token == 'true' && steps.published.outputs.macros_exists == 'false'
         run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --manifest-path macros/Cargo.toml
@@ -104,13 +99,10 @@ jobs:
       - name: Install protoc (for grpc feature)
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
-      # sdforge-macros 可独立打包（无外部依赖问题）
       - name: Package sdforge-macros
         run: cargo package --no-verify --manifest-path macros/Cargo.toml
 
-      # sdforge 主 crate 需要 sdforge-macros 已发布到 crates.io 才能 cargo package
-      # 若未配置 CARGO_REGISTRY_TOKEN，此步骤会失败但允许继续（macros.crate 仍上传）
-      - name: Package sdforge (may fail if macros not yet on crates.io)
+      - name: Package sdforge
         continue-on-error: true
         run: cargo package --no-verify --features full
 
