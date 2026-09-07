@@ -2041,6 +2041,8 @@ dependencies = [
 [[package]]
 name = "inklog"
 version = "0.3.0-rc.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e2aab6d331c8e049413de33030b484319c0494d54bb1aa0ab6744f961e15785"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -2218,6 +2220,8 @@ dependencies = [
 [[package]]
 name = "limiteron"
 version = "0.3.0-rc.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d23d91c678d5348ebeb6c59e5adff0c7ef115fde4f0148cb21039df24540d81f"
 dependencies = [
  "ahash",
  "async-trait",
@@ -2490,6 +2494,8 @@ dependencies = [
 [[package]]
 name = "oxcache"
 version = "0.5.0-rc.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a554d0bfa5cf5fe2b70718d46c19de465dc95615a08e704efa7bce302052cf51"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2511,6 +2517,8 @@ dependencies = [
 [[package]]
 name = "oxcache_macros"
 version = "0.5.0-rc.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc439e1fffa60bf11666e5b8ab3d2ef382ba9d9dc9ee322a0ce00941824cfcd8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4023,6 +4031,8 @@ dependencies = [
 [[package]]
 name = "trait-kit"
 version = "0.5.0-rc.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c42ac2757a63f328830f85ba42387a06ee475791dbf260cb9107014c5969dab1"
 
 [[package]]
 name = "try-lock"
