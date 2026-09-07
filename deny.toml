@@ -47,7 +47,7 @@ license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
 [[licenses.clarify]]
 name = "sdforge-macros"
 expression = "MIT"
-license-files = [{ path = "../LICENSE", hash = 0xfb13e7ad }]
+license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
 [[licenses.clarify]]
 name = "limiteron"
 expression = "MIT"
