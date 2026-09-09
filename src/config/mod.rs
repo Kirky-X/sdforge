@@ -175,6 +175,7 @@ mod tests {
                 port: 8080,
                 request_timeout_secs: 30,
                 cors: None,
+                ..Default::default()
             })
             .authentication(AuthConfig::None)
             .build();
@@ -193,6 +194,7 @@ mod tests {
                 port: 8080,
                 request_timeout_secs: 30, // Must be > 0 for validation
                 cors: None,
+                ..Default::default()
             })
             .timeout(TimeoutConfig {
                 default_timeout_secs: 60,
@@ -214,6 +216,7 @@ mod tests {
                 port: 8080,
                 request_timeout_secs: 120,
                 cors: None,
+                ..Default::default()
             })
             .authentication(AuthConfig::ApiKey {
                 header_name: "X-Auth".to_string(),
@@ -241,6 +244,7 @@ mod tests {
                 port: 4000,
                 request_timeout_secs: 90,
                 cors: None,
+                ..Default::default()
             },
             authentication: AuthConfig::Jwt {
                 secret: "test-secret".to_string(),
@@ -296,6 +300,7 @@ mod tests {
                 port: 8080,
                 request_timeout_secs: 30,
                 cors: None,
+                ..Default::default()
             },
             authentication: AuthConfig::ApiKey {
                 header_name: "X-API-Key".to_string(),
@@ -318,6 +323,7 @@ mod tests {
                 port: 0,
                 request_timeout_secs: 30,
                 cors: None,
+                ..Default::default()
             },
             authentication: AuthConfig::None,
             timeout: None,
@@ -333,6 +339,7 @@ mod tests {
                 port: 8080,
                 request_timeout_secs: 30,
                 cors: None,
+                ..Default::default()
             },
             authentication: AuthConfig::ApiKey {
                 header_name: "X-API-Key".to_string(),

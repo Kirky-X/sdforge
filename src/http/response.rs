@@ -53,6 +53,7 @@ impl IntoResponse for ApiError {
             ApiError::AuthenticationFailed { .. } => 401,
             ApiError::AccessDenied { .. } => 403,
             ApiError::RateLimitExceeded { .. } => 429,
+            ApiError::QuotaExhausted { .. } => 429,
             ApiError::Internal { .. } => 500,
             ApiError::ServiceUnavailable { .. } => 503,
             ApiError::ValidationError { .. } => 422,

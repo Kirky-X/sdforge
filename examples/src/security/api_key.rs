@@ -1,5 +1,13 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
+//! # ⚠️ SECURITY DEMO ONLY（HIGH 修复 #225-228 加注）
+//!
+//! 本示例中的 `api_key_protected` / `bearer_protected` / `multi_auth` /
+//! `refresh_token` 端点是**演示桩**：它们不读取任何认证头，直接返回
+//! 硬编码成功响应。真实认证由框架的认证中间件提供（见
+//! `build_with_config` + `ServerConfig` 的 authentication 配置），
+//! 本示例刻意使用无中间件的 `build()` 以聚焦展示 key 的播种方式。
+//! 严禁将本文件的端点形态复制到生产代码。
 //! # API Key 认证示例
 //!
 //! 本模块展示如何使用 API Key 进行身份验证。

@@ -475,8 +475,14 @@ mod error_handling_tests {
         assert!(context.line.is_some());
         assert!(context.line.unwrap() > 0);
 
-        // Verify function is captured
-        assert!(context.function.is_some());
+        // HIGH 修复回归：#[track_caller] 下 file/line 指向调用方（本文件）；
+        // function 无法经 track_caller 获得，诚实为 None（此前恒为 "()"）。
+        assert!(
+            file.contains("error_handling_tests"),
+            "file must point at the caller, got: {}",
+            file
+        );
+        assert!(context.function.is_none());
 
         // Verify extra map exists
         assert!(context.extra.is_empty());

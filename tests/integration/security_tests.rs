@@ -217,7 +217,8 @@ mod security_tests {
         let auth = AppApiKeyAuth::builder().rotation(rotation_config).build();
 
         // Add initial key version
-        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
+            .unwrap();
 
         // Rotate to new version
         let result = auth.rotate_key(
@@ -249,7 +250,8 @@ mod security_tests {
             vec!["read".to_string()],
             "v1",
             Some(Duration::from_secs(86400)),
-        );
+        )
+        .unwrap();
 
         // Validate v1 key works
         let result = auth.validate_key("app_secret_v1", "192.168.1.100");
@@ -295,7 +297,8 @@ mod security_tests {
             vec!["read".to_string()],
             "v1",
             None,
-        );
+        )
+        .unwrap();
         let before_revoke = auth.validate_key("revoke_secret", "192.168.1.100");
         assert!(before_revoke.is_some());
 

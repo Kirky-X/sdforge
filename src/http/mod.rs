@@ -21,7 +21,8 @@ pub mod version_routing;
 pub use response::{build_fallback_response, build_json_response};
 pub use security_headers::SecurityHeaders;
 pub use version_routing::{
-    VersionRouterConfig, VersionedRoute, build_version_router, version_redirect_middleware,
+    VersionRedirectLayer, VersionRedirectService, VersionRouterConfig, VersionedRoute,
+    build_version_router, version_redirect_middleware,
 };
 
 // Re-export rate-limit types.

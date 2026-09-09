@@ -32,6 +32,10 @@ mod api_key;
 mod api_key_manager;
 #[cfg(feature = "security")]
 mod audit;
+// HIGH 修复（#298）：供 ApiError::internal_* 构造器强制脱敏使用
+// （必须与 mod audit 同门控：audit 仅在 feature = "security" 下编译）
+#[cfg(feature = "security")]
+pub(crate) use audit::sanitize_error_message;
 #[cfg(feature = "security")]
 mod bearer;
 #[cfg(feature = "security")]

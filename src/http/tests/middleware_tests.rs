@@ -28,6 +28,7 @@ async fn test_request_id_middleware_generates_uuid_when_absent() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -60,6 +61,7 @@ async fn test_request_id_middleware_preserves_custom_id() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -89,6 +91,7 @@ async fn test_request_id_middleware_non_utf8_header_generates_uuid() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -148,6 +151,7 @@ fn build_jwt_test_router(secret: &str) -> Router {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::Jwt {
             secret: secret.to_string(),
@@ -274,6 +278,7 @@ fn build_apikey_test_router(header_name: &str, prefix: &str) -> Router {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::ApiKey {
             header_name: header_name.to_string(),

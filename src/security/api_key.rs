@@ -102,6 +102,14 @@ impl AppApiKeyAuth {
     /// This ensures that the same key always produces the same hash,
     /// allowing correct validation later.
     ///
+    /// # Threat model（设计决策，勿"加固"为 bcrypt/argon2）
+    ///
+    /// 确定性哈希是 O(1) 查找的前提（bcrypt 等慢哈希/加盐方案无法做索引查找）。
+    /// 对本存储方案的攻击是预计算/彩虹表，其前提是 key 低熵。因此本模块的
+    /// 安全性依赖 **key 必须由密码学安全随机源生成（≥256 bit 熵）**——对高熵
+    /// 随机 key，SHA256 暴力/预计算不可行，这正是 GitHub 等存储 token 摘要的
+    /// 标准做法。禁止将人类可记忆的低熵口令直接作为 API key 喂给 `add_key`。
+    ///
     /// Note: While SHA256 is cryptographically secure for integrity,
     /// API keys stored in this format should still be treated as sensitive.
     fn hash_key(key: &str) -> String {
@@ -121,6 +129,11 @@ impl AppApiKeyAuth {
     /// Returns a truncated SHA256 hash prefix (`api_key:<first 16 hex chars>`)
     /// suitable for use as `user_id` in audit logs and AuthContext without
     /// exposing the raw API key to logs or responses.
+    ///
+    /// # Note（#333 设计说明）
+    ///
+    /// 64-bit 截断是**有意的隐私取舍**：该标识符仅用于审计归属/日志关联，
+    /// 不参与认证决策，也非防碰撞唯一键。认证完全基于完整 SHA256 哈希查找。
     pub fn key_id(key: &str) -> String {
         let hash = Self::hash_key(key);
         format!("api_key:{}", &hash[..hash.len().min(16)])
@@ -171,6 +184,10 @@ impl AppApiKeyAuth {
     ///
     /// This method supports key rotation by storing multiple versions of the same key.
     ///
+    /// 安全不变量：元数据先在内存中完成更新并成功编码，之后才写 `valid_keys`。
+    /// 任何失败路径都在写入可认证凭据之前中止，因此不会产生"可认证但无法
+    /// revoke/rotate"的孤儿 key。
+    ///
     /// # Arguments
     ///
     /// * `key_id` - Unique identifier for this API key
@@ -178,6 +195,11 @@ impl AppApiKeyAuth {
     /// * `permissions` - List of permissions for this key
     /// * `version` - Version string (e.g., "v1", "v2")
     /// * `ttl` - Optional time-to-live for this version
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when existing metadata is unreadable or the updated
+    /// metadata cannot be encoded; in that case nothing is registered.
     pub fn add_key_version(
         &self,
         key_id: impl Into<String>,
@@ -185,12 +207,31 @@ impl AppApiKeyAuth {
         permissions: Vec<String>,
         version: impl Into<String>,
         ttl: Option<Duration>,
-    ) {
+    ) -> Result<(), String> {
         let key_id = key_id.into();
         let key_hash = Self::hash_key(&key.into());
         let version_str = version.into();
+        let metadata_key = format!("metadata:{}", key_id);
 
-        // Store the hash with permissions
+        let mut metadata = match self.key_metadata.get(&metadata_key) {
+            Some(data) => bincode::serde::decode_from_slice::<ApiKeyMetadata, _>(
+                &data,
+                bincode::config::standard(),
+            )
+            .map(|(v, _)| v)
+            .map_err(|e| format!("Failed to deserialize metadata: {}", e))?,
+            None => ApiKeyMetadata::new(key_id, None),
+        };
+        metadata.add_version(ApiKeyVersion::new(
+            version_str,
+            key_hash.clone(),
+            permissions.clone(),
+            ttl,
+        ));
+        let encoded = bincode::serde::encode_to_vec(&metadata, bincode::config::standard())
+            .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+
+        // 元数据已就绪，现在才能注册可认证凭据
         self.valid_keys.set(
             &CacheNamespace::ApiKey.key(&key_hash),
             serialize_permissions(&permissions),
@@ -201,35 +242,8 @@ impl AppApiKeyAuth {
             self.set_expiry_index(&key_hash, ttl);
         }
 
-        // Create or update metadata
-        let metadata_key = format!("metadata:{}", key_id);
-        if let Some(data) = self.key_metadata.get(&metadata_key) {
-            // Update existing metadata
-            if let Ok(mut metadata) = bincode::serde::decode_from_slice::<ApiKeyMetadata, _>(
-                &data,
-                bincode::config::standard(),
-            )
-            .map(|(v, _)| v)
-            {
-                let new_version = ApiKeyVersion::new(version_str, key_hash, permissions, ttl);
-                metadata.add_version(new_version);
-                self.key_metadata.set(
-                    &metadata_key,
-                    bincode::serde::encode_to_vec(&metadata, bincode::config::standard())
-                        .unwrap_or_default(),
-                );
-            }
-        } else {
-            // Create new metadata
-            let mut metadata = ApiKeyMetadata::new(key_id.clone(), None);
-            let new_version = ApiKeyVersion::new(version_str, key_hash, permissions, ttl);
-            metadata.add_version(new_version);
-            self.key_metadata.set(
-                &metadata_key,
-                bincode::serde::encode_to_vec(&metadata, bincode::config::standard())
-                    .unwrap_or_default(),
-            );
-        }
+        self.key_metadata.set(&metadata_key, encoded);
+        Ok(())
     }
 
     /// Rotate an API key to a new version
@@ -284,6 +298,36 @@ impl AppApiKeyAuth {
         // Add new version and activate it
         metadata.add_version(new_version);
 
+        // Determine which old hashes stop being valid, before any writes.
+        let old_hashes: Vec<String> = if let Some(config) = &self.rotation_config {
+            let hashes_before: std::collections::HashSet<String> = metadata
+                .versions
+                .iter()
+                .map(|v| v.key_hash.clone())
+                .collect();
+            metadata.cleanup_versions(config.keep_versions);
+            hashes_before
+                .into_iter()
+                .filter(|hash| !metadata.versions.iter().any(|v| &v.key_hash == hash))
+                .collect()
+        } else {
+            // 无 rotation_config：轮换即完全替换——旧版本立即失活（安全修复：
+            // 此前旧 hash 在无配置路径下从不清理，旧 key 永久可用）。
+            let new_idx = metadata.versions.len() - 1;
+            let hashes = metadata.versions[..new_idx]
+                .iter()
+                .map(|v| v.key_hash.clone())
+                .collect::<Vec<_>>();
+            for version in &mut metadata.versions[..new_idx] {
+                version.deactivate();
+            }
+            hashes
+        };
+
+        // 编码成功后才允许任何写入，避免半完成状态
+        let encoded = bincode::serde::encode_to_vec(&metadata, bincode::config::standard())
+            .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+
         // Store new key hash
         self.valid_keys.set(
             &CacheNamespace::ApiKey.key(&new_key_hash),
@@ -295,29 +339,14 @@ impl AppApiKeyAuth {
             self.set_expiry_index(&new_key_hash, ttl);
         }
 
-        // Save updated metadata
-        self.key_metadata.set(
-            &metadata_key,
-            bincode::serde::encode_to_vec(&metadata, bincode::config::standard())
-                .unwrap_or_default(),
-        );
+        // Save updated metadata（包含裁剪/失活结果）
+        self.key_metadata.set(&metadata_key, encoded);
 
-        // Cleanup old versions and delete their key_hashes from valid_keys cache
-        // so rotated-out keys can no longer authenticate.
-        if let Some(config) = &self.rotation_config {
-            let hashes_before: std::collections::HashSet<String> = metadata
-                .versions
-                .iter()
-                .map(|v| v.key_hash.clone())
-                .collect();
-            metadata.cleanup_versions(config.keep_versions);
-            for hash in hashes_before {
-                let still_present = metadata.versions.iter().any(|v| v.key_hash == hash);
-                if !still_present {
-                    let store_key = CacheNamespace::ApiKey.key(&hash);
-                    self.valid_keys.delete(&store_key);
-                }
-            }
+        // Delete rotated-out hashes from valid_keys and their expiry index so
+        // they can no longer authenticate.
+        for hash in &old_hashes {
+            self.valid_keys.delete(&CacheNamespace::ApiKey.key(hash));
+            self.key_metadata.delete(&format!("expires:{}", hash));
         }
 
         Ok(())
@@ -535,7 +564,8 @@ mod tests {
             vec!["read".to_string()],
             "v1",
             Some(Duration::from_millis(0)),
-        );
+        )
+        .unwrap();
         assert!(
             auth.validate_key("expiring_key", "127.0.0.1").is_none(),
             "expired key must be rejected"
@@ -550,7 +580,8 @@ mod tests {
     fn test_add_key_version() {
         let auth = AppApiKeyAuth::new();
 
-        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
+            .unwrap();
 
         let metadata = auth.get_key_metadata("key1");
         assert!(metadata.is_some());
@@ -564,7 +595,8 @@ mod tests {
         let auth = AppApiKeyAuth::new().with_rotation(RotationConfig::default());
 
         // Add initial version
-        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
+            .unwrap();
 
         // Rotate to new version
         let result = auth.rotate_key(
@@ -587,7 +619,8 @@ mod tests {
     fn test_revoke_key() {
         let auth = AppApiKeyAuth::new();
 
-        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
+            .unwrap();
 
         // Revoke the key
         let result = auth.revoke_key("key1");
@@ -780,7 +813,8 @@ mod tests {
     #[test]
     fn test_rotate_key_empty_new_key() {
         let auth = AppApiKeyAuth::new().with_rotation(RotationConfig::default());
-        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
+            .unwrap();
         let result = auth.rotate_key("key1", "", vec!["write".to_string()], "v2");
         assert!(result.is_ok());
         let perms = auth.validate_key("", "127.0.0.1");
@@ -799,7 +833,8 @@ mod tests {
     #[test]
     fn test_revoke_key_then_validate() {
         let auth = AppApiKeyAuth::new();
-        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
+            .unwrap();
         let perms = auth.validate_key("secret_v1", "127.0.0.1");
         assert!(perms.is_some());
 
@@ -878,15 +913,18 @@ mod tests {
     fn test_add_multiple_key_versions_same_id() {
         let auth = AppApiKeyAuth::new();
 
-        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
+            .unwrap();
         auth.add_key_version(
             "key1",
             "secret_v2",
             vec!["read".to_string(), "write".to_string()],
             "v2",
             None,
-        );
-        auth.add_key_version("key1", "secret_v3", vec!["admin".to_string()], "v3", None);
+        )
+        .unwrap();
+        auth.add_key_version("key1", "secret_v3", vec!["admin".to_string()], "v3", None)
+            .unwrap();
 
         let metadata = auth.get_key_metadata("key1");
         assert!(metadata.is_some());
@@ -903,7 +941,8 @@ mod tests {
     fn test_validate_key_after_rotation() {
         let auth = AppApiKeyAuth::new().with_rotation(RotationConfig::default());
 
-        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None);
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
+            .unwrap();
 
         let result = auth.rotate_key(
             "key1",
@@ -958,7 +997,8 @@ mod tests {
         let auth = AppApiKeyAuth::with_dependencies(valid_keys.clone(), Some(key_metadata.clone()));
 
         // Add a versioned key — this writes to key_metadata
-        auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None);
+        auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None)
+            .unwrap();
 
         // Verify the metadata was stored in OUR custom key_metadata cache,
         // not a newly-created one.
@@ -988,7 +1028,8 @@ mod tests {
         let auth = AppApiKeyAuth::new().with_rotation(rotation_config);
 
         // Add initial version
-        auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None);
+        auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None)
+            .unwrap();
 
         // Rotate to v2 — with keep_versions=1, v1 should be cleaned up and
         // its hash deleted from valid_keys.
@@ -1015,38 +1056,66 @@ mod tests {
     // add_key_version with corrupted metadata Tests
     // ============================================================================
 
-    /// Verify that add_key_version silently skips metadata update when
-    /// existing metadata is corrupted (the `if let Ok` failure path,
-    /// line 172).
-    ///
-    /// When the stored metadata cannot be deserialized, add_key_version still
-    /// stores the key hash in valid_keys but does NOT update the metadata.
+    /// 安全不变量回归：metadata 损坏时 add_key_version 必须整体失败，
+    /// 绝不能把 key hash 写进 valid_keys——否则产生"可认证但无法
+    /// revoke/rotate"的孤儿 key（此前版本会静默注册，已修复）。
     #[test]
-    fn test_add_key_version_with_corrupted_metadata_skips_update() {
+    fn test_add_key_version_rejects_corrupted_metadata() {
         let auth = AppApiKeyAuth::new();
 
         // Manually store corrupted metadata for "kid1"
         auth.key_metadata
             .set("metadata:kid1", b"corrupted_data".to_vec());
 
-        // Call add_key_version — it should find the corrupted metadata,
-        // fail to deserialize it, and skip the metadata update.
-        auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None);
+        // add_key_version must fail instead of registering an orphan key.
+        let result = auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None);
+        assert!(result.is_err(), "corrupted metadata must abort registration");
+        assert!(
+            result.unwrap_err().contains("Failed to deserialize metadata"),
+            "error must identify the metadata failure"
+        );
 
-        // The key hash should still be stored in valid_keys (stored before
-        // the metadata check).
+        // The key hash must NOT be in valid_keys — the key must not authenticate.
         let perms = auth.validate_key("secret_v1", "127.0.0.1");
         assert!(
-            perms.is_some(),
-            "Key hash should be stored in valid_keys even when metadata is corrupted"
+            perms.is_none(),
+            "Orphan key must not authenticate when metadata is corrupted"
         );
-        assert_eq!(perms.unwrap(), vec!["read"]);
 
-        // The metadata should still be corrupted (not updated)
+        // The metadata is still unreadable.
         let metadata = auth.get_key_metadata("kid1");
         assert!(
             metadata.is_none(),
             "Corrupted metadata should not be parseable, so get_key_metadata returns None"
         );
+    }
+
+    /// 安全回归：无 rotation_config 时 rotate_key 仍必须让旧 key 失效
+    /// （此前旧 hash 永远留在 valid_keys 中，旧 key 永久可用）。
+    #[test]
+    fn test_rotate_key_without_config_invalidates_old_key() {
+        let auth = AppApiKeyAuth::new();
+        auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
+            .unwrap();
+
+        auth.rotate_key("key1", "secret_v2", vec!["write".to_string()], "v2")
+            .expect("rotation must succeed");
+
+        // 旧 key 必须立即失效
+        assert!(
+            auth.validate_key("secret_v1", "127.0.0.1").is_none(),
+            "Old key must not validate after rotation without rotation_config"
+        );
+        // 新 key 正常
+        let perms = auth.validate_key("secret_v2", "127.0.0.1");
+        assert!(perms.is_some(), "New key must validate after rotation");
+        assert_eq!(perms.unwrap(), vec!["write"]);
+        // 元数据一致：仅最新版本处于激活状态
+        let meta = auth.get_key_metadata("key1").expect("metadata present");
+        assert_eq!(meta.versions.len(), 2);
+        let active_count = meta.versions.iter().filter(|v| v.is_active).count();
+        assert_eq!(active_count, 1, "exactly the new version stays active");
+        assert!(meta.versions[1].is_active);
+        assert!(!meta.versions[0].is_active);
     }
 }

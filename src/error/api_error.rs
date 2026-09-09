@@ -62,6 +62,20 @@ pub enum ApiError {
         window_seconds: u32,
     },
 
+    /// Quota exhausted（配额用尽）
+    ///
+    /// HIGH 修复：此前 `QuotaExhausted { used, total }` 被映射到
+    /// `RateLimitExceeded` 并把 `used` 塞进 `window_seconds`（语义错误，
+    /// 客户端会按错误的秒数退避；design.md D8 已知 tech debt）。
+    /// 现在作为独立变体承载配额语义。
+    #[error("Quota exhausted: {used}/{total}")]
+    QuotaExhausted {
+        /// Already used quota
+        used: u32,
+        /// Total quota
+        total: u32,
+    },
+
     /// Internal server error
     /// Security: message is sanitized to not leak internal implementation details
     #[error("Internal server error")]
@@ -122,6 +136,7 @@ impl ApiError {
             ApiError::AuthenticationFailed { .. } => ErrorCategory::AuthError,
             ApiError::AccessDenied { .. } => ErrorCategory::AuthError,
             ApiError::RateLimitExceeded { .. } => ErrorCategory::RateLimitError,
+            ApiError::QuotaExhausted { .. } => ErrorCategory::RateLimitError,
             ApiError::Internal { .. } => ErrorCategory::ServerError,
             ApiError::ServiceUnavailable { .. } => ErrorCategory::ServerError,
             ApiError::ValidationError { .. } => ErrorCategory::ValidationError,
@@ -145,6 +160,23 @@ impl ApiError {
         }
     }
 
+    /// HIGH 修复（#298）：Internal 消息构造期强制脱敏。
+    ///
+    /// 脱敏器位于 `security::audit`（依赖 regex，仅在 `feature = "security"`
+    /// 下编译）；该 feature 关闭时退化为原样存储——与引入本修复前的行为
+    /// 一致，且不影响任何 feature 组合的可编译性。
+    #[allow(unused_variables)]
+    fn sanitize_internal_message(message: String) -> String {
+        #[cfg(feature = "security")]
+        {
+            crate::security::sanitize_error_message(&message)
+        }
+        #[cfg(not(feature = "security"))]
+        {
+            message
+        }
+    }
+
     /// Create a new Internal error (backwards compatible)
     ///
     /// This is the recommended way to create Internal errors without source.
@@ -155,7 +187,9 @@ impl ApiError {
     /// * `error_id` - A unique identifier for debugging
     pub fn internal_error(message: impl Into<String>, error_id: impl Into<String>) -> Self {
         Self::Internal {
-            message: message.into(),
+            // HIGH 修复（#298）：文档声称 "sanitized" 但无强制——现在在
+            // 构造入口强制执行（JWT/密钥/信用卡/SSN/路径脱敏 + 500 字符截断）
+            message: Self::sanitize_internal_message(message.into()),
             error_id: error_id.into(),
             source: None,
             context: None,
@@ -178,7 +212,7 @@ impl ApiError {
         source: E,
     ) -> Self {
         Self::Internal {
-            message: message.into(),
+            message: Self::sanitize_internal_message(message.into()),
             error_id: error_id.into(),
             source: Some(Box::new(source)),
             context: None,
@@ -198,7 +232,7 @@ impl ApiError {
         context: ErrorContext,
     ) -> Self {
         Self::Internal {
-            message: message.into(),
+            message: Self::sanitize_internal_message(message.into()),
             error_id: error_id.into(),
             source: None,
             context: Some(Box::new(context)),
@@ -220,7 +254,7 @@ impl ApiError {
         context: ErrorContext,
     ) -> Self {
         Self::Internal {
-            message: message.into(),
+            message: Self::sanitize_internal_message(message.into()),
             error_id: error_id.into(),
             source: Some(Box::new(source)),
             context: Some(Box::new(context)),
@@ -369,7 +403,15 @@ impl ApiError {
             ApiError::RateLimitExceeded { .. } => {
                 ("RATE_LIMIT_EXCEEDED", "Rate limit exceeded".to_string())
             }
-            ApiError::Internal { message, .. } => ("INTERNAL_ERROR", message.clone()),
+            // HIGH 修复：Internal 的 MCP 输出与 sanitized_message 一致地脱敏，
+            // 不再把原始内部消息（可能含主机名/路径/SQL 等）泄漏到外部协议。
+            ApiError::Internal { .. } => (
+                "INTERNAL_ERROR",
+                "An internal error occurred. Please try again later.".to_string(),
+            ),
+            ApiError::QuotaExhausted { used, total } => {
+                ("QUOTA_EXHAUSTED", format!("Quota exhausted: {}/{}", used, total))
+            }
             ApiError::ServiceUnavailable { service, .. } => (
                 "SERVICE_UNAVAILABLE",
                 format!("Service unavailable: {}", service),
@@ -385,7 +427,10 @@ impl ApiError {
             "error": { "code": code, "message": message }
         }))
         .unwrap_or_else(|_| {
-            format!(r#"{{"success":false,"error":{{"code":"{code}","message":"{message}"}}}}"#)
+            // HIGH 修复：fallback 必须转义 message，防止引号/反斜杠
+            // 破坏 JSON 结构（此前 format! 直接内插原始字符串）。
+            let escaped = serde_json::to_string(&message).unwrap_or_else(|_| "\"\"".into());
+            format!(r#"{{"success":false,"error":{{"code":"{code}","message":{escaped}}}}}"#)
         })
     }
 
@@ -442,6 +487,12 @@ impl ApiError {
                 serde_json::json!({ "limit": limit, "window_seconds": window_seconds }),
                 429,
             ),
+            ApiError::QuotaExhausted { used, total } => ServiceError::with_details(
+                "QUOTA_EXHAUSTED",
+                format!("Quota exhausted: {}/{}", used, total),
+                serde_json::json!({ "used": used, "total": total }),
+                429,
+            ),
             ApiError::Internal {
                 message,
                 error_id,
@@ -491,9 +542,9 @@ impl From<ApiError> for ServiceError {
 /// - `Exceeded { limit, window_seconds }` → `RateLimitExceeded` (HTTP 429)
 /// - `Banned { .. }` → `AccessDenied` (HTTP 403)
 /// - `CircuitOpen` → `ServiceUnavailable` (HTTP 503)
-/// - `QuotaExhausted { used, total }` → `RateLimitExceeded` (semantically
-///   imperfect — `window_seconds` is reused to carry `used`; tracked as
-///   technical debt in design.md D8)
+/// - `QuotaExhausted { used, total }` → `QuotaExhausted` (HTTP 429)。
+///   （HIGH 修复：此前映射到 `RateLimitExceeded` 并把 `used` 塞进
+///   `window_seconds`，design.md D8 的 tech debt 已清偿）
 /// - `Limiteron(e)` → `Internal` with source preserved for error chaining
 ///
 /// `RateLimitError` uses `u64` for limit/window counters, while
@@ -525,9 +576,9 @@ impl From<RateLimitError> for ApiError {
                 retry_after: None,
                 source: None,
             },
-            RateLimitError::QuotaExhausted { used, total } => ApiError::RateLimitExceeded {
-                limit: cast_u32(total),
-                window_seconds: cast_u32(used),
+            RateLimitError::QuotaExhausted { used, total } => ApiError::QuotaExhausted {
+                used: cast_u32(used),
+                total: cast_u32(total),
             },
             RateLimitError::Limiteron(e) => {
                 let message = e.to_string();
@@ -1407,20 +1458,18 @@ mod tests {
     /// tech debt in design.md D8.
     #[cfg(feature = "ratelimit")]
     #[test]
-    fn ratelimit_quota_exhausted_maps_to_rate_limit_exceeded() {
+    fn ratelimit_quota_exhausted_maps_to_quota_exhausted() {
+        // HIGH 修复回归：QuotaExhausted 保持配额语义，不再复用 window_seconds
         let err = ApiError::from(RateLimitError::QuotaExhausted {
             used: 50,
             total: 100,
         });
         match err {
-            ApiError::RateLimitExceeded {
-                limit,
-                window_seconds,
-            } => {
-                assert_eq!(limit, 100);
-                assert_eq!(window_seconds, 50);
+            ApiError::QuotaExhausted { used, total } => {
+                assert_eq!(used, 50);
+                assert_eq!(total, 100);
             }
-            _ => panic!("Expected RateLimitExceeded, got {err:?}"),
+            _ => panic!("Expected QuotaExhausted, got {err:?}"),
         }
     }
 

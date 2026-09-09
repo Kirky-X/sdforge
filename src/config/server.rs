@@ -16,6 +16,11 @@ pub struct ServerConfig {
     pub port: u16,
     /// Request timeout in seconds
     pub request_timeout_secs: u64,
+    /// Maximum request body size in bytes (default 10 MiB)
+    ///
+    /// HIGH 修复：此前 10MB 上限硬编码在 `http::build_with_config` 中，
+    /// 配置结构无对应字段，运维无法调整上传上限。
+    pub max_body_size: usize,
     /// CORS configuration
     pub cors: Option<CorsConfig>,
 }
@@ -29,6 +34,7 @@ impl Default for ServerConfig {
             host: DEFAULT_HOST.to_string(),
             port: DEFAULT_PORT,
             request_timeout_secs: DEFAULT_REQUEST_TIMEOUT_SECS,
+            max_body_size: 10 * 1024 * 1024, // 10 MiB
             cors: None,
         }
     }
@@ -54,6 +60,14 @@ impl ServerConfig {
         if self.request_timeout_secs > 86400 {
             return Err(crate::config::ConfigError::ValidationError(
                 "Server request_timeout_secs should not exceed 86400 seconds (24 hours)".into(),
+            ));
+        }
+
+        // Body limit must be positive: 0 would make RequestBodyLimitLayer
+        // reject every request with a body.
+        if self.max_body_size == 0 {
+            return Err(crate::config::ConfigError::ValidationError(
+                "Server max_body_size cannot be 0".into(),
             ));
         }
 
@@ -119,6 +133,7 @@ mod tests {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         };
         assert!(config.validate().is_ok());
     }
@@ -130,6 +145,7 @@ mod tests {
             port: 0,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         };
         assert!(config.validate().is_err());
     }
@@ -141,6 +157,7 @@ mod tests {
             port: 8080,
             request_timeout_secs: 0,
             cors: None,
+            ..Default::default()
         };
         assert!(config.validate().is_err());
     }
@@ -152,6 +169,7 @@ mod tests {
             port: 8080,
             request_timeout_secs: 100000, // > 86400
             cors: None,
+            ..Default::default()
         };
         assert!(config.validate().is_err());
     }
@@ -163,6 +181,7 @@ mod tests {
             port: 9000,
             request_timeout_secs: 45,
             cors: None,
+            ..Default::default()
         };
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: ServerConfig = serde_json::from_str(&json).unwrap();
@@ -182,6 +201,7 @@ mod tests {
                 allowed_methods: vec!["GET".to_string()],
                 allowed_headers: vec!["Authorization".to_string()],
             }),
+            ..Default::default()
         };
         assert!(config.cors.is_some());
         let cors = config.cors.unwrap();
@@ -233,6 +253,7 @@ mod tests {
                 allowed_methods: vec!["GET".to_string()],
                 allowed_headers: vec!["Authorization".to_string()],
             }),
+            ..Default::default()
         };
         assert!(config.validate().is_ok());
     }
@@ -251,6 +272,7 @@ mod tests {
                 allowed_methods: vec!["GET".to_string()],
                 allowed_headers: vec![],
             }),
+            ..Default::default()
         };
         let result = config.validate();
         assert!(
@@ -279,6 +301,7 @@ mod tests {
                 allowed_methods: vec!["GET".to_string()],
                 allowed_headers: vec![],
             }),
+            ..Default::default()
         };
         let result = config.validate();
         assert!(result.is_err());
@@ -299,6 +322,7 @@ mod tests {
             port: 8080,
             request_timeout_secs: 86400,
             cors: None,
+            ..Default::default()
         };
         assert!(
             config.validate().is_ok(),

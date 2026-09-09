@@ -185,6 +185,7 @@ mod config_tests {
                 port: 3000,
                 request_timeout_secs: 30,
                 cors: None,
+                ..Default::default()
             })
             .build()
             .expect("build should succeed with valid config");

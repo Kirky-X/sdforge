@@ -56,13 +56,14 @@ pub use handler::{
     BoxFuture, DefaultWebSocketHandler, ValidatedWebSocketUpgrade, WebSocketHandler,
     WebSocketRoute, build, websocket_upgrade,
 };
+// `MAX_STRING_LENGTH` 现已由 `parse_websocket_message` 强制执行，随正常 API 导出。
 #[cfg(feature = "websocket")]
 pub use message::{
-    MAX_JSON_DEPTH, MAX_MESSAGE_SIZE, WebSocketMessage, calculate_value_depth,
+    MAX_JSON_DEPTH, MAX_MESSAGE_SIZE, MAX_STRING_LENGTH, WebSocketMessage, calculate_value_depth,
     parse_websocket_message,
 };
 // Test-only helpers from `message` module — re-exported under test cfg so the
 // split test files can access them via `use crate::websocket::*`.
 #[cfg(test)]
 #[cfg(feature = "websocket")]
-pub use message::{MAX_STRING_LENGTH, calculate_json_depth};
+pub use message::calculate_json_depth;

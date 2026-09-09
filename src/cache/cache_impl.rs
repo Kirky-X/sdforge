@@ -13,6 +13,13 @@ use std::sync::{Arc, Mutex};
 /// # Returns
 /// 规范化后的键字符串
 ///
+/// # Note
+///
+/// 这是面向调用方的工具函数：缓存内部操作（get/set/delete）**不会**自动
+/// 调用它——内部直接使用调用方传入的原始键，以保证 `set("A")` 后 `get("a")`
+/// 不产生语义歧义。若应用需要大小写不敏感/去空白键，请在读写两侧一致地
+/// 显式调用本函数。
+///
 /// # Examples
 /// ```
 /// use sdforge::cache::canonicalize_cache_key;
@@ -144,6 +151,9 @@ impl SyncCache for OxcacheSyncCache {
                 let existed = self.backend.exists(key).unwrap_or(false);
                 if existed && let Err(e) = self.backend.delete(key) {
                     log::warn!("cache backend delete failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
+                    // 契约修复：删除失败 = 键未被删除，必须返回 false，
+                    // 不能把 `existed` 当作删除成功（此前违反 trait 契约）。
+                    return false;
                 }
                 return existed;
             }
@@ -153,7 +163,8 @@ impl SyncCache for OxcacheSyncCache {
             // HIGH-002: backend 失败时不更新 index，保持一致
             if let Err(e) = self.backend.delete(key) {
                 log::warn!("cache backend delete failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
-                return existed;
+                // 契约修复：删除失败返回 false（键仍存在），调用方不得误以为已删除。
+                return false;
             }
             idx.remove(key);
         }

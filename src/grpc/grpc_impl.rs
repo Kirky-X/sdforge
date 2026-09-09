@@ -353,6 +353,7 @@ fn map_error_to_http(e: &ApiError) -> i32 {
         ApiError::AuthenticationFailed { .. } => 401,
         ApiError::AccessDenied { .. } => 403,
         ApiError::RateLimitExceeded { .. } => 429,
+        ApiError::QuotaExhausted { .. } => 429,
         ApiError::ServiceUnavailable { .. } => 503,
         ApiError::Internal { .. } => 500,
     }

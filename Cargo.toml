@@ -402,7 +402,7 @@ tonic-prost-build = { version = "0.14", default-features = false }
 all-features = true
 
 [[bench]]
-name = "axiom_bench"
+name = "sdforge_bench"
 path = "src/benches/sdforge_bench.rs"
 harness = false
 required-features = ["http"]

@@ -391,14 +391,25 @@ impl MrtrSessionManager {
     }
 
     /// Get a session by ID.
+    ///
+    /// HIGH 修复：锁中毒不再静默吞掉（与其他方法的 internal_error 传播策略
+    /// 对齐），改为记录告警后返回 None，使毒化可被运维观测。
     pub fn get_session(&self, session_id: &str) -> Option<SessionState> {
-        self.sessions
-            .lock()
-            .ok()
-            .and_then(|sessions| sessions.get(session_id).map(|s| s.state.clone()))
+        match self.sessions.lock() {
+            Ok(sessions) => sessions.get(session_id).map(|s| s.state.clone()),
+            Err(_) => {
+                log::warn!("mrtr sessions lock poisoned; get_session returned None");
+                None
+            }
+        }
     }
 
     /// Clean up expired (timed-out) sessions.
+    ///
+    /// HIGH 修复：终态会话（Completed/Cancelled）此前永不驱逐——它们不满足
+    /// `state == Pending` 条件，随时间积累到 MAX_MRTR_SESSIONS 后
+    /// `create_session` 永久失败（活性缺陷）。现在终态会话同样按超时窗口
+    /// 老化淘汰。
     pub fn cleanup_expired(&self) -> usize {
         let mut sessions = match self.sessions.lock() {
             Ok(s) => s,
@@ -406,9 +417,13 @@ impl MrtrSessionManager {
         };
         let before = sessions.len();
         sessions.retain(|_, session| {
-            if session.is_timed_out() && session.state == SessionState::Pending {
+            if session.state == SessionState::Pending && session.is_timed_out() {
                 session.mark_timeout();
                 false // remove timed-out pending sessions
+            } else if matches!(session.state, SessionState::Completed | SessionState::Cancelled)
+                && session.created_at.elapsed() >= session.timeout
+            {
+                false // terminal sessions age out after the timeout window
             } else {
                 true
             }
@@ -633,6 +648,39 @@ mod tests {
         let cleaned = manager.cleanup_expired();
         assert_eq!(cleaned, 1);
         assert_eq!(manager.session_count(), 0);
+    }
+
+    /// HIGH 修复回归：终态会话（Completed/Cancelled）必须随超时窗口老化
+    /// 淘汰——此前永不驱逐，积累到 MAX_MRTR_SESSIONS 后 create_session
+    /// 永久失败（活性缺陷）。
+    #[test]
+    fn test_cleanup_expired_evicts_terminal_sessions() {
+        let manager = MrtrSessionManager::new();
+        {
+            let mut sessions = manager.sessions.lock().unwrap();
+            let mut completed = MrtrSession::with_timeout("done", "tool", Duration::from_millis(1));
+            completed.complete();
+            sessions.insert("done".to_string(), completed);
+
+            let mut cancelled = MrtrSession::with_timeout("cancelled", "tool", Duration::from_millis(1));
+            cancelled.cancel();
+            sessions.insert("cancelled".to_string(), cancelled);
+
+            // Resumed 属于非终态：不受老化逻辑影响
+            let mut resumed = MrtrSession::with_timeout("resumed", "tool", Duration::from_millis(1));
+            resumed.resume(serde_json::json!({"answer": 42}));
+            sessions.insert("resumed".to_string(), resumed);
+        }
+        std::thread::sleep(Duration::from_millis(10));
+
+        let cleaned = manager.cleanup_expired();
+        assert_eq!(cleaned, 2, "Completed/Cancelled sessions must be evicted");
+        assert_eq!(manager.session_count(), 1);
+        assert_eq!(
+            manager.get_session("resumed"),
+            Some(SessionState::Resumed),
+            "non-terminal sessions must survive"
+        );
     }
 
     #[test]

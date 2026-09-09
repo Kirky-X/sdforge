@@ -18,6 +18,7 @@ fn test_build_with_config_jwt() {
             port: 3000,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::Jwt {
             secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
@@ -38,6 +39,7 @@ fn test_build_with_config_api_key() {
             port: 3000,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
@@ -66,6 +68,7 @@ fn test_build_with_config_oauth2_error() {
             port: 3000,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -88,6 +91,7 @@ fn test_build_with_config_cors() {
                 allowed_methods: vec!["GET".to_string(), "POST".to_string()],
                 allowed_headers: vec!["Content-Type".to_string()],
             }),
+            ..Default::default()
         },
         authentication: AuthConfig::Jwt {
             secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
@@ -112,6 +116,7 @@ fn test_build_with_config_request_id_middleware() {
             port: 8080,
             request_timeout_secs: 60,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -130,6 +135,7 @@ fn test_build_with_config_body_limit() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -148,6 +154,7 @@ fn test_build_with_config_compression_layer() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -166,6 +173,7 @@ fn test_build_with_config_timeout_layer() {
             port: 8080,
             request_timeout_secs: 5,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -184,6 +192,7 @@ fn test_build_with_config_zero_timeout() {
             port: 8080,
             request_timeout_secs: 0,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -202,6 +211,7 @@ fn test_build_with_config_large_timeout() {
             port: 8080,
             request_timeout_secs: 3600,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -228,6 +238,7 @@ fn test_build_with_config_cors_various_origins() {
                 allowed_methods: vec!["GET".to_string()],
                 allowed_headers: vec!["Content-Type".to_string()],
             }),
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -253,6 +264,7 @@ fn test_build_with_config_cors_all_methods() {
                 allowed_methods: vec!["GET".to_string(), "POST".to_string()],
                 allowed_headers: vec!["Content-Type".to_string()],
             }),
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -275,6 +287,7 @@ fn test_build_with_config_api_key_empty_prefix() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
@@ -300,6 +313,7 @@ fn test_build_with_config_api_key_long_prefix() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::ApiKey {
             header_name: "X-Custom-API-Key".to_string(),
@@ -325,6 +339,7 @@ fn test_build_with_config_api_key_special_chars() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::ApiKey {
             header_name: "X-Api-Key".to_string(),
@@ -355,6 +370,7 @@ fn test_build_with_config_jwt_short_secret() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::Jwt {
             secret: "ValidSecretKey123!@#WithUppercase".to_string(),
@@ -375,6 +391,7 @@ fn test_build_with_config_jwt_special_chars() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::Jwt {
             secret: "SpecialChars!@#$%^&*()_+Secret123".to_string(),
@@ -396,6 +413,7 @@ fn test_build_with_config_jwt_empty_secret() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::Jwt {
             secret: "ValidSecretForTesting123!@#WithUppercase".to_string(),
@@ -455,6 +473,7 @@ fn test_build_with_config_full_jwt_cors() {
                 allowed_methods: vec!["GET".to_string(), "POST".to_string()],
                 allowed_headers: vec!["Content-Type".to_string(), "Authorization".to_string()],
             }),
+            ..Default::default()
         },
         authentication: AuthConfig::Jwt {
             secret: "AnotherVeryLongSecretKeyForTestingPurposes1234567890!".to_string(),
@@ -479,6 +498,7 @@ fn test_build_with_config_full_api_key_cors() {
                 allowed_methods: vec!["GET".to_string(), "POST".to_string(), "PUT".to_string()],
                 allowed_headers: vec!["Content-Type".to_string(), "X-API-Key".to_string()],
             }),
+            ..Default::default()
         },
         authentication: AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
@@ -513,6 +533,7 @@ fn test_build_with_config_no_auth() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
@@ -537,6 +558,7 @@ fn test_build_with_config_minimal_config() {
             port: 1,
             request_timeout_secs: 1,
             cors: None,
+            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,

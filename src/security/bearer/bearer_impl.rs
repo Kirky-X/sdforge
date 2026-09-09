@@ -242,8 +242,14 @@ impl BearerAuth {
     }
 
     /// Base64url decode (JWT uses URL-safe base64)
+    ///
+    /// HIGH 修复（#344）：严格解码。此前查找表以 0 初始化且合法字符只覆盖
+    /// 64 个索引，其余 192 个字节的表值恰为 0（合法值 'A'），任何非法字符
+    /// 都被静默解码为 0 而非拒绝。现在以 0xFF 哨兵初始化，遇非法字符返回
+    /// None——注入字符无法再被无声接受（fail-closed）。
     pub(crate) fn base64url_decode(input: &str) -> Option<Vec<u8>> {
-        let mut table = [0u8; 256];
+        const INVALID: u8 = 0xFF;
+        let mut table = [INVALID; 256];
         for (i, b) in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
             .iter()
             .enumerate()
@@ -263,8 +269,12 @@ impl BearerAuth {
                 continue; // Skip whitespace
             }
 
-            let val = table.get(c as usize)?;
-            buffer = (buffer << 6) | (*val as u32);
+            let val = *table.get(c as usize)?;
+            if val == INVALID {
+                // 非法 base64url 字符：拒绝而不是当作 'A' 解码
+                return None;
+            }
+            buffer = (buffer << 6) | (val as u32);
             bits += 6;
 
             if bits >= 8 {
@@ -636,6 +646,19 @@ impl BearerAuthBuilder {
             return Err(AuthConfigError::SecretTooShort {
                 length: secret.len(),
             });
+        }
+
+        // HIGH 修复：audience/issuer 空串校验——`Some("")` 会匹配令牌中
+        // `aud: ""`/`iss: ""` 的空串 claim，等于校验形同虚设（fail-closed）。
+        if self.audience.as_ref().is_some_and(|a| a.is_empty()) {
+            return Err(AuthConfigError::InvalidSecret(
+                "Expected audience cannot be empty: an empty audience matches tokens with an empty aud claim".to_string(),
+            ));
+        }
+        if self.issuer.as_ref().is_some_and(|i| i.is_empty()) {
+            return Err(AuthConfigError::InvalidSecret(
+                "Expected issuer cannot be empty: an empty issuer matches tokens with an empty iss claim".to_string(),
+            ));
         }
 
         // Validate character classes

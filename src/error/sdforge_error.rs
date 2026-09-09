@@ -62,10 +62,16 @@ impl SdForgeError {
     }
 
     /// Get a sanitized error message for external display
+    ///
+    /// HIGH 修复：`Internal` 此前原样返回内部消息（与 `ApiError::Internal`
+    /// 的脱敏行为矛盾），原始消息可能含主机名/连接串等并进入外部输出。
+    /// 现在统一返回通用脱敏文案；完整细节仍留在 Display/Debug（日志）中。
     pub fn sanitized_message(&self) -> String {
         match self {
             SdForgeError::Api(err) => err.sanitized_message(),
-            SdForgeError::Internal(msg) => msg.clone(),
+            SdForgeError::Internal(_) => {
+                "An internal error occurred. Please try again later.".to_string()
+            }
             #[cfg(any(feature = "http", feature = "security"))]
             other => other.to_string(),
         }
@@ -103,9 +109,10 @@ impl SdForgeError {
                 serde_json::json!({ "type": "config" }),
                 400,
             ),
-            SdForgeError::Internal(msg) => ServiceError::with_details(
+            SdForgeError::Internal(_) => ServiceError::with_details(
                 "INTERNAL_ERROR",
-                msg.clone(),
+                // HIGH 修复：与 sanitized_message 一致地脱敏，原始消息不进 HTTP 响应体
+                "An internal error occurred. Please try again later.".to_string(),
                 serde_json::json!({ "type": "internal" }),
                 500,
             ),
@@ -218,12 +225,14 @@ mod tests {
         assert!(msg.contains("internal error"));
     }
 
-    /// Test sanitized_message() for the Internal variant returns the raw message.
+    /// Test sanitized_message() for the Internal variant returns the sanitized
+    /// generic message (HIGH 修复回归：原始消息不再进外部输出).
     #[test]
     fn test_sanitized_message_internal() {
         let err = SdForgeError::internal("my internal message");
         let msg = err.sanitized_message();
-        assert_eq!(msg, "my internal message");
+        assert_eq!(msg, "An internal error occurred. Please try again later.");
+        assert!(!msg.contains("my internal message"));
     }
 
     /// Test sanitized_message() for the Config variant (http feature).
@@ -257,14 +266,18 @@ mod tests {
     }
 
     /// Test to_service_error() for the Internal variant produces a 500
-    /// ServiceError carrying the original message.
+    /// ServiceError with a sanitized message (HIGH 修复回归).
     #[test]
     fn test_to_service_error_internal() {
         let err = SdForgeError::internal("custom internal message");
         let service_err = err.to_service_error();
         assert_eq!(service_err.code(), "INTERNAL_ERROR");
         assert_eq!(service_err.http_status(), 500);
-        assert_eq!(service_err.message(), "custom internal message");
+        assert_eq!(
+            service_err.message(),
+            "An internal error occurred. Please try again later."
+        );
+        assert!(!service_err.message().contains("custom internal message"));
     }
 
     /// Test to_service_error() for the Config variant (http feature)

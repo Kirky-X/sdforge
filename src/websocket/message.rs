@@ -26,23 +26,11 @@ pub const MAX_JSON_DEPTH: usize = 16;
 ///
 /// # Security Purpose
 ///
-/// This constant defines a reasonable upper bound for string field lengths to prevent:
+/// Enforced by [`parse_websocket_message`] on every string field (`id`,
+/// `method`, `error`, `event`) to prevent:
 /// - Memory exhaustion attacks via oversized string fields
-/// - Buffer overflow vulnerabilities in downstream processing
 /// - Performance degradation from processing extremely large strings
-///
-/// # Future Use
-///
-/// While not currently enforced in parsing logic, this constant serves as:
-/// - A reference for implementing future validation checks
-/// - A best practice reminder for secure WebSocket message handling
-/// - A potential configuration parameter for custom validation rules
-///
-/// # Recommendation
-///
-/// Implementers should consider validating string field lengths against this limit
-/// when processing WebSocket messages, especially in production environments.
-#[cfg(test)]
+#[cfg(feature = "websocket")]
 pub const MAX_STRING_LENGTH: usize = 64 * 1024; // 64KB
 
 #[cfg(feature = "websocket")]
@@ -96,7 +84,8 @@ pub enum WebSocketMessage {
 ///
 /// This function provides security measures:
 /// - Maximum message size validation (1MB)
-/// - JSON nesting depth validation (max 16 levels)
+/// - JSON nesting depth validation (max 16 levels, including empty containers)
+/// - String field length validation (`id`/`method`/`error`/`event`, max 64KB)
 ///
 /// # Errors
 ///
@@ -145,34 +134,87 @@ pub fn parse_websocket_message(text: &str) -> Result<WebSocketMessage, String> {
     }
 
     // Parse the actual WebSocket message
-    serde_json::from_str::<WebSocketMessage>(text).map_err(|e| format!("Invalid JSON: {}", e))
+    let msg = serde_json::from_str::<WebSocketMessage>(text)
+        .map_err(|e| format!("Invalid JSON: {}", e))?;
+    validate_string_limits(&msg)?;
+    Ok(msg)
 }
 
 /// Calculate depth of a JSON value recursively
+///
+/// 返回值包含容器自身层级：`{}` 为 1，`{"a":{}}` 为 2。此前实现只返回
+/// 子节点最大深度且空容器 `unwrap_or(0)`，导致纯空容器深嵌套（如
+/// `[[[…]]]`，17~serde_json 上限层）计算深度为 0，完全绕过
+/// [`MAX_JSON_DEPTH`] 检查。
 pub fn calculate_value_depth(value: &serde_json::Value, current_depth: &mut usize) -> usize {
     match value {
         Value::Object(map) => {
             *current_depth += 1;
+            let level = *current_depth;
             let max_child_depth = map
                 .values()
                 .map(|v| calculate_value_depth(v, current_depth))
                 .max()
                 .unwrap_or(0);
             *current_depth -= 1;
-            max_child_depth
+            max_child_depth.max(level)
         }
         Value::Array(arr) => {
             *current_depth += 1;
+            let level = *current_depth;
             let max_child_depth = arr
                 .iter()
                 .map(|v| calculate_value_depth(v, current_depth))
                 .max()
                 .unwrap_or(0);
             *current_depth -= 1;
-            max_child_depth
+            max_child_depth.max(level)
         }
         _ => *current_depth,
     }
+}
+
+/// 校验消息中所有字符串字段不超过 [`MAX_STRING_LENGTH`]。
+///
+/// 此前 `MAX_STRING_LENGTH` 仅为文档性常量（cfg(test) 门控），生产解析路径
+/// 对 `id`/`method`/`error`/`event` 无任何长度限制。
+fn validate_string_limits(msg: &WebSocketMessage) -> Result<(), String> {
+    let too_long =
+        |field: &str, len: usize| -> String {
+            format!(
+                "String field '{}' too long: {} bytes (max: {})",
+                field, len, MAX_STRING_LENGTH
+            )
+        };
+    match msg {
+        WebSocketMessage::Request { id, method, .. } => {
+            if id.len() > MAX_STRING_LENGTH {
+                return Err(too_long("id", id.len()));
+            }
+            if method.len() > MAX_STRING_LENGTH {
+                return Err(too_long("method", method.len()));
+            }
+        }
+        WebSocketMessage::Response { id, .. } => {
+            if id.len() > MAX_STRING_LENGTH {
+                return Err(too_long("id", id.len()));
+            }
+        }
+        WebSocketMessage::Error { id, error } => {
+            if id.len() > MAX_STRING_LENGTH {
+                return Err(too_long("id", id.len()));
+            }
+            if error.len() > MAX_STRING_LENGTH {
+                return Err(too_long("error", error.len()));
+            }
+        }
+        WebSocketMessage::Notification { event, .. } => {
+            if event.len() > MAX_STRING_LENGTH {
+                return Err(too_long("event", event.len()));
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Calculate actual JSON nesting depth by parsing the structure
@@ -228,29 +270,73 @@ mod tests {
 
     /// Object containing an empty child object — exercises the `.unwrap_or(0)`
     /// path for an empty child nested inside a non-empty parent, mixed with a
-    /// primitive sibling that returns `*current_depth`.
+    /// primitive sibling. 容器自身层级计入后：外层 1 + 内层空对象 1 = 2。
     #[test]
     fn calculate_value_depth_object_with_empty_child() {
         let value = serde_json::json!({"a": {}, "b": 1});
         let mut depth = 0;
         let result = calculate_value_depth(&value, &mut depth);
-        // Empty child returns 0; primitive "b" returns 1 (current_depth=1).
-        // max(0, 1) = 1.
-        assert_eq!(result, 1);
+        assert_eq!(result, 2);
         assert_eq!(depth, 0);
     }
 
     /// Array containing an empty child array — exercises the `.unwrap_or(0)`
     /// path for an empty array nested inside a non-empty parent.
+    /// 容器自身层级计入后：外层 1 + 内层空数组 1 = 2。
     #[test]
     fn calculate_value_depth_array_with_empty_child() {
         let value = serde_json::json!([[], 1]);
         let mut depth = 0;
         let result = calculate_value_depth(&value, &mut depth);
-        // Empty child returns 0; primitive 1 returns 1 (current_depth=1).
-        // max(0, 1) = 1.
-        assert_eq!(result, 1);
+        assert_eq!(result, 2);
         assert_eq!(depth, 0);
+    }
+
+    /// 安全回归（HIGH 修复）：纯空容器深嵌套不得绕过 MAX_JSON_DEPTH——
+    /// 此前空容器链深度算成 0，17 层以上 `[[[…]]]` 畅通无阻。
+    #[test]
+    fn parse_websocket_message_rejects_deep_empty_containers() {
+        let mut deep_json = String::from("[]");
+        for _ in 0..=MAX_JSON_DEPTH {
+            deep_json = format!("[{}]", deep_json);
+        }
+        let result = parse_websocket_message(&deep_json);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().contains("nesting too deep"),
+            "deep empty-container nesting must be rejected"
+        );
+    }
+
+    /// MAX_STRING_LENGTH 现在在生产解析路径强制执行（此前仅为 cfg(test)
+    /// 门控的文档性常量）。
+    #[test]
+    fn parse_websocket_message_rejects_oversized_string_fields() {
+        let long_id = "x".repeat(MAX_STRING_LENGTH + 1);
+        let json = serde_json::json!({
+            "type": "request",
+            "id": long_id,
+            "method": "m",
+            "params": {}
+        })
+        .to_string();
+        let result = parse_websocket_message(&json);
+        assert!(result.is_err());
+        assert!(
+            result.unwrap_err().contains("too long"),
+            "oversized string field must be rejected"
+        );
+
+        // 边界：恰好 64KB 合法
+        let boundary_id = "x".repeat(MAX_STRING_LENGTH);
+        let json = serde_json::json!({
+            "type": "request",
+            "id": boundary_id,
+            "method": "m",
+            "params": {}
+        })
+        .to_string();
+        assert!(parse_websocket_message(&json).is_ok());
     }
 
     /// calculate_json_depth with unmatched closing braces — the

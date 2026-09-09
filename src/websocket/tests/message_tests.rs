@@ -440,19 +440,21 @@ fn calculate_value_depth_mixed() {
 }
 
 /// Test calculate_value_depth with empty object
+/// 回归（HIGH 修复）：容器自身层级计入，空对象深度为 1（此前为 0，
+/// 导致空容器深嵌套绕过 MAX_JSON_DEPTH 检查）。
 #[test]
 fn calculate_value_depth_empty_object() {
     let value = serde_json::json!({});
     let mut depth = 0;
-    assert_eq!(calculate_value_depth(&value, &mut depth), 0);
+    assert_eq!(calculate_value_depth(&value, &mut depth), 1);
 }
 
-/// Test calculate_value_depth with empty array
+/// Test calculate_value_depth with empty array（同上，深度为 1）
 #[test]
 fn calculate_value_depth_empty_array() {
     let value = serde_json::json!([]);
     let mut depth = 0;
-    assert_eq!(calculate_value_depth(&value, &mut depth), 0);
+    assert_eq!(calculate_value_depth(&value, &mut depth), 1);
 }
 
 /// Test calculate_value_depth with boolean

@@ -33,6 +33,31 @@ pub struct BearerAuth {
     expected_issuer: Option<String>,
 }
 
+impl Drop for BearerAuth {
+    fn drop(&mut self) {
+        // HIGH 修复（加固）：销毁前以 volatile 写擦除密钥材料，防止密钥
+        // 残留在已释放内存中被后续转储/扫描读取。volatile 防止编译器把
+        // 死存储优化掉；写后加 fence 确保顺序。等价于 zeroize crate 的
+        // 核心语义，避免引入新依赖。
+        for byte in self.secret.iter_mut() {
+            // SAFETY: byte 指向 self 拥有的合法 Vec<u8> 缓冲区，写入 0 合法
+            unsafe { std::ptr::write_volatile(byte, 0) };
+        }
+        std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl std::fmt::Debug for BearerAuth {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BearerAuth")
+            .field("secret", &"[REDACTED]")
+            .field("secret_len", &self.secret.len())
+            .field("has_expected_audience", &self.expected_audience.is_some())
+            .field("has_expected_issuer", &self.expected_issuer.is_some())
+            .finish()
+    }
+}
+
 /// Builder for BearerAuth configuration
 ///
 /// This builder provides a fluent interface for configuring BearerAuth instances

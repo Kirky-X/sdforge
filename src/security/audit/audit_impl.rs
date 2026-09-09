@@ -175,6 +175,9 @@ impl AppAuditLogger {
         let logs_clone = logs.clone();
         let fallback_logs_clone = fallback_logs.clone();
         let max_logs_clone = max_logs;
+        // worker 与 log() 必须共用同一把合并锁（先建后克隆）
+        let merge_lock: Arc<std::sync::Mutex<()>> = Arc::new(std::sync::Mutex::new(()));
+        let merge_lock_clone = merge_lock.clone();
         tokio::spawn(async move {
             // Primary storage is done synchronously by log() — this worker only
             // handles draining the queue and merging fallback logs.
@@ -185,6 +188,8 @@ impl AppAuditLogger {
                 if let Some(fallback_data) = fallback_logs_clone.get(key) {
                     let fallback: Vec<AuditLog> = deserialize_audit_logs(&fallback_data);
                     if !fallback.is_empty() {
+                        // 与 log() 的读改写互斥（HIGH 修复：防止并发覆盖丢日志）
+                        let _guard = merge_lock_clone.lock();
                         let data = logs_clone.get(key);
                         let mut logs_vec: Vec<AuditLog> = data
                             .as_ref()
@@ -209,6 +214,7 @@ impl AppAuditLogger {
             fallback_logs,
             dropped_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             total_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            merge_lock,
         }
     }
 
@@ -233,7 +239,11 @@ impl AppAuditLogger {
         {
             Ok(Ok(permit)) => permit,
             Ok(Err(_)) | Err(_) => {
-                // Semaphore closed or timeout - skip logging to prevent DoS
+                // Semaphore closed or timeout - skip logging to prevent DoS。
+                // HIGH 修复：丢弃必须计数，否则监控对日志丢失完全不可见
+                // （此前超时路径静默 return，计数器不更新）。
+                self.dropped_log_count
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 return;
             }
         };
@@ -285,7 +295,12 @@ impl AppAuditLogger {
         // This ensures logs are immediately visible via get_logs() without
         // relying on the async worker being scheduled. Critical for tests and
         // for any code that reads logs immediately after logging.
+        //
+        // HIGH 修复：get→push→set 读改写必须与 worker 的 fallback 合并互斥，
+        // 否则同用户并发 log() 会互相覆盖、静默丢审计日志。临界区内无 await，
+        // 标准 Mutex 即可（semaphore 已把并发限制在 100 以内）。
         let key = &user_id;
+        let merge_guard = self.merge_lock.lock();
         let data = self.logs.get(key);
         let mut logs_vec: Vec<AuditLog> = data
             .as_ref()
@@ -316,6 +331,7 @@ impl AppAuditLogger {
                 self.fallback_logs.delete(key);
             }
         }
+        drop(merge_guard);
 
         // Send to async queue for potential downstream consumers.
         // The primary storage is already done above. This is fire-and-forget
@@ -458,6 +474,10 @@ impl crate::security::AuditLogger for AppAuditLogger {
         let queue_sender = self.queue_sender.clone();
         let fallback_logs = self.fallback_logs.clone();
         let dropped_log_count = self.dropped_log_count.clone();
+        // HIGH 修复：必须克隆原计数器——此前新建 0 值计数器，trait 路径
+        // 的日志永不计入 total_log_count()，监控指标失真。
+        let total_log_count = self.total_log_count.clone();
+        let merge_lock = self.merge_lock.clone();
 
         // Reuse the current tokio runtime instead of spawning a new OS thread + runtime per log call.
         // Previous implementation used std::thread::spawn + tokio::runtime::Builder which had
@@ -473,7 +493,8 @@ impl crate::security::AuditLogger for AppAuditLogger {
                         queue_sender,
                         fallback_logs,
                         dropped_log_count,
-                        total_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+                        total_log_count,
+                        merge_lock,
                     };
                     logger
                         .log(&context, action, resource, result, message)
@@ -650,8 +671,16 @@ impl AppAuditLoggerBuilder {
     /// }
     /// ```
     pub fn build(self) -> AppAuditLogger {
+        // HIGH 修复（#20/#304）：零值防护——此前 builder 不做任何校验：
+        // queue_size(0) 触发 tokio bounded channel 断言 panic；
+        // max_concurrent_ops(0) 使每条日志等待 1s 超时后丢弃；
+        // max_logs_per_user(0) 丢弃所有日志。统一钳制为最小 1（fail-safe）。
+        let queue_size = self.queue_size.max(1);
+        let max_concurrent_ops = self.max_concurrent_ops.max(1);
+        let max_logs_per_user = self.max_logs_per_user.max(1);
+
         let (queue_sender, mut queue_receiver) =
-            tokio::sync::mpsc::channel::<AuditLogBatch>(self.queue_size);
+            tokio::sync::mpsc::channel::<AuditLogBatch>(queue_size);
 
         // Spawn background worker for async log processing
         let logs: SharedCache = Arc::new(crate::cache::DashMapCache::new());
@@ -659,6 +688,9 @@ impl AppAuditLoggerBuilder {
         let logs_clone = logs.clone();
         let fallback_logs_clone = fallback_logs.clone();
         let max_logs_clone = self.max_logs_per_user;
+        // worker 与 log() 必须共用同一把合并锁（先建后克隆）
+        let merge_lock: Arc<std::sync::Mutex<()>> = Arc::new(std::sync::Mutex::new(()));
+        let merge_lock_clone = merge_lock.clone();
         tokio::spawn(async move {
             // Primary storage is done synchronously by log() — this worker only
             // handles draining the queue and merging fallback logs.
@@ -669,6 +701,8 @@ impl AppAuditLoggerBuilder {
                 if let Some(fallback_data) = fallback_logs_clone.get(key) {
                     let fallback: Vec<AuditLog> = deserialize_audit_logs(&fallback_data);
                     if !fallback.is_empty() {
+                        // 与 log() 的读改写互斥（HIGH 修复：防止并发覆盖丢日志）
+                        let _guard = merge_lock_clone.lock();
                         let data = logs_clone.get(key);
                         let mut logs_vec: Vec<AuditLog> = data
                             .as_ref()
@@ -687,12 +721,13 @@ impl AppAuditLoggerBuilder {
 
         AppAuditLogger {
             logs,
-            max_logs_per_user: self.max_logs_per_user,
-            semaphore: Arc::new(tokio::sync::Semaphore::new(self.max_concurrent_ops)),
+            max_logs_per_user: max_logs_per_user,
+            semaphore: Arc::new(tokio::sync::Semaphore::new(max_concurrent_ops)),
             queue_sender: Arc::new(queue_sender),
             fallback_logs,
             dropped_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             total_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            merge_lock,
         }
     }
 }

@@ -45,6 +45,7 @@ pub fn build_custom_config() -> AppConfig {
         host: "127.0.0.1".to_string(),
         port: 3000,
         request_timeout_secs: 60,
+        max_body_size: 10 * 1024 * 1024,
         cors: None,
     };
 
@@ -97,6 +98,7 @@ pub fn demo_server_config() -> ServerConfig {
         host: "0.0.0.0".to_string(),
         port: 8080,
         request_timeout_secs: 30,
+        max_body_size: 10 * 1024 * 1024,
         cors: None,
     }
 }

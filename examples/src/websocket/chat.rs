@@ -167,6 +167,9 @@ pub struct MessageResponse {
     tool_name = "chat_ws",
     description = "聊天 WebSocket 端点"
 )]
+// #161 演示说明：此端点是普通 HTTP GET 演示桩，不做 WebSocket 升级。
+// 框架的完整 WS 能力见 sdforge::websocket 模块（#[forge(ws_path=...)] 会
+// 生成真正的 WebSocketRoute）。严禁复制到生产。
 async fn chat_ws() -> Result<String, ApiError> {
     Ok("WebSocket chat connection".to_string())
 }

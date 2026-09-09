@@ -126,14 +126,13 @@ pub fn translate_or_fallback(default: &str, i18n_key: Option<&str>) -> String {
         Some(k) if !k.is_empty() => k,
         _ => return default.to_string(),
     };
-    let locale = {
-        let reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
-        if reg.locale.is_empty() {
-            return default.to_string();
-        }
-        reg.locale.clone()
-    };
+    // HIGH 修复：locale 快照与查表必须持同一把锁完成。此前两次独立加锁，
+    // 期间 set_locale 可变更 locale，导致用过期 locale 查表（TOCTOU）。
     let reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+    if reg.locale.is_empty() {
+        return default.to_string();
+    }
+    let locale = reg.locale.clone();
     reg.translations
         .get(&(locale, key.to_string()))
         .cloned()

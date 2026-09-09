@@ -25,7 +25,8 @@ fn benchmark_config_validation(c: &mut Criterion) {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
-        },
+             ..Default::default()
+         },
         authentication: AuthConfig::ApiKey {
             header_name: "X-Auth".to_string(),
             prefix: "Bearer ".to_string(),
@@ -45,7 +46,8 @@ fn benchmark_config_validation(c: &mut Criterion) {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
-        },
+             ..Default::default()
+         },
         authentication: AuthConfig::ApiKey {
             header_name: "X-Auth".to_string(),
             prefix: "".to_string(), // Invalid: empty prefix
@@ -76,6 +78,7 @@ fn benchmark_builder_with_validation(c: &mut Criterion) {
                     port: 8080,
                     request_timeout_secs: 30,
                     cors: None,
+                    ..Default::default()
                 })
                 .authentication(AuthConfig::ApiKey {
                     header_name: "X-Auth".to_string(),

@@ -69,6 +69,12 @@ pub struct VersionRouterConfig {
     /// Default version if none specified
     pub default_version: String,
     /// Supported versions
+    ///
+    /// # Note（#217 设计说明）
+    ///
+    /// 该字段仅用于计算 `Link: successor-version` 响应头。**版本合法性
+    /// 门控委托给路由注册**：未注册版本的请求最终由 axum 返回 404，
+    /// 中间件不基于此字段拒绝请求（默认放行任意 `v<数字>` 格式版本）。
     pub supported_versions: Vec<String>,
     /// Enable version redirect (redirect /api/foo to /api/v1/foo)
     pub redirect_unknown: bool,
@@ -112,18 +118,43 @@ pub fn build_version_router() -> Router {
     router
 }
 
-/// Version redirect middleware with deprecation support
+/// Version redirect middleware with deprecation support（默认配置的便捷形式）
+///
+/// HIGH 修复：此函数此前硬编码 `VersionRouterConfig::default()`，导致
+/// `redirect_unknown` / `sunset_header` / `deprecated_versions` 全部是死配置。
+/// 需要自定义配置时请使用 [`VersionRedirectLayer`]。
 pub async fn version_redirect_middleware(
     req: Request<Body>,
     next: axum::middleware::Next,
 ) -> Response {
-    let uri = req.uri().path().to_string();
     let config = VersionRouterConfig::default();
+    apply_version_redirect(req, &config, |req| next.run(req)).await
+}
+
+/// 核心重定向逻辑（配置注入 + query 保留）
+///
+/// 从 `next` 抽象为闭包，供 from_fn 形式与 tower [`VersionRedirectService`]
+/// 共用，避免两份实现漂移。
+async fn apply_version_redirect<F, Fut>(req: Request<Body>, config: &VersionRouterConfig, next: F) -> Response
+where
+    F: FnOnce(Request<Body>) -> Fut,
+    Fut: std::future::Future<Output = Response>,
+{
+    // 保留 query string（HIGH 修复：此前仅取 path，/api/test?foo=bar 重定向
+    // 后 query 静默丢失）
+    let (path, query) = match req.uri().path_and_query() {
+        Some(pq) => {
+            let p = pq.path().to_string();
+            let q = pq.query().map(|q| format!("?{}", q)).unwrap_or_default();
+            (p, q)
+        }
+        None => (req.uri().path().to_string(), String::new()),
+    };
 
     // Check if path starts with /api/ and has a version
-    if let Some(path_after_api) = uri.strip_prefix("/api/") {
+    if let Some(path_after_api) = path.strip_prefix("/api/") {
         // Check if it has a version (v1, v2, etc.)
-        if path_after_api.starts_with("v") {
+        if path_after_api.starts_with('v') {
             let end_of_version = path_after_api.find('/').unwrap_or(path_after_api.len());
             let version_part = &path_after_api[..end_of_version];
 
@@ -142,7 +173,7 @@ pub async fn version_redirect_middleware(
                 && version_part[1..].chars().all(|c| c.is_ascii_digit())
             {
                 // Valid version, proceed with request and add deprecation headers if needed
-                let mut response = next.run(req).await;
+                let mut response = next(req).await;
 
                 // Check if version is deprecated
                 if let Some(sunset_date) = config.deprecated_versions.get(version_part) {
@@ -152,12 +183,12 @@ pub async fn version_redirect_middleware(
                         axum::http::HeaderValue::from_static("true"),
                     );
 
-                    // Add Sunset header with date. Skip the header (rather than panicking)
-                    // if the configured sunset_date contains invalid header bytes.
-                    if let Ok(val) = axum::http::HeaderValue::from_str(sunset_date) {
-                        response
-                            .headers_mut()
-                            .insert(axum::http::header::HeaderName::from_static("Sunset"), val);
+                    // Add Sunset header（配置化头名；非法头名/头值优雅跳过）
+                    if let Ok(name) =
+                        axum::http::header::HeaderName::from_bytes(config.sunset_header.as_bytes())
+                        && let Ok(val) = axum::http::HeaderValue::from_str(sunset_date)
+                    {
+                        response.headers_mut().insert(name, val);
                     }
 
                     // Add Link header to newer version
@@ -177,26 +208,110 @@ pub async fn version_redirect_middleware(
         }
 
         // No version or invalid version - redirect to default version
-        let default_version = &config.default_version;
-        let path_without_version = if path_after_api.starts_with('/') {
-            path_after_api.to_string()
-        } else {
-            format!("/{}", path_after_api)
-        };
-        let new_uri = format!("/api/{}{}", default_version, path_without_version);
+        // （redirect_unknown=false 时按配置放行，不再无条件重定向）
+        if config.redirect_unknown {
+            let default_version = &config.default_version;
+            let path_without_version = if path_after_api.starts_with('/') {
+                path_after_api.to_string()
+            } else {
+                format!("/{}", path_after_api)
+            };
+            let new_uri = format!("/api/{}{}{}", default_version, path_without_version, query);
 
-        let mut response = Response::new(Body::empty());
-        *response.status_mut() = axum::http::StatusCode::MOVED_PERMANENTLY;
-        response.headers_mut().insert(
-            axum::http::header::LOCATION,
-            axum::http::HeaderValue::from_str(&new_uri)
-                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("/")),
-        );
-        return response;
+            let mut response = Response::new(Body::empty());
+            *response.status_mut() = axum::http::StatusCode::MOVED_PERMANENTLY;
+            response.headers_mut().insert(
+                axum::http::header::LOCATION,
+                axum::http::HeaderValue::from_str(&new_uri)
+                    .unwrap_or_else(|_| axum::http::HeaderValue::from_static("/")),
+            );
+            return response;
+        }
     }
 
-    // Not an API path, proceed with request
-    next.run(req).await
+    // Not an API path (or redirect disabled), proceed with request
+    next(req).await
+}
+
+/// 可配置的版本重定向层（HIGH 修复：配置注入入口）
+///
+/// # Examples
+///
+/// ```ignore
+/// use sdforge::http::version_routing::{VersionRedirectLayer, VersionRouterConfig};
+///
+/// let mut config = VersionRouterConfig::default();
+/// config.deprecated_versions.insert("v1".into(), "2026-12-31".into());
+/// let router = Router::new()
+///     .route("/api/v1/users", axum::routing::get(users))
+///     .layer(VersionRedirectLayer::new(config));
+/// ```
+#[derive(Clone)]
+pub struct VersionRedirectLayer {
+    config: std::sync::Arc<VersionRouterConfig>,
+}
+
+impl VersionRedirectLayer {
+    /// Create a layer with custom configuration
+    pub fn new(config: VersionRouterConfig) -> Self {
+        Self {
+            config: std::sync::Arc::new(config),
+        }
+    }
+}
+
+impl<S> tower::layer::Layer<S> for VersionRedirectLayer {
+    type Service = VersionRedirectService<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        VersionRedirectService {
+            inner,
+            config: self.config.clone(),
+        }
+    }
+}
+
+/// Service 应用 [`VersionRedirectLayer`] 携带的配置
+#[derive(Clone)]
+pub struct VersionRedirectService<S> {
+    inner: S,
+    config: std::sync::Arc<VersionRouterConfig>,
+}
+
+impl<S> tower::Service<Request<Body>> for VersionRedirectService<S>
+where
+    S: tower::Service<Request<Body>, Response = Response, Error = std::convert::Infallible>
+        + Clone
+        + Send
+        + 'static,
+    S::Future: Send + 'static,
+{
+    type Response = Response;
+    type Error = std::convert::Infallible;
+    type Future = std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Response, std::convert::Infallible>> + Send>,
+    >;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        let clone = self.inner.clone();
+        let mut inner = std::mem::replace(&mut self.inner, clone);
+        let config = self.config.clone();
+        Box::pin(async move {
+            let response =
+                apply_version_redirect(req, &config, |req| async move {
+                    inner.call(req).await.unwrap_or_else(|e| match e {})
+                })
+                .await;
+            Ok(response)
+        })
+    }
 }
 
 /// Find the next newer version
@@ -535,6 +650,76 @@ mod tests {
         assert_eq!(
             response.headers().get("location").unwrap(),
             "/api/v1/users/123"
+        );
+    }
+
+    // ===== HIGH 修复回归：配置注入 / query 保留 =====
+
+    /// redirect_unknown=false 时无版本路径应放行而非重定向
+    /// （此前 redirect_unknown 是死配置，永远重定向）。
+    #[tokio::test]
+    async fn test_redirect_unknown_false_passes_through() {
+        let config = VersionRouterConfig {
+            redirect_unknown: false,
+            ..VersionRouterConfig::default()
+        };
+        let router = Router::new()
+            .route("/api/plain", get(test_handler))
+            .layer(VersionRedirectLayer::new(config));
+        let response = router
+            .oneshot(Request::builder().uri("/api/plain").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK, "path must pass through when redirect_unknown=false");
+        assert!(response.headers().get("location").is_none());
+    }
+
+    /// 重定向 Location 必须保留 query string
+    /// （此前仅取 path，/api/test?foo=bar 重定向后 query 静默丢失）。
+    #[tokio::test]
+    async fn test_redirect_preserves_query_string() {
+        let router = Router::new()
+            .route("/api/v1/test", get(test_handler))
+            .layer(axum::middleware::from_fn(version_redirect_middleware));
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/test?foo=bar&baz=1")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
+        assert_eq!(
+            response.headers().get("location").unwrap(),
+            "/api/v1/test?foo=bar&baz=1"
+        );
+    }
+
+    /// 自定义 deprecated_versions + sunset_header 通过 VersionRedirectLayer 生效
+    /// （此前中间件硬编码 default config，弃用头永远不可达）。
+    #[tokio::test]
+    async fn test_layer_config_deprecation_headers() {
+        let mut config = VersionRouterConfig::default();
+        config.deprecated_versions.insert("v1".to_string(), "2026-12-31".to_string());
+        config.sunset_header = "X-Custom-Sunset".to_string();
+
+        let router = Router::new()
+            .route("/api/v1/test", get(test_handler))
+            .layer(VersionRedirectLayer::new(config));
+        let response = router
+            .oneshot(Request::builder().uri("/api/v1/test").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers().get("deprecation").unwrap(), "true");
+        assert_eq!(
+            response.headers().get("x-custom-sunset").unwrap(),
+            "2026-12-31"
         );
     }
 

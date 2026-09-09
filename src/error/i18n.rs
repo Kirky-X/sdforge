@@ -149,6 +149,9 @@ impl LocalizedError for ApiError {
                 } => {
                     format!("请求频率超限：{} 次 / {} 秒", limit, window_seconds)
                 }
+                ApiError::QuotaExhausted { used, total } => {
+                    format!("配额已用尽：{}/{}", used, total)
+                }
                 ApiError::Internal { message, .. } => {
                     format!("内部错误：{}", message)
                 }
@@ -183,6 +186,9 @@ impl LocalizedError for ApiError {
                         limit, window_seconds
                     )
                 }
+                ApiError::QuotaExhausted { used, total } => {
+                    format!("Quota épuisé : {}/{}", used, total)
+                }
                 ApiError::Internal { message, .. } => {
                     format!("Erreur interne: {}", message)
                 }
@@ -216,6 +222,9 @@ impl LocalizedError for ApiError {
                         "Límite de tasa excedido: {} solicitudes / {} segundos",
                         limit, window_seconds
                     )
+                }
+                ApiError::QuotaExhausted { used, total } => {
+                    format!("Cuota agotada: {}/{}", used, total)
                 }
                 ApiError::Internal { message, .. } => {
                     format!("Error interno: {}", message)

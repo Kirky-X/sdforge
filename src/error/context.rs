@@ -50,8 +50,13 @@ impl ErrorContext {
 
     /// Capture the current calling context
     ///
-    /// This uses the `file!()`, `line!()`, and `std::any::type_name` to
-    /// automatically capture the caller's location.
+    /// Uses `#[track_caller]` to capture the **caller's** file and line.
+    ///
+    /// HIGH 修复：此前 `file!()/line!()` 展开于本文件，永远指向
+    /// context.rs 自身；`type_name::<()>()` 恒为 `"()"`——"调用者上下文"
+    /// 整体失效且 function 字段是常量垃圾值。调用者位置无法经
+    /// `track_caller` 获得函数名，`function` 现为 `None`（诚实的缺失
+    /// 优于恒错的 `"()"`）。
     ///
     /// # Example
     ///
@@ -59,11 +64,13 @@ impl ErrorContext {
     /// use sdforge::error::ErrorContext;
     /// let context = ErrorContext::current();
     /// ```
+    #[track_caller]
     pub fn current() -> Self {
+        let loc = std::panic::Location::caller();
         Self {
-            file: Some(file!().to_string()),
-            line: Some(line!()),
-            function: Some(std::any::type_name::<()>().to_string()),
+            file: Some(loc.file().to_string()),
+            line: Some(loc.line()),
+            function: None,
             extra: HashMap::new(),
         }
     }

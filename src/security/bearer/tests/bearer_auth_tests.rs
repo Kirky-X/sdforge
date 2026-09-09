@@ -574,15 +574,10 @@ fn test_base64url_decode_with_whitespace() {
 
 #[test]
 fn test_base64url_decode_non_ascii_chars() {
-    // The base64url decoder uses a lookup table indexed by byte value.
-    // Non-ASCII UTF-8 characters produce bytes > 127, which map to index 0
-    // in the lookup table (uninitialized entries are zero). The decoder is
-    // permissive and won't return None - it just decodes them as zero-value bits.
+    // HIGH 修复回归（#344）：非 ASCII 字节不属于 base64url 字母表，
+    // 必须被拒绝（此前查找表未初始化项为 0，被静默当作 'A' 解码）。
     let result = BearerAuth::base64url_decode("\u{0080}");
-    assert!(result.is_some());
-    // 2 UTF-8 bytes (0xC2, 0x80), both map to 0 in table
-    // 2*6 bits = 12 bits -> 1 full byte
-    assert_eq!(result.unwrap().len(), 1);
+    assert!(result.is_none(), "non-ASCII bytes must be rejected");
 }
 
 #[test]
@@ -1393,4 +1388,56 @@ fn test_vuln0005_with_dependencies_accepts_exactly_32_bytes() {
         result.is_ok(),
         "32-byte secret with all classes must be accepted"
     );
+}
+
+/// HIGH 修复回归：builder 拒绝空 audience/issuer——`Some("")` 会匹配
+/// 令牌中空串 claim，使校验形同虚设（fail-closed）。
+#[test]
+fn test_builder_rejects_empty_audience_and_issuer() {
+    let err = BearerAuth::builder()
+        .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
+        .audience("")
+        .build()
+        .expect_err("empty audience must be rejected");
+    assert!(
+        err.to_string().contains("audience"),
+        "error must mention audience: {}",
+        err
+    );
+
+    let err = BearerAuth::builder()
+        .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
+        .issuer("")
+        .build()
+        .expect_err("empty issuer must be rejected");
+    assert!(
+        err.to_string().contains("issuer"),
+        "error must mention issuer: {}",
+        err
+    );
+
+    // 合法 audience/issuer 不受影响
+    assert!(BearerAuth::builder()
+        .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
+        .audience("my-api")
+        .issuer("my-issuer")
+        .build()
+        .is_ok());
+}
+
+/// HIGH 修复回归（#344）：base64url 解码必须拒绝非法字符——此前查找表
+/// 以 0 初始化，任何非法字节都被静默当作 'A'（值 0）解码。
+#[test]
+fn test_base64url_decode_rejects_invalid_characters() {
+    // 合法 base64url 输入正常解码
+    assert!(BearerAuth::base64url_decode("eyJhbGciOiJIUzI1NiJ9").is_some());
+    // URL-safe 字符集（- 和 _）合法
+    assert!(BearerAuth::base64url_decode("_-_-").is_some());
+    // 非法字符：! @ # $ % + /（标准 base64 的 + / 也不属于 base64url）
+    for bad in ["ab!d", "ab@d", "a#c", "a+b", "a/b"] {
+        assert!(
+            BearerAuth::base64url_decode(bad).is_none(),
+            "invalid base64url character must be rejected: {bad}"
+        );
+    }
 }

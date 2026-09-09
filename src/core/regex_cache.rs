@@ -263,14 +263,44 @@ pub mod common {
         &USERNAME
     }
 
-    /// Password strength regex (at least 8 chars, mixed case, number, special char)
-    /// Note: Simplified regex without lookahead since Rust regex crate doesn't support it
+    /// Password length regex (at least 8 chars)
+    ///
+    /// 注意：此正则**只校验长度**，不校验字符复杂度。regex crate 不支持
+    /// lookaround，单条正则无法表达"小写+大写+数字+特殊字符各至少一个"
+    /// 的合取；需要完整强度检查请使用 [`common::is_strong_password`]。
+    /// （HIGH 修复：此前注释宣称 "mixed case, number, special char" 与
+    /// `^.{8,}$` 的实际行为不符）
     pub fn password_strong() -> &'static Regex {
         static PASSWORD_STRONG: Lazy<Regex> = Lazy::new(|| {
             // Simplified: at least 8 chars with any combination
             Regex::new(r"^.{8,}$").unwrap()
         });
         &PASSWORD_STRONG
+    }
+
+    /// 完整密码强度检查：≥8 位且同时包含小写、大写、数字、特殊字符。
+    ///
+    /// （HIGH 修复：弥补 [`common::password_strong`] 只查长度的缺口）
+    pub fn is_strong_password(password: &str) -> bool {
+        if password.chars().count() < 8 {
+            return false;
+        }
+        let mut has_lower = false;
+        let mut has_upper = false;
+        let mut has_digit = false;
+        let mut has_special = false;
+        for c in password.chars() {
+            if c.is_ascii_lowercase() {
+                has_lower = true;
+            } else if c.is_ascii_uppercase() {
+                has_upper = true;
+            } else if c.is_ascii_digit() {
+                has_digit = true;
+            } else {
+                has_special = true;
+            }
+        }
+        has_lower && has_upper && has_digit && has_special
     }
 
     /// Slug regex (URL-friendly identifier)
@@ -525,10 +555,31 @@ mod tests {
 
     #[test]
     fn test_common_password_strong_regex() {
+        // HIGH 修复：password_strong 现在有诚实文档——只查长度；
+        // 完整强度检查用 is_strong_password。
         let regex = common::password_strong();
         assert!(regex.is_match("password123"));
         assert!(regex.is_match("Abcdefgh!"));
         assert!(!regex.is_match("short"));
         assert!(!regex.is_match("1234567"));
+    }
+
+    #[test]
+    fn test_is_strong_password_full_checks() {
+        // 全部满足：小写+大写+数字+特殊字符，≥8 位
+        assert!(common::is_strong_password("Abcdefg1!"));
+        assert!(common::is_strong_password("xK9#mP2$vL5@"));
+        // 缺少大写
+        assert!(!common::is_strong_password("abcdefgh1!"));
+        // 缺少小写
+        assert!(!common::is_strong_password("ABCDEFGH1!"));
+        // 缺少数字
+        assert!(!common::is_strong_password("Abcdefgh!!"));
+        // 缺少特殊字符
+        assert!(!common::is_strong_password("Abcdefg1"));
+        // 长度不足（即便字符类别齐全）
+        assert!(!common::is_strong_password("Ab1!"));
+        // 空串
+        assert!(!common::is_strong_password(""));
     }
 }

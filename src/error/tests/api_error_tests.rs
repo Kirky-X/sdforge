@@ -385,14 +385,27 @@ fn test_error_context_new() {
 }
 
 /// Test ErrorContext::current() captures caller information
+///
+/// HIGH 修复回归：`#[track_caller]` 生效后 file/line 必须指向**调用方**
+/// （本测试文件），而非 context.rs 自身；function 字段诚实为 None
+/// （此前恒为常量 "()"）。
 #[test]
 fn test_error_context_current() {
     let ctx = ErrorContext::current();
-    assert!(ctx.file.is_some());
-    assert!(ctx.file.unwrap().contains("error"));
-    assert!(ctx.line.is_some());
-    assert!(ctx.line.unwrap() > 0);
-    assert!(ctx.function.is_some());
+    let file = ctx.file.expect("file must be captured");
+    assert!(
+        file.contains("api_error_tests"),
+        "file must point at the caller, got: {}",
+        file
+    );
+    let line = ctx.line.expect("line must be captured");
+    assert!(line > 0);
+    // 该断言位于 current() 调用之后，行号必须大于调用处上方任何行
+    assert!(line >= 380 && line <= 420, "line must reflect the call site, got {}", line);
+    assert!(
+        ctx.function.is_none(),
+        "function is honestly None until track_caller can provide it"
+    );
     assert!(ctx.extra.is_empty());
 }
 
@@ -671,9 +684,16 @@ fn test_sdforge_error_internal() {
 /// Test SdForgeError sanitized_message
 #[test]
 fn test_sdforge_error_sanitized_message() {
+    // HIGH 修复回归：Internal 变体现在与 ApiError::Internal 一致地脱敏，
+    // 原始消息只留在 Display/Debug（日志）中，不进外部输出。
     let internal = SdForgeError::internal("Database connection failed: host=localhost");
     let msg = internal.sanitized_message();
-    assert!(msg.contains("Database")); // Not sanitized for Internal variant
+    assert!(
+        !msg.contains("Database") && !msg.contains("host=localhost"),
+        "Internal message must be sanitized for external display: {}",
+        msg
+    );
+    assert!(msg.contains("internal error"));
 
     let api_internal = ApiError::internal_error("DB failed", "ERR001");
     let sdforge_err: SdForgeError = api_internal.into();
@@ -789,7 +809,13 @@ fn test_to_mcp_json_internal() {
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
     assert_eq!(parsed["error"]["code"], "INTERNAL_ERROR");
-    assert_eq!(parsed["error"]["message"], "db failure");
+    // HIGH 修复回归：MCP 输出与 sanitized_message 一致地脱敏，
+    // 不得把原始内部消息泄漏到外部协议。
+    assert_eq!(
+        parsed["error"]["message"],
+        "An internal error occurred. Please try again later."
+    );
+    assert!(!json.contains("db failure"));
 }
 
 #[test]
@@ -970,4 +996,32 @@ fn test_api_error_to_service_error_from_all_variants() {
     let validation = ApiError::validation("email", "required");
     let svc: ServiceError = validation.into();
     assert_eq!(svc.code, "VALIDATION_ERROR");
+}
+
+/// HIGH 修复回归：QuotaExhausted 现在是独立变体，不再把 `used` 塞进
+/// `window_seconds`（此前客户端会按错误的秒数退避）。
+#[cfg(feature = "ratelimit")]
+#[test]
+fn test_quota_exhausted_preserves_quota_semantics() {
+    use crate::security::RateLimitError;
+
+    let err: ApiError = RateLimitError::QuotaExhausted { used: 850, total: 1000 }.into();
+    match &err {
+        ApiError::QuotaExhausted { used, total } => {
+            assert_eq!(*used, 850);
+            assert_eq!(*total, 1000);
+        }
+        other => panic!("Expected QuotaExhausted, got {:?}", other),
+    }
+    assert_eq!(err.category(), ErrorCategory::RateLimitError);
+
+    // MCP 输出带配额语义
+    let json = err.to_mcp_json();
+    assert!(json.contains("QUOTA_EXHAUSTED"), "json: {}", json);
+    assert!(json.contains("850"), "json must carry used: {}", json);
+
+    // HTTP 输出 429 且 details 携带 used/total
+    let svc = err.to_service_error();
+    assert_eq!(svc.http_status, 429);
+    assert_eq!(svc.code, "QUOTA_EXHAUSTED");
 }

@@ -189,70 +189,94 @@ pub async fn websocket_upgrade(ws: ValidatedWebSocketUpgrade) -> impl IntoRespon
 
 #[cfg(feature = "websocket")]
 async fn handle_socket(
-    mut socket: WebSocket,
+    socket: WebSocket,
     manager: Arc<ConnectionManager>,
     handler: Arc<dyn WebSocketHandler>,
 ) {
     let conn_id = uuid::Uuid::new_v4().to_string();
-    let (conn, _receiver) = WebSocketConnection::new(conn_id.clone());
-    manager.add_connection(conn_id.clone(), conn).await;
+    let (conn, mut receiver) = WebSocketConnection::new(conn_id.clone());
+    manager.add_connection(conn_id.clone(), conn.clone()).await;
+
+    // RAII 清理（HIGH 修复）：此前超大消息路径 close 后直接 return，跳过函数
+    // 末尾唯一的 remove_connection，且无任何 Drop 兜底——连接条目在
+    // ConnectionManager 中永久泄漏，可被远程滥用为连接表耗尽 DoS。
+    // Guard 保证所有退出路径（超大消息早退、客户端断开、任务被取消）都清理。
+    struct ConnectionGuard {
+        conn_id: String,
+        manager: Arc<ConnectionManager>,
+    }
+    impl Drop for ConnectionGuard {
+        fn drop(&mut self) {
+            let manager = self.manager.clone();
+            let conn_id = self.conn_id.clone();
+            // Drop 是同步上下文：把异步移除交给运行时。
+            // remove_connection 幂等（重复移除不会下溢计数器）。
+            tokio::spawn(async move {
+                manager.remove_connection(&conn_id).await;
+            });
+        }
+    }
+    let _guard = ConnectionGuard {
+        conn_id: conn_id.clone(),
+        manager: manager.clone(),
+    };
+
+    // 广播修复（HIGH）：此前 `WebSocketConnection::new` 返回的 receiver 被
+    // 直接丢弃且无处 spawn，manager 注册的所有连接都是死通道——broadcast
+    // 对真实连接必然失败并将其误删。现在所有出站消息统一经通道投递，由
+    // forwarder 任务序列化并写回 socket；请求/响应也走同一路径。
+    let (mut sink, mut stream) = socket.split();
+    let forwarder = tokio::spawn(async move {
+        while let Some(msg) = receiver.recv().await {
+            let json = serde_json::to_string(&msg).unwrap_or_else(|_| {
+                serde_json::to_string(&WebSocketMessage::Error {
+                    id: String::new(),
+                    error: "Internal serialization error".to_string(),
+                })
+                .unwrap_or_else(|_| {
+                    r#"{"type":"error","id":"","error":"Internal error"}"#.to_string()
+                })
+            });
+            if sink
+                .send(axum::extract::ws::Message::Text(json.into()))
+                .await
+                .is_err()
+            {
+                // socket 已关闭（客户端断开）：退出 forwarder，
+                // 全部 sender 随之 drop 后通道自然排空。
+                break;
+            }
+        }
+    });
 
     // Handle incoming messages
-    while let Some(result) = socket.next().await {
+    while let Some(result) = stream.next().await {
         match result {
             Ok(msg) => {
                 if let Ok(text) = msg.to_text() {
                     // Check message size early
                     if text.len() > MAX_MESSAGE_SIZE {
-                        // Close connection immediately to prevent DoS
-                        let _ = socket.close().await;
+                        // Close connection immediately to prevent DoS。
+                        // 连接清理由 ConnectionGuard 的 Drop 兜底；abort forwarder
+                        // 释放 sink 半边，socket 随之整体丢弃断开。
+                        forwarder.abort();
                         return;
                     }
 
                     match parse_websocket_message(text) {
                         Ok(ws_msg) => {
                             // 使用该连接路由绑定的自定义 handler（diting HIGH-002 修复）；
-                            // 未注入时回退到 DefaultWebSocketHandler
+                            // 未注入时回退到 DefaultWebSocketHandler。
+                            // 响应经通道由 forwarder 写回，保证与广播一致的单出站路径。
                             let response = handler.handle(ws_msg).await;
-                            // Use map_err to convert serialization errors to error messages
-                            let response_json = match serde_json::to_string(&response) {
-                                Ok(json) => json,
-                                Err(_) => {
-                                    // Send a generic error to the client
-                                    let error_response = WebSocketMessage::Error {
-                                        id: String::new(),
-                                        error: "Internal serialization error".to_string(),
-                                    };
-                                    if let Ok(json) = serde_json::to_string(&error_response) {
-                                        json
-                                    } else {
-                                        // If even the error message can't be serialized, send a hardcoded fallback
-                                        r#"{"type":"error","id":"","error":"Internal error"}"#
-                                            .to_string()
-                                    }
-                                }
-                            };
-                            let _ = socket
-                                .send(axum::extract::ws::Message::Text(response_json.into()))
-                                .await;
+                            let _ = conn.send(response).await;
                         }
                         Err(e) => {
                             let error_msg = WebSocketMessage::Error {
                                 id: String::new(),
                                 error: e,
                             };
-                            // Use match instead of expect to handle serialization errors gracefully
-                            let response_json = match serde_json::to_string(&error_msg) {
-                                Ok(json) => json,
-                                Err(_) => {
-                                    // Send a hardcoded fallback error message
-                                    r#"{"type":"error","id":"","error":"Internal error processing request"}"#
-                                        .to_string()
-                                }
-                            };
-                            let _ = socket
-                                .send(axum::extract::ws::Message::Text(response_json.into()))
-                                .await;
+                            let _ = conn.send(error_msg).await;
                         }
                     }
                 }
@@ -263,7 +287,10 @@ async fn handle_socket(
         }
     }
 
-    // Cleanup
+    // forwarder 在所有 sender（本地 conn + manager 中的注册项）drop 后随
+    // 通道关闭自然退出；此处主动 abort 只是尽快释放 sink 半边。
+    forwarder.abort();
+    // Cleanup（ConnectionGuard 兜底，此处显式执行以同步移除）
     manager.remove_connection(&conn_id).await;
 }
 
@@ -352,6 +379,80 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// 广播修复回归（HIGH）：此前 handle_socket 丢弃 receiver 且无处 spawn，
+    /// manager 注册的连接全部是死通道——broadcast 必然投递失败并误删连接。
+    /// 修复后广播必须真正到达客户端，且连接保持注册。
+    #[tokio::test]
+    async fn broadcast_reaches_connected_client() {
+        let manager = Arc::new(ConnectionManager::new());
+        let state = Arc::new(AppState::new(manager.clone()));
+        let app = Router::new()
+            .route("/ws", axum::routing::get(websocket_upgrade))
+            .layer(axum::Extension(state));
+        let server = axum_test::TestServer::builder().http_transport().build(app);
+
+        let mut ws = server.get_websocket("/ws").await.into_websocket().await;
+        // 等待服务端完成连接注册
+        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+        assert_eq!(manager.connection_count().await, 1);
+
+        let notification = Arc::new(WebSocketMessage::Notification {
+            event: "ping".to_string(),
+            data: serde_json::json!({"hello": "world"}),
+        });
+        manager.broadcast(&notification).await;
+
+        let received = tokio::time::timeout(
+            tokio::time::Duration::from_secs(2),
+            ws.receive_json(),
+        )
+        .await
+        .expect("broadcast must reach the client within timeout");
+        match received {
+            WebSocketMessage::Notification { event, data } => {
+                assert_eq!(event, "ping");
+                assert_eq!(data["hello"], "world");
+            }
+            other => panic!("Expected Notification, got {:?}", other),
+        }
+        assert_eq!(
+            manager.connection_count().await,
+            1,
+            "connection must stay registered after a successful broadcast"
+        );
+    }
+
+    /// 连接泄漏修复回归（HIGH）：此前超大消息路径 close 后直接 return，
+    /// 跳过 remove_connection 且无 Drop 兜底，连接条目在 manager 中永久
+    /// 泄漏（可被远程滥用为连接表耗尽 DoS）。修复后所有退出路径都清理。
+    #[tokio::test]
+    async fn oversized_message_removes_connection_from_manager() {
+        let manager = Arc::new(ConnectionManager::new());
+        let state = Arc::new(AppState::new(manager.clone()));
+        let app = Router::new()
+            .route("/ws", axum::routing::get(websocket_upgrade))
+            .layer(axum::Extension(state));
+        let server = axum_test::TestServer::builder().http_transport().build(app);
+
+        let mut ws = server.get_websocket("/ws").await.into_websocket().await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+        assert_eq!(manager.connection_count().await, 1);
+
+        let oversized = "x".repeat(MAX_MESSAGE_SIZE + 1);
+        ws.send_text(&oversized).await;
+
+        let cleaned = tokio::time::timeout(tokio::time::Duration::from_secs(2), async {
+            while manager.connection_count().await > 0 {
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            }
+        })
+        .await;
+        assert!(
+            cleaned.is_ok(),
+            "connection entry must be removed after oversized-message close (leak)"
+        );
     }
 
     /// Test that handle_socket silently ignores binary messages (the implicit

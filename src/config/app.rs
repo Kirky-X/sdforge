@@ -137,6 +137,7 @@ mod tests {
                 port: 9000,
                 request_timeout_secs: 30, // Must be > 0 for validation
                 cors: None,
+                ..Default::default()
             })
             .build();
 

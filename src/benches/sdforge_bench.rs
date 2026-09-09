@@ -294,9 +294,14 @@ fn benchmark_cache_operations(c: &mut Criterion) {
 
     c.bench_function("cache_clear", |b| {
         let local = DashMapCache::new();
-        local.set("k1", b"v1".to_vec());
-        local.set("k2", b"v2".to_vec());
-        b.iter(|| local.clear())
+        // FIX(T2): 原实现只在迭代外填充一次，clear 原地清空后，第 2 次起
+        // 度量的都是"清空空缓存"。现在每次迭代内重新填充，保证度量的
+        // 始终是清空非空缓存（成本含 2 次 set，恒定且已计入）。
+        b.iter(|| {
+            local.set("k1", b"v1".to_vec());
+            local.set("k2", b"v2".to_vec());
+            local.clear()
+        })
     });
 
     c.bench_function("cache_set_many_100", |b| {
@@ -347,22 +352,24 @@ fn benchmark_cache_pattern_invalidate(c: &mut Criterion) {
             criterion::BenchmarkId::from_parameter(size),
             size,
             |b, &size| {
-                let cache = DashMapCache::new();
-                for i in 0..size {
-                    cache.set(&format!("user:{}", i), b"v".to_vec());
-                }
-                // Non-matching keys to add noise
-                for i in 0..size {
-                    cache.set(&format!("session:{}", i), b"s".to_vec());
-                }
-
-                b.iter(|| {
-                    // Re-populate user keys after each invalidation
-                    for i in 0..size {
-                        cache.set(&format!("user:{}", i), b"v".to_vec());
-                    }
-                    cache.invalidate(black_box("user:*"))
-                })
+                // FIX(T3): 原实现把 O(n) 重填充放进 b.iter()，度量的是
+                // sets+invalidate 而非纯失效开销。iter_batched 的 setup
+                // 不计入度量，每次迭代拿到全新填充好的缓存。
+                b.iter_batched(
+                    || {
+                        let cache = DashMapCache::new();
+                        for i in 0..size {
+                            cache.set(&format!("user:{}", i), b"v".to_vec());
+                        }
+                        // Non-matching keys to add noise
+                        for i in 0..size {
+                            cache.set(&format!("session:{}", i), b"s".to_vec());
+                        }
+                        cache
+                    },
+                    |cache| cache.invalidate(black_box("user:*")),
+                    criterion::BatchSize::LargeInput,
+                )
             },
         );
     }
@@ -459,9 +466,17 @@ fn benchmark_jwt_operations(c: &mut Criterion) {
     });
 
     c.bench_function("jwt_secret_validation", |b| {
+        // FIX(T6): 原实现每次迭代调用 generate_secure_jwt_secret()，度量的是
+        // 生成成本。现在生成一次、循环外持有，仅度量校验（长度 + BearerAuth
+        // 同款字符类别策略）。
+        let secret = generate_secure_jwt_secret();
         b.iter(|| {
-            let test_secret = generate_secure_jwt_secret();
-            test_secret.len() >= 32
+            let s = black_box(&secret);
+            s.len() >= 32
+                && s.chars().any(|c| c.is_uppercase())
+                && s.chars().any(|c| c.is_lowercase())
+                && s.chars().any(|c| c.is_ascii_digit())
+                && s.chars().any(|c| !c.is_alphanumeric())
         })
     });
 }
@@ -542,7 +557,9 @@ fn benchmark_lru_cache(c: &mut Criterion) {
 
     // Eviction: fill beyond capacity to trigger eviction overhead
     let mut group = c.benchmark_group("lru_cache_eviction");
-    group.throughput(Throughput::Elements(150));
+    // FIX(T4): 每次迭代实际执行 50 次 set（150 曾与实际操作数不符，
+    // elements/sec 指标被低估 3 倍）
+    group.throughput(Throughput::Elements(50));
 
     group.bench_function("evict_at_capacity", |b| {
         let cache2: SharedCache = Arc::new(DashMapCache::new());
@@ -626,8 +643,13 @@ fn benchmark_limiteron_governor(c: &mut Criterion) {
             }
         }
         b.iter(|| {
-            // Each iteration should return Err (denied).
-            let _ = rt.block_on(limiter.check("denied-bench"));
+            // FIX(T5): 每次迭代必须返回 Err（denied）。若限流器回归为
+            // 返回 Ok，此处立即失败，而不是静默通过掩盖回归。
+            let result = rt.block_on(limiter.check("denied-bench"));
+            assert!(
+                result.is_err(),
+                "denied-bench must stay denied; limiter regressed to Ok"
+            );
         })
     });
 }
@@ -761,7 +783,8 @@ fn benchmark_http_router_construction(c: &mut Criterion) {
             port: 3000,
             request_timeout_secs: 30,
             cors: None,
-        },
+             ..Default::default()
+         },
         authentication: AuthConfig::None,
         timeout: None,
     };
@@ -780,7 +803,8 @@ fn benchmark_http_router_construction(c: &mut Criterion) {
                 allowed_methods: vec!["GET".to_string(), "POST".to_string()],
                 allowed_headers: vec!["Content-Type".to_string()],
             }),
-        },
+             ..Default::default()
+         },
         authentication: AuthConfig::None,
         timeout: None,
     };

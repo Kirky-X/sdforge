@@ -10,7 +10,13 @@ use serde::{Deserialize, Serialize};
 ///
 /// 此前 `AuthConfig::ApiKey` 只携带 header/prefix，无任何键材料，
 /// `build_with_config` 会创建空 key store → 整条 API 被 401 锁死且无播种途径。
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+///
+/// # Security
+///
+/// `Serialize`/`Deserialize` 保留：配置文件的合法持久化路径依赖它们。
+/// `Debug` 为手动实现——key 恒以 `[REDACTED]` 形式输出，防止一次
+/// `{:?}` 日志泄漏密钥材料（HIGH 修复：此前 derive(Debug) 明文打印）。
+#[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct ApiKeySeed {
     /// API key 明文（构建时以哈希形式写入 key store，不落盘）
     pub key: String,
@@ -19,8 +25,24 @@ pub struct ApiKeySeed {
     pub permissions: Vec<String>,
 }
 
+impl std::fmt::Debug for ApiKeySeed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ApiKeySeed")
+            .field("key", &"[REDACTED]")
+            .field("key_len", &self.key.len())
+            .field("permissions", &self.permissions)
+            .finish()
+    }
+}
+
 /// Authentication configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+///
+/// # Security
+///
+/// `Debug` 为手动实现：`Jwt::secret` 与 `ApiKey::keys[].key` 恒以
+/// `[REDACTED]` 输出。序列化行为不变（配置文件持久化仍明文落盘，请
+/// 通过文件权限保护配置）。（HIGH 修复：此前 derive(Debug) 明文打印密钥）
+#[derive(Clone, Serialize, Deserialize, Default)]
 #[serde(tag = "type")]
 #[non_exhaustive]
 pub enum AuthConfig {
@@ -46,6 +68,29 @@ pub enum AuthConfig {
     #[serde(rename = "none")]
     #[default]
     None,
+}
+
+impl std::fmt::Debug for AuthConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AuthConfig::ApiKey {
+                header_name,
+                prefix,
+                keys,
+            } => f
+                .debug_struct("AuthConfig::ApiKey")
+                .field("header_name", header_name)
+                .field("prefix", prefix)
+                .field("keys", keys)
+                .finish(),
+            AuthConfig::Jwt { secret } => f
+                .debug_struct("AuthConfig::Jwt")
+                .field("secret", &"[REDACTED]")
+                .field("secret_len", &secret.len())
+                .finish(),
+            AuthConfig::None => f.write_str("AuthConfig::None"),
+        }
+    }
 }
 
 impl AuthConfig {
@@ -367,5 +412,45 @@ mod tests {
         use crate::config::ValidateConfig;
         let config = AuthConfig::None;
         assert!(ValidateConfig::validate(&config).is_ok());
+    }
+
+    /// HIGH 修复回归：Debug 输出不得包含密钥材料（此前 derive(Debug)
+    /// 会把 JWT secret 与 API key 明文打进日志）。
+    #[test]
+    fn test_debug_redacts_secrets() {
+        let jwt = AuthConfig::Jwt {
+            secret: "super-secret-value-1234567890".to_string(),
+        };
+        let debug = format!("{:?}", jwt);
+        assert!(
+            !debug.contains("super-secret-value"),
+            "Debug must not leak JWT secret: {}",
+            debug
+        );
+        assert!(debug.contains("[REDACTED]"));
+
+        let seed = ApiKeySeed {
+            key: "sk-live-abc123".to_string(),
+            permissions: vec!["read".to_string()],
+        };
+        let debug = format!("{:?}", seed);
+        assert!(
+            !debug.contains("sk-live-abc123"),
+            "Debug must not leak API key: {}",
+            debug
+        );
+        assert!(debug.contains("[REDACTED]"));
+
+        let api = AuthConfig::ApiKey {
+            header_name: "X-API-Key".to_string(),
+            prefix: "sk-".to_string(),
+            keys: vec![seed],
+        };
+        let debug = format!("{:?}", api);
+        assert!(
+            !debug.contains("sk-live-abc123"),
+            "nested keys must also be redacted: {}",
+            debug
+        );
     }
 }

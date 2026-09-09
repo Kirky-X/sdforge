@@ -74,14 +74,29 @@ impl<'de> Deserialize<'de> for ApiKeyVersion {
             version: helper.version,
             key_hash: helper.key_hash,
             permissions: helper.permissions,
-            created_at: Instant::now() - Duration::from_nanos(helper.created_at as u64),
-            // 与 serialize 对应：expires_at 存的是"剩余时长"，还原时做加法（HIGH-004 修复）
-            expires_at: helper
-                .expires_at
-                .map(|n| Instant::now() + Duration::from_nanos(n as u64)),
+            created_at: instant_elapsed_nanos_ago(helper.created_at),
+            // 与 serialize 对应：expires_at 存的是"剩余时长"，还原时做加法（HIGH-004 修复）。
+            // 负剩余时长 = 已过期，钳制为立即过期（fail-closed），不得回绕成"永不过期"。
+            expires_at: helper.expires_at.map(instant_in_nanos_from_now),
             is_active: helper.is_active,
         })
     }
+}
+
+/// 反序列化数据不可信：负值或超出 `Instant` 可表示范围的时长一律钳制，
+/// 避免 `as u64` 回绕导致 `Instant` 运算 panic（.createdAt 场景）或安全语义反转。
+fn instant_elapsed_nanos_ago(nanos: i64) -> Instant {
+    Instant::now()
+        .checked_sub(Duration::from_nanos(nanos.max(0) as u64))
+        .unwrap_or_else(Instant::now)
+}
+
+fn instant_in_nanos_from_now(nanos: i64) -> Instant {
+    let now = Instant::now();
+    // 加法溢出 → fail-closed：钳制为"过去 1ns"（立即过期），绝不还原成永不过期。
+    now.checked_add(Duration::from_nanos(nanos.max(0) as u64))
+        .or_else(|| now.checked_sub(Duration::from_nanos(1)))
+        .unwrap_or(now)
 }
 
 impl ApiKeyVersion {
@@ -172,7 +187,7 @@ impl<'de> Deserialize<'de> for ApiKeyMetadata {
             key_id: helper.key_id,
             versions: helper.versions,
             active_version_index: helper.active_version_index,
-            created_at: Instant::now() - Duration::from_nanos(helper.created_at as u64),
+            created_at: instant_elapsed_nanos_ago(helper.created_at),
             description: helper.description,
         })
     }
@@ -248,11 +263,25 @@ impl ApiKeyMetadata {
     /// Clean up expired and old versions
     pub fn cleanup_versions(&mut self, keep_last_n: usize) {
         let active_idx = self.active_version_index;
+        let active_version_name = active_idx
+            .and_then(|idx| self.versions.get(idx))
+            .map(|v| v.version.clone());
         let last_idx = self.versions.len().saturating_sub(1);
 
         // Remove expired versions that are not the active one
         self.versions
             .retain(|v| !v.is_expired() || active_idx == Some(last_idx));
+
+        // 回归（HIGH 修复）：retain 裁剪后重算 active_version_index。原索引可能
+        // 指向已删除位置，或指向残留的失活版本，导致 get_active_version 返回
+        // 错误结果。优先按版本名找回；找不到则提升最新的有效版本。
+        self.active_version_index = active_version_name
+            .and_then(|name| self.versions.iter().position(|v| v.version == name))
+            .or_else(|| {
+                let pos = self.versions.iter().rposition(|v| !v.is_expired())?;
+                self.versions[pos].is_active = true;
+                Some(pos)
+            });
 
         // Keep only the last N versions
         if self.versions.len() > keep_last_n {
@@ -1011,5 +1040,47 @@ mod tests {
         // Only the non-expired v3 remains.
         assert_eq!(metadata.versions.len(), 1);
         assert_eq!(metadata.versions[0].version, "v3");
+
+        // 回归（HIGH 修复）：retain 裁剪掉已过期的活动版本后，
+        // active_version_index 必须重算并回退到最新的有效版本，
+        // 不能悬空指向已删除位置或残留的失活版本。
+        assert_eq!(
+            metadata.active_version_index,
+            Some(0),
+            "active index must be recomputed after retain prunes the active version"
+        );
+        let active = metadata
+            .get_active_version()
+            .expect("a valid version must be promoted to active");
+        assert_eq!(active.version, "v3");
+    }
+
+    /// 回归（HIGH 修复）：反序列化损坏/被篡改的元数据时，负数时间戳
+    /// 不得让 `as u64` 回绕成巨大值导致 `Instant` 运算 panic。
+    #[test]
+    fn test_deserialize_negative_timestamps_does_not_panic() {
+        // created_at 为负：此前 `as u64` 回绕 → `now - Duration::from_nanos(巨大)` panic
+        let json = r#"{"key_id":"k1","versions":[],"active_version_index":null,"created_at":-42,"description":null}"#;
+        let metadata: ApiKeyMetadata =
+            serde_json::from_str(json).expect("negative created_at must deserialize safely");
+
+        // created_at 被钳制到"现在"（信息性字段，安全方向正确）
+        let _elapsed = metadata.created_at.elapsed();
+
+        // expires_at 为负（剩余时长已为负 = 已过期）：不得 panic，
+        // 且还原出的版本必须立即视为过期（fail-closed）。
+        let json = r#"{"version":"v1","key_hash":"hash1","permissions":[],"created_at":100,"expires_at":-7,"is_active":true}"#;
+        let version: ApiKeyVersion =
+            serde_json::from_str(json).expect("negative expires_at must deserialize safely");
+        assert!(
+            version.is_expired(),
+            "negative remaining duration must yield an already-expired version"
+        );
+
+        // i64::MAX 级别的时间戳同样不得 panic
+        let json = r#"{"key_id":"k1","versions":[],"active_version_index":null,"created_at":9223372036854775807,"description":null}"#;
+        let metadata: ApiKeyMetadata =
+            serde_json::from_str(json).expect("i64::MAX created_at must deserialize safely");
+        let _elapsed = metadata.created_at.elapsed();
     }
 }

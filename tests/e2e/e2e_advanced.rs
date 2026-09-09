@@ -201,7 +201,8 @@ mod config_advanced {
             port: 0,
             request_timeout_secs: 30,
             cors: None,
-        };
+               ..Default::default()
+           };
         let result = config.validate();
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -215,7 +216,8 @@ mod config_advanced {
             port: 8080,
             request_timeout_secs: 0,
             cors: None,
-        };
+               ..Default::default()
+           };
         let result = config.validate();
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -229,7 +231,8 @@ mod config_advanced {
             port: 8080,
             request_timeout_secs: 100_000,
             cors: None,
-        };
+               ..Default::default()
+           };
         let result = config.validate();
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -243,7 +246,8 @@ mod config_advanced {
             port: 8080,
             request_timeout_secs: 86_400,
             cors: None,
-        };
+               ..Default::default()
+           };
         assert!(config.validate().is_ok());
     }
 
@@ -340,7 +344,8 @@ mod config_advanced {
             port: 0,
             request_timeout_secs: 30,
             cors: None,
-        };
+               ..Default::default()
+           };
         assert!(ValidateConfig::validate(&config).is_err());
     }
 
@@ -355,7 +360,8 @@ mod config_advanced {
                 allowed_methods: vec!["GET".to_string()],
                 allowed_headers: vec![],
             }),
-        };
+               ..Default::default()
+           };
         let result = config.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("empty"));
@@ -372,7 +378,8 @@ mod config_advanced {
                 allowed_methods: vec!["GET".to_string()],
                 allowed_headers: vec![],
             }),
-        };
+               ..Default::default()
+           };
         let result = config.validate();
         assert!(result.is_err());
         assert!(
@@ -391,7 +398,8 @@ mod config_advanced {
                 port: 0,
                 request_timeout_secs: 30,
                 cors: None,
-            },
+                 ..Default::default()
+             },
             authentication: AuthConfig::None,
             timeout: None,
         };
@@ -406,6 +414,7 @@ mod config_advanced {
                 port: 8080,
                 request_timeout_secs: 30,
                 cors: None,
+                ..Default::default()
             })
             .authentication(AuthConfig::None)
             .timeout(TimeoutConfig::default())
@@ -874,20 +883,18 @@ mod ratelimit_error_advanced {
     }
 
     #[test]
-    fn test_ratelimit_quota_exhausted_maps_to_rate_limit_exceeded() {
+    fn test_ratelimit_quota_exhausted_maps_to_quota_exhausted() {
+        // HIGH 修复回归：QuotaExhausted 保持配额语义，不再复用 window_seconds
         let err = ApiError::from(RateLimitError::QuotaExhausted {
             used: 50,
             total: 100,
         });
         match err {
-            ApiError::RateLimitExceeded {
-                limit,
-                window_seconds,
-            } => {
-                assert_eq!(limit, 100);
-                assert_eq!(window_seconds, 50);
+            ApiError::QuotaExhausted { used, total } => {
+                assert_eq!(used, 50);
+                assert_eq!(total, 100);
             }
-            _ => panic!("Expected RateLimitExceeded, got {err:?}"),
+            _ => panic!("Expected QuotaExhausted, got {err:?}"),
         }
     }
 
@@ -916,14 +923,11 @@ mod ratelimit_error_advanced {
             total: u64::MAX,
         });
         match err {
-            ApiError::RateLimitExceeded {
-                limit,
-                window_seconds,
-            } => {
-                assert_eq!(limit, u32::MAX);
-                assert_eq!(window_seconds, u32::MAX);
+            ApiError::QuotaExhausted { used, total } => {
+                assert_eq!(used, u32::MAX);
+                assert_eq!(total, u32::MAX);
             }
-            _ => panic!("Expected RateLimitExceeded, got {err:?}"),
+            _ => panic!("Expected QuotaExhausted, got {err:?}"),
         }
     }
 
