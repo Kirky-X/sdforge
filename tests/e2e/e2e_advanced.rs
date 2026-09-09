@@ -201,8 +201,8 @@ mod config_advanced {
             port: 0,
             request_timeout_secs: 30,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         let result = config.validate();
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -216,8 +216,8 @@ mod config_advanced {
             port: 8080,
             request_timeout_secs: 0,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         let result = config.validate();
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -231,8 +231,8 @@ mod config_advanced {
             port: 8080,
             request_timeout_secs: 100_000,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         let result = config.validate();
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -246,8 +246,8 @@ mod config_advanced {
             port: 8080,
             request_timeout_secs: 86_400,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert!(config.validate().is_ok());
     }
 
@@ -344,8 +344,8 @@ mod config_advanced {
             port: 0,
             request_timeout_secs: 30,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert!(ValidateConfig::validate(&config).is_err());
     }
 
@@ -360,8 +360,8 @@ mod config_advanced {
                 allowed_methods: vec!["GET".to_string()],
                 allowed_headers: vec![],
             }),
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         let result = config.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("empty"));
@@ -378,8 +378,8 @@ mod config_advanced {
                 allowed_methods: vec!["GET".to_string()],
                 allowed_headers: vec![],
             }),
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         let result = config.validate();
         assert!(result.is_err());
         assert!(
@@ -398,8 +398,8 @@ mod config_advanced {
                 port: 0,
                 request_timeout_secs: 30,
                 cors: None,
-                 ..Default::default()
-             },
+                ..Default::default()
+            },
             authentication: AuthConfig::None,
             timeout: None,
         };
