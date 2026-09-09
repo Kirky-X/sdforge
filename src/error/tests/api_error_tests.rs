@@ -401,7 +401,11 @@ fn test_error_context_current() {
     let line = ctx.line.expect("line must be captured");
     assert!(line > 0);
     // 该断言位于 current() 调用之后，行号必须大于调用处上方任何行
-    assert!(line >= 380 && line <= 420, "line must reflect the call site, got {}", line);
+    assert!(
+        (380..=420).contains(&line),
+        "line must reflect the call site, got {}",
+        line
+    );
     assert!(
         ctx.function.is_none(),
         "function is honestly None until track_caller can provide it"
@@ -1005,7 +1009,11 @@ fn test_api_error_to_service_error_from_all_variants() {
 fn test_quota_exhausted_preserves_quota_semantics() {
     use crate::security::RateLimitError;
 
-    let err: ApiError = RateLimitError::QuotaExhausted { used: 850, total: 1000 }.into();
+    let err: ApiError = RateLimitError::QuotaExhausted {
+        used: 850,
+        total: 1000,
+    }
+    .into();
     match &err {
         ApiError::QuotaExhausted { used, total } => {
             assert_eq!(*used, 850);

@@ -409,9 +409,10 @@ impl ApiError {
                 "INTERNAL_ERROR",
                 "An internal error occurred. Please try again later.".to_string(),
             ),
-            ApiError::QuotaExhausted { used, total } => {
-                ("QUOTA_EXHAUSTED", format!("Quota exhausted: {}/{}", used, total))
-            }
+            ApiError::QuotaExhausted { used, total } => (
+                "QUOTA_EXHAUSTED",
+                format!("Quota exhausted: {}/{}", used, total),
+            ),
             ApiError::ServiceUnavailable { service, .. } => (
                 "SERVICE_UNAVAILABLE",
                 format!("Service unavailable: {}", service),
@@ -494,7 +495,7 @@ impl ApiError {
                 429,
             ),
             ApiError::Internal {
-                message,
+                message: _,
                 error_id,
                 source: _,
                 context,
@@ -507,7 +508,15 @@ impl ApiError {
                 if let Some(ctx) = context {
                     details["context"] = serde_json::to_value(ctx).unwrap_or(serde_json::json!({}));
                 }
-                ServiceError::with_details("INTERNAL_ERROR", message.clone(), details, 500)
+                // MED-002 收尾：与 sanitized_message / to_mcp_json 三轨统一——
+                // 即使调用方绕过构造器以字面量构造 Internal（未过构造期脱敏），
+                // HTTP 响应体也绝不携带原始内部消息。完整消息仍留在 Debug/日志。
+                ServiceError::with_details(
+                    "INTERNAL_ERROR",
+                    Self::sanitized_message(self),
+                    details,
+                    500,
+                )
             }
             ApiError::ServiceUnavailable {
                 service,
