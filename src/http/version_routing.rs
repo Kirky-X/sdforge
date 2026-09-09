@@ -135,7 +135,11 @@ pub async fn version_redirect_middleware(
 ///
 /// 从 `next` 抽象为闭包，供 from_fn 形式与 tower [`VersionRedirectService`]
 /// 共用，避免两份实现漂移。
-async fn apply_version_redirect<F, Fut>(req: Request<Body>, config: &VersionRouterConfig, next: F) -> Response
+async fn apply_version_redirect<F, Fut>(
+    req: Request<Body>,
+    config: &VersionRouterConfig,
+    next: F,
+) -> Response
 where
     F: FnOnce(Request<Body>) -> Fut,
     Fut: std::future::Future<Output = Response>,
@@ -304,11 +308,10 @@ where
         let mut inner = std::mem::replace(&mut self.inner, clone);
         let config = self.config.clone();
         Box::pin(async move {
-            let response =
-                apply_version_redirect(req, &config, |req| async move {
-                    inner.call(req).await.unwrap_or_else(|e| match e {})
-                })
-                .await;
+            let response = apply_version_redirect(req, &config, |req| async move {
+                inner.call(req).await.unwrap_or_else(|e| match e {})
+            })
+            .await;
             Ok(response)
         })
     }
@@ -667,11 +670,20 @@ mod tests {
             .route("/api/plain", get(test_handler))
             .layer(VersionRedirectLayer::new(config));
         let response = router
-            .oneshot(Request::builder().uri("/api/plain").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/plain")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
-        assert_eq!(response.status(), StatusCode::OK, "path must pass through when redirect_unknown=false");
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "path must pass through when redirect_unknown=false"
+        );
         assert!(response.headers().get("location").is_none());
     }
 
@@ -704,14 +716,21 @@ mod tests {
     #[tokio::test]
     async fn test_layer_config_deprecation_headers() {
         let mut config = VersionRouterConfig::default();
-        config.deprecated_versions.insert("v1".to_string(), "2026-12-31".to_string());
+        config
+            .deprecated_versions
+            .insert("v1".to_string(), "2026-12-31".to_string());
         config.sunset_header = "X-Custom-Sunset".to_string();
 
         let router = Router::new()
             .route("/api/v1/test", get(test_handler))
             .layer(VersionRedirectLayer::new(config));
         let response = router
-            .oneshot(Request::builder().uri("/api/v1/test").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 

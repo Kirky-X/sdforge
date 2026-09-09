@@ -179,13 +179,12 @@ pub fn calculate_value_depth(value: &serde_json::Value, current_depth: &mut usiz
 /// 此前 `MAX_STRING_LENGTH` 仅为文档性常量（cfg(test) 门控），生产解析路径
 /// 对 `id`/`method`/`error`/`event` 无任何长度限制。
 fn validate_string_limits(msg: &WebSocketMessage) -> Result<(), String> {
-    let too_long =
-        |field: &str, len: usize| -> String {
-            format!(
-                "String field '{}' too long: {} bytes (max: {})",
-                field, len, MAX_STRING_LENGTH
-            )
-        };
+    let too_long = |field: &str, len: usize| -> String {
+        format!(
+            "String field '{}' too long: {} bytes (max: {})",
+            field, len, MAX_STRING_LENGTH
+        )
+    };
     match msg {
         WebSocketMessage::Request { id, method, .. } => {
             if id.len() > MAX_STRING_LENGTH {

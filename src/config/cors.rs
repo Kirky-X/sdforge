@@ -94,12 +94,13 @@ fn parse_allowed_headers(
     }
     let mut parsed = Vec::with_capacity(headers.len());
     for h in headers {
-        let name = axum::http::HeaderName::from_bytes(h.to_lowercase().as_bytes()).map_err(|_| {
-            crate::config::ConfigError::ValidationError(format!(
-                "Invalid CORS header: {}. Use valid header names (e.g. Content-Type) or \"*\".",
-                h
-            ))
-        })?;
+        let name =
+            axum::http::HeaderName::from_bytes(h.to_lowercase().as_bytes()).map_err(|_| {
+                crate::config::ConfigError::ValidationError(format!(
+                    "Invalid CORS header: {}. Use valid header names (e.g. Content-Type) or \"*\".",
+                    h
+                ))
+            })?;
         parsed.push(name);
     }
     Ok(tower_http::cors::AllowHeaders::list(parsed))
@@ -363,7 +364,12 @@ mod tests {
         let headers = vec!["Content Type".to_string()]; // 空格非法
         let result = parse_allowed_headers(&headers);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid CORS header"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid CORS header")
+        );
     }
 }
 
@@ -431,9 +437,7 @@ mod cors_behavior_tests {
         let app = cors_router(&config);
         let resp = app.oneshot(preflight("POST")).await.unwrap();
         assert!(
-            resp.headers()
-                .get("access-control-allow-origin")
-                .is_some(),
+            resp.headers().get("access-control-allow-origin").is_some(),
             "allowed preflight must carry allow-origin header"
         );
     }

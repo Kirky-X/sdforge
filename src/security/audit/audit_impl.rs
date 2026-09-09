@@ -721,7 +721,7 @@ impl AppAuditLoggerBuilder {
 
         AppAuditLogger {
             logs,
-            max_logs_per_user: max_logs_per_user,
+            max_logs_per_user,
             semaphore: Arc::new(tokio::sync::Semaphore::new(max_concurrent_ops)),
             queue_sender: Arc::new(queue_sender),
             fallback_logs,

@@ -42,8 +42,8 @@ mod config_tests {
             port: 9090,
             request_timeout_secs: 60,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
 
         assert_eq!(config.host, "192.168.1.1");
         assert_eq!(config.port, 9090);
@@ -104,8 +104,8 @@ mod config_enhanced_tests {
             port: 1,
             request_timeout_secs: 30,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert_eq!(min_port.port, 1);
 
         // Common ports
@@ -114,8 +114,8 @@ mod config_enhanced_tests {
             port: 80,
             request_timeout_secs: 30,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert_eq!(http_port.port, 80);
 
         let https_port = ServerConfig {
@@ -123,8 +123,8 @@ mod config_enhanced_tests {
             port: 443,
             request_timeout_secs: 30,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert_eq!(https_port.port, 443);
 
         // Maximum valid port
@@ -133,8 +133,8 @@ mod config_enhanced_tests {
             port: 65535,
             request_timeout_secs: 30,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert_eq!(max_port.port, 65535);
     }
 
@@ -147,8 +147,8 @@ mod config_enhanced_tests {
             port: 3000,
             request_timeout_secs: 0,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert_eq!(no_timeout.request_timeout_secs, 0);
 
         // Very short timeout
@@ -157,8 +157,8 @@ mod config_enhanced_tests {
             port: 3000,
             request_timeout_secs: 1,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert_eq!(short_timeout.request_timeout_secs, 1);
 
         // Very long timeout (1 day)
@@ -167,8 +167,8 @@ mod config_enhanced_tests {
             port: 3000,
             request_timeout_secs: 86400,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert_eq!(long_timeout.request_timeout_secs, 86400);
     }
 
@@ -181,8 +181,8 @@ mod config_enhanced_tests {
             port: 3000,
             request_timeout_secs: 30,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert_eq!(ipv4_local.host, "127.0.0.1");
 
         // IPv4 any address
@@ -191,8 +191,8 @@ mod config_enhanced_tests {
             port: 3000,
             request_timeout_secs: 30,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert_eq!(ipv4_any.host, "0.0.0.0");
 
         // IPv6 localhost
@@ -201,8 +201,8 @@ mod config_enhanced_tests {
             port: 3000,
             request_timeout_secs: 30,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert_eq!(ipv6_local.host, "::1");
 
         // IPv6 any address
@@ -211,8 +211,8 @@ mod config_enhanced_tests {
             port: 3000,
             request_timeout_secs: 30,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert_eq!(ipv6_any.host, "::");
 
         // Hostname
@@ -221,8 +221,8 @@ mod config_enhanced_tests {
             port: 3000,
             request_timeout_secs: 30,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
         assert_eq!(hostname.host, "localhost");
     }
 
@@ -370,8 +370,8 @@ mod config_enhanced_tests {
             port: 8080,
             request_timeout_secs: 60,
             cors: None,
-               ..Default::default()
-           };
+            ..Default::default()
+        };
 
         let config = AppConfig::builder()
             .server(server)

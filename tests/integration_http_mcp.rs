@@ -96,8 +96,8 @@ mod integration_tests {
                 port: 3000,
                 request_timeout_secs: 30,
                 cors: None,
-                 ..Default::default()
-             },
+                ..Default::default()
+            },
             authentication: AuthConfig::None,
             timeout: None,
         };

@@ -1068,10 +1068,16 @@ mod tests {
             .set("metadata:kid1", b"corrupted_data".to_vec());
 
         // add_key_version must fail instead of registering an orphan key.
-        let result = auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None);
-        assert!(result.is_err(), "corrupted metadata must abort registration");
+        let result =
+            auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None);
         assert!(
-            result.unwrap_err().contains("Failed to deserialize metadata"),
+            result.is_err(),
+            "corrupted metadata must abort registration"
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .contains("Failed to deserialize metadata"),
             "error must identify the metadata failure"
         );
 
