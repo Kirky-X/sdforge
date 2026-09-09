@@ -1318,79 +1318,80 @@ async fn test_log_skips_when_semaphore_times_out() {
         0,
         "No log should be stored on semaphore timeout"
     );
+}
+
+/// HIGH 修复回归：同用户并发 log() 不得互相覆盖丢日志
+/// （此前 get→push→set 读改写无互斥，写并发会静默丢失审计记录）。
+#[tokio::test]
+async fn test_concurrent_same_user_logs_not_lost() {
+    let logger = AppAuditLogger::with_limit(1000);
+
+    let mut handles = Vec::new();
+    for i in 0..50 {
+        let logger = logger.clone();
+        handles.push(tokio::spawn(async move {
+            let context = AuthContext {
+                user_id: Some("concurrent_user".to_string()),
+                permissions: vec![],
+                metadata: AuthMetadata::default(),
+            };
+            logger
+                .log(&context, format!("action_{}", i), "resource", true, None)
+                .await;
+        }));
+    }
+    for h in handles {
+        h.await.unwrap();
     }
 
+    let logs = logger.get_logs("concurrent_user");
+    assert_eq!(
+        logs.len(),
+        50,
+        "all concurrent logs from the same user must be retained"
+    );
+    assert_eq!(
+        logger.total_log_count(),
+        50,
+        "total_log_count must reflect every stored log"
+    );
+}
 
-    /// HIGH 修复回归：同用户并发 log() 不得互相覆盖丢日志
-    /// （此前 get→push→set 读改写无互斥，写并发会静默丢失审计记录）。
-    #[tokio::test]
-    async fn test_concurrent_same_user_logs_not_lost() {
-        let logger = AppAuditLogger::with_limit(1000);
+/// HIGH 修复回归：信号量超时丢弃路径必须递增 dropped_log_count
+/// （此前静默 return，日志丢失对监控不可见）。
+#[tokio::test]
+async fn test_timeout_drop_increments_dropped_count() {
+    // 0 permits → acquire 必然超时（1s），触发丢弃路径
+    let logger = AppAuditLogger {
+        logs: Arc::new(crate::cache::DashMapCache::new()),
+        max_logs_per_user: 100,
+        semaphore: Arc::new(tokio::sync::Semaphore::new(0)),
+        queue_sender: {
+            let (sender, _receiver) = tokio::sync::mpsc::channel::<AuditLogBatch>(10);
+            Arc::new(sender)
+        },
+        fallback_logs: Arc::new(crate::cache::DashMapCache::new()),
+        dropped_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        total_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        merge_lock: Arc::new(std::sync::Mutex::new(())),
+    };
+    // _receiver 保持存活，通道不关闭
 
-        let mut handles = Vec::new();
-        for i in 0..50 {
-            let logger = logger.clone();
-            handles.push(tokio::spawn(async move {
-                let context = AuthContext {
-                    user_id: Some("concurrent_user".to_string()),
-                    permissions: vec![],
-                    metadata: AuthMetadata::default(),
-                };
-                logger
-                    .log(&context, format!("action_{}", i), "resource", true, None)
-                    .await;
-            }));
-        }
-        for h in handles {
-            h.await.unwrap();
-        }
+    let context = AuthContext {
+        user_id: Some("timeout_user".to_string()),
+        permissions: vec![],
+        metadata: AuthMetadata::default(),
+    };
+    logger
+        .log(&context, "dropped_action", "res", true, None)
+        .await;
 
-        let logs = logger.get_logs("concurrent_user");
-        assert_eq!(
-            logs.len(),
-            50,
-            "all concurrent logs from the same user must be retained"
-        );
-        assert_eq!(
-            logger.total_log_count(),
-            50,
-            "total_log_count must reflect every stored log"
-        );
-    }
-
-    /// HIGH 修复回归：信号量超时丢弃路径必须递增 dropped_log_count
-    /// （此前静默 return，日志丢失对监控不可见）。
-    #[tokio::test]
-    async fn test_timeout_drop_increments_dropped_count() {
-        // 0 permits → acquire 必然超时（1s），触发丢弃路径
-        let logger = AppAuditLogger {
-            logs: Arc::new(crate::cache::DashMapCache::new()),
-            max_logs_per_user: 100,
-            semaphore: Arc::new(tokio::sync::Semaphore::new(0)),
-            queue_sender: {
-                let (sender, _receiver) = tokio::sync::mpsc::channel::<AuditLogBatch>(10);
-                Arc::new(sender)
-            },
-            fallback_logs: Arc::new(crate::cache::DashMapCache::new()),
-            dropped_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            total_log_count: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            merge_lock: Arc::new(std::sync::Mutex::new(())),
-        };
-        // _receiver 保持存活，通道不关闭
-
-        let context = AuthContext {
-            user_id: Some("timeout_user".to_string()),
-            permissions: vec![],
-            metadata: AuthMetadata::default(),
-        };
+    assert_eq!(
         logger
-            .log(&context, "dropped_action", "res", true, None)
-            .await;
-
-        assert_eq!(
-            logger.dropped_log_count.load(std::sync::atomic::Ordering::Relaxed),
-            1,
-            "timeout drop must be visible to monitoring"
-        );
-        assert_eq!(logger.get_logs("timeout_user").len(), 0);
-    }
+            .dropped_log_count
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1,
+        "timeout drop must be visible to monitoring"
+    );
+    assert_eq!(logger.get_logs("timeout_user").len(), 0);
+}
