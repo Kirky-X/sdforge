@@ -93,6 +93,22 @@
   实际 50 次操作不符、denied 路径 `let _ =` 掩盖回归（改断言）、
   `jwt_secret_validation` 重复度量生成成本（现仅度量校验）。
 
+### 安全加固 (Security Hardening)
+
+- CI workflows（ci.yml / codeql.yml / release.yml / tag-deleted.yml）的所有第三方
+  action 引用从可变 tag 固定为 40 位 commit SHA（附版本注释）——消除供应链
+  tag 劫持风险（tiangang SAST 扫描 Medium 发现）。
+- `ApiError::internal_*` 构造器强制脱敏改为 feature 感知：`security` feature
+  关闭时退化为原样存储，保证裸默认构建与 ratelimit-only 构建可编译。
+- `to_service_error` 的 `Internal` 分支与 `sanitized_message` / `to_mcp_json`
+  三轨完全统一：HTTP 500 响应体现在不可能携带原始内部消息。
+
+### 已知依赖健康信号 (Known Dependency Signals)
+
+- `bincode 2.0.1`：RUSTSEC-2025-0141 标记为 unmaintained（informational，非漏洞，
+  trivy + cargo-audit 双通道均 0 CVE）。可留意 postcard/rkyv 等替代方案，无需
+  紧急行动。
+
 ### 文档 (Documentation)
 
 - `hash_key`：补充无盐 SHA256 存储的威胁模型说明（确定性查找前提 + 依赖 key 高熵，
