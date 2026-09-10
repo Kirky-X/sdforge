@@ -11,6 +11,25 @@ _暂无变更。_
 
 ---
 
+## [0.5.0-rc.3] - 2026-09-10
+
+### Added
+
+- **AppConfig 安全/缓存字段**：`AppConfig` 新增 `security: SecurityConfig` + `cache: CacheConfig`（feature-gated），builder 同步支持 `.security()` / `.cache()` 方法（T060）
+- **`build_rate_limiter()` 自动装配**：`AppConfig::build_rate_limiter()` 从 `security.rate_limit` 配置自动构造 `LimiteronAdapter`（T060）
+- **响应缓存中间件**：`ResponseCacheLayer` / `ResponseCacheMiddleware` — GET 路由自动缓存成功响应，key 经 `canonicalize_cache_key` 规范化，命中短路、未命中回源回写（T061）
+- **`AuditSink` trait**：抽象审计日志存储后端（`write` / `read` / `clear`），内存环形缓冲保留为默认 sink（T062）
+- **`InklogAuditSink`**：`inklog` feature 下桥接审计事件到 inklog 结构化输出管道（T062）
+
+### Changed
+
+- 移除 `ratelimit-http` feature 中的 `limiteron/tower-middleware` 死重使能（全仓 0 import，sdforge 自带 Tower middleware 实现）（T060）
+- 版本递增至 `0.5.0-rc.3`
+- trait-kit → `0.5.0-rc.3`、oxcache → `0.5.0-rc.4`、limiteron → `0.3.0-rc.3`、inklog → `0.3.0-rc.3`
+- 新增 `[patch.crates-io]` 本地路径联调
+
+---
+
 ## [0.5.0-rc.2] - 2026-09-07
 
 ### Added

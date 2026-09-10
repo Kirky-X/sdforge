@@ -100,6 +100,7 @@ mod integration_tests {
             },
             authentication: AuthConfig::None,
             timeout: None,
+            ..Default::default()
         };
 
         // Config created successfully - verify authentication is None

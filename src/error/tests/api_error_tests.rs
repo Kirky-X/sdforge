@@ -402,7 +402,7 @@ fn test_error_context_current() {
     assert!(line > 0);
     // 该断言位于 current() 调用之后，行号必须大于调用处上方任何行
     assert!(
-        (380..=420).contains(&line),
+        line >= 380 && line <= 420,
         "line must reflect the call site, got {}",
         line
     );

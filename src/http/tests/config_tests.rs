@@ -24,6 +24,7 @@ fn test_build_with_config_jwt() {
             secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
         },
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -50,6 +51,7 @@ fn test_build_with_config_api_key() {
             }],
         },
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -72,6 +74,7 @@ fn test_build_with_config_oauth2_error() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -97,6 +100,7 @@ fn test_build_with_config_cors() {
             secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
         },
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -120,6 +124,7 @@ fn test_build_with_config_request_id_middleware() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -139,6 +144,7 @@ fn test_build_with_config_body_limit() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -158,6 +164,7 @@ fn test_build_with_config_compression_layer() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -177,6 +184,7 @@ fn test_build_with_config_timeout_layer() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -196,6 +204,7 @@ fn test_build_with_config_zero_timeout() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -215,6 +224,7 @@ fn test_build_with_config_large_timeout() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -242,6 +252,7 @@ fn test_build_with_config_cors_various_origins() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -268,6 +279,7 @@ fn test_build_with_config_cors_all_methods() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -298,6 +310,7 @@ fn test_build_with_config_api_key_empty_prefix() {
             }],
         },
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -324,6 +337,7 @@ fn test_build_with_config_api_key_long_prefix() {
             }],
         },
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -350,6 +364,7 @@ fn test_build_with_config_api_key_special_chars() {
             }],
         },
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -376,6 +391,7 @@ fn test_build_with_config_jwt_short_secret() {
             secret: "ValidSecretKey123!@#WithUppercase".to_string(),
         },
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -397,6 +413,7 @@ fn test_build_with_config_jwt_special_chars() {
             secret: "SpecialChars!@#$%^&*()_+Secret123".to_string(),
         },
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -419,6 +436,7 @@ fn test_build_with_config_jwt_empty_secret() {
             secret: "ValidSecretForTesting123!@#WithUppercase".to_string(),
         },
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -479,6 +497,7 @@ fn test_build_with_config_full_jwt_cors() {
             secret: "AnotherVeryLongSecretKeyForTestingPurposes1234567890!".to_string(),
         },
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -509,6 +528,7 @@ fn test_build_with_config_full_api_key_cors() {
             }],
         },
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -537,6 +557,7 @@ fn test_build_with_config_no_auth() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);
@@ -562,6 +583,7 @@ fn test_build_with_config_minimal_config() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     let result = build_with_config(&config);

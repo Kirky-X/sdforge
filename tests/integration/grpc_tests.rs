@@ -586,6 +586,7 @@ mod grpc_integration_tests {
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             state: None,
+            ..Default::default()
         };
 
         assert_eq!(
@@ -1045,6 +1046,7 @@ mod grpc_integration_tests {
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             state: None,
+            ..Default::default()
         };
 
         assert!(config.auth.is_some(), "Config should have auth when set");
@@ -1226,6 +1228,7 @@ mod grpc_integration_tests {
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             state: None,
+            ..Default::default()
         };
 
         assert_eq!(config.max_connections, 200);

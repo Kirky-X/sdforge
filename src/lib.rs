@@ -4,7 +4,7 @@
 //!
 //! This crate provides the runtime types and service builders for the SDForge framework.
 
-#![doc(html_root_url = "https://docs.rs/sdforge/0.5.0-rc.2")]
+#![doc(html_root_url = "https://docs.rs/sdforge/0.5.0-rc.3")]
 #![warn(missing_docs)]
 
 // Allow macro-generated code (which references `sdforge::cli::...`,
@@ -283,6 +283,9 @@ pub mod cache;
 
 #[cfg(feature = "cache")]
 pub use cache::{Cache, CacheKey, DashMapCache, OxcacheSyncCache, SharedCache, SyncCache};
+
+#[cfg(all(feature = "cache", feature = "http"))]
+pub use cache::{ResponseCacheLayer, ResponseCacheMiddleware};
 
 /// WebSocket support
 #[cfg(feature = "websocket")]

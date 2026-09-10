@@ -787,6 +787,7 @@ fn benchmark_http_router_construction(c: &mut Criterion) {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     c.bench_function("http_router_build_with_config_none_auth", |b| {
@@ -807,6 +808,7 @@ fn benchmark_http_router_construction(c: &mut Criterion) {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     c.bench_function("http_router_build_with_config_cors", |b| {

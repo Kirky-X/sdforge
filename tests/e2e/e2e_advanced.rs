@@ -402,6 +402,7 @@ mod config_advanced {
             },
             authentication: AuthConfig::None,
             timeout: None,
+            ..Default::default()
         };
         assert!(config.validate().is_err());
     }
