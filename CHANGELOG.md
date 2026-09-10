@@ -121,6 +121,22 @@
 - `examples/src/security/api_key.rs`、`examples/src/websocket/chat.rs`：显著标注
   认证/WS 端点为演示桩，禁止复制到生产。
 
+## [0.5.0-rc.3] - 2026-09-10
+
+### 新增
+
+- **限流配置化自动装配**：`SecurityConfig.rate_limit` 接入 `AppConfig` 与 `build_with_config`——配置存在即自动构造 `LimiteronAdapter` + `rate_limit_layer` 挂 HTTP 路由；`WebSocketConfig.rate_limit` 在 WS 握手层生效（T060）
+- **`cache_ttl` 响应缓存闭环**：带 `cache_ttl` 的 GET 路由自动叠加 oxcache SyncCache 响应缓存层（key 使用 `canonicalize_cache_key`），命中短路、未命中回源后回写，MCP 成功路径同步回写；`config::CacheConfig` 接入 `AppConfig`（T061）
+- **`AuditSink` 可插拔审计**：审计日志抽象 `AuditSink` trait（内存环形缓冲为默认 sink），`inklog` feature 下桥接 inklog 结构化输出（T062）
+
+### 移除
+
+- **`limiteron/tower-middleware` 死重使能**：全仓 0 import，限流统一走自研 `rate_limit_layer`（T060）
+
+### 依赖
+
+- inklog → `0.3.0-rc.3`、limiteron → `0.3.0-rc.3`、oxcache → `0.5.0-rc.4`、trait-kit → `0.5.0-rc.3`；开发期经 `[patch.crates-io]` 指向本地同级兄弟检出（发布 crates.io 后可移除 patch 段）
+
 ## [0.5.0-rc.2] 及更早
 
 此前版本无独立更新日志记录。
