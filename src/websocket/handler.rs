@@ -404,12 +404,9 @@ mod tests {
         });
         manager.broadcast(&notification).await;
 
-        let received = tokio::time::timeout(
-            tokio::time::Duration::from_secs(2),
-            ws.receive_json(),
-        )
-        .await
-        .expect("broadcast must reach the client within timeout");
+        let received = tokio::time::timeout(tokio::time::Duration::from_secs(2), ws.receive_json())
+            .await
+            .expect("broadcast must reach the client within timeout");
         match received {
             WebSocketMessage::Notification { event, data } => {
                 assert_eq!(event, "ping");

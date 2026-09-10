@@ -8,6 +8,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::config::ConfigError;
+use crate::config::ValidateConfig;
 use crate::config::{AuthConfig, ServerConfig, TimeoutConfig};
 
 /// Application configuration
@@ -21,6 +22,12 @@ pub struct AppConfig {
     pub authentication: AuthConfig,
     /// Timeout configuration
     pub timeout: Option<TimeoutConfig>,
+    /// Security configuration (headers, rate-limit, etc.)
+    #[cfg(feature = "security")]
+    pub security: crate::config::SecurityConfig,
+    /// Cache configuration (capacity, TTL, etc.)
+    #[cfg(feature = "cache")]
+    pub cache: crate::config::CacheConfig,
 }
 
 impl AppConfig {
@@ -42,7 +49,37 @@ impl AppConfig {
             timeout.validate()?;
         }
 
+        // Validate security configuration
+        #[cfg(feature = "security")]
+        self.security.validate()?;
+
+        // Validate cache configuration
+        #[cfg(feature = "cache")]
+        self.cache.validate()?;
+
         Ok(())
+    }
+
+    /// Build a `LimiteronAdapter` from the security rate-limit config (if any).
+    ///
+    /// Returns `Ok(Some(adapter))` when `security.rate_limit` is `Some`,
+    /// `Ok(None)` when no rate-limit config is present, or `Err` when the
+    /// limiteron config fails validation.
+    #[cfg(feature = "ratelimit")]
+    pub async fn build_rate_limiter(
+        &self,
+    ) -> Result<Option<crate::security::LimiteronAdapter>, crate::security::RateLimitError> {
+        #[cfg(feature = "security")]
+        {
+            if let Some(ref rl_config) = self.security.rate_limit {
+                let adapter = crate::security::LimiteronAdapter::builder()
+                    .with_config(rl_config.clone())
+                    .build()
+                    .await?;
+                return Ok(Some(adapter));
+            }
+        }
+        Ok(None)
     }
 }
 
@@ -61,6 +98,10 @@ impl Default for AppConfig {
             server: ServerConfig::default(),
             authentication: AuthConfig::default(),
             timeout: Some(TimeoutConfig::default()),
+            #[cfg(feature = "security")]
+            security: crate::config::SecurityConfig::default(),
+            #[cfg(feature = "cache")]
+            cache: crate::config::CacheConfig::default(),
         }
     }
 }
@@ -71,6 +112,10 @@ pub struct AppConfigBuilder {
     server: Option<ServerConfig>,
     authentication: Option<AuthConfig>,
     timeout: Option<TimeoutConfig>,
+    #[cfg(feature = "security")]
+    security: Option<crate::config::SecurityConfig>,
+    #[cfg(feature = "cache")]
+    cache: Option<crate::config::CacheConfig>,
 }
 
 impl AppConfigBuilder {
@@ -92,6 +137,20 @@ impl AppConfigBuilder {
         self
     }
 
+    /// Set security configuration
+    #[cfg(feature = "security")]
+    pub fn security(mut self, security: crate::config::SecurityConfig) -> Self {
+        self.security = Some(security);
+        self
+    }
+
+    /// Set cache configuration
+    #[cfg(feature = "cache")]
+    pub fn cache(mut self, cache: crate::config::CacheConfig) -> Self {
+        self.cache = Some(cache);
+        self
+    }
+
     /// Build AppConfig with validation
     ///
     /// BUG-3 修复: `timeout` 缺省时回退到 `TimeoutConfig::default()`，
@@ -104,6 +163,10 @@ impl AppConfigBuilder {
             server: self.server.unwrap_or_default(),
             authentication: self.authentication.unwrap_or_default(),
             timeout: self.timeout.or_else(|| Some(TimeoutConfig::default())),
+            #[cfg(feature = "security")]
+            security: self.security.unwrap_or_default(),
+            #[cfg(feature = "cache")]
+            cache: self.cache.unwrap_or_default(),
         };
 
         // Validate the built configuration

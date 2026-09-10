@@ -420,8 +420,10 @@ impl MrtrSessionManager {
             if session.state == SessionState::Pending && session.is_timed_out() {
                 session.mark_timeout();
                 false // remove timed-out pending sessions
-            } else if matches!(session.state, SessionState::Completed | SessionState::Cancelled)
-                && session.created_at.elapsed() >= session.timeout
+            } else if matches!(
+                session.state,
+                SessionState::Completed | SessionState::Cancelled
+            ) && session.created_at.elapsed() >= session.timeout
             {
                 false // terminal sessions age out after the timeout window
             } else {
@@ -662,12 +664,14 @@ mod tests {
             completed.complete();
             sessions.insert("done".to_string(), completed);
 
-            let mut cancelled = MrtrSession::with_timeout("cancelled", "tool", Duration::from_millis(1));
+            let mut cancelled =
+                MrtrSession::with_timeout("cancelled", "tool", Duration::from_millis(1));
             cancelled.cancel();
             sessions.insert("cancelled".to_string(), cancelled);
 
             // Resumed 属于非终态：不受老化逻辑影响
-            let mut resumed = MrtrSession::with_timeout("resumed", "tool", Duration::from_millis(1));
+            let mut resumed =
+                MrtrSession::with_timeout("resumed", "tool", Duration::from_millis(1));
             resumed.resume(serde_json::json!({"answer": 42}));
             sessions.insert("resumed".to_string(), resumed);
         }

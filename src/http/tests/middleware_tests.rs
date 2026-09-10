@@ -32,6 +32,7 @@ async fn test_request_id_middleware_generates_uuid_when_absent() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
     let router = build_with_config(&config).unwrap();
     let response = tower::ServiceExt::oneshot(
@@ -65,6 +66,7 @@ async fn test_request_id_middleware_preserves_custom_id() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
     let router = build_with_config(&config).unwrap();
     let response = tower::ServiceExt::oneshot(
@@ -95,6 +97,7 @@ async fn test_request_id_middleware_non_utf8_header_generates_uuid() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
     let router = build_with_config(&config).unwrap();
     let response = tower::ServiceExt::oneshot(
@@ -157,6 +160,7 @@ fn build_jwt_test_router(secret: &str) -> Router {
             secret: secret.to_string(),
         },
         timeout: None,
+        ..Default::default()
     };
     build_with_config(&config).unwrap()
 }
@@ -289,6 +293,7 @@ fn build_apikey_test_router(header_name: &str, prefix: &str) -> Router {
             }],
         },
         timeout: None,
+        ..Default::default()
     };
     build_with_config(&config).unwrap()
 }

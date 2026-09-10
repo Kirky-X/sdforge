@@ -19,6 +19,10 @@ pub use types::*;
 #[cfg(feature = "security")]
 pub use api_key::{AppApiKeyAuth, AppApiKeyAuthBuilder};
 #[cfg(feature = "security")]
+pub use audit::AuditSink;
+#[cfg(all(feature = "security", feature = "inklog"))]
+pub use audit::InklogAuditSink;
+#[cfg(feature = "security")]
 pub use audit::{AppAuditLogger, AppAuditLoggerBuilder};
 #[cfg(feature = "security")]
 pub use bearer::{BearerAuth, BearerAuthBuilder, generate_secure_jwt_secret};

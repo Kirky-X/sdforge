@@ -6,6 +6,8 @@
 
 use crate::cache::SharedCache;
 use crate::security::AuditLog;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 mod audit_impl;
@@ -14,6 +16,42 @@ mod audit_impl;
 pub(crate) use audit_impl::sanitize_error_message;
 #[cfg(test)]
 pub(crate) use audit_impl::{JWT_PATTERN, PATH_PATTERN, SECRET_PATTERN};
+
+// =============================================================================
+// AuditSink trait — abstract audit log storage backend
+// =============================================================================
+
+/// Abstract audit log storage backend.
+///
+/// `AuditSink` decouples *where* audit logs are stored from the
+/// `AppAuditLogger`'s DoS-protection machinery (semaphore, queue,
+/// merge-lock). The default implementation is an in-memory ring buffer
+/// (`AppAuditLogger`'s existing `SharedCache`-backed storage). When the
+/// `inklog` feature is enabled, an [`InklogAuditSink`] bridges audit
+/// events to inklog's structured output pipeline.
+///
+/// Uses `Pin<Box<dyn Future>>` instead of `async-trait` to avoid pulling
+/// in an extra dependency — mirrors the `RateLimiter` trait pattern.
+pub trait AuditSink: Send + Sync {
+    /// Write an audit log entry for the given user.
+    fn write<'a>(
+        &'a self,
+        user_id: &'a str,
+        log: AuditLog,
+    ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
+
+    /// Read all audit logs for the given user.
+    fn read(&self, user_id: &str) -> Vec<AuditLog>;
+
+    /// Clear all audit logs for the given user.
+    fn clear(&self, user_id: &str);
+}
+
+// inklog bridge — available when both `security` and `inklog` features are on.
+#[cfg(feature = "inklog")]
+mod inklog_sink;
+#[cfg(feature = "inklog")]
+pub use inklog_sink::InklogAuditSink;
 
 /// Batch of audit logs for async processing.
 ///

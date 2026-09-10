@@ -409,9 +409,10 @@ impl ApiError {
                 "INTERNAL_ERROR",
                 "An internal error occurred. Please try again later.".to_string(),
             ),
-            ApiError::QuotaExhausted { used, total } => {
-                ("QUOTA_EXHAUSTED", format!("Quota exhausted: {}/{}", used, total))
-            }
+            ApiError::QuotaExhausted { used, total } => (
+                "QUOTA_EXHAUSTED",
+                format!("Quota exhausted: {}/{}", used, total),
+            ),
             ApiError::ServiceUnavailable { service, .. } => (
                 "SERVICE_UNAVAILABLE",
                 format!("Service unavailable: {}", service),

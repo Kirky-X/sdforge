@@ -783,10 +783,11 @@ fn benchmark_http_router_construction(c: &mut Criterion) {
             port: 3000,
             request_timeout_secs: 30,
             cors: None,
-             ..Default::default()
-         },
+            ..Default::default()
+        },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     c.bench_function("http_router_build_with_config_none_auth", |b| {
@@ -803,10 +804,11 @@ fn benchmark_http_router_construction(c: &mut Criterion) {
                 allowed_methods: vec!["GET".to_string(), "POST".to_string()],
                 allowed_headers: vec!["Content-Type".to_string()],
             }),
-             ..Default::default()
-         },
+            ..Default::default()
+        },
         authentication: AuthConfig::None,
         timeout: None,
+        ..Default::default()
     };
 
     c.bench_function("http_router_build_with_config_cors", |b| {

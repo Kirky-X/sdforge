@@ -1417,12 +1417,14 @@ fn test_builder_rejects_empty_audience_and_issuer() {
     );
 
     // 合法 audience/issuer 不受影响
-    assert!(BearerAuth::builder()
-        .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
-        .audience("my-api")
-        .issuer("my-issuer")
-        .build()
-        .is_ok());
+    assert!(
+        BearerAuth::builder()
+            .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
+            .audience("my-api")
+            .issuer("my-issuer")
+            .build()
+            .is_ok()
+    );
 }
 
 /// HIGH 修复回归（#344）：base64url 解码必须拒绝非法字符——此前查找表
