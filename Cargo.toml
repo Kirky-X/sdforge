@@ -443,6 +443,13 @@ path = "src/benches/sdforge_bench.rs"
 harness = false
 required-features = ["http"]
 
+# T710: runtime performance baselines (routing dispatch / JSON serialization).
+[[bench]]
+name = "runtime_bench"
+path = "benches/runtime_bench.rs"
+harness = false
+required-features = ["http"]
+
 # Cache tests
 [[test]]
 name = "cache_tests"
