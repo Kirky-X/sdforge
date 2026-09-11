@@ -620,6 +620,12 @@ name = "lifecycle_tests"
 path = "tests/integration/lifecycle_tests.rs"
 required-features = ["http", "graceful", "lifecycle"]
 
+# T712: 非 HTTP 协议认证 e2e — gRPC 拦截器 + WS 握手。
+[[test]]
+name = "grpc_ws_auth_tests"
+path = "tests/integration/grpc_ws_auth_tests.rs"
+required-features = ["grpc", "websocket", "security"]
+
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）
 # ============================================================================

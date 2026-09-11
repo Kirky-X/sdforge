@@ -54,6 +54,11 @@ pub struct SdForgeGrpcService {
     /// is checked against the limiter using the client's remote address.
     #[cfg(feature = "ratelimit")]
     rate_limiter: Option<std::sync::Arc<dyn crate::security::ratelimit::RateLimiter>>,
+    /// T712: optional auth interceptor. When `Some`, every `call` must carry
+    /// credentials the verifier accepts (bearer JWT / API key), otherwise the
+    /// request is rejected with `Status::unauthenticated`.
+    #[cfg(feature = "security")]
+    auth_interceptor: Option<std::sync::Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
 }
 
 #[cfg(feature = "grpc")]
@@ -66,6 +71,8 @@ impl Default for SdForgeGrpcService {
             default_statuses: OnceLock::new(),
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
+            #[cfg(feature = "security")]
+            auth_interceptor: None,
         }
     }
 }
@@ -83,7 +90,24 @@ impl SdForgeGrpcService {
             default_statuses: OnceLock::new(),
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
+            #[cfg(feature = "security")]
+            auth_interceptor: None,
         }
+    }
+
+    /// T712: attach an auth interceptor (gRPC authentication).
+    ///
+    /// Every `call` is verified before dispatch; failures map to
+    /// `Status::unauthenticated`. Mirrors `GrpcServerConfig.rate_limiter`
+    /// wiring for the auth dimension.
+    #[cfg(feature = "security")]
+    #[must_use]
+    pub fn with_auth_interceptor(
+        mut self,
+        verifier: std::sync::Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>,
+    ) -> Self {
+        self.auth_interceptor = Some(verifier);
+        self
     }
 
     /// Construct a service with injected application state and rate limiter
@@ -101,6 +125,8 @@ impl SdForgeGrpcService {
             body_params: OnceLock::new(),
             default_statuses: OnceLock::new(),
             rate_limiter,
+            #[cfg(feature = "security")]
+            auth_interceptor: None,
         }
     }
 
@@ -146,6 +172,17 @@ impl SdForgeGrpcService {
         &self,
         request: Request<CallRequest>,
     ) -> Result<Response<CallResponse>, Status> {
+        // T712: verify credentials before any dispatch.
+        #[cfg(feature = "security")]
+        if let Some(ref verifier) = self.auth_interceptor {
+            let metadata = request.metadata();
+            let authorization = metadata.get("authorization").and_then(|v| v.to_str().ok());
+            let api_key = metadata.get("x-api-key").and_then(|v| v.to_str().ok());
+            if let Err(msg) = verifier.verify(authorization, api_key) {
+                return Err(Status::unauthenticated(msg));
+            }
+        }
+
         #[cfg(feature = "context")]
         {
             let ctx = crate::context::current_or_new();
