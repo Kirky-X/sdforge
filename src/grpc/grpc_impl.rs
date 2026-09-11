@@ -139,10 +139,28 @@ impl SdForgeGrpcService {
 }
 
 #[cfg(feature = "grpc")]
-#[tonic::async_trait]
-impl SdForgeService for SdForgeGrpcService {
-    async fn call(&self, request: Request<CallRequest>) -> Result<Response<CallResponse>, Status> {
-        // vuln-0006: rate limit check before any handler dispatch.
+impl SdForgeGrpcService {
+    /// T705: install a request context (request_id/trace_id) for the whole
+    /// dispatch, so handlers and logs share the ambient correlation ids.
+    async fn call_with_context(
+        &self,
+        request: Request<CallRequest>,
+    ) -> Result<Response<CallResponse>, Status> {
+        #[cfg(feature = "context")]
+        {
+            let ctx = crate::context::current_or_new();
+            return crate::context::scope(ctx, self.call_inner(request)).await;
+        }
+        #[cfg(not(feature = "context"))]
+        {
+            return self.call_inner(request).await;
+        }
+    }
+}
+
+#[cfg(feature = "grpc")]
+impl SdForgeGrpcService {
+    async fn call_inner(&self, request: Request<CallRequest>) -> Result<Response<CallResponse>, Status> {
         // Extract client IP from tonic's remote_addr (set by transport layer
         // from the actual TCP connection — unspoofable, unlike headers).
         #[cfg(feature = "ratelimit")]
@@ -276,6 +294,14 @@ impl SdForgeService for SdForgeGrpcService {
                 Err(Status::internal("handler panicked"))
             }
         }
+    }
+}
+
+#[cfg(feature = "grpc")]
+#[tonic::async_trait]
+impl SdForgeService for SdForgeGrpcService {
+    async fn call(&self, request: Request<CallRequest>) -> Result<Response<CallResponse>, Status> {
+        self.call_with_context(request).await
     }
 
     async fn get_info(

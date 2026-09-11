@@ -96,6 +96,7 @@ pub(crate) fn apply_security_headers(router: Router) -> Router {
 ///
 /// T701/T702: built-in probe/metrics mounting skips paths already claimed by
 /// user routes to avoid axum duplicate-route panics.
+#[cfg(any(feature = "health", feature = "metrics", test))]
 pub(crate) fn route_path_taken(path: &str) -> bool {
     use crate::core::Registration;
     let mut taken = false;
@@ -280,7 +281,10 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         ));
     }
 
-    // Apply request ID middleware (first to ensure all requests have an ID)
+    // Request ID middleware (first to ensure all requests have an ID).
+    // T705: with the `context` feature, the additional context middleware
+    // (inner layer) adopts this id into the task-local RequestContext, adds a
+    // trace_id, and echoes both on the response.
     router = router.layer(axum::middleware::from_fn(
         |mut req: axum::http::Request<Body>, next: axum::middleware::Next| async move {
             let request_id = get_or_generate_request_id(&req);
@@ -300,6 +304,10 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
             response
         },
     ));
+    #[cfg(feature = "context")]
+    {
+        router = router.layer(axum::middleware::from_fn(crate::context::context_middleware));
+    }
 
     // Apply global body limit（HIGH 修复：来自 ServerConfig::max_body_size，
     // 此前硬编码 10MB 且配置结构无对应字段，运维无法调整）

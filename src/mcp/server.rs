@@ -163,6 +163,26 @@ impl SdForgeMcpServer {
         name: &str,
         arguments: Option<serde_json::Value>,
     ) -> Result<CallToolResult, ErrorData> {
+        // T705: install a request context for synchronous dispatch so logs
+        // inside tool handlers carry correlation ids.
+        #[cfg(feature = "context")]
+        {
+            let ctx = crate::context::current_or_new();
+            return crate::context::scope_sync(ctx, || {
+                self.call_tool_inner(name, arguments)
+            });
+        }
+        #[cfg(not(feature = "context"))]
+        {
+            return self.call_tool_inner(name, arguments);
+        }
+    }
+
+    fn call_tool_inner(
+        &self,
+        name: &str,
+        arguments: Option<serde_json::Value>,
+    ) -> Result<CallToolResult, ErrorData> {
         // vuln-0002: reject oversized argument payloads before any dispatch.
         if let Some(ref args) = arguments {
             let size = serde_json::to_vec(args).map(|v| v.len()).unwrap_or(0);

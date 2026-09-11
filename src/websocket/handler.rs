@@ -193,6 +193,29 @@ async fn handle_socket(
     manager: Arc<ConnectionManager>,
     handler: Arc<dyn WebSocketHandler>,
 ) {
+    // T705: adopt/create a request context for this connection's lifetime so
+    // logs emitted from the message loop carry correlation ids.
+    #[cfg(feature = "context")]
+    {
+        let ctx = crate::context::current_or_new();
+        return crate::context::scope(
+            ctx,
+            handle_socket_inner(socket, manager, handler),
+        )
+        .await;
+    }
+    #[cfg(not(feature = "context"))]
+    {
+        handle_socket_inner(socket, manager, handler).await;
+    }
+}
+
+#[cfg(feature = "websocket")]
+async fn handle_socket_inner(
+    socket: WebSocket,
+    manager: Arc<ConnectionManager>,
+    handler: Arc<dyn WebSocketHandler>,
+) {
     let conn_id = uuid::Uuid::new_v4().to_string();
     let (conn, mut receiver) = WebSocketConnection::new(conn_id.clone());
     manager.add_connection(conn_id.clone(), conn.clone()).await;

@@ -351,6 +351,10 @@ metrics = ["http", "tokio"]
 # kit 三阶段关闭；serve_with_graceful_shutdown 集成入口。
 graceful = ["http", "tokio", "tokio?/signal"]
 
+# 请求上下文特性 (T705) - request_id/trace_id 生成与跨协议（HTTP/MCP/gRPC/WS）
+# 注入，日志关联字段；tokio task_local 承载。
+context = ["tokio"]
+
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
 # `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
@@ -403,6 +407,7 @@ full = [
     "health",
     "metrics",
     "graceful",
+    "context",
     "websocket",
     "grpc",
     "logging",

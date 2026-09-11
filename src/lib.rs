@@ -207,6 +207,11 @@ pub mod health;
 #[cfg(feature = "metrics")]
 pub mod metrics;
 
+/// Request context propagation (request_id/trace_id across protocols,
+/// log correlation fields) — T705.
+#[cfg(feature = "context")]
+pub mod context;
+
 /// Endpoint-level RBAC (`#[forge(auth(role = "..."))]`) — the macro wraps the
 /// generated route with [`rbac::require_role`] (T703). Fail-safe: no auth
 /// stack or no matching role → 403.
