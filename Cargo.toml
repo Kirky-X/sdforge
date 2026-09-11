@@ -343,6 +343,10 @@ cache = ["oxcache/minimal"]
 # （bypass 认证：探针路由在安全中间件层之后注册）。kit 数据源经 `kit` 特性提供。
 health = ["http", "tokio"]
 
+# Prometheus metrics 特性 (T702) - 请求计数/延迟直方图/状态码分布自动采集，
+# /metrics 端点 bypass 认证；自研轻量 Prometheus 文本渲染（无 prometheus 依赖）。
+metrics = ["http", "tokio"]
+
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
 # `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
@@ -389,6 +393,7 @@ full = [
     "security",
     "cache",
     "health",
+    "metrics",
     "websocket",
     "grpc",
     "logging",

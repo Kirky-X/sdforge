@@ -92,6 +92,33 @@ pub(crate) fn apply_security_headers(router: Router) -> Router {
     SecurityHeaders::default().apply(router)
 }
 
+/// True when a route already occupies `path` (module-prefix resolved).
+///
+/// T701/T702: built-in probe/metrics mounting skips paths already claimed by
+/// user routes to avoid axum duplicate-route panics.
+pub(crate) fn route_path_taken(path: &str) -> bool {
+    use crate::core::Registration;
+    let mut taken = false;
+    for registration in inventory::iter::<RouteRegistration>() {
+        let route = registration.create();
+        let full = resolve_route_path(route.path(), route.module_prefix());
+        if full == path {
+            taken = true;
+            break;
+        }
+    }
+    if !taken {
+        for route in inventory::iter::<HttpRoute>() {
+            let full = resolve_route_path(route.path(), route.module_prefix());
+            if full == path {
+                taken = true;
+                break;
+            }
+        }
+    }
+    taken
+}
+
 /// Prevent linker from optimizing away inventory registrations
 /// Uses reference iteration to ensure symbols are preserved
 #[cfg(feature = "mcp")]
@@ -241,6 +268,17 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     use std::sync::Arc;
 
     let mut router = build();
+
+    // T702: request metrics middleware (count / latency / status per route
+    // template). Installed early so every route from build() is measured;
+    // the /metrics endpoint itself is mounted after the auth layer below and
+    // therefore not self-recorded.
+    #[cfg(feature = "metrics")]
+    {
+        router = router.layer(axum::middleware::from_fn(
+            crate::metrics::record_middleware,
+        ));
+    }
 
     // Apply request ID middleware (first to ensure all requests have an ID)
     router = router.layer(axum::middleware::from_fn(
@@ -410,6 +448,12 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     #[cfg(feature = "health")]
     {
         router = crate::health::mount_probes(router);
+    }
+
+    // T702: mount /metrics after the auth layer (bypasses authentication).
+    #[cfg(feature = "metrics")]
+    {
+        router = crate::metrics::mount_metrics(router);
     }
 
     // Note: 日志初始化已移除，由使用方通过 sdforge::inklog 直接管理

@@ -242,38 +242,14 @@ pub async fn readyz_handler() -> Response {
     (code, Json(body)).into_response()
 }
 
-/// True when a route already occupies `path` (module-prefix resolved).
-pub(crate) fn route_path_taken(path: &str) -> bool {
-    use crate::core::Registration;
-    let mut taken = false;
-    for registration in inventory::iter::<crate::http::RouteRegistration>() {
-        let route = registration.create();
-        let full = crate::http::resolve_route_path(route.path(), route.module_prefix());
-        if full == path {
-            taken = true;
-            break;
-        }
-    }
-    if !taken {
-        for route in inventory::iter::<crate::http::HttpRoute>() {
-            let full = crate::http::resolve_route_path(route.path(), route.module_prefix());
-            if full == path {
-                taken = true;
-                break;
-            }
-        }
-    }
-    taken
-}
-
 /// Mount `/healthz` and `/readyz` on `router`, skipping any path already
 /// claimed by a user route (avoids axum duplicate-route panics).
 pub(crate) fn mount_probes(router: axum::Router) -> axum::Router {
     let mut router = router;
-    if !route_path_taken("/healthz") {
+    if !crate::http::route_path_taken("/healthz") {
         router = router.route("/healthz", axum::routing::get(healthz_handler));
     }
-    if !route_path_taken("/readyz") {
+    if !crate::http::route_path_taken("/readyz") {
         router = router.route("/readyz", axum::routing::get(readyz_handler));
     }
     router
@@ -419,7 +395,7 @@ mod tests {
         // "/healthz" is mounted by probe_router above but that is a plain
         // Router (not inventory), so inventory scan sees no match for a
         // deliberately unused path.
-        assert!(!route_path_taken("/__definitely_not_registered__"));
+        assert!(!crate::http::route_path_taken("/__definitely_not_registered__"));
     }
 }
 

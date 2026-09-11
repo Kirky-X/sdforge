@@ -202,6 +202,11 @@ pub mod http;
 #[cfg(feature = "health")]
 pub mod health;
 
+/// Prometheus metrics (`/metrics`, RED request metrics) — auto-installed by
+/// `build_with_config` when the `metrics` feature is enabled (T702).
+#[cfg(feature = "metrics")]
+pub mod metrics;
+
 #[cfg(feature = "http")]
 pub use http::version_routing::{VersionRouterConfig, VersionedRoute, build_version_router};
 
