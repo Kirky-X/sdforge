@@ -355,6 +355,10 @@ graceful = ["http", "tokio", "tokio?/signal"]
 # 注入，日志关联字段；tokio task_local 承载。
 context = ["tokio"]
 
+# 参数校验契约特性 (T707) - #[forge(validate)] + #[param(ge/le/...)] 校验规则，
+# 400 带字段级错误；验证语句由宏注入 HTTP 处理闭包。
+validate = ["http", "tokio"]
+
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
 # `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
@@ -573,6 +577,12 @@ required-features = ["http", "security"]
 name = "graceful_shutdown_tests"
 path = "tests/integration/graceful_shutdown_tests.rs"
 required-features = ["http", "graceful"]
+
+# T707: #[forge(validate)] 参数校验 e2e — 400 字段级错误。
+[[test]]
+name = "validate_tests"
+path = "tests/integration/validate_tests.rs"
+required-features = ["http", "validate"]
 
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）

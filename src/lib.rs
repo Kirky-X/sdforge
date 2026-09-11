@@ -84,6 +84,10 @@ pub use inventory;
 /// optional; serde is always present, so the gate would be a no-op.
 pub use serde;
 
+/// Re-export serde_json for use in generated code (T707 validation payload)
+/// and downstream extensions without a direct dependency.
+pub use serde_json;
+
 /// Re-export tokio_stream for use in generated code
 #[cfg(feature = "streaming")]
 pub use tokio_stream;

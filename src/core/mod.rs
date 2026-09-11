@@ -11,6 +11,11 @@
 //! HTTP-specific response handling is provided in `http::response` module
 //! to avoid HTTP dependencies for non-HTTP protocol implementations.
 
+/// Field-level validation contract (T707): `#[forge(validate)]` +
+/// `#[param(ge/le/min_length/...)]` enforcement plumbing.
+#[cfg(feature = "validate")]
+pub mod field_validation;
+
 pub mod handler;
 pub mod json;
 #[cfg(any(feature = "http", feature = "security"))]
