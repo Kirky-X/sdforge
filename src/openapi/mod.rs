@@ -29,7 +29,7 @@
 //! This module is only available when the `openapi` feature is enabled.
 
 mod openapi_impl;
-pub use openapi_impl::generate_openapi_spec;
+pub use openapi_impl::{generate_openapi_spec, schema_for_type_name};
 
 /// Static metadata for a single OpenAPI path parameter, embedded in
 /// [`OpenApiRouteInfo`].
@@ -58,6 +58,42 @@ pub struct OpenApiPathParam {
     pub schema_format: &'static str,
 }
 
+/// Static metadata for a request-body parameter (T706).
+///
+/// The `#[forge]` macro emits one entry per `ParamKind::Body` handler
+/// parameter so the generated OpenAPI operation carries a `requestBody`
+/// with a concrete JSON schema instead of the previous path-params-only
+/// shape.
+#[derive(Debug, Clone, Copy)]
+pub struct OpenApiBodyParam {
+    /// Parameter name.
+    pub name: &'static str,
+    /// Human-readable description; empty string when unspecified.
+    pub description: &'static str,
+    /// Whether the body parameter is required (non-`Option<T>`).
+    pub required: bool,
+    /// OpenAPI schema type (`"integer"`, `"number"`, `"boolean"`,
+    /// `"string"`, `"object"`, `"array"`).
+    pub schema_type: &'static str,
+    /// OpenAPI schema format (`""` for none).
+    pub schema_format: &'static str,
+}
+
+/// OpenAPI schema descriptor for a handler response type (T706).
+///
+/// Derived from the handler return type at macro-expansion time via the
+/// T706 type-mapping table (`Result<T, E>` -> `T`, `Vec<T>` -> array, Rust
+/// primitives -> schema type/format, unknown -> object).
+#[derive(Debug, Clone, Copy)]
+pub struct OpenApiTypeInfo {
+    /// OpenAPI schema type.
+    pub schema_type: &'static str,
+    /// OpenAPI schema format (`""` for none).
+    pub schema_format: &'static str,
+    /// Whether the response is an array of the described element schema.
+    pub is_array: bool,
+}
+
 /// Static metadata for an OpenAPI route, registered via `inventory::submit!`.
 ///
 /// The `#[forge]` macro generates one `OpenApiRouteInfo` entry per route
@@ -84,6 +120,11 @@ pub struct OpenApiRouteInfo {
     /// When `Some`, the OpenAPI response key uses this code (e.g. `201`)
     /// instead of the default `200`. `None` keeps backward-compatible `200`.
     pub success_status: Option<u16>,
+    /// Request-body parameters (T706). Empty for GET/query-only routes.
+    pub body_params: &'static [OpenApiBodyParam],
+    /// Response schema descriptor (T706). `None` keeps the legacy
+    /// schema-less response entry.
+    pub response_type: Option<OpenApiTypeInfo>,
 }
 
 inventory::collect!(OpenApiRouteInfo);
@@ -141,6 +182,41 @@ inventory::submit!(OpenApiRouteInfo::with_path_params_and_status(
     &[],
     Some(201u16),
 ));
+
+// T706: test-only route WITH a request body and a typed response so the
+// generated-spec assertions can verify requestBody + response schema emission.
+#[cfg(test)]
+inventory::submit!(OpenApiRouteInfo {
+    path: "/__openapi_body_test__/orders",
+    method: "POST",
+    summary: "Body schema test marker",
+    description: "Route with body params and a typed response registered by src/openapi/mod.rs tests.",
+    version: "test",
+    tags: &["test"],
+    path_params: &[],
+    success_status: Some(201u16),
+    body_params: &[
+        OpenApiBodyParam {
+            name: "item",
+            description: "Item to create",
+            required: true,
+            schema_type: "string",
+            schema_format: "",
+        },
+        OpenApiBodyParam {
+            name: "quantity",
+            description: "",
+            required: false,
+            schema_type: "integer",
+            schema_format: "uint64",
+        },
+    ],
+    response_type: Some(OpenApiTypeInfo {
+        schema_type: "string",
+        schema_format: "",
+        is_array: true,
+    }),
+});
 
 #[cfg(test)]
 mod tests {
@@ -415,6 +491,79 @@ mod tests {
         assert_eq!(INFO.path_params[0].name, "id");
         assert_eq!(INFO.path_params[0].schema_type, "integer");
         assert_eq!(INFO.path_params[0].schema_format, "uint64");
+    }
+
+    // ========================================================================
+    // T706: requestBody + response schema emission
+    // ========================================================================
+
+    /// T706: the body-param test route must emit a typed `requestBody`
+    /// (application/json object with item/quantity properties, item required).
+    #[test]
+    fn generated_spec_contains_request_body_schema() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+        let op = &paths_json["/__openapi_body_test__/orders"]["post"];
+        let request_body = op
+            .get("requestBody")
+            .expect("requestBody must be emitted for body-param routes");
+        let content = &request_body["content"]["application/json"];
+        let schema = &content["schema"];
+        assert_eq!(schema["type"], "object", "body schema must be an object");
+        assert_eq!(schema["properties"]["item"]["type"], "string");
+        assert_eq!(
+            schema["properties"]["quantity"]["type"], "integer",
+            "quantity must map to integer"
+        );
+        assert_eq!(
+            schema["properties"]["quantity"]["format"], "uint64",
+            "quantity format must be uint64"
+        );
+        let required = schema["required"].as_array().expect("required array");
+        assert_eq!(required.len(), 1);
+        assert_eq!(required[0], "item");
+    }
+
+    /// T706: the response of the body-param test route must carry a typed
+    /// schema (array of string — `Vec<String>` mapped at macro level and the
+    /// test route declares `is_array` + `"string"` directly).
+    #[test]
+    fn generated_spec_contains_response_schema() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+        let op = &paths_json["/__openapi_body_test__/orders"]["post"];
+        let schema = &op["responses"]["201"]["content"]["application/json"]["schema"];
+        assert_eq!(schema["type"], "array", "response schema must be array");
+        assert_eq!(schema["items"]["type"], "string", "array items string");
+    }
+
+    /// T706: routes without declared response schema keep the legacy
+    /// schema-less response (backward compatibility).
+    #[test]
+    fn generated_spec_keeps_schemaless_response_for_legacy_route() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+        let op = &paths_json["/__openapi_test_marker__"]["get"];
+        let response = op["responses"]["200"]
+            .as_object()
+            .expect("legacy response is an object");
+        assert!(
+            !response.contains_key("content"),
+            "legacy route must not gain a content schema"
+        );
+    }
+
+    /// T715 (shared mapping): `schema_for_type_name` mirrors the macro table.
+    #[test]
+    fn schema_for_type_name_maps_primitives() {
+        let info = super::schema_for_type_name("u64");
+        assert_eq!(info.schema_type, "integer");
+        assert_eq!(info.schema_format, "uint64");
+        assert!(!info.is_array);
+        let info = super::schema_for_type_name("String");
+        assert_eq!(info.schema_type, "string");
+        let info = super::schema_for_type_name("CustomStruct");
+        assert_eq!(info.schema_type, "object");
     }
 
     /// `generate_openapi_spec()` should emit a `parameters` array on the

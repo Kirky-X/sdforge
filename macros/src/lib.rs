@@ -776,6 +776,36 @@ impl ParamInfo {
     }
 }
 
+/// Map a handler return type to an `sdforge::openapi::OpenApiTypeInfo`
+/// expression (T706).
+///
+/// Mapping: `Result<T, E>` unwraps to `T`; `Vec<T>` marks `is_array` with the
+/// element mapping; primitives map through the shared table; anything else
+/// (including `serde_json::Value`) maps to `"object"`.
+fn response_type_to_openapi_info_tokens(return_type: &syn::ReturnType) -> TokenStream2 {
+    let target_ty = match return_type {
+        syn::ReturnType::Type(_, ty) => ty.as_ref(),
+        syn::ReturnType::Default => {
+            return quote! { None };
+        }
+    };
+    let target_ty = extract_result_ok_type(target_ty).unwrap_or(target_ty);
+    let ty_str = quote! { #target_ty }.to_string().replace(' ', "");
+    let (inner, is_array) = if ty_str.starts_with("Vec<") && ty_str.ends_with('>') {
+        (&ty_str[4..ty_str.len() - 1], true)
+    } else {
+        (ty_str.as_str(), false)
+    };
+    let (schema_type, schema_format) = rust_type_to_openapi_schema(inner);
+    quote! {
+        Some(sdforge::openapi::OpenApiTypeInfo {
+            schema_type: #schema_type,
+            schema_format: #schema_format,
+            is_array: #is_array,
+        })
+    }
+}
+
 /// Extract path parameters from path string
 fn extract_path_params(path: &str) -> Vec<String> {
     path.split('/')
@@ -1525,6 +1555,31 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         None => quote! { None },
     };
 
+    // T706: OpenAPI requestBody entries for Body parameters.
+    let openapi_body_params_tokens: Vec<TokenStream2> = params
+        .iter()
+        .filter(|p| matches!(p.param_kind, ParamKind::Body))
+        .map(|p| {
+            let (schema_type, schema_format) = rust_type_to_openapi_schema(&p.inner_type);
+            let name_lit = proc_macro2::Literal::string(&p.name);
+            let type_lit = proc_macro2::Literal::string(schema_type);
+            let format_lit = proc_macro2::Literal::string(schema_format);
+            let required = !p.is_option;
+            quote! {
+                sdforge::openapi::OpenApiBodyParam {
+                    name: #name_lit,
+                    description: "",
+                    required: #required,
+                    schema_type: #type_lit,
+                    schema_format: #format_lit,
+                }
+            }
+        })
+        .collect();
+
+    // T706: response schema descriptor from the handler return type.
+    let openapi_response_type_expr = response_type_to_openapi_info_tokens(return_type);
+
     // Build description expression
     let description_literal = description.as_deref().unwrap_or(&name);
 
@@ -1878,16 +1933,18 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             // the declared `status` so the OpenAPI response key matches the
             // actual HTTP success code clients will receive.
             #[cfg(feature = "openapi")]
-            sdforge::inventory::submit!(sdforge::openapi::OpenApiRouteInfo::with_path_params_and_status(
-                #http_path,
-                #http_method_upper,
-                #description_literal,
-                #description_literal,
-                #version,
-                &[],
-                &[#(#openapi_path_params_tokens),*],
-                #openapi_status_expr,
-            ));
+            sdforge::inventory::submit!(sdforge::openapi::OpenApiRouteInfo {
+                path: #http_path,
+                method: #http_method_upper,
+                summary: #description_literal,
+                description: #description_literal,
+                version: #version,
+                tags: &[],
+                path_params: &[#(#openapi_path_params_tokens),*],
+                success_status: #openapi_status_expr,
+                body_params: &[#(#openapi_body_params_tokens),*],
+                response_type: #openapi_response_type_expr,
+            });
         }
     } else {
         quote! {}

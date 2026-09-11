@@ -420,7 +420,10 @@ pub use anyhow;
 pub mod openapi;
 
 #[cfg(feature = "openapi")]
-pub use openapi::{OpenApiBuilder, OpenApiPathParam, OpenApiRouteInfo, generate_openapi_spec};
+pub use openapi::{
+    OpenApiBodyParam, OpenApiBuilder, OpenApiPathParam, OpenApiRouteInfo, OpenApiTypeInfo,
+    generate_openapi_spec, schema_for_type_name,
+};
 
 /// 统一文档输出模块 — Swagger UI + CLI/MCP Markdown。
 ///

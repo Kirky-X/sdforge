@@ -35,6 +35,23 @@ async fn get_user(id: u64) -> Result<String, ApiError> {
     Ok(format!("user-{}", id))
 }
 
+/// T706 fixture: POST with a JSON body parameter and a typed array response.
+///
+/// Note: axum accepts exactly ONE body extractor per handler, so the fixture
+/// declares a single `String` body param; the emitted requestBody schema is
+/// that param's own schema (string), required per the non-Option type.
+#[forge(
+    name = "openapi_test_create_order",
+    version = "v1",
+    path = "/orders",
+    method = "POST",
+    status = 201,
+    description = "Create an order"
+)]
+async fn create_order(item: String) -> Result<Vec<String>, ApiError> {
+    Ok(vec![item])
+}
+
 /// List all users. No path parameters.
 #[forge(
     name = "openapi_test_list_users",
@@ -179,4 +196,49 @@ fn operation_id_is_versioned_path() {
         "operationId must start with version prefix, got: {}",
         op_id
     );
+}
+
+
+// ============================================================================
+// T706: requestBody + response schema emitted from #[forge] signatures.
+// ============================================================================
+
+#[test]
+fn forge_body_param_generates_request_body() {
+    let spec = generate_openapi_spec();
+    let paths = serde_json::to_value(&spec.paths).unwrap();
+    let op = &paths["/api/v1/orders"]["post"];
+    // Single body param: the requestBody schema IS the param schema.
+    let schema = &op["requestBody"]["content"]["application/json"]["schema"];
+    assert_eq!(
+        schema["type"], "string",
+        "String body param must map to a string request body"
+    );
+    assert_eq!(
+        op["requestBody"]["required"], true,
+        "non-Option body param must be required"
+    );
+}
+
+#[test]
+fn forge_response_type_generates_response_schema() {
+    let spec = generate_openapi_spec();
+    let paths = serde_json::to_value(&spec.paths).unwrap();
+    let op = &paths["/api/v1/orders"]["post"];
+    let schema = &op["responses"]["201"]["content"]["application/json"]["schema"];
+    assert_eq!(
+        schema["type"], "array",
+        "Vec<String> response must map to array"
+    );
+    assert_eq!(schema["items"]["type"], "string");
+}
+
+#[test]
+fn forge_result_ok_type_is_unwrapped_for_response_schema() {
+    // `get_user` returns Result<String, ApiError> -> schema must be a plain
+    // string (not an object fallback and not array).
+    let spec = generate_openapi_spec();
+    let paths = serde_json::to_value(&spec.paths).unwrap();
+    let schema = &paths["/api/v1/users/{id}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"];
+    assert_eq!(schema["type"], "string");
 }
