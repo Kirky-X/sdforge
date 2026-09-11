@@ -1,0 +1,5 @@
+error: auth role cannot be empty
+ --> tests/trybuild/fail/auth_empty_role.rs:6:58
+  |
+6 | #[forge(name = "auth_empty", version = "v1", auth(role = ""))]
+  |                                                          ^^

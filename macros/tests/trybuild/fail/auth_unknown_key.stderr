@@ -1,0 +1,5 @@
+error: unknown key inside auth(...): `rol` (supported: role)
+ --> tests/trybuild/fail/auth_unknown_key.rs:6:50
+  |
+6 | #[forge(name = "auth_typo", version = "v1", auth(rol = "admin"))]
+  |                                                  ^^^

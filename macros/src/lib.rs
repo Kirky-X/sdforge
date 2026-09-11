@@ -429,10 +429,59 @@ fn parse_auth_group(args: TokenStream2, extras: &mut ForgeExtras) -> Result<(), 
     Ok(())
 }
 
+/// Known classic `#[forge]` keys (validated token-wise so unknown keys
+/// produce diagnostics pointing at the offending token, T715).
+const KNOWN_FORGE_KEYS: &[&str] = &[
+    "name",
+    "version",
+    "description",
+    "path",
+    "method",
+    "tool_name",
+    "stream",
+    "streaming",
+    "cache_ttl",
+    "ws_path",
+    "grpc_method",
+    "i18n_key",
+    "no_prefix",
+    "cli",
+    "status",
+];
+
+/// Validate that every `key = value` pair uses a known key, reporting the
+/// span of the offending key ident (T715 precise diagnostics).
+fn validate_known_keys(args: &TokenStream2) -> Result<(), syn::Error> {
+    let mut iter = args.clone().into_iter().peekable();
+    while let Some(tt) = iter.next() {
+        if let TokenTree::Ident(ident) = &tt {
+            let is_key = matches!(
+                iter.peek(),
+                Some(TokenTree::Punct(p)) if p.as_char() == '='
+            );
+            if !is_key {
+                continue;
+            }
+            let key = ident.to_string();
+            if !KNOWN_FORGE_KEYS.contains(&key.as_str()) {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    format!("Unknown attribute: {key}"),
+                ));
+            }
+            // Skip '=' and the (single-token) value.
+            iter.next();
+            iter.next();
+        }
+    }
+    Ok(())
+}
+
 /// Parse forge attributes. `lifecycle_only` (T711) relaxes the required
 /// `name`/`version` attributes for pure lifecycle hooks
 /// (`#[forge(on_start)]` with no endpoint declaration).
-fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceApiArgs {    let pairs = parse_kv_pairs(args)?;
+fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceApiArgs {
+    let pairs = parse_kv_pairs(args)?;
 
     let mut name = None;
     let mut version = None;
@@ -1371,6 +1420,11 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         Err(e) => return e.into_compile_error().into(),
     };
     let lifecycle_only = extras.on_start || extras.on_stop;
+    // T715: precise-span diagnostics for unknown keys (before the
+    // string-based parser falls back to call_site spans).
+    if let Err(e) = validate_known_keys(&args) {
+        return e.into_compile_error().into();
+    }
     let args = match parse_service_api_args(args, lifecycle_only) {
         Ok(args) => args,
         Err(e) => return e.into_compile_error().into(),
@@ -2684,7 +2738,7 @@ mod macro_parsing_tests {
     #[test]
     fn test_parse_service_api_args_required() {
         let input: TokenStream2 = quote! { name = "test", version = "v1" };
-        let result = parse_service_api_args(input).unwrap();
+        let result = parse_service_api_args(input, false).unwrap();
         assert_eq!(result.0, "test");
         assert_eq!(result.1, "v1");
     }
@@ -3037,6 +3091,7 @@ mod macro_parsing_tests {
             param_kind: kind,
             is_option,
             is_vec: false,
+            validations: Vec::new(),
             inner_type: if is_option {
                 "String".to_string()
             } else {

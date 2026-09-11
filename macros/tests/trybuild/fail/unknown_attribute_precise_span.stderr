@@ -1,0 +1,5 @@
+error: Unknown attribute: nmae2
+ --> tests/trybuild/fail/unknown_attribute_precise_span.rs:6:45
+  |
+6 | #[forge(name = "typo_demo", version = "v1", nmae2 = "oops")]
+  |                                             ^^^^^
