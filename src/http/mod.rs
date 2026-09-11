@@ -36,9 +36,16 @@ pub use crate::security::RateLimitLayer;
 pub use crate::security::{LimiteronAdapter, RateLimiter};
 
 mod http_impl;
+#[cfg(feature = "graceful")]
+pub mod graceful;
 #[cfg(feature = "ratelimit-http")]
 pub use http_impl::rate_limit_layer;
 pub use http_impl::{build, build_with_config, build_with_redirect};
+
+#[cfg(feature = "graceful")]
+pub use graceful::{
+    default_shutdown_signal, serve_with_graceful_shutdown, GracefulShutdownConfig,
+};
 
 // Re-export internal helpers for test access.
 #[cfg(all(test, feature = "grpc"))]

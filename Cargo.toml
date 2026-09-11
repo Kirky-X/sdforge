@@ -347,6 +347,10 @@ health = ["http", "tokio"]
 # /metrics 端点 bypass 认证；自研轻量 Prometheus 文本渲染（无 prometheus 依赖）。
 metrics = ["http", "tokio"]
 
+# 优雅停机特性 (T704) - SIGTERM/SIGINT → 停止接新 → 排空在途（超时上限）→
+# kit 三阶段关闭；serve_with_graceful_shutdown 集成入口。
+graceful = ["http", "tokio", "tokio?/signal"]
+
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
 # `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
@@ -372,7 +376,11 @@ simd-json = ["dep:simd-json"]
 limiteron-integration = ["dep:limiteron"]
 # `trait-kit/health` (T701): AsyncKit::health_report() powers the /readyz
 # kit data source (health::kit_source::KitHealthSource).
-kit = ["dep:trait-kit", "trait-kit/health", "limiteron-integration", "limiteron/kit"]
+# `trait-kit/lifecycle` (T704): AsyncKit::shutdown_async() phased teardown
+# runs as phase 3 of serve_with_graceful_shutdown.
+# `oxcache/kit` (T704 alignment): limiteron T617 makes LimiteronModule depend
+# on oxcache's OxcacheModule — activate it so the kit graph resolves.
+kit = ["dep:trait-kit", "trait-kit/health", "trait-kit/lifecycle", "limiteron-integration", "limiteron/kit", "oxcache/kit"]
 
 # inklog 结构化日志集成 — 将裸 log 输出桥接到 inklog LoggerManager。
 # 启用后通过 init_inklog_logger() 安装 inklog 为全局 log 后端，
@@ -394,6 +402,7 @@ full = [
     "cache",
     "health",
     "metrics",
+    "graceful",
     "websocket",
     "grpc",
     "logging",
@@ -553,6 +562,12 @@ required-features = ["http", "health"]
 name = "rbac_endpoint_tests"
 path = "tests/integration/rbac_endpoint_tests.rs"
 required-features = ["http", "security"]
+
+# T704: graceful shutdown integration — drain + timeout force + kit teardown.
+[[test]]
+name = "graceful_shutdown_tests"
+path = "tests/integration/graceful_shutdown_tests.rs"
+required-features = ["http", "graceful"]
 
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）
