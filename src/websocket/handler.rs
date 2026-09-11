@@ -150,13 +150,35 @@ where
         // Validate auth if configured. The `auth` field only exists when the
         // `security` feature is enabled (see WebSocketConfig), so the entire
         // validation block is gated to match.
+        //
+        // T712: two credential paths are accepted — bearer JWT (existing) or
+        // `x-api-key` against the optional API-key store. Both reuse the HTTP
+        // stack's credential stores; either success authenticates the
+        // handshake, otherwise the upgrade is rejected with 401.
         #[cfg(feature = "security")]
-        if let Some(ref state_ref) = app_state
-            && let Some(ref auth) = state_ref.config.auth
-        {
-            let token = bearer_token.ok_or(StatusCode::UNAUTHORIZED)?;
-            auth.validate_token(&token)
-                .ok_or(StatusCode::UNAUTHORIZED)?;
+        if let Some(ref state_ref) = app_state {
+            let bearer_cfg = state_ref.config.auth.as_ref();
+            let api_cfg = state_ref.config.api_key_auth.as_ref();
+
+            if bearer_cfg.is_some() || api_cfg.is_some() {
+                let bearer_ok = bearer_cfg
+                    .zip(bearer_token.as_deref())
+                    .and_then(|(auth, token)| auth.validate_token(token))
+                    .is_some();
+
+                let api_key = req
+                    .headers()
+                    .get("x-api-key")
+                    .and_then(|v| v.to_str().ok());
+                let api_ok = api_cfg
+                    .zip(api_key)
+                    .and_then(|(store, key)| store.validate_key(key, "unknown"))
+                    .is_some();
+
+                if !bearer_ok && !api_ok {
+                    return Err(StatusCode::UNAUTHORIZED);
+                }
+            }
         }
 
         // Extract WebSocketUpgrade via axum's built-in extractor
@@ -189,6 +211,29 @@ pub async fn websocket_upgrade(ws: ValidatedWebSocketUpgrade) -> impl IntoRespon
 
 #[cfg(feature = "websocket")]
 async fn handle_socket(
+    socket: WebSocket,
+    manager: Arc<ConnectionManager>,
+    handler: Arc<dyn WebSocketHandler>,
+) {
+    // T705: adopt/create a request context for this connection's lifetime so
+    // logs emitted from the message loop carry correlation ids.
+    #[cfg(feature = "context")]
+    {
+        let ctx = crate::context::current_or_new();
+        return crate::context::scope(
+            ctx,
+            handle_socket_inner(socket, manager, handler),
+        )
+        .await;
+    }
+    #[cfg(not(feature = "context"))]
+    {
+        handle_socket_inner(socket, manager, handler).await;
+    }
+}
+
+#[cfg(feature = "websocket")]
+async fn handle_socket_inner(
     socket: WebSocket,
     manager: Arc<ConnectionManager>,
     handler: Arc<dyn WebSocketHandler>,

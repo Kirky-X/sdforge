@@ -167,14 +167,21 @@ mod tests {
         assert_err::<SdForgeError>();
     }
 
-    /// R-sdforge-module-003 #4: Full integration — register LimiteronModule +
-    /// SdforgeModule, set config, build, require SdforgeModule → get a
-    /// working `Arc<dyn ForgeRateLimiter + Send + Sync>` that delegates
-    /// `check` to the underlying `Governor`.
+    /// R-sdforge-module-003 #4: Full integration — register OxcacheModule +
+    /// LimiteronModule + SdforgeModule, set config, build, require
+    /// SdforgeModule → get a working `Arc<dyn ForgeRateLimiter + Send + Sync>`
+    /// that delegates `check` to the underlying `Governor`.
+    ///
+    /// (limiteron T617 made `LimiteronModule` depend on `OxcacheModule`, so
+    /// the cache module must be registered for the graph to resolve.)
     #[tokio::test]
     async fn sdforge_module_build_returns_rate_limiter() {
+        use oxcache::integrations::kit::{OxcacheConfig, OxcacheModule};
         let mut kit = AsyncKit::new();
         kit.set_config(make_minimal_valid_config());
+        kit.set_config(OxcacheConfig::default());
+        kit.register::<OxcacheModule>()
+            .expect("register OxcacheModule");
         kit.register::<LimiteronModule>()
             .expect("register LimiteronModule");
         kit.register::<SdforgeModule>()

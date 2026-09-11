@@ -84,6 +84,10 @@ pub use inventory;
 /// optional; serde is always present, so the gate would be a no-op.
 pub use serde;
 
+/// Re-export serde_json for use in generated code (T707 validation payload)
+/// and downstream extensions without a direct dependency.
+pub use serde_json;
+
 /// Re-export tokio_stream for use in generated code
 #[cfg(feature = "streaming")]
 pub use tokio_stream;
@@ -196,6 +200,40 @@ pub mod integrations;
 /// HTTP server and routing
 #[cfg(feature = "http")]
 pub mod http;
+
+/// Built-in health probes (`/healthz`, `/readyz`) — auto-mounted by
+/// `build_with_config` when the `health` feature is enabled (T701).
+#[cfg(feature = "health")]
+pub mod health;
+
+/// Prometheus metrics (`/metrics`, RED request metrics) — auto-installed by
+/// `build_with_config` when the `metrics` feature is enabled (T702).
+#[cfg(feature = "metrics")]
+pub mod metrics;
+
+/// Request context propagation (request_id/trace_id across protocols,
+/// log correlation fields) — T705.
+#[cfg(feature = "context")]
+pub mod context;
+
+/// Lifecycle hooks (`#[forge(on_start)]` / `#[forge(on_stop)]`) — T711,
+/// coordinated with the T704 graceful-shutdown sequence.
+#[cfg(feature = "lifecycle")]
+pub mod lifecycle;
+
+/// Processor pre/post hook pipeline (middleware-style) — T713.
+#[cfg(feature = "hooks")]
+pub mod hooks;
+
+/// OpenTelemetry observation (OTLP/HTTP MVP: spans + request metrics) — T714.
+#[cfg(feature = "otel")]
+pub mod otel;
+
+/// Endpoint-level RBAC (`#[forge(auth(role = "..."))]`) — the macro wraps the
+/// generated route with [`rbac::require_role`] (T703). Fail-safe: no auth
+/// stack or no matching role → 403.
+#[cfg(feature = "http")]
+pub mod rbac;
 
 #[cfg(feature = "http")]
 pub use http::version_routing::{VersionRouterConfig, VersionedRoute, build_version_router};
@@ -399,7 +437,10 @@ pub use anyhow;
 pub mod openapi;
 
 #[cfg(feature = "openapi")]
-pub use openapi::{OpenApiBuilder, OpenApiPathParam, OpenApiRouteInfo, generate_openapi_spec};
+pub use openapi::{
+    OpenApiBodyParam, OpenApiBuilder, OpenApiPathParam, OpenApiRouteInfo, OpenApiTypeInfo,
+    generate_openapi_spec, schema_for_type_name,
+};
 
 /// 统一文档输出模块 — Swagger UI + CLI/MCP Markdown。
 ///

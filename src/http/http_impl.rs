@@ -23,6 +23,7 @@ pub fn rate_limit_layer(
 }
 
 /// Generate or extract request ID from request
+#[cfg_attr(feature = "context", allow(dead_code))]
 pub(crate) fn get_or_generate_request_id(req: &axum::http::Request<Body>) -> String {
     req.headers()
         .get(X_REQUEST_ID)
@@ -90,6 +91,34 @@ pub(crate) fn resolve_route_path(base_path: &str, module_prefix: Option<&str>) -
 
 pub(crate) fn apply_security_headers(router: Router) -> Router {
     SecurityHeaders::default().apply(router)
+}
+
+/// True when a route already occupies `path` (module-prefix resolved).
+///
+/// T701/T702: built-in probe/metrics mounting skips paths already claimed by
+/// user routes to avoid axum duplicate-route panics.
+#[cfg(any(feature = "health", feature = "metrics", test))]
+pub(crate) fn route_path_taken(path: &str) -> bool {
+    use crate::core::Registration;
+    let mut taken = false;
+    for registration in inventory::iter::<RouteRegistration>() {
+        let route = registration.create();
+        let full = resolve_route_path(route.path(), route.module_prefix());
+        if full == path {
+            taken = true;
+            break;
+        }
+    }
+    if !taken {
+        for route in inventory::iter::<HttpRoute>() {
+            let full = resolve_route_path(route.path(), route.module_prefix());
+            if full == path {
+                taken = true;
+                break;
+            }
+        }
+    }
+    taken
 }
 
 /// Prevent linker from optimizing away inventory registrations
@@ -242,26 +271,68 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
 
     let mut router = build();
 
-    // Apply request ID middleware (first to ensure all requests have an ID)
-    router = router.layer(axum::middleware::from_fn(
-        |mut req: axum::http::Request<Body>, next: axum::middleware::Next| async move {
-            let request_id = get_or_generate_request_id(&req);
-            // Safely insert request ID header — fall back to a static placeholder
-            // if the value contains non-ASCII characters (prevents panic on malformed client input)
-            let header_value = axum::http::HeaderValue::from_str(&request_id)
-                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("invalid-request-id"));
-            req.headers_mut().insert(
-                axum::http::header::HeaderName::from_static(X_REQUEST_ID),
-                header_value.clone(),
-            );
-            let mut response = next.run(req).await;
-            response.headers_mut().insert(
-                axum::http::header::HeaderName::from_static(X_REQUEST_ID),
-                header_value,
-            );
-            response
-        },
-    ));
+    // T702: request metrics middleware (count / latency / status per route
+    // template). Installed early so every route from build() is measured;
+    // the /metrics endpoint itself is mounted after the auth layer below and
+    // therefore not self-recorded.
+    #[cfg(feature = "metrics")]
+    {
+        router = router.layer(axum::middleware::from_fn(
+            crate::metrics::record_middleware,
+        ));
+    }
+
+    // T714: request-span middleware (OTLP export via sdforge::otel).
+    #[cfg(feature = "otel")]
+    {
+        router = router.layer(axum::middleware::from_fn(
+            crate::otel::otel_span_middleware,
+        ));
+    }
+
+    // T709: ETag/If-None-Match conditional requests for GET responses.
+    #[cfg(feature = "etag")]
+    {
+        router = router.layer(axum::middleware::from_fn(crate::http::etag::etag_middleware));
+    }
+
+    // T713: processor pre/post hook pipeline (active when hooks installed).
+    #[cfg(feature = "hooks")]
+    {
+        router = router.layer(axum::middleware::from_fn(crate::hooks::hooks_middleware));
+    }
+
+    // Request ID middleware (first to ensure all requests have an ID).
+    // T705: with the `context` feature the richer context middleware
+    // (request_id + trace_id + task-local scope + response echo) subsumes it.
+    #[cfg(not(feature = "context"))]
+    {
+        router = router.layer(axum::middleware::from_fn(
+            |mut req: axum::http::Request<Body>, next: axum::middleware::Next| async move {
+                let request_id = get_or_generate_request_id(&req);
+                // Safely insert request ID header — fall back to a static placeholder
+                // if the value contains non-ASCII characters (prevents panic on malformed client input)
+                let header_value = axum::http::HeaderValue::from_str(&request_id)
+                    .unwrap_or_else(|_| {
+                        axum::http::HeaderValue::from_static("invalid-request-id")
+                    });
+                req.headers_mut().insert(
+                    axum::http::header::HeaderName::from_static(X_REQUEST_ID),
+                    header_value.clone(),
+                );
+                let mut response = next.run(req).await;
+                response.headers_mut().insert(
+                    axum::http::header::HeaderName::from_static(X_REQUEST_ID),
+                    header_value,
+                );
+                response
+            },
+        ));
+    }
+    #[cfg(feature = "context")]
+    {
+        router = router.layer(axum::middleware::from_fn(crate::context::context_middleware));
+    }
 
     // Apply global body limit（HIGH 修复：来自 ServerConfig::max_body_size，
     // 此前硬编码 10MB 且配置结构无对应字段，运维无法调整）
@@ -401,6 +472,21 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         }
         // OAuth2 is already checked before this block
         // None is handled by doing nothing
+    }
+
+    // T701: mount /healthz + /readyz AFTER the auth layer — axum layers only
+    // apply to routes registered before them, so probes added here bypass
+    // authentication/rate-limiting by construction. Paths already claimed by
+    // user routes are skipped (prevents duplicate-route panics).
+    #[cfg(feature = "health")]
+    {
+        router = crate::health::mount_probes(router);
+    }
+
+    // T702: mount /metrics after the auth layer (bypasses authentication).
+    #[cfg(feature = "metrics")]
+    {
+        router = crate::metrics::mount_metrics(router);
     }
 
     // Note: 日志初始化已移除，由使用方通过 sdforge::inklog 直接管理

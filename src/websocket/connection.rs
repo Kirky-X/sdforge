@@ -120,6 +120,11 @@ pub struct WebSocketConfig {
     /// ```
     #[cfg(feature = "security")]
     pub auth: Option<crate::security::BearerAuth>,
+    /// T712: optional API-key validator (header `x-api-key`). Accepts
+    /// connections that present a valid API key when the bearer token path
+    /// is not used; reuses the HTTP key store type.
+    #[cfg(feature = "security")]
+    pub api_key_auth: Option<std::sync::Arc<crate::security::AppApiKeyAuth>>,
     /// Maximum message size in bytes. Default 1 MiB.
     ///
     /// Migrated out of the deleted `RateLimitConfig` (the old 4-field config
@@ -139,6 +144,8 @@ impl Default for WebSocketConfig {
         Self {
             #[cfg(feature = "security")]
             auth: None,
+            #[cfg(feature = "security")]
+            api_key_auth: None,
             max_message_size: 1_048_576, // 1 MiB
             #[cfg(feature = "ratelimit")]
             rate_limit: FlowControlConfig::default(),

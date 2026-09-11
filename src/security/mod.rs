@@ -57,6 +57,11 @@ mod types;
 #[cfg(any(feature = "security", feature = "ratelimit-http"))]
 mod ip_util;
 
+// T712: protocol-neutral auth verifier port + Bearer/API-key adapters for
+// non-HTTP protocols (gRPC interceptor, WS handshake, custom transports).
+#[cfg(feature = "security")]
+pub mod grpc_auth;
+
 // Rate limiting module — backed by limiteron 0.2.1.
 // Available when the `ratelimit` feature is enabled (inherited by
 // `ratelimit-http` and `security`).

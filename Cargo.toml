@@ -103,6 +103,10 @@ pretty_assertions = { version = "1.4", default-features = false, features = ["st
 name = "sdforge"
 version.workspace = true
 edition.workspace = true
+# T716: the `examples/` directory is the sdforge-examples member crate; the
+# root package must not auto-discover member example files (they use direct
+# oxcache/dbnexus deps that only the member declares).
+autoexamples = false
 rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -238,7 +242,7 @@ writeable = { version = "0.6", optional = true }
 tokio = { workspace = true, features = ["test-util"] }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.2", path = "./macros", default-features = false }
+sdforge-macros = { version = "0.5.0-rc.3", path = "./macros", default-features = false }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }
@@ -339,6 +343,44 @@ docs = ["openapi", "dep:utoipa-swagger-ui", "dep:clap-markdown", "cli"]
 # cache 模块不依赖 http（已验证 src/cache/ 无 http/axum 使用）
 cache = ["oxcache/minimal"]
 
+# Health probes 特性 (T701) - build_with_config 自动挂载 /healthz /readyz
+# （bypass 认证：探针路由在安全中间件层之后注册）。kit 数据源经 `kit` 特性提供。
+health = ["http", "tokio"]
+
+# Prometheus metrics 特性 (T702) - 请求计数/延迟直方图/状态码分布自动采集，
+# /metrics 端点 bypass 认证；自研轻量 Prometheus 文本渲染（无 prometheus 依赖）。
+metrics = ["http", "tokio"]
+
+# 优雅停机特性 (T704) - SIGTERM/SIGINT → 停止接新 → 排空在途（超时上限）→
+# kit 三阶段关闭；serve_with_graceful_shutdown 集成入口。
+graceful = ["http", "tokio", "tokio?/signal"]
+
+# 请求上下文特性 (T705) - request_id/trace_id 生成与跨协议（HTTP/MCP/gRPC/WS）
+# 注入，日志关联字段；tokio task_local 承载。
+context = ["tokio"]
+
+# 参数校验契约特性 (T707) - #[forge(validate)] + #[param(ge/le/...)] 校验规则，
+# 400 带字段级错误；验证语句由宏注入 HTTP 处理闭包。
+validate = ["http", "tokio"]
+
+# 声明式分页特性 (T708) - #[forge(paginate)] 自动 page/size 查询参数与
+# {items,total,next} 响应包装；处理函数返回完整 Vec<T>。
+paginate = ["http", "tokio"]
+
+# ETag 条件请求特性 (T709) - GET 响应自动强 ETag（SHA-256）+ If-None-Match → 304。
+etag = ["http", "dep:sha2"]
+
+# 生命周期钩子特性 (T711) - #[forge(on_start/on_stop)] 进程级钩子，
+# 与 T704 优雅停机顺序协同（on_start 先于监听、on_stop 在排空之后）。
+lifecycle = ["http", "tokio", "dep:futures-util"]
+
+# 钩子管道特性 (T713) - 处理器前后钩子（中间件式），统一错误契约同批交付。
+hooks = ["http", "tokio"]
+
+# OTel 全栈观测特性 (T714) - OTLP/HTTP JSON 导出（MVP：本地 collector，无 TLS），
+# 请求 span 中间件 + 指标快照导出；零额外依赖（自研轻量 HTTP POST）。
+otel = ["http", "tokio"]
+
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
 # `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
@@ -362,7 +404,13 @@ simd-json = ["dep:simd-json"]
 # `limiteron/kit` is required because `LimiteronModule` is gated behind
 # limiteron's `kit` feature (Phase 3). default-features = false (Rule 6).
 limiteron-integration = ["dep:limiteron"]
-kit = ["dep:trait-kit", "limiteron-integration", "limiteron/kit"]
+# `trait-kit/health` (T701): AsyncKit::health_report() powers the /readyz
+# kit data source (health::kit_source::KitHealthSource).
+# `trait-kit/lifecycle` (T704): AsyncKit::shutdown_async() phased teardown
+# runs as phase 3 of serve_with_graceful_shutdown.
+# `oxcache/kit` (T704 alignment): limiteron T617 makes LimiteronModule depend
+# on oxcache's OxcacheModule — activate it so the kit graph resolves.
+kit = ["dep:trait-kit", "trait-kit/health", "trait-kit/lifecycle", "limiteron-integration", "limiteron/kit", "oxcache/kit"]
 
 # inklog 结构化日志集成 — 将裸 log 输出桥接到 inklog LoggerManager。
 # 启用后通过 init_inklog_logger() 安装 inklog 为全局 log 后端，
@@ -382,6 +430,10 @@ full = [
     "timestamp",
     "security",
     "cache",
+    "health",
+    "metrics",
+    "graceful",
+    "context",
     "websocket",
     "grpc",
     "logging",
@@ -403,6 +455,13 @@ all-features = true
 [[bench]]
 name = "sdforge_bench"
 path = "src/benches/sdforge_bench.rs"
+harness = false
+required-features = ["http"]
+
+# T710: runtime performance baselines (routing dispatch / JSON serialization).
+[[bench]]
+name = "runtime_bench"
+path = "benches/runtime_bench.rs"
 harness = false
 required-features = ["http"]
 
@@ -524,6 +583,65 @@ required-features = ["docs"]
 [[test]]
 name = "macro_tests"
 path = "tests/macros/macro_tests.rs"
+
+# T701: health probe e2e — /healthz /readyz bypass auth in build_with_config.
+[[test]]
+name = "health_probes_tests"
+path = "tests/integration/health_probes_tests.rs"
+required-features = ["http", "health"]
+
+[[test]]
+name = "health_probe_collision_tests"
+path = "tests/integration/health_probe_collision_tests.rs"
+required-features = ["http", "health"]
+
+# T703: endpoint-level RBAC e2e — #[forge(auth(role = "..."))] → 403/200.
+[[test]]
+name = "rbac_endpoint_tests"
+path = "tests/integration/rbac_endpoint_tests.rs"
+required-features = ["http", "security"]
+
+# T704: graceful shutdown integration — drain + timeout force + kit teardown.
+[[test]]
+name = "graceful_shutdown_tests"
+path = "tests/integration/graceful_shutdown_tests.rs"
+required-features = ["http", "graceful"]
+
+# T707: #[forge(validate)] 参数校验 e2e — 400 字段级错误。
+[[test]]
+name = "validate_tests"
+path = "tests/integration/validate_tests.rs"
+required-features = ["http", "validate"]
+
+# T708: #[forge(paginate)] 声明式分页 e2e — {items,total,next} 包装。
+[[test]]
+name = "paginate_tests"
+path = "tests/integration/paginate_tests.rs"
+required-features = ["http", "paginate"]
+
+# T709: ETag 条件请求 e2e — 自动 ETag + 304。
+[[test]]
+name = "etag_tests"
+path = "tests/integration/etag_tests.rs"
+required-features = ["http", "etag"]
+
+# T711: 生命周期钩子 e2e — on_start/on_stop 与优雅停机顺序协同。
+[[test]]
+name = "lifecycle_tests"
+path = "tests/integration/lifecycle_tests.rs"
+required-features = ["http", "graceful", "lifecycle"]
+
+# T712: 非 HTTP 协议认证 e2e — gRPC 拦截器 + WS 握手。
+[[test]]
+name = "grpc_ws_auth_tests"
+path = "tests/integration/grpc_ws_auth_tests.rs"
+required-features = ["grpc", "websocket", "security"]
+
+# T714: OTLP/HTTP 导出 e2e — mock collector 收到 span/metrics。
+[[test]]
+name = "otel_export_tests"
+path = "tests/integration/otel_export_tests.rs"
+required-features = ["http", "otel", "metrics"]
 
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）

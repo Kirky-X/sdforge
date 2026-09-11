@@ -7,7 +7,7 @@
 #![doc(html_root_url = "https://docs.rs/sdforge-macros/0.5.0-rc.2")]
 
 use proc_macro::TokenStream;
-use proc_macro2::TokenStream as TokenStream2;
+use proc_macro2::{Delimiter, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use syn::{FnArg, ItemFn, ItemMod, Pat, parse_macro_input};
 
@@ -253,8 +253,234 @@ const RESERVED_KEYWORDS: &[&str] = &[
 /// Default cache TTL in seconds (5 minutes)
 const DEFAULT_CACHE_TTL: u64 = 300;
 
-/// Parse forge attributes
-fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
+// =============================================================================
+// T703+: structured "extras" attributes parsed before the classic key=value
+// parser. Only new-syntax keys are consumed here; everything else passes
+// through to `parse_kv_pairs` untouched (zero breakage of existing usage).
+// =============================================================================
+
+/// New-syntax `#[forge]` attributes with structure or spans the classic
+/// string-based parser cannot represent.
+#[derive(Debug, Default)]
+struct ForgeExtras {
+    /// Roles from `auth(role = "admin")` (repeatable).
+    auth_roles: Vec<String>,
+    /// `validate` bare flag (T707): enforce `#[param(...)]` validation rules.
+    validate: bool,
+    /// `paginate` bare flag (T708): page/size params + envelope wrapping.
+    paginate: bool,
+    /// `on_start` bare flag (T711): run the fn at process start.
+    on_start: bool,
+    /// `on_stop` bare flag (T711): run the fn after shutdown drain.
+    on_stop: bool,
+}
+
+/// Extract extras attributes from the raw argument token stream.
+///
+/// Returns the remaining token stream (to be handed to
+/// [`parse_service_api_args`]) plus the parsed extras. Errors carry the span
+/// of the offending token so diagnostics point at the argument, not at the
+/// call site.
+fn extract_forge_extras(args: TokenStream2) -> Result<(TokenStream2, ForgeExtras), syn::Error> {
+    let mut extras = ForgeExtras::default();
+    let mut remaining: Vec<TokenTree> = Vec::new();
+    let mut iter = args.into_iter();
+
+    while let Some(tt) = iter.next() {
+        match &tt {
+            TokenTree::Ident(ident)
+                if ident.to_string() == "validate"
+                    || ident.to_string() == "paginate"
+                    || ident.to_string() == "on_start"
+                    || ident.to_string() == "on_stop" =>
+            {
+                // Bare flags (T707/T708/T711). Also tolerate `flag = true|false`.
+                let flag = ident.to_string();
+                match iter.next() {
+                    Some(TokenTree::Punct(p)) if p.as_char() == '=' => {
+                        match iter.next() {
+                            Some(TokenTree::Literal(lit)) => {
+                                let raw = lit.to_string();
+                                let value = raw.trim().trim_matches('"').to_string();
+                                let enabled = value.parse::<bool>().map_err(|_| {
+                                    syn::Error::new(
+                                        lit.span(),
+                                        format!("{} must be true or false, got {}", flag, value),
+                                    )
+                                })?;
+                                match flag.as_str() {
+                                    "validate" => extras.validate = enabled,
+                                    "paginate" => extras.paginate = enabled,
+                                    "on_start" => extras.on_start = enabled,
+                                    "on_stop" => extras.on_stop = enabled,
+                                    _ => {}
+                                }
+                            }
+                            _ => {
+                                return Err(syn::Error::new(
+                                    ident.span(),
+                                    format!("{} requires a bool value", flag),
+                                ));
+                            }
+                        }
+                    }
+                    Some(other) => {
+                        return Err(syn::Error::new(
+                            other.span(),
+                            format!("unexpected token after `{}`", flag),
+                        ));
+                    }
+                    None => match flag.as_str() {
+                        "validate" => extras.validate = true,
+                        "paginate" => extras.paginate = true,
+                        "on_start" => extras.on_start = true,
+                        "on_stop" => extras.on_stop = true,
+                        _ => {}
+                    },
+                }
+            }
+            TokenTree::Ident(ident) if ident.to_string() == "auth" => {
+                match iter.next() {
+                    Some(TokenTree::Group(group))
+                        if group.delimiter() == Delimiter::Parenthesis =>
+                    {
+                        parse_auth_group(group.stream(), &mut extras)?;
+                    }
+                    _ => {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            "auth requires a parenthesized role list: auth(role = \"admin\")",
+                        ));
+                    }
+                }
+            }
+            other => remaining.push(other.clone()),
+        }
+    }
+
+    Ok((remaining.into_iter().collect(), extras))
+}
+
+/// Parse `role = "name"` pairs inside `auth(...)`. Unknown keys error with a
+/// precise span.
+fn parse_auth_group(args: TokenStream2, extras: &mut ForgeExtras) -> Result<(), syn::Error> {
+    let mut iter = args.into_iter();
+    while let Some(tt) = iter.next() {
+        match &tt {
+            TokenTree::Punct(p) if p.as_char() == ',' => continue,
+            TokenTree::Ident(ident) if ident.to_string() == "role" => {
+                match iter.next() {
+                    Some(TokenTree::Punct(p)) if p.as_char() == '=' => {}
+                    other => {
+                        let span = match other {
+                            Some(t) => t.span(),
+                            None => ident.span(),
+                        };
+                        return Err(syn::Error::new(span, "expected `=` after `role`"));
+                    }
+                }
+                match iter.next() {
+                    Some(TokenTree::Literal(lit)) => {
+                        let raw = lit.to_string();
+                        let value = raw.trim().trim_matches('"').to_string();
+                        if value.is_empty() {
+                            return Err(syn::Error::new(
+                                lit.span(),
+                                "auth role cannot be empty",
+                            ));
+                        }
+                        extras.auth_roles.push(value);
+                    }
+                    other => {
+                        let span = match other {
+                            Some(t) => t.span(),
+                            None => ident.span(),
+                        };
+                        return Err(syn::Error::new(
+                            span,
+                            "expected a string literal role value, e.g. role = \"admin\"",
+                        ));
+                    }
+                }
+            }
+            TokenTree::Ident(ident) => {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    format!(
+                        "unknown key inside auth(...): `{}` (supported: role)",
+                        ident
+                    ),
+                ));
+            }
+            other => {
+                return Err(syn::Error::new(
+                    other.span(),
+                    "unexpected token inside auth(...)",
+                ));
+            }
+        }
+    }
+    if extras.auth_roles.is_empty() {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "auth(...) requires at least one role: auth(role = \"admin\")",
+        ));
+    }
+    Ok(())
+}
+
+/// Known classic `#[forge]` keys (validated token-wise so unknown keys
+/// produce diagnostics pointing at the offending token, T715).
+const KNOWN_FORGE_KEYS: &[&str] = &[
+    "name",
+    "version",
+    "description",
+    "path",
+    "method",
+    "tool_name",
+    "stream",
+    "streaming",
+    "cache_ttl",
+    "ws_path",
+    "grpc_method",
+    "i18n_key",
+    "no_prefix",
+    "cli",
+    "status",
+];
+
+/// Validate that every `key = value` pair uses a known key, reporting the
+/// span of the offending key ident (T715 precise diagnostics).
+fn validate_known_keys(args: &TokenStream2) -> Result<(), syn::Error> {
+    let mut iter = args.clone().into_iter().peekable();
+    while let Some(tt) = iter.next() {
+        if let TokenTree::Ident(ident) = &tt {
+            let is_key = matches!(
+                iter.peek(),
+                Some(TokenTree::Punct(p)) if p.as_char() == '='
+            );
+            if !is_key {
+                continue;
+            }
+            let key = ident.to_string();
+            if !KNOWN_FORGE_KEYS.contains(&key.as_str()) {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    format!("Unknown attribute: {key}"),
+                ));
+            }
+            // Skip '=' and the (single-token) value.
+            iter.next();
+            iter.next();
+        }
+    }
+    Ok(())
+}
+
+/// Parse forge attributes. `lifecycle_only` (T711) relaxes the required
+/// `name`/`version` attributes for pure lifecycle hooks
+/// (`#[forge(on_start)]` with no endpoint declaration).
+fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceApiArgs {
     let pairs = parse_kv_pairs(args)?;
 
     let mut name = None;
@@ -355,18 +581,26 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
         }
     }
 
-    let name = name.ok_or_else(|| {
-        syn::Error::new(
-            proc_macro2::Span::call_site(),
-            "Missing required attribute: name",
-        )
-    })?;
-    let version = version.ok_or_else(|| {
-        syn::Error::new(
-            proc_macro2::Span::call_site(),
-            "Missing required attribute: version",
-        )
-    })?;
+    let name = match name {
+        Some(n) => n,
+        None if lifecycle_only => "__lifecycle".to_string(),
+        None => {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "Missing required attribute: name",
+            ))
+        }
+    };
+    let version = match version {
+        Some(v) => v,
+        None if lifecycle_only => "v1".to_string(),
+        None => {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "Missing required attribute: version",
+            ))
+        }
+    };
 
     Ok((
         name,
@@ -493,6 +727,37 @@ impl std::fmt::Display for ParamKind {
     }
 }
 
+/// A validation rule declared via `#[param(...)]` (T707).
+#[derive(Debug, Clone)]
+enum ValidationSpec {
+    /// `ge = <lit>` — value must be >= the literal (numeric params).
+    Ge(TokenStream2),
+    /// `le = <lit>` — value must be <= the literal (numeric params).
+    Le(TokenStream2),
+    /// `min_length = <n>` — string length lower bound.
+    MinLength(usize),
+    /// `max_length = <n>` — string length upper bound.
+    MaxLength(usize),
+    /// `not_blank` — non-empty, non-whitespace-only string.
+    NotBlank,
+    /// `email` — basic email shape.
+    Email,
+}
+
+impl ValidationSpec {
+    /// Rule identifier used in error payloads.
+    fn rule_name(&self) -> &'static str {
+        match self {
+            ValidationSpec::Ge(_) => "ge",
+            ValidationSpec::Le(_) => "le",
+            ValidationSpec::MinLength(_) => "min_length",
+            ValidationSpec::MaxLength(_) => "max_length",
+            ValidationSpec::NotBlank => "not_blank",
+            ValidationSpec::Email => "email",
+        }
+    }
+}
+
 /// Extract parameter info from function arguments
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -514,6 +779,9 @@ struct ParamInfo {
     /// Whether this parameter should be excluded from MCP schema
     /// Extension/State parameters are runtime state, not input parameters
     skip_mcp_schema: bool,
+    /// Validation rules declared via `#[param(...)]` (T707, enforced by
+    /// `#[forge(validate)]`).
+    validations: Vec<ValidationSpec>,
 }
 
 impl ParamInfo {
@@ -539,7 +807,8 @@ impl ParamInfo {
             let ty_str_trimmed = ty_str.trim().to_string();
 
             // Check for explicit #[param(kind = "...")] attribute
-            let explicit_annotation = Self::extract_param_annotation(pat_type);
+            let (explicit_annotation, validations) =
+                Self::parse_param_attributes(pat_type);
 
             // Determine extraction kind based on explicit annotation first, then path parameters, then type inference
             let param_kind = if let Some(ref kind) = explicit_annotation {
@@ -586,49 +855,109 @@ impl ParamInfo {
                 inner_type,
                 explicit_annotation,
                 skip_mcp_schema,
+                validations,
             })
         } else {
             None
         }
     }
 
-    /// Extract explicit #[param(kind = "...")] or #[state] attribute from function argument
-    fn extract_param_annotation(pat_type: &syn::PatType) -> Option<ParamKind> {
+    /// Parse `#[param(...)]` / `#[state]` attributes from a function argument.
+    ///
+    /// Returns the extraction kind (T00x behaviour, unchanged) plus any
+    /// validation rules declared alongside `kind` (T707):
+    /// `#[param(kind = "query", ge = 1, le = 100, min_length = 2,
+    ///          max_length = 10, not_blank, email)]`.
+    fn parse_param_attributes(
+        pat_type: &syn::PatType,
+    ) -> (Option<ParamKind>, Vec<ValidationSpec>) {
+        let mut kind = None;
+        let mut validations = Vec::new();
         for attr in &pat_type.attrs {
             // Check for #[state] attribute (Extension state injection)
             if attr.path().is_ident("state") {
-                return Some(ParamKind::State);
+                kind = Some(ParamKind::State);
+                continue;
             }
 
             if attr.path().is_ident("param") {
-                // Parse the attribute: #[param(kind = "path")]
+                // Parse the attribute: #[param(kind = "path", ge = 1, ...)]
                 if let Ok(meta) = attr.parse_args_with(
                     syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
                 ) {
                     for meta_item in meta {
-                        if let syn::Meta::NameValue(name_value) = meta_item
-                            && name_value.path.is_ident("kind")
-                            && let syn::Expr::Lit(syn::ExprLit {
-                                lit: syn::Lit::Str(lit_str),
-                                ..
-                            }) = &name_value.value
-                        {
-                            return match lit_str.value().as_str() {
-                                "path" => Some(ParamKind::Path),
-                                "query" => Some(ParamKind::Query),
-                                "header" => Some(ParamKind::Header),
-                                "form" => Some(ParamKind::Form),
-                                "body" => Some(ParamKind::Body),
-                                "state" => Some(ParamKind::State),
-                                "extension" => Some(ParamKind::Extension),
-                                _ => None,
-                            };
+                        match &meta_item {
+                            syn::Meta::NameValue(name_value) => {
+                                let key = name_value
+                                    .path
+                                    .get_ident()
+                                    .map(|i| i.to_string())
+                                    .unwrap_or_default();
+                                match key.as_str() {
+                                    "kind" => {
+                                        if let syn::Expr::Lit(syn::ExprLit {
+                                            lit: syn::Lit::Str(lit_str),
+                                            ..
+                                        }) = &name_value.value
+                                        {
+                                            kind = match lit_str.value().as_str() {
+                                                "path" => Some(ParamKind::Path),
+                                                "query" => Some(ParamKind::Query),
+                                                "header" => Some(ParamKind::Header),
+                                                "form" => Some(ParamKind::Form),
+                                                "body" => Some(ParamKind::Body),
+                                                "state" => Some(ParamKind::State),
+                                                "extension" => Some(ParamKind::Extension),
+                                                _ => None,
+                                            };
+                                        }
+                                    }
+                                    "ge" | "le" => {
+                                        // Keep the literal verbatim so the
+                                        // emitted comparison is typed.
+                                        let expr = &name_value.value;
+                                        let expr_tokens = quote! { #expr };
+                                        validations.push(if key == "ge" {
+                                            ValidationSpec::Ge(expr_tokens)
+                                        } else {
+                                            ValidationSpec::Le(expr_tokens)
+                                        });
+                                    }
+                                    "min_length" | "max_length" => {
+                                        if let syn::Expr::Lit(syn::ExprLit {
+                                            lit: syn::Lit::Int(lit_int),
+                                            ..
+                                        }) = &name_value.value
+                                        {
+                                            let n = lit_int.base10_parse::<usize>().unwrap_or(0);
+                                            validations.push(if key == "min_length" {
+                                                ValidationSpec::MinLength(n)
+                                            } else {
+                                                ValidationSpec::MaxLength(n)
+                                            });
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            syn::Meta::Path(path) => {
+                                let key = path
+                                    .get_ident()
+                                    .map(|i| i.to_string())
+                                    .unwrap_or_default();
+                                match key.as_str() {
+                                    "not_blank" => validations.push(ValidationSpec::NotBlank),
+                                    "email" => validations.push(ValidationSpec::Email),
+                                    _ => {}
+                                }
+                            }
+                            syn::Meta::List(_) => {}
                         }
                     }
                 }
             }
         }
-        None
+        (kind, validations)
     }
 
     /// Convert parameter to JSON schema property
@@ -657,6 +986,36 @@ impl ParamInfo {
             "String" | "&str" => "\"string\"".to_string(),
             _ => "\"object\"".to_string(),
         }
+    }
+}
+
+/// Map a handler return type to an `sdforge::openapi::OpenApiTypeInfo`
+/// expression (T706).
+///
+/// Mapping: `Result<T, E>` unwraps to `T`; `Vec<T>` marks `is_array` with the
+/// element mapping; primitives map through the shared table; anything else
+/// (including `serde_json::Value`) maps to `"object"`.
+fn response_type_to_openapi_info_tokens(return_type: &syn::ReturnType) -> TokenStream2 {
+    let target_ty = match return_type {
+        syn::ReturnType::Type(_, ty) => ty.as_ref(),
+        syn::ReturnType::Default => {
+            return quote! { None };
+        }
+    };
+    let target_ty = extract_result_ok_type(target_ty).unwrap_or(target_ty);
+    let ty_str = quote! { #target_ty }.to_string().replace(' ', "");
+    let (inner, is_array) = if ty_str.starts_with("Vec<") && ty_str.ends_with('>') {
+        (&ty_str[4..ty_str.len() - 1], true)
+    } else {
+        (ty_str.as_str(), false)
+    };
+    let (schema_type, schema_format) = rust_type_to_openapi_schema(inner);
+    quote! {
+        Some(sdforge::openapi::OpenApiTypeInfo {
+            schema_type: #schema_type,
+            schema_format: #schema_format,
+            is_array: #is_array,
+        })
     }
 }
 
@@ -1054,7 +1413,19 @@ fn generate_cli_registration(
 
 #[proc_macro_attribute]
 pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = match parse_service_api_args(args.into()) {
+    // T703+: structured extras (auth(...)) are peeled off first; the rest of
+    // the argument stream goes through the classic key=value parser.
+    let (args, extras) = match extract_forge_extras(args.into()) {
+        Ok(result) => result,
+        Err(e) => return e.into_compile_error().into(),
+    };
+    let lifecycle_only = extras.on_start || extras.on_stop;
+    // T715: precise-span diagnostics for unknown keys (before the
+    // string-based parser falls back to call_site spans).
+    if let Err(e) = validate_known_keys(&args) {
+        return e.into_compile_error().into();
+    }
+    let args = match parse_service_api_args(args, lifecycle_only) {
         Ok(args) => args,
         Err(e) => return e.into_compile_error().into(),
     };
@@ -1254,6 +1625,39 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         closure_params.clone_from(&param_patterns);
     }
 
+    // T708: with `#[forge(paginate)]`, append a page/size query extractor and
+    // enable the {items,total,next} envelope. The extractor must be FIRST:
+    // axum requires the last extractor to implement `FromRequest`
+    // (body-consuming); `Query` only implements `FromRequestParts`, so it can
+    // never be last. Routes WITHOUT the flag are emitted unchanged
+    // (zero-breakage); the flag requires the downstream `paginate` feature
+    // (which provides `sdforge::core::pagination`).
+    let paginate_wrap = |target: &str| -> TokenStream2 {
+        if !extras.paginate {
+            let t = syn::Ident::new(target, proc_macro2::Span::call_site());
+            return quote! { #t };
+        }
+        let t = syn::Ident::new(target, proc_macro2::Span::call_site());
+        quote! {{
+            let __page = sdforge::core::pagination::PageRequest::from_query(
+                &_forge_page_query.0,
+            );
+            sdforge::core::pagination::paginate(#t, __page)
+        }}
+    };
+    if extras.paginate {
+        closure_params.insert(
+            0,
+            quote! {
+                _forge_page_query: sdforge::axum::extract::Query<
+                    std::collections::HashMap<String, String>,
+                >
+            },
+        );
+    }
+    let value_wrap_expr = paginate_wrap("value");
+    let result_wrap_expr = paginate_wrap("result");
+
     // 闭包体内统一的前置解构语句（路径元组 + 查询结构体，均可能为空）
     let mut prelude_stmts: Vec<proc_macro2::TokenStream> = Vec::new();
     if multi_path {
@@ -1271,6 +1675,101 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             let #query_struct_ident { #(#q_field_idents,)* } = _forge_query.0;
         });
     }
+
+    // T707: when `#[forge(validate)]` is set, emit field-level validation
+    // checks into every HTTP handler closure (before the user fn runs).
+    // Violations short-circuit with 400 + {"errors":[{field,rule,message}]}.
+    if extras.validate {
+        let mut rule_stmts: Vec<TokenStream2> = Vec::new();
+        for p in &params {
+            if p.validations.is_empty() {
+                continue;
+            }
+            let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+            // Target expression: Body params are Json<T> extractors (value at
+            // `.0`); Path/State/Extension in single-extractor form are
+            // newtype-wrapped too; Query params and multi-path destructured
+            // locals are plain values.
+            let target = match p.param_kind {
+                ParamKind::Query => quote! { #name_ident },
+                ParamKind::Path if multi_path => quote! { #name_ident },
+                ParamKind::Extension => quote! { #name_ident },
+                _ => quote! { #name_ident.0 },
+            };
+            let field_lit = proc_macro2::Literal::string(&p.name);
+            for rule in &p.validations {
+                match rule {
+                    ValidationSpec::Ge(min) => rule_stmts.push(quote! {
+                        if !(#target >= #min) {
+                            sdforge::core::field_validation::push_error(
+                                &mut __forge_validation_errors, #field_lit, "ge",
+                                format!("must be >= {}", #min));
+                        }
+                    }),
+                    ValidationSpec::Le(max) => rule_stmts.push(quote! {
+                        if !(#target <= #max) {
+                            sdforge::core::field_validation::push_error(
+                                &mut __forge_validation_errors, #field_lit, "le",
+                                format!("must be <= {}", #max));
+                        }
+                    }),
+                    ValidationSpec::MinLength(n) => rule_stmts.push(quote! {
+                        if sdforge::core::field_validation::str_len(
+                            &sdforge::core::field_validation::as_str_ref(&#target)) < #n {
+                            sdforge::core::field_validation::push_error(
+                                &mut __forge_validation_errors, #field_lit, "min_length",
+                                format!("must be at least {} characters", #n));
+                        }
+                    }),
+                    ValidationSpec::MaxLength(n) => rule_stmts.push(quote! {
+                        if sdforge::core::field_validation::str_len(
+                            &sdforge::core::field_validation::as_str_ref(&#target)) > #n {
+                            sdforge::core::field_validation::push_error(
+                                &mut __forge_validation_errors, #field_lit, "max_length",
+                                format!("must be at most {} characters", #n));
+                        }
+                    }),
+                    ValidationSpec::NotBlank => rule_stmts.push(quote! {
+                        if sdforge::core::field_validation::is_blank(
+                            sdforge::core::field_validation::as_str_ref(&#target)) {
+                            sdforge::core::field_validation::push_error(
+                                &mut __forge_validation_errors, #field_lit, "not_blank",
+                                "must not be blank");
+                        }
+                    }),
+                    ValidationSpec::Email => rule_stmts.push(quote! {
+                        if !sdforge::core::field_validation::is_email(
+                            sdforge::core::field_validation::as_str_ref(&#target)) {
+                            sdforge::core::field_validation::push_error(
+                                &mut __forge_validation_errors, #field_lit, "email",
+                                "must be a valid email address");
+                        }
+                    }),
+                }
+            }
+        }
+
+        if !rule_stmts.is_empty() {
+            prelude_stmts.push(quote! {
+                let mut __forge_validation_errors: std::vec::Vec<
+                    sdforge::core::field_validation::FieldError,
+                > = std::vec::Vec::new();
+                #(#rule_stmts)*
+                if !__forge_validation_errors.is_empty() {
+                    return (
+                        sdforge::axum::http::status::StatusCode::BAD_REQUEST,
+                        sdforge::axum::extract::Json(sdforge::serde_json::json!({
+                            "code": "BAD_REQUEST",
+                            "message": "validation failed",
+                            "errors": __forge_validation_errors,
+                        })),
+                    )
+                        .into_response();
+                }
+            });
+        }
+    }
+
     let path_destructure: proc_macro2::TokenStream = quote! { #(#prelude_stmts)* };
 
     // Build parameter unwrapping logic
@@ -1403,8 +1902,50 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         None => quote! { None },
     };
 
+    // T706: OpenAPI requestBody entries for Body parameters.
+    let openapi_body_params_tokens: Vec<TokenStream2> = params
+        .iter()
+        .filter(|p| matches!(p.param_kind, ParamKind::Body))
+        .map(|p| {
+            let (schema_type, schema_format) = rust_type_to_openapi_schema(&p.inner_type);
+            let name_lit = proc_macro2::Literal::string(&p.name);
+            let type_lit = proc_macro2::Literal::string(schema_type);
+            let format_lit = proc_macro2::Literal::string(schema_format);
+            let required = !p.is_option;
+            quote! {
+                sdforge::openapi::OpenApiBodyParam {
+                    name: #name_lit,
+                    description: "",
+                    required: #required,
+                    schema_type: #type_lit,
+                    schema_format: #format_lit,
+                }
+            }
+        })
+        .collect();
+
+    // T706: response schema descriptor from the handler return type.
+    let openapi_response_type_expr = response_type_to_openapi_info_tokens(return_type);
+
     // Build description expression
     let description_literal = description.as_deref().unwrap_or(&name);
+
+    // T703: endpoint-level RBAC. When `auth(role = "...")` is declared, the
+    // generated MethodRouter is wrapped with `sdforge::rbac::require_role`.
+    // Gated per-feature in the generated code: with `security` the roles are
+    // matched against AuthContext; without it the endpoint denies all
+    // (fail-safe — roles cannot be verified without an auth stack).
+    let role_wrap_stmt = if extras.auth_roles.is_empty() {
+        quote! {}
+    } else {
+        let role_lits: Vec<&str> = extras.auth_roles.iter().map(|s| s.as_str()).collect();
+        quote! {
+            #[cfg(feature = "security")]
+            let router = sdforge::rbac::require_role(router, &[#(#role_lits),*]);
+            #[cfg(not(feature = "security"))]
+            let router = sdforge::rbac::require_role(router, &[#(#role_lits),*]);
+        }
+    };
 
     // Build i18n_key expression for runtime translation lookup
     let i18n_key_expr = match &i18n_key {
@@ -1551,6 +2092,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                                 "options" => router = router.options(#handler_closure),
                                 _ => router = router.get(#handler_closure),
                             }
+                            #role_wrap_stmt
                             router
                         },
                         #streaming_metadata,
@@ -1623,11 +2165,14 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                             use sdforge::prelude::*;
                             #path_destructure
                             match #fn_name(#(#param_call_args),*).await {
-                                Ok(value) => (
-                                    sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
-                                        .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
-                                    sdforge::axum::extract::Json(value),
-                                ).into_response(),
+                                Ok(value) => {
+                                    let __forge_result = { #value_wrap_expr };
+                                    (
+                                        sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
+                                            .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
+                                        sdforge::axum::extract::Json(__forge_result),
+                                    ).into_response()
+                                }
                                 Err(e) => e.into_response(),
                             }
                         }
@@ -1649,10 +2194,11 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                             use sdforge::prelude::*;
                             #path_destructure
                             let result = #fn_name(#(#param_call_args),*).await;
+                            let __forge_result = { #result_wrap_expr };
                             (
                                 sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
                                     .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
-                                sdforge::axum::extract::Json(result),
+                                sdforge::axum::extract::Json(__forge_result),
                             ).into_response()
                         }
                     }
@@ -1676,6 +2222,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                                 "options" => router = router.options(#handler_closure),
                                 _ => router = router.get(#handler_closure),
                             }
+                            #role_wrap_stmt
                             router
                         },
                         #non_streaming_metadata,
@@ -1737,16 +2284,18 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             // the declared `status` so the OpenAPI response key matches the
             // actual HTTP success code clients will receive.
             #[cfg(feature = "openapi")]
-            sdforge::inventory::submit!(sdforge::openapi::OpenApiRouteInfo::with_path_params_and_status(
-                #http_path,
-                #http_method_upper,
-                #description_literal,
-                #description_literal,
-                #version,
-                &[],
-                &[#(#openapi_path_params_tokens),*],
-                #openapi_status_expr,
-            ));
+            sdforge::inventory::submit!(sdforge::openapi::OpenApiRouteInfo {
+                path: #http_path,
+                method: #http_method_upper,
+                summary: #description_literal,
+                description: #description_literal,
+                version: #version,
+                tags: &[],
+                path_params: &[#(#openapi_path_params_tokens),*],
+                success_status: #openapi_status_expr,
+                body_params: &[#(#openapi_body_params_tokens),*],
+                response_type: #openapi_response_type_expr,
+            });
         }
     } else {
         quote! {}
@@ -2048,9 +2597,52 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
+    // T711: lifecycle hooks. `#[forge(on_start)]` / `#[forge(on_stop)]` mark
+    // zero-parameter async fns; the macro emits an inventory registration so
+    // `sdforge::lifecycle::run_on_start/run_on_stop` (invoked by the T704
+    // graceful-shutdown sequence) can discover and run them. Zero breakage:
+    // endpoint-related attributes keep working unchanged.
+    let lifecycle_code = if extras.on_start || extras.on_stop {
+        if !input.sig.inputs.is_empty() {
+            return syn::Error::new(
+                fn_name.span(),
+                "lifecycle hooks (#[forge(on_start/on_stop)]) must be zero-parameter functions",
+            )
+            .into_compile_error()
+            .into();
+        }
+        let phase_expr = if extras.on_start {
+            quote! { "start" }
+        } else {
+            quote! { "stop" }
+        };
+        let runner_name = syn::Ident::new(
+            &format!("__forge_lifecycle_runner_{}", fn_name_str),
+            proc_macro2::Span::call_site(),
+        );
+        quote! {
+            #[cfg(feature = "lifecycle")]
+            fn #runner_name() -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = ()> + Send>,
+            > {
+                Box::pin(async move {
+                    let _ = #fn_name().await;
+                })
+            }
+            #[cfg(feature = "lifecycle")]
+            sdforge::inventory::submit!(sdforge::lifecycle::LifecycleHookRegistration::new(
+                #phase_expr,
+                #runner_name,
+            ));
+        }
+    } else {
+        quote! {}
+    };
+
     let generated = quote! {
         #openapi_path_attr
         #cleaned_input
+        #lifecycle_code
         #http_code
         #mcp_code
         #ws_code
@@ -2146,7 +2738,7 @@ mod macro_parsing_tests {
     #[test]
     fn test_parse_service_api_args_required() {
         let input: TokenStream2 = quote! { name = "test", version = "v1" };
-        let result = parse_service_api_args(input).unwrap();
+        let result = parse_service_api_args(input, false).unwrap();
         assert_eq!(result.0, "test");
         assert_eq!(result.1, "v1");
     }
@@ -2499,6 +3091,7 @@ mod macro_parsing_tests {
             param_kind: kind,
             is_option,
             is_vec: false,
+            validations: Vec::new(),
             inner_type: if is_option {
                 "String".to_string()
             } else {

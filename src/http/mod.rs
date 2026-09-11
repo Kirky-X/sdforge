@@ -36,9 +36,18 @@ pub use crate::security::RateLimitLayer;
 pub use crate::security::{LimiteronAdapter, RateLimiter};
 
 mod http_impl;
+#[cfg(feature = "etag")]
+pub mod etag;
+#[cfg(feature = "graceful")]
+pub mod graceful;
 #[cfg(feature = "ratelimit-http")]
 pub use http_impl::rate_limit_layer;
 pub use http_impl::{build, build_with_config, build_with_redirect};
+
+#[cfg(feature = "graceful")]
+pub use graceful::{
+    default_shutdown_signal, serve_with_graceful_shutdown, GracefulShutdownConfig,
+};
 
 // Re-export internal helpers for test access.
 #[cfg(all(test, feature = "grpc"))]
@@ -48,11 +57,16 @@ pub(crate) use http_impl::preserve_mcp_inventory;
 #[cfg(all(test, feature = "websocket"))]
 pub(crate) use http_impl::preserve_websocket_inventory;
 #[cfg(test)]
-pub(crate) use http_impl::{
-    apply_security_headers, get_or_generate_request_id, resolve_route_path,
-};
+pub(crate) use http_impl::{apply_security_headers, get_or_generate_request_id};
+// T701/T702: health probes & metrics endpoints resolve module-prefixed paths
+// when scanning for collisions with user routes.
+#[cfg(test)]
+pub(crate) use http_impl::resolve_route_path;
+#[cfg(any(feature = "health", feature = "metrics"))]
+pub(crate) use http_impl::route_path_taken;
 
 /// Request ID header name
+#[cfg_attr(feature = "context", allow(dead_code))]
 pub(crate) const X_REQUEST_ID: &str = "x-request-id";
 
 /// HTTP route registration

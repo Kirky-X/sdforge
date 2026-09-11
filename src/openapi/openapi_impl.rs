@@ -6,8 +6,11 @@ use utoipa::openapi::path::{
     HttpMethod, OperationBuilder, Parameter, ParameterBuilder, ParameterIn, Paths,
 };
 use utoipa::openapi::response::ResponseBuilder;
-use utoipa::openapi::schema::{ObjectBuilder, SchemaFormat, SchemaType, Type};
-use utoipa::openapi::{Info, InfoBuilder, OpenApi, Required};
+use utoipa::openapi::schema::{ArrayBuilder, ObjectBuilder, SchemaFormat, SchemaType, Type};
+use utoipa::openapi::content::ContentBuilder;
+use utoipa::openapi::request_body::RequestBodyBuilder;
+use utoipa::openapi::schema::{OneOf, Schema};
+use utoipa::openapi::{Info, InfoBuilder, OpenApi, RefOr, Required};
 
 impl OpenApiPathParam {
     /// Construct a new path parameter descriptor.
@@ -84,6 +87,8 @@ impl OpenApiRouteInfo {
             tags,
             path_params: &[],
             success_status: None,
+            body_params: &[],
+            response_type: None,
         }
     }
 
@@ -109,6 +114,8 @@ impl OpenApiRouteInfo {
             tags,
             path_params,
             success_status: None,
+            body_params: &[],
+            response_type: None,
         }
     }
 
@@ -144,6 +151,8 @@ impl OpenApiRouteInfo {
             tags,
             path_params,
             success_status,
+            body_params: &[],
+            response_type: None,
         }
     }
 
@@ -163,6 +172,84 @@ impl OpenApiRouteInfo {
             "TRACE" => HttpMethod::Trace,
             _ => HttpMethod::Get,
         }
+    }
+}
+
+/// Map a Rust type string to an OpenAPI [`OpenApiTypeInfo`] (T706/T715).
+///
+/// The single source of truth shared by the macro (compile-time request /
+/// response schema emission) and runtime schema reflection. Mirrors the
+/// macro-side mapping in `sdforge-macros`:
+///
+/// | Rust type            | schema_type | schema_format |
+/// |----------------------|-------------|---------------|
+/// | `u8`..`u128`,`i8`..`i128` | `"integer"` | `"uint64"` / `"int32"` / … |
+/// | `f32` / `f64`        | `"number"`  | `"float"` / `"double"` |
+/// | `bool`               | `"boolean"` | `""` |
+/// | `String`, `&str`     | `"string"`  | `""` |
+/// | `serde_json::Value`  | `"object"`  | `""` |
+/// | anything else        | `"object"`  | `""` |
+pub fn schema_for_type_name(rust_type: &str) -> OpenApiTypeInfo {
+    let (schema_type, schema_format) = match rust_type.trim() {
+        "u8" => ("integer", "uint8"),
+        "u16" => ("integer", "uint16"),
+        "u32" => ("integer", "uint32"),
+        "u64" => ("integer", "uint64"),
+        "u128" => ("integer", "uint128"),
+        "i8" => ("integer", "int8"),
+        "i16" => ("integer", "int16"),
+        "i32" => ("integer", "int32"),
+        "i64" => ("integer", "int64"),
+        "i128" => ("integer", "int128"),
+        "f32" => ("number", "float"),
+        "f64" => ("number", "double"),
+        "bool" => ("boolean", ""),
+        "String" | "&str" | "&'static str" => ("string", ""),
+        _ => ("object", ""),
+    };
+    OpenApiTypeInfo {
+        schema_type,
+        schema_format,
+        is_array: false,
+    }
+}
+
+/// Build a utoipa [`Schema`] from an [`OpenApiTypeInfo`] descriptor.
+fn schema_from_type(info: &OpenApiTypeInfo) -> Schema {
+    fn object_of(schema_type: SchemaType, format: Option<SchemaFormat>) -> Schema {
+        let mut builder = ObjectBuilder::new().schema_type(schema_type);
+        if let Some(fmt) = format {
+            builder = builder.format(Some(fmt));
+        }
+        Schema::Object(builder.build())
+    }
+    let format = |f: &str| {
+        if f.is_empty() {
+            None
+        } else {
+            Some(SchemaFormat::Custom(f.to_string()))
+        }
+    };
+    let element = || {
+        object_of(
+            match info.schema_type {
+                "integer" => SchemaType::Type(Type::Integer),
+                "number" => SchemaType::Type(Type::Number),
+                "boolean" => SchemaType::Type(Type::Boolean),
+                "string" => SchemaType::Type(Type::String),
+                _ => SchemaType::Type(Type::Object),
+            },
+            format(info.schema_format),
+        )
+    };
+    if info.is_array {
+        Schema::Array(
+            ArrayBuilder::new()
+                .items(RefOr::T(element()))
+                .build(),
+        )
+    } else {
+        element()
     }
 }
 
@@ -233,10 +320,61 @@ impl OpenApiBuilder {
             // declared success status (from `#[forge(status = <code>)]`) or
             // default `200` when not specified. This makes the OpenAPI doc
             // accurately reflect the HTTP success code clients will receive.
+            // T706: emit a typed requestBody from the declared body params.
+            // Single body param (the only shape axum accepts — one Json
+            // extractor): the request body IS the parameter schema. Multiple
+            // declared params: render a wrapping object with per-param
+            // properties.
+            if !route.body_params.is_empty() {
+                let mut request_body = RequestBodyBuilder::new();
+                let mut content = ContentBuilder::new();
+                if route.body_params.len() == 1 {
+                    let param = &route.body_params[0];
+                    let info = OpenApiTypeInfo {
+                        schema_type: param.schema_type,
+                        schema_format: param.schema_format,
+                        is_array: param.schema_type == "array",
+                    };
+                    request_body = request_body.required(Some(if param.required {
+                        Required::True
+                    } else {
+                        Required::False
+                    }));
+                    content = content.schema(Some(schema_from_type(&info)));
+                } else {
+                    let mut props = ObjectBuilder::new().schema_type(Type::Object);
+                    let mut required_names: Vec<String> = Vec::new();
+                    for param in route.body_params {
+                        let info = OpenApiTypeInfo {
+                            schema_type: param.schema_type,
+                            schema_format: param.schema_format,
+                            is_array: param.schema_type == "array",
+                        };
+                        props = props.property(param.name, schema_from_type(&info));
+                        if param.required {
+                            required_names.push(param.name.to_string());
+                        }
+                    }
+                    for name in &required_names {
+                        props = props.required(name.as_str());
+                    }
+                    request_body = request_body.required(Some(Required::True));
+                    content = content.schema(Some(Schema::Object(props.build())));
+                }
+                request_body =
+                    request_body.content("application/json", content.build());
+                operation_builder =
+                    operation_builder.request_body(Some(request_body.build()));
+            }
+
             let status_code = route.success_status.unwrap_or(200);
-            let response = ResponseBuilder::new()
-                .description("Successful response")
-                .build();
+            let mut response = ResponseBuilder::new().description("Successful response");
+            if let Some(response_type) = route.response_type {
+                let mut content = ContentBuilder::new();
+                content = content.schema(Some(schema_from_type(&response_type)));
+                response = response.content("application/json", content.build());
+            }
+            let response = response.build();
             operation_builder = operation_builder.response(status_code.to_string(), response);
             let operation = operation_builder.build();
             paths.add_path_operation(route.path, vec![route.http_method()], operation);
