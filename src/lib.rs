@@ -207,6 +207,12 @@ pub mod health;
 #[cfg(feature = "metrics")]
 pub mod metrics;
 
+/// Endpoint-level RBAC (`#[forge(auth(role = "..."))]`) — the macro wraps the
+/// generated route with [`rbac::require_role`] (T703). Fail-safe: no auth
+/// stack or no matching role → 403.
+#[cfg(feature = "http")]
+pub mod rbac;
+
 #[cfg(feature = "http")]
 pub use http::version_routing::{VersionRouterConfig, VersionedRoute, build_version_router};
 

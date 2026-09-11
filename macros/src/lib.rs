@@ -7,7 +7,7 @@
 #![doc(html_root_url = "https://docs.rs/sdforge-macros/0.5.0-rc.2")]
 
 use proc_macro::TokenStream;
-use proc_macro2::TokenStream as TokenStream2;
+use proc_macro2::{Delimiter, TokenStream as TokenStream2, TokenTree};
 use quote::quote;
 use syn::{FnArg, ItemFn, ItemMod, Pat, parse_macro_input};
 
@@ -253,9 +253,125 @@ const RESERVED_KEYWORDS: &[&str] = &[
 /// Default cache TTL in seconds (5 minutes)
 const DEFAULT_CACHE_TTL: u64 = 300;
 
+// =============================================================================
+// T703+: structured "extras" attributes parsed before the classic key=value
+// parser. Only new-syntax keys are consumed here; everything else passes
+// through to `parse_kv_pairs` untouched (zero breakage of existing usage).
+// =============================================================================
+
+/// New-syntax `#[forge]` attributes with structure or spans the classic
+/// string-based parser cannot represent.
+#[derive(Debug, Default)]
+struct ForgeExtras {
+    /// Roles from `auth(role = "admin")` (repeatable).
+    auth_roles: Vec<String>,
+}
+
+/// Extract extras attributes from the raw argument token stream.
+///
+/// Returns the remaining token stream (to be handed to
+/// [`parse_service_api_args`]) plus the parsed extras. Errors carry the span
+/// of the offending token so diagnostics point at the argument, not at the
+/// call site.
+fn extract_forge_extras(args: TokenStream2) -> Result<(TokenStream2, ForgeExtras), syn::Error> {
+    let mut extras = ForgeExtras::default();
+    let mut remaining: Vec<TokenTree> = Vec::new();
+    let mut iter = args.into_iter();
+
+    while let Some(tt) = iter.next() {
+        match &tt {
+            TokenTree::Ident(ident) if ident.to_string() == "auth" => {
+                match iter.next() {
+                    Some(TokenTree::Group(group))
+                        if group.delimiter() == Delimiter::Parenthesis =>
+                    {
+                        parse_auth_group(group.stream(), &mut extras)?;
+                    }
+                    _ => {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            "auth requires a parenthesized role list: auth(role = \"admin\")",
+                        ));
+                    }
+                }
+            }
+            other => remaining.push(other.clone()),
+        }
+    }
+
+    Ok((remaining.into_iter().collect(), extras))
+}
+
+/// Parse `role = "name"` pairs inside `auth(...)`. Unknown keys error with a
+/// precise span.
+fn parse_auth_group(args: TokenStream2, extras: &mut ForgeExtras) -> Result<(), syn::Error> {
+    let mut iter = args.into_iter();
+    while let Some(tt) = iter.next() {
+        match &tt {
+            TokenTree::Punct(p) if p.as_char() == ',' => continue,
+            TokenTree::Ident(ident) if ident.to_string() == "role" => {
+                match iter.next() {
+                    Some(TokenTree::Punct(p)) if p.as_char() == '=' => {}
+                    other => {
+                        let span = match other {
+                            Some(t) => t.span(),
+                            None => ident.span(),
+                        };
+                        return Err(syn::Error::new(span, "expected `=` after `role`"));
+                    }
+                }
+                match iter.next() {
+                    Some(TokenTree::Literal(lit)) => {
+                        let raw = lit.to_string();
+                        let value = raw.trim().trim_matches('"').to_string();
+                        if value.is_empty() {
+                            return Err(syn::Error::new(
+                                lit.span(),
+                                "auth role cannot be empty",
+                            ));
+                        }
+                        extras.auth_roles.push(value);
+                    }
+                    other => {
+                        let span = match other {
+                            Some(t) => t.span(),
+                            None => ident.span(),
+                        };
+                        return Err(syn::Error::new(
+                            span,
+                            "expected a string literal role value, e.g. role = \"admin\"",
+                        ));
+                    }
+                }
+            }
+            TokenTree::Ident(ident) => {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    format!(
+                        "unknown key inside auth(...): `{}` (supported: role)",
+                        ident
+                    ),
+                ));
+            }
+            other => {
+                return Err(syn::Error::new(
+                    other.span(),
+                    "unexpected token inside auth(...)",
+                ));
+            }
+        }
+    }
+    if extras.auth_roles.is_empty() {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "auth(...) requires at least one role: auth(role = \"admin\")",
+        ));
+    }
+    Ok(())
+}
+
 /// Parse forge attributes
-fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {
-    let pairs = parse_kv_pairs(args)?;
+fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {    let pairs = parse_kv_pairs(args)?;
 
     let mut name = None;
     let mut version = None;
@@ -1054,7 +1170,13 @@ fn generate_cli_registration(
 
 #[proc_macro_attribute]
 pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = match parse_service_api_args(args.into()) {
+    // T703+: structured extras (auth(...)) are peeled off first; the rest of
+    // the argument stream goes through the classic key=value parser.
+    let (args, extras) = match extract_forge_extras(args.into()) {
+        Ok(result) => result,
+        Err(e) => return e.into_compile_error().into(),
+    };
+    let args = match parse_service_api_args(args) {
         Ok(args) => args,
         Err(e) => return e.into_compile_error().into(),
     };
@@ -1406,6 +1528,23 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     // Build description expression
     let description_literal = description.as_deref().unwrap_or(&name);
 
+    // T703: endpoint-level RBAC. When `auth(role = "...")` is declared, the
+    // generated MethodRouter is wrapped with `sdforge::rbac::require_role`.
+    // Gated per-feature in the generated code: with `security` the roles are
+    // matched against AuthContext; without it the endpoint denies all
+    // (fail-safe — roles cannot be verified without an auth stack).
+    let role_wrap_stmt = if extras.auth_roles.is_empty() {
+        quote! {}
+    } else {
+        let role_lits: Vec<&str> = extras.auth_roles.iter().map(|s| s.as_str()).collect();
+        quote! {
+            #[cfg(feature = "security")]
+            let router = sdforge::rbac::require_role(router, &[#(#role_lits),*]);
+            #[cfg(not(feature = "security"))]
+            let router = sdforge::rbac::require_role(router, &[#(#role_lits),*]);
+        }
+    };
+
     // Build i18n_key expression for runtime translation lookup
     let i18n_key_expr = match &i18n_key {
         Some(key) => quote! { Some(#key.to_string()) },
@@ -1551,6 +1690,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                                 "options" => router = router.options(#handler_closure),
                                 _ => router = router.get(#handler_closure),
                             }
+                            #role_wrap_stmt
                             router
                         },
                         #streaming_metadata,
@@ -1676,6 +1816,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                                 "options" => router = router.options(#handler_closure),
                                 _ => router = router.get(#handler_closure),
                             }
+                            #role_wrap_stmt
                             router
                         },
                         #non_streaming_metadata,

@@ -548,6 +548,12 @@ name = "health_probe_collision_tests"
 path = "tests/integration/health_probe_collision_tests.rs"
 required-features = ["http", "health"]
 
+# T703: endpoint-level RBAC e2e — #[forge(auth(role = "..."))] → 403/200.
+[[test]]
+name = "rbac_endpoint_tests"
+path = "tests/integration/rbac_endpoint_tests.rs"
+required-features = ["http", "security"]
+
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）
 # ============================================================================
