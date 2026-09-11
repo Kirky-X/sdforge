@@ -269,6 +269,10 @@ struct ForgeExtras {
     validate: bool,
     /// `paginate` bare flag (T708): page/size params + envelope wrapping.
     paginate: bool,
+    /// `on_start` bare flag (T711): run the fn at process start.
+    on_start: bool,
+    /// `on_stop` bare flag (T711): run the fn after shutdown drain.
+    on_stop: bool,
 }
 
 /// Extract extras attributes from the raw argument token stream.
@@ -285,9 +289,12 @@ fn extract_forge_extras(args: TokenStream2) -> Result<(TokenStream2, ForgeExtras
     while let Some(tt) = iter.next() {
         match &tt {
             TokenTree::Ident(ident)
-                if ident.to_string() == "validate" || ident.to_string() == "paginate" =>
+                if ident.to_string() == "validate"
+                    || ident.to_string() == "paginate"
+                    || ident.to_string() == "on_start"
+                    || ident.to_string() == "on_stop" =>
             {
-                // Bare flags (T707/T708). Also tolerate `flag = true|false`.
+                // Bare flags (T707/T708/T711). Also tolerate `flag = true|false`.
                 let flag = ident.to_string();
                 match iter.next() {
                     Some(TokenTree::Punct(p)) if p.as_char() == '=' => {
@@ -301,10 +308,12 @@ fn extract_forge_extras(args: TokenStream2) -> Result<(TokenStream2, ForgeExtras
                                         format!("{} must be true or false, got {}", flag, value),
                                     )
                                 })?;
-                                if flag == "validate" {
-                                    extras.validate = enabled;
-                                } else if flag == "paginate" {
-                                    extras.paginate = enabled;
+                                match flag.as_str() {
+                                    "validate" => extras.validate = enabled,
+                                    "paginate" => extras.paginate = enabled,
+                                    "on_start" => extras.on_start = enabled,
+                                    "on_stop" => extras.on_stop = enabled,
+                                    _ => {}
                                 }
                             }
                             _ => {
@@ -324,6 +333,8 @@ fn extract_forge_extras(args: TokenStream2) -> Result<(TokenStream2, ForgeExtras
                     None => match flag.as_str() {
                         "validate" => extras.validate = true,
                         "paginate" => extras.paginate = true,
+                        "on_start" => extras.on_start = true,
+                        "on_stop" => extras.on_stop = true,
                         _ => {}
                     },
                 }
@@ -418,8 +429,10 @@ fn parse_auth_group(args: TokenStream2, extras: &mut ForgeExtras) -> Result<(), 
     Ok(())
 }
 
-/// Parse forge attributes
-fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {    let pairs = parse_kv_pairs(args)?;
+/// Parse forge attributes. `lifecycle_only` (T711) relaxes the required
+/// `name`/`version` attributes for pure lifecycle hooks
+/// (`#[forge(on_start)]` with no endpoint declaration).
+fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceApiArgs {    let pairs = parse_kv_pairs(args)?;
 
     let mut name = None;
     let mut version = None;
@@ -519,18 +532,26 @@ fn parse_service_api_args(args: TokenStream2) -> ServiceApiArgs {    let pairs =
         }
     }
 
-    let name = name.ok_or_else(|| {
-        syn::Error::new(
-            proc_macro2::Span::call_site(),
-            "Missing required attribute: name",
-        )
-    })?;
-    let version = version.ok_or_else(|| {
-        syn::Error::new(
-            proc_macro2::Span::call_site(),
-            "Missing required attribute: version",
-        )
-    })?;
+    let name = match name {
+        Some(n) => n,
+        None if lifecycle_only => "__lifecycle".to_string(),
+        None => {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "Missing required attribute: name",
+            ))
+        }
+    };
+    let version = match version {
+        Some(v) => v,
+        None if lifecycle_only => "v1".to_string(),
+        None => {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "Missing required attribute: version",
+            ))
+        }
+    };
 
     Ok((
         name,
@@ -1349,7 +1370,8 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         Ok(result) => result,
         Err(e) => return e.into_compile_error().into(),
     };
-    let args = match parse_service_api_args(args) {
+    let lifecycle_only = extras.on_start || extras.on_stop;
+    let args = match parse_service_api_args(args, lifecycle_only) {
         Ok(args) => args,
         Err(e) => return e.into_compile_error().into(),
     };
@@ -2521,9 +2543,52 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
+    // T711: lifecycle hooks. `#[forge(on_start)]` / `#[forge(on_stop)]` mark
+    // zero-parameter async fns; the macro emits an inventory registration so
+    // `sdforge::lifecycle::run_on_start/run_on_stop` (invoked by the T704
+    // graceful-shutdown sequence) can discover and run them. Zero breakage:
+    // endpoint-related attributes keep working unchanged.
+    let lifecycle_code = if extras.on_start || extras.on_stop {
+        if !input.sig.inputs.is_empty() {
+            return syn::Error::new(
+                fn_name.span(),
+                "lifecycle hooks (#[forge(on_start/on_stop)]) must be zero-parameter functions",
+            )
+            .into_compile_error()
+            .into();
+        }
+        let phase_expr = if extras.on_start {
+            quote! { "start" }
+        } else {
+            quote! { "stop" }
+        };
+        let runner_name = syn::Ident::new(
+            &format!("__forge_lifecycle_runner_{}", fn_name_str),
+            proc_macro2::Span::call_site(),
+        );
+        quote! {
+            #[cfg(feature = "lifecycle")]
+            fn #runner_name() -> std::pin::Pin<
+                Box<dyn std::future::Future<Output = ()> + Send>,
+            > {
+                Box::pin(async move {
+                    let _ = #fn_name().await;
+                })
+            }
+            #[cfg(feature = "lifecycle")]
+            sdforge::inventory::submit!(sdforge::lifecycle::LifecycleHookRegistration::new(
+                #phase_expr,
+                #runner_name,
+            ));
+        }
+    } else {
+        quote! {}
+    };
+
     let generated = quote! {
         #openapi_path_attr
         #cleaned_input
+        #lifecycle_code
         #http_code
         #mcp_code
         #ws_code

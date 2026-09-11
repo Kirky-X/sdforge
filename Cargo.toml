@@ -366,6 +366,10 @@ paginate = ["http", "tokio"]
 # ETag 条件请求特性 (T709) - GET 响应自动强 ETag（SHA-256）+ If-None-Match → 304。
 etag = ["http", "dep:sha2"]
 
+# 生命周期钩子特性 (T711) - #[forge(on_start/on_stop)] 进程级钩子，
+# 与 T704 优雅停机顺序协同（on_start 先于监听、on_stop 在排空之后）。
+lifecycle = ["http", "tokio", "dep:futures-util"]
+
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
 # `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
@@ -609,6 +613,12 @@ required-features = ["http", "paginate"]
 name = "etag_tests"
 path = "tests/integration/etag_tests.rs"
 required-features = ["http", "etag"]
+
+# T711: 生命周期钩子 e2e — on_start/on_stop 与优雅停机顺序协同。
+[[test]]
+name = "lifecycle_tests"
+path = "tests/integration/lifecycle_tests.rs"
+required-features = ["http", "graceful", "lifecycle"]
 
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）

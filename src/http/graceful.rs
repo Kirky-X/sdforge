@@ -105,6 +105,18 @@ fn run_stop_hooks() {
     }
 }
 
+/// Async stop hooks (phase 3b): `#[forge(on_stop)]` lifecycle hooks (T711).
+async fn run_lifecycle_stop_hooks() {
+    #[cfg(feature = "lifecycle")]
+    crate::lifecycle::run_on_stop().await;
+}
+
+/// Pre-serve start hooks: `#[forge(on_start)]` lifecycle hooks (T711).
+async fn run_lifecycle_start_hooks() {
+    #[cfg(feature = "lifecycle")]
+    crate::lifecycle::run_on_start().await;
+}
+
 /// Serve `router` on `listener` with the graceful shutdown sequence.
 ///
 /// `shutdown` is the phase-1 stop trigger — [`default_shutdown_signal`] or
@@ -126,6 +138,9 @@ pub async fn serve_with_graceful_shutdown(
         shutdown.await;
         let _ = trigger_tx.send(true);
     };
+
+    // T711: run on_start hooks before accepting connections.
+    run_lifecycle_start_hooks().await;
 
     let server = axum::serve(listener, router).with_graceful_shutdown(axum_shutdown);
 
@@ -149,12 +164,14 @@ pub async fn serve_with_graceful_shutdown(
     tokio::select! {
         result = server => {
             run_stop_hooks();
+            run_lifecycle_stop_hooks().await;
             result
         }
         _ = deadline => {
             // Dropping `server` here aborts the accept loop and any
             // in-flight connection — the forced path of phase 2.
             run_stop_hooks();
+            run_lifecycle_stop_hooks().await;
             Ok(())
         }
     }

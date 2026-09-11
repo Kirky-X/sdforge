@@ -216,6 +216,11 @@ pub mod metrics;
 #[cfg(feature = "context")]
 pub mod context;
 
+/// Lifecycle hooks (`#[forge(on_start)]` / `#[forge(on_stop)]`) — T711,
+/// coordinated with the T704 graceful-shutdown sequence.
+#[cfg(feature = "lifecycle")]
+pub mod lifecycle;
+
 /// Endpoint-level RBAC (`#[forge(auth(role = "..."))]`) — the macro wraps the
 /// generated route with [`rbac::require_role`] (T703). Fail-safe: no auth
 /// stack or no matching role → 403.
