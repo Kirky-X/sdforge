@@ -29,6 +29,8 @@ chrono = { version = "0.4", features = ["serde"] }
 # the `#[forge]` macro emits `#[cfg_attr(feature = "openapi", utoipa::path(...))]`,
 # which requires `utoipa` to be resolvable in the current crate.
 utoipa = { workspace = true }
+oxcache = { workspace = true, optional = true }
+dbnexus = { path = "../../dbnexus", default-features = false, features = ["embedded", "sql-parser"], optional = true }
 
 [features]
 default = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "cache_examples", "grpc_examples", "logging_examples", "openapi_examples", "cli_examples", "docs_examples", "combined_examples"]
@@ -51,6 +53,9 @@ combined_examples = ["http_examples", "mcp_examples", "websocket_examples",
                      "streaming_examples", "security_examples", "cache_examples",
                      "grpc_examples", "logging_examples", "openapi_examples",
                      "cli_examples", "docs_examples"]
+# T716 ecosystem examples
+oxcache_admin_example = ["http_examples", "cache_examples", "dep:oxcache"]
+dbnexus_gateway_example = ["http_examples", "dep:dbnexus"]
 
 # sdforge feature aliases — each enables the corresponding sdforge feature.
 # The `#[forge]` macro generates `#[cfg(feature = "cli")]` /
@@ -81,3 +86,19 @@ ratelimit = ["sdforge/ratelimit"]
 name = "swagger_demo"
 path = "swagger_demo.rs"
 required-features = ["docs", "http"]
+
+# T716: oxcache 管理端点示例（经 BackendRegistry）。
+[[example]]
+name = "oxcache_admin"
+path = "oxcache_admin.rs"
+required-features = ["oxcache_admin_example"]
+
+# T716: dbnexus 数据 API 网关对接示例。
+[[example]]
+name = "dbnexus_gateway"
+path = "dbnexus_gateway.rs"
+required-features = ["dbnexus_gateway_example"]
+
+[dev-dependencies]
+tower = { version = "0.5", default-features = false, features = ["util"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
