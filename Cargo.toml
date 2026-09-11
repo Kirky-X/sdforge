@@ -339,6 +339,10 @@ docs = ["openapi", "dep:utoipa-swagger-ui", "dep:clap-markdown", "cli"]
 # cache 模块不依赖 http（已验证 src/cache/ 无 http/axum 使用）
 cache = ["oxcache/minimal"]
 
+# Health probes 特性 (T701) - build_with_config 自动挂载 /healthz /readyz
+# （bypass 认证：探针路由在安全中间件层之后注册）。kit 数据源经 `kit` 特性提供。
+health = ["http", "tokio"]
+
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
 # `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
@@ -362,7 +366,9 @@ simd-json = ["dep:simd-json"]
 # `limiteron/kit` is required because `LimiteronModule` is gated behind
 # limiteron's `kit` feature (Phase 3). default-features = false (Rule 6).
 limiteron-integration = ["dep:limiteron"]
-kit = ["dep:trait-kit", "limiteron-integration", "limiteron/kit"]
+# `trait-kit/health` (T701): AsyncKit::health_report() powers the /readyz
+# kit data source (health::kit_source::KitHealthSource).
+kit = ["dep:trait-kit", "trait-kit/health", "limiteron-integration", "limiteron/kit"]
 
 # inklog 结构化日志集成 — 将裸 log 输出桥接到 inklog LoggerManager。
 # 启用后通过 init_inklog_logger() 安装 inklog 为全局 log 后端，
@@ -382,6 +388,7 @@ full = [
     "timestamp",
     "security",
     "cache",
+    "health",
     "websocket",
     "grpc",
     "logging",
@@ -524,6 +531,17 @@ required-features = ["docs"]
 [[test]]
 name = "macro_tests"
 path = "tests/macros/macro_tests.rs"
+
+# T701: health probe e2e — /healthz /readyz bypass auth in build_with_config.
+[[test]]
+name = "health_probes_tests"
+path = "tests/integration/health_probes_tests.rs"
+required-features = ["http", "health"]
+
+[[test]]
+name = "health_probe_collision_tests"
+path = "tests/integration/health_probe_collision_tests.rs"
+required-features = ["http", "health"]
 
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）

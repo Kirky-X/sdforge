@@ -48,9 +48,10 @@ pub(crate) use http_impl::preserve_mcp_inventory;
 #[cfg(all(test, feature = "websocket"))]
 pub(crate) use http_impl::preserve_websocket_inventory;
 #[cfg(test)]
-pub(crate) use http_impl::{
-    apply_security_headers, get_or_generate_request_id, resolve_route_path,
-};
+pub(crate) use http_impl::{apply_security_headers, get_or_generate_request_id};
+// T701: health probes resolve module-prefixed paths when scanning for
+// collisions with user routes.
+pub(crate) use http_impl::resolve_route_path;
 
 /// Request ID header name
 pub(crate) const X_REQUEST_ID: &str = "x-request-id";

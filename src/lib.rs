@@ -197,6 +197,11 @@ pub mod integrations;
 #[cfg(feature = "http")]
 pub mod http;
 
+/// Built-in health probes (`/healthz`, `/readyz`) — auto-mounted by
+/// `build_with_config` when the `health` feature is enabled (T701).
+#[cfg(feature = "health")]
+pub mod health;
+
 #[cfg(feature = "http")]
 pub use http::version_routing::{VersionRouterConfig, VersionedRoute, build_version_router};
 

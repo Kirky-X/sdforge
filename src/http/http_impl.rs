@@ -403,6 +403,15 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         // None is handled by doing nothing
     }
 
+    // T701: mount /healthz + /readyz AFTER the auth layer — axum layers only
+    // apply to routes registered before them, so probes added here bypass
+    // authentication/rate-limiting by construction. Paths already claimed by
+    // user routes are skipped (prevents duplicate-route panics).
+    #[cfg(feature = "health")]
+    {
+        router = crate::health::mount_probes(router);
+    }
+
     // Note: 日志初始化已移除，由使用方通过 sdforge::inklog 直接管理
     Ok(router)
 }
