@@ -1625,22 +1625,38 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         closure_params.clone_from(&param_patterns);
     }
 
-    // T708: with `#[forge(paginate)]`, append a page/size query extractor.
-    // The extractor is appended unconditionally (plain axum/std types, so it
-    // compiles under any feature set); the envelope wrapping itself is
-    // gated on the downstream crate's `paginate` feature below.
-    let _paginate_active = extras.paginate;
-    // Must be FIRST: axum requires the last extractor to implement
-    // `FromRequest` (body-consuming); `Query` only implements
-    // `FromRequestParts`, so it can never be last.
-    closure_params.insert(
-        0,
-        quote! {
-            _forge_page_query: sdforge::axum::extract::Query<
-                std::collections::HashMap<String, String>,
-            >
-        },
-    );
+    // T708: with `#[forge(paginate)]`, append a page/size query extractor and
+    // enable the {items,total,next} envelope. The extractor must be FIRST:
+    // axum requires the last extractor to implement `FromRequest`
+    // (body-consuming); `Query` only implements `FromRequestParts`, so it can
+    // never be last. Routes WITHOUT the flag are emitted unchanged
+    // (zero-breakage); the flag requires the downstream `paginate` feature
+    // (which provides `sdforge::core::pagination`).
+    let paginate_wrap = |target: &str| -> TokenStream2 {
+        if !extras.paginate {
+            let t = syn::Ident::new(target, proc_macro2::Span::call_site());
+            return quote! { #t };
+        }
+        let t = syn::Ident::new(target, proc_macro2::Span::call_site());
+        quote! {{
+            let __page = sdforge::core::pagination::PageRequest::from_query(
+                &_forge_page_query.0,
+            );
+            sdforge::core::pagination::paginate(#t, __page)
+        }}
+    };
+    if extras.paginate {
+        closure_params.insert(
+            0,
+            quote! {
+                _forge_page_query: sdforge::axum::extract::Query<
+                    std::collections::HashMap<String, String>,
+                >
+            },
+        );
+    }
+    let value_wrap_expr = paginate_wrap("value");
+    let result_wrap_expr = paginate_wrap("result");
 
     // 闭包体内统一的前置解构语句（路径元组 + 查询结构体，均可能为空）
     let mut prelude_stmts: Vec<proc_macro2::TokenStream> = Vec::new();
@@ -2150,15 +2166,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                             #path_destructure
                             match #fn_name(#(#param_call_args),*).await {
                                 Ok(value) => {
-                                    #[cfg(not(feature = "paginate"))]
-                                    let __forge_result = value;
-                                    #[cfg(feature = "paginate")]
-                                    let __forge_result = {
-                                        let __page = sdforge::core::pagination::PageRequest::from_query(
-                                            &_forge_page_query.0,
-                                        );
-                                        sdforge::core::pagination::paginate(value, __page)
-                                    };
+                                    let __forge_result = { #value_wrap_expr };
                                     (
                                         sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
                                             .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
@@ -2186,15 +2194,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                             use sdforge::prelude::*;
                             #path_destructure
                             let result = #fn_name(#(#param_call_args),*).await;
-                            #[cfg(not(feature = "paginate"))]
-                            let __forge_result = result;
-                            #[cfg(feature = "paginate")]
-                            let __forge_result = {
-                                let __page = sdforge::core::pagination::PageRequest::from_query(
-                                    &_forge_page_query.0,
-                                );
-                                sdforge::core::pagination::paginate(result, __page)
-                            };
+                            let __forge_result = { #result_wrap_expr };
                             (
                                 sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
                                     .unwrap_or(sdforge::axum::http::status::StatusCode::OK),

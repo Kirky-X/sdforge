@@ -103,6 +103,10 @@ pretty_assertions = { version = "1.4", default-features = false, features = ["st
 name = "sdforge"
 version.workspace = true
 edition.workspace = true
+# T716: the `examples/` directory is the sdforge-examples member crate; the
+# root package must not auto-discover member example files (they use direct
+# oxcache/dbnexus deps that only the member declares).
+autoexamples = false
 rust-version.workspace = true
 authors.workspace = true
 license.workspace = true

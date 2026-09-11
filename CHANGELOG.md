@@ -137,6 +137,37 @@
 
 - inklog → `0.3.0-rc.3`、limiteron → `0.3.0-rc.3`、oxcache → `0.5.0-rc.4`、trait-kit → `0.5.0-rc.3`；开发期经 `[patch.crates-io]` 指向本地同级兄弟检出（发布 crates.io 后可移除 patch 段）
 
+### 新增（workspace-rc4-completion Phase 7 追加，同版本节累计）
+
+- **生产就绪**（T701/T702/T704）：
+  - `health` feature——`build_with_config` 自动挂载 `/healthz`、`/readyz`（在认证层之后注册，天然 bypass 认证；`/readyz` 汇集 `ReadinessCheck` 与 kit 健康数据源，任一失败 503）；用户路由占用探针路径时自动让位（不 panic）
+  - `metrics` feature——请求计数/延迟直方图/状态码分布自动采集（route 模板标签防基数爆炸），`/metrics` 端点 bypass 认证；自研轻量 Prometheus 文本渲染，零新增依赖
+  - `graceful` feature——`serve_with_graceful_shutdown`：SIGTERM/SIGINT → 停止接新 → 排空在途（`drain_timeout` 上限强制退出）→ kit `shutdown_async` 三阶段关闭；集成测试覆盖在途完成、超时强停、kit 关闭钩子
+- **声明式端点增强**（T703/T707/T708/T709/T711）：
+  - `#[forge(auth(role = "admin"))]`——端点级 RBAC：路由包裹 `rbac::require_role`，`AuthContext` 无声明角色 → 403（默认拒绝）；`security` feature 关闭时 fail-safe 全拒绝
+  - `#[forge(validate)]` + `#[param(ge/le/min_length/max_length/not_blank/email)]`——参数校验契约：400 响应携带字段级错误 `{"errors":[{field,rule,message}]}`
+  - `#[forge(paginate)]`——声明式分页：自动 `page`/`size` 查询参数（默认 1/20，钳制 `1..=100`），`Vec<T>` 返回包装为 `{items,total,next}`
+  - `etag` feature——GET 2xx 响应自动强 ETag（SHA-256），`If-None-Match` 命中/`*` → 304 空 body；POST 不受影响
+  - `#[forge(on_start/on_stop)]`——进程生命周期钩子（inventory 注册，`lifecycle` feature），与 T704 停机顺序协同（on_start 先于监听、on_stop 在排空之后）
+- **契约与观测**（T705/T706/T713/T714/T715）：
+  - `context` feature——`RequestContext`（request_id/trace_id）经 tokio task_local 跨协议贯穿（HTTP 中间件/gRPC call/WS handle_socket/MCP dispatch），`StructuredLogger` 自动附加关联字段；响应回显 `X-Request-Id`/`X-Trace-Id`，支持 W3C `traceparent` 提取
+  - OpenAPI Schema 补全——Body 参数生成 `requestBody`，返回类型映射生成响应 schema（`Result` 解包、`Vec<T>` → array、Rust 基元映射表）；`OpenApiRouteInfo` 新增 `body_params`/`response_type` 字段，运行时反射入口 `schema_for_type_name`
+  - `hooks` feature——处理器前后钩子管道（`RequestHooks` before/after + 全局安装），hook panic 隔离不致请求失败；统一错误契约 `error::unified::UnifiedError`（code/message/trace_id/field），RBAC 403 与校验 400 均走同一渲染
+  - `otel` feature——OTLP/HTTP JSON 导出（`/v1/traces` 请求 span + `/v1/metrics` 计数快照），零新增依赖（自研轻量 HTTP POST）；mock collector e2e
+  - 宏诊断精确到参数 span——未知 `#[forge]` 键、`auth(...)` 内未知键、空 role 值均在出错 token 处报错（trybuild stderr 快照断言）
+- **协议扩展**（T712）：
+  - gRPC 认证拦截器——`SdForgeGrpcService::with_auth_interceptor`，凭据校验失败 → `Status::unauthenticated`；`GrpcAuthVerifier` 端口 + `BearerVerifier`（JWT）/`ApiKeyVerifier`（API key）适配器，复用 HTTP 凭据栈
+  - WS 握手认证扩展——`WebSocketConfig.api_key_auth` 支持 `x-api-key` 凭据路径（与 bearer JWT 二选一通过即认证）
+- **生态承接**（T716）：
+  - 新顶层 crate `limiteron-admin`——limiteron 管理面多协议化（HTTP + CLI + MCP + OpenAPI 同一 `#[forge]` 声明集：status/check/introspect），含 6 项最小 e2e
+  - oxcache 管理端点示例（经 `BackendRegistry` T315：kinds 列举 + 按名构建 + 读写往返）与 dbnexus 数据 API 网关对接示例（表/列白名单 + 过滤 + LIMIT/OFFSET 分页），各含最小 e2e
+- **性能基线**（T710）：`benches/runtime_bench`（路由分发 plain/路径参数、HandlerArgs、JSON 序列化）+ `docs/PERFORMANCE.md` 本机基线（路由分发 ~553-604 ns，序列化 ~137 ns）
+
+### 依赖（Phase 7 追加）
+
+- 新增可选依赖：`futures-util`（lifecycle）、`sha2`（etag，复用既有 workspace 版本）；dbnexus `0.6.0-rc.3` 仅用于生态示例（examples 成员 path 依赖）；`trait-kit/health`、`trait-kit/lifecycle`、`oxcache/kit` 随对应 feature 级联启用
+- 根包 `autoexamples = false`：`examples/` 目录归属 sdforge-examples 成员 crate，根包不再自动发现成员示例文件
+
 ## [0.5.0-rc.2] 及更早
 
 此前版本无独立更新日志记录。
