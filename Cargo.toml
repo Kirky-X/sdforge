@@ -242,7 +242,7 @@ writeable = { version = "0.6", optional = true }
 tokio = { workspace = true, features = ["test-util"] }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.2", path = "./macros", default-features = false }
+sdforge-macros = { version = "0.5.0-rc.3", path = "./macros", default-features = false }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }
