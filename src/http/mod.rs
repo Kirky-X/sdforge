@@ -66,6 +66,7 @@ pub(crate) use http_impl::resolve_route_path;
 pub(crate) use http_impl::route_path_taken;
 
 /// Request ID header name
+#[cfg_attr(feature = "context", allow(dead_code))]
 pub(crate) const X_REQUEST_ID: &str = "x-request-id";
 
 /// HTTP route registration

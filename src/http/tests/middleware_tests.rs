@@ -20,6 +20,7 @@ use crate::http::{X_REQUEST_ID, build_with_config};
 // middleware closure body, which is never executed by build-only tests.
 // ============================================================================
 
+#[cfg(not(feature = "context"))]
 #[tokio::test]
 async fn test_request_id_middleware_generates_uuid_when_absent() {
     let config = AppConfig {
@@ -85,6 +86,7 @@ async fn test_request_id_middleware_preserves_custom_id() {
     assert_eq!(request_id.to_str().unwrap(), "my-custom-id-789");
 }
 
+#[cfg(not(feature = "context"))]
 #[tokio::test]
 async fn test_request_id_middleware_non_utf8_header_generates_uuid() {
     let config = AppConfig {

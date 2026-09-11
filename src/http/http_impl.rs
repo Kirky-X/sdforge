@@ -23,6 +23,7 @@ pub fn rate_limit_layer(
 }
 
 /// Generate or extract request ID from request
+#[cfg_attr(feature = "context", allow(dead_code))]
 pub(crate) fn get_or_generate_request_id(req: &axum::http::Request<Body>) -> String {
     req.headers()
         .get(X_REQUEST_ID)
@@ -302,28 +303,32 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     }
 
     // Request ID middleware (first to ensure all requests have an ID).
-    // T705: with the `context` feature, the additional context middleware
-    // (inner layer) adopts this id into the task-local RequestContext, adds a
-    // trace_id, and echoes both on the response.
-    router = router.layer(axum::middleware::from_fn(
-        |mut req: axum::http::Request<Body>, next: axum::middleware::Next| async move {
-            let request_id = get_or_generate_request_id(&req);
-            // Safely insert request ID header — fall back to a static placeholder
-            // if the value contains non-ASCII characters (prevents panic on malformed client input)
-            let header_value = axum::http::HeaderValue::from_str(&request_id)
-                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("invalid-request-id"));
-            req.headers_mut().insert(
-                axum::http::header::HeaderName::from_static(X_REQUEST_ID),
-                header_value.clone(),
-            );
-            let mut response = next.run(req).await;
-            response.headers_mut().insert(
-                axum::http::header::HeaderName::from_static(X_REQUEST_ID),
-                header_value,
-            );
-            response
-        },
-    ));
+    // T705: with the `context` feature the richer context middleware
+    // (request_id + trace_id + task-local scope + response echo) subsumes it.
+    #[cfg(not(feature = "context"))]
+    {
+        router = router.layer(axum::middleware::from_fn(
+            |mut req: axum::http::Request<Body>, next: axum::middleware::Next| async move {
+                let request_id = get_or_generate_request_id(&req);
+                // Safely insert request ID header — fall back to a static placeholder
+                // if the value contains non-ASCII characters (prevents panic on malformed client input)
+                let header_value = axum::http::HeaderValue::from_str(&request_id)
+                    .unwrap_or_else(|_| {
+                        axum::http::HeaderValue::from_static("invalid-request-id")
+                    });
+                req.headers_mut().insert(
+                    axum::http::header::HeaderName::from_static(X_REQUEST_ID),
+                    header_value.clone(),
+                );
+                let mut response = next.run(req).await;
+                response.headers_mut().insert(
+                    axum::http::header::HeaderName::from_static(X_REQUEST_ID),
+                    header_value,
+                );
+                response
+            },
+        ));
+    }
     #[cfg(feature = "context")]
     {
         router = router.layer(axum::middleware::from_fn(crate::context::context_middleware));

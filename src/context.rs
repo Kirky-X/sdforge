@@ -128,7 +128,7 @@ pub fn log_fields() -> Vec<(String, serde_json::Value)> {
 /// chain, echo ids on the response.
 #[cfg(feature = "http")]
 pub async fn context_middleware(
-    req: axum::http::Request<axum::body::Body>,
+    mut req: axum::http::Request<axum::body::Body>,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
     let request_id = req
@@ -159,6 +159,12 @@ pub async fn context_middleware(
         .unwrap_or_else(|_| axum::http::HeaderValue::from_static("invalid-request-id"));
     let header_trace = axum::http::HeaderValue::from_str(&trace_id)
         .unwrap_or_else(|_| axum::http::HeaderValue::from_static("invalid-trace-id"));
+
+    // Surface the resolved ids to inner layers/handlers via request headers.
+    req.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-request-id"),
+        header_req.clone(),
+    );
 
     let ctx = RequestContext::with_ids(request_id, trace_id);
     let mut response = scope(ctx, next.run(req)).await;
