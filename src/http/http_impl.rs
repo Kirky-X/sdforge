@@ -281,6 +281,12 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         ));
     }
 
+    // T709: ETag/If-None-Match conditional requests for GET responses.
+    #[cfg(feature = "etag")]
+    {
+        router = router.layer(axum::middleware::from_fn(crate::http::etag::etag_middleware));
+    }
+
     // Request ID middleware (first to ensure all requests have an ID).
     // T705: with the `context` feature, the additional context middleware
     // (inner layer) adopts this id into the task-local RequestContext, adds a

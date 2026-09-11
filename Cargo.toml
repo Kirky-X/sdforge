@@ -363,6 +363,9 @@ validate = ["http", "tokio"]
 # {items,total,next} 响应包装；处理函数返回完整 Vec<T>。
 paginate = ["http", "tokio"]
 
+# ETag 条件请求特性 (T709) - GET 响应自动强 ETag（SHA-256）+ If-None-Match → 304。
+etag = ["http", "dep:sha2"]
+
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
 # `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
@@ -593,6 +596,12 @@ required-features = ["http", "validate"]
 name = "paginate_tests"
 path = "tests/integration/paginate_tests.rs"
 required-features = ["http", "paginate"]
+
+# T709: ETag 条件请求 e2e — 自动 ETag + 304。
+[[test]]
+name = "etag_tests"
+path = "tests/integration/etag_tests.rs"
+required-features = ["http", "etag"]
 
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）

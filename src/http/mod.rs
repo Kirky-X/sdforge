@@ -36,6 +36,8 @@ pub use crate::security::RateLimitLayer;
 pub use crate::security::{LimiteronAdapter, RateLimiter};
 
 mod http_impl;
+#[cfg(feature = "etag")]
+pub mod etag;
 #[cfg(feature = "graceful")]
 pub mod graceful;
 #[cfg(feature = "ratelimit-http")]
