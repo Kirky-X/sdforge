@@ -370,6 +370,9 @@ etag = ["http", "dep:sha2"]
 # 与 T704 优雅停机顺序协同（on_start 先于监听、on_stop 在排空之后）。
 lifecycle = ["http", "tokio", "dep:futures-util"]
 
+# 钩子管道特性 (T713) - 处理器前后钩子（中间件式），统一错误契约同批交付。
+hooks = ["http", "tokio"]
+
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
 # `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building

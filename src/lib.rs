@@ -221,6 +221,10 @@ pub mod context;
 #[cfg(feature = "lifecycle")]
 pub mod lifecycle;
 
+/// Processor pre/post hook pipeline (middleware-style) — T713.
+#[cfg(feature = "hooks")]
+pub mod hooks;
+
 /// Endpoint-level RBAC (`#[forge(auth(role = "..."))]`) — the macro wraps the
 /// generated route with [`rbac::require_role`] (T703). Fail-safe: no auth
 /// stack or no matching role → 403.

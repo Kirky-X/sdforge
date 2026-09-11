@@ -287,6 +287,12 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         router = router.layer(axum::middleware::from_fn(crate::http::etag::etag_middleware));
     }
 
+    // T713: processor pre/post hook pipeline (active when hooks installed).
+    #[cfg(feature = "hooks")]
+    {
+        router = router.layer(axum::middleware::from_fn(crate::hooks::hooks_middleware));
+    }
+
     // Request ID middleware (first to ensure all requests have an ID).
     // T705: with the `context` feature, the additional context middleware
     // (inner layer) adopts this id into the task-local RequestContext, adds a

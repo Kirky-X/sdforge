@@ -21,15 +21,15 @@ use axum::response::IntoResponse;
 pub type Roles = &'static [&'static str];
 
 /// 403 body shared by both implementations (stable shape for clients).
+///
+/// T713: rendered through the unified error contract — carries the ambient
+/// `trace_id` when the `context` feature is active.
 fn forbidden(roles: Roles) -> axum::response::Response {
-    (
-        axum::http::StatusCode::FORBIDDEN,
-        axum::Json(serde_json::json!({
-            "code": "FORBIDDEN",
-            "message": format!("missing required role: {}", roles.join(", ")),
-        })),
-    )
-        .into_response()
+    let err = crate::error::unified::UnifiedError::new(
+        "FORBIDDEN",
+        format!("missing required role: {}", roles.join(", ")),
+    );
+    crate::error::unified::render_http(axum::http::StatusCode::FORBIDDEN, &err)
 }
 
 /// Wrap a route's `MethodRouter` with an endpoint-level role requirement.
