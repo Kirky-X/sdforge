@@ -373,6 +373,10 @@ lifecycle = ["http", "tokio", "dep:futures-util"]
 # 钩子管道特性 (T713) - 处理器前后钩子（中间件式），统一错误契约同批交付。
 hooks = ["http", "tokio"]
 
+# OTel 全栈观测特性 (T714) - OTLP/HTTP JSON 导出（MVP：本地 collector，无 TLS），
+# 请求 span 中间件 + 指标快照导出；零额外依赖（自研轻量 HTTP POST）。
+otel = ["http", "tokio"]
+
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
 # `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
@@ -628,6 +632,12 @@ required-features = ["http", "graceful", "lifecycle"]
 name = "grpc_ws_auth_tests"
 path = "tests/integration/grpc_ws_auth_tests.rs"
 required-features = ["grpc", "websocket", "security"]
+
+# T714: OTLP/HTTP 导出 e2e — mock collector 收到 span/metrics。
+[[test]]
+name = "otel_export_tests"
+path = "tests/integration/otel_export_tests.rs"
+required-features = ["http", "otel", "metrics"]
 
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）

@@ -225,6 +225,10 @@ pub mod lifecycle;
 #[cfg(feature = "hooks")]
 pub mod hooks;
 
+/// OpenTelemetry observation (OTLP/HTTP MVP: spans + request metrics) — T714.
+#[cfg(feature = "otel")]
+pub mod otel;
+
 /// Endpoint-level RBAC (`#[forge(auth(role = "..."))]`) — the macro wraps the
 /// generated route with [`rbac::require_role`] (T703). Fail-safe: no auth
 /// stack or no matching role → 403.

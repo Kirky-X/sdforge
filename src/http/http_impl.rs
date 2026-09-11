@@ -281,6 +281,14 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         ));
     }
 
+    // T714: request-span middleware (OTLP export via sdforge::otel).
+    #[cfg(feature = "otel")]
+    {
+        router = router.layer(axum::middleware::from_fn(
+            crate::otel::otel_span_middleware,
+        ));
+    }
+
     // T709: ETag/If-None-Match conditional requests for GET responses.
     #[cfg(feature = "etag")]
     {
