@@ -359,6 +359,10 @@ context = ["tokio"]
 # 400 带字段级错误；验证语句由宏注入 HTTP 处理闭包。
 validate = ["http", "tokio"]
 
+# 声明式分页特性 (T708) - #[forge(paginate)] 自动 page/size 查询参数与
+# {items,total,next} 响应包装；处理函数返回完整 Vec<T>。
+paginate = ["http", "tokio"]
+
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
 # `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
@@ -583,6 +587,12 @@ required-features = ["http", "graceful"]
 name = "validate_tests"
 path = "tests/integration/validate_tests.rs"
 required-features = ["http", "validate"]
+
+# T708: #[forge(paginate)] 声明式分页 e2e — {items,total,next} 包装。
+[[test]]
+name = "paginate_tests"
+path = "tests/integration/paginate_tests.rs"
+required-features = ["http", "paginate"]
 
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）

@@ -16,6 +16,11 @@
 #[cfg(feature = "validate")]
 pub mod field_validation;
 
+/// Declarative pagination (T708): `#[forge(paginate)]` page/size parsing and
+/// the {items,total,next} response envelope.
+#[cfg(feature = "paginate")]
+pub mod pagination;
+
 pub mod handler;
 pub mod json;
 #[cfg(any(feature = "http", feature = "security"))]

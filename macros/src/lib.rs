@@ -267,6 +267,8 @@ struct ForgeExtras {
     auth_roles: Vec<String>,
     /// `validate` bare flag (T707): enforce `#[param(...)]` validation rules.
     validate: bool,
+    /// `paginate` bare flag (T708): page/size params + envelope wrapping.
+    paginate: bool,
 }
 
 /// Extract extras attributes from the raw argument token stream.
@@ -301,6 +303,8 @@ fn extract_forge_extras(args: TokenStream2) -> Result<(TokenStream2, ForgeExtras
                                 })?;
                                 if flag == "validate" {
                                     extras.validate = enabled;
+                                } else if flag == "paginate" {
+                                    extras.paginate = enabled;
                                 }
                             }
                             _ => {
@@ -317,11 +321,11 @@ fn extract_forge_extras(args: TokenStream2) -> Result<(TokenStream2, ForgeExtras
                             format!("unexpected token after `{}`", flag),
                         ));
                     }
-                    None => {
-                        if flag == "validate" {
-                            extras.validate = true;
-                        }
-                    }
+                    None => match flag.as_str() {
+                        "validate" => extras.validate = true,
+                        "paginate" => extras.paginate = true,
+                        _ => {}
+                    },
                 }
             }
             TokenTree::Ident(ident) if ident.to_string() == "auth" => {
@@ -1545,6 +1549,23 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         closure_params.clone_from(&param_patterns);
     }
 
+    // T708: with `#[forge(paginate)]`, append a page/size query extractor.
+    // The extractor is appended unconditionally (plain axum/std types, so it
+    // compiles under any feature set); the envelope wrapping itself is
+    // gated on the downstream crate's `paginate` feature below.
+    let _paginate_active = extras.paginate;
+    // Must be FIRST: axum requires the last extractor to implement
+    // `FromRequest` (body-consuming); `Query` only implements
+    // `FromRequestParts`, so it can never be last.
+    closure_params.insert(
+        0,
+        quote! {
+            _forge_page_query: sdforge::axum::extract::Query<
+                std::collections::HashMap<String, String>,
+            >
+        },
+    );
+
     // 闭包体内统一的前置解构语句（路径元组 + 查询结构体，均可能为空）
     let mut prelude_stmts: Vec<proc_macro2::TokenStream> = Vec::new();
     if multi_path {
@@ -2052,11 +2073,22 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                             use sdforge::prelude::*;
                             #path_destructure
                             match #fn_name(#(#param_call_args),*).await {
-                                Ok(value) => (
-                                    sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
-                                        .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
-                                    sdforge::axum::extract::Json(value),
-                                ).into_response(),
+                                Ok(value) => {
+                                    #[cfg(not(feature = "paginate"))]
+                                    let __forge_result = value;
+                                    #[cfg(feature = "paginate")]
+                                    let __forge_result = {
+                                        let __page = sdforge::core::pagination::PageRequest::from_query(
+                                            &_forge_page_query.0,
+                                        );
+                                        sdforge::core::pagination::paginate(value, __page)
+                                    };
+                                    (
+                                        sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
+                                            .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
+                                        sdforge::axum::extract::Json(__forge_result),
+                                    ).into_response()
+                                }
                                 Err(e) => e.into_response(),
                             }
                         }
@@ -2078,10 +2110,19 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                             use sdforge::prelude::*;
                             #path_destructure
                             let result = #fn_name(#(#param_call_args),*).await;
+                            #[cfg(not(feature = "paginate"))]
+                            let __forge_result = result;
+                            #[cfg(feature = "paginate")]
+                            let __forge_result = {
+                                let __page = sdforge::core::pagination::PageRequest::from_query(
+                                    &_forge_page_query.0,
+                                );
+                                sdforge::core::pagination::paginate(result, __page)
+                            };
                             (
                                 sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
                                     .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
-                                sdforge::axum::extract::Json(result),
+                                sdforge::axum::extract::Json(__forge_result),
                             ).into_response()
                         }
                     }
