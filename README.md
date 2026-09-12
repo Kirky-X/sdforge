@@ -1,14 +1,31 @@
 <div align="center">
 
-<img src="docs/assets/sdforge.png" alt="SDForge Logo" width="200">
+<img src="docs/assets/sdforge.png" alt="SDForge Logo" width="180">
 
 [![CI Status](https://github.com/Kirky-X/sdforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Kirky-X/sdforge/actions/workflows/ci.yml) [![Version](https://img.shields.io/crates/v/sdforge.svg)](https://crates.io/crates/sdforge) [![Docs.rs](https://docs.rs/sdforge/badge.svg)](https://docs.rs/sdforge) [![Downloads](https://img.shields.io/crates/d/sdforge.svg)](https://crates.io/crates/sdforge) [![License](https://img.shields.io/crates/l/sdforge.svg)](LICENSE) [![Rust](https://img.shields.io/badge/rust-1.97.1%2B-orange.svg)](https://www.rust-lang.org/) [![Coverage](https://codecov.io/gh/Kirky-X/sdforge/branch/main/graph/badge.svg)](https://codecov.io/gh/Kirky-X/sdforge)
 
 **中文** | [English](README_EN.md)
 
-**SDForge** 是一个基于 Rust 的声明式 SDK 框架，利用过程宏从统一的函数注解自动生成多协议服务接口（HTTP + MCP + gRPC + WebSocket + CLI）。其核心创新在于通过 Cargo features 进行编译时协议选择——未使用的协议将产生零编译代码。
+**一套宏注解，编译时装配多协议 SDK**
 
 [✨ 功能特性](#-功能特性) • [🚀 快速开始](#-快速开始) • [📚 文档](#-文档) • [💻 示例](#-示例) • [🤝 参与贡献](#-参与贡献)
+
+</div>
+
+---
+
+SDForge 是基于 Rust 的声明式 SDK 框架。用 `#[forge]` 过程宏标注一次函数，框架在编译期生成 HTTP、MCP、gRPC、WebSocket、CLI 五种协议的注册代码；协议选择完全由 Cargo features 决定，未启用的协议不产生任何编译代码。
+
+<div align="center">
+
+<table>
+  <tr>
+    <td align="center" width="25%">🎯<br><b>统一注解</b><br><code>#[forge]</code> 单宏定义端点<br>五种协议消费同一份元数据</td>
+    <td align="center" width="25%">⚡<br><b>编译时协议选择</b><br>feature 门控代码生成<br>未启用协议零编译代码</td>
+    <td align="center" width="25%">🌐<br><b>五种协议入口</b><br>HTTP / MCP / gRPC<br>WebSocket / CLI</td>
+    <td align="center" width="25%">🛡️<br><b>安全默认</b><br>认证、限流、审计<br>fail-safe 默认值</td>
+  </tr>
+</table>
 
 </div>
 
@@ -17,27 +34,16 @@
 ## 📋 目录
 
 <details open>
+<summary>📑 目录</summary>
 
 - [✨ 功能特性](#-功能特性)
 - [🚀 快速开始](#-快速开始)
-  - [📦 安装](#-安装)
-  - [💡 基本用法](#-基本用法)
-  - [📁 模块前缀](#-模块前缀)
-  - [🔢 多版本管理](#-多版本管理)
-  - [🛤️ 路径参数](#️-路径参数)
-  - [⚠️ 错误处理](#️-错误处理)
-  - [🔧 `#[forge]` 宏参数](#-forge-宏参数)
-  - [🌐 协议组合](#-协议组合)
-  - [🛰️ gRPC Dispatch](#️-grpc-dispatch)
-  - [🖥️ CLI Dispatch](#️-cli-dispatch)
 - [🎨 特性标志](#-特性标志)
 - [📚 文档](#-文档)
 - [💻 示例](#-示例)
 - [🏗️ 架构](#️-架构)
-- [📜 OpenAPI 自动生成](#-openapi-自动生成)
-- [🔄 MCP 2026-07-28 迁移指南](#-mcp-2026-07-28-迁移指南)
-- [🚀 生产部署](#-生产部署)
-- [🐛 故障排查](#-故障排查)
+- [🔄 核心执行路径](#-核心执行路径)
+- [🌐 一份注解，五种协议](#-一份注解五种协议)
 - [🧪 测试](#-测试)
 - [📊 性能](#-性能)
 - [🔒 安全](#-安全)
@@ -57,49 +63,41 @@
 
 | 特性 | 说明 |
 |------|------|
-| **🎯 统一接口定义** | 针对 HTTP、MCP、gRPC、WebSocket、CLI 的单一宏配置 |
-| **⚡ 编译时协议选择** | 通过 Feature 控制代码生成，未使用的协议零运行时开销 |
-| **🔒 类型安全** | 接口定义的编译时验证 |
-| **🌐 多协议支持** | HTTP (Axum)、MCP (rmcp 3.2)、gRPC (tonic)、WebSocket、SSE 流式传输、CLI (clap) |
-| **🧩 模块化设计** | 基于 Feature 的架构，允许仅选择所需功能 |
-| **🛡️ 安全特性** | 内置认证（Bearer/API Key）、限流（limiteron）、审计日志 |
-| **💾 缓存** | 基于内存缓存（oxcache），无需外部数据库 |
-| **🔧 配置管理** | 自包含的 TOML 配置（无需外部配置中心） |
-| **📊 版本控制** | 内置 API 版本管理 |
-| **📜 OpenAPI 自动生成** | 基于 utoipa 5.5 生成 OpenAPI 3.1 规范 |
-| **🌐 国际化** | 基于 ICU4X 2.x 的本地化支持（`i18n` feature） |
+| 🎯 **统一接口定义** | 单个 `#[forge]` 宏同时配置 HTTP、MCP、gRPC、WebSocket、CLI |
+| ⚡ **零协议税** | 协议选择发生在编译期，运行期无协议探测或动态加载 |
+| 🌐 **多协议支持** | Axum 0.8、rmcp 3.2（MCP 2026-07-28 规范）、tonic、WebSocket、SSE、clap |
+| 🔒 **类型安全** | 接口定义编译期验证，trybuild 覆盖编译失败用例 |
+| 🛡️ **安全特性** | API Key / JWT Bearer 认证、limiteron 限流、审计日志、安全头 |
+| 💾 **内存缓存** | oxcache 提供 LRU、模式失效、批量操作与统计，无数据库依赖 |
+| 🔧 **配置管理** | 自包含 TOML 配置，模块化默认值与 Builder 模式 |
+| 📊 **版本管理** | 内置 `/api/{version}` 多版本路由与 `#[service_module]` 模块前缀 |
+| 📜 **OpenAPI 3.1** | utoipa 编译期收集路由，运行时生成规范 + Swagger UI |
+| 🌍 **国际化** | ICU4X 本地化格式化与 Accept-Language 解析 |
+| 🔭 **可观测性** | Prometheus 指标、OTLP 导出、健康探针、优雅停机、请求上下文 |
+| 🧩 **特性组合** | 30+ Cargo features 按需装配，常驻核心不依赖任何协议栈 |
 
-### 🔌 可选功能
+<details>
+<summary>🔧 按需启用的进阶能力</summary>
 
-以下能力均通过 Cargo feature 按需启用，详见[特性标志](#-特性标志)：
-
-| 可选功能 | 对应 Feature | 说明 |
-|----------|--------------|------|
-| HTTP 服务器 | `http` | Axum 0.8 路由、中间件、版本路由 |
-| MCP 协议 | `mcp` | rmcp 官方 SDK，2026-07-28 规范（无状态 HTTP 头协议、MRTR、缓存语义） |
-| SSE 流式传输 | `streaming` | SSE 事件流与流式响应构建 |
-| WebSocket | `websocket` | 连接管理、广播、消息解析 |
-| gRPC | `grpc` | tonic 服务、统一 handler dispatch |
-| CLI | `cli` | clap 命令行集成、一站式 `CliBuilder::execute()` |
-| OpenAPI 3.1 | `openapi` | 编译时注册路由信息，运行时生成规范 |
-| 统一文档输出 | `docs` | Swagger UI + CLI/MCP Markdown |
-| 认证与审计 | `security` | API Key / JWT Bearer、审计日志、安全头 |
-| 限流 | `ratelimit` / `ratelimit-http` | limiteron 统一限流（核心 / Tower 中间件） |
-| 缓存 | `cache` | oxcache 内存缓存（LRU、模式失效、统计） |
+| 能力 | Feature | 说明 |
+|------|---------|------|
+| 参数校验 | `validate` | `#[forge(validate)]` + `#[param(ge/le/...)]`，400 返回字段级错误 |
+| 声明式分页 | `paginate` | `#[forge(paginate)]` 自动 page/size 与 `{items,total,next}` 包装 |
+| ETag 条件请求 | `etag` | GET 响应自动强 ETag（SHA-256），If-None-Match 返回 304 |
+| 生命周期钩子 | `lifecycle` | `#[forge(on_start/on_stop)]` 进程级钩子，与优雅停机顺序协同 |
+| 钩子管道 | `hooks` | 处理器前后钩子（中间件式），统一错误契约 |
+| 优雅停机 | `graceful` | SIGTERM/SIGINT 触发停止接新、排空在途、三阶段关闭 |
+| 健康探针 | `health` | `build_with_config` 自动挂载 `/healthz` `/readyz`（bypass 认证） |
+| Prometheus 指标 | `metrics` | 请求计数、延迟直方图、状态码分布，`/metrics` 端点 |
+| OTel 导出 | `otel` | OTLP/HTTP JSON 导出请求 span 与指标快照，零额外依赖 |
+| 请求上下文 | `context` | request_id/trace_id 生成与跨协议（HTTP/MCP/gRPC/WS）注入 |
 | 响应时间戳 | `timestamp` | 自动向响应添加时间戳 |
 | 结构化日志 | `logging` | 结构化请求日志 |
-| inklog 集成 | `inklog` | 桥接到 inklog LoggerManager 结构化日志管道 |
-| 国际化 | `i18n` | ICU4X 本地化格式化与 Accept-Language 解析 |
-| SIMD JSON | `simd-json` | SIMD 加速 JSON 序列化 |
+| inklog 桥接 | `inklog` | 裸 `log` 调用路由到 inklog LoggerManager 管道 |
+| trait-kit 集成 | `kit` | AsyncKit 模块图集成与 `LimiteronForgeAdapter` |
+| SIMD JSON | `simd-json` | SIMD 加速 JSON 序列化/反序列化 |
 
-#### 🆕 Phase 1 架构改进
-
-近期的架构增强包括：
-
-- **🔄 统一注册系统** — 通过 trait 抽象与过程宏，消除 HTTP、MCP、WebSocket、gRPC 模块间 95+ 行重复代码
-- **⚙️ 模块化配置管理** — 配置重构为独立模块（app、cache、security），集中默认值并支持 Builder 模式
-- **🔐 增强安全模块** — API Key 版本管理、LRU 缓存、带审计日志的密钥轮换、完善的安全头配置
-- **💾 高级缓存** — 基于模式的缓存失效、键规范化、批量操作与统计信息跟踪
+</details>
 
 ---
 
@@ -111,205 +109,53 @@
 cargo add sdforge
 ```
 
-或手动添加到 `Cargo.toml`：
+或手动添加到 `Cargo.toml`（当前版本 `0.5.0-rc.3`）：
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["http"] }
+sdforge = { version = "0.5.0-rc.3", features = ["http"] }
 ```
 
-> 注意：`sdforge` 默认不启用任何特性（`default = []`），需按需显式启用协议特性。
+最低要求：
 
-### 💡 基本用法
+- **Rust 1.97.1+**（edition 2024，`rust-toolchain.toml` 固定工具链）
+- **protoc**：仅在启用 `grpc` feature 时需要（`build.rs` 编译 protobuf）
 
-使用单个宏定义你的 API：
+> `sdforge` 默认不启用任何特性（`default = []`），按需显式启用协议特性。
+
+### 💡 最小可运行示例
+
+以下示例来自 [`examples/basic_cli.rs`](examples/basic_cli.rs)（`cli` feature）：
 
 ```rust
-use sdforge::prelude::*;
+use sdforge::cli::CliBuilder;
+use sdforge::core::ApiError;
+use sdforge::forge;
 
-#[forge(
-    name = "get_user",
-    version = "v1",
-    path = "/users/:id",
-    method = "GET",
-    tool_name = "get_user",
-    description = "Get a user by ID"
-)]
-async fn get_user(id: u64) -> Result<User, ApiError> {
-    Ok(User { id, name: "Test".into() })
+#[forge(name = "echo", version = "1.0", description = "Echo a greeting", cli = true)]
+async fn echo(name: String) -> Result<String, ApiError> {
+    Ok(format!("Hello, {}!", name))
 }
 
 #[tokio::main]
 async fn main() {
-    let app = sdforge::http::build();
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    sdforge::init_all_plugins();
+    // execute() 返回 `!`：内部完成 build / parse / dispatch / 输出 / exit
+    CliBuilder::new().execute().await;
 }
 ```
 
-### 📁 模块前缀
-
-使用模块前缀对相关 API 进行分组：
-
-```rust
-#[service_module(prefix = "/auth")]
-mod auth_api {
-    use super::*;
-
-    #[forge(
-        name = "login",
-        version = "v1",
-        path = "/login",
-        method = "POST"
-    )]
-    async fn login(credentials: Credentials) -> Result<Token, ApiError> {
-        Ok(Token::new())
-    }
-
-    #[forge(
-        name = "logout",
-        version = "v1",
-        path = "/logout",
-        method = "POST"
-    )]
-    async fn logout() -> Result<(), ApiError> {
-        Ok(())
-    }
-}
+```bash
+cargo run --example basic_cli --features cli -- echo --name world
+# 输出：Hello, world!（Value::String 智能提取，无引号）
 ```
 
-这将生成端点：
+### 🧭 核心概念
 
-- `/auth/api/v1/login`
-- `/auth/api/v1/logout`
-
-### 🔢 多版本管理
-
-同时支持多个 API 版本：
-
-```rust
-#[forge(
-    name = "get_user",
-    version = "v1",
-    path = "/users/:id",
-    method = "GET",
-    tool_name = "get_user_v1"
-)]
-async fn get_user_v1(id: u64) -> Result<UserV1, ApiError> {
-    Ok(UserV1 { id, name: "John Doe".into() })
-}
-
-#[forge(
-    name = "get_user",
-    version = "v2",
-    path = "/users/:id",
-    method = "GET",
-    tool_name = "get_user_v2"
-)]
-async fn get_user_v2(id: u64) -> Result<UserV2, ApiError> {
-    Ok(UserV2 { id, first_name: "John".into(), last_name: "Doe".into() })
-}
-```
-
-这将生成带版本的端点：
-
-- `/api/v1/users/:id` → `get_user_v1`
-- `/api/v2/users/:id` → `get_user_v2`
-
-### 🛤️ 路径参数
-
-遵循 Rust 命名规范提取路径参数。宏自动将路径段映射到函数参数：
-
-```rust
-#[forge(
-    name = "get_user",
-    version = "v1",
-    path = "/users/:id",
-    method = "GET"
-)]
-async fn get_user(id: u64) -> Result<User, ApiError> {
-    // `id` 自动从 `/users/:id` 提取
-    Ok(User { id, name: "John".into() })
-}
-```
-
-#### 🔹 多个路径参数
-
-对于嵌套资源：
-
-```rust
-#[forge(
-    name = "get_comment",
-    version = "v1",
-    path = "/posts/:post_id/comments/:comment_id",
-    method = "GET"
-)]
-async fn get_comment(
-    post_id: u64,
-    comment_id: u64
-) -> Result<Comment, ApiError> {
-    // 两个参数均从路径提取
-    Ok(Comment { post_id, comment_id, text: "Test".into() })
-}
-
-#[forge(
-    name = "get_task",
-    version = "v1",
-    path = "/orgs/:org_id/projects/:project_id/tasks/:task_id",
-    method = "GET"
-)]
-async fn get_task(
-    org_id: u64,
-    project_id: u64,
-    task_id: u64
-) -> Result<Task, ApiError> {
-    Ok(Task { org_id, project_id, task_id, title: "Task".into() })
-}
-```
-
-### ⚠️ 错误处理
-
-定义自定义错误类型并转换为 `ServiceError`：
-
-```rust
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum MyError {
-    #[error("Resource not found: {resource}")]
-    NotFound { resource: String },
-
-    #[error("Validation failed: {field}")]
-    ValidationError { field: String },
-
-    #[error("Unauthorized access")]
-    Unauthorized,
-}
-
-impl From<MyError> for ServiceError {
-    fn from(err: MyError) -> Self {
-        match err {
-            MyError::NotFound { resource } => ServiceError::with_details(
-                "NOT_FOUND",
-                format!("Resource not found: {}", resource),
-                serde_json::json!({ "resource": resource }),
-                404,
-            ),
-            MyError::ValidationError { field } => ServiceError::with_details(
-                "VALIDATION_ERROR",
-                format!("Validation failed for field: {}", field),
-                serde_json::json!({ "field": field }),
-                400,
-            ),
-            MyError::Unauthorized => ServiceError::new(
-                "UNAUTHORIZED",
-                "Authentication required",
-                401,
-            ),
-        }
-    }
-}
-```
+- `#[forge]` 注解描述一份端点元数据：名称、版本、路径、方法、描述
+- 宏按启用的 feature 生成各协议注册代码，经 `inventory::submit!()` 编译期提交
+- 应用启动时调用 `init_all_plugins()` 一次性收集全部注册项（`OnceLock` 固化）
+- 按协议选择入口：`http::build()` / rmcp stdio / `SdForgeGrpcService` / `CliBuilder::execute()`
 
 ### 🔧 `#[forge]` 宏参数
 
@@ -327,168 +173,67 @@ impl From<MyError> for ServiceError {
 
 ### 🌐 协议组合
 
-**仅 HTTP** — 传统 REST API：
+| 目标 | features | 场景 |
+|------|----------|------|
+| 仅 HTTP | `["http"]` | 传统 REST API |
+| 仅 MCP | `["mcp"]` | AI 工具集成 |
+| HTTP + MCP 双协议 | `["http", "mcp"]` | 同一份代码双入口 |
+| 全量运行时特性 | `["full"]` | 全部协议与能力（不含 `simd-json`/`hex`） |
 
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["http"] }
-```
-
-**仅 MCP** — AI 工具集成：
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["mcp"] }
-```
-
-**双协议** — 同一份代码同时通过 HTTP 与 MCP 暴露：
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["http", "mcp"] }
-```
-
-**全量特性** — 启用全部能力：
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["full"] }
-```
-
-### 🛰️ gRPC Dispatch
-
-启用 `grpc` feature 后，`#[forge(grpc_method = "...")]` 会通过 inventory 注册到
-`SdForgeGrpcService`，由其 `call()` 方法路由到对应 handler。返回值需满足
-`serde::Serialize`，错误类型需为 `ApiError`：
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["grpc"] }
-```
-
-```rust
-use sdforge::prelude::*;
-use sdforge::forge;
-
-#[forge(
-    name = "grpc_echo",
-    version = "v1",
-    grpc_method = "comprehensive.echo",
-    description = "gRPC echo handler"
-)]
-async fn echo(msg: String) -> Result<serde_json::Value, ApiError> {
-    Ok(serde_json::json!({ "echo": msg }))
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    sdforge::init_all_plugins();
-    let server = sdforge::grpc::SdForgeGrpcService::default();
-    server.serve("0.0.0.0:50051").await?;
-    Ok(())
-}
-```
-
-### 🖥️ CLI Dispatch
-
-启用 `cli` feature 后，`#[forge(cli = true)]` 会注册 `CliCommandRegistration` +
-`CliHandlerRegistration`，由 `CliBuilder::execute()` 一站式完成 build / parse /
-dispatch / 输出 / 退出。返回 `Value::String` 时输出原始串（不带引号），其他类型
-输出 JSON：
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["cli"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-```
-
-```rust
-use sdforge::cli::CliBuilder;
-use sdforge::core::ApiError;
-use sdforge::forge;
-
-#[forge(name = "echo", version = "1.0", description = "Echo a greeting", cli = true)]
-async fn echo(name: String) -> Result<String, ApiError> {
-    Ok(format!("Hello, {}!", name))
-}
-
-#[tokio::main]
-async fn main() {
-    sdforge::init_all_plugins();
-    // execute() 返回 `!`：内部 std::process::exit(0/1)，调用方无需 match
-    CliBuilder::new().execute().await;
-}
-```
-
-```sh
-# 运行：cargo run --example basic_cli --features cli -- echo --name world
-# 输出：Hello, world!   （无引号 —— 智能提取 Value::String）
-```
+`grpc`、`websocket`、`streaming`、`openapi`、`cli`、`cache` 均可独立于 `http` 启用，任意组合。
 
 ---
 
 ## 🎨 特性标志
 
-SDForge 使用 Cargo features 进行编译时协议选择和特性组合。
+`default = []`：所有特性均为可选，按需显式启用。
 
-| 特性             | 描述                                     | 默认   |
-|------------------|------------------------------------------|--------|
-| `http`           | HTTP 服务器 (Axum 0.8)                   | ❌     |
-| `mcp`            | MCP 协议 (rmcp 3.2, 2026-07-28 规范)     | ❌     |
-| `streaming`      | SSE 流式传输支持                         | ❌     |
-| `timestamp`      | 自动向响应添加时间戳                     | ❌     |
-| `logging`        | 结构化请求日志                           | ❌     |
-| `security`       | 安全特性 (认证, 限流, 审计)              | ❌     |
-| `ratelimit`      | 限流核心 (基于 limiteron，不依赖 http)   | ❌     |
-| `ratelimit-http` | HTTP 限流中间件 (Tower middleware)       | ❌     |
-| `websocket`      | WebSocket 支持                           | ❌     |
-| `grpc`           | gRPC 支持 (tonic)                        | ❌     |
-| `cache`          | 缓存支持 (oxcache)                       | ❌     |
-| `openapi`        | 自动 OpenAPI 3.1 规范生成                | ❌     |
-| `cli`            | CLI 集成 (clap)                          | ❌     |
-| `docs`           | 统一文档输出 (Swagger UI + Markdown)     | ❌     |
-| `inklog`         | inklog 结构化日志集成                    | ❌     |
-| `i18n`           | ICU4X 国际化 (本地化格式化)              | ❌     |
-| `simd-json`      | SIMD 加速 JSON 序列化                    | ❌     |
-| `full`           | 启用所有运行时特性                       | ❌     |
+<table>
+  <tr><th>标志</th><th>说明</th><th>默认</th></tr>
+  <tr><td><code>http</code></td><td>HTTP 服务器（Axum 0.8 路由、Tower 中间件、版本路由）</td><td>❌</td></tr>
+  <tr><td><code>mcp</code></td><td>MCP 协议（rmcp 3.2，2026-07-28 规范：无状态 HTTP 头、MRTR、缓存语义）</td><td>❌</td></tr>
+  <tr><td><code>grpc</code></td><td>gRPC（tonic + prost，独立于 http，proto 经 build.rs 生成）</td><td>❌</td></tr>
+  <tr><td><code>websocket</code></td><td>WebSocket（依赖 http + streaming）</td><td>❌</td></tr>
+  <tr><td><code>streaming</code></td><td>SSE 流式传输（独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>cli</code></td><td>CLI 集成（clap，独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>openapi</code></td><td>OpenAPI 3.1 规范生成（utoipa，独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>docs</code></td><td>统一文档输出（Swagger UI + CLI/MCP Markdown，依赖 openapi + cli）</td><td>❌</td></tr>
+  <tr><td><code>security</code></td><td>认证（API Key / JWT Bearer）、审计、安全头、限流与缓存（含 http + ratelimit-http + cache）</td><td>❌</td></tr>
+  <tr><td><code>ratelimit</code></td><td>限流核心（limiteron，不依赖 http）</td><td>❌</td></tr>
+  <tr><td><code>ratelimit-http</code></td><td>HTTP 限流中间件（Tower Layer，依赖 http + ratelimit）</td><td>❌</td></tr>
+  <tr><td><code>cache</code></td><td>oxcache 内存缓存（独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>health</code></td><td><code>/healthz</code> <code>/readyz</code> 健康探针（自动挂载，bypass 认证）</td><td>❌</td></tr>
+  <tr><td><code>metrics</code></td><td>Prometheus 文本格式 <code>/metrics</code> 端点（自研轻量渲染）</td><td>❌</td></tr>
+  <tr><td><code>graceful</code></td><td>优雅停机（SIGTERM/SIGINT，停止接新、排空在途）</td><td>❌</td></tr>
+  <tr><td><code>context</code></td><td>请求上下文（request_id/trace_id 跨协议注入）</td><td>❌</td></tr>
+  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> 参数校验契约</td><td>❌</td></tr>
+  <tr><td><code>paginate</code></td><td><code>#[forge(paginate)]</code> 声明式分页</td><td>❌</td></tr>
+  <tr><td><code>etag</code></td><td>ETag 条件请求（SHA-256 强 ETag + 304）</td><td>❌</td></tr>
+  <tr><td><code>lifecycle</code></td><td><code>#[forge(on_start/on_stop)]</code> 生命周期钩子</td><td>❌</td></tr>
+  <tr><td><code>hooks</code></td><td>处理器前后钩子管道</td><td>❌</td></tr>
+  <tr><td><code>otel</code></td><td>OTLP/HTTP JSON 导出（零额外依赖）</td><td>❌</td></tr>
+  <tr><td><code>logging</code></td><td>结构化请求日志</td><td>❌</td></tr>
+  <tr><td><code>timestamp</code></td><td>响应时间戳</td><td>❌</td></tr>
+  <tr><td><code>inklog</code></td><td>inklog 结构化日志桥接</td><td>❌</td></tr>
+  <tr><td><code>i18n</code></td><td>ICU4X 国际化（本地化格式化 + Accept-Language 解析）</td><td>❌</td></tr>
+  <tr><td><code>simd-json</code></td><td>SIMD 加速 JSON 序列化</td><td>❌</td></tr>
+  <tr><td><code>limiteron-integration</code></td><td>引入 limiteron 依赖（kit 集成基座）</td><td>❌</td></tr>
+  <tr><td><code>kit</code></td><td>trait-kit AsyncKit 集成（SdforgeModule 模块图）</td><td>❌</td></tr>
+  <tr><td><code>tokio</code></td><td>内部特性：启用 tokio 依赖（随其他特性自动引入）</td><td>❌</td></tr>
+  <tr><td><code>hex</code></td><td>十六进制编解码工具特性</td><td>❌</td></tr>
+  <tr><td><code>full</code></td><td>全部运行时特性（不含 <code>simd-json</code> 与 <code>hex</code>）</td><td>❌</td></tr>
+</table>
 
-### 🔗 特性依赖关系
+<details>
+<summary>🔗 特性依赖关系</summary>
 
-- `default`: 空（无预启用特性，需按需显式启用）
-- `mcp`/`grpc`/`openapi`/`cli`/`streaming`/`cache`: 独立于 `http`
-- `security`: 启用 `http`、`ratelimit-http`（含 `ratelimit`）与 `cache`，并引入 hmac/sha2/uuid 等安全依赖
-- `ratelimit-http`: 需要 `http` + `ratelimit`
-- `websocket`: 需要 `http` + `streaming`
-- `docs`: 需要 `openapi` + `cli`（Swagger UI 子模块需额外启用 `http`）
-- `kit`: trait-kit AsyncKit 集成，需要 `limiteron-integration` + `trait-kit`
-- `full`: 启用全部运行时特性（不含 `simd-json` 与 `hex` 工具特性）
+- 独立于 `http`：`mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `logging` / `inklog` / `i18n` / `simd-json` / `limiteron-integration`
+- 派生自 `http`：`security`（含 `ratelimit-http` → `ratelimit` 与 `cache`）、`ratelimit-http`、`websocket`（含 `streaming`）、`health` / `metrics` / `graceful` / `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
+- `docs` = `openapi` + `cli`（Swagger UI 挂载需另启用 `http`）
+- `kit` = `trait-kit`（health + lifecycle）+ `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
+- `full` 覆盖 18 项运行时特性，不含 `simd-json` / `hex`
 
-### 🔨 构建与测试
-
-```bash
-# 默认（无特性）
-cargo build
-
-# HTTP 协议
-cargo build --features http
-
-# MCP 协议
-cargo build --features mcp
-
-# 完整功能
-cargo build --features full
-
-# 自定义特性集
-cargo build --features "http,cache,security"
-
-# 测试
-cargo test --features http
-cargo test --features full
-
-# 格式化与 Lint
-cargo fmt
-cargo clippy --all-features -- -D warnings
-```
+</details>
 
 ---
 
@@ -496,40 +241,35 @@ cargo clippy --all-features -- -D warnings
 
 | 文档 | 说明 |
 |------|------|
-| [📖 用户指南](docs/USER_GUIDE.md) | 从安装到进阶的完整使用教程 |
-| [📘 API 参考](docs/API_REFERENCE.md) | 全部公开 API 的详细说明 |
-| [🏗️ 架构文档](docs/ARCHITECTURE.md) | 设计理念与内部实现 |
-| [🔒 安全文档](docs/SECURITY.md) | 安全设计与最佳实践 |
-| [⚡ 性能基准](docs/benchmarks/vs-server-less.md) | 特性门控 vs 全量打包的编译时间/体积对比 |
+| [📖 用户指南](docs/USER_GUIDE.md) | 从安装、核心概念到进阶用法的完整教程 |
+| [📘 API 参考](docs/API_REFERENCE.md) | 核心类型与各 feature 门控的公开 API |
+| [🏗️ 架构文档](docs/ARCHITECTURE.md) | 设计原则、模块划分、数据流、安全与性能设计 |
+| [⚡ 性能基线](docs/PERFORMANCE.md) | 运行时热路径 criterion 基线与回归口径 |
+| [📶 编译期门控基准](docs/benchmarks/vs-server-less.md) | feature 门控 vs 全量打包的编译时间与产物体积 |
+| [🔒 安全文档](docs/SECURITY.md) | 漏洞报告流程、安全设计与最佳实践 |
+| [🧾 测试场景](docs/TEST_SCENARIOS.md) | 测试金字塔基线与 E2E 场景定义 |
 | [📋 更新日志](docs/CHANGELOG.md) | 每个版本的变更记录 |
-| [🤝 贡献指南](docs/CONTRIBUTING.md) | 如何参与项目开发 |
-| [📦 在线 API 文档](https://docs.rs/sdforge) | docs.rs 自动生成的最新文档 |
+| [🤝 贡献指南](docs/CONTRIBUTING.md) | 开发环境、TDD 工作流与 PR 流程 |
+| [📦 在线 API 文档](https://docs.rs/sdforge) | docs.rs 自动生成的最新文档（all-features） |
 
 ---
 
 ## 💻 示例
 
-仓库包含两类示例。
-
-### 可运行示例（根包 `cargo run --example`）
+### 根包示例（`cargo run --example`）
 
 | 示例 | 所需特性 | 说明 |
 |------|----------|------|
-| `basic_cli` | `cli` | `#[forge(cli = true)]` + `CliBuilder` 一站式 CLI 入口 |
-| `swagger_demo` | `docs` | Swagger UI 路由 + axum serve |
+| `basic_cli` | `cli` | `#[forge(cli = true)]` + `CliBuilder::execute()` 一站式 CLI |
+| `swagger_demo` | `docs` + `http` | Swagger UI 路由 + OpenAPI JSON + axum serve |
 | `perf_regex_cache` | `cache` | 正则缓存性能验证 |
 | `perf_lru_eviction` | `cache` | LRU 驱逐性能验证 |
 | `perf_prefix_index` | `cache` | 前缀索引性能验证 |
 | `perf_batch_ops` | `cache` | 批量操作性能验证 |
 
 ```bash
-# CLI 示例
 cargo run --example basic_cli --features cli -- echo --name world
-
-# Swagger UI 示例
 cargo run --example swagger_demo --features "docs http"
-
-# 缓存性能示例
 cargo run --example perf_regex_cache --features cache
 ```
 
@@ -539,20 +279,26 @@ cargo run --example perf_regex_cache --features cache
 |------|------|
 | `basics/` | 简单 API、响应构建、类型与错误处理 |
 | `http/` | 路由（路径参数、查询参数）、中间件（CORS） |
-| `mcp/` | 工具定义与注册、MCP 2026-07-28 迁移（`migration_2026.rs`）、MRTR 会话（`mrtr_example.rs`） |
-| `security/` | API Key 认证、认证失败场景、完整安全栈（`comprehensive.rs`） |
-| `cache/` | 高级缓存模式（二级缓存、Cache-Aside、Write-Through） |
+| `mcp/` | 工具定义与注册、MCP 2026-07-28 迁移、MRTR 会话 |
+| `security/` | API Key 认证、认证失败场景、完整安全栈 |
+| `cache/` | 高级缓存模式与性能验证 |
 | `config/` | 配置管理（`app_config.rs`） |
 | `streaming/` | SSE 流式响应 |
-| `websocket/` | 基础用法与聊天室示例 |
+| `websocket/` | 基础用法与聊天室 |
 | `grpc/` | gRPC 服务端 |
 | `logging/` | 结构化日志 |
 | `openapi/` | OpenAPI 规范生成（`OpenApiBuilder`、`generate_openapi_spec`） |
-| `combined/` | 多特性组合的完整示例（`full_example.rs`） |
+| `combined/` | 多特性组合完整示例（`full_example.rs`） |
+
+### 生态集成示例（`sdforge-examples` 成员示例）
+
+| 示例 | 启用特性 | 说明 |
+|------|----------|------|
+| `oxcache_admin` | `oxcache_admin_example` | 经 `BackendRegistry` 暴露 oxcache 管理端点 |
+| `dbnexus_gateway` | `dbnexus_gateway_example` | 白名单表上的只读数据 API 网关（sqlite 内存库） |
 
 ```bash
-# 运行综合示例库的全部模块测试
-cargo test --manifest-path examples/Cargo.toml --lib
+cargo run -p sdforge-examples --example oxcache_admin --features oxcache_admin_example
 ```
 
 示例配置文件位于 `examples/config/`（`default.toml`、`minimal.toml`、`production.toml`、`api-key-auth.toml`）。
@@ -561,411 +307,193 @@ cargo test --manifest-path examples/Cargo.toml --lib
 
 ## 🏗️ 架构
 
-SDForge 采用「统一宏注解 → 编译期协议门控 → inventory 运行时注册」的架构。完整设计说明见 [架构文档](docs/ARCHITECTURE.md)。
+SDForge 由两个 crate 组成：`macros/sdforge-macros` 负责解析 `#[forge]` / `#[service_module]` 注解并按 feature 门控生成注册代码；`sdforge` 是运行时库。运行骨架建立在 inventory 之上：注册项编译期 `inventory::submit!()` 提交，启动期 `init_all_plugins()` 一次性收集并固化为 `OnceLock`，防止 release 构建链接期剔除。各协议模块（http / mcp / grpc / websocket / streaming / cli）彼此独立、按 feature 编译，共享 `core` 的统一 handler 契约（`HandlerArgs` + `HandlerState`）。gRPC 的 protobuf 定义于 `proto/sdforge.v1.proto`（`SdForgeService` 的 `Call` / `GetInfo`），由 `build.rs` 经 tonic-prost 生成到 `OUT_DIR`。完整设计说明见 [架构文档](docs/ARCHITECTURE.md)。
 
-```
-sdforge/
-├── src/                # 主框架 crate
-│   ├── core/         # 核心类型、错误处理、验证
-│   ├── error/        # 框架错误类型（ApiError、SdForgeError）
-│   ├── http/         # HTTP 协议实现 (Axum)
-│   ├── mcp/          # MCP 协议实现 (rmcp)
-│   ├── security/     # 安全特性 (认证、限流、审计)
-│   ├── cache/        # 缓存集成 (oxcache)
-│   ├── websocket/    # WebSocket 支持
-│   ├── grpc/         # gRPC 支持 (tonic)
-│   ├── streaming/    # SSE 流式支持
-│   ├── cli/          # CLI 集成 (clap)
-│   ├── docs/         # 文档生成 (Swagger UI + Markdown)
-│   ├── openapi/      # OpenAPI 3.1 规范生成
-│   ├── domain/       # 领域抽象
-│   ├── config/       # 配置管理
-│   ├── i18n/         # 国际化 (ICU4X)
-│   ├── integrations/ # trait-kit AsyncKit 集成
-│   └── lib.rs        # 库入口点
-├── macros/            # 过程宏 crate (#[forge])
-├── examples/          # 综合示例库 (workspace member)
-├── docs/              # 文档
-├── benches/           # 基准测试
-├── proto/             # protobuf 定义 (gRPC)
-├── .github/           # GitHub 工作流
-└── scripts/           # 构建和实用脚本
+```mermaid
+flowchart TD
+    MAC["macros sdforge-macros<br/>forge 与 service_module 过程宏"] -->|"cfg feature 门控生成"| REG["inventory 注册项<br/>HTTP 路由 MCP 工具 gRPC handler CLI 命令"]
+    REG --> BOOT["init_all_plugins<br/>启动期收集并以 OnceLock 固化"]
+    BOOT --> HTTP["http<br/>axum 路由与中间件栈"]
+    BOOT --> MCP["mcp<br/>rmcp 无状态 handler"]
+    BOOT --> GRPC["grpc<br/>tonic SdForgeGrpcService"]
+    BOOT --> CLI["cli<br/>clap CliBuilder"]
+    BOOT --> WS["websocket 与 streaming<br/>WS 与 SSE"]
+    GRPC --> PROTO["proto sdforge.v1.proto<br/>build.rs tonic-prost 生成"]
+    CORE["core error domain<br/>统一 handler 契约与错误类型"] --> HTTP
+    CORE --> MCP
+    CORE --> GRPC
+    CORE --> CLI
+    HTTP --> SEC["security ratelimit cache config<br/>health metrics graceful otel"]
+    REG --> OAPI["openapi 与 docs<br/>OpenAPI 3.1 规范与 Swagger UI"]
 ```
 
 ### 设计原则
 
-- **编译时协议选择**：未使用的协议不产生任何编译代码
-- **Inventory 注册模式**：`inventory::submit!()` 用于编译时注册，`init_all_plugins()` 防止链接器优化
-- **三种构造模式**：所有组件支持 `new()`（开箱即用）、`builder()`（Builder 模式）、`with_dependencies()`（依赖注入）
-- **不使用数据库**：所有数据交互通过 oxcache（内存缓存）完成
+- **编译时协议选择**：未启用的协议不进入编译图，无运行时探测与动态加载
+- **Inventory 注册模式**：编译期 `inventory::submit!()`，`init_all_plugins()` 防链接器剔除并返回注册计数
+- **统一 handler 契约**：所有协议遵循 `fn(HandlerArgs, HandlerState) -> HandlerFuture`
+- **三种构造模式**：组件支持 `new()`（开箱即用）、`builder()`（Builder）、`with_dependencies()`（依赖注入）
+- **零数据库**：数据交互经 oxcache 内存缓存完成，限流复用 limiteron，日志可桥接 inklog
 
 ---
 
-## 📜 OpenAPI 自动生成
+## 🔄 核心执行路径
 
-SDForge 基于 [utoipa 5.5](https://crates.io/crates/utoipa) 自动生成 OpenAPI 3.1 规范。启用 `openapi` feature 后，每个 `#[forge]` 宏在编译期通过 `inventory` 注册 `OpenApiRouteInfo`；运行时调用 `generate_openapi_spec()` 收集全部路由并生成完整规范。
+以 HTTP 请求热路径为例（完整数据流见 [架构文档](docs/ARCHITECTURE.md) 数据流一节）：
 
-### 🔧 启用
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["http", "openapi"] }
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as 客户端
+    participant MW as 中间件栈
+    participant RT as 版本路由
+    participant FN as forge handler
+    participant RS as ServiceResponse
+    C->>MW: HTTP 请求
+    note over MW: auth_middleware 认证<br/>RateLimitLayer 限流<br/>安全头与 CORS
+    MW->>RT: 校验通过放行
+    RT->>FN: 匹配 /api/v1 路由<br/>提取路径与查询参数
+    FN->>FN: HandlerArgs 与 HandlerState<br/>执行业务逻辑
+    FN-->>RS: Result 值或 ApiError
+    RS-->>C: JSON 响应<br/>可选 timestamp i18n logging
 ```
 
-### 🚀 基本用法
-
-```rust
-use sdforge::openapi::generate_openapi_spec;
-
-// 收集所有通过 #[forge] 注册的路由并生成 OpenAPI 规范
-let spec = generate_openapi_spec();
-
-// 序列化为 JSON 写入文件或返回给客户端
-let json = serde_json::to_string_pretty(&spec).unwrap();
-println!("{json}");
-```
-
-### 🎨 自定义元数据
-
-使用 `OpenApiBuilder` 链式调用自定义 `info` 部分（title、version、description）。路由始终从全局 `inventory` 注册表收集：
-
-```rust
-use sdforge::openapi::OpenApiBuilder;
-
-let spec = OpenApiBuilder::new()
-    .title("My Service")
-    .version("2.0.0")
-    .description("User-facing API for the billing domain")
-    .build();
-```
-
-### 🔗 宏集成
-
-启用 `openapi` feature 后，`#[forge]` 自动生成注册代码，无需手动维护：
-
-```rust
-#[forge(
-    name = "get_user",
-    version = "v1",
-    path = "/users/:id",
-    method = "GET",
-    description = "Get a user by ID"
-)]
-async fn get_user(id: u64) -> Result<User, ApiError> { /* ... */ }
-```
-
-上述代码会在编译期自动向全局注册表提交 `OpenApiRouteInfo { path: "/users/{id}", method: "GET", ... }`，`generate_openapi_spec()` 会将其纳入生成的规范。
-
-> 注意：未启用 `openapi` feature 时，宏不生成任何 utoipa 相关代码——零运行时开销。
+中间件栈顺序、版本路由与响应管道均由 `http::build()` / `build_with_config()` 装配；MCP、gRPC、CLI 入口复用同一批 handler 与响应契约。
 
 ---
 
-## 🔄 MCP 2026-07-28 迁移指南
+## 🌐 一份注解，五种协议
 
-v0.2.0 将 MCP 实现从 `mcp-sdk 0.0.3` 全面迁移至官方 [`rmcp`](https://crates.io/crates/rmcp) SDK（当前为 rmcp 3.2），适配 MCP 2026-07-28 规范。该迁移是一次 **BREAKING** 变更。
+`#[forge]` 宏按当前启用的 feature 生成对应协议的注册项；未启用的协议不生成任何代码：
 
-### ⚠️ BREAKING 变更
-
-| 旧版本 (v0.1.x)                        | 新版本 (v0.2.0+)                              |
-|-----------------------------------------|-----------------------------------------------|
-| `mcp-sdk = "0.0"` 依赖                 | `rmcp` 依赖                                   |
-| `initialize` 握手流程                   | 移除，改用 `server/discover` 端点             |
-| 有状态会话 (`StatefulServerHandler`)    | 无状态适配层 (`StatelessServerHandler`)       |
-| `register_mcp(&mut Server)` 签名        | `register_mcp(&mut dyn McpToolRegistry)`      |
-
-### 🛠️ 无状态适配层
-
-`StatelessServerHandler` 实现了 `rmcp::ServerHandler` trait，其方法均不依赖会话状态，适配 2026-07-28 规范的无状态协议模型：
-
-```rust
-use sdforge::mcp::stateless::StatelessServerHandler;
-
-let handler = StatelessServerHandler::new();
-// 通过 rmcp 的 axum 集成挂载到 HTTP 路由
+```mermaid
+flowchart LR
+    A["forge 宏注解的 async 函数"] --> B["sdforge-macros 宏展开"]
+    B --> C["inventory 编译期注册"]
+    C --> D["http feature<br/>RouteRegistration axum 路由"]
+    C --> E["mcp feature<br/>McpToolRegistration 工具 schema"]
+    C --> F["grpc feature<br/>GrpcHandlerRegistration 调用分发"]
+    C --> G["cli feature<br/>CliCommandRegistration 子命令"]
+    C --> H["openapi feature<br/>OpenApiRouteInfo 规范收集"]
 ```
 
-### 📨 HTTP 头协议
-
-无状态协议通过 HTTP 头传递方法名与工具名，由 `parse_mcp_headers` 解析：
-
-```rust
-use sdforge::mcp::headers::parse_mcp_headers;
-
-// 客户端请求必须携带：
-//   Mcp-Method: tools/call
-//   Mcp-Name: get_user
-let info = parse_mcp_headers(&headers)?;
-```
-
-缺少请求头返回 `400 Bad Request`，与 2026-07-28 规范一致。
-
-### 🔁 多轮往返请求（MRTR）
-
-新增 MRTR 支持。工具可通过 `InputRequiredResult` 挂起执行，等待客户端补充输入；300 秒超时后自动取消：
-
-```rust
-use sdforge::mcp::mrtr::MrtrSessionManager;
-
-let manager = MrtrSessionManager::new();
-let result = manager.create_session("session-1", "get_user")?;
-// 客户端随后通过 session_id 恢复执行
-```
-
-### 💾 缓存语义
-
-`cache_semantics` 模块处理 `ttlMs` 与 `cacheScope` 字段，支持 `global` 与 `request` 两种缓存作用域，并与 oxcache 集成实现工具结果缓存。
-
-### 📚 迁移步骤
-
-1. 将 `Cargo.toml` 中的 `mcp-sdk` 依赖替换为 `rmcp`
-2. 将 `register_mcp(&mut Server)` 调用改为 `register_mcp(&mut dyn McpToolRegistry)`
-3. 移除 `initialize` 握手相关代码，改用 `server/discover` 端点
-4. 如需 MRTR 或缓存语义，导入对应模块
-
-> 完整迁移示例见 `examples/src/mcp/migration_2026.rs`。
-
----
-
-## 🚀 生产部署
-
-### 🐳 Docker 部署
-
-```dockerfile
-FROM rust:1.85 as builder
-WORKDIR /app
-COPY . .
-RUN cargo build --release --features full
-
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/target/release/sdforge /usr/local/bin/
-EXPOSE 3000
-CMD ["sdforge", "serve", "--port", "3000"]
-```
-
-### ☸️ Kubernetes 部署
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: sdforge-api
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: sdforge-api
-  template:
-    metadata:
-      labels:
-        app: sdforge-api
-    spec:
-      containers:
-      - name: sdforge
-        image: sdforge:latest
-        ports:
-        - containerPort: 3000
-        env:
-        - name: FEATURES
-          value: "full"
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-```
-
-### 🔧 环境配置
-
-```bash
-# 生产环境变量
-export RUST_LOG=info
-export SD_FORGE_PORT=3000
-export SD_FORGE_HOST=0.0.0.0
-export SD_FORGE_CONFIG_PATH=/etc/sdforge/config.toml
-export SD_FORGE_FEATURES=full
-```
-
----
-
-## 🐛 故障排查
-
-### 🔍 常见问题
-
-#### **编译错误**
-
-```bash
-# 错误：找不到 feature
-# 解决：检查可用的 features
-cargo check --help | grep features
-
-# 启用指定 features
-cargo build --features "http,security,cache"
-```
-
-#### **运行时问题**
-
-```bash
-# 使用 tracing 查看日志
-RUST_LOG=debug cargo run --features logging
-
-# 端口冲突
-# 解决：更换端口或结束占用进程
-lsof -i :3000
-kill -9 <PID>
-```
-
-#### **性能问题**
-
-```bash
-# 使用 cargo-flamegraph 剖析
-cargo install flamegraph
-cargo flamegraph --bin sdforge --features full
-
-# 内存占用分析
-valgrind --tool=massif target/release/sdforge
-```
-
-### 📋 健康检查端点
-
-```rust
-#[forge(
-    name = "health_check",
-    version = "v1",
-    path = "/health",
-    method = "GET"
-)]
-async fn health_check() -> Result<HealthStatus, ApiError> {
-    Ok(HealthStatus {
-        status: "healthy".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        uptime: get_uptime(),
-    })
-}
-```
-
-### 🆘 获取帮助
-
-- 📖 [文档](https://docs.rs/sdforge)
-- 🐛 [Issue 跟踪](https://github.com/Kirky-X/sdforge/issues)
-- 💬 [Discussions](https://github.com/Kirky-X/sdforge/discussions)
+MCP 经 `Mcp-Method` / `Mcp-Name` 头（或 stdio）由 `StatelessServerHandler` 路由；gRPC 经 `SdForgeGrpcService::call()` 按 `grpc_method` 分发；CLI 经 `CliBuilder::execute()` 完成 parse、dispatch、输出与退出码。协议之间无运行时耦合。
 
 ---
 
 ## 🧪 测试
 
-### 测试分类
+### 测试策略矩阵
 
-| 分类 | 位置 | 说明 |
+| 层级 | 位置 | 说明 |
 |------|------|------|
-| 单元测试 | `src/` 内嵌 `#[cfg(test)]`、`tests/unit/` | 模块级单元测试 |
-| 集成测试 | `tests/integration/` | cache / config / error_handling / feature_combinations / grpc / http / mcp / openapi / security / status_code / streaming / uat / websocket / cli / docs |
-| 宏测试 | `tests/macros/` | trybuild 编译失败用例与宏展开验证 |
-| E2E 高级测试 | `tests/e2e_advanced.rs` | 覆盖 12 个模块未覆盖场景（178 个测试） |
-| Examples 综合测试 | `examples/tests/comprehensive_features.rs` | 全 feature re-export 可访问性、跨协议 dispatch（77 个测试） |
-| 基准测试 | `src/benches/` | criterion 基准（需 `http` feature） |
+| 单元测试 | `src/` 内嵌 `#[cfg(test)]`、`tests/unit/` | 模块级测试，含 proptest 属性测试（`src/tests/property_tests.rs`） |
+| 集成测试 | `tests/integration/` | 覆盖 http / mcp / grpc / websocket / security / cache / streaming / openapi / cli / docs / health_probes / graceful_shutdown / validate / paginate / etag / lifecycle / otel_export / status_code / rbac 等协议与特性组合 |
+| 宏测试 | `tests/macros/`、`macros/tests/` | trybuild 编译失败用例与宏展开验证 |
+| E2E | `tests/e2e/` | `e2e_advanced` 覆盖 12 个域共 178 个测试 |
+| 示例综合测试 | `examples/tests/` | 全 feature re-export 与跨协议 dispatch（77 个测试）及网关 E2E |
+| 基准测试 | `benches/`、`src/benches/` | criterion：`runtime_bench` / `config_and_cache_bench` / `sdforge_bench` |
+| Doc-tests | `src/` 文档注释 | rustdoc 内嵌示例 |
 
 ### 运行命令
 
 ```bash
-# 按特性运行测试
-cargo test --features http
-cargo test --features mcp
-cargo test --features "http,mcp"
-cargo test --features full
+# 与 CI 矩阵一致（http / mcp / http,mcp / http,security / http,cache /
+# http,websocket / http,grpc / http,streaming / full 共 9 种组合）
+cargo test --features "http,mcp" --workspace
+cargo test --features full --workspace
 
-# 仅运行 lib 测试（CI 覆盖率口径）
+# lib 测试（CI 覆盖率口径）
 cargo test --features full --lib
 
-# 运行指定测试
-cargo test test_get_user --features http
+# 覆盖率（CI 门禁 ≥80% 行覆盖，lefthook pre-push 同口径）
+cargo llvm-cov --features full --lib --lcov --fail-under-lines 80
 
-# 带输出运行
-cargo test --features http -- --nocapture
-
-# Release 模式测试
-cargo test --release --features http
+# 格式化与零告警 Lint
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-CI 通过 `cargo llvm-cov --features full --lib` 生成覆盖率并上传 Codecov。
+覆盖率测量经 `llvm-cov.toml` 排除 build.rs 生成的 protobuf 代码（`src/grpc/pb/`）。
+
+### 测试规模
+
+约 **2,900** 个测试函数（`src/` 2,015 + `tests/` 704 + `macros/` 59 + `examples/` 126，grep 统计，截至 v0.5.0-rc.3）。
 
 ---
 
 ## 📊 性能
 
-SDForge 的编译时特性门控带来显著的编译时间与产物体积优势（vs 全量打包 `--features full`）：
+### 运行时热路径（criterion 基线）
+
+| 基准 | 中位延迟 | 吞吐 |
+|------|----------|------|
+| `plain_get`（无路径参数的路由分发） | ~553 ns | ~1.81 M req/s |
+| `path_param_get`（1 个路径参数） | ~604 ns | ~1.65 M req/s |
+| `handler_args_build_5_params`（5 参数装配） | ~117 ns | - |
+| `serialize_nested_object`（7 字段嵌套对象） | ~137 ns | - |
+| `deserialize_nested_object`（同上） | ~383 ns | - |
+
+> 环境：WSL2 (linux 6.6.87) x64、Rust 1.97.1、release profile（`lto=fat`、`codegen-units=1`），criterion 中位数。复现：`cargo bench --bench runtime_bench --features http`。完整口径见 [性能基线](docs/PERFORMANCE.md)。
+
+### 编译时门控收益（feature 门控 vs 全量打包）
 
 | 指标 | http only | full | 节省 |
 |------|-----------|------|------|
 | 编译时间（debug） | 28.88s | 54.52s | **47.0%** |
 | 编译时间（release） | 13.72s | 25.48s | **46.2%** |
-| 框架库体积 rlib（debug） | 33.9 MB | 100.2 MB | **66.2%** |
-| 框架库体积 rlib（release） | 3.57 MB | 9.07 MB | **60.6%** |
+| 框架库 rlib（debug） | 33.9 MB | 100.2 MB | **66.2%** |
+| 框架库 rlib（release） | 3.57 MB | 9.07 MB | **60.6%** |
 | 唯一依赖 crate 数 | 396 | 478 | 17.2% |
 
-> 数据来源：[docs/benchmarks/vs-server-less.md](docs/benchmarks/vs-server-less.md)（2026-07-03 实测，AMD Ryzen 9 9950X / rustc 1.93.1 / WSL2）。完整方法论、二进制体积分析与复现命令见该文档。
+> 数据来源：[编译期门控基准](docs/benchmarks/vs-server-less.md)（2026-07-03 实测，AMD Ryzen 9 9950X / rustc 1.93.1 / WSL2），文内附方法论与复现命令。
 
 ---
 
 ## 🔒 安全
 
-SDForge 内置全套安全能力（`security` feature）：API Key / JWT Bearer 认证、限流（limiteron）、审计日志、安全头（CORS/CSP）、输入校验。概要设计与最佳实践见 [安全文档](docs/SECURITY.md)。
+### 🚨 漏洞上报
 
-### 🛡️ API Key 认证
+**请勿通过公开 issue 报告安全漏洞。** 请使用 GitHub [Security Advisories](https://github.com/Kirky-X/sdforge/security/advisories/new) 私密披露通道提交。项目承诺 48 小时内确认、7 天内给出初步评估，详见 [安全文档](docs/SECURITY.md) 与仓库根目录 [SECURITY.md](SECURITY.md)。
 
-```rust
-use sdforge::security::{ApiKeyAuth, auth_middleware};
+### 🛡️ 安全设计要点
 
-let app = Router::new()
-    .route("/api/*path", get(handler))
-    .layer(auth_middleware(ApiKeyAuth::new("your-secret-key")));
-```
+- **认证**：API Key（版本管理、LRU 缓存、显式播种、空库 fail-loud）与 JWT Bearer（HMAC-SHA256 验签，`MIN_SECRET_LENGTH=32` 强制密钥长度）
+- **fail-safe 默认值**：`ServerConfig` 默认绑定 `127.0.0.1`；CORS 校验同时检查 scheme 与 host
+- **不可伪造的客户端 IP**：无 `ConnectInfo` 时不信任 `X-Forwarded-For` / `X-Real-IP`，限流与封禁仅基于 TCP 对端地址
+- **审计**：`AuditLogger` 记录安全事件，支持 HMAC-SHA256 签名防篡改；密钥轮换动作有审计日志
+- **错误脱敏**：`ApiError::Internal` 清洗后输出并附 `error_id`，`ErrorContext` 仅服务端保留
+- **输入防御**：MCP 工具 `input_schema` required / unknown-field 校验；MCP 与 gRPC 载荷 1 MiB 上限
 
-### ⚡ 限流配置
+### 🔍 供应链安全
 
-```toml
-# config.toml
-[rate_limit]
-enabled = true
-requests_per_minute = 60
-burst_size = 10
-```
-
-### ⚠️ 安全默认值（v0.3.0+）
-
-> **注意**：v0.3.0 收紧了安全默认值，迁移时请检查：
-> - **JWT 密钥最小长度**：`MIN_SECRET_LENGTH=32`，短于 32 字符的密钥将被拒绝
-> - **ServerConfig 默认 host**：从 `"0.0.0.0"`（fail-open）改为 `"127.0.0.1"`（fail-safe 回环），生产部署必须显式配置 host
-> - **CORS 校验收紧**：`"http://"`（仅 scheme 无 host）将被拒绝
->
-> 另：v0.4.4 起 `extract_client_ip_core` 在无 `ConnectInfo` 时不再信任 `X-Forwarded-For` / `X-Real-IP` 头，生产部署**必须**配置 `ConnectInfo` 以启用不可伪造的 TCP 对端 IP 提取。
+CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略：漏洞、许可证、重复依赖）+ `cargo audit`，配合 CodeQL、Dependabot 与 pre-commit 密钥扫描（detect-secrets）。
 
 ---
 
 ## 🗺️ 开发路线图
 
-以下规划整理自 [CHANGELOG.md](docs/CHANGELOG.md) 未发布条目与工作区验收计划（ACCEPTANCE_PLAN.md）：
-
-- **v0.5.0 发布（进行中）** — 当前处于 `0.5.0-rc.2`，按工作区验收计划完成依赖链（trait-kit/oxcache/inklog/limiteron）协同发布与终验
-- **自定义成功状态码（已合入待发布）** — `#[forge(status = <code>)]` 静态声明 + `ServiceResponse::success_with_status` 动态控制（见 CHANGELOG [Unreleased]）
-- **错误码行为契约统一** — 评估统一同一校验错误在 HTTP（400）与 gRPC（422）间的状态码差异（验收计划 SIMPL-001，现为记录在案的行为契约）
-- **依赖治理** — 中期评估将 `bincode`（RUSTSEC-2025-0141 unmaintained）迁移至 `postcard` / `bitcode` / `rkyv`
-- **MSRV 声明收敛** — 已按工作区 CONFIG_BASELINE 统一为 1.97.1（2026-09-06），覆盖 `--all-features` 下 1.94 的有效要求
+<table>
+  <tr><th>状态</th><th>条目</th><th>说明</th></tr>
+  <tr><td>🚧</td><td><b>v0.5.0 发布</b></td><td>当前处于 <code>0.5.0-rc.3</code>，推进依赖链（trait-kit / oxcache / inklog / limiteron）协同发布与终验</td></tr>
+  <tr><td>✅</td><td>自定义成功状态码</td><td><code>#[forge(status = &lt;code&gt;)]</code> 静态声明 + <code>ServiceResponse::success_with_status</code> 动态控制，已于 0.5.0-rc.2 发布</td></tr>
+  <tr><td>✅</td><td>MSRV 声明收敛</td><td>工作区统一为 1.97.1（2026-09-06），覆盖 <code>--all-features</code> 有效要求</td></tr>
+  <tr><td>📋</td><td>错误码行为契约统一</td><td>评估同一校验错误在 HTTP（400）与 gRPC（422）间的状态码对齐（记录在案的行为契约）</td></tr>
+  <tr><td>📋</td><td>依赖治理</td><td>中期评估将 <code>bincode</code>（RUSTSEC-2025-0141 unmaintained）迁移至 <code>postcard</code> / <code>bitcode</code> / <code>rkyv</code></td></tr>
+</table>
 
 ---
 
 ## 🤝 参与贡献
 
-我们欢迎贡献！请阅读 [贡献指南](docs/CONTRIBUTING.md) 了解开发环境、TDD 工作流和 PR 流程。
+欢迎贡献！请先阅读 [贡献指南](docs/CONTRIBUTING.md)。
 
 ```bash
-# 克隆仓库
 git clone https://github.com/Kirky-X/sdforge.git
 cd sdforge
 
-# 安装 pre-commit 钩子
+# 工具链：Rust 1.97.1（rust-toolchain.toml 固定）；grpc 特性需要 protoc
+# 安装 lefthook / pre-commit 钩子（fmt / clippy / cargo-deny / 密钥扫描）
 ./scripts/install-pre-commit.sh
 
 # 验证环境
@@ -973,22 +501,23 @@ cargo build --all-features
 cargo test --all-features --lib
 ```
 
+提交信息遵循 Conventional Commits（`feat` / `fix` / `refactor` / `docs` / `test` / `chore` 等，commit-msg 钩子强制校验）。
+
 ---
 
 ## 📋 更新日志
 
 详见 [CHANGELOG.md](docs/CHANGELOG.md)。最近版本要点：
 
-- **[Unreleased]** — `#[forge(status = <code>)]` 自定义成功状态码（静态声明 + `ServiceResponse::success_with_status` 动态控制，HTTP/gRPC 拉通，OpenAPI 同步）
-- **[0.4.7]** — 依赖版本约束移除波浪号；补公开 `bincode` RUSTSEC-2025-0141 ignore 决策
-- **[0.4.6]** — CI Clippy 修复；恢复 examples 的 `serde` 依赖
-- **[0.4.5]** — 新增 `tests/e2e_advanced.rs`（178 个测试）
+- **[0.5.0-rc.3]** (2026-09-10)：`ResponseCacheLayer` 响应缓存中间件、`AppConfig` security/cache 字段、`AuditSink` 审计存储抽象与 `InklogAuditSink`
+- **[0.5.0-rc.2]** (2026-09-07)：`#[forge(status = <code>)]` 自定义成功状态码、`i18n_key` 参数与翻译注册表、rmcp 2.2 → 3.2
+- **[0.4.7]** (2026-07-23)：依赖版本约束移除波浪号；补公开 `bincode` RUSTSEC-2025-0141 ignore 决策
 
 ---
 
 ## 📄 许可证
 
-本项目基于 MIT + Commons Clause 许可证发布，商业使用需单独授权。详见 [LICENSE](LICENSE)。
+本项目基于 **MIT + Commons Clause** 双重条款发布：在 MIT 许可下可自由使用、修改与分发，但未经作者单独书面授权不得销售。详见 [LICENSE](LICENSE)。
 
 Copyright (c) 2026 Kirky.X
 
@@ -1005,7 +534,7 @@ SDForge 站在优秀的开源生态之上，感谢以下项目：
 - [clap](https://github.com/clap-rs/clap) — 命令行解析
 - [inventory](https://crates.io/crates/inventory) — 编译期注册
 - [ICU4X](https://github.com/unicode-org/icu4x) — 国际化
-- base 工作区姊妹项目 [oxcache](https://github.com/Kirky-X/oxcache)、[limiteron](https://github.com/Kirky-X/limiteron)、[trait-kit](https://github.com/Kirky-X/trait-kit)、[inklog](https://github.com/Kirky-X/inklog)
+- base 工作区姊妹项目 [oxcache](https://github.com/Kirky-X/oxcache)、[limiteron](https://github.com/Kirky-X/limiteron)、[trait-kit](https://github.com/Kirky-X/trait-kit)、[inklog](https://github.com/Kirky-X/inklog)、[dbnexus](https://github.com/Kirky-X/dbnexus)
 
 ---
 

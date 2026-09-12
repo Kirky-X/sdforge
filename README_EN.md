@@ -1,14 +1,31 @@
 <div align="center">
 
-<img src="docs/assets/sdforge.png" alt="SDForge Logo" width="200">
+<img src="docs/assets/sdforge.png" alt="SDForge Logo" width="180">
 
 [![CI Status](https://github.com/Kirky-X/sdforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Kirky-X/sdforge/actions/workflows/ci.yml) [![Version](https://img.shields.io/crates/v/sdforge.svg)](https://crates.io/crates/sdforge) [![Docs.rs](https://docs.rs/sdforge/badge.svg)](https://docs.rs/sdforge) [![Downloads](https://img.shields.io/crates/d/sdforge.svg)](https://crates.io/crates/sdforge) [![License](https://img.shields.io/crates/l/sdforge.svg)](LICENSE) [![Rust](https://img.shields.io/badge/rust-1.97.1%2B-orange.svg)](https://www.rust-lang.org/) [![Coverage](https://codecov.io/gh/Kirky-X/sdforge/branch/main/graph/badge.svg)](https://codecov.io/gh/Kirky-X/sdforge)
 
-**[中文](README.md)** | English
+[中文](README.md) | **English**
 
-**SDForge** is a Rust-based declarative SDK framework that uses procedural macros to automatically generate multi-protocol service interfaces (HTTP + MCP + gRPC + WebSocket + CLI) from unified function annotations. The key innovation is compile-time protocol selection via Cargo features — unused protocols produce zero compiled code.
+**One macro annotation, multi-protocol SDKs assembled at compile time**
 
 [✨ Features](#-features) • [🚀 Quick Start](#-quick-start) • [📚 Documentation](#-documentation) • [💻 Examples](#-examples) • [🤝 Contributing](#-contributing)
+
+</div>
+
+---
+
+SDForge is a declarative SDK framework for Rust. Annotate a function once with the `#[forge]` procedural macro, and the framework generates registration code for five protocols at compile time: HTTP, MCP, gRPC, WebSocket, and CLI. Protocol selection is decided entirely by Cargo features; protocols you do not enable produce zero compiled code.
+
+<div align="center">
+
+<table>
+  <tr>
+    <td align="center" width="25%">🎯<br><b>Unified Annotation</b><br>One <code>#[forge]</code> macro defines an endpoint<br>five protocols consume the same metadata</td>
+    <td align="center" width="25%">⚡<br><b>Compile-Time Selection</b><br>feature-gated code generation<br>unused protocols compile to nothing</td>
+    <td align="center" width="25%">🌐<br><b>Five Protocol Entrypoints</b><br>HTTP / MCP / gRPC<br>WebSocket / CLI</td>
+    <td align="center" width="25%">🛡️<br><b>Secure Defaults</b><br>auth, rate limiting, audit<br>fail-safe defaults</td>
+  </tr>
+</table>
 
 </div>
 
@@ -17,27 +34,16 @@
 ## 📋 Table of Contents
 
 <details open>
+<summary>📑 Table of Contents</summary>
 
 - [✨ Features](#-features)
 - [🚀 Quick Start](#-quick-start)
-  - [📦 Installation](#-installation)
-  - [💡 Basic Usage](#-basic-usage)
-  - [📁 Module Prefixes](#-module-prefixes)
-  - [🔢 Version Management](#-version-management)
-  - [🛤️ Path Parameters](#️-path-parameters)
-  - [⚠️ Error Handling](#️-error-handling)
-  - [🔧 `#[forge]` Macro Parameters](#-forge-macro-parameters)
-  - [🌐 Protocol Combinations](#-protocol-combinations)
-  - [🛰️ gRPC Dispatch](#️-grpc-dispatch)
-  - [🖥️ CLI Dispatch](#️-cli-dispatch)
 - [🎨 Feature Flags](#-feature-flags)
 - [📚 Documentation](#-documentation)
 - [💻 Examples](#-examples)
 - [🏗️ Architecture](#️-architecture)
-- [📜 OpenAPI Auto-Generation](#-openapi-auto-generation)
-- [🔄 MCP 2026-07-28 Migration Guide](#-mcp-2026-07-28-migration-guide)
-- [🚀 Production Deployment](#-production-deployment)
-- [🐛 Troubleshooting](#-troubleshooting)
+- [🔄 Core Execution Path](#-core-execution-path)
+- [🌐 One Annotation, Five Protocols](#-one-annotation-five-protocols)
 - [🧪 Testing](#-testing)
 - [📊 Performance](#-performance)
 - [🔒 Security](#-security)
@@ -57,49 +63,41 @@
 
 | Feature | Description |
 |---------|-------------|
-| **🎯 Unified Interface Definition** | Single macro configuration for HTTP, MCP, gRPC, WebSocket, and CLI |
-| **⚡ Compile-Time Protocol Selection** | Feature-gated code generation with zero runtime overhead for unused protocols |
-| **🔒 Type Safety** | Compile-time validation of interface definitions |
-| **🌐 Multi-Protocol Support** | HTTP (Axum), MCP (rmcp 3.2), gRPC (tonic), WebSocket, SSE streaming, CLI (clap) |
-| **🧩 Modular Design** | Feature-based architecture allows selecting only needed functionality |
-| **🛡️ Security Features** | Built-in authentication (Bearer/API Key), rate limiting (limiteron), audit logging |
-| **💾 Caching** | In-memory caching (oxcache), no external database required |
-| **🔧 Configuration Management** | Self-contained TOML configuration (no external config center) |
-| **📊 Versioning** | Built-in API version management |
-| **📜 OpenAPI Auto-Generation** | OpenAPI 3.1 spec generation based on utoipa 5.5 |
-| **🌐 Internationalization** | ICU4X 2.x-based localization support (`i18n` feature) |
+| 🎯 **Unified interface definition** | A single `#[forge]` macro configures HTTP, MCP, gRPC, WebSocket, and CLI at once |
+| ⚡ **Zero protocol tax** | Protocol selection happens at compile time; no runtime probing or dynamic loading |
+| 🌐 **Multi-protocol support** | Axum 0.8, rmcp 3.2 (MCP 2026-07-28 spec), tonic, WebSocket, SSE, clap |
+| 🔒 **Type safety** | Interface definitions validated at compile time; trybuild covers compile-failure cases |
+| 🛡️ **Security features** | API Key / JWT Bearer auth, limiteron rate limiting, audit logging, security headers |
+| 💾 **In-memory caching** | oxcache provides LRU, pattern invalidation, batch ops, and stats; no database required |
+| 🔧 **Configuration management** | Self-contained TOML config with modular defaults and Builder pattern |
+| 📊 **Versioning** | Built-in `/api/{version}` version routing and `#[service_module]` module prefixes |
+| 📜 **OpenAPI 3.1** | Routes collected at compile time via utoipa; runtime spec generation + Swagger UI |
+| 🌍 **Internationalization** | ICU4X locale-aware formatting and Accept-Language parsing |
+| 🔭 **Observability** | Prometheus metrics, OTLP export, health probes, graceful shutdown, request context |
+| 🧩 **Feature composition** | 30+ Cargo features assembled on demand; the always-on core depends on no protocol stack |
 
-### 🔌 Optional Capabilities
+<details>
+<summary>🔧 Advanced capabilities, enabled on demand</summary>
 
-All of the following are enabled on demand via Cargo features — see [Feature Flags](#-feature-flags):
-
-| Optional Capability | Feature | Description |
-|---------------------|---------|-------------|
-| HTTP server | `http` | Axum 0.8 routing, middleware, version routing |
-| MCP protocol | `mcp` | Official rmcp SDK, 2026-07-28 spec (stateless HTTP headers, MRTR, cache semantics) |
-| SSE streaming | `streaming` | SSE event streams and streaming response building |
-| WebSocket | `websocket` | Connection management, broadcast, message parsing |
-| gRPC | `grpc` | tonic service, unified handler dispatch |
-| CLI | `cli` | clap integration, one-shot `CliBuilder::execute()` |
-| OpenAPI 3.1 | `openapi` | Compile-time route registration, runtime spec generation |
-| Unified docs output | `docs` | Swagger UI + CLI/MCP Markdown |
-| Auth & audit | `security` | API Key / JWT Bearer, audit logging, security headers |
-| Rate limiting | `ratelimit` / `ratelimit-http` | Unified limiteron rate limiting (core / Tower middleware) |
-| Caching | `cache` | oxcache in-memory cache (LRU, pattern invalidation, stats) |
+| Capability | Feature | Description |
+|------------|---------|-------------|
+| Parameter validation | `validate` | `#[forge(validate)]` + `#[param(ge/le/...)]`; 400 with field-level errors |
+| Declarative pagination | `paginate` | `#[forge(paginate)]` auto page/size and `{items,total,next}` wrapper |
+| ETag conditional requests | `etag` | Automatic strong ETag (SHA-256) on GET; If-None-Match returns 304 |
+| Lifecycle hooks | `lifecycle` | `#[forge(on_start/on_stop)]` process hooks, ordered with graceful shutdown |
+| Hook pipeline | `hooks` | Pre/post handler hooks (middleware-style) with a unified error contract |
+| Graceful shutdown | `graceful` | SIGTERM/SIGINT: stop accepting, drain in-flight, phased teardown |
+| Health probes | `health` | `/healthz` and `/readyz` auto-mounted by `build_with_config` (auth bypassed) |
+| Prometheus metrics | `metrics` | Request counts, latency histograms, status code distribution on `/metrics` |
+| OTel export | `otel` | OTLP/HTTP JSON export of request spans and metric snapshots, zero extra deps |
+| Request context | `context` | request_id/trace_id generation and cross-protocol (HTTP/MCP/gRPC/WS) injection |
 | Response timestamps | `timestamp` | Auto-add timestamps to responses |
 | Structured logging | `logging` | Structured request logging |
-| inklog integration | `inklog` | Bridge to the inklog LoggerManager structured logging pipeline |
-| Internationalization | `i18n` | ICU4X locale-aware formatting and Accept-Language parsing |
-| SIMD JSON | `simd-json` | SIMD-accelerated JSON serialization |
+| inklog bridge | `inklog` | Route bare `log` calls into the inklog LoggerManager pipeline |
+| trait-kit integration | `kit` | AsyncKit module graph integration and `LimiteronForgeAdapter` |
+| SIMD JSON | `simd-json` | SIMD-accelerated JSON serialization/deserialization |
 
-#### 🆕 Phase 1 Architecture Improvements
-
-Recent architectural enhancements include:
-
-- **🔄 Unified Registration System** — Eliminated 95+ lines of duplicate code across HTTP, MCP, WebSocket, and gRPC modules using trait-based abstraction and procedural macros
-- **⚙️ Modular Configuration Management** — Refactored configuration into dedicated modules (app, cache, security) with centralized defaults and Builder pattern support
-- **🔐 Enhanced Security Module** — API Key versioning, LRU caching, key rotation with audit logging, and comprehensive security headers configuration
-- **💾 Advanced Caching** — Pattern-based cache invalidation, key normalization, batch operations, and statistics tracking
+</details>
 
 ---
 
@@ -111,297 +109,23 @@ Recent architectural enhancements include:
 cargo add sdforge
 ```
 
-Or add it to your `Cargo.toml` manually:
+Or add it to your `Cargo.toml` manually (current version `0.5.0-rc.3`):
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["http"] }
+sdforge = { version = "0.5.0-rc.3", features = ["http"] }
 ```
 
-> Note: `sdforge` enables no features by default (`default = []`); enable protocol features explicitly as needed.
+Minimum requirements:
 
-### 💡 Basic Usage
+- **Rust 1.97.1+** (edition 2024, toolchain pinned by `rust-toolchain.toml`)
+- **protoc**: only needed when the `grpc` feature is enabled (`build.rs` compiles the protobuf)
 
-Define your API with a single macro:
+> `sdforge` enables no features by default (`default = []`); enable protocol features explicitly as needed.
 
-```rust
-use sdforge::prelude::*;
+### 💡 Minimal runnable example
 
-#[forge(
-    name = "get_user",
-    version = "v1",
-    path = "/users/:id",
-    method = "GET",
-    tool_name = "get_user",
-    description = "Get a user by ID"
-)]
-async fn get_user(id: u64) -> Result<User, ApiError> {
-    Ok(User { id, name: "Test".into() })
-}
-
-#[tokio::main]
-async fn main() {
-    let app = sdforge::http::build();
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
-}
-```
-
-### 📁 Module Prefixes
-
-Group related APIs with module prefixes for better organization:
-
-```rust
-#[service_module(prefix = "/auth")]
-mod auth_api {
-    use super::*;
-
-    #[forge(
-        name = "login",
-        version = "v1",
-        path = "/login",
-        method = "POST"
-    )]
-    async fn login(credentials: Credentials) -> Result<Token, ApiError> {
-        Ok(Token::new())
-    }
-
-    #[forge(
-        name = "logout",
-        version = "v1",
-        path = "/logout",
-        method = "POST"
-    )]
-    async fn logout() -> Result<(), ApiError> {
-        Ok(())
-    }
-}
-```
-
-This creates the endpoints:
-
-- `/auth/api/v1/login`
-- `/auth/api/v1/logout`
-
-### 🔢 Version Management
-
-Support multiple API versions simultaneously:
-
-```rust
-#[forge(
-    name = "get_user",
-    version = "v1",
-    path = "/users/:id",
-    method = "GET",
-    tool_name = "get_user_v1"
-)]
-async fn get_user_v1(id: u64) -> Result<UserV1, ApiError> {
-    Ok(UserV1 { id, name: "John Doe".into() })
-}
-
-#[forge(
-    name = "get_user",
-    version = "v2",
-    path = "/users/:id",
-    method = "GET",
-    tool_name = "get_user_v2"
-)]
-async fn get_user_v2(id: u64) -> Result<UserV2, ApiError> {
-    Ok(UserV2 { id, first_name: "John".into(), last_name: "Doe".into() })
-}
-```
-
-This creates versioned endpoints:
-
-- `/api/v1/users/:id` → `get_user_v1`
-- `/api/v2/users/:id` → `get_user_v2`
-
-### 🛤️ Path Parameters
-
-Extract path parameters using Rust naming conventions. The macro automatically maps path segments to function parameters:
-
-```rust
-#[forge(
-    name = "get_user",
-    version = "v1",
-    path = "/users/:id",
-    method = "GET"
-)]
-async fn get_user(id: u64) -> Result<User, ApiError> {
-    // `id` is automatically extracted from `/users/:id`
-    Ok(User { id, name: "John".into() })
-}
-```
-
-#### 🔹 Multiple Path Parameters
-
-For nested resources:
-
-```rust
-#[forge(
-    name = "get_comment",
-    version = "v1",
-    path = "/posts/:post_id/comments/:comment_id",
-    method = "GET"
-)]
-async fn get_comment(
-    post_id: u64,
-    comment_id: u64
-) -> Result<Comment, ApiError> {
-    // Both parameters are extracted from the path
-    Ok(Comment { post_id, comment_id, text: "Test".into() })
-}
-
-#[forge(
-    name = "get_task",
-    version = "v1",
-    path = "/orgs/:org_id/projects/:project_id/tasks/:task_id",
-    method = "GET"
-)]
-async fn get_task(
-    org_id: u64,
-    project_id: u64,
-    task_id: u64
-) -> Result<Task, ApiError> {
-    Ok(Task { org_id, project_id, task_id, title: "Task".into() })
-}
-```
-
-### ⚠️ Error Handling
-
-Define custom error types and convert them to `ServiceError`:
-
-```rust
-use thiserror::Error;
-
-#[derive(Debug, Error)]
-pub enum MyError {
-    #[error("Resource not found: {resource}")]
-    NotFound { resource: String },
-
-    #[error("Validation failed: {field}")]
-    ValidationError { field: String },
-
-    #[error("Unauthorized access")]
-    Unauthorized,
-}
-
-impl From<MyError> for ServiceError {
-    fn from(err: MyError) -> Self {
-        match err {
-            MyError::NotFound { resource } => ServiceError::with_details(
-                "NOT_FOUND",
-                format!("Resource not found: {}", resource),
-                serde_json::json!({ "resource": resource }),
-                404,
-            ),
-            MyError::ValidationError { field } => ServiceError::with_details(
-                "VALIDATION_ERROR",
-                format!("Validation failed for field: {}", field),
-                serde_json::json!({ "field": field }),
-                400,
-            ),
-            MyError::Unauthorized => ServiceError::new(
-                "UNAUTHORIZED",
-                "Authentication required",
-                401,
-            ),
-        }
-    }
-}
-```
-
-### 🔧 `#[forge]` Macro Parameters
-
-| Parameter      | Description                                                        | Required | Default |
-|----------------|--------------------------------------------------------------------|----------|---------|
-| `name`         | Endpoint name                                                      | Yes      | -       |
-| `version`      | API version                                                        | Yes      | -       |
-| `path`         | HTTP path (e.g., `/users/:id`)                                     | No       | -       |
-| `method`       | HTTP method (GET/POST/PUT/DELETE, etc.)                            | No       | GET     |
-| `status`       | Explicit success status code (e.g., 201 for POST create)          | No       | 200     |
-| `description`  | Endpoint description                                               | No       | -       |
-| `tool_name`    | MCP tool name                                                      | No       | -       |
-| `grpc_method`  | gRPC method name (effective when the `grpc` feature is enabled)   | No       | -       |
-| `cli`          | Register as CLI command (effective when the `cli` feature is enabled) | No    | false   |
-
-### 🌐 Protocol Combinations
-
-**HTTP only** — for traditional REST APIs:
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["http"] }
-```
-
-**MCP only** — for AI tool integration:
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["mcp"] }
-```
-
-**Both protocols** — expose the same code via HTTP and MCP:
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["http", "mcp"] }
-```
-
-**Full features** — all capabilities enabled:
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["full"] }
-```
-
-### 🛰️ gRPC Dispatch
-
-With the `grpc` feature enabled, `#[forge(grpc_method = "...")]` registers into
-`SdForgeGrpcService` via inventory; its `call()` method routes to the matching
-handler. Return types must satisfy `serde::Serialize`; errors must be `ApiError`:
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["grpc"] }
-```
-
-```rust
-use sdforge::prelude::*;
-use sdforge::forge;
-
-#[forge(
-    name = "grpc_echo",
-    version = "v1",
-    grpc_method = "comprehensive.echo",
-    description = "gRPC echo handler"
-)]
-async fn echo(msg: String) -> Result<serde_json::Value, ApiError> {
-    Ok(serde_json::json!({ "echo": msg }))
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    sdforge::init_all_plugins();
-    let server = sdforge::grpc::SdForgeGrpcService::default();
-    server.serve("0.0.0.0:50051").await?;
-    Ok(())
-}
-```
-
-### 🖥️ CLI Dispatch
-
-With the `cli` feature enabled, `#[forge(cli = true)]` registers paired
-`CliCommandRegistration` + `CliHandlerRegistration` entries.
-`CliBuilder::execute()` is a one-shot runner that handles build / parse /
-dispatch / output / exit. Returning `Value::String` prints the raw string
-(no quotes); other types are serialized as JSON:
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["cli"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-```
+The following example comes from [`examples/basic_cli.rs`](examples/basic_cli.rs) (`cli` feature):
 
 ```rust
 use sdforge::cli::CliBuilder;
@@ -416,81 +140,100 @@ async fn echo(name: String) -> Result<String, ApiError> {
 #[tokio::main]
 async fn main() {
     sdforge::init_all_plugins();
-    // execute() returns `!`: it calls std::process::exit(0/1) internally,
-    // so callers don't need to match on the result.
+    // execute() returns `!`: build / parse / dispatch / output / exit all happen inside
     CliBuilder::new().execute().await;
 }
 ```
 
-```sh
-# Run: cargo run --example basic_cli --features cli -- echo --name world
-# Output: Hello, world!   (no quotes — smart Value::String extraction)
+```bash
+cargo run --example basic_cli --features cli -- echo --name world
+# Output: Hello, world! (smart Value::String extraction, no quotes)
 ```
+
+### 🧭 Core concepts
+
+- A `#[forge]` annotation describes one set of endpoint metadata: name, version, path, method, description
+- The macro generates registration code per enabled feature, submitted at compile time via `inventory::submit!()`
+- At startup, `init_all_plugins()` collects all registrations once (cached in a `OnceLock`)
+- Pick the entrypoint per protocol: `http::build()` / rmcp stdio / `SdForgeGrpcService` / `CliBuilder::execute()`
+
+### 🔧 `#[forge]` macro parameters
+
+| Parameter      | Description                                                        | Required | Default |
+|----------------|--------------------------------------------------------------------|----------|---------|
+| `name`         | Endpoint name                                                      | Yes      | -       |
+| `version`      | API version                                                        | Yes      | -       |
+| `path`         | HTTP path (e.g., `/users/:id`)                                     | No       | -       |
+| `method`       | HTTP method (GET/POST/PUT/DELETE, etc.)                            | No       | GET     |
+| `status`       | Explicit success status code (e.g., 201 for POST create)           | No       | 200     |
+| `description`  | Endpoint description                                               | No       | -       |
+| `tool_name`    | MCP tool name                                                      | No       | -       |
+| `grpc_method`  | gRPC method name (effective when the `grpc` feature is enabled)    | No       | -       |
+| `cli`          | Register as CLI command (effective when the `cli` feature is enabled) | No    | false   |
+
+### 🌐 Protocol combinations
+
+| Goal | features | Scenario |
+|------|----------|----------|
+| HTTP only | `["http"]` | Traditional REST APIs |
+| MCP only | `["mcp"]` | AI tool integration |
+| HTTP + MCP dual protocol | `["http", "mcp"]` | One codebase, two entrypoints |
+| Full runtime features | `["full"]` | All protocols and capabilities (excludes `simd-json`/`hex`) |
+
+`grpc`, `websocket`, `streaming`, `openapi`, `cli`, and `cache` can all be enabled independently of `http`, in any combination.
 
 ---
 
 ## 🎨 Feature Flags
 
-SDForge uses Cargo features for compile-time protocol selection and feature composition.
+`default = []`: every feature is optional and enabled explicitly.
 
-| Feature          | Description                                          | Default |
-|------------------|------------------------------------------------------|---------|
-| `http`           | HTTP server (Axum 0.8)                               | ❌      |
-| `mcp`            | MCP protocol (rmcp 3.2, 2026-07-28 spec)             | ❌      |
-| `streaming`      | SSE streaming support                                | ❌      |
-| `timestamp`      | Auto-add timestamp to responses                      | ❌      |
-| `logging`        | Structured request logging                           | ❌      |
-| `security`       | Security features (auth, rate limiting, audit)       | ❌      |
-| `ratelimit`      | Rate limiting core (limiteron-based, no http dep)    | ❌      |
-| `ratelimit-http` | HTTP rate limiting middleware (Tower middleware)     | ❌      |
-| `websocket`      | WebSocket support                                    | ❌      |
-| `grpc`           | gRPC support (tonic)                                 | ❌      |
-| `cache`          | Caching support (oxcache)                            | ❌      |
-| `openapi`        | Automatic OpenAPI 3.1 spec generation                | ❌      |
-| `cli`            | CLI integration (clap)                               | ❌      |
-| `docs`           | Unified docs output (Swagger UI + Markdown)          | ❌      |
-| `inklog`         | inklog structured logging integration                | ❌      |
-| `i18n`           | ICU4X internationalization (locale-aware formatting) | ❌      |
-| `simd-json`      | SIMD-accelerated JSON serialization                  | ❌      |
-| `full`           | All runtime features                                 | ❌      |
+<table>
+  <tr><th>Flag</th><th>Description</th><th>Default</th></tr>
+  <tr><td><code>http</code></td><td>HTTP server (Axum 0.8 routing, Tower middleware, version routing)</td><td>❌</td></tr>
+  <tr><td><code>mcp</code></td><td>MCP protocol (rmcp 3.2, 2026-07-28 spec: stateless HTTP headers, MRTR, cache semantics)</td><td>❌</td></tr>
+  <tr><td><code>grpc</code></td><td>gRPC (tonic + prost, independent of http, proto generated by build.rs)</td><td>❌</td></tr>
+  <tr><td><code>websocket</code></td><td>WebSocket (requires http + streaming)</td><td>❌</td></tr>
+  <tr><td><code>streaming</code></td><td>SSE streaming (independent of http)</td><td>❌</td></tr>
+  <tr><td><code>cli</code></td><td>CLI integration (clap, independent of http)</td><td>❌</td></tr>
+  <tr><td><code>openapi</code></td><td>OpenAPI 3.1 spec generation (utoipa, independent of http)</td><td>❌</td></tr>
+  <tr><td><code>docs</code></td><td>Unified docs output (Swagger UI + CLI/MCP Markdown; requires openapi + cli)</td><td>❌</td></tr>
+  <tr><td><code>security</code></td><td>Auth (API Key / JWT Bearer), audit, security headers, rate limiting and caching (includes http + ratelimit-http + cache)</td><td>❌</td></tr>
+  <tr><td><code>ratelimit</code></td><td>Rate limiting core (limiteron, no http dependency)</td><td>❌</td></tr>
+  <tr><td><code>ratelimit-http</code></td><td>HTTP rate limiting middleware (Tower Layer; requires http + ratelimit)</td><td>❌</td></tr>
+  <tr><td><code>cache</code></td><td>oxcache in-memory cache (independent of http)</td><td>❌</td></tr>
+  <tr><td><code>health</code></td><td><code>/healthz</code> and <code>/readyz</code> probes (auto-mounted, auth bypassed)</td><td>❌</td></tr>
+  <tr><td><code>metrics</code></td><td>Prometheus text-format <code>/metrics</code> endpoint (lightweight in-house renderer)</td><td>❌</td></tr>
+  <tr><td><code>graceful</code></td><td>Graceful shutdown (SIGTERM/SIGINT: stop accepting, drain in-flight)</td><td>❌</td></tr>
+  <tr><td><code>context</code></td><td>Request context (request_id/trace_id cross-protocol injection)</td><td>❌</td></tr>
+  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> parameter validation contract</td><td>❌</td></tr>
+  <tr><td><code>paginate</code></td><td><code>#[forge(paginate)]</code> declarative pagination</td><td>❌</td></tr>
+  <tr><td><code>etag</code></td><td>ETag conditional requests (SHA-256 strong ETag + 304)</td><td>❌</td></tr>
+  <tr><td><code>lifecycle</code></td><td><code>#[forge(on_start/on_stop)]</code> lifecycle hooks</td><td>❌</td></tr>
+  <tr><td><code>hooks</code></td><td>Pre/post handler hook pipeline</td><td>❌</td></tr>
+  <tr><td><code>otel</code></td><td>OTLP/HTTP JSON export (zero extra dependencies)</td><td>❌</td></tr>
+  <tr><td><code>logging</code></td><td>Structured request logging</td><td>❌</td></tr>
+  <tr><td><code>timestamp</code></td><td>Response timestamps</td><td>❌</td></tr>
+  <tr><td><code>inklog</code></td><td>inklog structured logging bridge</td><td>❌</td></tr>
+  <tr><td><code>i18n</code></td><td>ICU4X internationalization (locale-aware formatting + Accept-Language parsing)</td><td>❌</td></tr>
+  <tr><td><code>simd-json</code></td><td>SIMD-accelerated JSON serialization</td><td>❌</td></tr>
+  <tr><td><code>limiteron-integration</code></td><td>Pulls in the limiteron dependency (foundation for kit)</td><td>❌</td></tr>
+  <tr><td><code>kit</code></td><td>trait-kit AsyncKit integration (SdforgeModule graph)</td><td>❌</td></tr>
+  <tr><td><code>tokio</code></td><td>Internal feature: enables the tokio dependency (pulled in automatically by other features)</td><td>❌</td></tr>
+  <tr><td><code>hex</code></td><td>Hex encoding utility feature</td><td>❌</td></tr>
+  <tr><td><code>full</code></td><td>All runtime features (excludes <code>simd-json</code> and <code>hex</code>)</td><td>❌</td></tr>
+</table>
 
-### 🔗 Feature Dependencies
+<details>
+<summary>🔗 Feature dependency relations</summary>
 
-- `default`: empty (no pre-enabled features; enable explicitly as needed)
-- `mcp`/`grpc`/`openapi`/`cli`/`streaming`/`cache`: independent of `http`
-- `security`: enables `http`, `ratelimit-http` (which includes `ratelimit`) and `cache`, plus hmac/sha2/uuid security dependencies
-- `ratelimit-http`: requires `http` + `ratelimit`
-- `websocket`: requires `http` + `streaming`
-- `docs`: requires `openapi` + `cli` (the Swagger UI submodule additionally requires `http`)
-- `kit`: trait-kit AsyncKit integration; requires `limiteron-integration` + `trait-kit`
-- `full`: all runtime features (excludes the `simd-json` and `hex` tooling features)
+- Independent of `http`: `mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `logging` / `inklog` / `i18n` / `simd-json` / `limiteron-integration`
+- Derived from `http`: `security` (includes `ratelimit-http` → `ratelimit` and `cache`), `ratelimit-http`, `websocket` (includes `streaming`), `health` / `metrics` / `graceful` / `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
+- `docs` = `openapi` + `cli` (mounting the Swagger UI additionally requires `http`)
+- `kit` = `trait-kit` (health + lifecycle) + `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
+- `full` covers 18 runtime features and excludes `simd-json` / `hex`
 
-### 🔨 Building and Testing
-
-```bash
-# Default (no features)
-cargo build
-
-# HTTP protocol
-cargo build --features http
-
-# MCP protocol
-cargo build --features mcp
-
-# Full features
-cargo build --features full
-
-# Custom feature set
-cargo build --features "http,cache,security"
-
-# Tests
-cargo test --features http
-cargo test --features full
-
-# Formatting and linting
-cargo fmt
-cargo clippy --all-features -- -D warnings
-```
+</details>
 
 ---
 
@@ -498,40 +241,35 @@ cargo clippy --all-features -- -D warnings
 
 | Document | Description |
 |----------|-------------|
-| [📖 User Guide](docs/USER_GUIDE.md) | Complete tutorial from installation to advanced usage |
-| [📘 API Reference](docs/API_REFERENCE.md) | Detailed reference for all public APIs |
-| [🏗️ Architecture](docs/ARCHITECTURE.md) | Design philosophy and internal implementation |
-| [🔒 Security](docs/SECURITY.md) | Security design and best practices |
-| [⚡ Benchmarks](docs/benchmarks/vs-server-less.md) | Compile-time/binary size comparison: feature gating vs full build |
+| [📖 User Guide](docs/USER_GUIDE.md) | Complete tutorial from installation and core concepts to advanced usage |
+| [📘 API Reference](docs/API_REFERENCE.md) | Public APIs of the core and every feature gate |
+| [🏗️ Architecture](docs/ARCHITECTURE.md) | Design principles, module breakdown, data flow, security and performance design |
+| [⚡ Performance Baselines](docs/PERFORMANCE.md) | Runtime hot-path criterion baselines and regression guidelines |
+| [📶 Compile-Time Gating Benchmarks](docs/benchmarks/vs-server-less.md) | Compile time and artifact size: feature gating vs full build |
+| [🔒 Security](docs/SECURITY.md) | Vulnerability reporting process, security design, and best practices |
+| [🧾 Test Scenarios](docs/TEST_SCENARIOS.md) | Test pyramid baseline and E2E scenario definitions |
 | [📋 Changelog](docs/CHANGELOG.md) | Change log for every release |
-| [🤝 Contributing](docs/CONTRIBUTING.md) | How to participate in development |
-| [📦 Online API Docs](https://docs.rs/sdforge) | Latest documentation generated by docs.rs |
+| [🤝 Contributing](docs/CONTRIBUTING.md) | Development environment, TDD workflow, and PR process |
+| [📦 Online API Docs](https://docs.rs/sdforge) | Latest docs.rs documentation (all features) |
 
 ---
 
 ## 💻 Examples
 
-The repository contains two kinds of examples.
-
-### Runnable examples (root package `cargo run --example`)
+### Root package examples (`cargo run --example`)
 
 | Example | Required features | Description |
 |---------|-------------------|-------------|
-| `basic_cli` | `cli` | `#[forge(cli = true)]` + one-shot `CliBuilder` CLI entry point |
-| `swagger_demo` | `docs` | Swagger UI route + axum serve |
+| `basic_cli` | `cli` | `#[forge(cli = true)]` + one-shot `CliBuilder::execute()` CLI |
+| `swagger_demo` | `docs` + `http` | Swagger UI route + OpenAPI JSON + axum serve |
 | `perf_regex_cache` | `cache` | Regex cache performance verification |
 | `perf_lru_eviction` | `cache` | LRU eviction performance verification |
 | `perf_prefix_index` | `cache` | Prefix index performance verification |
 | `perf_batch_ops` | `cache` | Batch operation performance verification |
 
 ```bash
-# CLI example
 cargo run --example basic_cli --features cli -- echo --name world
-
-# Swagger UI example
 cargo run --example swagger_demo --features "docs http"
-
-# Cache performance example
 cargo run --example perf_regex_cache --features cache
 ```
 
@@ -541,20 +279,26 @@ cargo run --example perf_regex_cache --features cache
 |--------|----------|
 | `basics/` | Simple API, response building, types and error handling |
 | `http/` | Routing (path params, query params), middleware (CORS) |
-| `mcp/` | Tool definition & registration, MCP 2026-07-28 migration (`migration_2026.rs`), MRTR sessions (`mrtr_example.rs`) |
-| `security/` | API Key auth, auth failure scenarios, full security stack (`comprehensive.rs`) |
-| `cache/` | Advanced caching patterns (two-level, Cache-Aside, Write-Through) |
+| `mcp/` | Tool definition & registration, MCP 2026-07-28 migration, MRTR sessions |
+| `security/` | API Key auth, auth failure scenarios, full security stack |
+| `cache/` | Advanced caching patterns and performance verification |
 | `config/` | Configuration management (`app_config.rs`) |
 | `streaming/` | SSE streaming responses |
-| `websocket/` | Basic usage and chat room examples |
+| `websocket/` | Basic usage and chat room |
 | `grpc/` | gRPC server |
 | `logging/` | Structured logging |
 | `openapi/` | OpenAPI spec generation (`OpenApiBuilder`, `generate_openapi_spec`) |
-| `combined/` | Complete examples combining multiple features (`full_example.rs`) |
+| `combined/` | Complete example combining multiple features (`full_example.rs`) |
+
+### Ecosystem integration examples (`sdforge-examples` member examples)
+
+| Example | Feature | Description |
+|---------|---------|-------------|
+| `oxcache_admin` | `oxcache_admin_example` | Expose oxcache management endpoints via `BackendRegistry` |
+| `dbnexus_gateway` | `dbnexus_gateway_example` | Read-only data API gateway over a whitelisted table (in-memory sqlite) |
 
 ```bash
-# Run all module tests of the comprehensive example library
-cargo test --manifest-path examples/Cargo.toml --lib
+cargo run -p sdforge-examples --example oxcache_admin --features oxcache_admin_example
 ```
 
 Sample configuration files live in `examples/config/` (`default.toml`, `minimal.toml`, `production.toml`, `api-key-auth.toml`).
@@ -563,341 +307,136 @@ Sample configuration files live in `examples/config/` (`default.toml`, `minimal.
 
 ## 🏗️ Architecture
 
-SDForge follows an architecture of "unified macro annotations → compile-time protocol gating → inventory runtime registration". See the [Architecture document](docs/ARCHITECTURE.md) for the full design description.
+SDForge consists of two crates: `macros/sdforge-macros` parses the `#[forge]` / `#[service_module]` annotations and generates feature-gated registration code, while `sdforge` is the runtime library. The runtime skeleton is built on inventory: registrations are submitted at compile time via `inventory::submit!()` and collected once at startup by `init_all_plugins()` into a `OnceLock`, preventing link-time elimination in release builds. The protocol modules (http / mcp / grpc / websocket / streaming / cli) are mutually independent and compiled per feature, all sharing the unified handler contract in `core` (`HandlerArgs` + `HandlerState`). The gRPC protobuf lives in `proto/sdforge.v1.proto` (`SdForgeService` with `Call` / `GetInfo`) and is generated by `build.rs` via tonic-prost into `OUT_DIR`. See the [Architecture document](docs/ARCHITECTURE.md) for the full design description.
 
-```
-sdforge/
-├── src/                # Main framework crate
-│   ├── core/         # Core types, error handling, validation
-│   ├── error/        # Framework error types (ApiError, SdForgeError)
-│   ├── http/         # HTTP protocol implementation (Axum)
-│   ├── mcp/          # MCP protocol implementation (rmcp)
-│   ├── security/     # Security features (auth, rate limiting, audit)
-│   ├── cache/        # Cache integration (oxcache)
-│   ├── websocket/    # WebSocket support
-│   ├── grpc/         # gRPC support (tonic)
-│   ├── streaming/    # SSE streaming support
-│   ├── cli/          # CLI integration (clap)
-│   ├── docs/         # Documentation generation (Swagger UI + Markdown)
-│   ├── openapi/      # OpenAPI 3.1 spec generation
-│   ├── domain/       # Domain abstractions
-│   ├── config/       # Configuration management
-│   ├── i18n/         # Internationalization (ICU4X)
-│   ├── integrations/ # trait-kit AsyncKit integration
-│   └── lib.rs        # Library entry point
-├── macros/            # Procedural macros crate (#[forge])
-├── examples/          # Comprehensive example library (workspace member)
-├── docs/              # Documentation
-├── benches/           # Benchmarks
-├── proto/             # Protobuf definitions (gRPC)
-├── .github/           # GitHub workflows
-└── scripts/           # Build and utility scripts
+```mermaid
+flowchart TD
+    MAC["macros sdforge-macros<br/>forge and service_module proc macros"] -->|"cfg feature gated codegen"| REG["inventory registrations<br/>HTTP routes MCP tools gRPC handlers CLI commands"]
+    REG --> BOOT["init_all_plugins<br/>startup collection cached in OnceLock"]
+    BOOT --> HTTP["http<br/>axum router and middleware stack"]
+    BOOT --> MCP["mcp<br/>rmcp stateless handler"]
+    BOOT --> GRPC["grpc<br/>tonic SdForgeGrpcService"]
+    BOOT --> CLI["cli<br/>clap CliBuilder"]
+    BOOT --> WS["websocket and streaming<br/>WS and SSE"]
+    GRPC --> PROTO["proto sdforge.v1.proto<br/>generated by build.rs via tonic-prost"]
+    CORE["core error domain<br/>unified handler contract and errors"] --> HTTP
+    CORE --> MCP
+    CORE --> GRPC
+    CORE --> CLI
+    HTTP --> SEC["security ratelimit cache config<br/>health metrics graceful otel"]
+    REG --> OAPI["openapi and docs<br/>OpenAPI 3.1 spec and Swagger UI"]
 ```
 
-### Design Principles
+### Design principles
 
-- **Compile-time protocol selection**: unused protocols produce no compiled code at all
-- **Inventory registration pattern**: `inventory::submit!()` for compile-time registration, `init_all_plugins()` to prevent linker optimization
-- **Three construction modes**: every component supports `new()` (out of the box), `builder()` (builder pattern), and `with_dependencies()` (dependency injection)
-- **No database**: all data interaction goes through oxcache (in-memory cache)
+- **Compile-time protocol selection**: disabled protocols never enter the compile graph; no runtime probing or dynamic loading
+- **Inventory registration pattern**: compile-time `inventory::submit!()`; `init_all_plugins()` prevents linker elimination and returns registration counts
+- **Unified handler contract**: every protocol follows `fn(HandlerArgs, HandlerState) -> HandlerFuture`
+- **Three construction modes**: components support `new()` (out of the box), `builder()` (builder pattern), and `with_dependencies()` (dependency injection)
+- **No database**: all data interaction goes through oxcache in-memory caching; rate limiting reuses limiteron; logging can bridge to inklog
 
 ---
 
-## 📜 OpenAPI Auto-Generation
+## 🔄 Core Execution Path
 
-SDForge generates OpenAPI 3.1 specifications automatically based on [utoipa 5.5](https://crates.io/crates/utoipa). When the `openapi` feature is enabled, each `#[forge]` macro registers an `OpenApiRouteInfo` at compile time via `inventory`. At runtime, calling `generate_openapi_spec()` collects all routes and generates a complete specification.
+The HTTP request hot path as an example (full data flow in the [Architecture document](docs/ARCHITECTURE.md), data flow section):
 
-### 🔧 Enabling
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["http", "openapi"] }
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant MW as Middleware stack
+    participant RT as Version router
+    participant FN as forge handler
+    participant RS as ServiceResponse
+    C->>MW: HTTP request
+    note over MW: auth_middleware authentication<br/>RateLimitLayer rate limiting<br/>security headers and CORS
+    MW->>RT: Passes checks, forwarded
+    RT->>FN: Matches /api/v1 route<br/>extracts path and query params
+    FN->>FN: HandlerArgs and HandlerState<br/>business logic runs
+    FN-->>RS: Result value or ApiError
+    RS-->>C: JSON response<br/>optional timestamp i18n logging
 ```
 
-### 🚀 Basic Usage
-
-```rust
-use sdforge::openapi::generate_openapi_spec;
-
-// Collect all routes registered via #[forge] and generate the OpenAPI specification
-let spec = generate_openapi_spec();
-
-// Serialize to JSON to write to a file or return to the client
-let json = serde_json::to_string_pretty(&spec).unwrap();
-println!("{json}");
-```
-
-### 🎨 Custom Metadata
-
-Use `OpenApiBuilder` chainable calls to customize the `info` section (title, version, description). Routes are always collected from the global `inventory` registry:
-
-```rust
-use sdforge::openapi::OpenApiBuilder;
-
-let spec = OpenApiBuilder::new()
-    .title("My Service")
-    .version("2.0.0")
-    .description("User-facing API for the billing domain")
-    .build();
-```
-
-### 🔗 Macro Integration
-
-When the `openapi` feature is enabled, `#[forge]` automatically generates registration code — no manual maintenance required:
-
-```rust
-#[forge(
-    name = "get_user",
-    version = "v1",
-    path = "/users/:id",
-    method = "GET",
-    description = "Get a user by ID"
-)]
-async fn get_user(id: u64) -> Result<User, ApiError> { /* ... */ }
-```
-
-The code above automatically submits `OpenApiRouteInfo { path: "/users/{id}", method: "GET", ... }` to the global registry at compile time; `generate_openapi_spec()` will include it in the generated specification.
-
-> **Note**: when the `openapi` feature is not enabled, the macro generates no utoipa-related code at all — zero runtime overhead.
+The middleware stack order, version routing, and response pipeline are assembled by `http::build()` / `build_with_config()`; the MCP, gRPC, and CLI entrypoints reuse the same handlers and response contract.
 
 ---
 
-## 🔄 MCP 2026-07-28 Migration Guide
+## 🌐 One Annotation, Five Protocols
 
-v0.2.0 fully migrated the MCP implementation from `mcp-sdk 0.0.3` to the official [`rmcp`](https://crates.io/crates/rmcp) SDK (currently rmcp 3.2), adapting to the MCP 2026-07-28 specification. This migration is a **BREAKING** change.
+The `#[forge]` macro generates protocol registrations for the features currently enabled; disabled protocols generate no code at all:
 
-### ⚠️ BREAKING Changes
-
-| Old Version (v0.1.x)                   | New Version (v0.2.0+)                         |
-|-----------------------------------------|-----------------------------------------------|
-| `mcp-sdk = "0.0"` dependency            | `rmcp` dependency                             |
-| `initialize` handshake flow             | Removed, replaced with the `server/discover` endpoint |
-| Stateful sessions (`StatefulServerHandler`) | Stateless adapter layer (`StatelessServerHandler`) |
-| `register_mcp(&mut Server)` signature   | `register_mcp(&mut dyn McpToolRegistry)`      |
-
-### 🛠️ Stateless Adapter Layer
-
-`StatelessServerHandler` implements the `rmcp::ServerHandler` trait. None of its methods depend on session state, adapting to the stateless protocol model of the 2026-07-28 specification:
-
-```rust
-use sdforge::mcp::stateless::StatelessServerHandler;
-
-let handler = StatelessServerHandler::new();
-// Mount to HTTP routes via rmcp's axum integration
+```mermaid
+flowchart LR
+    A["async fn annotated with forge macro"] --> B["sdforge-macros expansion"]
+    B --> C["inventory compile-time registration"]
+    C --> D["http feature<br/>RouteRegistration axum routing"]
+    C --> E["mcp feature<br/>McpToolRegistration tool schema"]
+    C --> F["grpc feature<br/>GrpcHandlerRegistration call dispatch"]
+    C --> G["cli feature<br/>CliCommandRegistration subcommands"]
+    C --> H["openapi feature<br/>OpenApiRouteInfo spec collection"]
 ```
 
-### 📨 HTTP Header Protocol
-
-The stateless protocol passes methods and tool names through HTTP headers, parsed by `parse_mcp_headers`:
-
-```rust
-use sdforge::mcp::headers::parse_mcp_headers;
-
-// Client requests must carry:
-//   Mcp-Method: tools/call
-//   Mcp-Name: get_user
-let info = parse_mcp_headers(&headers)?;
-```
-
-Missing headers return `400 Bad Request`, consistent with the 2026-07-28 specification.
-
-### 🔁 Multi Round-Trip Requests (MRTR)
-
-MRTR support lets tools suspend execution via `InputRequiredResult` and wait for the client to provide additional input. Sessions are automatically canceled after a 300-second timeout:
-
-```rust
-use sdforge::mcp::mrtr::MrtrSessionManager;
-
-let manager = MrtrSessionManager::new();
-let result = manager.create_session("session-1", "get_user")?;
-// The client later resumes execution via session_id
-```
-
-### 💾 Cache Semantics
-
-The `cache_semantics` module handles the `ttlMs` and `cacheScope` fields, supporting both `global` and `request` cache scopes. It integrates with oxcache to implement tool result caching.
-
-### 📚 Migration Steps
-
-1. Replace the `mcp-sdk` dependency in `Cargo.toml` with `rmcp`
-2. Change the `register_mcp(&mut Server)` call to `register_mcp(&mut dyn McpToolRegistry)`
-3. Remove the `initialize` handshake-related code and use the `server/discover` endpoint instead
-4. If you need MRTR or cache semantics, import the corresponding modules
-
-> For the complete migration example, see `examples/src/mcp/migration_2026.rs`.
-
----
-
-## 🚀 Production Deployment
-
-### 🐳 Docker Deployment
-
-```dockerfile
-FROM rust:1.85 as builder
-WORKDIR /app
-COPY . .
-RUN cargo build --release --features full
-
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/target/release/sdforge /usr/local/bin/
-EXPOSE 3000
-CMD ["sdforge", "serve", "--port", "3000"]
-```
-
-### ☸️ Kubernetes Deployment
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: sdforge-api
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: sdforge-api
-  template:
-    metadata:
-      labels:
-        app: sdforge-api
-    spec:
-      containers:
-      - name: sdforge
-        image: sdforge:latest
-        ports:
-        - containerPort: 3000
-        env:
-        - name: FEATURES
-          value: "full"
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-```
-
-### 🔧 Environment Configuration
-
-```bash
-# Production environment variables
-export RUST_LOG=info
-export SD_FORGE_PORT=3000
-export SD_FORGE_HOST=0.0.0.0
-export SD_FORGE_CONFIG_PATH=/etc/sdforge/config.toml
-export SD_FORGE_FEATURES=full
-```
-
----
-
-## 🐛 Troubleshooting
-
-### 🔍 Common Issues
-
-#### **Compilation Errors**
-
-```bash
-# Error: feature not found
-# Solution: check available features
-cargo check --help | grep features
-
-# Enable specific features
-cargo build --features "http,security,cache"
-```
-
-#### **Runtime Issues**
-
-```bash
-# Check logs with tracing
-RUST_LOG=debug cargo run --features logging
-
-# Common port conflicts
-# Solution: change the port or kill the existing process
-lsof -i :3000
-kill -9 <PID>
-```
-
-#### **Performance Issues**
-
-```bash
-# Profile with cargo-flamegraph
-cargo install flamegraph
-cargo flamegraph --bin sdforge --features full
-
-# Memory usage analysis
-valgrind --tool=massif target/release/sdforge
-```
-
-### 📋 Health Check Endpoint
-
-```rust
-#[forge(
-    name = "health_check",
-    version = "v1",
-    path = "/health",
-    method = "GET"
-)]
-async fn health_check() -> Result<HealthStatus, ApiError> {
-    Ok(HealthStatus {
-        status: "healthy".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        uptime: get_uptime(),
-    })
-}
-```
-
-### 🆘 Getting Help
-
-- 📖 [Documentation](https://docs.rs/sdforge)
-- 🐛 [Issue Tracker](https://github.com/Kirky-X/sdforge/issues)
-- 💬 [Discussions](https://github.com/Kirky-X/sdforge/discussions)
+MCP routes via the `Mcp-Method` / `Mcp-Name` headers (or stdio) through `StatelessServerHandler`; gRPC dispatches via `SdForgeGrpcService::call()` keyed by `grpc_method`; CLI runs parse, dispatch, output, and exit code through `CliBuilder::execute()`. Protocols are decoupled at runtime.
 
 ---
 
 ## 🧪 Testing
 
-### Test Categories
+### Test strategy matrix
 
-| Category | Location | Description |
-|----------|----------|-------------|
-| Unit tests | Embedded `#[cfg(test)]` in `src/`, `tests/unit/` | Module-level unit tests |
-| Integration tests | `tests/integration/` | cache / config / error_handling / feature_combinations / grpc / http / mcp / openapi / security / status_code / streaming / uat / websocket / cli / docs |
-| Macro tests | `tests/macros/` | trybuild compile-failure cases and macro expansion verification |
-| Advanced E2E tests | `tests/e2e_advanced.rs` | Uncovered scenarios across 12 modules (178 tests) |
-| Examples comprehensive tests | `examples/tests/comprehensive_features.rs` | Re-export accessibility for all features, cross-protocol dispatch (77 tests) |
-| Benchmarks | `src/benches/` | criterion benchmarks (require the `http` feature) |
+| Layer | Location | Description |
+|-------|----------|-------------|
+| Unit tests | Embedded `#[cfg(test)]` in `src/`, `tests/unit/` | Module-level tests, including proptest property tests (`src/tests/property_tests.rs`) |
+| Integration tests | `tests/integration/` | Covers http / mcp / grpc / websocket / security / cache / streaming / openapi / cli / docs / health_probes / graceful_shutdown / validate / paginate / etag / lifecycle / otel_export / status_code / rbac protocol and feature combinations |
+| Macro tests | `tests/macros/`, `macros/tests/` | trybuild compile-failure cases and macro expansion verification |
+| E2E | `tests/e2e/` | `e2e_advanced` covers 12 domains with 178 tests |
+| Examples comprehensive tests | `examples/tests/` | All-feature re-export accessibility and cross-protocol dispatch (77 tests) plus gateway E2E |
+| Benchmarks | `benches/`, `src/benches/` | criterion: `runtime_bench` / `config_and_cache_bench` / `sdforge_bench` |
+| Doc-tests | `src/` doc comments | Embedded rustdoc examples |
 
-### Running Commands
+### Running commands
 
 ```bash
-# Run tests per feature set
-cargo test --features http
-cargo test --features mcp
-cargo test --features "http,mcp"
-cargo test --features full
+# Aligned with the CI matrix (http / mcp / http,mcp / http,security / http,cache /
+# http,websocket / http,grpc / http,streaming / full — 9 combinations)
+cargo test --features "http,mcp" --workspace
+cargo test --features full --workspace
 
-# Lib tests only (the CI coverage target)
+# Lib tests (the CI coverage target)
 cargo test --features full --lib
 
-# Run a specific test
-cargo test test_get_user --features http
+# Coverage (CI gate >=80% line coverage; same gate in lefthook pre-push)
+cargo llvm-cov --features full --lib --lcov --fail-under-lines 80
 
-# Run with output
-cargo test --features http -- --nocapture
-
-# Release-mode tests
-cargo test --release --features http
+# Formatting and zero-warning lint
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-CI generates coverage with `cargo llvm-cov --features full --lib` and uploads it to Codecov.
+Coverage measurement excludes the build.rs-generated protobuf code (`src/grpc/pb/`) via `llvm-cov.toml`.
+
+### Test scale
+
+About **2,900** test functions (`src/` 2,015 + `tests/` 704 + `macros/` 59 + `examples/` 126; grep count, as of v0.5.0-rc.3).
 
 ---
 
 ## 📊 Performance
 
-SDForge's compile-time feature gating yields significant compile-time and artifact-size advantages (vs the full `--features full` build):
+### Runtime hot path (criterion baselines)
+
+| Benchmark | Median latency | Throughput |
+|-----------|----------------|------------|
+| `plain_get` (routing dispatch, no path params) | ~553 ns | ~1.81 M req/s |
+| `path_param_get` (1 path param) | ~604 ns | ~1.65 M req/s |
+| `handler_args_build_5_params` (5-param assembly) | ~117 ns | - |
+| `serialize_nested_object` (7-field nested object) | ~137 ns | - |
+| `deserialize_nested_object` (same object) | ~383 ns | - |
+
+> Environment: WSL2 (linux 6.6.87) x64, Rust 1.97.1, release profile (`lto=fat`, `codegen-units=1`), criterion medians. Reproduce with `cargo bench --bench runtime_bench --features http`. See [Performance Baselines](docs/PERFORMANCE.md) for the full methodology.
+
+### Compile-time gating gains (feature gating vs full build)
 
 | Metric | http only | full | Savings |
 |--------|-----------|------|---------|
@@ -907,67 +446,54 @@ SDForge's compile-time feature gating yields significant compile-time and artifa
 | Framework rlib size (release) | 3.57 MB | 9.07 MB | **60.6%** |
 | Unique dependency crates | 396 | 478 | 17.2% |
 
-> Data source: [docs/benchmarks/vs-server-less.md](docs/benchmarks/vs-server-less.md) (measured 2026-07-03 on AMD Ryzen 9 9950X / rustc 1.93.1 / WSL2). See that document for the full methodology, binary size analysis, and reproduction commands.
+> Data source: [compile-time gating benchmarks](docs/benchmarks/vs-server-less.md) (measured 2026-07-03 on AMD Ryzen 9 9950X / rustc 1.93.1 / WSL2); methodology and reproduction commands are included there.
 
 ---
 
 ## 🔒 Security
 
-SDForge ships a full security suite (the `security` feature): API Key / JWT Bearer authentication, rate limiting (limiteron), audit logging, security headers (CORS/CSP), and input validation. See the [Security document](docs/SECURITY.md) for the design overview and best practices.
+### 🚨 Reporting vulnerabilities
 
-### 🛡️ API Key Authentication
+**Do not report security vulnerabilities through public GitHub issues.** Please use the private GitHub [Security Advisories](https://github.com/Kirky-X/sdforge/security/advisories/new) disclosure channel. The project commits to acknowledging reports within 48 hours and providing an initial assessment within 7 days. See [docs/SECURITY.md](docs/SECURITY.md) and the root [SECURITY.md](SECURITY.md).
 
-```rust
-use sdforge::security::{ApiKeyAuth, auth_middleware};
+### 🛡️ Security design highlights
 
-let app = Router::new()
-    .route("/api/*path", get(handler))
-    .layer(auth_middleware(ApiKeyAuth::new("your-secret-key")));
-```
+- **Authentication**: API Key (versioning, LRU cache, explicit seeding, fail-loud on empty store) and JWT Bearer (HMAC-SHA256 verification, `MIN_SECRET_LENGTH=32` enforced)
+- **Fail-safe defaults**: `ServerConfig` binds `127.0.0.1` by default; CORS validation checks both scheme and host
+- **Unspoofable client IP**: `X-Forwarded-For` / `X-Real-IP` are not trusted without `ConnectInfo`; rate limiting and bans rely only on the TCP peer address
+- **Audit**: `AuditLogger` records security events with optional HMAC-SHA256 tamper-proof signatures; key rotation is audited
+- **Error sanitization**: `ApiError::Internal` is sanitized before output with an `error_id`; `ErrorContext` stays server-side only
+- **Input defense**: required / unknown-field validation of MCP tool `input_schema`; 1 MiB payload caps for MCP and gRPC
 
-### ⚡ Rate Limiting
+### 🔍 Supply chain security
 
-```toml
-# config.toml
-[rate_limit]
-enabled = true
-requests_per_minute = 60
-burst_size = 10
-```
-
-### ⚠️ Security Defaults (v0.3.0+)
-
-> **Note**: v0.3.0 tightened security defaults. Please check during migration:
-> - **JWT secret minimum length**: `MIN_SECRET_LENGTH=32`. Secrets shorter than 32 characters are rejected
-> - **ServerConfig default host**: changed from `"0.0.0.0"` (fail-open) to `"127.0.0.1"` (fail-safe loopback). Production deployments must explicitly configure the host
-> - **CORS validation tightened**: `"http://"` (scheme only, no host) is now rejected
->
-> Also: since v0.4.4, `extract_client_ip_core` no longer trusts the `X-Forwarded-For` / `X-Real-IP` headers when no `ConnectInfo` is available. Production deployments **must** configure `ConnectInfo` to enable unspoofable TCP peer IP extraction.
+CI security gates are always on: `cargo deny check` ([deny.toml](deny.toml) policy: advisories, licenses, duplicate dependencies) + `cargo audit`, together with CodeQL, Dependabot, and pre-commit secret scanning (detect-secrets).
 
 ---
 
 ## 🗺️ Roadmap
 
-The following plans are compiled from the unreleased entries in [CHANGELOG.md](docs/CHANGELOG.md) and the workspace acceptance plan (ACCEPTANCE_PLAN.md):
-
-- **v0.5.0 release (in progress)** — currently at `0.5.0-rc.2`; completing coordinated releases of the dependency chain (trait-kit/oxcache/inklog/limiteron) and final verification per the workspace acceptance plan
-- **Custom success status codes (merged, pending release)** — `#[forge(status = <code>)]` static declaration + `ServiceResponse::success_with_status` dynamic control (see CHANGELOG [Unreleased])
-- **Unified error-code behavior contract** — evaluate unifying the status code divergence for the same validation error between HTTP (400) and gRPC (422) (SIMPL-001 in the acceptance plan; currently a recorded behavior contract)
-- **Dependency hygiene** — mid-term evaluation of migrating `bincode` (RUSTSEC-2025-0141 unmaintained) to `postcard` / `bitcode` / `rkyv`
-- **MSRV declaration alignment** — unified to 1.97.1 per workspace CONFIG_BASELINE (2026-09-06), covering the effective 1.94 requirement under `--all-features`
+<table>
+  <tr><th>Status</th><th>Item</th><th>Notes</th></tr>
+  <tr><td>🚧</td><td><b>v0.5.0 release</b></td><td>Currently at <code>0.5.0-rc.3</code>; completing coordinated releases of the dependency chain (trait-kit / oxcache / inklog / limiteron) and final verification</td></tr>
+  <tr><td>✅</td><td>Custom success status codes</td><td><code>#[forge(status = &lt;code&gt;)]</code> static declaration + <code>ServiceResponse::success_with_status</code> dynamic control, released in 0.5.0-rc.2</td></tr>
+  <tr><td>✅</td><td>MSRV alignment</td><td>Workspace unified to 1.97.1 (2026-09-06), covering the effective requirement under <code>--all-features</code></td></tr>
+  <tr><td>📋</td><td>Unified error-code behavior contract</td><td>Evaluate aligning the status code for the same validation error between HTTP (400) and gRPC (422) (recorded behavior contract)</td></tr>
+  <tr><td>📋</td><td>Dependency hygiene</td><td>Mid-term evaluation of migrating <code>bincode</code> (RUSTSEC-2025-0141 unmaintained) to <code>postcard</code> / <code>bitcode</code> / <code>rkyv</code></td></tr>
+</table>
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please read the [Contributing Guide](docs/CONTRIBUTING.md) for the development environment, TDD workflow, and PR process.
+Contributions are welcome! Please read the [Contributing Guide](docs/CONTRIBUTING.md) first.
 
 ```bash
-# Clone the repository
 git clone https://github.com/Kirky-X/sdforge.git
 cd sdforge
 
-# Install pre-commit hooks
+# Toolchain: Rust 1.97.1 (pinned by rust-toolchain.toml); grpc needs protoc
+# Install lefthook / pre-commit hooks (fmt / clippy / cargo-deny / secret scanning)
 ./scripts/install-pre-commit.sh
 
 # Verify the environment
@@ -975,22 +501,23 @@ cargo build --all-features
 cargo test --all-features --lib
 ```
 
+Commit messages follow Conventional Commits (`feat` / `fix` / `refactor` / `docs` / `test` / `chore`, etc.); the commit-msg hook enforces this.
+
 ---
 
 ## 📋 Changelog
 
 See [CHANGELOG.md](docs/CHANGELOG.md). Highlights of recent releases:
 
-- **[Unreleased]** — `#[forge(status = <code>)]` custom success status code (static declaration + `ServiceResponse::success_with_status` dynamic control, aligned across HTTP/gRPC and OpenAPI)
-- **[0.4.7]** — Removed tilde constraints from dependency versions; published the `bincode` RUSTSEC-2025-0141 ignore decision
-- **[0.4.6]** — Fixed CI Clippy failures; restored the `serde` dev-dependency for examples
-- **[0.4.5]** — Added `tests/e2e_advanced.rs` (178 tests)
+- **[0.5.0-rc.3]** (2026-09-10): `ResponseCacheLayer` response caching middleware, `AppConfig` security/cache fields, `AuditSink` abstraction and `InklogAuditSink`
+- **[0.5.0-rc.2]** (2026-09-07): `#[forge(status = <code>)]` custom success status codes, `i18n_key` parameter and translation registry, rmcp 2.2 → 3.2
+- **[0.4.7]** (2026-07-23): Removed tilde constraints from dependency versions; published the `bincode` RUSTSEC-2025-0141 ignore decision
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT + Commons Clause License. Commercial use requires separate authorization. See [LICENSE](LICENSE).
+This project is licensed under **MIT + Commons Clause**: free to use, modify, and distribute under the MIT License, but selling requires separate written authorization from the licensor. See [LICENSE](LICENSE).
 
 Copyright (c) 2026 Kirky.X
 
@@ -1007,7 +534,7 @@ SDForge stands on the shoulders of an excellent open-source ecosystem. Thanks to
 - [clap](https://github.com/clap-rs/clap) — command-line parsing
 - [inventory](https://crates.io/crates/inventory) — compile-time registration
 - [ICU4X](https://github.com/unicode-org/icu4x) — internationalization
-- Base workspace sibling projects [oxcache](https://github.com/Kirky-X/oxcache), [limiteron](https://github.com/Kirky-X/limiteron), [trait-kit](https://github.com/Kirky-X/trait-kit), [inklog](https://github.com/Kirky-X/inklog)
+- Base workspace sibling projects [oxcache](https://github.com/Kirky-X/oxcache), [limiteron](https://github.com/Kirky-X/limiteron), [trait-kit](https://github.com/Kirky-X/trait-kit), [inklog](https://github.com/Kirky-X/inklog), [dbnexus](https://github.com/Kirky-X/dbnexus)
 
 ---
 
