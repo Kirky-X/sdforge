@@ -277,7 +277,13 @@ pub mod validators {
 /// It provides basic sanitization but is not currently used in the main codebase.
 /// Consider using the `ammonia` crate for production HTML sanitization.
 #[cfg(feature = "http")]
-#[allow(dead_code)] // Reserved for future security-sensitive input handling
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "预留的安全输入处理模块：函数仅由本模块测试调用，非测试构建暂无消费方"
+    )
+)]
 pub(crate) mod sanitizer {
     use crate::core::ApiError;
     use std::path::PathBuf;

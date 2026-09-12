@@ -58,7 +58,10 @@ pub use inklog_sink::InklogAuditSink;
 /// Internal struct used to pass user ID and log entry through the async channel.
 pub(crate) struct AuditLogBatch {
     user_id: String,
-    #[allow(dead_code)] // Field used in queue transfer; direct read access not needed
+    #[expect(
+        dead_code,
+        reason = "批次经 fire-and-forget 队列传输，消费端当前不读取该负载"
+    )]
     log: AuditLog,
 }
 

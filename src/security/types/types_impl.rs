@@ -43,7 +43,6 @@ pub fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {
 ///
 /// Reserved as the serialization pair for serialize_auth_context.
 /// Kept for future use when AuthContext deserialization from cache is needed.
-#[allow(dead_code)]
 pub fn deserialize_auth_context(data: &[u8]) -> Option<AuthContext> {
     bincode::serde::decode_from_slice::<AuthContext, _>(data, bincode::config::standard())
         .map(|(v, _)| v)

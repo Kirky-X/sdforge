@@ -32,12 +32,14 @@ pub use handler::GrpcHandlerRegistration;
 #[cfg(feature = "grpc")]
 /// gRPC route registration
 #[derive(Debug, Clone)]
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "字段仅由 grpc 测试模块读取，非测试构建无消费者")
+)]
 pub struct GrpcRoute {
     /// The gRPC service name
-    #[allow(dead_code)]
     pub(crate) service_name: String,
     /// API metadata
-    #[allow(dead_code)]
     pub(crate) metadata: ApiMetadata,
 }
 

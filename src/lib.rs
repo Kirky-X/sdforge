@@ -899,7 +899,6 @@ mod reexport_tests {
         // that actually pins `from_fn`. `Next` is exercised as a typed parameter.
         #[allow(unused_imports)]
         use crate::axum::middleware::{Next, from_fn};
-        #[allow(dead_code)]
         fn _next_typed(_next: Next) {}
     }
 

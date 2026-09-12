@@ -132,7 +132,6 @@ macro_rules! define_registration {
             /// * `version` - API version
             /// * `create_fn` - Function to create the instance
             /// * `metadata_fn` - Function to create the metadata
-            #[allow(dead_code)]
             pub const fn new(
                 name: &'static str,
                 version: &'static str,

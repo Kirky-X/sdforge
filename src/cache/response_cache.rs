@@ -99,10 +99,13 @@ impl<S> Layer<S> for ResponseCacheLayer {
 /// first; on a hit, returns the cached response. On a miss, delegates to
 /// the inner service and writes the response back to the cache.
 #[derive(Clone)]
+#[expect(
+    dead_code,
+    reason = "TTL 目前仅信息性存储，SyncCache 不消费；为后端集成预留"
+)]
 pub struct ResponseCacheMiddleware<S> {
     inner: S,
     cache: SharedCache,
-    #[allow(dead_code)] // TTL is stored for future backend integration
     ttl_secs: u64,
 }
 
