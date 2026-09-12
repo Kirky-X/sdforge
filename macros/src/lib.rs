@@ -128,7 +128,6 @@ fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Erro
 
 /// Generate ApiMetadata TokenStream for service API
 /// Accepts TokenStream2 parameters to work within quote! macro
-#[allow(dead_code)]
 #[inline]
 fn api_metadata_tokens(
     name: TokenStream2,
@@ -752,23 +751,8 @@ enum ValidationSpec {
     Email,
 }
 
-impl ValidationSpec {
-    /// Rule identifier used in error payloads.
-    fn rule_name(&self) -> &'static str {
-        match self {
-            ValidationSpec::Ge(_) => "ge",
-            ValidationSpec::Le(_) => "le",
-            ValidationSpec::MinLength(_) => "min_length",
-            ValidationSpec::MaxLength(_) => "max_length",
-            ValidationSpec::NotBlank => "not_blank",
-            ValidationSpec::Email => "email",
-        }
-    }
-}
-
 /// Extract parameter info from function arguments
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct ParamInfo {
     /// Parameter name (identifier)
     name: String,
@@ -782,8 +766,6 @@ struct ParamInfo {
     is_vec: bool,
     /// The inner type for Option or Vec (as string for comparison)
     inner_type: String,
-    /// Explicit parameter annotation (if any)
-    explicit_annotation: Option<ParamKind>,
     /// Whether this parameter should be excluded from MCP schema
     /// Extension/State parameters are runtime state, not input parameters
     skip_mcp_schema: bool,
@@ -861,7 +843,6 @@ impl ParamInfo {
                 is_option,
                 is_vec,
                 inner_type,
-                explicit_annotation,
                 skip_mcp_schema,
                 validations,
             }))
@@ -1605,7 +1586,6 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     let query_struct_def: proc_macro2::TokenStream = if has_query {
         quote! {
             #[derive(::serde::Deserialize)]
-            #[allow(dead_code)]
             struct #query_struct_ident {
                 #query_struct_fields
             }
@@ -3164,7 +3144,6 @@ mod macro_parsing_tests {
             } else {
                 "u64".to_string()
             },
-            explicit_annotation: None,
             skip_mcp_schema,
         }
     }
