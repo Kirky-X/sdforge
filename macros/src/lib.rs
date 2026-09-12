@@ -89,11 +89,19 @@ fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Erro
         if let Some(&'"') = chars.peek() {
             // Quoted string value
             chars.next();
+            let mut terminated = false;
             for c in chars.by_ref() {
                 if c == '"' {
+                    terminated = true;
                     break;
                 }
                 value.push(c);
+            }
+            if !terminated {
+                return Err(syn::Error::new(
+                    proc_macro2::Span::call_site(),
+                    "unterminated string literal in forge attribute (missing closing `\"`)",
+                ));
             }
         } else {
             // Unquoted value (boolean, number, etc.)
@@ -790,9 +798,9 @@ impl ParamInfo {
         path_params: &[String],
         http_method: Option<&str>,
         body_params: &[String],
-    ) -> Option<Self> {
+    ) -> syn::Result<Option<Self>> {
         let pat_type = match arg {
-            FnArg::Receiver(_) => return None,
+            FnArg::Receiver(_) => return Ok(None),
             FnArg::Typed(pat_type) => pat_type,
         };
 
@@ -808,7 +816,7 @@ impl ParamInfo {
 
             // Check for explicit #[param(kind = "...")] attribute
             let (explicit_annotation, validations) =
-                Self::parse_param_attributes(pat_type);
+                Self::parse_param_attributes(pat_type)?;
 
             // Determine extraction kind based on explicit annotation first, then path parameters, then type inference
             let param_kind = if let Some(ref kind) = explicit_annotation {
@@ -846,7 +854,7 @@ impl ParamInfo {
             // Extension/State parameters should be excluded from MCP schema
             let skip_mcp_schema = matches!(param_kind, ParamKind::State | ParamKind::Extension);
 
-            Some(Self {
+            Ok(Some(Self {
                 name,
                 ty,
                 param_kind,
@@ -856,9 +864,9 @@ impl ParamInfo {
                 explicit_annotation,
                 skip_mcp_schema,
                 validations,
-            })
+            }))
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -870,7 +878,7 @@ impl ParamInfo {
     ///          max_length = 10, not_blank, email)]`.
     fn parse_param_attributes(
         pat_type: &syn::PatType,
-    ) -> (Option<ParamKind>, Vec<ValidationSpec>) {
+    ) -> syn::Result<(Option<ParamKind>, Vec<ValidationSpec>)> {
         let mut kind = None;
         let mut validations = Vec::new();
         for attr in &pat_type.attrs {
@@ -924,17 +932,31 @@ impl ParamInfo {
                                         });
                                     }
                                     "min_length" | "max_length" => {
-                                        if let syn::Expr::Lit(syn::ExprLit {
-                                            lit: syn::Lit::Int(lit_int),
-                                            ..
-                                        }) = &name_value.value
-                                        {
-                                            let n = lit_int.base10_parse::<usize>().unwrap_or(0);
-                                            validations.push(if key == "min_length" {
-                                                ValidationSpec::MinLength(n)
-                                            } else {
-                                                ValidationSpec::MaxLength(n)
-                                            });
+                                        match &name_value.value {
+                                            syn::Expr::Lit(syn::ExprLit {
+                                                lit: syn::Lit::Int(lit_int),
+                                                ..
+                                            }) => {
+                                                // A failed parse must not fail open as
+                                                // `0` (which silently disables the rule);
+                                                // surface the literal's error instead.
+                                                let n = lit_int.base10_parse::<usize>().map_err(
+                                                    |e| syn::Error::new(lit_int.span(), e),
+                                                )?;
+                                                validations.push(if key == "min_length" {
+                                                    ValidationSpec::MinLength(n)
+                                                } else {
+                                                    ValidationSpec::MaxLength(n)
+                                                });
+                                            }
+                                            other => {
+                                                return Err(syn::Error::new_spanned(
+                                                    other,
+                                                    format!(
+                                                        "`{key}` requires an unsigned integer literal"
+                                                    ),
+                                                ));
+                                            }
                                         }
                                     }
                                     _ => {}
@@ -957,7 +979,7 @@ impl ParamInfo {
                 }
             }
         }
-        (kind, validations)
+        Ok((kind, validations))
     }
 
     /// Convert parameter to JSON schema property
@@ -1483,14 +1505,18 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         .collect();
 
     // Extract function parameters
-    let params: Vec<ParamInfo> = input
+    let params: Vec<ParamInfo> = match input
         .sig
         .inputs
         .iter()
         .filter_map(|arg| {
-            ParamInfo::from_arg(arg, &path_params, method.as_deref(), &body_param_names)
+            ParamInfo::from_arg(arg, &path_params, method.as_deref(), &body_param_names).transpose()
         })
-        .collect();
+        .collect::<syn::Result<Vec<_>>>()
+    {
+        Ok(params) => params,
+        Err(e) => return e.into_compile_error().into(),
+    };
 
     // Check if there are any parameters
     let _has_params = !params.is_empty();
@@ -2741,6 +2767,47 @@ mod macro_parsing_tests {
         let result = parse_service_api_args(input, false).unwrap();
         assert_eq!(result.0, "test");
         assert_eq!(result.1, "v1");
+    }
+
+    /// Build a `#[param(...)] <ident>: <ty>` PatType with the given attribute
+    /// payload (the meta inside `param(...)`).
+    fn pat_type_with_param_attr(meta_str: &str) -> syn::PatType {
+        let meta: syn::Meta = syn::parse_str(meta_str).expect("valid attribute meta");
+        let attr = syn::Attribute {
+            pound_token: Default::default(),
+            style: syn::AttrStyle::Outer,
+            bracket_token: Default::default(),
+            meta,
+        };
+        syn::PatType {
+            attrs: vec![attr],
+            pat: Box::new(syn::parse_quote!(keyword)),
+            ty: Box::new(syn::parse_quote!(String)),
+            colon_token: Default::default(),
+        }
+    }
+
+    #[test]
+    fn test_parse_param_attributes_rejects_non_int_min_length() {
+        // A non-integer `min_length` must fail the build instead of silently
+        // disabling the validation rule (fail-open `MinLength(0)`).
+        let pat_type = pat_type_with_param_attr("param(min_length = \"5\")");
+        assert!(ParamInfo::parse_param_attributes(&pat_type).is_err());
+    }
+
+    #[test]
+    fn test_parse_param_attributes_rejects_overflowing_min_length() {
+        // Larger than usize::MAX — base10_parse fails and must surface as a
+        // compile error rather than clamping to 0.
+        let pat_type = pat_type_with_param_attr("param(min_length = 999999999999999999999999)");
+        assert!(ParamInfo::parse_param_attributes(&pat_type).is_err());
+    }
+
+    #[test]
+    fn test_parse_param_attributes_accepts_valid_min_length() {
+        let pat_type = pat_type_with_param_attr("param(min_length = 2)");
+        let (_, validations) = ParamInfo::parse_param_attributes(&pat_type).unwrap();
+        assert_eq!(validations.len(), 1);
     }
 
     #[test]
