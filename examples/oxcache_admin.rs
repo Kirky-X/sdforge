@@ -65,8 +65,8 @@ fn main() {
         .unwrap();
     rt.block_on(async {
         let router = sdforge::http::build();
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:8092").await.unwrap();
-        eprintln!("oxcache admin example on http://0.0.0.0:8092");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:8092").await.unwrap();
+        eprintln!("oxcache admin example on http://127.0.0.1:8092");
         sdforge::axum::serve(listener, router).await.unwrap();
     });
 }

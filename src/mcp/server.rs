@@ -184,13 +184,18 @@ impl SdForgeMcpServer {
         arguments: Option<serde_json::Value>,
     ) -> Result<CallToolResult, ErrorData> {
         // vuln-0002: reject oversized argument payloads before any dispatch.
+        // A serialization failure must not fail open (size 0 would bypass the
+        // cap): it is surfaced as invalid_params instead.
         if let Some(ref args) = arguments {
-            let size = serde_json::to_vec(args).map(|v| v.len()).unwrap_or(0);
-            if size > MAX_ARGUMENTS_SIZE_BYTES {
+            let size = serde_json::to_vec(args).map_err(|e| {
+                ErrorData::invalid_params(format!("failed to serialize arguments: {e}"), None)
+            })?;
+            if size.len() > MAX_ARGUMENTS_SIZE_BYTES {
                 return Err(ErrorData::invalid_params(
                     format!(
                         "arguments payload size ({}) exceeds maximum allowed size ({})",
-                        size, MAX_ARGUMENTS_SIZE_BYTES
+                        size.len(),
+                        MAX_ARGUMENTS_SIZE_BYTES
                     ),
                     None,
                 ));

@@ -77,19 +77,25 @@ pub struct Page<T> {
 }
 
 /// Slice `items` by `req` and produce the envelope.
+///
+/// Offset arithmetic uses checked multiplication: an adversarial `page`
+/// (e.g. near `u64::MAX`) must yield an empty page, never a wrapped small
+/// offset that would slice the wrong range.
 pub fn paginate<T: Clone>(items: Vec<T>, req: PageRequest) -> Page<T> {
     let total = items.len() as u64;
-    let start = ((req.page - 1) * req.size) as usize;
-    let end = ((start as u64 + req.size) as usize).min(items.len());
-    let items = if start >= items.len() {
-        Vec::new()
-    } else {
-        items[start..end].to_vec()
+    let start = (req.page - 1)
+        .checked_mul(req.size)
+        .and_then(|offset| usize::try_from(offset).ok());
+    let items = match start {
+        Some(start) if start < items.len() => {
+            let end = start.saturating_add(req.size as usize).min(items.len());
+            items[start..end].to_vec()
+        }
+        _ => Vec::new(),
     };
-    let next = if req.page * req.size < total {
-        Some(req.page + 1)
-    } else {
-        None
+    let next = match req.page.checked_mul(req.size) {
+        Some(consumed) if consumed < total => Some(req.page + 1),
+        _ => None,
     };
     Page { items, total, next }
 }
@@ -145,6 +151,18 @@ mod tests {
         let page = paginate(vec![1, 2], PageRequest::new(9, 2));
         assert!(page.items.is_empty());
         assert_eq!(page.total, 2);
+        assert_eq!(page.next, None);
+    }
+
+    #[test]
+    fn paginate_huge_page_does_not_wrap_offset() {
+        // (page - 1) * size must not wrap to a small offset and slice the
+        // wrong range; an unrepresentable offset yields an empty page.
+        let page = paginate(
+            vec![1, 2, 3],
+            PageRequest::new(u64::MAX, MAX_PAGE_SIZE),
+        );
+        assert!(page.items.is_empty(), "wrapped offset would leak items");
         assert_eq!(page.next, None);
     }
 

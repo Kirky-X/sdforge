@@ -269,11 +269,9 @@ async fn test_jwt_auth_valid_token_returns_200() {
 // ============================================================================
 // ApiKey Auth Middleware Execution Tests (security feature, covers lines 288-328)
 // These tests exercise the extract_auth closure body for ApiKey auth.
-//
-// NOTE: The ApiKey success path (lines 316-321) is UNREACHABLE through
-// build_with_config() because AppApiKeyAuth::new() creates an empty
-// authenticator with no registered keys. All valid-format keys will fail
-// validation. This is a design limitation of build_with_config().
+// Keys declared in the config are seeded into the store by build_with_config,
+// so the success path (valid key → 200) is covered below. A key with an
+// empty permission list validates to None, so the seeded key carries one.
 // ============================================================================
 
 #[cfg(feature = "security")]
@@ -291,13 +289,35 @@ fn build_apikey_test_router(header_name: &str, prefix: &str) -> Router {
             prefix: prefix.to_string(),
             keys: vec![ApiKeySeed {
                 key: "test-key-0123456789abcdef".to_string(),
-                permissions: vec![],
+                permissions: vec!["read".to_string()],
             }],
         },
         timeout: None,
         ..Default::default()
     };
     build_with_config(&config).unwrap()
+}
+
+#[cfg(feature = "security")]
+#[tokio::test]
+async fn test_apikey_auth_valid_key_returns_200() {
+    let router = build_apikey_test_router("X-API-Key", "key-");
+    let response = tower::ServiceExt::oneshot(
+        router,
+        axum::http::Request::builder()
+            .uri("/cov-test-route")
+            .header("X-API-Key", "key-test-key-0123456789abcdef")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(
+        response.status(),
+        axum::http::StatusCode::OK,
+        "a registered key carrying permissions must authenticate"
+    );
 }
 
 #[cfg(feature = "security")]

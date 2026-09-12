@@ -160,20 +160,14 @@ mod tests {
         assert_eq!(*hooks.last_status.lock().unwrap(), Some(200));
     }
 
-    #[tokio::test]
-    #[serial_test::serial]
-    async fn panicking_before_hook_does_not_break_pipeline() {
-        install_hooks(Arc::new(PanickingBefore));
-        let resp = test_app()
-            .oneshot(
-                axum::http::Request::builder()
-                    .uri("/hooked")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), 200, "request must complete despite hook panic");
+    #[test]
+    fn panicking_before_hook_is_isolated() {
+        // Panic isolation lives in `run_before`/`run_after`; exercising them
+        // directly keeps this test independent of the process-global install
+        // order (install is first-install-wins and never reset).
+        let info = RequestInfo::synthetic("GET", "/hooked");
+        run_before(&PanickingBefore, &info);
+        run_after(&PanickingBefore, &info, 200);
     }
 
     #[test]

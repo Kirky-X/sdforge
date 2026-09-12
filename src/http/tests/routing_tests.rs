@@ -788,7 +788,8 @@ fn test_resolve_route_path_prefix_multiple_leading_slashes_trimmed() {
 // ============================================================================
 
 /// Test get_or_generate_request_id with an empty x-request-id header
-/// value generates a UUID (falls through to the unwrap_or_else branch).
+/// value generates a UUID (empty values must not become the request id,
+/// mirroring the `context` middleware's empty-value handling).
 #[test]
 fn test_get_or_generate_request_id_empty_header_value() {
     let req = axum::http::Request::builder()
@@ -796,10 +797,11 @@ fn test_get_or_generate_request_id_empty_header_value() {
         .body(Body::empty())
         .unwrap();
     let id = get_or_generate_request_id(&req);
-    // An empty string header value is returned as-is (to_str succeeds on
-    // empty), so the function returns "" rather than generating a UUID.
-    // Verify the function does not panic and returns a String.
-    let _: String = id;
+    assert!(
+        !id.is_empty(),
+        "blank header value must fall through to UUID generation"
+    );
+    assert_eq!(id.len(), 36, "generated id should be a UUID");
 }
 
 /// Test get_or_generate_request_id generates a valid UUID v4 when no

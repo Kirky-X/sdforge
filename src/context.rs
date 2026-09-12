@@ -124,6 +124,13 @@ pub fn log_fields() -> Vec<(String, serde_json::Value)> {
     }
 }
 
+/// W3C trace-id shape: exactly 32 hex characters, not all zero.
+fn is_w3c_trace_id(s: &str) -> bool {
+    s.len() == 32
+        && s.chars().all(|c| c.is_ascii_hexdigit())
+        && s.chars().any(|c| c != '0')
+}
+
 /// HTTP middleware: resolve/create ids, install context for the rest of the
 /// chain, echo ids on the response.
 #[cfg(feature = "http")]
@@ -145,12 +152,14 @@ pub async fn context_middleware(
         .filter(|s| !s.is_empty())
         .map(str::to_string)
         .or_else(|| {
-            // W3C Trace Context: version-traceid-spanid-flags
+            // W3C Trace Context: version-traceid-spanid-flags. The trace-id
+            // must be 32 non-zero hex characters — anything else is treated
+            // as absent so garbage never enters the trace correlation path.
             req.headers()
                 .get("traceparent")
                 .and_then(|v| v.to_str().ok())
                 .and_then(|tp| tp.split('-').nth(1))
-                .filter(|t| !t.is_empty())
+                .filter(|t| is_w3c_trace_id(t))
                 .map(str::to_string)
         })
         .unwrap_or_else(|| generate_id("trace"));
@@ -332,6 +341,24 @@ mod tests {
             .await;
             let trace_id = resp.headers().get("x-trace-id").unwrap().to_str().unwrap();
             assert_eq!(trace_id, "0af7651916cd43dd8448eb211c80319c");
+        }
+
+        #[tokio::test]
+        async fn middleware_rejects_malformed_traceparent_ids() {
+            // Non-hex / wrong-length / all-zero trace-ids violate the W3C
+            // shape and must fall back to a freshly generated id.
+            for bad in [
+                "00-XYZ0000000000000000000000000001-b7ad6b7169203331-01",
+                "00-0af7651916cd43dd8448eb211c8031-b7ad6b7169203331-01",
+                "00-00000000000000000000000000000000-b7ad6b7169203331-01",
+            ] {
+                let resp = get_with(&[("traceparent", bad)]).await;
+                let trace_id = resp.headers().get("x-trace-id").unwrap().to_str().unwrap();
+                assert!(
+                    trace_id.starts_with("trace-"),
+                    "malformed traceparent {bad} must not be echoed"
+                );
+            }
         }
     }
 }

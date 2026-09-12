@@ -73,7 +73,7 @@ async fn gateway_users(
     assert_allowed("users", "id")?;
     let page = page.unwrap_or(1).max(1);
     let size = size.unwrap_or(20).clamp(1, 100);
-    let offset = (page - 1) * size;
+    let offset = (page - 1).saturating_mul(size);
 
     // Filter value is bound through escaping of the simple demo text; the
     // whitelist guard above covers identifier injection.

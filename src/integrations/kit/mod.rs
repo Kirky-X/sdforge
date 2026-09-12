@@ -29,17 +29,20 @@ fn ready_kit_slot() -> &'static Mutex<Option<Arc<AsyncKit<AsyncReady>>>> {
 /// `/readyz` health data (`health` feature) and graceful-shutdown
 /// phase-3 teardown (`graceful` feature).
 pub fn set_ready_kit(kit: Arc<AsyncKit<AsyncReady>>) {
-    if let Ok(mut guard) = ready_kit_slot().lock() {
-        *guard = Some(kit);
-    }
+    // A poisoned mutex still holds consistent data — recover the guard
+    // instead of silently dropping the registration.
+    let mut guard = ready_kit_slot()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    *guard = Some(kit);
 }
 
 /// Take (consume) the registered ready kit. Returns `None` when unset.
 pub fn take_ready_kit() -> Option<Arc<AsyncKit<AsyncReady>>> {
     ready_kit_slot()
         .lock()
-        .ok()
-        .and_then(|mut guard| guard.take())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take()
 }
 
 #[cfg(test)]

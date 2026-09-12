@@ -193,7 +193,9 @@ fn test_build_with_config_timeout_layer() {
 
 #[test]
 fn test_build_with_config_zero_timeout() {
-    // Test with zero timeout (edge case)
+    // Zero timeout would time out every request (a TimeoutLayer of 0s never
+    // yields), so build_with_config rejects it up front — mirroring
+    // ServerConfig::validate.
     let config = AppConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
@@ -208,7 +210,28 @@ fn test_build_with_config_zero_timeout() {
     };
 
     let result = build_with_config(&config);
-    assert!(result.is_ok());
+    assert!(result.is_err(), "zero request_timeout_secs must be rejected");
+}
+
+#[test]
+fn test_build_with_config_zero_body_size_rejected() {
+    // max_body_size = 0 would reject every request that carries a body.
+    let config = AppConfig {
+        server: ServerConfig {
+            host: "127.0.0.1".to_string(),
+            port: 8080,
+            request_timeout_secs: 30,
+            cors: None,
+            max_body_size: 0,
+            ..Default::default()
+        },
+        authentication: AuthConfig::None,
+        timeout: None,
+        ..Default::default()
+    };
+
+    let result = build_with_config(&config);
+    assert!(result.is_err(), "zero max_body_size must be rejected");
 }
 
 #[test]

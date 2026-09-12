@@ -168,47 +168,58 @@ pub fn clear_health_source() {
 }
 
 /// Run all readiness checks and fold in the health data source.
+///
+/// Registered checks are cloned out of the registry under a short-lived read
+/// lock so user check code never runs while holding it — a slow or blocked
+/// check cannot stall `register_readiness_check` / `clear_readiness_checks`.
 pub(crate) fn run_readiness_checks() -> (bool, Vec<CheckOutcome>) {
     let mut outcomes = Vec::new();
     let mut all_healthy = true;
 
-    if let Ok(guard) = readiness_checks().read() {
-        for check in guard.iter() {
-            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| check.check()))
-                .unwrap_or_else(|_| {
-                    CheckOutcome::unhealthy(check.name(), "check panicked".to_string())
-                });
-            if !outcome.healthy {
-                all_healthy = false;
-            }
-            outcomes.push(outcome);
+    let checks: Vec<Arc<dyn ReadinessCheck>> = match readiness_checks().read() {
+        Ok(guard) => guard.clone(),
+        Err(_) => {
+            log::warn!("readiness checks lock poisoned; running with an empty check set");
+            Vec::new()
         }
+    };
+    for check in &checks {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| check.check()))
+            .unwrap_or_else(|_| CheckOutcome::unhealthy(check.name(), "check panicked".to_string()));
+        if !outcome.healthy {
+            all_healthy = false;
+        }
+        outcomes.push(outcome);
     }
 
-    // Kit-style aggregate: fold its overall status into readiness.
-    if let Ok(guard) = health_source().read() {
-        if let Some(source) = guard.as_ref() {
-            let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                source.health_json()
-            }))
+    // Kit-style aggregate: fold its overall status into readiness. The source
+    // handle is cloned out of the lock before its `health_json()` runs.
+    let source = match health_source().read() {
+        Ok(guard) => guard.clone(),
+        Err(_) => {
+            log::warn!("health source lock poisoned; skipping the kit aggregate");
+            None
+        }
+    };
+    if let Some(source) = source {
+        let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| source.health_json()))
             .unwrap_or_else(|_| {
                 serde_json::json!({"status": "unhealthy", "healthy": false}).to_string()
             });
-            let value: serde_json::Value = serde_json::from_str(&payload)
-                .unwrap_or_else(|_| serde_json::json!({"status": "unhealthy"}));
-            let healthy = value
-                .get("healthy")
-                .and_then(|h| h.as_bool())
-                .unwrap_or(false);
-            if !healthy {
-                all_healthy = false;
-            }
-            outcomes.push(CheckOutcome {
-                name: "kit".to_string(),
-                healthy,
-                details: Some(value),
-            });
+        let value: serde_json::Value = serde_json::from_str(&payload)
+            .unwrap_or_else(|_| serde_json::json!({"status": "unhealthy"}));
+        let healthy = value
+            .get("healthy")
+            .and_then(|h| h.as_bool())
+            .unwrap_or(false);
+        if !healthy {
+            all_healthy = false;
         }
+        outcomes.push(CheckOutcome {
+            name: "kit".to_string(),
+            healthy,
+            details: Some(value),
+        });
     }
 
     (all_healthy, outcomes)

@@ -22,12 +22,16 @@ pub fn rate_limit_layer(
     RateLimitLayer::new(limiter)
 }
 
-/// Generate or extract request ID from request
+/// Generate or extract request ID from request.
+///
+/// A blank `x-request-id` header falls through to UUID generation, matching
+/// the `context` middleware's handling of empty inbound ids.
 #[cfg_attr(feature = "context", allow(dead_code))]
 pub(crate) fn get_or_generate_request_id(req: &axum::http::Request<Body>) -> String {
     req.headers()
         .get(X_REQUEST_ID)
         .and_then(|v| v.to_str().ok())
+        .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
         .unwrap_or_else(|| Uuid::new_v4().to_string())
 }
@@ -268,6 +272,11 @@ pub fn build_with_redirect() -> Router {
 pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, ConfigError> {
     #[cfg(feature = "security")]
     use std::sync::Arc;
+
+    // Fail fast on nonsensical server limits (e.g. max_body_size = 0 rejects
+    // every request with a body; request_timeout_secs = 0 times out every
+    // request) instead of wiring middleware that bricks the app.
+    config.server.validate()?;
 
     let mut router = build();
 

@@ -283,10 +283,16 @@ pub fn install(config: OtelConfig, interval: std::time::Duration) {
     tokio::spawn(async move {
         loop {
             tokio::time::sleep(interval).await;
-            let _ = flush_spans(&config);
+            // Export failures must be observable: a silent drop would hide a
+            // downed collector from operators.
+            if let Err(e) = flush_spans(&config) {
+                log::warn!("otel: span flush failed: {e}");
+            }
             #[cfg(feature = "metrics")]
             {
-                let _ = flush_metrics(&config);
+                if let Err(e) = flush_metrics(&config) {
+                    log::warn!("otel: metrics flush failed: {e}");
+                }
             }
         }
     });

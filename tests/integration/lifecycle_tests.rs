@@ -27,6 +27,10 @@ async fn teardown() {
 
 #[tokio::test]
 async fn hooks_run_in_shutdown_sequence() {
+    // 每次进入先复位，避免先前 panic/中断留下脏状态。
+    STARTED.store(false, Ordering::SeqCst);
+    STOPPED.store(false, Ordering::SeqCst);
+
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
@@ -42,9 +46,17 @@ async fn hooks_run_in_shutdown_sequence() {
         GracefulShutdownConfig::default(),
     ));
 
-    // on_start hooks run before the server accepts connections.
+    // on_start hooks run before the server accepts connections. The hook
+    // executes inside the spawned task, so poll with a timeout instead of
+    // asserting immediately (which races task startup).
+    let started_seen = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while !STARTED.load(Ordering::SeqCst) {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await;
     assert!(
-        STARTED.load(Ordering::SeqCst),
+        started_seen.is_ok(),
         "on_start hook must run before serving"
     );
 

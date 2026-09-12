@@ -175,6 +175,22 @@ impl OpenApiRouteInfo {
     }
 }
 
+/// Constrain an operationId to the OpenAPI charset `^[a-zA-Z0-9._-]+$`.
+///
+/// Path-derived ids contain `/` and `{`/`}` placeholders; each such character
+/// is mapped to `_` so generated documents stay spec-valid.
+fn sanitize_operation_id(raw: &str) -> String {
+    raw.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
 /// Map a Rust type string to an OpenAPI [`OpenApiTypeInfo`] .
 ///
 /// The single source of truth shared by the macro (compile-time request /
@@ -312,7 +328,10 @@ impl OpenApiBuilder {
                         .map(|t| (*t).to_string())
                         .collect::<Vec<_>>(),
                 ))
-                .operation_id(Some(format!("{}_{}", route.version, route.path)));
+                .operation_id(Some(sanitize_operation_id(&format!(
+                    "{}_{}",
+                    route.version, route.path
+                ))));
             for param in route.path_params {
                 operation_builder = operation_builder.parameter(param.to_parameter());
             }
@@ -393,4 +412,20 @@ pub fn generate_openapi_spec() -> OpenApi {
         .title("SDForge API")
         .version(env!("CARGO_PKG_VERSION"))
         .build()
+}
+
+#[cfg(all(test, feature = "openapi"))]
+mod operation_id_tests {
+    use super::sanitize_operation_id;
+
+    #[test]
+    fn operation_id_keeps_spec_charset_unchanged() {
+        assert_eq!(sanitize_operation_id("v1_.plain-Id_9"), "v1_.plain-Id_9");
+    }
+
+    #[test]
+    fn operation_id_maps_path_and_placeholder_chars() {
+        assert_eq!(sanitize_operation_id("v1_/api/v1/users/{id}"), "v1__api_v1_users__id_");
+        assert!(!sanitize_operation_id("v1_/a/{b}").contains(['/', '{', '}']));
+    }
 }

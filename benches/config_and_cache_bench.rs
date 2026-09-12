@@ -33,6 +33,7 @@ fn benchmark_config_validation(c: &mut Criterion) {
             keys: vec![],
         },
         timeout: None,
+        ..Default::default()
     };
 
     group.bench_function("validate_valid_config", |b| {
@@ -54,6 +55,7 @@ fn benchmark_config_validation(c: &mut Criterion) {
             keys: vec![],
         },
         timeout: None,
+        ..Default::default()
     };
 
     group.bench_function("validate_invalid_api_key_prefix", |b| {

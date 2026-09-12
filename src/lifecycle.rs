@@ -26,6 +26,7 @@ pub type Phase = &'static str;
 
 /// A lifecycle hook registered via `inventory::submit!` by the
 /// `#[forge(on_start)]` / `#[forge(on_stop)]` macro arguments.
+#[derive(Debug)]
 pub struct LifecycleHookRegistration {
     /// `"start"` or `"stop"`.
     pub phase: Phase,

@@ -25,7 +25,7 @@ async fn gw_users(
     // Whitelist guard (data-api contract): only users.id/name/age are reachable.
     let page = page.unwrap_or(1).max(1);
     let size = size.unwrap_or(20).clamp(1, 100);
-    let offset = (page - 1) * size;
+    let offset = (page - 1).saturating_mul(size);
     let filter = name
         .as_deref()
         .map(|n| format!(" AND name = '{}'", n.replace('\'', "''")))

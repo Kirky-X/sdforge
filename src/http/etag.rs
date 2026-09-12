@@ -29,10 +29,14 @@ fn strong_etag(body: &[u8]) -> String {
 }
 
 /// Whether the request's `If-None-Match` header matches `etag`.
+///
+/// Uses RFC 7232 weak comparison: a `W/"..."` candidate matches the strong
+/// etag produced here.
 fn if_none_match_matches(header_value: &str, etag: &str) -> bool {
     header_value
         .split(',')
         .map(|t| t.trim())
+        .map(|candidate| candidate.strip_prefix("W/").unwrap_or(candidate))
         .any(|candidate| candidate == "*" || candidate == etag)
 }
 
@@ -56,12 +60,27 @@ pub async fn etag_middleware(req: Request<Body>, next: Next) -> Response {
         return response;
     }
 
-    let (parts, body) = response.into_parts();
+    let (mut parts, body) = response.into_parts();
+
+    // A body with a known-oversized Content-Length is passed through
+    // untouched: buffering it would consume the stream, and a failed read
+    // cannot be replayed to the client.
+    let oversized = parts
+        .headers
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok())
+        .is_some_and(|len| len > MAX_ETAG_BODY_BYTES as u64);
+    if oversized {
+        return Response::from_parts(parts, body);
+    }
+
     let bytes = match axum::body::to_bytes(body, MAX_ETAG_BODY_BYTES).await {
         Ok(b) => b,
         Err(_) => {
-            // Oversized/streaming body: skip fingerprinting.
-            return Response::from_parts(parts, Body::empty());
+            // The buffered body cannot be replayed; return an explicit error
+            // rather than a silently empty 200.
+            return StatusCode::BAD_GATEWAY.into_response();
         }
     };
 
@@ -71,24 +90,18 @@ pub async fn etag_middleware(req: Request<Body>, next: Next) -> Response {
         .map(|inm| if_none_match_matches(inm, &etag))
         .unwrap_or(false);
 
-    let mut builder = Response::builder().status(parts.status);
-    for (name, value) in parts.headers.iter() {
-        builder = builder.header(name, value);
+    // The etag is quoted hex — always a valid header value — so mutate the
+    // original parts in place: every original header (and the body) survives.
+    if let Ok(etag_value) = axum::http::HeaderValue::from_str(&etag) {
+        parts.headers.insert(axum::http::header::ETAG, etag_value);
     }
     if matches {
-        let mut res = builder
-            .header(axum::http::header::ETAG, etag.clone())
-            .status(StatusCode::NOT_MODIFIED)
-            .body(Body::empty())
-            .unwrap();
+        parts.status = StatusCode::NOT_MODIFIED;
         // RFC 7232: 304 must not carry Content-Length of the elided body.
-        res.headers_mut().remove(axum::http::header::CONTENT_LENGTH);
-        return res;
+        parts.headers.remove(axum::http::header::CONTENT_LENGTH);
+        return Response::from_parts(parts, Body::empty());
     }
-    builder
-        .header(axum::http::header::ETAG, etag)
-        .body(Body::from(bytes))
-        .unwrap_or_else(|_| (parts.status, "etag encode failure").into_response())
+    Response::from_parts(parts, Body::from(bytes))
 }
 
 #[cfg(test)]
@@ -161,6 +174,23 @@ mod tests {
     async fn star_if_none_match_returns_304() {
         let res = send("GET", "/resource", Some("*")).await;
         assert_eq!(res.status(), 304);
+    }
+
+    #[tokio::test]
+    async fn weak_if_none_match_candidate_matches_strong_etag() {
+        let res = send("GET", "/resource", None).await;
+        let etag = res
+            .headers()
+            .get(axum::http::header::ETAG)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        // RFC 7232 weak comparison: W/"foo" must match "foo".
+        let weak = format!("W/{etag}");
+        let res = send("GET", "/resource", Some(&weak)).await;
+        assert_eq!(res.status(), 304, "weak candidate must use weak comparison");
     }
 
     #[tokio::test]
