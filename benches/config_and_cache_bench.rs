@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Phase 2 Configuration and Cache Performance Benchmarks
+//! Configuration and Cache Performance Benchmarks
 //!
 //! These benchmarks measure the performance of:
 //! - Configuration validation operations

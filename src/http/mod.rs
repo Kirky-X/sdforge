@@ -58,7 +58,7 @@ pub(crate) use http_impl::preserve_mcp_inventory;
 pub(crate) use http_impl::preserve_websocket_inventory;
 #[cfg(test)]
 pub(crate) use http_impl::{apply_security_headers, get_or_generate_request_id};
-// T701/T702: health probes & metrics endpoints resolve module-prefixed paths
+// Health probes & metrics endpoints resolve module-prefixed paths
 // when scanning for collisions with user routes.
 #[cfg(test)]
 pub(crate) use http_impl::resolve_route_path;

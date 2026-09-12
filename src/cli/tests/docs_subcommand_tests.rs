@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T020 测试：`docs` 子命令处理。
+//! 测试：`docs` 子命令处理。
 //!
 //! 仅当 `docs` feature 启用时编译（`docs` 隐式包含 `cli`）。
 //! 验证 `docs_subcommand_definition()` 返回的 `clap::Command` 含

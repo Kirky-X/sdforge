@@ -58,7 +58,7 @@ pub struct OpenApiPathParam {
     pub schema_format: &'static str,
 }
 
-/// Static metadata for a request-body parameter (T706).
+/// Static metadata for a request-body parameter.
 ///
 /// The `#[forge]` macro emits one entry per `ParamKind::Body` handler
 /// parameter so the generated OpenAPI operation carries a `requestBody`
@@ -79,10 +79,10 @@ pub struct OpenApiBodyParam {
     pub schema_format: &'static str,
 }
 
-/// OpenAPI schema descriptor for a handler response type (T706).
+/// OpenAPI schema descriptor for a handler response type.
 ///
 /// Derived from the handler return type at macro-expansion time via the
-/// T706 type-mapping table (`Result<T, E>` -> `T`, `Vec<T>` -> array, Rust
+/// Type-mapping table (`Result<T, E>` -> `T`, `Vec<T>` -> array, Rust
 /// primitives -> schema type/format, unknown -> object).
 #[derive(Debug, Clone, Copy)]
 pub struct OpenApiTypeInfo {
@@ -120,9 +120,9 @@ pub struct OpenApiRouteInfo {
     /// When `Some`, the OpenAPI response key uses this code (e.g. `201`)
     /// instead of the default `200`. `None` keeps backward-compatible `200`.
     pub success_status: Option<u16>,
-    /// Request-body parameters (T706). Empty for GET/query-only routes.
+    /// Request-body parameters. Empty for GET/query-only routes.
     pub body_params: &'static [OpenApiBodyParam],
-    /// Response schema descriptor (T706). `None` keeps the legacy
+    /// Response schema descriptor. `None` keeps the legacy
     /// schema-less response entry.
     pub response_type: Option<OpenApiTypeInfo>,
 }
@@ -183,7 +183,7 @@ inventory::submit!(OpenApiRouteInfo::with_path_params_and_status(
     Some(201u16),
 ));
 
-// T706: test-only route WITH a request body and a typed response so the
+// test-only route WITH a request body and a typed response so the
 // generated-spec assertions can verify requestBody + response schema emission.
 #[cfg(test)]
 inventory::submit!(OpenApiRouteInfo {
@@ -494,10 +494,10 @@ mod tests {
     }
 
     // ========================================================================
-    // T706: requestBody + response schema emission
+    // requestBody + response schema emission
     // ========================================================================
 
-    /// T706: the body-param test route must emit a typed `requestBody`
+    /// the body-param test route must emit a typed `requestBody`
     /// (application/json object with item/quantity properties, item required).
     #[test]
     fn generated_spec_contains_request_body_schema() {
@@ -524,7 +524,7 @@ mod tests {
         assert_eq!(required[0], "item");
     }
 
-    /// T706: the response of the body-param test route must carry a typed
+    /// the response of the body-param test route must carry a typed
     /// schema (array of string — `Vec<String>` mapped at macro level and the
     /// test route declares `is_array` + `"string"` directly).
     #[test]
@@ -537,7 +537,7 @@ mod tests {
         assert_eq!(schema["items"]["type"], "string", "array items string");
     }
 
-    /// T706: routes without declared response schema keep the legacy
+    /// routes without declared response schema keep the legacy
     /// schema-less response (backward compatibility).
     #[test]
     fn generated_spec_keeps_schemaless_response_for_legacy_route() {
@@ -553,7 +553,7 @@ mod tests {
         );
     }
 
-    /// T715 (shared mapping): `schema_for_type_name` mirrors the macro table.
+    /// Shared mapping: `schema_for_type_name` mirrors the macro table.
     #[test]
     fn schema_for_type_name_maps_primitives() {
         let info = super::schema_for_type_name("u64");
@@ -568,7 +568,7 @@ mod tests {
 
     /// `generate_openapi_spec()` should emit a `parameters` array on the
     /// operation of a route registered with `path_params`. This is the
-    /// end-to-end T094 verification: the generated OpenAPI operation for
+    /// end-to-end verification: the generated OpenAPI operation for
     /// `/__openapi_path_param_test__/{id}` MUST contain a parameter
     /// `{name: "id", in: "path", required: true, schema: {type: "integer",
     /// format: "uint64"}}`.

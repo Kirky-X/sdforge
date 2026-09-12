@@ -285,7 +285,7 @@ fn benchmark_cache_operations(c: &mut Criterion) {
         b.iter(|| cache.delete("to_delete"))
     });
 
-    // --- Batch operations (Task 3.2.3) ---
+    // --- Batch operations ---
 
     c.bench_function("cache_contains", |b| {
         cache.set("contains_key", b"v".to_vec());
@@ -294,7 +294,7 @@ fn benchmark_cache_operations(c: &mut Criterion) {
 
     c.bench_function("cache_clear", |b| {
         let local = DashMapCache::new();
-        // FIX(T2): 原实现只在迭代外填充一次，clear 原地清空后，第 2 次起
+        // FIX: 原实现只在迭代外填充一次，clear 原地清空后，第 2 次起
         // 度量的都是"清空空缓存"。现在每次迭代内重新填充，保证度量的
         // 始终是清空非空缓存（成本含 2 次 set，恒定且已计入）。
         b.iter(|| {
@@ -338,7 +338,7 @@ fn benchmark_cache_operations(c: &mut Criterion) {
     });
 }
 
-/// Benchmark for cache pattern-based invalidation (Task 3.2.4)
+/// Benchmark for cache pattern-based invalidation
 #[cfg(feature = "cache")]
 fn benchmark_cache_pattern_invalidate(c: &mut Criterion) {
     use sdforge::cache::{DashMapCache, SyncCache};
@@ -352,7 +352,7 @@ fn benchmark_cache_pattern_invalidate(c: &mut Criterion) {
             criterion::BenchmarkId::from_parameter(size),
             size,
             |b, &size| {
-                // FIX(T3): 原实现把 O(n) 重填充放进 b.iter()，度量的是
+                // FIX: 原实现把 O(n) 重填充放进 b.iter()，度量的是
                 // sets+invalidate 而非纯失效开销。iter_batched 的 setup
                 // 不计入度量，每次迭代拿到全新填充好的缓存。
                 b.iter_batched(
@@ -387,7 +387,7 @@ fn benchmark_cache_pattern_invalidate(c: &mut Criterion) {
     });
 }
 
-/// Benchmark for cache key normalization (Task 3.2.5)
+/// Benchmark for cache key normalization
 #[cfg(feature = "cache")]
 fn benchmark_cache_key_normalization(c: &mut Criterion) {
     use sdforge::cache::canonicalize_cache_key;
@@ -466,7 +466,7 @@ fn benchmark_jwt_operations(c: &mut Criterion) {
     });
 
     c.bench_function("jwt_secret_validation", |b| {
-        // FIX(T6): 原实现每次迭代调用 generate_secure_jwt_secret()，度量的是
+        // FIX: 原实现每次迭代调用 generate_secure_jwt_secret()，度量的是
         // 生成成本。现在生成一次、循环外持有，仅度量校验（长度 + BearerAuth
         // 同款字符类别策略）。
         let secret = generate_secure_jwt_secret();
@@ -481,7 +481,7 @@ fn benchmark_jwt_operations(c: &mut Criterion) {
     });
 }
 
-/// Benchmark for BearerAuth token validation (Task 3.4.3)
+/// Benchmark for BearerAuth token validation
 #[cfg(feature = "security")]
 fn benchmark_bearer_auth(c: &mut Criterion) {
     use sdforge::security::{AuthContext, AuthMetadata, BearerAuth};
@@ -515,7 +515,7 @@ fn benchmark_bearer_auth(c: &mut Criterion) {
     });
 }
 
-/// Benchmark for LRU cache manager (Task 3.3)
+/// Benchmark for LRU cache manager
 #[cfg(feature = "security")]
 fn benchmark_lru_cache(c: &mut Criterion) {
     use sdforge::cache::{DashMapCache, SharedCache};
@@ -557,7 +557,7 @@ fn benchmark_lru_cache(c: &mut Criterion) {
 
     // Eviction: fill beyond capacity to trigger eviction overhead
     let mut group = c.benchmark_group("lru_cache_eviction");
-    // FIX(T4): 每次迭代实际执行 50 次 set（150 曾与实际操作数不符，
+    // FIX: 每次迭代实际执行 50 次 set（150 曾与实际操作数不符，
     // elements/sec 指标被低估 3 倍）
     group.throughput(Throughput::Elements(50));
 
@@ -643,7 +643,7 @@ fn benchmark_limiteron_governor(c: &mut Criterion) {
             }
         }
         b.iter(|| {
-            // FIX(T5): 每次迭代必须返回 Err（denied）。若限流器回归为
+            // FIX: 每次迭代必须返回 Err（denied）。若限流器回归为
             // 返回 Ok，此处立即失败，而不是静默通过掩盖回归。
             let result = rt.block_on(limiter.check("denied-bench"));
             assert!(
@@ -766,7 +766,7 @@ fn benchmark_regex_caching(c: &mut Criterion) {
     });
 }
 
-/// Benchmark for HTTP router construction (Task 3.6.1)
+/// Benchmark for HTTP router construction
 #[cfg(feature = "http")]
 fn benchmark_http_router_construction(c: &mut Criterion) {
     use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
@@ -827,7 +827,7 @@ criterion_group!(
 // MCP Benchmarks (feature = "mcp")
 // =============================================================================
 
-/// Benchmark for MCP tool registration/collection (Task 3.6.2)
+/// Benchmark for MCP tool registration/collection
 #[cfg(feature = "mcp")]
 fn benchmark_mcp_tool_registration(c: &mut Criterion) {
     c.bench_function("mcp_get_tools", |b| b.iter(sdforge::get_mcp_tools));

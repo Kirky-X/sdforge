@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T708 e2e: `#[forge(paginate)]` declarative pagination.
+//! e2e: `#[forge(paginate)]` declarative pagination.
 //!
 //! The generated route accepts `page`/`size` query parameters and wraps the
 //! handler's full `Vec<T>` into `{items, total, next}`.

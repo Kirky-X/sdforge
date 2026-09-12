@@ -4,7 +4,7 @@
 //!
 //! Currently houses the [`rate_limiter`](crate::domain::rate_limiter) module
 //! defining the \[`ForgeRateLimiter`\] trait used by the trait-kit 0.3
-//! `AsyncKit` integration (Phase 5 of `trait-kit-async-integration`).
+//! `AsyncKit` integration.
 
 pub mod rate_limiter;
 

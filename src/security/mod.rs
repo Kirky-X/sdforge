@@ -57,7 +57,7 @@ mod types;
 #[cfg(any(feature = "security", feature = "ratelimit-http"))]
 mod ip_util;
 
-// T712: protocol-neutral auth verifier port + Bearer/API-key adapters for
+// protocol-neutral auth verifier port + Bearer/API-key adapters for
 // non-HTTP protocols (gRPC interceptor, WS handshake, custom transports).
 #[cfg(feature = "security")]
 pub mod grpc_auth;

@@ -9,7 +9,6 @@
 //!    returns `Err`.
 //! 2. Forward the request to the inner service when the limiter returns `Ok`.
 //!
-//! See `tasks.md` T010 (TDD-Red) and T011 (TDD-Green).
 
 use std::convert::Infallible;
 use std::future::Future;
@@ -35,7 +34,7 @@ use crate::security::{RateLimitError, RateLimiter};
 /// Holds only a `should_reject: bool` because `RateLimitError` does not
 /// implement `Clone`. On rejection we emit a fixed
 /// `RateLimitError::Exceeded { limit: 100, window_seconds: 60 }` (the value
-/// mandated by `tasks.md` T010).
+/// mandated by the middleware contract).
 struct MockLimiter {
     should_reject: bool,
 }
@@ -105,13 +104,13 @@ impl Service<Request<Body>> for EchoService {
 }
 
 // ============================================================================
-// T010/T011 — RateLimitMiddleware behavior tests (limiter reject/allow paths)
+// RateLimitMiddleware behavior tests (limiter reject/allow paths)
 // ============================================================================
 
 /// When the limiter rejects (returns `Err`), the middleware must short-circuit
 /// with `StatusCode::TOO_MANY_REQUESTS` (429) and NOT call the inner service.
 ///
-/// This is the canonical T010 acceptance test from `tasks.md`.
+/// This is the canonical acceptance test from `tasks.md`.
 #[tokio::test]
 async fn middleware_returns_429_when_limiter_rejects() {
     let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiter {
@@ -140,7 +139,7 @@ async fn middleware_returns_429_when_limiter_rejects() {
 /// When the limiter approves (returns `Ok`), the middleware must forward the
 /// request to the inner service unchanged.
 ///
-/// This test is the second acceptance criterion from `tasks.md` T011.
+/// This test is the second acceptance criterion from `tasks.md`.
 #[tokio::test]
 async fn middleware_forwards_request_when_limiter_approves() {
     let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiter {

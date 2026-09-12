@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! MCP Markdown 生成测试。
 //!
-//! 对应任务：T018。整个文件需 `mcp` feature 门控。
+//! 整个文件需 `mcp` feature 门控。
 
 use crate::core::ApiMetadata;
 use crate::docs::generate_mcp_docs;

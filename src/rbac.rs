@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Endpoint-level role-based access control (T703, R-sd4-002).
+//! Endpoint-level role-based access control.
 //!
 //! `#[forge(auth(role = "admin"))]` attaches a declared role requirement to
 //! the generated HTTP route. The macro wraps the route's `MethodRouter` with
@@ -22,7 +22,7 @@ pub type Roles = &'static [&'static str];
 
 /// 403 body shared by both implementations (stable shape for clients).
 ///
-/// T713: rendered through the unified error contract — carries the ambient
+/// rendered through the unified error contract — carries the ambient
 /// `trace_id` when the `context` feature is active.
 fn forbidden(roles: Roles) -> axum::response::Response {
     let err = crate::error::unified::UnifiedError::new(

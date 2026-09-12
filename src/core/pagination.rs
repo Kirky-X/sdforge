@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Declarative pagination (T708, R-sd4-002).
+//! Declarative pagination.
 //!
 //! `#[forge(paginate)]` on a handler returning `Vec<T>` makes the generated
 //! HTTP route accept `page` / `size` query parameters (defaults 1 / 20,

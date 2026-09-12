@@ -35,7 +35,7 @@ async fn get_user(id: u64) -> Result<String, ApiError> {
     Ok(format!("user-{}", id))
 }
 
-/// T706 fixture: POST with a JSON body parameter and a typed array response.
+/// Fixture: POST with a JSON body parameter and a typed array response.
 ///
 /// Note: axum accepts exactly ONE body extractor per handler, so the fixture
 /// declares a single `String` body param; the emitted requestBody schema is
@@ -200,7 +200,7 @@ fn operation_id_is_versioned_path() {
 
 
 // ============================================================================
-// T706: requestBody + response schema emitted from #[forge] signatures.
+// requestBody + response schema emitted from #[forge] signatures.
 // ============================================================================
 
 #[test]

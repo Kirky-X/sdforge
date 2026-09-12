@@ -1,13 +1,13 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Processor pre/post hook pipeline (T713, R-sd4-003).
+//! Processor pre/post hook pipeline.
 //!
 //! Middleware-style hooks around every HTTP request handled by
 //! `build_with_config`: [`install_hooks`] registers one process-global
 //! [`RequestHooks`] implementation; the pipeline invokes `before` when the
 //! request enters and `after` when the response leaves (with the final
 //! status). Hooks are protocol-agnostic by construction and composed with the
-//! T705 request context for correlation.
+//! request context for correlation.
 //!
 //! Hook panics are isolated: a panicking `before`/`after` never breaks the
 //! request pipeline.
@@ -21,7 +21,7 @@ pub struct RequestInfo {
     pub method: String,
     /// Request path (concrete path, not route template).
     pub path: String,
-    /// Request id from the ambient context, when available (T705).
+    /// Request id from the ambient context, when available.
     pub request_id: Option<String>,
 }
 

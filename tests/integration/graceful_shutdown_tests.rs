@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T704 integration: graceful shutdown sequence.
+//! integration: graceful shutdown sequence.
 //!
 //! Verifies the three phases of `serve_with_graceful_shutdown`:
 //! 1. stop trigger → server stops accepting new connections,

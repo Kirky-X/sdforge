@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T716 example: oxcache management endpoints via `BackendRegistry` (T315).
+//! Example: oxcache management endpoints via `BackendRegistry`.
 //!
 //! `#[forge]` declares the management plane once; sdforge surfaces it over
 //! HTTP (and any other protocol). The oxcache global registry builds backends

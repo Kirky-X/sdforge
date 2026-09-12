@@ -254,7 +254,7 @@ const RESERVED_KEYWORDS: &[&str] = &[
 const DEFAULT_CACHE_TTL: u64 = 300;
 
 // =============================================================================
-// T703+: structured "extras" attributes parsed before the classic key=value
+// structured "extras" attributes parsed before the classic key=value
 // parser. Only new-syntax keys are consumed here; everything else passes
 // through to `parse_kv_pairs` untouched (zero breakage of existing usage).
 // =============================================================================
@@ -265,13 +265,13 @@ const DEFAULT_CACHE_TTL: u64 = 300;
 struct ForgeExtras {
     /// Roles from `auth(role = "admin")` (repeatable).
     auth_roles: Vec<String>,
-    /// `validate` bare flag (T707): enforce `#[param(...)]` validation rules.
+    /// `validate` bare flag: enforce `#[param(...)]` validation rules.
     validate: bool,
-    /// `paginate` bare flag (T708): page/size params + envelope wrapping.
+    /// `paginate` bare flag: page/size params + envelope wrapping.
     paginate: bool,
-    /// `on_start` bare flag (T711): run the fn at process start.
+    /// `on_start` bare flag: run the fn at process start.
     on_start: bool,
-    /// `on_stop` bare flag (T711): run the fn after shutdown drain.
+    /// `on_stop` bare flag: run the fn after shutdown drain.
     on_stop: bool,
 }
 
@@ -294,7 +294,7 @@ fn extract_forge_extras(args: TokenStream2) -> Result<(TokenStream2, ForgeExtras
                     || ident.to_string() == "on_start"
                     || ident.to_string() == "on_stop" =>
             {
-                // Bare flags (T707/T708/T711). Also tolerate `flag = true|false`.
+                // Bare flags. Also tolerate `flag = true|false`.
                 let flag = ident.to_string();
                 match iter.next() {
                     Some(TokenTree::Punct(p)) if p.as_char() == '=' => {
@@ -430,7 +430,7 @@ fn parse_auth_group(args: TokenStream2, extras: &mut ForgeExtras) -> Result<(), 
 }
 
 /// Known classic `#[forge]` keys (validated token-wise so unknown keys
-/// produce diagnostics pointing at the offending token, T715).
+/// produce diagnostics pointing at the offending token).
 const KNOWN_FORGE_KEYS: &[&str] = &[
     "name",
     "version",
@@ -450,7 +450,7 @@ const KNOWN_FORGE_KEYS: &[&str] = &[
 ];
 
 /// Validate that every `key = value` pair uses a known key, reporting the
-/// span of the offending key ident (T715 precise diagnostics).
+/// span of the offending key ident (precise diagnostics).
 fn validate_known_keys(args: &TokenStream2) -> Result<(), syn::Error> {
     let mut iter = args.clone().into_iter().peekable();
     while let Some(tt) = iter.next() {
@@ -477,7 +477,7 @@ fn validate_known_keys(args: &TokenStream2) -> Result<(), syn::Error> {
     Ok(())
 }
 
-/// Parse forge attributes. `lifecycle_only` (T711) relaxes the required
+/// Parse forge attributes. `lifecycle_only` relaxes the required
 /// `name`/`version` attributes for pure lifecycle hooks
 /// (`#[forge(on_start)]` with no endpoint declaration).
 fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceApiArgs {
@@ -727,7 +727,7 @@ impl std::fmt::Display for ParamKind {
     }
 }
 
-/// A validation rule declared via `#[param(...)]` (T707).
+/// A validation rule declared via `#[param(...)]`.
 #[derive(Debug, Clone)]
 enum ValidationSpec {
     /// `ge = <lit>` — value must be >= the literal (numeric params).
@@ -779,7 +779,7 @@ struct ParamInfo {
     /// Whether this parameter should be excluded from MCP schema
     /// Extension/State parameters are runtime state, not input parameters
     skip_mcp_schema: bool,
-    /// Validation rules declared via `#[param(...)]` (T707, enforced by
+    /// Validation rules declared via `#[param(...)]` (enforced by
     /// `#[forge(validate)]`).
     validations: Vec<ValidationSpec>,
 }
@@ -864,8 +864,8 @@ impl ParamInfo {
 
     /// Parse `#[param(...)]` / `#[state]` attributes from a function argument.
     ///
-    /// Returns the extraction kind (T00x behaviour, unchanged) plus any
-    /// validation rules declared alongside `kind` (T707):
+    /// Returns the extraction kind (behaviour unchanged) plus any
+    /// validation rules declared alongside `kind`:
     /// `#[param(kind = "query", ge = 1, le = 100, min_length = 2,
     ///          max_length = 10, not_blank, email)]`.
     fn parse_param_attributes(
@@ -990,7 +990,7 @@ impl ParamInfo {
 }
 
 /// Map a handler return type to an `sdforge::openapi::OpenApiTypeInfo`
-/// expression (T706).
+/// expression.
 ///
 /// Mapping: `Result<T, E>` unwraps to `T`; `Vec<T>` marks `is_array` with the
 /// element mapping; primitives map through the shared table; anything else
@@ -1071,7 +1071,7 @@ fn rust_type_to_openapi_schema(rust_type: &str) -> (&'static str, &'static str) 
     }
 }
 
-/// Extract the inner `T` from a `Arc<T>` type (T011).
+/// Extract the inner `T` from a `Arc<T>` type.
 ///
 /// Returns `Some(&syn::Type)` when `ty` is `Arc<T>` (any path-qualified
 /// `Arc` with exactly one angle-bracketed type argument), `None` otherwise.
@@ -1235,7 +1235,7 @@ fn derive_body_param(params: &[ParamInfo]) -> Option<String> {
 }
 
 /// Generate gRPC handler registration tokens for a `#[forge(grpc_method)]`
-/// function (T005).
+/// function.
 ///
 /// Emits two `#[cfg(feature = "grpc")]`-gated items:
 /// 1. `fn __grpc_handler_<fn_name>(...)` — the unified handler closure
@@ -1243,7 +1243,7 @@ fn derive_body_param(params: &[ParamInfo]) -> Option<String> {
 ///    `generate_handler_closure`.
 /// 2. `inventory::submit!(GrpcHandlerRegistration { method, handler,
 ///    body_param, default_status })` — links `CallRequest.method` → this
-///    handler at runtime (consumed by `SdForgeGrpcService::call` in T007).
+///    handler at runtime (consumed by `SdForgeGrpcService::call`).
 ///
 /// `body_param` is derived from the first `ParamKind::Body` param; `None`
 /// when the handler takes no Body arg. NOTE: `quote!` interpolates `Option<T>`
@@ -1308,7 +1308,7 @@ fn generate_grpc_handler_registration(
 /// - `ParamKind::Path`  → `CliArgType::Path`, `required = true`
 /// - `ParamKind::Body`  → `CliArgType::Body`, `required = !is_option`
 /// - `State` → not surfaced on CLI (no `CliArgInfo`), but resolved inside
-///   the handler closure via `downcast_state::<T>(state)` (T011). The full
+///   the handler closure via `downcast_state::<T>(state)`. The full
 ///   `params` slice (including State) is passed to `generate_handler_closure`
 ///   so the closure can emit downcast code; `cli_params` here filters to
 ///   Path/Body only for `CliArgInfo`.
@@ -1330,7 +1330,7 @@ fn generate_cli_registration(
     // (before the #[cfg(feature = "cli")] gate) so the error surfaces even
     // when the cli feature is disabled (e.g., in the macro crate's trybuild
     // tests). State params must be Arc<T> so downcast_state can recover the
-    // concrete T at runtime (T011).
+    // concrete T at runtime.
     for p in params
         .iter()
         .filter(|p| matches!(p.param_kind, ParamKind::State))
@@ -1413,14 +1413,14 @@ fn generate_cli_registration(
 
 #[proc_macro_attribute]
 pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
-    // T703+: structured extras (auth(...)) are peeled off first; the rest of
+    // structured extras (auth(...)) are peeled off first; the rest of
     // the argument stream goes through the classic key=value parser.
     let (args, extras) = match extract_forge_extras(args.into()) {
         Ok(result) => result,
         Err(e) => return e.into_compile_error().into(),
     };
     let lifecycle_only = extras.on_start || extras.on_stop;
-    // T715: precise-span diagnostics for unknown keys (before the
+    // precise-span diagnostics for unknown keys (before the
     // string-based parser falls back to call_site spans).
     if let Err(e) = validate_known_keys(&args) {
         return e.into_compile_error().into();
@@ -1625,7 +1625,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         closure_params.clone_from(&param_patterns);
     }
 
-    // T708: with `#[forge(paginate)]`, append a page/size query extractor and
+    // with `#[forge(paginate)]`, append a page/size query extractor and
     // enable the {items,total,next} envelope. The extractor must be FIRST:
     // axum requires the last extractor to implement `FromRequest`
     // (body-consuming); `Query` only implements `FromRequestParts`, so it can
@@ -1676,7 +1676,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         });
     }
 
-    // T707: when `#[forge(validate)]` is set, emit field-level validation
+    // when `#[forge(validate)]` is set, emit field-level validation
     // checks into every HTTP handler closure (before the user fn runs).
     // Violations short-circuit with 400 + {"errors":[{field,rule,message}]}.
     if extras.validate {
@@ -1902,7 +1902,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         None => quote! { None },
     };
 
-    // T706: OpenAPI requestBody entries for Body parameters.
+    // OpenAPI requestBody entries for Body parameters.
     let openapi_body_params_tokens: Vec<TokenStream2> = params
         .iter()
         .filter(|p| matches!(p.param_kind, ParamKind::Body))
@@ -1924,13 +1924,13 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    // T706: response schema descriptor from the handler return type.
+    // response schema descriptor from the handler return type.
     let openapi_response_type_expr = response_type_to_openapi_info_tokens(return_type);
 
     // Build description expression
     let description_literal = description.as_deref().unwrap_or(&name);
 
-    // T703: endpoint-level RBAC. When `auth(role = "...")` is declared, the
+    // endpoint-level RBAC. When `auth(role = "...")` is declared, the
     // generated MethodRouter is wrapped with `sdforge::rbac::require_role`.
     // Gated per-feature in the generated code: with `security` the roles are
     // matched against AuthContext; without it the endpoint denies all
@@ -1983,7 +1983,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         })
         .collect();
 
-    // Generate the `#[utoipa::path]` attribute (T095). When the downstream
+    // Generate the `#[utoipa::path]` attribute. When the downstream
     // crate enables the `openapi` feature, this attribute is processed by
     // utoipa and registers a `__path` struct, making the route discoverable
     // by utoipa-aware tooling. The path uses `{id}` OpenAPI templating
@@ -2533,8 +2533,8 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let grpc_code = if let Some(grpc_method_name) = grpc_method.as_deref() {
-        // T005: emit the GrpcHandlerRegistration (method → handler link) so
-        // SdForgeGrpcService::call (T007) can route CallRequest to the forge
+        // emit the GrpcHandlerRegistration (method → handler link) so
+        // SdForgeGrpcService::call can route CallRequest to the forge
         // fn instead of the legacy stub. The GrpcRouteRegistration below
         // carries only metadata; this adds the invocable handler pointer.
         // H-1: pass the macro-level `status` argument so the gRPC layer can
@@ -2577,7 +2577,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    // T009: when `cli = true`, emit paired CliCommandRegistration +
+    // when `cli = true`, emit paired CliCommandRegistration +
     // CliHandlerRegistration inventory submissions. Each emitted item is
     // individually gated by `#[cfg(feature = "cli")]` inside
     // `generate_cli_registration`, so downstream crates without the `cli`
@@ -2597,9 +2597,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    // T711: lifecycle hooks. `#[forge(on_start)]` / `#[forge(on_stop)]` mark
+    // lifecycle hooks. `#[forge(on_start)]` / `#[forge(on_stop)]` mark
     // zero-parameter async fns; the macro emits an inventory registration so
-    // `sdforge::lifecycle::run_on_start/run_on_stop` (invoked by the T704
+    // `sdforge::lifecycle::run_on_start/run_on_stop` (invoked by the
     // graceful-shutdown sequence) can discover and run them. Zero breakage:
     // endpoint-related attributes keep working unchanged.
     let lifecycle_code = if extras.on_start || extras.on_stop {
@@ -3065,7 +3065,7 @@ mod macro_parsing_tests {
     }
 
     // ============================================================================
-    // T008: generate_cli_registration
+    // generate_cli_registration
     //
     // Verifies the helper emits paired CliCommandRegistration +
     // CliHandlerRegistration inventory submissions, maps ParamKind to
@@ -3075,7 +3075,7 @@ mod macro_parsing_tests {
     /// Build a `ParamInfo` with the minimal fields needed by
     /// `generate_cli_registration`. The `ty` is synthesized via
     /// `syn::parse_quote!` so the test does not depend on real AST input.
-    /// State params use `Arc<Db>` (T011) so `extract_arc_inner_type` can
+    /// State params use `Arc<Db>` so `extract_arc_inner_type` can
     /// resolve the inner `Db` type for `downcast_state::<Db>`.
     fn make_cli_param(name: &str, kind: ParamKind, is_option: bool) -> ParamInfo {
         let ty: syn::Type = match kind {
@@ -3169,13 +3169,13 @@ mod macro_parsing_tests {
 
         // The State parameter "state" must NOT appear as a CliArgInfo entry.
         // State params are not surfaced on the CLI — they're resolved at
-        // handler call time via downcast_state (T011).
+        // handler call time via downcast_state.
         assert!(
             !s.contains("CliArgInfo :: new (\"state\""),
             "state param should be skipped in CliArgInfo: {s}"
         );
 
-        // T011: State params ARE resolved in the handler closure via
+        // State params ARE resolved in the handler closure via
         // downcast_state. The closure emits `downcast_state::<Db>(state)`
         // (Db is the inner type of Arc<Db>).
         assert!(
@@ -3244,7 +3244,7 @@ mod macro_parsing_tests {
     }
 
     // ========================================================================
-    // T005: generate_grpc_handler_registration
+    // generate_grpc_handler_registration
     // ========================================================================
 
     /// gRPC handler registration must submit `GrpcHandlerRegistration` with

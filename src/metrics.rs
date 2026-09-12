@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Prometheus metrics (T702, R-sd4-001).
+//! Prometheus metrics.
 //!
 //! Lightweight, self-rendered Prometheus text format (no `prometheus` crate
 //! dependency — keeps the trimming philosophy). With the `metrics` feature:
@@ -10,7 +10,7 @@
 //!   template via `MatchedPath` — no cardinality explosion from concrete
 //!   paths), and
 //! - mounts `GET /metrics` **after** the auth layer (bypasses authentication,
-//!   same mechanism as the T701 probes), unless a user route claims it.
+//!   same mechanism as the built-in probes), unless a user route claims it.
 //!
 //! Exported series (RED method):
 //!

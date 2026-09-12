@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 //! Comprehensive integration tests for sdforge features via the examples crate.
 //!
-//! This file is task AX3 of the specmark change `grpc-cli-runtime-dispatch`.
 //! It verifies ALL sdforge features through the examples crate, exercising:
 //! - Framework re-exports (`sdforge::axum`, `sdforge::clap`, `sdforge::tonic`,
 //!   `sdforge::prost`, `sdforge::utoipa`, `sdforge::rmcp`, `sdforge::inventory`,
@@ -1124,7 +1123,7 @@ fn combined_http_build_with_all_features() {
 // ============================================================================
 // Section 14: End-to-end dispatch via #[forge(...)] from a downstream crate
 //
-// These tests prove the specmark change `grpc-cli-runtime-dispatch` works
+// These tests prove the end-to-end dispatch works
 // from downstream code: the `#[forge]` macro (re-exported via
 // `sdforge::forge`) registers `CliHandlerRegistration` /
 // `GrpcHandlerRegistration` / `McpToolRegistration` inventory items at
@@ -1325,7 +1324,7 @@ fn mcp_dispatch_init_all_plugins_counts_comprehensive_tool() {
 fn combined_dispatch_all_protocols_registered_via_forge_macro() {
     // Under combined_examples, the #[forge(...)] attributes above must
     // register across all three protocols (cli + grpc + mcp). This is the
-    // end-to-end proof that the specmark change's runtime dispatch works
+    // end-to-end proof that the runtime dispatch works
     // from a downstream crate without direct framework deps.
     let counts = sdforge::init_all_plugins();
     assert!(

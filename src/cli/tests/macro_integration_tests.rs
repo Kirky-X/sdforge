@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T009: `#[forge(cli = true)]` end-to-end integration.
+//! `#[forge(cli = true)]` end-to-end integration.
 //!
 //! These tests decorate real functions with the `#[forge]` macro
 //! (passing `cli = true`) and assert that the macro-generated

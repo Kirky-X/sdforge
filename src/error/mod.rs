@@ -15,7 +15,7 @@ mod context;
 mod i18n;
 mod sdforge_error;
 
-/// Unified cross-protocol error contract (T713): code/message/trace_id/field.
+/// Unified cross-protocol error contract: code/message/trace_id/field.
 pub mod unified;
 
 #[cfg(test)]

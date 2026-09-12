@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T709 e2e: ETag / conditional requests through `build_with_config`.
+//! e2e: ETag / conditional requests through `build_with_config`.
 //!
 //! Routes are declared via `#[forge]` (inventory) so the `build_with_config`
 //! middleware stack applies to them (axum layers only affect routes

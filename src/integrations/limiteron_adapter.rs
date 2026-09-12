@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! `LimiteronForgeAdapter` — adapts `limiteron::Governor` to `ForgeRateLimiter`.
 //!
-//! Phase 5 (T034 Red / T035 Green) of the `trait-kit-async-integration`
-//! change. Wraps an `Arc<limiteron::Governor>` and implements
+//! Wraps an `Arc<limiteron::Governor>` and implements
 //! [`ForgeRateLimiter`] by delegating `check` to `Governor::check` and making
 //! `record` a no-op (Governor::check is atomic — check + consume together;
 //! there is no separate `record` method on `Governor`).
@@ -14,7 +13,7 @@
 //!
 //! `spec.md` R-sdforge-module-002 wrote the error mapping as
 //! `ForgeError::rate_limiter(message)`. The actual `ForgeError` enum (defined
-//! in T033 at `domain/rate_limiter.rs`) has **no `rate_limiter` constructor**;
+//! at `domain/rate_limiter.rs`) has **no `rate_limiter` constructor**;
 //! the closest semantic match is [`ForgeError::internal(impl Display)`], which
 //! we use for mapping `limiteron::LimiteronError`. This divergence is
 //! documented here rather than silently papered over.
@@ -165,7 +164,7 @@ mod tests {
     /// R-sdforge-module-002 #4: `LimiteronForgeAdapter` implements
     /// `ForgeRateLimiter` — object-safe via `Arc<dyn ForgeRateLimiter +
     /// Send + Sync>`. This is the dyn-dispatch path `SdforgeModule::build`
-    /// will use (T036/T037).
+    /// will use .
     #[tokio::test]
     async fn adapter_is_object_safe_as_forge_rate_limiter() {
         let governor = make_governor().await;

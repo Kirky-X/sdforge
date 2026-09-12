@@ -2,17 +2,17 @@
 // SPDX-License-Identifier: MIT
 //! Trait/structure tests for CLI registration primitives.
 //!
-//! Tests are added incrementally as T002/T003/T004 land. This file
-//! currently covers T002 (`CliArgType` + `CliArgInfo`).
+//! Tests are added incrementally. This file
+//! currently covers `CliArgType` + `CliArgInfo`.
 
 use crate::cli::{CliArgInfo, CliArgType, CliCommandRegistration};
 
 // ============================================================================
-// T002: CliArgType variants + CliArgInfo field population
+// CliArgType variants + CliArgInfo field population
 // ============================================================================
 
 /// Verify the three `CliArgType` variants exist and `PartialEq` holds for
-/// each distinct variant. This is the foundational assertion for T002 —
+/// each distinct variant. This is the foundational assertion —
 /// if any variant is missing or `PartialEq` is not derived, compilation
 /// fails here.
 #[test]
@@ -77,7 +77,7 @@ fn test_cli_arg_info_new_is_const_fn() {
 }
 
 // ============================================================================
-// T003: CliCommandRegistration field population
+// CliCommandRegistration field population
 // ============================================================================
 
 /// Verify `CliCommandRegistration::new` populates all fields and `args`
@@ -119,7 +119,7 @@ fn test_cli_command_registration_const_fn() {
 }
 
 // ============================================================================
-// T004: inventory collects CliCommandRegistration submissions
+// inventory collects CliCommandRegistration submissions
 // ============================================================================
 
 // Test-only registration submitted at module load time. The static

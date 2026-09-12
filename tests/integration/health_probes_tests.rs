@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T701 e2e: built-in health probes.
+//! e2e: built-in health probes.
 //!
 //! `build_with_config` auto-mounts `/healthz` and `/readyz` **after** the
 //! auth middleware, so probes bypass authentication while normal routes

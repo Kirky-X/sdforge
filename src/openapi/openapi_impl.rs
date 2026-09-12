@@ -175,7 +175,7 @@ impl OpenApiRouteInfo {
     }
 }
 
-/// Map a Rust type string to an OpenAPI [`OpenApiTypeInfo`] (T706/T715).
+/// Map a Rust type string to an OpenAPI [`OpenApiTypeInfo`] .
 ///
 /// The single source of truth shared by the macro (compile-time request /
 /// response schema emission) and runtime schema reflection. Mirrors the
@@ -320,7 +320,7 @@ impl OpenApiBuilder {
             // declared success status (from `#[forge(status = <code>)]`) or
             // default `200` when not specified. This makes the OpenAPI doc
             // accurately reflect the HTTP success code clients will receive.
-            // T706: emit a typed requestBody from the declared body params.
+            // emit a typed requestBody from the declared body params.
             // Single body param (the only shape axum accepts — one Json
             // extractor): the request body IS the parameter schema. Multiple
             // declared params: render a wrapping object with per-param

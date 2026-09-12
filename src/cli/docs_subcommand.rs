@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! `docs` 子命令处理 — T020。
+//! `docs` 子命令处理。
 //!
 //! 仅当 `docs` feature 启用时编译（`docs` 隐式包含 `cli`）。
 //! 提供 [`docs_subcommand_definition`] 用于在 [`crate::cli::CliBuilder`]

@@ -54,7 +54,7 @@ pub struct SdForgeGrpcService {
     /// is checked against the limiter using the client's remote address.
     #[cfg(feature = "ratelimit")]
     rate_limiter: Option<std::sync::Arc<dyn crate::security::ratelimit::RateLimiter>>,
-    /// T712: optional auth interceptor. When `Some`, every `call` must carry
+    /// optional auth interceptor. When `Some`, every `call` must carry
     /// credentials the verifier accepts (bearer JWT / API key), otherwise the
     /// request is rejected with `Status::unauthenticated`.
     #[cfg(feature = "security")]
@@ -95,7 +95,7 @@ impl SdForgeGrpcService {
         }
     }
 
-    /// T712: attach an auth interceptor (gRPC authentication).
+    /// attach an auth interceptor (gRPC authentication).
     ///
     /// Every `call` is verified before dispatch; failures map to
     /// `Status::unauthenticated`. Mirrors `GrpcServerConfig.rate_limiter`
@@ -166,13 +166,13 @@ impl SdForgeGrpcService {
 
 #[cfg(feature = "grpc")]
 impl SdForgeGrpcService {
-    /// T705: install a request context (request_id/trace_id) for the whole
+    /// install a request context (request_id/trace_id) for the whole
     /// dispatch, so handlers and logs share the ambient correlation ids.
     async fn call_with_context(
         &self,
         request: Request<CallRequest>,
     ) -> Result<Response<CallResponse>, Status> {
-        // T712: verify credentials before any dispatch.
+        // verify credentials before any dispatch.
         #[cfg(feature = "security")]
         if let Some(ref verifier) = self.auth_interceptor {
             let metadata = request.metadata();
@@ -514,7 +514,7 @@ pub async fn build_server_with_config(
              (set GrpcServerConfig.require_auth = false to override)",
         )));
     }
-    // T008: pass `config.state` into the service so handlers with State
+    // pass `config.state` into the service so handlers with State
     // parameters can downcast it at call time.
     // vuln-0006: pass `config.rate_limiter` when `ratelimit` feature is enabled.
     #[cfg(feature = "ratelimit")]
@@ -614,7 +614,7 @@ impl SdForgeGrpcService {
 }
 
 // ============================================================================
-// T006/T007 unit tests
+// Unit tests
 // ============================================================================
 #[cfg(all(test, feature = "grpc"))]
 mod tests {
@@ -830,7 +830,7 @@ mod tests {
 
     #[test]
     fn lookup_builds_cache_from_inventory() {
-        // T006: OnceLock is initialized lazily on first `handlers()` call.
+        // OnceLock is initialized lazily on first `handlers()` call.
         let service = SdForgeGrpcService::default();
         let table = service.handlers();
         assert!(table.contains_key("test_echo"));
@@ -1224,7 +1224,7 @@ mod tests {
         let state: Arc<dyn Any + Send + Sync> = Arc::new(42_i32);
         let service = SdForgeGrpcService::with_state(Some(state));
         // Downcast back to i32 to verify the value survived.
-        // (Real handlers use `downcast_state` from core::handler — T011.)
+        // (Real handlers use `downcast_state` from core::handler.)
         let borrowed = service.state.clone().unwrap();
         let downcast = borrowed.downcast_ref::<i32>();
         assert_eq!(downcast, Some(&42_i32));

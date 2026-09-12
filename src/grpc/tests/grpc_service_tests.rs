@@ -425,7 +425,7 @@ fn test_grpc_config_boundary_values() {
 }
 
 // ============================================================================
-// Task 2.14: Server Streaming RPC Tests
+// Server Streaming RPC Tests
 // ============================================================================
 
 #[test]
@@ -467,7 +467,7 @@ fn test_grpc_server_streaming_empty_stream() {
 }
 
 // ============================================================================
-// Task 2.15: ProtoBuf Encoding/Decoding Tests
+// ProtoBuf Encoding/Decoding Tests
 // ============================================================================
 
 #[test]
@@ -537,7 +537,7 @@ fn test_grpc_protobuf_roundtrip() {
 }
 
 // ============================================================================
-// Task 2.16: Error Propagation Tests
+// Error Propagation Tests
 // ============================================================================
 
 #[test]

@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T008: `#[forge(cli = true)]` with path + body parameters compiles.
+//! `#[forge(cli = true)]` with path + body parameters compiles.
 //!
 //! The macro emits `CliCommandRegistration` + `CliHandlerRegistration`
 //! inventory submissions gated by `#[cfg(feature = "cli")]`. The trybuild

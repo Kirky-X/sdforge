@@ -53,7 +53,7 @@ combined_examples = ["http_examples", "mcp_examples", "websocket_examples",
                      "streaming_examples", "security_examples", "cache_examples",
                      "grpc_examples", "logging_examples", "openapi_examples",
                      "cli_examples", "docs_examples"]
-# T716 ecosystem examples
+# Ecosystem examples
 oxcache_admin_example = ["http_examples", "cache_examples", "dep:oxcache"]
 dbnexus_gateway_example = ["http_examples", "dep:dbnexus"]
 
@@ -87,13 +87,13 @@ name = "swagger_demo"
 path = "swagger_demo.rs"
 required-features = ["docs", "http"]
 
-# T716: oxcache 管理端点示例（经 BackendRegistry）。
+# oxcache 管理端点示例（经 BackendRegistry）。
 [[example]]
 name = "oxcache_admin"
 path = "oxcache_admin.rs"
 required-features = ["oxcache_admin_example"]
 
-# T716: dbnexus 数据 API 网关对接示例。
+# dbnexus 数据 API 网关对接示例。
 [[example]]
 name = "dbnexus_gateway"
 path = "dbnexus_gateway.rs"

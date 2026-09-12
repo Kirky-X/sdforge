@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! `SdforgeModule` — trait-kit 0.3 `AsyncKit` integration for sdforge.
 //!
-//! Phase 5 (T036 Red / T037 Green) of the `trait-kit-async-integration`
-//! change. Wires sdforge's rate-limiting capability into the `AsyncKit`
+//! Wires sdforge's rate-limiting capability into the `AsyncKit`
 //! dependency injection framework, depending on `LimiteronModule` for the
 //! underlying `Governor`.
 //!
@@ -71,7 +70,7 @@ impl ModuleMeta for SdforgeModule {
     const NAME: &'static str = "sdforge";
 
     fn dependencies() -> &'static [(&'static str, TypeId)] {
-        // OnceLock lazy init — mirrors dbnexus's pattern (Phase 4).
+        // OnceLock lazy init — mirrors dbnexus's pattern.
         // OnceLock (stable since 1.70) gives a `&'static` reference to a
         // runtime-constructed `Vec`.
         static DEPS: OnceLock<Vec<(&'static str, TypeId)>> = OnceLock::new();
@@ -172,7 +171,7 @@ mod tests {
     /// SdforgeModule → get a working `Arc<dyn ForgeRateLimiter + Send + Sync>`
     /// that delegates `check` to the underlying `Governor`.
     ///
-    /// (limiteron T617 made `LimiteronModule` depend on `OxcacheModule`, so
+    /// (limiteron made `LimiteronModule` depend on `OxcacheModule`, so
     /// the cache module must be registered for the graph to resolve.)
     #[tokio::test]
     async fn sdforge_module_build_returns_rate_limiter() {

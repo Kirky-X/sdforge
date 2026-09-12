@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T007: `cli = true` is a legal `#[forge]` argument.
+//! `cli = true` is a legal `#[forge]` argument.
 //!
 //! Verifies the macro accepts the new `cli` boolean parameter and emits a
 //! compilable expansion. The expansion itself is gated by `#[cfg(feature =

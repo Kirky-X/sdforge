@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Non-HTTP protocol authentication port (T712, R-sd4-004).
+//! Non-HTTP protocol authentication port.
 //!
 //! Protocol-neutral verifier consumed by the gRPC interceptor
 //! (`SdForgeGrpcService::with_auth_interceptor`) — and usable by any other

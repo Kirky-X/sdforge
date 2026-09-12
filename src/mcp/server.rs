@@ -163,7 +163,7 @@ impl SdForgeMcpServer {
         name: &str,
         arguments: Option<serde_json::Value>,
     ) -> Result<CallToolResult, ErrorData> {
-        // T705: install a request context for synchronous dispatch so logs
+        // install a request context for synchronous dispatch so logs
         // inside tool handlers carry correlation ids.
         #[cfg(feature = "context")]
         {

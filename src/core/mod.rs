@@ -11,12 +11,12 @@
 //! HTTP-specific response handling is provided in `http::response` module
 //! to avoid HTTP dependencies for non-HTTP protocol implementations.
 
-/// Field-level validation contract (T707): `#[forge(validate)]` +
+/// Field-level validation contract: `#[forge(validate)]` +
 /// `#[param(ge/le/min_length/...)]` enforcement plumbing.
 #[cfg(feature = "validate")]
 pub mod field_validation;
 
-/// Declarative pagination (T708): `#[forge(paginate)]` page/size parsing and
+/// Declarative pagination: `#[forge(paginate)]` page/size parsing and
 /// the {items,total,next} response envelope.
 #[cfg(feature = "paginate")]
 pub mod pagination;

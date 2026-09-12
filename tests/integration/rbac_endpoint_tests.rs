@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T703 e2e: endpoint-level RBAC via `#[forge(auth(role = "..."))]`.
+//! e2e: endpoint-level RBAC via `#[forge(auth(role = "..."))]`.
 //!
 //! The macro wraps the declared route with a role requirement; requests
 //! authenticated without the role get 403 (not 401), requests with a

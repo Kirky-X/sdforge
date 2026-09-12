@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 //! Swagger UI Router 测试。
 //!
-//! 对应任务：T014。
 
 #[cfg(feature = "http")]
 use axum::body::Body;

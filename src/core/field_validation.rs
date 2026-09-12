@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Field-level validation contract (T707, R-sd4-002).
+//! Field-level validation contract.
 //!
 //! `#[forge(validate)]` enables enforcement of rules declared via
 //! `#[param(ge = 1, le = 100, min_length = 2, max_length = 10, not_blank,

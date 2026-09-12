@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Lifecycle hooks (T711, R-sd4-002).
+//! Lifecycle hooks.
 //!
 //! `#[forge(on_start)]` / `#[forge(on_stop)]` mark zero-parameter async fns
-//! as process lifecycle hooks. `serve_with_graceful_shutdown` (T704) runs
+//! as process lifecycle hooks. `serve_with_graceful_shutdown` runs
 //! `on_start` hooks before binding and `on_stop` hooks after the drain
 //! completes — the final phase of the shutdown sequence.
 //!

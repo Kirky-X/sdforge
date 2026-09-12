@@ -21,7 +21,7 @@ use crate::security::ratelimit::{LimiteronAdapter, RateLimiter};
 use crate::security::ratelimit::HttpRequestRateLimiter;
 
 // ============================================================================
-// Construction Tests (T007/T008 — new/default)
+// Construction Tests (new/default)
 // ============================================================================
 
 /// `LimiteronAdapter::new().await` returns a usable instance without panic.
@@ -41,7 +41,7 @@ async fn default_matches_new_behavior() {
 }
 
 // ============================================================================
-// T009 — builder / with_dependencies / RateLimiter impl
+// builder / with_dependencies / RateLimiter impl
 // ============================================================================
 
 /// `LimiteronAdapter::builder().build().await` constructs an instance using
@@ -142,7 +142,7 @@ async fn with_dependencies_accepts_prebuilt_governor() {
 /// default config (TokenBucket capacity=100, refill_rate=10) allows the first
 /// request.
 ///
-/// This is the canonical T009 acceptance test from `tasks.md`.
+/// This is the canonical acceptance test from `tasks.md`.
 #[tokio::test]
 async fn check_allows_first_request_with_default_config() {
     let adapter = LimiteronAdapter::new().await;

@@ -2,12 +2,11 @@
 // SPDX-License-Identifier: MIT
 //! `docs` 模块主测试 — `DocFormat` 枚举、`generate_docs`、`write_docs`。
 //!
-//! 对应任务：T011 / T012 / T013 / T015 / T017 / T019。
 
 use crate::docs::{DocFormat, generate_docs, write_docs};
 
 // ============================================================================
-// T011: DocFormat 枚举
+// DocFormat 枚举
 // ============================================================================
 
 /// 验证 `DocFormat` 5 个变体存在、互异，且派生了 `Debug`/`Clone`/`Copy`/
@@ -54,7 +53,7 @@ fn test_doc_format_variants() {
 }
 
 // ============================================================================
-// T012: generate_docs 入口
+// generate_docs 入口
 // ============================================================================
 
 /// `generate_docs(OpenApi)` 应返回非空 JSON 字符串，首字符为 `{`。
@@ -82,7 +81,7 @@ fn test_generate_docs_cli_markdown_returns_md() {
 }
 
 // ============================================================================
-// T013: write_docs 写文件
+// write_docs 写文件
 // ============================================================================
 
 /// `write_docs` 应将生成的文档写入指定路径，文件存在且内容非空。
@@ -107,7 +106,7 @@ fn test_write_docs_creates_file() {
 }
 
 // ============================================================================
-// T015: generate_docs 支持 SwaggerUi
+// generate_docs 支持 SwaggerUi
 // ============================================================================
 
 /// `generate_docs(SwaggerUi)` 应返回含 `<html` 和 `swagger-ui` 的 HTML 字符串。
@@ -129,7 +128,7 @@ fn test_generate_docs_swagger_returns_html() {
 }
 
 // ============================================================================
-// T019: generate_docs 支持 McpMarkdown 和 All
+// generate_docs 支持 McpMarkdown 和 All
 // ============================================================================
 
 /// `generate_docs(McpMarkdown)` 应返回非空字符串。

@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T714 e2e: OTLP/HTTP export to an in-process mock collector.
+//! e2e: OTLP/HTTP export to an in-process mock collector.
 //!
 //! Spans recorded by the request-span middleware (plus a manual protocol
 //! span) are flushed as OTLP/HTTP JSON to a local axum collector; a metrics

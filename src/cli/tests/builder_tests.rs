@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Tests for `CliBuilder` (T005/T029).
+//! Tests for `CliBuilder` .
 //!
 //! `CliBuilder` collects `CliCommandRegistration` items from the global
 //! `inventory` registry and constructs a `clap::Command` tree. Each
@@ -32,7 +32,7 @@ inventory::submit!(
 );
 
 // ============================================================================
-// T005: CliBuilder
+// CliBuilder
 // ============================================================================
 
 /// `CliBuilder::new()` returns a fresh builder with no injected state.
@@ -105,7 +105,7 @@ fn test_builder_collects_commands() {
 }
 
 // ============================================================================
-// T029: CliBuilder::with_dependencies — state injection
+// CliBuilder::with_dependencies — state injection
 // ============================================================================
 
 /// Test-only state type used to verify `with_dependencies` actually stores
@@ -117,7 +117,7 @@ struct TestAppState {
 }
 
 /// Verify `with_dependencies(state)` stores the supplied state in the
-/// builder so that handlers (T006+) can downcast it at call time. Also
+/// builder so that handlers can downcast it at call time. Also
 /// verifies `build()` succeeds after state injection — the framework's
 /// "constructor pattern 3" (full DI).
 #[test]
@@ -152,7 +152,7 @@ fn test_builder_with_dependencies_injects_state() {
 }
 
 // ============================================================================
-// T021: CliBuilder 自动注入 docs 子命令（docs feature）
+// CliBuilder 自动注入 docs 子命令（docs feature）
 // ============================================================================
 
 /// 当 `docs` feature 启用时，`CliBuilder::build()` 必须自动 append

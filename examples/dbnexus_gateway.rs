@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T716 example: dbnexus data API gateway (T419 雏形) exposed via `#[forge]`.
+//! Example: dbnexus data API gateway exposed via `#[forge]`.
 //!
 //! A read-only data API over a whitelisted table (`users`, columns
 //! `id/name/age`): equality filter on the whitelisted column plus
@@ -12,7 +12,7 @@ use std::sync::OnceLock;
 
 use sdforge::forge;
 
-/// Gateway allowlist: table → columns (the T419 contract surface).
+/// Gateway allowlist: table → columns (the data-api contract surface).
 const ALLOWED_TABLES: &[(&str, &[&str])] = &[("users", &["id", "name", "age"])];
 
 static POOL: OnceLock<dbnexus::DbPool> = OnceLock::new();

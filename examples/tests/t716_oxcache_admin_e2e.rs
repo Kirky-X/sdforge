@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T716 e2e: oxcache management endpoints over `#[forge]` + BackendRegistry.
+//! e2e: oxcache management endpoints over `#[forge]` + BackendRegistry.
 
 #![cfg(feature = "oxcache_admin_example")]
 

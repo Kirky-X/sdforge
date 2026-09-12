@@ -151,7 +151,7 @@ where
         // `security` feature is enabled (see WebSocketConfig), so the entire
         // validation block is gated to match.
         //
-        // T712: two credential paths are accepted — bearer JWT (existing) or
+        // two credential paths are accepted — bearer JWT (existing) or
         // `x-api-key` against the optional API-key store. Both reuse the HTTP
         // stack's credential stores; either success authenticates the
         // handshake, otherwise the upgrade is rejected with 401.
@@ -215,7 +215,7 @@ async fn handle_socket(
     manager: Arc<ConnectionManager>,
     handler: Arc<dyn WebSocketHandler>,
 ) {
-    // T705: adopt/create a request context for this connection's lifetime so
+    // adopt/create a request context for this connection's lifetime so
     // logs emitted from the message loop carry correlation ids.
     #[cfg(feature = "context")]
     {

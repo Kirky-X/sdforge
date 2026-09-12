@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MIT
 //! CLI Markdown 生成测试。
 //!
-//! 对应任务：T016。
 
 use crate::cli::CliCommandRegistration;
 use crate::docs::generate_cli_docs;

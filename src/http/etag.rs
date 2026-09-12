@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! ETag / conditional requests (T709, R-sd4-002).
+//! ETag / conditional requests.
 //!
 //! With the `etag` feature, `build_with_config` installs
 //! [`etag_middleware`]: successful (2xx) GET responses get a strong ETag

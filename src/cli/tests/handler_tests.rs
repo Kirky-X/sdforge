@@ -1,10 +1,10 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Tests for `CliHandlerRegistration` (T006).
+//! Tests for `CliHandlerRegistration`.
 //!
 //! A `CliHandlerRegistration` pairs a command name with a unified `HandlerFn`
 //! pointer that takes `(HandlerArgs, HandlerState)` and returns a boxed future
-//! resolving to `Result<Value, ApiError>`. The `#[forge]` macro (T008) emits
+//! resolving to `Result<Value, ApiError>`. The `#[forge]` macro emits
 //! `inventory::submit!` blocks pairing each `CliCommandRegistration` with one
 //! of these handler registrations.
 
@@ -14,7 +14,7 @@ use crate::prelude::ApiError;
 use serde_json::Value;
 
 // ============================================================================
-// T006: CliHandlerRegistration
+// CliHandlerRegistration
 // ============================================================================
 
 /// Test handler used by `test_handler_registration_call`. Returns

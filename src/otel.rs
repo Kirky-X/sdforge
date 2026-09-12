@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! OpenTelemetry observation (T714, R-sd4-003) — MVP OTLP/HTTP.
+//! OpenTelemetry observation — MVP OTLP/HTTP.
 //!
 //! Feature `otel`: request spans (route/method/status/duration) are recorded
 //! per protocol entry point and exported to an OTLP/HTTP collector:

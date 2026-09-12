@@ -10,7 +10,7 @@
 //! registrations and constructs a `clap::Command`.
 
 // ============================================================================
-// T002: CliArgType + CliArgInfo
+// CliArgType + CliArgInfo
 // ============================================================================
 
 /// Classification of a CLI argument's source.
@@ -50,7 +50,7 @@ pub struct CliArgInfo {
 }
 
 // ============================================================================
-// T003: CliCommandRegistration
+// CliCommandRegistration
 // ============================================================================
 
 /// Static metadata for a CLI command, registered at compile time via
@@ -84,13 +84,13 @@ pub struct CliCommandRegistration {
 mod cli_impl;
 
 // ============================================================================
-// T004: inventory collect — compile-time registration of CLI commands.
+// inventory collect — compile-time registration of CLI commands.
 // ============================================================================
 //
 // Mirrors the registration pattern in src/http/mod.rs and src/mcp/mod.rs.
 // `inventory::collect!` declares the type as inventory-collectable; the
-// `#[forge]` macro (T008) emits `inventory::submit!` blocks at
-// call sites. At runtime, `CliBuilder::build()` (T005) iterates this
+// `#[forge]` macro emits `inventory::submit!` blocks at
+// call sites. At runtime, `CliBuilder::build()` iterates this
 // registry to construct the `clap::Command` tree.
 inventory::collect!(CliCommandRegistration);
 
@@ -189,21 +189,21 @@ impl GlobalArg {
 }
 
 // ============================================================================
-// T005: CliBuilder — runtime collector → clap::Command
+// CliBuilder — runtime collector → clap::Command
 // ============================================================================
 pub mod builder;
 
 pub use builder::CliBuilder;
 
 // ============================================================================
-// T009: CLI dispatch — route ArgMatches to the registered forge handler
+// CLI dispatch — route ArgMatches to the registered forge handler
 // ============================================================================
 pub mod dispatch;
 
 pub use dispatch::dispatch;
 
 // ============================================================================
-// T020: docs subcommand — definition + handler (docs feature only)
+// docs subcommand — definition + handler (docs feature only)
 // ============================================================================
 #[cfg(feature = "docs")]
 pub mod docs_subcommand;
@@ -212,7 +212,7 @@ pub mod docs_subcommand;
 pub use docs_subcommand::{docs_subcommand, docs_subcommand_definition};
 
 // ============================================================================
-// T006: CliHandlerRegistration — closure-based handler dispatch
+// CliHandlerRegistration — closure-based handler dispatch
 // ============================================================================
 pub mod handler;
 

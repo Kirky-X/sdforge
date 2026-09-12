@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Request context propagation (T705, R-sd4-003).
+//! Request context propagation.
 //!
 //! A [`RequestContext`] (request_id + trace_id + start time) is generated per
 //! request and carried across protocol boundaries via `tokio::task_local`:

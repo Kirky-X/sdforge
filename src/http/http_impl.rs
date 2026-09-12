@@ -95,7 +95,7 @@ pub(crate) fn apply_security_headers(router: Router) -> Router {
 
 /// True when a route already occupies `path` (module-prefix resolved).
 ///
-/// T701/T702: built-in probe/metrics mounting skips paths already claimed by
+/// Built-in probe/metrics mounting skips paths already claimed by
 /// user routes to avoid axum duplicate-route panics.
 #[cfg(any(feature = "health", feature = "metrics", test))]
 pub(crate) fn route_path_taken(path: &str) -> bool {
@@ -271,7 +271,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
 
     let mut router = build();
 
-    // T702: request metrics middleware (count / latency / status per route
+    // request metrics middleware (count / latency / status per route
     // template). Installed early so every route from build() is measured;
     // the /metrics endpoint itself is mounted after the auth layer below and
     // therefore not self-recorded.
@@ -282,7 +282,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         ));
     }
 
-    // T714: request-span middleware (OTLP export via sdforge::otel).
+    // request-span middleware (OTLP export via sdforge::otel).
     #[cfg(feature = "otel")]
     {
         router = router.layer(axum::middleware::from_fn(
@@ -290,20 +290,20 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         ));
     }
 
-    // T709: ETag/If-None-Match conditional requests for GET responses.
+    // ETag/If-None-Match conditional requests for GET responses.
     #[cfg(feature = "etag")]
     {
         router = router.layer(axum::middleware::from_fn(crate::http::etag::etag_middleware));
     }
 
-    // T713: processor pre/post hook pipeline (active when hooks installed).
+    // processor pre/post hook pipeline (active when hooks installed).
     #[cfg(feature = "hooks")]
     {
         router = router.layer(axum::middleware::from_fn(crate::hooks::hooks_middleware));
     }
 
     // Request ID middleware (first to ensure all requests have an ID).
-    // T705: with the `context` feature the richer context middleware
+    // with the `context` feature the richer context middleware
     // (request_id + trace_id + task-local scope + response echo) subsumes it.
     #[cfg(not(feature = "context"))]
     {
@@ -474,7 +474,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         // None is handled by doing nothing
     }
 
-    // T701: mount /healthz + /readyz AFTER the auth layer — axum layers only
+    // mount /healthz + /readyz AFTER the auth layer — axum layers only
     // apply to routes registered before them, so probes added here bypass
     // authentication/rate-limiting by construction. Paths already claimed by
     // user routes are skipped (prevents duplicate-route panics).
@@ -483,7 +483,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         router = crate::health::mount_probes(router);
     }
 
-    // T702: mount /metrics after the auth layer (bypasses authentication).
+    // mount /metrics after the auth layer (bypasses authentication).
     #[cfg(feature = "metrics")]
     {
         router = crate::metrics::mount_metrics(router);

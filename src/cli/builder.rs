@@ -12,7 +12,7 @@
 //! |--------------|------------|
 //! | `Path`       | positional `<name>` (required flag honored) |
 //! | `Body`       | `--name <VALUE>` option (default honored) |
-//! | `State`      | dropped (not surfaced; injected via T029) |
+//! | `State`      | dropped (not surfaced; injected at call time) |
 
 use std::any::Any;
 use std::sync::Arc;
@@ -101,7 +101,7 @@ impl CliBuilder {
     /// Borrow the injected application state, if any.
     ///
     /// Returns `None` for builders constructed via \[`new`\] / \[`default`\].
-    /// Handler invocation logic (T006+) uses this accessor to downcast
+    /// Handler invocation logic uses this accessor to downcast
     /// the state before invoking a `State`-parameterized handler.
     pub fn state(&self) -> Option<&Arc<dyn Any + Send + Sync>> {
         self.state.as_ref()
@@ -116,7 +116,7 @@ impl CliBuilder {
     ///
     /// When the `docs` feature is enabled, the `docs` SubCommand (from
     /// [`mod@crate::cli::docs_subcommand`]) is automatically appended — users
-    /// do not need to register it manually (T021).
+    /// do not need to register it manually.
     pub fn build(&self) -> clap::Command {
         let mut root = clap::Command::new(self.name.clone())
             .version(env!("CARGO_PKG_VERSION"))
@@ -126,7 +126,7 @@ impl CliBuilder {
             root = root.subcommand(build_subcommand(reg));
         }
 
-        // T021: docs feature 启用时自动注入 docs 子命令。
+        // docs feature 启用时自动注入 docs 子命令。
         // 用 cfg 门控确保 cli-only 编译时不引入 docs_subcommand 模块依赖。
         #[cfg(feature = "docs")]
         {
@@ -206,8 +206,8 @@ fn build_subcommand(reg: &CliCommandRegistration) -> clap::Command {
             }
             CliArgType::State => {
                 // State arguments are not surfaced on the CLI — they are
-                // injected at call time via `CliBuilder::with_dependencies`
-                // (T029). Drop them here.
+                // injected at call time via `CliBuilder::with_dependencies`.
+                // Drop them here.
             }
         }
     }

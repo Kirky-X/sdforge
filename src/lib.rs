@@ -84,7 +84,7 @@ pub use inventory;
 /// optional; serde is always present, so the gate would be a no-op.
 pub use serde;
 
-/// Re-export serde_json for use in generated code (T707 validation payload)
+/// Re-export serde_json for use in generated code (validation payload)
 /// and downstream extensions without a direct dependency.
 pub use serde_json;
 
@@ -202,35 +202,35 @@ pub mod integrations;
 pub mod http;
 
 /// Built-in health probes (`/healthz`, `/readyz`) — auto-mounted by
-/// `build_with_config` when the `health` feature is enabled (T701).
+/// `build_with_config` when the `health` feature is enabled.
 #[cfg(feature = "health")]
 pub mod health;
 
 /// Prometheus metrics (`/metrics`, RED request metrics) — auto-installed by
-/// `build_with_config` when the `metrics` feature is enabled (T702).
+/// `build_with_config` when the `metrics` feature is enabled.
 #[cfg(feature = "metrics")]
 pub mod metrics;
 
 /// Request context propagation (request_id/trace_id across protocols,
-/// log correlation fields) — T705.
+/// log correlation fields).
 #[cfg(feature = "context")]
 pub mod context;
 
-/// Lifecycle hooks (`#[forge(on_start)]` / `#[forge(on_stop)]`) — T711,
-/// coordinated with the T704 graceful-shutdown sequence.
+/// Lifecycle hooks (`#[forge(on_start)]` / `#[forge(on_stop)]`),
+/// coordinated with the graceful-shutdown sequence.
 #[cfg(feature = "lifecycle")]
 pub mod lifecycle;
 
-/// Processor pre/post hook pipeline (middleware-style) — T713.
+/// Processor pre/post hook pipeline (middleware-style).
 #[cfg(feature = "hooks")]
 pub mod hooks;
 
-/// OpenTelemetry observation (OTLP/HTTP MVP: spans + request metrics) — T714.
+/// OpenTelemetry observation (OTLP/HTTP MVP: spans + request metrics).
 #[cfg(feature = "otel")]
 pub mod otel;
 
 /// Endpoint-level RBAC (`#[forge(auth(role = "..."))]`) — the macro wraps the
-/// generated route with [`rbac::require_role`] (T703). Fail-safe: no auth
+/// generated route with [`rbac::require_role`]. Fail-safe: no auth
 /// stack or no matching role → 403.
 #[cfg(feature = "http")]
 pub mod rbac;
@@ -387,11 +387,11 @@ pub use i18n::{HttpI18nFormatter, I18nError};
 
 /// CLI (clap) integration — feature-gated by `cli`.
 ///
-/// Promoted to `pub mod cli;` in T009 so that macro-generated
+/// Exposed as `pub mod cli;` so that macro-generated
 /// `sdforge::cli::CliCommandRegistration` paths (emitted by
 /// `#[forge(cli = true)]`) resolve both inside the sdforge crate
 /// (via `extern crate self as sdforge;` above) and in downstream crates.
-/// T010 wires the inventory iteration into `init_all_plugins`.
+/// The inventory iteration is wired into `init_all_plugins`.
 #[cfg(feature = "cli")]
 pub mod cli;
 
@@ -444,7 +444,7 @@ pub use openapi::{
 
 /// 统一文档输出模块 — Swagger UI + CLI/MCP Markdown。
 ///
-/// 仅当 `docs` feature 启用时可用。T011-T019 实现逐步填充。
+/// 仅当 `docs` feature 启用时可用。
 #[cfg(feature = "docs")]
 pub mod docs;
 
@@ -537,7 +537,7 @@ pub fn init_all_plugins() -> PluginCounts {
         })
     };
 
-    // T015: touch `GrpcHandlerRegistration` inventory so the linker keeps
+    // touch `GrpcHandlerRegistration` inventory so the linker keeps
     // `inventory::submit!` blocks emitted by `#[forge(grpc_method = "...")]`.
     // Mirrors the http/mcp/websocket/grpc-route/cli blocks above. Without
     // this, release builds (LTO + opt-level=z) may strip the handler
@@ -557,7 +557,7 @@ pub fn init_all_plugins() -> PluginCounts {
         })
     };
 
-    // T010: touch CLI inventory so the linker keeps `inventory::submit!`
+    // touch CLI inventory so the linker keeps `inventory::submit!`
     // blocks emitted by `#[forge(cli = true)]`. Mirrors the http/mcp/
     // websocket/grpc blocks above. Both `CliCommandRegistration` and
     // `CliHandlerRegistration` are collected; the returned count reflects

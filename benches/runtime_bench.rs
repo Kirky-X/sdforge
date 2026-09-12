@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Runtime performance baselines (T710).
+//! Runtime performance baselines.
 //!
 //! Run with:
 //! ```text

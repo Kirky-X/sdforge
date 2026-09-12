@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T712 e2e: non-HTTP protocol authentication — gRPC interceptor and WS
+//! e2e: non-HTTP protocol authentication — gRPC interceptor and WS
 //! handshake, reusing the HTTP credential stores (bearer JWT / API key).
 
 #![cfg(all(feature = "security", feature = "grpc", feature = "websocket"))]

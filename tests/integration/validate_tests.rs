@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T707 e2e: `#[forge(validate)]` parameter validation.
+//! e2e: `#[forge(validate)]` parameter validation.
 //!
 //! Rules declared via `#[param(ge/le/min_length/max_length/not_blank/email)]`
 //! are enforced inside the generated HTTP handler; violations return

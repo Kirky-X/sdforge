@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T701 collision semantics: a user route that already claims `/healthz`
+//! collision semantics: a user route that already claims `/healthz`
 //! takes precedence — `build_with_config` skips the built-in probe instead
 //! of panicking on a duplicate route.
 //!

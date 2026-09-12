@@ -1,9 +1,9 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Unified error contract (T713, R-sd4-003).
+//! Unified error contract.
 //!
 //! All protocol error responses share one structure — error code, message,
-//! and the ambient request `trace_id` (from the T705 request context when the
+//! and the ambient request `trace_id` (from the request context when the
 //! `context` feature is on). This collapses the historical HTTP-400 vs
 //! gRPC-422 divergence (SIMPL-001) onto a single payload shape with a
 //! per-protocol status mapping table.
@@ -21,7 +21,7 @@ pub struct UnifiedError {
     pub code: String,
     /// Human-readable message.
     pub message: String,
-    /// Ambient trace id from the request context (T705), when available.
+    /// Ambient trace id from the request context, when available.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trace_id: Option<String>,
     /// Offending field for validation-type errors.
@@ -52,7 +52,7 @@ impl UnifiedError {
     }
 }
 
-/// Ambient trace id from the request context (T705), when the `context`
+/// Ambient trace id from the request context, when the `context`
 /// feature is enabled and a context is installed.
 pub fn current_trace_id() -> Option<String> {
     #[cfg(feature = "context")]

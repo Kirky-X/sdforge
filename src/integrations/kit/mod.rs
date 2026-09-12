@@ -8,7 +8,7 @@
 //! [`LimiteronForgeAdapter`](crate::integrations::LimiteronForgeAdapter))
 //! during [`AsyncKit::build`](trait_kit::AsyncKit::build).
 //!
-//! Also hosts the process-global ready-kit registry (T704): register a built
+//! Also hosts the process-global ready-kit registry: register a built
 //! `AsyncKit<AsyncReady>` with [`set_ready_kit`] and
 //! `http::serve_with_graceful_shutdown` runs its phased
 //! `shutdown_async()` as the final stage of the graceful-stop sequence.
@@ -26,8 +26,8 @@ fn ready_kit_slot() -> &'static Mutex<Option<Arc<AsyncKit<AsyncReady>>>> {
 }
 
 /// Register the built (ready) kit used for process-wide integration points:
-/// `/readyz` health data (T701, `health` feature) and graceful-shutdown
-/// phase-3 teardown (T704, `graceful` feature).
+/// `/readyz` health data (`health` feature) and graceful-shutdown
+/// phase-3 teardown (`graceful` feature).
 pub fn set_ready_kit(kit: Arc<AsyncKit<AsyncReady>>) {
     if let Ok(mut guard) = ready_kit_slot().lock() {
         *guard = Some(kit);

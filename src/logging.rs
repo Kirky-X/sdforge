@@ -165,7 +165,7 @@ impl StructuredLogger {
         fields: Vec<(String, serde_json::Value)>,
     ) {
         if level >= self.config.min_level {
-            // T705: correlate log entries with the ambient request context
+            // correlate log entries with the ambient request context
             // (request_id/trace_id) when the `context` feature is enabled.
             #[cfg(feature = "context")]
             let fields = {

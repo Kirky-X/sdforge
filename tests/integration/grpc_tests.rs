@@ -35,9 +35,9 @@ mod grpc_integration_tests {
     use tonic::transport::Channel;
 
     // ============================================================================
-    // T012: Test handler registered for integration tests.
+    // Test handler registered for integration tests.
     //
-    // The new `call` routing (T007) returns `Status::not_found` for methods
+    // The new `call` routing returns `Status::not_found` for methods
     // not in the `GrpcHandlerRegistration` inventory. Integration tests that
     // previously asserted the stub's `{"result":"processed"}` response now
     // call this registered handler so they continue to exercise the success
@@ -893,7 +893,7 @@ mod grpc_integration_tests {
     async fn test_grpc_response_success_flag() {
         let (mut client, _server_addr) = setup_grpc_test_server().await;
 
-        // T012: call a REGISTERED handler so the new routing returns success
+        // call a REGISTERED handler so the new routing returns success
         // (the old stub returned success for any method name, but the new
         // routing returns Status::not_found for unregistered methods).
         let request = create_test_call_request(
@@ -923,7 +923,7 @@ mod grpc_integration_tests {
     /// Test: gRPC response data format
     ///
     /// Verifies that response data is the smart-extracted handler return
-    /// value (String → raw, others → JSON). With the new routing (T007),
+    /// value (String → raw, others → JSON). With the new routing,
     /// `data` is no longer a JSON object containing `{"method":..., "result":"processed"}`
     /// — it's the handler's `Value::String` output extracted via
     /// `extract_value`.
@@ -932,7 +932,7 @@ mod grpc_integration_tests {
     async fn test_grpc_response_data_format() {
         let (mut client, _server_addr) = setup_grpc_test_server().await;
 
-        // T012: call a registered handler — the stub `processed` response is gone.
+        // call a registered handler — the stub `processed` response is gone.
         let request = create_test_call_request(
             "integration_test_echo",
             HashMap::from([("msg".to_string(), "hello".to_string())]),
@@ -1331,7 +1331,7 @@ mod grpc_status_code_tests {
         response.into_inner()
     }
 
-    /// T012 (a): Handler returning `ServiceResponse::success_with_status(_, 201)`
+    /// (a): Handler returning `ServiceResponse::success_with_status(_, 201)`
     /// → `CallResponse.status_code == 201`.
     #[tokio::test]
     async fn test_grpc_service_response_with_status_201() {
@@ -1347,7 +1347,7 @@ mod grpc_status_code_tests {
         );
     }
 
-    /// T012 (b): Handler returning `ServiceResponse::success(_)` (no status_code)
+    /// (b): Handler returning `ServiceResponse::success(_)` (no status_code)
     /// → `CallResponse.status_code == 200` (default).
     #[tokio::test]
     async fn test_grpc_service_response_without_status_defaults_200() {
@@ -1359,7 +1359,7 @@ mod grpc_status_code_tests {
         );
     }
 
-    /// T012 (c): Handler returning a bare type → `CallResponse.status_code == 200`.
+    /// (c): Handler returning a bare type → `CallResponse.status_code == 200`.
     #[tokio::test]
     async fn test_grpc_bare_type_defaults_200() {
         let response = call_method("status_code_test_bare_type").await;

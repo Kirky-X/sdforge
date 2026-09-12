@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Graceful shutdown (T704, R-sd4-001).
+//! Graceful shutdown.
 //!
 //! [`serve_with_graceful_shutdown`] implements the production shutdown
 //! sequence:
@@ -13,7 +13,7 @@
 //!    server is force-aborted,
 //! 3. **Stop hooks** — trait-kit phased shutdown (`kit` feature, registered
 //!    via [`crate::integrations::kit::set_ready_kit`]) and `#[forge(on_stop)]`
-//!    lifecycle hooks (T711) run after the drain completes.
+//!    lifecycle hooks run after the drain completes.
 //!
 //! # Example
 //!
@@ -88,7 +88,7 @@ pub async fn default_shutdown_signal() {
 ///
 /// `AsyncKit::shutdown_async` is intentionally `!Send`, so it runs on a
 /// dedicated current-thread runtime + OS thread, keeping the serve future
-/// spawn-safe (Send). `#[forge(on_stop)]` lifecycle hooks (T711) hook in
+/// spawn-safe (Send). `#[forge(on_stop)]` lifecycle hooks hook in
 /// here once the `lifecycle` feature lands.
 fn run_stop_hooks() {
     #[cfg(feature = "kit")]
@@ -105,13 +105,13 @@ fn run_stop_hooks() {
     }
 }
 
-/// Async stop hooks (phase 3b): `#[forge(on_stop)]` lifecycle hooks (T711).
+/// Async stop hooks: `#[forge(on_stop)]` lifecycle hooks.
 async fn run_lifecycle_stop_hooks() {
     #[cfg(feature = "lifecycle")]
     crate::lifecycle::run_on_stop().await;
 }
 
-/// Pre-serve start hooks: `#[forge(on_start)]` lifecycle hooks (T711).
+/// Pre-serve start hooks: `#[forge(on_start)]` lifecycle hooks.
 async fn run_lifecycle_start_hooks() {
     #[cfg(feature = "lifecycle")]
     crate::lifecycle::run_on_start().await;
@@ -139,7 +139,7 @@ pub async fn serve_with_graceful_shutdown(
         let _ = trigger_tx.send(true);
     };
 
-    // T711: run on_start hooks before accepting connections.
+    // run on_start hooks before accepting connections.
     run_lifecycle_start_hooks().await;
 
     let server = axum::serve(listener, router).with_graceful_shutdown(axum_shutdown);

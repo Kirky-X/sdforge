@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! Built-in health probes (T701).
+//! Built-in health probes.
 //!
 //! `build_with_config` auto-mounts `/healthz` (liveness) and `/readyz`
 //! (readiness) **after** the auth/rate-limit/security layers, so probes
@@ -12,7 +12,7 @@
 //! - Custom checks: register [`ReadinessCheck`] implementations via
 //!   [`register_readiness_check`]; any failing check flips `/readyz` to 503.
 //! - trait-kit data source: with the `kit` feature, [`KitHealthSource`]
-//!   adapts an `AsyncKit<AsyncReady>` health report (trait-kit T205 health
+//!   adapts an `AsyncKit<AsyncReady>` health report (trait-kit health
 //!   aggregation) into the `/readyz` payload via [`register_health_source`].
 //!
 //! # Example
@@ -185,7 +185,7 @@ pub(crate) fn run_readiness_checks() -> (bool, Vec<CheckOutcome>) {
         }
     }
 
-    // Kit-style aggregate: fold its overall status into readiness (T701).
+    // Kit-style aggregate: fold its overall status into readiness.
     if let Ok(guard) = health_source().read() {
         if let Some(source) = guard.as_ref() {
             let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -409,7 +409,7 @@ pub mod kit_source {
     use trait_kit::{AsyncKit, AsyncReady};
 
     /// [`HealthDataSource`] backed by an `AsyncKit<AsyncReady>` health report
-    /// (trait-kit T205 aggregate shape; requires trait-kit `health` feature).
+    /// (trait-kit aggregate shape; requires trait-kit `health` feature).
     pub struct KitHealthSource {
         kit: Arc<AsyncKit<AsyncReady>>,
     }
@@ -451,7 +451,7 @@ pub mod kit_source {
         }
     }
 
-    /// Register a kit as the readiness health data source (T701 data path).
+    /// Register a kit as the readiness health data source (data path).
     pub fn register_kit_health_source(kit: Arc<AsyncKit<AsyncReady>>) {
         super::register_health_source(Arc::new(KitHealthSource::new(kit)));
     }

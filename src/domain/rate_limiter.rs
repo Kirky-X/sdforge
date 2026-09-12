@@ -3,13 +3,12 @@
 //! Rate limiter abstraction for the trait-kit 0.3 `AsyncKit` integration.
 //!
 //! Defines the [`ForgeRateLimiter`] trait — the minimal rate-limiter
-//! interface sdforge consumes when wiring up `SdforgeModule` (Phase 5 of
-//! `trait-kit-async-integration`). The trait uses explicit
+//! interface sdforge consumes when wiring up `SdforgeModule`. The trait uses explicit
 //! `Pin<Box<dyn Future + Send>>` return types (rather than `async fn` in
 //! trait) to remain object-safe (`dyn ForgeRateLimiter` compiles) without
 //! pulling in the `async-trait` crate. This mirrors the pattern used by
 //! `trait_kit::AsyncAutoBuilder` (see `trait-kit/src/core/meta.rs`) and
-//! dbnexus's `DbCacheProvider` (Phase 4).
+//! dbnexus's `DbCacheProvider`.
 //!
 //! # Relationship to the existing `RateLimiter` trait
 //!
@@ -33,7 +32,7 @@ use std::pin::Pin;
 /// `limiteron` or other optional crates. Adapter implementations map
 /// provider-specific errors (e.g. `limiteron::LimiteronError`) into the
 /// `Internal` variant — mirroring how `LimiteronModule` maps `TraitKitError` via
-/// `LimiteronError::ConfigError(format!(...))` (Phase 3 precedent).
+/// `LimiteronError::ConfigError(format!(...))`.
 #[derive(Debug, thiserror::Error)]
 pub enum ForgeError {
     /// Rate limit exceeded — the identifier is allowed `limit` requests per
@@ -74,7 +73,7 @@ impl ForgeError {
 }
 
 /// Rate limiter abstraction consumed by the trait-kit 0.3 `AsyncKit`
-/// integration (Phase 5 of `trait-kit-async-integration`).
+/// integration.
 ///
 /// Defines a minimal, key-based rate-limiter interface: `check` queries
 /// whether a request for the given key is allowed (returns `true` = allowed,
@@ -137,9 +136,6 @@ pub trait ForgeRateLimiter: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    // T032 Red: tests referencing the not-yet-defined ForgeRateLimiter trait
-    // and ForgeError error type. This module fails to compile until T033
-    // (Green) adds the trait + error definitions above.
 
     use super::*;
     use std::future::Future;

@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T711 e2e: `#[forge(on_start/on_stop)]` lifecycle hooks coordinated with
-//! the T704 graceful-shutdown sequence.
+//! e2e: `#[forge(on_start/on_stop)]` lifecycle hooks coordinated with
+//! the graceful-shutdown sequence.
 
 #![cfg(all(feature = "http", feature = "graceful", feature = "lifecycle"))]
 

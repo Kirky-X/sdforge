@@ -120,7 +120,7 @@ pub struct WebSocketConfig {
     /// ```
     #[cfg(feature = "security")]
     pub auth: Option<crate::security::BearerAuth>,
-    /// T712: optional API-key validator (header `x-api-key`). Accepts
+    /// optional API-key validator (header `x-api-key`). Accepts
     /// connections that present a valid API key when the bearer token path
     /// is not used; reuses the HTTP key store type.
     #[cfg(feature = "security")]

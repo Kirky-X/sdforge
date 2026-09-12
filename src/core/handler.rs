@@ -6,7 +6,7 @@
 //! a single function-pointer type and a common value-extraction helper, so a
 //! `#[forge]` function is callable the same way regardless of protocol.
 //!
-//! See change `grpc-cli-runtime-dispatch` (D1) for the design rationale.
+//! See `grpc-cli-runtime-dispatch` (D1) for the design rationale.
 
 use crate::prelude::ApiError;
 use serde_json::Value;
@@ -26,7 +26,7 @@ pub type HandlerArgs = HashMap<String, String>;
 ///
 /// CLI injects via `CliBuilder::with_dependencies`; gRPC injects via
 /// `GrpcServerConfig.state`. Handlers declare a `State` parameter and
-/// recover the concrete type via `downcast_state` (T011).
+/// recover the concrete type via `downcast_state`.
 pub type HandlerState = Option<Arc<dyn Any + Send + Sync>>;
 
 /// Handler return value — the forge function's `T: Serialize` run through
@@ -126,7 +126,7 @@ mod tests {
     }
 
     // ========================================================================
-    // T011: downcast_state
+    // downcast_state
     // ========================================================================
 
     #[test]

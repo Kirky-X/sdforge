@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X
 // SPDX-License-Identifier: MIT
-//! T716 e2e: dbnexus data API gateway — allowlist + filter + pagination
+//! e2e: dbnexus data API gateway — allowlist + filter + pagination
 //! served through a `#[forge]` route.
 
 #![cfg(feature = "dbnexus_gateway_example")]
@@ -22,7 +22,7 @@ async fn gw_users(
     page: Option<u64>,
     size: Option<u64>,
 ) -> Result<serde_json::Value, sdforge::core::ApiError> {
-    // Whitelist guard (T419 contract): only users.id/name/age are reachable.
+    // Whitelist guard (data-api contract): only users.id/name/age are reachable.
     let page = page.unwrap_or(1).max(1);
     let size = size.unwrap_or(20).clamp(1, 100);
     let offset = (page - 1) * size;
