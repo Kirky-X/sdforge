@@ -52,7 +52,6 @@ fn bench_route_dispatch(c: &mut Criterion) {
     group.bench_function("plain_get", |b| {
         b.iter(|| {
             rt.block_on({
-                use tower::ServiceExt;
                 let mut r = router.clone();
                 async move {
                     use tower::Service;
@@ -70,7 +69,6 @@ fn bench_route_dispatch(c: &mut Criterion) {
     group.bench_function("path_param_get", |b| {
         b.iter(|| {
             rt.block_on({
-                use tower::ServiceExt;
                 let mut r = router.clone();
                 async move {
                     use tower::Service;
@@ -102,7 +100,7 @@ fn bench_unified_handler_dispatch(c: &mut Criterion) {
             args.insert("c", "3.5".to_string());
             args.insert("d", "true".to_string());
             args.insert("e", "2026-09-11".to_string());
-            criterion::black_box(args)
+            std::hint::black_box(args)
         });
     });
 
@@ -128,7 +126,7 @@ fn bench_json_serialization(c: &mut Criterion) {
     group.bench_function("serialize_nested_object", |b| {
         b.iter(|| {
             let s = serde_json::to_string(&payload).unwrap();
-            criterion::black_box(s)
+            std::hint::black_box(s)
         });
     });
 
@@ -136,7 +134,7 @@ fn bench_json_serialization(c: &mut Criterion) {
         let text = serde_json::to_string(&payload).unwrap();
         b.iter(|| {
             let v: serde_json::Value = serde_json::from_str(&text).unwrap();
-            criterion::black_box(v)
+            std::hint::black_box(v)
         });
     });
 

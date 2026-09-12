@@ -9,7 +9,7 @@ use utoipa::openapi::response::ResponseBuilder;
 use utoipa::openapi::schema::{ArrayBuilder, ObjectBuilder, SchemaFormat, SchemaType, Type};
 use utoipa::openapi::content::ContentBuilder;
 use utoipa::openapi::request_body::RequestBodyBuilder;
-use utoipa::openapi::schema::{OneOf, Schema};
+use utoipa::openapi::schema::Schema;
 use utoipa::openapi::{Info, InfoBuilder, OpenApi, RefOr, Required};
 
 impl OpenApiPathParam {

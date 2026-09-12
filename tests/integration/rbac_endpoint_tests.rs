@@ -64,7 +64,6 @@ fn apikey_config(admin_key: &str, viewer_key: &str) -> AppConfig {
 }
 
 async fn get_with_key(uri: &str, key: Option<&str>) -> axum::http::Response<axum::body::Body> {
-    use tower::ServiceExt;
     let config = apikey_config("admin-secret-key-1", "viewer-secret-key-2");
     let mut router = build_with_config(&config).unwrap();
     let mut builder = axum::http::Request::builder().uri(uri);

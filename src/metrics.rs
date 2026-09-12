@@ -51,14 +51,6 @@ impl Default for RequestSeries {
 }
 
 impl RequestSeries {
-    fn new() -> Self {
-        Self {
-            count: 0,
-            duration_sum: 0.0,
-            buckets: vec![0; LATENCY_BUCKETS.len()],
-        }
-    }
-
     fn observe(&mut self, duration_secs: f64) {
         self.count += 1;
         self.duration_sum += duration_secs;

@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 //! Comprehensive Security Example
 //!
+//! 本文件为参考型演示（未接线为 bin 目标），handler 与辅助函数仅供
+//! 文档阅读，不参与运行时调用。
+//!
 //! This example demonstrates how to combine multiple security features:
 //! - API Key authentication
 //! - JWT Bearer token authentication
@@ -14,6 +17,8 @@
 //! ```bash
 //! cargo run --features "http security" --example security/comprehensive
 //! ```
+
+#![allow(dead_code)]
 
 use sdforge::cache::{DashMapCache, SyncCache};
 use sdforge::prelude::*;

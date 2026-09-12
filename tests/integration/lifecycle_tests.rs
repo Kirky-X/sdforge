@@ -6,7 +6,6 @@
 #![cfg(all(feature = "http", feature = "graceful", feature = "lifecycle"))]
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::time::Duration;
 
 use sdforge::forge;

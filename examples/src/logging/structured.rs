@@ -15,6 +15,10 @@
 //! cargo run --features logging_examples --example logging/structured
 //! ```
 
+//! 参考型演示模块（未接线为 bin 目标）：handler 与辅助函数仅供文档阅读，
+//! 编译为库模块时允许保留未调用项。
+#![allow(dead_code)]
+
 use sdforge::logging::{
     LogEntry, LogFormat, LogLevel, LoggerConfig, StructuredLogger, get_global_logger,
     init_global_logger,

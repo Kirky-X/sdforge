@@ -23,6 +23,10 @@
 //!   sdforge.v1.SdForgeService/Call
 //! ```
 
+//! 参考型演示模块（未接线为 bin 目标）：handler 与辅助函数仅供文档阅读，
+//! 编译为库模块时允许保留未调用项。
+#![allow(dead_code)]
+
 use sdforge::core::ApiMetadata;
 #[allow(deprecated)]
 use sdforge::grpc::{

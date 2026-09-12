@@ -413,6 +413,8 @@ mod tests {
 // =============================================================================
 // trait-kit integration (`kit` feature): AsyncKit health report adapter.
 // =============================================================================
+/// AsyncKit 健康报告适配：将 trait-kit `AsyncKit<AsyncReady>` 的模块健康
+/// 状态映射为 `HealthDataSource`，并入聚合健康报告。
 #[cfg(feature = "kit")]
 pub mod kit_source {
     use super::HealthDataSource;

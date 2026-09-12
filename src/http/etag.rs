@@ -49,7 +49,7 @@ pub async fn etag_middleware(req: Request<Body>, next: Next) -> Response {
         .and_then(|v| v.to_str().ok())
         .map(str::to_string);
 
-    let mut response = next.run(req).await;
+    let response = next.run(req).await;
 
     // Only fingerprint cacheable successful GET responses that don't already
     // carry an ETag.

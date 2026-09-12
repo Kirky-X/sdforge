@@ -81,9 +81,13 @@ pub fn is_email(value: impl AsRef<str>) -> bool {
 
 #[cfg(feature = "http")]
 mod http_response {
+    // FieldError 仅被下方测试门控的响应构造消费
+    #[cfg(test)]
     use super::FieldError;
 
     /// Build the standardized 400 response for a failed validation report.
+    /// 仅由下方 http 门控的契约测试消费，非测试构建不参与编译。
+    #[cfg(test)]
     pub fn validation_failed_response(errors: Vec<FieldError>) -> axum::response::Response {
         use axum::response::IntoResponse;
         (

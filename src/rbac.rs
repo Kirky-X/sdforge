@@ -14,8 +14,6 @@
 //! - `security` feature disabled → the endpoint denies every request (403);
 //!   role requirements can never be satisfied without an authentication stack.
 
-use axum::response::IntoResponse;
-
 /// Allowed roles for an endpoint; a request passes when its `AuthContext`
 /// permissions contain at least one of them.
 pub type Roles = &'static [&'static str];
@@ -71,6 +69,7 @@ mod tests {
     use super::*;
     use crate::security::{AuthContext, AuthMetadata};
     use axum::body::Body;
+    use axum::response::IntoResponse;
     use tower::ServiceExt;
 
     async fn probe() -> impl IntoResponse {
