@@ -101,7 +101,9 @@ pub(crate) fn apply_security_headers(router: Router) -> Router {
 ///
 /// Built-in probe/metrics mounting skips paths already claimed by
 /// user routes to avoid axum duplicate-route panics.
-#[cfg(any(feature = "health", feature = "metrics", test))]
+// 消费方：health 探针挂载、metrics 挂载、health 门控测试——
+// 两 feature 皆关时无消费方，不参与编译。
+#[cfg(any(feature = "health", feature = "metrics"))]
 pub(crate) fn route_path_taken(path: &str) -> bool {
     use crate::core::Registration;
     let mut taken = false;
