@@ -37,14 +37,7 @@ SDForge 的核心思路是：**一份函数注解，多协议消费**。你只�
 cargo add sdforge
 ```
 
-或手动添加到 `Cargo.toml`（当前版本 `0.5.0-rc.3`）：
-
-```toml
-[dependencies]
-sdforge = { version = "0.5.0-rc.3", features = ["http"] }
-```
-
-> `sdforge` 默认不启用任何特性（`default = []`），需按需显式启用。
+版本固定的 `Cargo.toml` 写法与「`default = []` 需按需显式启用协议特性」的说明见 [README · 快速开始](../README.md#-快速开始)。
 
 ### 定义第一个 API
 
@@ -117,7 +110,7 @@ let app = build_with_config(&config)?;
 
 ### TOML 配置文件
 
-SDForge 使用自包含的 TOML 配置（无需外部配置中心）。示例配置见仓库 `examples/config/`：`default.toml`、`minimal.toml`、`production.toml`、`api-key-auth.toml`。
+SDForge 使用自包含的 TOML 配置（无需外部配置中心）。示例配置见仓库 `examples/config/`（完整清单见 [README · 示例](../README.md#-示例)）。
 
 限流与缓存配置示例：
 
