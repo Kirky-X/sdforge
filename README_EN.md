@@ -454,7 +454,7 @@ About **2,900** test functions (`src/` 2,015 + `tests/` 704 + `macros/` 59 + `ex
 
 ### 🚨 Reporting vulnerabilities
 
-**Do not report security vulnerabilities through public GitHub issues.** Please use the private GitHub [Security Advisories](https://github.com/Kirky-X/sdforge/security/advisories/new) disclosure channel. The project commits to acknowledging reports within 48 hours and providing an initial assessment within 7 days. See [docs/SECURITY.md](docs/SECURITY.md) and the root [SECURITY.md](SECURITY.md).
+**Do not report security vulnerabilities through public GitHub issues.** Please use the private GitHub [Security Advisories](https://github.com/Kirky-X/sdforge/security/advisories/new) disclosure channel. The project commits to acknowledging reports within 48 hours and providing an initial assessment within 7 days. See [docs/SECURITY.md](docs/SECURITY.md).
 
 ### 🛡️ Security design highlights
 

@@ -454,7 +454,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ### 🚨 漏洞上报
 
-**请勿通过公开 issue 报告安全漏洞。** 请使用 GitHub [Security Advisories](https://github.com/Kirky-X/sdforge/security/advisories/new) 私密披露通道提交。项目承诺 48 小时内确认、7 天内给出初步评估，详见 [安全文档](docs/SECURITY.md) 与仓库根目录 [SECURITY.md](SECURITY.md)。
+**请勿通过公开 issue 报告安全漏洞。** 请使用 GitHub [Security Advisories](https://github.com/Kirky-X/sdforge/security/advisories/new) 私密披露通道提交。项目承诺 48 小时内确认、7 天内给出初步评估，详见 [安全文档](docs/SECURITY.md)。
 
 ### 🛡️ 安全设计要点
 
