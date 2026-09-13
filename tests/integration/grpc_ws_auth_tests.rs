@@ -7,10 +7,10 @@
 
 use std::sync::Arc;
 
-use sdforge::grpc::sdforge_v1::sd_forge_service_server::SdForgeService;
 use sdforge::grpc::SdForgeGrpcService;
-use sdforge::security::grpc_auth::{ApiKeyVerifier, BearerVerifier};
+use sdforge::grpc::sdforge_v1::sd_forge_service_server::SdForgeService;
 use sdforge::security::AppApiKeyAuth;
+use sdforge::security::grpc_auth::{ApiKeyVerifier, BearerVerifier};
 
 // =============================================================================
 // gRPC interceptor
@@ -26,11 +26,15 @@ async fn grpc_auth_ping() -> Result<serde_json::Value, sdforge::core::ApiError> 
     Ok(serde_json::json!({"pong": true}))
 }
 
-fn grpc_service_with(verifier: Arc<dyn sdforge::security::grpc_auth::GrpcAuthVerifier>) -> SdForgeGrpcService {
+fn grpc_service_with(
+    verifier: Arc<dyn sdforge::security::grpc_auth::GrpcAuthVerifier>,
+) -> SdForgeGrpcService {
     SdForgeGrpcService::default().with_auth_interceptor(verifier)
 }
 
-fn call_request(auth: Option<(&'static str, String)>) -> sdforge::tonic::Request<sdforge::grpc::sdforge_v1::CallRequest> {
+fn call_request(
+    auth: Option<(&'static str, String)>,
+) -> sdforge::tonic::Request<sdforge::grpc::sdforge_v1::CallRequest> {
     let mut req = sdforge::tonic::Request::new(sdforge::grpc::sdforge_v1::CallRequest {
         method: "auth_ping".to_string(),
         parameters: Default::default(),
@@ -45,20 +49,23 @@ fn call_request(auth: Option<(&'static str, String)>) -> sdforge::tonic::Request
 
 #[tokio::test]
 async fn grpc_without_credentials_is_unauthenticated() {
-    let service = grpc_service_with(Arc::new(BearerVerifier::from_secret(
-        "Grpc-Test-Secret-Key-0123456789-AbCdEf",
-    ).unwrap()));
+    let service = grpc_service_with(Arc::new(
+        BearerVerifier::from_secret("Grpc-Test-Secret-Key-0123456789-AbCdEf").unwrap(),
+    ));
     let err = service.call(call_request(None)).await.unwrap_err();
     assert_eq!(err.code(), tonic::Code::Unauthenticated);
 }
 
 #[tokio::test]
 async fn grpc_with_invalid_bearer_is_unauthenticated() {
-    let service = grpc_service_with(Arc::new(BearerVerifier::from_secret(
-        "Grpc-Test-Secret-Key-0123456789-AbCdEf",
-    ).unwrap()));
+    let service = grpc_service_with(Arc::new(
+        BearerVerifier::from_secret("Grpc-Test-Secret-Key-0123456789-AbCdEf").unwrap(),
+    ));
     let err = service
-        .call(call_request(Some(("authorization", "Bearer bogus.token.here".to_string()))))
+        .call(call_request(Some((
+            "authorization",
+            "Bearer bogus.token.here".to_string(),
+        ))))
         .await
         .unwrap_err();
     assert_eq!(err.code(), tonic::Code::Unauthenticated);
@@ -66,13 +73,16 @@ async fn grpc_with_invalid_bearer_is_unauthenticated() {
 
 #[tokio::test]
 async fn grpc_with_valid_bearer_proceeds_to_dispatch() {
-    let service = grpc_service_with(Arc::new(BearerVerifier::from_secret(
-        "Grpc-Test-Secret-Key-0123456789-AbCdEf",
-    ).unwrap()));
+    let service = grpc_service_with(Arc::new(
+        BearerVerifier::from_secret("Grpc-Test-Secret-Key-0123456789-AbCdEf").unwrap(),
+    ));
 
     let token = mint_jwt("Grpc-Test-Secret-Key-0123456789-AbCdEf");
     let res = service
-        .call(call_request(Some(("authorization", format!("Bearer {token}")))))
+        .call(call_request(Some((
+            "authorization",
+            format!("Bearer {token}"),
+        ))))
         .await
         .expect("valid bearer must pass the interceptor");
     // Authenticated dispatch reached the forge handler.
@@ -83,17 +93,22 @@ async fn grpc_with_valid_bearer_proceeds_to_dispatch() {
 async fn grpc_with_valid_api_key_proceeds_to_dispatch() {
     let store = Arc::new(AppApiKeyAuth::new());
     store.add_key("grpc-secret-key-9", vec!["admin".to_string()]);
-    let service =
-        grpc_service_with(Arc::new(ApiKeyVerifier::new(store, "sk_")));
+    let service = grpc_service_with(Arc::new(ApiKeyVerifier::new(store, "sk_")));
 
     let err = service
-        .call(call_request(Some(("x-api-key", "sk_wrong-key".to_string()))))
+        .call(call_request(Some((
+            "x-api-key",
+            "sk_wrong-key".to_string(),
+        ))))
         .await
         .unwrap_err();
     assert_eq!(err.code(), tonic::Code::Unauthenticated);
 
     let res = service
-        .call(call_request(Some(("x-api-key", "sk_grpc-secret-key-9".to_string()))))
+        .call(call_request(Some((
+            "x-api-key",
+            "sk_grpc-secret-key-9".to_string(),
+        ))))
         .await
         .expect("valid api key must pass the interceptor");
     assert_eq!(res.get_ref().data, r#"{"pong":true}"#);
@@ -108,13 +123,15 @@ fn mint_jwt(secret: &str) -> String {
     let header = serde_json::json!({"alg": "HS256", "typ": "JWT"});
     let header_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .encode(serde_json::to_string(&header).unwrap());
-    let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .encode(serde_json::to_string(&serde_json::json!({"sub": "grpc-test", "exp": 9999999999u64})).unwrap());
+    let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+        serde_json::to_string(&serde_json::json!({"sub": "grpc-test", "exp": 9999999999u64}))
+            .unwrap(),
+    );
     let signing_input = format!("{header_b64}.{payload_b64}");
     let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
     mac.update(signing_input.as_bytes());
-    let sig_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .encode(mac.finalize().into_bytes());
+    let sig_b64 =
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
     format!("{signing_input}.{sig_b64}")
 }
 
@@ -125,7 +142,7 @@ fn mint_jwt(secret: &str) -> String {
 mod ws_handshake {
     use super::*;
     use axum::body::Body;
-    use sdforge::websocket::{websocket_upgrade, AppState, ConnectionManager, WebSocketConfig};
+    use sdforge::websocket::{AppState, ConnectionManager, WebSocketConfig, websocket_upgrade};
     use tower::ServiceExt;
 
     fn ws_app_with(config: WebSocketConfig) -> axum::Router {
@@ -158,11 +175,13 @@ mod ws_handshake {
     }
 
     fn ws_config() -> WebSocketConfig {
-        let mut config = WebSocketConfig::default();
-        config.auth = Some(
-            sdforge::security::BearerAuth::try_new("Ws-Test-Secret-Key-0123456789-AbCdEf")
-                .unwrap(),
-        );
+        let mut config = WebSocketConfig {
+            auth: Some(
+                sdforge::security::BearerAuth::try_new("Ws-Test-Secret-Key-0123456789-AbCdEf")
+                    .unwrap(),
+            ),
+            ..Default::default()
+        };
         let store = Arc::new(AppApiKeyAuth::new());
         store.add_key("ws-secret-key-1", vec!["viewer".to_string()]);
         config.api_key_auth = Some(store);
@@ -171,7 +190,10 @@ mod ws_handshake {
 
     #[tokio::test]
     async fn ws_without_credentials_is_rejected_401() {
-        assert_eq!(upgrade_with(&[]).await, axum::http::StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            upgrade_with(&[]).await,
+            axum::http::StatusCode::UNAUTHORIZED
+        );
     }
 
     #[tokio::test]
@@ -192,7 +214,11 @@ mod ws_handshake {
         // `WebSocketUpgrade` extractor fails with 400 AFTER our validation —
         // 400 proves the handshake auth accepted the key (401 would mean the
         // gate rejected it).
-        assert_ne!(status, axum::http::StatusCode::UNAUTHORIZED, "valid api key must authenticate");
+        assert_ne!(
+            status,
+            axum::http::StatusCode::UNAUTHORIZED,
+            "valid api key must authenticate"
+        );
     }
 
     #[tokio::test]

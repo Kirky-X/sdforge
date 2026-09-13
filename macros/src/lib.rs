@@ -296,41 +296,39 @@ fn extract_forge_extras(args: TokenStream2) -> Result<(TokenStream2, ForgeExtras
     while let Some(tt) = iter.next() {
         match &tt {
             TokenTree::Ident(ident)
-                if ident.to_string() == "validate"
-                    || ident.to_string() == "paginate"
-                    || ident.to_string() == "on_start"
-                    || ident.to_string() == "on_stop" =>
+                if ident == "validate"
+                    || ident == "paginate"
+                    || ident == "on_start"
+                    || ident == "on_stop" =>
             {
                 // Bare flags. Also tolerate `flag = true|false`.
                 let flag = ident.to_string();
                 match iter.next() {
-                    Some(TokenTree::Punct(p)) if p.as_char() == '=' => {
-                        match iter.next() {
-                            Some(TokenTree::Literal(lit)) => {
-                                let raw = lit.to_string();
-                                let value = raw.trim().trim_matches('"').to_string();
-                                let enabled = value.parse::<bool>().map_err(|_| {
-                                    syn::Error::new(
-                                        lit.span(),
-                                        format!("{} must be true or false, got {}", flag, value),
-                                    )
-                                })?;
-                                match flag.as_str() {
-                                    "validate" => extras.validate = enabled,
-                                    "paginate" => extras.paginate = enabled,
-                                    "on_start" => extras.on_start = enabled,
-                                    "on_stop" => extras.on_stop = enabled,
-                                    _ => {}
-                                }
-                            }
-                            _ => {
-                                return Err(syn::Error::new(
-                                    ident.span(),
-                                    format!("{} requires a bool value", flag),
-                                ));
+                    Some(TokenTree::Punct(p)) if p.as_char() == '=' => match iter.next() {
+                        Some(TokenTree::Literal(lit)) => {
+                            let raw = lit.to_string();
+                            let value = raw.trim().trim_matches('"').to_string();
+                            let enabled = value.parse::<bool>().map_err(|_| {
+                                syn::Error::new(
+                                    lit.span(),
+                                    format!("{} must be true or false, got {}", flag, value),
+                                )
+                            })?;
+                            match flag.as_str() {
+                                "validate" => extras.validate = enabled,
+                                "paginate" => extras.paginate = enabled,
+                                "on_start" => extras.on_start = enabled,
+                                "on_stop" => extras.on_stop = enabled,
+                                _ => {}
                             }
                         }
-                    }
+                        _ => {
+                            return Err(syn::Error::new(
+                                ident.span(),
+                                format!("{} requires a bool value", flag),
+                            ));
+                        }
+                    },
                     Some(other) => {
                         return Err(syn::Error::new(
                             other.span(),
@@ -346,21 +344,17 @@ fn extract_forge_extras(args: TokenStream2) -> Result<(TokenStream2, ForgeExtras
                     },
                 }
             }
-            TokenTree::Ident(ident) if ident.to_string() == "auth" => {
-                match iter.next() {
-                    Some(TokenTree::Group(group))
-                        if group.delimiter() == Delimiter::Parenthesis =>
-                    {
-                        parse_auth_group(group.stream(), &mut extras)?;
-                    }
-                    _ => {
-                        return Err(syn::Error::new(
-                            ident.span(),
-                            "auth requires a parenthesized role list: auth(role = \"admin\")",
-                        ));
-                    }
+            TokenTree::Ident(ident) if ident == "auth" => match iter.next() {
+                Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Parenthesis => {
+                    parse_auth_group(group.stream(), &mut extras)?;
                 }
-            }
+                _ => {
+                    return Err(syn::Error::new(
+                        ident.span(),
+                        "auth requires a parenthesized role list: auth(role = \"admin\")",
+                    ));
+                }
+            },
             other => remaining.push(other.clone()),
         }
     }
@@ -375,7 +369,7 @@ fn parse_auth_group(args: TokenStream2, extras: &mut ForgeExtras) -> Result<(), 
     while let Some(tt) = iter.next() {
         match &tt {
             TokenTree::Punct(p) if p.as_char() == ',' => continue,
-            TokenTree::Ident(ident) if ident.to_string() == "role" => {
+            TokenTree::Ident(ident) if ident == "role" => {
                 match iter.next() {
                     Some(TokenTree::Punct(p)) if p.as_char() == '=' => {}
                     other => {
@@ -391,10 +385,7 @@ fn parse_auth_group(args: TokenStream2, extras: &mut ForgeExtras) -> Result<(), 
                         let raw = lit.to_string();
                         let value = raw.trim().trim_matches('"').to_string();
                         if value.is_empty() {
-                            return Err(syn::Error::new(
-                                lit.span(),
-                                "auth role cannot be empty",
-                            ));
+                            return Err(syn::Error::new(lit.span(), "auth role cannot be empty"));
                         }
                         extras.auth_roles.push(value);
                     }
@@ -595,7 +586,7 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
             return Err(syn::Error::new(
                 proc_macro2::Span::call_site(),
                 "Missing required attribute: name",
-            ))
+            ));
         }
     };
     let version = match version {
@@ -605,7 +596,7 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
             return Err(syn::Error::new(
                 proc_macro2::Span::call_site(),
                 "Missing required attribute: version",
-            ))
+            ));
         }
     };
 
@@ -797,8 +788,7 @@ impl ParamInfo {
             let ty_str_trimmed = ty_str.trim().to_string();
 
             // Check for explicit #[param(kind = "...")] attribute
-            let (explicit_annotation, validations) =
-                Self::parse_param_attributes(pat_type)?;
+            let (explicit_annotation, validations) = Self::parse_param_attributes(pat_type)?;
 
             // Determine extraction kind based on explicit annotation first, then path parameters, then type inference
             let param_kind = if let Some(ref kind) = explicit_annotation {
@@ -944,10 +934,8 @@ impl ParamInfo {
                                 }
                             }
                             syn::Meta::Path(path) => {
-                                let key = path
-                                    .get_ident()
-                                    .map(|i| i.to_string())
-                                    .unwrap_or_default();
+                                let key =
+                                    path.get_ident().map(|i| i.to_string()).unwrap_or_default();
                                 match key.as_str() {
                                     "not_blank" => validations.push(ValidationSpec::NotBlank),
                                     "email" => validations.push(ValidationSpec::Email),

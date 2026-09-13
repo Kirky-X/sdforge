@@ -3,8 +3,8 @@
 //! Processor pre/post hook pipeline.
 //!
 //! Middleware-style hooks around every HTTP request handled by
-//! `build_with_config`: [`install_hooks`] registers one process-global
-//! [`RequestHooks`] implementation; the pipeline invokes `before` when the
+//! `build_with_config`: `install_hooks` registers one process-global
+//! `RequestHooks` implementation; the pipeline invokes `before` when the
 //! request enters and `after` when the response leaves (with the final
 //! status). Hooks are protocol-agnostic by construction and composed with the
 //! request context for correlation.
@@ -92,8 +92,7 @@ fn run_before(hooks: &dyn RequestHooks, info: &RequestInfo) {
 }
 
 fn run_after(hooks: &dyn RequestHooks, info: &RequestInfo, status: u16) {
-    let _ =
-        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| hooks.after(info, status)));
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| hooks.after(info, status)));
 }
 
 #[cfg(test)]

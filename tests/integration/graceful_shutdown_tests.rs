@@ -13,7 +13,7 @@
 
 use std::time::Duration;
 
-use sdforge::http::{serve_with_graceful_shutdown, GracefulShutdownConfig};
+use sdforge::http::{GracefulShutdownConfig, serve_with_graceful_shutdown};
 
 /// Bind an ephemeral listener for tests.
 async fn test_listener() -> tokio::net::TcpListener {
@@ -79,10 +79,7 @@ async fn inflight_request_completes_before_shutdown() {
         result.is_ok(),
         "serve future must resolve after in-flight drain"
     );
-    result
-        .unwrap()
-        .unwrap()
-        .expect("graceful path returns Ok");
+    result.unwrap().unwrap().expect("graceful path returns Ok");
 }
 
 #[tokio::test]
@@ -138,8 +135,8 @@ mod kit_teardown {
     use super::*;
     use std::future::Future;
     use std::pin::Pin;
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use trait_kit::core::ModuleMeta;
     use trait_kit::{AsyncAutoBuilder, AsyncKit};
 

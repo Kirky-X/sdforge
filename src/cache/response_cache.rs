@@ -136,13 +136,13 @@ where
         let key = cache_key_from_request(&req);
 
         // Cache lookup (synchronous)
-        if let Some(cached_bytes) = self.cache.get(&key) {
-            if cached_bytes.len() >= 2 {
-                let status_code = u16::from_be_bytes([cached_bytes[0], cached_bytes[1]]);
-                if let Ok(status) = StatusCode::from_u16(status_code) {
-                    let body = cached_bytes[2..].to_vec();
-                    return Box::pin(async move { Ok(deserialize_response(status, body)) });
-                }
+        if let Some(cached_bytes) = self.cache.get(&key)
+            && cached_bytes.len() >= 2
+        {
+            let status_code = u16::from_be_bytes([cached_bytes[0], cached_bytes[1]]);
+            if let Ok(status) = StatusCode::from_u16(status_code) {
+                let body = cached_bytes[2..].to_vec();
+                return Box::pin(async move { Ok(deserialize_response(status, body)) });
             }
         }
 

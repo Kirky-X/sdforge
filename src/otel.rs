@@ -11,7 +11,7 @@
 //! The exporter is dependency-free (raw HTTP/1.1 POST over `TcpStream`, no
 //! TLS in MVP — point it at a local collector/sidecar). `build_with_config`
 //! installs the request-span middleware when the feature is enabled; other
-//! protocols record spans via [`start_span`] / [`finish_span`] around their
+//! protocols record spans via `start_span` / `finish_span` around their
 //! dispatch.
 //!
 //! ```ignore
@@ -23,7 +23,7 @@
 //! ```
 
 use std::sync::Mutex;
-use std::sync::{OnceLock};
+use std::sync::OnceLock;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 /// OTLP/HTTP exporter configuration.
@@ -55,8 +55,7 @@ impl AtomicCounter {
         Self(std::sync::atomic::AtomicU64::new(start))
     }
     fn next(&self) -> u64 {
-        self.0
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -83,7 +82,7 @@ pub struct SpanData {
     pub attributes: Vec<(String, serde_json::Value)>,
 }
 
-/// An in-flight span; call [`finish_span`] to record it.
+/// An in-flight span; call `finish_span` to record it.
 #[derive(Debug)]
 pub struct ActiveSpan {
     trace_id: String,
@@ -306,10 +305,10 @@ pub fn flush_metrics(config: &OtelConfig) -> Result<u16, String> {
     let text = registry.render();
     let mut total: u64 = 0;
     for line in text.lines() {
-        if let Some(rest) = line.strip_prefix("sdforge_http_requests_total{") {
-            if let Some(value) = rest.rsplit(' ').next().and_then(|v| v.parse::<u64>().ok()) {
-                total += value;
-            }
+        if let Some(rest) = line.strip_prefix("sdforge_http_requests_total{")
+            && let Some(value) = rest.rsplit(' ').next().and_then(|v| v.parse::<u64>().ok())
+        {
+            total += value;
         }
     }
     let payload = serde_json::json!({
@@ -326,10 +325,7 @@ pub fn flush_metrics(config: &OtelConfig) -> Result<u16, String> {
             }],
         }],
     });
-    post_json(
-        &format!("{}/v1/metrics", config.endpoint),
-        &payload,
-    )
+    post_json(&format!("{}/v1/metrics", config.endpoint), &payload)
 }
 
 #[cfg(test)]
@@ -343,10 +339,12 @@ mod tests {
         finish_span(span);
         assert!(buffered_span_count() >= 1);
         let spans = take_spans();
-        assert!(spans.iter().any(|s| s.name == "unit.op" && s
-            .attributes
-            .iter()
-            .any(|(k, v)| k == "k" && v == &serde_json::json!("v"))));
+        assert!(spans.iter().any(|s| {
+            s.name == "unit.op"
+                && s.attributes
+                    .iter()
+                    .any(|(k, v)| k == "k" && v == &serde_json::json!("v"))
+        }));
         assert_eq!(buffered_span_count(), 0);
     }
 

@@ -44,42 +44,37 @@ async fn gw_users(
 async fn seed_global_pool() -> &'static dbnexus::DbPool {
     // First caller creates+seeds; later callers reuse the same pool (the
     // OnceLock guarantees identical data across parallel tests).
-    let pool = POOL
-        .get_or_init(|| async {
-            // File-backed db: `sqlite::memory:` gives EACH pooled connection
-            // its own database, which breaks table visibility across pooled
-            // sessions.
-            let dir = std::env::temp_dir().join(format!(
-                "sdforge-gw-e2e-{}",
-                std::process::id()
-            ));
-            let _ = std::fs::create_dir_all(&dir);
-            let db_path = dir.join("gateway.db");
-            let _ = std::fs::remove_file(&db_path);
-            let pool = dbnexus::DbPoolBuilder::new()
-                .url(format!("sqlite://{}?mode=rwc", db_path.display()).as_str())
-                .build()
-                .await
-                .expect("sqlite pool");
-            let session = pool.get_session("admin").await.expect("admin session");
+    POOL.get_or_init(|| async {
+        // File-backed db: `sqlite::memory:` gives EACH pooled connection
+        // its own database, which breaks table visibility across pooled
+        // sessions.
+        let dir = std::env::temp_dir().join(format!("sdforge-gw-e2e-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let db_path = dir.join("gateway.db");
+        let _ = std::fs::remove_file(&db_path);
+        let pool = dbnexus::DbPoolBuilder::new()
+            .url(format!("sqlite://{}?mode=rwc", db_path.display()).as_str())
+            .build()
+            .await
+            .expect("sqlite pool");
+        let session = pool.get_session("admin").await.expect("admin session");
+        session
+            .execute_raw_ddl(
+                "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)",
+            )
+            .await
+            .expect("create table");
+        for (name, age) in [("alice", 30), ("bob", 41), ("carol", 25)] {
             session
-                .execute_raw_ddl(
-                    "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)",
-                )
+                .execute_raw(&format!(
+                    "INSERT INTO users (name, age) VALUES ('{name}', {age})"
+                ))
                 .await
-                .expect("create table");
-            for (name, age) in [("alice", 30), ("bob", 41), ("carol", 25)] {
-                session
-                    .execute_raw(&format!(
-                        "INSERT INTO users (name, age) VALUES ('{name}', {age})"
-                    ))
-                    .await
-                    .expect("seed");
-            }
-            pool
-        })
-        .await;
-    pool
+                .expect("seed");
+        }
+        pool
+    })
+    .await
 }
 
 #[tokio::test]
@@ -132,4 +127,3 @@ async fn gateway_pagination_slices_results() {
     assert_eq!(rows.len(), 1, "page 2 of 3 rows @ size 2 → 1 row: {json}");
     assert_eq!(rows[0]["name"], "carol");
 }
-

@@ -12,7 +12,7 @@
 //! serialization; macro-expansion compile-time cost is intentionally NOT
 //! measured here (see docs/PERFORMANCE.md).
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use serde_json::json;
 
 /// A forge endpoint used for dispatch benchmarks (plain handler).

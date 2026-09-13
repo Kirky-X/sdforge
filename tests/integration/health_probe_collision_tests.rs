@@ -14,9 +14,8 @@ use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
 use sdforge::http::build_with_config;
 
 fn shadow_route() -> sdforge::http::HttpRoute {
-    let router = sdforge::axum::routing::MethodRouter::new().get(|| async {
-        (axum::http::StatusCode::IM_A_TEAPOT, "user-owned healthz")
-    });
+    let router = sdforge::axum::routing::MethodRouter::new()
+        .get(|| async { (axum::http::StatusCode::IM_A_TEAPOT, "user-owned healthz") });
     sdforge::http::HttpRoute::new(
         "/healthz".to_string(),
         router,

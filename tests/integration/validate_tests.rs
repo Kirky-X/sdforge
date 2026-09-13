@@ -42,9 +42,7 @@ async fn subscribe(#[param(kind = "body", email)] email: String) -> serde_json::
     path = "/unvalidated",
     method = "GET"
 )]
-async fn unvalidated(
-    #[param(kind = "query", ge = 1)] page: u64,
-) -> serde_json::Value {
+async fn unvalidated(#[param(kind = "query", ge = 1)] page: u64) -> serde_json::Value {
     serde_json::json!({ "page": page })
 }
 
@@ -100,10 +98,7 @@ async fn string_rules_report_multiple_field_errors() {
     assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
     let errors = json["errors"].as_array().unwrap();
     assert_eq!(errors.len(), 2, "both violations must be reported");
-    let rules: Vec<&str> = errors
-        .iter()
-        .map(|e| e["rule"].as_str().unwrap())
-        .collect();
+    let rules: Vec<&str> = errors.iter().map(|e| e["rule"].as_str().unwrap()).collect();
     assert!(rules.contains(&"le"));
     assert!(rules.contains(&"min_length"));
 }

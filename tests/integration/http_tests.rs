@@ -36,7 +36,10 @@ mod http_protocol_tests {
 
     /// Test data structure for query parameters.
     #[derive(Debug, Deserialize)]
-    #[expect(dead_code, reason = "tags 字段参与反序列化形状覆盖，测试断言不直接读取")]
+    #[expect(
+        dead_code,
+        reason = "tags 字段参与反序列化形状覆盖，测试断言不直接读取"
+    )]
     struct PaginationParams {
         page: Option<u32>,
         limit: Option<u32>,
@@ -46,7 +49,10 @@ mod http_protocol_tests {
 
     /// Test data structure for form data.
     #[derive(Debug, Deserialize)]
-    #[expect(dead_code, reason = "password 字段参与反序列化形状覆盖，测试断言不直接读取")]
+    #[expect(
+        dead_code,
+        reason = "password 字段参与反序列化形状覆盖，测试断言不直接读取"
+    )]
     struct LoginForm {
         username: String,
         password: String,
@@ -54,7 +60,10 @@ mod http_protocol_tests {
 
     /// Query params for search operations.
     #[derive(Debug, Deserialize)]
-    #[expect(dead_code, reason = "active 字段参与反序列化形状覆盖，测试断言不直接读取")]
+    #[expect(
+        dead_code,
+        reason = "active 字段参与反序列化形状覆盖，测试断言不直接读取"
+    )]
     struct SearchQuery {
         search: String,
         active: Option<bool>,

@@ -197,7 +197,10 @@ impl SdForgeGrpcService {
 
 #[cfg(feature = "grpc")]
 impl SdForgeGrpcService {
-    async fn call_inner(&self, request: Request<CallRequest>) -> Result<Response<CallResponse>, Status> {
+    async fn call_inner(
+        &self,
+        request: Request<CallRequest>,
+    ) -> Result<Response<CallResponse>, Status> {
         // Extract client IP from tonic's remote_addr (set by transport layer
         // from the actual TCP connection — unspoofable, unlike headers).
         #[cfg(feature = "ratelimit")]

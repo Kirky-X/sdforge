@@ -136,14 +136,14 @@ mod tests {
     #[cfg(all(feature = "http", feature = "context"))]
     #[tokio::test]
     async fn trace_id_flows_from_request_context() {
-        crate::context::scope(crate::context::RequestContext::with_ids(
-            "r".into(),
-            "trace-42".into(),
-        ), async {
-            let err = UnifiedError::new("FORBIDDEN", "nope");
-            assert_eq!(err.trace_id.as_deref(), Some("trace-42"));
-            assert_eq!(err.to_json()["trace_id"], "trace-42");
-        })
+        crate::context::scope(
+            crate::context::RequestContext::with_ids("r".into(), "trace-42".into()),
+            async {
+                let err = UnifiedError::new("FORBIDDEN", "nope");
+                assert_eq!(err.trace_id.as_deref(), Some("trace-42"));
+                assert_eq!(err.to_json()["trace_id"], "trace-42");
+            },
+        )
         .await;
     }
 }

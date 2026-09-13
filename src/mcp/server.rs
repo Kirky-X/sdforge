@@ -168,9 +168,7 @@ impl SdForgeMcpServer {
         #[cfg(feature = "context")]
         {
             let ctx = crate::context::current_or_new();
-            return crate::context::scope_sync(ctx, || {
-                self.call_tool_inner(name, arguments)
-            });
+            crate::context::scope_sync(ctx, || self.call_tool_inner(name, arguments))
         }
         #[cfg(not(feature = "context"))]
         {

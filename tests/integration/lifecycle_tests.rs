@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use sdforge::forge;
-use sdforge::http::{serve_with_graceful_shutdown, GracefulShutdownConfig};
+use sdforge::http::{GracefulShutdownConfig, serve_with_graceful_shutdown};
 
 static STARTED: AtomicBool = AtomicBool::new(false);
 static STOPPED: AtomicBool = AtomicBool::new(false);

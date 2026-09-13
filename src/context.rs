@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! Request context propagation.
 //!
-//! A [`RequestContext`] (request_id + trace_id + start time) is generated per
+//! A `RequestContext` (request_id + trace_id + start time) is generated per
 //! request and carried across protocol boundaries via `tokio::task_local`:
 //!
 //! - **HTTP** — `context_middleware` (auto-installed by `build_with_config`)
@@ -103,9 +103,7 @@ pub fn scope_sync<R>(ctx: RequestContext, f: impl FnOnce() -> R) -> R {
 
 /// Read the ambient context, if any.
 pub fn current() -> Option<RequestContext> {
-    REQUEST_CONTEXT
-        .try_with(|ctx| ctx.clone())
-        .ok()
+    REQUEST_CONTEXT.try_with(|ctx| ctx.clone()).ok()
 }
 
 /// Read the ambient context or synthesize a fresh one (never fails).
@@ -117,7 +115,10 @@ pub fn current_or_new() -> RequestContext {
 pub fn log_fields() -> Vec<(String, serde_json::Value)> {
     match current() {
         Some(ctx) => vec![
-            ("request_id".to_string(), serde_json::json!(ctx.request_id())),
+            (
+                "request_id".to_string(),
+                serde_json::json!(ctx.request_id()),
+            ),
             ("trace_id".to_string(), serde_json::json!(ctx.trace_id())),
         ],
         None => Vec::new(),
@@ -126,9 +127,7 @@ pub fn log_fields() -> Vec<(String, serde_json::Value)> {
 
 /// W3C trace-id shape: exactly 32 hex characters, not all zero.
 fn is_w3c_trace_id(s: &str) -> bool {
-    s.len() == 32
-        && s.chars().all(|c| c.is_ascii_hexdigit())
-        && s.chars().any(|c| c != '0')
+    s.len() == 32 && s.chars().all(|c| c.is_ascii_hexdigit()) && s.chars().any(|c| c != '0')
 }
 
 /// HTTP middleware: resolve/create ids, install context for the rest of the
@@ -177,12 +176,14 @@ pub async fn context_middleware(
 
     let ctx = RequestContext::with_ids(request_id, trace_id);
     let mut response = scope(ctx, next.run(req)).await;
-    response
-        .headers_mut()
-        .insert(axum::http::header::HeaderName::from_static("x-request-id"), header_req);
-    response
-        .headers_mut()
-        .insert(axum::http::header::HeaderName::from_static("x-trace-id"), header_trace);
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-request-id"),
+        header_req,
+    );
+    response.headers_mut().insert(
+        axum::http::header::HeaderName::from_static("x-trace-id"),
+        header_trace,
+    );
     response
 }
 
@@ -204,13 +205,19 @@ mod tests {
 
     #[tokio::test]
     async fn nested_scopes_shadow_outer() {
-        scope(RequestContext::with_ids("outer".into(), "t-outer".into()), async {
-            scope(RequestContext::with_ids("inner".into(), "t-inner".into()), async {
-                assert_eq!(current().unwrap().request_id(), "inner");
-            })
-            .await;
-            assert_eq!(current().unwrap().request_id(), "outer");
-        })
+        scope(
+            RequestContext::with_ids("outer".into(), "t-outer".into()),
+            async {
+                scope(
+                    RequestContext::with_ids("inner".into(), "t-inner".into()),
+                    async {
+                        assert_eq!(current().unwrap().request_id(), "inner");
+                    },
+                )
+                .await;
+                assert_eq!(current().unwrap().request_id(), "outer");
+            },
+        )
         .await;
     }
 
@@ -267,7 +274,10 @@ mod tests {
                     "/echo",
                     axum::routing::get(|| async {
                         let ctx = current().expect("context visible in handler");
-                        (axum::http::StatusCode::OK, format!("{}/{}", ctx.request_id(), ctx.trace_id()))
+                        (
+                            axum::http::StatusCode::OK,
+                            format!("{}/{}", ctx.request_id(), ctx.trace_id()),
+                        )
                     }),
                 )
                 .layer(axum::middleware::from_fn(context_middleware))
@@ -312,8 +322,7 @@ mod tests {
 
         #[tokio::test]
         async fn middleware_preserves_inbound_ids() {
-            let resp =
-                get_with(&[("x-request-id", "my-req"), ("x-trace-id", "my-trace")]).await;
+            let resp = get_with(&[("x-request-id", "my-req"), ("x-trace-id", "my-trace")]).await;
             let req_id = resp
                 .headers()
                 .get("x-request-id")

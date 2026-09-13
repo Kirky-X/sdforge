@@ -111,22 +111,12 @@ mod tests {
 
     fn app() -> axum::Router {
         axum::Router::new()
-            .route(
-                "/resource",
-                axum::routing::get(|| async { "payload-v1" }),
-            )
-            .route(
-                "/post-only",
-                axum::routing::post(|| async { "created" }),
-            )
+            .route("/resource", axum::routing::get(|| async { "payload-v1" }))
+            .route("/post-only", axum::routing::post(|| async { "created" }))
             .layer(axum::middleware::from_fn(etag_middleware))
     }
 
-    async fn send(
-        method: &str,
-        uri: &str,
-        if_none_match: Option<&str>,
-    ) -> Response {
+    async fn send(method: &str, uri: &str, if_none_match: Option<&str>) -> Response {
         let mut builder = Request::builder().method(method).uri(uri);
         if let Some(inm) = if_none_match {
             builder = builder.header(axum::http::header::IF_NONE_MATCH, inm);
@@ -147,7 +137,10 @@ mod tests {
             .unwrap()
             .to_str()
             .unwrap();
-        assert!(etag.starts_with('"') && etag.ends_with('"'), "quoted: {etag}");
+        assert!(
+            etag.starts_with('"') && etag.ends_with('"'),
+            "quoted: {etag}"
+        );
         assert_eq!(etag.len(), 66, "quoted sha256 hex = 64 + 2 quotes");
     }
 

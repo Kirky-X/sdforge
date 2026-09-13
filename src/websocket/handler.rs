@@ -166,10 +166,7 @@ where
                     .and_then(|(auth, token)| auth.validate_token(token))
                     .is_some();
 
-                let api_key = req
-                    .headers()
-                    .get("x-api-key")
-                    .and_then(|v| v.to_str().ok());
+                let api_key = req.headers().get("x-api-key").and_then(|v| v.to_str().ok());
                 let api_ok = api_cfg
                     .zip(api_key)
                     .and_then(|(store, key)| store.validate_key(key, "unknown"))
@@ -220,11 +217,7 @@ async fn handle_socket(
     #[cfg(feature = "context")]
     {
         let ctx = crate::context::current_or_new();
-        return crate::context::scope(
-            ctx,
-            handle_socket_inner(socket, manager, handler),
-        )
-        .await;
+        crate::context::scope(ctx, handle_socket_inner(socket, manager, handler)).await
     }
     #[cfg(not(feature = "context"))]
     {

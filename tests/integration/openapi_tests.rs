@@ -198,7 +198,6 @@ fn operation_id_is_versioned_path() {
     );
 }
 
-
 // ============================================================================
 // requestBody + response schema emitted from #[forge] signatures.
 // ============================================================================
@@ -239,6 +238,7 @@ fn forge_result_ok_type_is_unwrapped_for_response_schema() {
     // string (not an object fallback and not array).
     let spec = generate_openapi_spec();
     let paths = serde_json::to_value(&spec.paths).unwrap();
-    let schema = &paths["/api/v1/users/{id}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"];
+    let schema = &paths["/api/v1/users/{id}"]["get"]["responses"]["200"]["content"]["application/json"]
+        ["schema"];
     assert_eq!(schema["type"], "string");
 }

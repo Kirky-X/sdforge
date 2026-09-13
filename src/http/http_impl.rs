@@ -288,23 +288,21 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     // therefore not self-recorded.
     #[cfg(feature = "metrics")]
     {
-        router = router.layer(axum::middleware::from_fn(
-            crate::metrics::record_middleware,
-        ));
+        router = router.layer(axum::middleware::from_fn(crate::metrics::record_middleware));
     }
 
     // request-span middleware (OTLP export via sdforge::otel).
     #[cfg(feature = "otel")]
     {
-        router = router.layer(axum::middleware::from_fn(
-            crate::otel::otel_span_middleware,
-        ));
+        router = router.layer(axum::middleware::from_fn(crate::otel::otel_span_middleware));
     }
 
     // ETag/If-None-Match conditional requests for GET responses.
     #[cfg(feature = "etag")]
     {
-        router = router.layer(axum::middleware::from_fn(crate::http::etag::etag_middleware));
+        router = router.layer(axum::middleware::from_fn(
+            crate::http::etag::etag_middleware,
+        ));
     }
 
     // processor pre/post hook pipeline (active when hooks installed).
@@ -324,9 +322,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
                 // Safely insert request ID header — fall back to a static placeholder
                 // if the value contains non-ASCII characters (prevents panic on malformed client input)
                 let header_value = axum::http::HeaderValue::from_str(&request_id)
-                    .unwrap_or_else(|_| {
-                        axum::http::HeaderValue::from_static("invalid-request-id")
-                    });
+                    .unwrap_or_else(|_| axum::http::HeaderValue::from_static("invalid-request-id"));
                 req.headers_mut().insert(
                     axum::http::header::HeaderName::from_static(X_REQUEST_ID),
                     header_value.clone(),
@@ -342,7 +338,9 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     }
     #[cfg(feature = "context")]
     {
-        router = router.layer(axum::middleware::from_fn(crate::context::context_middleware));
+        router = router.layer(axum::middleware::from_fn(
+            crate::context::context_middleware,
+        ));
     }
 
     // Apply global body limit（HIGH 修复：来自 ServerConfig::max_body_size，

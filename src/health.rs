@@ -9,11 +9,11 @@
 //! # Readiness data sources
 //!
 //! - Built-in: no checks registered → `/readyz` reports ready immediately.
-//! - Custom checks: register [`ReadinessCheck`] implementations via
-//!   [`register_readiness_check`]; any failing check flips `/readyz` to 503.
-//! - trait-kit data source: with the `kit` feature, [`KitHealthSource`]
+//! - Custom checks: register `ReadinessCheck` implementations via
+//!   `register_readiness_check`; any failing check flips `/readyz` to 503.
+//! - trait-kit data source: with the `kit` feature, `KitHealthSource`
 //!   adapts an `AsyncKit<AsyncReady>` health report (trait-kit health
-//!   aggregation) into the `/readyz` payload via [`register_health_source`].
+//!   aggregation) into the `/readyz` payload via `register_health_source`.
 //!
 //! # Example
 //!
@@ -26,9 +26,9 @@
 
 use std::sync::{Arc, OnceLock, RwLock};
 
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 
 /// Outcome of a single readiness check.
 #[derive(Debug, Clone)]
@@ -64,7 +64,7 @@ impl CheckOutcome {
 /// A readiness check port: named, synchronous dependency probe.
 ///
 /// Implement this for cache connectivity, database pings, config-loaded
-/// flags, etc., and register via [`register_readiness_check`].
+/// flags, etc., and register via `register_readiness_check`.
 pub trait ReadinessCheck: Send + Sync {
     /// Check name surfaced in the `/readyz` payload.
     fn name(&self) -> &str;
@@ -76,7 +76,7 @@ pub trait ReadinessCheck: Send + Sync {
 ///
 /// The JSON payload mirrors trait-kit's `HealthAggregate` shape:
 /// `{"status":"healthy","healthy":true,"modules":[...]}`. When a source is
-/// registered via [`register_health_source`], `/readyz` folds its overall
+/// registered via `register_health_source`, `/readyz` folds its overall
 /// status into the readiness decision and embeds the payload under `source`.
 pub trait HealthDataSource: Send + Sync {
     /// Aggregate health snapshot as a JSON string.
@@ -185,7 +185,9 @@ pub(crate) fn run_readiness_checks() -> (bool, Vec<CheckOutcome>) {
     };
     for check in &checks {
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| check.check()))
-            .unwrap_or_else(|_| CheckOutcome::unhealthy(check.name(), "check panicked".to_string()));
+            .unwrap_or_else(|_| {
+                CheckOutcome::unhealthy(check.name(), "check panicked".to_string())
+            });
         if !outcome.healthy {
             all_healthy = false;
         }
@@ -202,10 +204,11 @@ pub(crate) fn run_readiness_checks() -> (bool, Vec<CheckOutcome>) {
         }
     };
     if let Some(source) = source {
-        let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| source.health_json()))
-            .unwrap_or_else(|_| {
-                serde_json::json!({"status": "unhealthy", "healthy": false}).to_string()
-            });
+        let payload =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| source.health_json()))
+                .unwrap_or_else(|_| {
+                    serde_json::json!({"status": "unhealthy", "healthy": false}).to_string()
+                });
         let value: serde_json::Value = serde_json::from_str(&payload)
             .unwrap_or_else(|_| serde_json::json!({"status": "unhealthy"}));
         let healthy = value
@@ -354,8 +357,7 @@ mod tests {
         clear_readiness_checks();
         clear_health_source();
         register_health_source_fn(|| {
-            serde_json::json!({"status": "unhealthy", "healthy": false, "modules": []})
-                .to_string()
+            serde_json::json!({"status": "unhealthy", "healthy": false, "modules": []}).to_string()
         });
         let resp = get(probe_router(), "/readyz").await;
         assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
@@ -406,7 +408,9 @@ mod tests {
         // "/healthz" is mounted by probe_router above but that is a plain
         // Router (not inventory), so inventory scan sees no match for a
         // deliberately unused path.
-        assert!(!crate::http::route_path_taken("/__definitely_not_registered__"));
+        assert!(!crate::http::route_path_taken(
+            "/__definitely_not_registered__"
+        ));
     }
 }
 

@@ -70,9 +70,12 @@ async fn get_with_key(uri: &str, key: Option<&str>) -> axum::http::Response<axum
     if let Some(k) = key {
         builder = builder.header("x-api-key", format!("sk_{k}"));
     }
-    tower::Service::call(&mut router, builder.body(axum::body::Body::empty()).unwrap())
-        .await
-        .unwrap()
+    tower::Service::call(
+        &mut router,
+        builder.body(axum::body::Body::empty()).unwrap(),
+    )
+    .await
+    .unwrap()
 }
 
 #[tokio::test]

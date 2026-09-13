@@ -158,17 +158,17 @@ mod tests {
     fn paginate_huge_page_does_not_wrap_offset() {
         // (page - 1) * size must not wrap to a small offset and slice the
         // wrong range; an unrepresentable offset yields an empty page.
-        let page = paginate(
-            vec![1, 2, 3],
-            PageRequest::new(u64::MAX, MAX_PAGE_SIZE),
-        );
+        let page = paginate(vec![1, 2, 3], PageRequest::new(u64::MAX, MAX_PAGE_SIZE));
         assert!(page.items.is_empty(), "wrapped offset would leak items");
         assert_eq!(page.next, None);
     }
 
     #[test]
     fn paginated_envelope_serializes_contract() {
-        let page = paginate(vec!["a".to_string(), "b".to_string()], PageRequest::new(1, 2));
+        let page = paginate(
+            vec!["a".to_string(), "b".to_string()],
+            PageRequest::new(1, 2),
+        );
         let json = serde_json::to_value(&page).unwrap();
         assert_eq!(json["items"], serde_json::json!(["a", "b"]));
         assert_eq!(json["total"], 2);

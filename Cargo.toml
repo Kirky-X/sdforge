@@ -3,7 +3,7 @@ members = [".", "examples", "macros"]
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0-rc.3"
+version = "0.5.0-rc.4"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kirky.X"]
@@ -66,7 +66,7 @@ tonic-prost = { version = "0.14", default-features = false }
 
 # 流控依赖 - limiteron 0.2.1 提供统一限流/封禁/配额/熔断
 # 纯 crates.io 版本依赖（rc.2 已发布；本地跨仓联调可用 .cargo/config.toml [patch]）。
-limiteron = { version = "0.3.0-rc.3", default-features = false }
+limiteron = { version = "0.3.0-rc.4", default-features = false }
 
 # OpenAPI 依赖
 utoipa = { version = "5.5", default-features = false, features = ["macros"] }
@@ -154,7 +154,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.3", path = "./macros" }
+sdforge-macros = { version = "0.5.0-rc.4", path = "./macros" }
 
 # HTTP dependencies
 axum = { workspace = true, optional = true }
@@ -225,12 +225,12 @@ limiteron = { workspace = true, optional = true }
 # trait-kit 0.3 is published to crates.io.
 # Mirrors dbnexus's pattern.
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
-trait-kit = { version = "0.5.0-rc.3", features = ["async"], optional = true, default-features = false }
+trait-kit = { version = "0.5.0-rc.4", features = ["async"], optional = true, default-features = false }
 
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # 纯 crates.io 版本依赖（rc.2 已发布）。
 # default-features = false (Rule 6) — only core logging is pulled in.
-inklog = { version = "0.3.0-rc.3", default-features = false, optional = true }
+inklog = { version = "0.3.0-rc.4", default-features = false, optional = true }
 
 # ICU4X internationalization (optional, feature-gated via `i18n`).
 # icu 2.2 provides locale-aware number/date/plural/collation formatting +
@@ -242,7 +242,7 @@ writeable = { version = "0.6", optional = true }
 tokio = { workspace = true, features = ["test-util"] }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.3", path = "./macros", default-features = false }
+sdforge-macros = { version = "0.5.0-rc.4", path = "./macros", default-features = false }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }
@@ -653,12 +653,6 @@ required-features = ["http", "otel", "metrics"]
 name = "e2e_advanced"
 path = "tests/e2e/e2e_advanced.rs"
 
-[patch.crates-io]
-trait-kit = { path = "../trait-kit" }
-oxcache = { path = "../oxcache" }
-dbnexus = { path = "../dbnexus" }
-inklog = { path = "../inklog" }
-limiteron = { path = "../limiteron" }
 
 [profile.release]
 opt-level = 3

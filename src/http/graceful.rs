@@ -61,7 +61,7 @@ impl GracefulShutdownConfig {
 pub async fn default_shutdown_signal() {
     #[cfg(unix)]
     {
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal};
         // Signal registration happens before the select so a SIGTERM arriving
         // early is buffered rather than taking the default (kill) action.
         let term = signal(SignalKind::terminate()).ok();

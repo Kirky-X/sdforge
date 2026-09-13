@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: MIT
 
 use super::*;
+use utoipa::openapi::content::ContentBuilder;
 use utoipa::openapi::path::{
     HttpMethod, OperationBuilder, Parameter, ParameterBuilder, ParameterIn, Paths,
 };
-use utoipa::openapi::response::ResponseBuilder;
-use utoipa::openapi::schema::{ArrayBuilder, ObjectBuilder, SchemaFormat, SchemaType, Type};
-use utoipa::openapi::content::ContentBuilder;
 use utoipa::openapi::request_body::RequestBodyBuilder;
+use utoipa::openapi::response::ResponseBuilder;
 use utoipa::openapi::schema::Schema;
+use utoipa::openapi::schema::{ArrayBuilder, ObjectBuilder, SchemaFormat, SchemaType, Type};
 use utoipa::openapi::{Info, InfoBuilder, OpenApi, RefOr, Required};
 
 impl OpenApiPathParam {
@@ -259,11 +259,7 @@ fn schema_from_type(info: &OpenApiTypeInfo) -> Schema {
         )
     };
     if info.is_array {
-        Schema::Array(
-            ArrayBuilder::new()
-                .items(RefOr::T(element()))
-                .build(),
-        )
+        Schema::Array(ArrayBuilder::new().items(RefOr::T(element())).build())
     } else {
         element()
     }
@@ -380,10 +376,8 @@ impl OpenApiBuilder {
                     request_body = request_body.required(Some(Required::True));
                     content = content.schema(Some(Schema::Object(props.build())));
                 }
-                request_body =
-                    request_body.content("application/json", content.build());
-                operation_builder =
-                    operation_builder.request_body(Some(request_body.build()));
+                request_body = request_body.content("application/json", content.build());
+                operation_builder = operation_builder.request_body(Some(request_body.build()));
             }
 
             let status_code = route.success_status.unwrap_or(200);
@@ -425,7 +419,10 @@ mod operation_id_tests {
 
     #[test]
     fn operation_id_maps_path_and_placeholder_chars() {
-        assert_eq!(sanitize_operation_id("v1_/api/v1/users/{id}"), "v1__api_v1_users__id_");
+        assert_eq!(
+            sanitize_operation_id("v1_/api/v1/users/{id}"),
+            "v1__api_v1_users__id_"
+        );
         assert!(!sanitize_operation_id("v1_/a/{b}").contains(['/', '{', '}']));
     }
 }

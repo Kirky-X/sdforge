@@ -33,7 +33,9 @@ impl BearerVerifier {
     }
 
     /// Build from a JWT secret (complexity-validated like the HTTP config).
-    pub fn from_secret(secret: impl Into<String>) -> Result<Self, crate::security::AuthConfigError> {
+    pub fn from_secret(
+        secret: impl Into<String>,
+    ) -> Result<Self, crate::security::AuthConfigError> {
         Ok(Self {
             auth: BearerAuth::try_new(secret)?,
         })
@@ -101,10 +103,7 @@ mod tests {
     #[test]
     fn bearer_verifier_accepts_only_wellformed_header() {
         let v = jwt_verifier();
-        assert_eq!(
-            v.verify(None, None).unwrap_err(),
-            "missing bearer token"
-        );
+        assert_eq!(v.verify(None, None).unwrap_err(), "missing bearer token");
         assert_eq!(
             v.verify(Some("Basic abc"), None).unwrap_err(),
             "missing bearer token"

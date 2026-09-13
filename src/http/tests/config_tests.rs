@@ -4,7 +4,9 @@
 //! `CorsConfig` combinations, middleware layer wiring, and feature-gated
 //! inventory preservation through `build()`.
 
-use crate::config::{ApiKeySeed, AppConfig, AuthConfig, CorsConfig, ServerConfig};
+use crate::config::{
+    ApiKeySeed, AppConfig, AuthConfig, CacheConfig, CorsConfig, SecurityConfig, ServerConfig,
+};
 #[cfg(any(feature = "mcp", feature = "websocket", feature = "grpc"))]
 use crate::http::build;
 use crate::http::build_with_config;
@@ -74,7 +76,8 @@ fn test_build_with_config_oauth2_error() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        cache: CacheConfig::default(),
+        security: SecurityConfig::default(),
     };
 
     let result = build_with_config(&config);
@@ -210,7 +213,10 @@ fn test_build_with_config_zero_timeout() {
     };
 
     let result = build_with_config(&config);
-    assert!(result.is_err(), "zero request_timeout_secs must be rejected");
+    assert!(
+        result.is_err(),
+        "zero request_timeout_secs must be rejected"
+    );
 }
 
 #[test]
@@ -223,11 +229,11 @@ fn test_build_with_config_zero_body_size_rejected() {
             request_timeout_secs: 30,
             cors: None,
             max_body_size: 0,
-            ..Default::default()
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        cache: CacheConfig::default(),
+        security: SecurityConfig::default(),
     };
 
     let result = build_with_config(&config);

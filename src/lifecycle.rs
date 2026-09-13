@@ -55,9 +55,7 @@ pub async fn run_on_start() {
         if hook.phase == "start" {
             STARTED.fetch_add(1, Ordering::Relaxed);
             let fut = (hook.create)();
-            let _ = std::panic::AssertUnwindSafe(fut)
-                .catch_unwind()
-                .await;
+            let _ = std::panic::AssertUnwindSafe(fut).catch_unwind().await;
         }
     }
 }

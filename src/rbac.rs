@@ -4,7 +4,7 @@
 //!
 //! `#[forge(auth(role = "admin"))]` attaches a declared role requirement to
 //! the generated HTTP route. The macro wraps the route's `MethodRouter` with
-//! [`require_role`]; requests whose [`AuthContext`] lacks every declared role
+//! `require_role`; requests whose [`AuthContext`] lacks every declared role
 //! are rejected with **403 Forbidden** (never 401 — authentication happened
 //! upstream in the global auth middleware).
 //!
@@ -35,7 +35,10 @@ fn forbidden(roles: Roles) -> axum::response::Response {
 /// Requires the `security` feature: the declared roles are matched against
 /// the `AuthContext` inserted by the global auth middleware.
 #[cfg(feature = "security")]
-pub fn require_role(router: axum::routing::MethodRouter, roles: Roles) -> axum::routing::MethodRouter {
+pub fn require_role(
+    router: axum::routing::MethodRouter,
+    roles: Roles,
+) -> axum::routing::MethodRouter {
     use crate::security::AuthContext;
     router.layer(axum::middleware::from_fn(
         move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| async move {
@@ -56,7 +59,10 @@ pub fn require_role(router: axum::routing::MethodRouter, roles: Roles) -> axum::
 /// Fail-safe fallback without the `security` feature: endpoints that declare
 /// a role requirement deny every request (a role can never be verified).
 #[cfg(not(feature = "security"))]
-pub fn require_role(router: axum::routing::MethodRouter, roles: Roles) -> axum::routing::MethodRouter {
+pub fn require_role(
+    router: axum::routing::MethodRouter,
+    roles: Roles,
+) -> axum::routing::MethodRouter {
     router.layer(axum::middleware::from_fn(
         move |_req: axum::http::Request<axum::body::Body>, _next: axum::middleware::Next| async move {
             forbidden(roles)

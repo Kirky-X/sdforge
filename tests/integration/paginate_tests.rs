@@ -78,5 +78,9 @@ async fn non_numeric_params_fall_back_to_defaults() {
 async fn oversized_size_is_clamped() {
     let (status, json) = get_json("/api/v1/items?page=1&size=99999").await;
     assert_eq!(status, axum::http::StatusCode::OK);
-    assert_eq!(json["items"].as_array().unwrap().len(), 5, "clamped to 100 (all items fit)");
+    assert_eq!(
+        json["items"].as_array().unwrap().len(),
+        5,
+        "clamped to 100 (all items fit)"
+    );
 }

@@ -57,10 +57,7 @@ impl RequestSeries {
         // Increment only the FIRST bucket with le >= duration; `render`
         // accumulates per-bucket counts into Prometheus's cumulative form.
         // Durations above the last bucket land in the `+Inf` bucket only.
-        if let Some(i) = LATENCY_BUCKETS
-            .iter()
-            .position(|le| duration_secs <= *le)
-        {
+        if let Some(i) = LATENCY_BUCKETS.iter().position(|le| duration_secs <= *le) {
             self.buckets[i] += 1;
         }
     }
@@ -131,9 +128,7 @@ impl MetricsRegistry {
             }
         }
 
-        out.push_str(
-            "# HELP sdforge_http_request_duration_seconds HTTP request latency.\n",
-        );
+        out.push_str("# HELP sdforge_http_request_duration_seconds HTTP request latency.\n");
         out.push_str("# TYPE sdforge_http_request_duration_seconds histogram\n");
         for ((route, method), series) in guard.iter() {
             let mut cumulative = 0u64;
@@ -178,7 +173,10 @@ pub fn record_request(route: &str, method: &str, status: u16, duration_secs: f64
 pub async fn metrics_handler() -> impl IntoResponse {
     let body = global_registry().render();
     (
-        [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )],
         body,
     )
 }
@@ -263,9 +261,12 @@ mod tests {
         assert_eq!(line("0.005"), "1");
         assert_eq!(line("0.05"), "2");
         assert_eq!(line("+Inf"), "2");
-        assert!(text.contains("sdforge_http_request_duration_seconds_count{route=\"/x\",method=\"GET\"} 2"));
-        assert!(text
-            .contains("sdforge_http_request_duration_seconds_sum{route=\"/x\",method=\"GET\"} 0.032"));
+        assert!(text.contains(
+            "sdforge_http_request_duration_seconds_count{route=\"/x\",method=\"GET\"} 2"
+        ));
+        assert!(text.contains(
+            "sdforge_http_request_duration_seconds_sum{route=\"/x\",method=\"GET\"} 0.032"
+        ));
     }
 
     #[test]

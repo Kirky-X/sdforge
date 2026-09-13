@@ -49,7 +49,7 @@ pub fn push_error(
 }
 
 /// Coerce a string-like value (`String`, `&str`) to `&str`.
-pub fn as_str_ref<'a>(value: &'a impl AsRef<str>) -> &'a str {
+pub fn as_str_ref(value: &impl AsRef<str>) -> &str {
     value.as_ref()
 }
 
