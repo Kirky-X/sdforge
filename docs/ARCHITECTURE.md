@@ -81,7 +81,7 @@ sdforge/
 | `i18n/` | `i18n`（格式化部分） | 翻译注册表（始终可用）+ ICU4X `HttpI18nFormatter` |
 | `http/` | `http` | Axum 协议实现：`build()` / `build_with_config()`、版本路由、安全头、响应构造、路由注册 |
 | `mcp/` | `mcp` | rmcp 集成：`StatelessServerHandler`、HTTP 头协议（`headers.rs`）、MRTR 会话（`mrtr.rs`）、缓存语义（`cache_semantics.rs`）、schema 校验 |
-| `grpc/` | `grpc` | tonic 服务：`SdForgeGrpcService`、`GrpcServerConfig`、protobuf（`proto/`，build.rs 生成）、handler 注册与拦截器 |
+| `grpc/` | `grpc` | tonic 服务：`SdForgeGrpcService`、`GrpcServerConfig`、protobuf（`proto/sdforge.v1.proto`，`build.rs` 经 tonic-prost 生成到 `OUT_DIR`）、handler 注册与拦截器 |
 | `websocket/` | `websocket` | 连接管理（`connection.rs`）、handler 分发（`handler.rs`）、广播（`broadcast.rs`）、消息解析（`message.rs`） |
 | `streaming/` | `streaming` | SSE：`StreamEvent` / `StreamResponse`、`stream_to_sse`、`StreamBuilder` |
 | `cli/` | `cli` | clap 集成：`CliBuilder`、`dispatch`、`GlobalArg`、docs 子命令 |
@@ -170,10 +170,7 @@ sequenceDiagram
 
 ## ⚡ 性能设计
 
-- **编译时裁剪是第一性能设计**：特性门控让未用协议的依赖（tonic/prost、rmcp、tokio-tungstenite、argon2/sha2 等）完全不进入编译图。实测（2026-07-03，详见[编译期门控基准](benchmarks/vs-server-less.md)）：
-  - 编译时间：`http` only 相比 `full` 节省 47.0%（debug）/ 46.2%（release）
-  - 框架库 rlib：debug 33.9 MB vs 100.2 MB（-66.2%）；release 3.57 MB vs 9.07 MB（-60.6%）
-  - 依赖图：396 vs 478 个唯一 crate
+- **编译时裁剪是第一性能设计**：特性门控让未用协议的依赖（tonic/prost、rmcp、tokio-tungstenite、argon2/sha2 等）完全不进入编译图。实测（2026-07-03）`http` only 相比 `full` 节省约 47% 编译时间、约六成框架库体积，详见[编译期门控基准](benchmarks/vs-server-less.md)
 - **运行期零协议税**：协议选择发生在编译期，不存在运行时协议探测或动态加载；运行时热路径基线见[性能基线](PERFORMANCE.md)
 - **注册收集幂等缓存**：`init_all_plugins()` 用 `OnceLock` 缓存 inventory 迭代结果，重复调用零开销
 - **正则缓存**：`core::RegexCache` 以 LRU 缓存编译后的正则（修复过 MRU 误驱逐缺陷），避免热路径重复编译

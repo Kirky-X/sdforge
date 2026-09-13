@@ -53,7 +53,7 @@
 | `validate` | 裸旗标：启用 `#[param(...)]` 校验（`validate`） | 否 | false |
 | `paginate` | 裸旗标：声明式分页（`paginate`） | 否 | false |
 | `on_start` / `on_stop` | 裸旗标：进程生命周期钩子（`lifecycle`） | 否 | false |
-| `auth(role = "...")` | 端点级 RBAC 角色（`http`） | 否 | - |
+| `auth(role = "...")` | 端点级 RBAC 角色（`http`，无匹配角色返回 403） | 否 | - |
 
 ## 🧱 核心 API
 
@@ -91,10 +91,10 @@
 |-----------|------|
 | `AppConfig` / `AppConfigBuilder` | 应用配置聚合根与 Builder（含 `security` / `cache` 字段与 `build_rate_limiter()` 自动装配） |
 | `ServerConfig` / `TlsConfig` / `TimeoutConfig` | 监听（默认 `127.0.0.1:8080`、30s 超时）、TLS、超时 |
-| `ApiConfig` / `TracingConfig` / `EnvHelper` | API 行为、追踪配置、运行环境名称辅助 |
+| `ApiConfig` / `TracingConfig` / `EnvHelper` | API 行为（路由前缀、默认版本）、追踪配置、运行环境名称辅助（`environment` 字段） |
 | `AuthConfig` / `ApiKeySeed` | 认证配置与 API Key 播种 |
 | `CacheConfig` | 缓存配置（`enabled`、`default_ttl_secs`、`max_items`、`track_stats`） |
-| `SecurityConfig` / `defaults` | 安全响应头配置与集中默认值（`MIN_SECRET_LENGTH=32` 等） |
+| `SecurityConfig` / `defaults` | 安全响应头配置（CSP、X-Frame-Options 等）与集中默认值（`MIN_SECRET_LENGTH=32` 等） |
 | `CorsConfig` / `build_cors_layer` | CORS 配置与层构建（校验非法 origin） |
 | `ConfigError` | 配置错误类型（实现 `ValidateConfig` 的类型另有 `validate()`） |
 
@@ -174,22 +174,7 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 
 ### 最小 HTTP 服务
 
-```rust
-use sdforge::prelude::*;
-
-#[forge(name = "get_user", version = "v1", path = "/users/:id", method = "GET")]
-async fn get_user(id: u64) -> Result<serde_json::Value, ApiError> {
-    Ok(serde_json::json!({ "id": id, "name": "Test" }))
-}
-
-#[tokio::main]
-async fn main() {
-    sdforge::init_all_plugins();
-    let app = sdforge::http::build();
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
-    sdforge::axum::serve(listener, app).await.unwrap();
-}
-```
+`#[forge]` 注解 + `init_all_plugins()` + `http::build()` 的完整最小示例（含 Axum serve 与版本前缀说明）见 [用户指南](USER_GUIDE.md#-快速开始)。
 
 ### 自定义错误转换
 
@@ -224,15 +209,7 @@ let spec = OpenApiBuilder::new()
 
 ### CLI 一站式入口
 
-```rust
-use sdforge::cli::CliBuilder;
-
-#[tokio::main]
-async fn main() {
-    sdforge::init_all_plugins();
-    CliBuilder::new().execute().await; // 返回 `!`，内部 exit(0/1)
-}
-```
+`#[forge(cli = true)]` 注解与 `CliBuilder::execute()`（返回 `!`，内部 exit(0/1)）的最小示例见 [README 快速开始](../README.md#-最小可运行示例)，CLI 进阶用法见 [用户指南](USER_GUIDE.md#cli-应用)。
 
 更多示例见仓库 `examples/`（运行方式见 [README 示例章节](../README.md#-示例)）。
 

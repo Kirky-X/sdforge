@@ -24,31 +24,15 @@ cargo bench --bench runtime_bench --features http
 
 ## 🔀 请求热路径（路由分发）
 
-`route_dispatch/*` 从 `http::build()` 产物直接 `Service::call`，覆盖 axum 路由匹配 + `#[forge]` 生成的提取/序列化闭包：
-
-| 基准 | 中位延迟 | 吞吐 |
-|------|----------|------|
-| `plain_get`（无路径参数） | ~553 ns | ~1.81 M req/s |
-| `path_param_get`（1 个 `{id}` 路径参数） | ~604 ns | ~1.65 M req/s |
-
-路径参数提取的额外开销约 **+50 ns/请求**（约 +9%）。
+`route_dispatch/*` 从 `http::build()` 产物直接 `Service::call`，覆盖 axum 路由匹配 + `#[forge]` 生成的提取/序列化闭包（`plain_get` / `path_param_get` 延迟与吞吐见 [基线汇总](#-基线汇总)）。路径参数提取的额外开销约 **+50 ns/请求**（约 +9%）。
 
 ## 🧩 HandlerArgs 参数装配
 
-gRPC / CLI 统一处理入口共享的参数装配（`HandlerArgs` String map 构造）：
-
-| 基准 | 中位延迟 |
-|------|----------|
-| `handler_args_build_5_params`（5 参数） | ~117 ns |
+gRPC / CLI 统一处理入口共享的参数装配（`HandlerArgs` String map 构造），对应基线 `handler_args_build_5_params`（见 [基线汇总](#-基线汇总)）。
 
 ## 📦 JSON 序列化
 
-| 基准 | 中位延迟 |
-|------|----------|
-| `serialize_nested_object`（7 字段嵌套对象） | ~137 ns |
-| `deserialize_nested_object`（同上） | ~383 ns |
-
-`simd-json` feature 可进一步加速反序列化（尚未纳入本基线，后续轮次补充对比）。
+对应基线 `serialize_nested_object` / `deserialize_nested_object`（7 字段嵌套对象，见 [基线汇总](#-基线汇总)）。`simd-json` feature 可进一步加速反序列化（尚未纳入本基线，后续轮次补充对比）。
 
 ## 🚧 基线外开销
 

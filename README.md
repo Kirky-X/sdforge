@@ -76,23 +76,7 @@
 <details>
 <summary>🔧 按需启用的进阶能力</summary>
 
-| 能力 | Feature | 说明 |
-|------|---------|------|
-| 参数校验 | `validate` | `#[forge(validate)]` + `#[param(ge/le/...)]`，400 返回字段级错误 |
-| 声明式分页 | `paginate` | `#[forge(paginate)]` 自动 page/size 与 `{items,total,next}` 包装 |
-| ETag 条件请求 | `etag` | GET 响应自动强 ETag（SHA-256），If-None-Match 返回 304 |
-| 生命周期钩子 | `lifecycle` | `#[forge(on_start/on_stop)]` 进程级钩子，与优雅停机顺序协同 |
-| 钩子管道 | `hooks` | 处理器前后钩子（中间件式），统一错误契约 |
-| 优雅停机 | `graceful` | SIGTERM/SIGINT 触发停止接新、排空在途、三阶段关闭 |
-| 健康探针 | `health` | `build_with_config` 自动挂载 `/healthz` `/readyz`（bypass 认证） |
-| Prometheus 指标 | `metrics` | 请求计数、延迟直方图、状态码分布，`/metrics` 端点 |
-| OTel 导出 | `otel` | OTLP/HTTP JSON 导出请求 span 与指标快照，零额外依赖 |
-| 请求上下文 | `context` | request_id/trace_id 生成与跨协议（HTTP/MCP/gRPC/WS）注入 |
-| 响应时间戳 | `timestamp` | 自动向响应添加时间戳 |
-| 结构化日志 | `logging` | 结构化请求日志 |
-| inklog 桥接 | `inklog` | 裸 `log` 调用路由到 inklog LoggerManager 管道 |
-| trait-kit 集成 | `kit` | AsyncKit 模块图集成与 `LimiteronForgeAdapter` |
-| SIMD JSON | `simd-json` | SIMD 加速 JSON 序列化/反序列化 |
+参数校验、声明式分页、ETag 条件请求、生命周期钩子、钩子管道、优雅停机、健康探针、Prometheus 指标、OTel 导出、请求上下文、响应时间戳、结构化日志、inklog 桥接、trait-kit 集成、SIMD JSON 等能力均以独立 feature 按需启用，逐项说明与默认值见 [特性标志](#-特性标志) 一节。
 
 </details>
 
@@ -149,24 +133,12 @@ cargo run --example basic_cli --features cli -- echo --name world
 
 ### 🧭 核心概念
 
-- `#[forge]` 注解描述一份端点元数据：名称、版本、路径、方法、描述
-- 宏按启用的 feature 生成各协议注册代码，经 `inventory::submit!()` 编译期提交
-- 应用启动时调用 `init_all_plugins()` 一次性收集全部注册项（`OnceLock` 固化）
+- `#[forge]` 注解描述一份端点元数据（名称、版本、路径、方法、描述），宏按启用的 feature 生成各协议注册代码，编译期经 `inventory::submit!()` 提交，启动时由 `init_all_plugins()` 一次性收集固化
 - 按协议选择入口：`http::build()` / rmcp stdio / `SdForgeGrpcService` / `CliBuilder::execute()`
 
 ### 🔧 `#[forge]` 宏参数
 
-| 参数           | 说明                                                        | 必填 | 默认值 |
-|----------------|-------------------------------------------------------------|------|--------|
-| `name`         | 端点名称                                                    | 是   | -      |
-| `version`      | API 版本                                                    | 是   | -      |
-| `path`         | HTTP 路径（如 `/users/:id`）                                | 否   | -      |
-| `method`       | HTTP 方法（GET/POST/PUT/DELETE 等）                         | 否   | GET    |
-| `status`       | 显式声明成功状态码（如 201 用于 POST 创建）                 | 否   | 200    |
-| `description`  | 端点描述                                                    | 否   | -      |
-| `tool_name`    | MCP 工具名称                                                | 否   | -      |
-| `grpc_method`  | gRPC 方法名（启用 `grpc` feature 时生效）                   | 否   | -      |
-| `cli`          | 是否注册为 CLI 命令（启用 `cli` feature 时生效）            | 否   | false  |
+`#[forge]` 必填 `name` 与 `version`；常用可选参数包括 `path` / `method` / `status` / `description` / `tool_name` / `grpc_method` / `cli`。完整参数表（含进阶参数与默认值）见 [API 参考](docs/API_REFERENCE.md#forge-参数) 的「`#[forge]` 参数」一节。
 
 ### 🌐 协议组合
 
@@ -199,21 +171,21 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>ratelimit</code></td><td>限流核心（limiteron，不依赖 http）</td><td>❌</td></tr>
   <tr><td><code>ratelimit-http</code></td><td>HTTP 限流中间件（Tower Layer，依赖 http + ratelimit）</td><td>❌</td></tr>
   <tr><td><code>cache</code></td><td>oxcache 内存缓存（独立于 http）</td><td>❌</td></tr>
-  <tr><td><code>health</code></td><td><code>/healthz</code> <code>/readyz</code> 健康探针（自动挂载，bypass 认证）</td><td>❌</td></tr>
-  <tr><td><code>metrics</code></td><td>Prometheus 文本格式 <code>/metrics</code> 端点（自研轻量渲染）</td><td>❌</td></tr>
-  <tr><td><code>graceful</code></td><td>优雅停机（SIGTERM/SIGINT，停止接新、排空在途）</td><td>❌</td></tr>
-  <tr><td><code>context</code></td><td>请求上下文（request_id/trace_id 跨协议注入）</td><td>❌</td></tr>
-  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> 参数校验契约</td><td>❌</td></tr>
-  <tr><td><code>paginate</code></td><td><code>#[forge(paginate)]</code> 声明式分页</td><td>❌</td></tr>
-  <tr><td><code>etag</code></td><td>ETag 条件请求（SHA-256 强 ETag + 304）</td><td>❌</td></tr>
-  <tr><td><code>lifecycle</code></td><td><code>#[forge(on_start/on_stop)]</code> 生命周期钩子</td><td>❌</td></tr>
-  <tr><td><code>hooks</code></td><td>处理器前后钩子管道</td><td>❌</td></tr>
-  <tr><td><code>otel</code></td><td>OTLP/HTTP JSON 导出（零额外依赖）</td><td>❌</td></tr>
+  <tr><td><code>health</code></td><td><code>/healthz</code> <code>/readyz</code> 健康探针（<code>build_with_config</code> 自动挂载，bypass 认证）</td><td>❌</td></tr>
+  <tr><td><code>metrics</code></td><td>Prometheus 文本格式 <code>/metrics</code> 端点（请求计数、延迟直方图、状态码分布；自研轻量渲染）</td><td>❌</td></tr>
+  <tr><td><code>graceful</code></td><td>优雅停机（SIGTERM/SIGINT：停止接新、排空在途、三阶段关闭）</td><td>❌</td></tr>
+  <tr><td><code>context</code></td><td>请求上下文（request_id/trace_id 生成与跨协议 HTTP/MCP/gRPC/WS 注入）</td><td>❌</td></tr>
+  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> + <code>#[param(ge/le/...)]</code> 参数校验，400 返回字段级错误</td><td>❌</td></tr>
+  <tr><td><code>paginate</code></td><td><code>#[forge(paginate)]</code> 声明式分页（自动 page/size 与 <code>{items,total,next}</code> 包装）</td><td>❌</td></tr>
+  <tr><td><code>etag</code></td><td>ETag 条件请求（GET 响应自动附加 SHA-256 强 ETag，If-None-Match 返回 304）</td><td>❌</td></tr>
+  <tr><td><code>lifecycle</code></td><td><code>#[forge(on_start/on_stop)]</code> 生命周期钩子（与优雅停机顺序协同）</td><td>❌</td></tr>
+  <tr><td><code>hooks</code></td><td>处理器前后钩子管道（中间件式，统一错误契约）</td><td>❌</td></tr>
+  <tr><td><code>otel</code></td><td>OTLP/HTTP JSON 导出请求 span 与指标快照（零额外依赖）</td><td>❌</td></tr>
   <tr><td><code>logging</code></td><td>结构化请求日志</td><td>❌</td></tr>
   <tr><td><code>timestamp</code></td><td>响应时间戳</td><td>❌</td></tr>
   <tr><td><code>inklog</code></td><td>inklog 结构化日志桥接</td><td>❌</td></tr>
   <tr><td><code>i18n</code></td><td>ICU4X 国际化（本地化格式化 + Accept-Language 解析）</td><td>❌</td></tr>
-  <tr><td><code>simd-json</code></td><td>SIMD 加速 JSON 序列化</td><td>❌</td></tr>
+  <tr><td><code>simd-json</code></td><td>SIMD 加速 JSON 序列化/反序列化</td><td>❌</td></tr>
   <tr><td><code>limiteron-integration</code></td><td>引入 limiteron 依赖（kit 集成基座）</td><td>❌</td></tr>
   <tr><td><code>kit</code></td><td>trait-kit AsyncKit 集成（SdforgeModule 模块图）</td><td>❌</td></tr>
   <tr><td><code>tokio</code></td><td>内部特性：启用 tokio 依赖（随其他特性自动引入）</td><td>❌</td></tr>
@@ -304,77 +276,23 @@ cargo run -p sdforge-examples --example oxcache_admin --features oxcache_admin_e
 
 ## 🏗️ 架构
 
-SDForge 由两个 crate 组成：`macros/sdforge-macros` 负责解析 `#[forge]` / `#[service_module]` 注解并按 feature 门控生成注册代码；`sdforge` 是运行时库。运行骨架建立在 inventory 之上：注册项编译期 `inventory::submit!()` 提交，启动期 `init_all_plugins()` 一次性收集并固化为 `OnceLock`，防止 release 构建链接期剔除。各协议模块（http / mcp / grpc / websocket / streaming / cli）彼此独立、按 feature 编译，共享 `core` 的统一 handler 契约（`HandlerArgs` + `HandlerState`）。gRPC 的 protobuf 定义于 `proto/sdforge.v1.proto`（`SdForgeService` 的 `Call` / `GetInfo`），由 `build.rs` 经 tonic-prost 生成到 `OUT_DIR`。完整设计说明见 [架构文档](docs/ARCHITECTURE.md)。
-
-```mermaid
-flowchart TD
-    MAC["macros sdforge-macros<br/>forge 与 service_module 过程宏"] -->|"cfg feature 门控生成"| REG["inventory 注册项<br/>HTTP 路由 MCP 工具 gRPC handler CLI 命令"]
-    REG --> BOOT["init_all_plugins<br/>启动期收集并以 OnceLock 固化"]
-    BOOT --> HTTP["http<br/>axum 路由与中间件栈"]
-    BOOT --> MCP["mcp<br/>rmcp 无状态 handler"]
-    BOOT --> GRPC["grpc<br/>tonic SdForgeGrpcService"]
-    BOOT --> CLI["cli<br/>clap CliBuilder"]
-    BOOT --> WS["websocket 与 streaming<br/>WS 与 SSE"]
-    GRPC --> PROTO["proto sdforge.v1.proto<br/>build.rs tonic-prost 生成"]
-    CORE["core error domain<br/>统一 handler 契约与错误类型"] --> HTTP
-    CORE --> MCP
-    CORE --> GRPC
-    CORE --> CLI
-    HTTP --> SEC["security ratelimit cache config<br/>health metrics graceful otel"]
-    REG --> OAPI["openapi 与 docs<br/>OpenAPI 3.1 规范与 Swagger UI"]
-```
+SDForge 由两个 crate 组成：`macros/sdforge-macros` 负责解析 `#[forge]` / `#[service_module]` 注解并按 feature 门控生成注册代码；`sdforge` 是运行时库。注册项编译期经 `inventory::submit!()` 提交、启动期由 `init_all_plugins()` 固化，各协议模块（http / mcp / grpc / websocket / streaming / cli）彼此独立、按 feature 编译，共享 `core` 的统一 handler 契约（`HandlerArgs` + `HandlerState`）。模块注册全景、仓库布局与设计取舍见 [架构文档](docs/ARCHITECTURE.md)。
 
 ### 设计原则
 
-- **编译时协议选择**：未启用的协议不进入编译图，无运行时探测与动态加载
-- **Inventory 注册模式**：编译期 `inventory::submit!()`，`init_all_plugins()` 防链接器剔除并返回注册计数
-- **统一 handler 契约**：所有协议遵循 `fn(HandlerArgs, HandlerState) -> HandlerFuture`
-- **三种构造模式**：组件支持 `new()`（开箱即用）、`builder()`（Builder）、`with_dependencies()`（依赖注入）
-- **零数据库**：数据交互经 oxcache 内存缓存完成，限流复用 limiteron，日志可桥接 inklog
+编译时协议选择、inventory 注册模式、统一 handler 契约、三种构造模式（`new()` / `builder()` / `with_dependencies()`）、零数据库五大原则的完整阐述见 [架构文档](docs/ARCHITECTURE.md#-设计原则)。
 
 ---
 
 ## 🔄 核心执行路径
 
-以 HTTP 请求热路径为例（完整数据流见 [架构文档](docs/ARCHITECTURE.md) 数据流一节）：
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as 客户端
-    participant MW as 中间件栈
-    participant RT as 版本路由
-    participant FN as forge handler
-    participant RS as ServiceResponse
-    C->>MW: HTTP 请求
-    note over MW: auth_middleware 认证<br/>RateLimitLayer 限流<br/>安全头与 CORS
-    MW->>RT: 校验通过放行
-    RT->>FN: 匹配 /api/v1 路由<br/>提取路径与查询参数
-    FN->>FN: HandlerArgs 与 HandlerState<br/>执行业务逻辑
-    FN-->>RS: Result 值或 ApiError
-    RS-->>C: JSON 响应<br/>可选 timestamp i18n logging
-```
-
-中间件栈顺序、版本路由与响应管道均由 `http::build()` / `build_with_config()` 装配；MCP、gRPC、CLI 入口复用同一批 handler 与响应契约。
+以 HTTP 请求热路径为例：请求经中间件栈（认证 → 限流 → 安全头 / CORS）进入版本路由匹配 `/api/{version}`，由 forge handler 在统一 handler 契约（`HandlerArgs` + `HandlerState`）中执行业务逻辑，经 `ServiceResponse` 响应管道输出 JSON；MCP、gRPC、CLI 入口复用同一批 handler 与响应契约，中间件栈顺序、版本路由与响应管道由 `http::build()` / `build_with_config()` 装配。完整时序图与数据流见 [架构文档](docs/ARCHITECTURE.md#-数据流)。
 
 ---
 
 ## 🌐 一份注解，五种协议
 
-`#[forge]` 宏按当前启用的 feature 生成对应协议的注册项；未启用的协议不生成任何代码：
-
-```mermaid
-flowchart LR
-    A["forge 宏注解的 async 函数"] --> B["sdforge-macros 宏展开"]
-    B --> C["inventory 编译期注册"]
-    C --> D["http feature<br/>RouteRegistration axum 路由"]
-    C --> E["mcp feature<br/>McpToolRegistration 工具 schema"]
-    C --> F["grpc feature<br/>GrpcHandlerRegistration 调用分发"]
-    C --> G["cli feature<br/>CliCommandRegistration 子命令"]
-    C --> H["openapi feature<br/>OpenApiRouteInfo 规范收集"]
-```
-
-MCP 经 `Mcp-Method` / `Mcp-Name` 头（或 stdio）由 `StatelessServerHandler` 路由；gRPC 经 `SdForgeGrpcService::call()` 按 `grpc_method` 分发；CLI 经 `CliBuilder::execute()` 完成 parse、dispatch、输出与退出码。协议之间无运行时耦合。
+`#[forge]` 宏按当前启用的 feature 生成对应协议的注册项（HTTP / MCP / gRPC / CLI / OpenAPI），未启用的协议不生成任何代码；MCP 经 `Mcp-Method` / `Mcp-Name` 头（或 stdio）路由，gRPC 经 `SdForgeGrpcService::call()` 按 `grpc_method` 分发，CLI 经 `CliBuilder::execute()` 完成解析、分发与退出码，协议之间无运行时耦合。编译期注册流与请求期数据流详见 [架构文档](docs/ARCHITECTURE.md#-数据流)。
 
 ---
 
@@ -387,7 +305,7 @@ MCP 经 `Mcp-Method` / `Mcp-Name` 头（或 stdio）由 `StatelessServerHandler`
 | 单元测试 | `src/` 内嵌 `#[cfg(test)]`、`tests/unit/` | 模块级测试，含 proptest 属性测试（`src/tests/property_tests.rs`） |
 | 集成测试 | `tests/integration/` | 覆盖 http / mcp / grpc / websocket / security / cache / streaming / openapi / cli / docs / health_probes / graceful_shutdown / validate / paginate / etag / lifecycle / otel_export / status_code / rbac 等协议与特性组合 |
 | 宏测试 | `tests/macros/`、`macros/tests/` | trybuild 编译失败用例与宏展开验证 |
-| E2E | `tests/e2e/` | `e2e_advanced` 覆盖 12 个域共 178 个测试 |
+| E2E | `tests/e2e/` | `e2e_advanced` 多域 E2E 场景（12 域规模基线见 [测试场景](docs/TEST_SCENARIOS.md)） |
 | 示例综合测试 | `examples/tests/` | 全 feature re-export 与跨协议 dispatch（77 个测试）及网关 E2E |
 | 基准测试 | `benches/`、`src/benches/` | criterion：`runtime_bench` / `config_and_cache_bench` / `sdforge_bench` |
 | Doc-tests | `src/` 文档注释 | rustdoc 内嵌示例 |
@@ -423,27 +341,11 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ### 运行时热路径（criterion 基线）
 
-| 基准 | 中位延迟 | 吞吐 |
-|------|----------|------|
-| `plain_get`（无路径参数的路由分发） | ~553 ns | ~1.81 M req/s |
-| `path_param_get`（1 个路径参数） | ~604 ns | ~1.65 M req/s |
-| `handler_args_build_5_params`（5 参数装配） | ~117 ns | - |
-| `serialize_nested_object`（7 字段嵌套对象） | ~137 ns | - |
-| `deserialize_nested_object`（同上） | ~383 ns | - |
-
-> 环境：WSL2 (linux 6.6.87) x64、Rust 1.97.1、release profile（`lto=fat`、`codegen-units=1`），criterion 中位数。复现：`cargo bench --bench runtime_bench --features http`。完整口径见 [性能基线](docs/PERFORMANCE.md)。
+`plain_get` 路由分发中位延迟约 553 ns（约 1.81 M req/s），1 个路径参数约 604 ns；HandlerArgs 装配与 JSON 序列化/反序列化等完整基线、环境口径与复现命令见 [性能基线](docs/PERFORMANCE.md)。
 
 ### 编译时门控收益（feature 门控 vs 全量打包）
 
-| 指标 | http only | full | 节省 |
-|------|-----------|------|------|
-| 编译时间（debug） | 28.88s | 54.52s | **47.0%** |
-| 编译时间（release） | 13.72s | 25.48s | **46.2%** |
-| 框架库 rlib（debug） | 33.9 MB | 100.2 MB | **66.2%** |
-| 框架库 rlib（release） | 3.57 MB | 9.07 MB | **60.6%** |
-| 唯一依赖 crate 数 | 396 | 478 | 17.2% |
-
-> 数据来源：[编译期门控基准](docs/benchmarks/vs-server-less.md)（2026-07-03 实测，AMD Ryzen 9 9950X / rustc 1.93.1 / WSL2），文内附方法论与复现命令。
+`http` only 相比 `full` 节省约 47% 编译时间、框架库 rlib 体积缩减约六成、唯一依赖少 82 个 crate；完整数据与方法论见 [编译期门控基准](docs/benchmarks/vs-server-less.md)（2026-07-03 实测，AMD Ryzen 9 9950X / rustc 1.93.1 / WSL2）。
 
 ---
 
@@ -451,20 +353,15 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ### 🚨 漏洞上报
 
-**请勿通过公开 issue 报告安全漏洞。** 请使用 GitHub [Security Advisories](https://github.com/Kirky-X/sdforge/security/advisories/new) 私密披露通道提交。项目承诺 48 小时内确认、7 天内给出初步评估，详见 [安全文档](docs/SECURITY.md)。
+**请勿通过公开 issue 报告安全漏洞。** 请使用 GitHub [Security Advisories](https://github.com/Kirky-X/sdforge/security/advisories/new) 私密披露通道提交，响应时限与流程见 [安全文档](docs/SECURITY.md)。
 
 ### 🛡️ 安全设计要点
 
-- **认证**：API Key（版本管理、LRU 缓存、显式播种、空库 fail-loud）与 JWT Bearer（HMAC-SHA256 验签，`MIN_SECRET_LENGTH=32` 强制密钥长度）
-- **fail-safe 默认值**：`ServerConfig` 默认绑定 `127.0.0.1`；CORS 校验同时检查 scheme 与 host
-- **不可伪造的客户端 IP**：无 `ConnectInfo` 时不信任 `X-Forwarded-For` / `X-Real-IP`，限流与封禁仅基于 TCP 对端地址
-- **审计**：`AuditLogger` 记录安全事件，支持 HMAC-SHA256 签名防篡改；密钥轮换动作有审计日志
-- **错误脱敏**：`ApiError::Internal` 清洗后输出并附 `error_id`，`ErrorContext` 仅服务端保留
-- **输入防御**：MCP 工具 `input_schema` required / unknown-field 校验；MCP 与 gRPC 载荷 1 MiB 上限
+认证（API Key / JWT Bearer 与密钥长度强制）、fail-safe 默认值（默认绑定 `127.0.0.1`）、不可伪造的客户端 IP、审计签名、错误脱敏、输入防御（MCP schema 校验与 1 MiB 载荷上限）等设计与取舍，详见 [架构文档](docs/ARCHITECTURE.md#-安全设计) 与 [安全文档](docs/SECURITY.md)。
 
 ### 🔍 供应链安全
 
-CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略：漏洞、许可证、重复依赖）+ `cargo audit`，配合 CodeQL、Dependabot 与 pre-commit 密钥扫描（detect-secrets）。
+CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `cargo audit`，配合 CodeQL、Dependabot 与 pre-commit 密钥扫描（detect-secrets）；发布前另设 tiangang SAST 与 diting 审查门槛，见 [贡献指南](docs/CONTRIBUTING.md) 发布流程。
 
 ---
 
@@ -483,22 +380,7 @@ CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略：漏
 
 ## 🤝 参与贡献
 
-欢迎贡献！请先阅读 [贡献指南](docs/CONTRIBUTING.md)。
-
-```bash
-git clone https://github.com/Kirky-X/sdforge.git
-cd sdforge
-
-# 工具链：Rust 1.97.1（rust-toolchain.toml 固定）；grpc 特性需要 protoc
-# 安装 lefthook / pre-commit 钩子（fmt / clippy / cargo-deny / 密钥扫描）
-./scripts/install-pre-commit.sh
-
-# 验证环境
-cargo build --all-features
-cargo test --all-features --lib
-```
-
-提交信息遵循 Conventional Commits（`feat` / `fix` / `refactor` / `docs` / `test` / `chore` 等，commit-msg 钩子强制校验）。
+欢迎贡献！开发环境初始化（工具链、protoc、lefthook / pre-commit 钩子）、TDD 工作流、特性组合校验与 Conventional Commits 提交规范（commit-msg 钩子强制校验），见 [贡献指南](docs/CONTRIBUTING.md)。
 
 ---
 

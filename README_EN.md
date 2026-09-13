@@ -76,23 +76,7 @@ Annotate a function once with `#[forge]`; registration code for HTTP, MCP, gRPC,
 <details>
 <summary>🔧 Advanced capabilities, enabled on demand</summary>
 
-| Capability | Feature | Description |
-|------------|---------|-------------|
-| Parameter validation | `validate` | `#[forge(validate)]` + `#[param(ge/le/...)]`; 400 with field-level errors |
-| Declarative pagination | `paginate` | `#[forge(paginate)]` auto page/size and `{items,total,next}` wrapper |
-| ETag conditional requests | `etag` | Automatic strong ETag (SHA-256) on GET; If-None-Match returns 304 |
-| Lifecycle hooks | `lifecycle` | `#[forge(on_start/on_stop)]` process hooks, ordered with graceful shutdown |
-| Hook pipeline | `hooks` | Pre/post handler hooks (middleware-style) with a unified error contract |
-| Graceful shutdown | `graceful` | SIGTERM/SIGINT: stop accepting, drain in-flight, phased teardown |
-| Health probes | `health` | `/healthz` and `/readyz` auto-mounted by `build_with_config` (auth bypassed) |
-| Prometheus metrics | `metrics` | Request counts, latency histograms, status code distribution on `/metrics` |
-| OTel export | `otel` | OTLP/HTTP JSON export of request spans and metric snapshots, zero extra deps |
-| Request context | `context` | request_id/trace_id generation and cross-protocol (HTTP/MCP/gRPC/WS) injection |
-| Response timestamps | `timestamp` | Auto-add timestamps to responses |
-| Structured logging | `logging` | Structured request logging |
-| inklog bridge | `inklog` | Route bare `log` calls into the inklog LoggerManager pipeline |
-| trait-kit integration | `kit` | AsyncKit module graph integration and `LimiteronForgeAdapter` |
-| SIMD JSON | `simd-json` | SIMD-accelerated JSON serialization/deserialization |
+Parameter validation, declarative pagination, ETag conditional requests, lifecycle hooks, hook pipeline, graceful shutdown, health probes, Prometheus metrics, OTel export, request context, response timestamps, structured logging, inklog bridge, trait-kit integration, and SIMD JSON are each enabled on demand via an individual feature; per-item descriptions and defaults are in the [Feature Flags](#-feature-flags) section.
 
 </details>
 
@@ -149,24 +133,12 @@ cargo run --example basic_cli --features cli -- echo --name world
 
 ### 🧭 Core concepts
 
-- A `#[forge]` annotation describes one set of endpoint metadata: name, version, path, method, description
-- The macro generates registration code per enabled feature, submitted at compile time via `inventory::submit!()`
-- At startup, `init_all_plugins()` collects all registrations once (cached in a `OnceLock`)
+- A `#[forge]` annotation describes one set of endpoint metadata (name, version, path, method, description); the macro generates registration code per enabled feature, submitted at compile time via `inventory::submit!()` and collected once at startup by `init_all_plugins()`
 - Pick the entrypoint per protocol: `http::build()` / rmcp stdio / `SdForgeGrpcService` / `CliBuilder::execute()`
 
 ### 🔧 `#[forge]` macro parameters
 
-| Parameter      | Description                                                        | Required | Default |
-|----------------|--------------------------------------------------------------------|----------|---------|
-| `name`         | Endpoint name                                                      | Yes      | -       |
-| `version`      | API version                                                        | Yes      | -       |
-| `path`         | HTTP path (e.g., `/users/:id`)                                     | No       | -       |
-| `method`       | HTTP method (GET/POST/PUT/DELETE, etc.)                            | No       | GET     |
-| `status`       | Explicit success status code (e.g., 201 for POST create)           | No       | 200     |
-| `description`  | Endpoint description                                               | No       | -       |
-| `tool_name`    | MCP tool name                                                      | No       | -       |
-| `grpc_method`  | gRPC method name (effective when the `grpc` feature is enabled)    | No       | -       |
-| `cli`          | Register as CLI command (effective when the `cli` feature is enabled) | No    | false   |
+`#[forge]` requires `name` and `version`; common optional parameters include `path` / `method` / `status` / `description` / `tool_name` / `grpc_method` / `cli`. The full parameter table (including advanced parameters and defaults) is in the "`#[forge]` parameters" section of the [API Reference](docs/API_REFERENCE.md#forge-参数).
 
 ### 🌐 Protocol combinations
 
@@ -199,21 +171,21 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>ratelimit</code></td><td>Rate limiting core (limiteron, no http dependency)</td><td>❌</td></tr>
   <tr><td><code>ratelimit-http</code></td><td>HTTP rate limiting middleware (Tower Layer; requires http + ratelimit)</td><td>❌</td></tr>
   <tr><td><code>cache</code></td><td>oxcache in-memory cache (independent of http)</td><td>❌</td></tr>
-  <tr><td><code>health</code></td><td><code>/healthz</code> and <code>/readyz</code> probes (auto-mounted, auth bypassed)</td><td>❌</td></tr>
-  <tr><td><code>metrics</code></td><td>Prometheus text-format <code>/metrics</code> endpoint (lightweight in-house renderer)</td><td>❌</td></tr>
-  <tr><td><code>graceful</code></td><td>Graceful shutdown (SIGTERM/SIGINT: stop accepting, drain in-flight)</td><td>❌</td></tr>
-  <tr><td><code>context</code></td><td>Request context (request_id/trace_id cross-protocol injection)</td><td>❌</td></tr>
-  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> parameter validation contract</td><td>❌</td></tr>
-  <tr><td><code>paginate</code></td><td><code>#[forge(paginate)]</code> declarative pagination</td><td>❌</td></tr>
-  <tr><td><code>etag</code></td><td>ETag conditional requests (SHA-256 strong ETag + 304)</td><td>❌</td></tr>
-  <tr><td><code>lifecycle</code></td><td><code>#[forge(on_start/on_stop)]</code> lifecycle hooks</td><td>❌</td></tr>
-  <tr><td><code>hooks</code></td><td>Pre/post handler hook pipeline</td><td>❌</td></tr>
-  <tr><td><code>otel</code></td><td>OTLP/HTTP JSON export (zero extra dependencies)</td><td>❌</td></tr>
+  <tr><td><code>health</code></td><td><code>/healthz</code> and <code>/readyz</code> probes (auto-mounted by <code>build_with_config</code>, auth bypassed)</td><td>❌</td></tr>
+  <tr><td><code>metrics</code></td><td>Prometheus text-format <code>/metrics</code> endpoint (request counts, latency histograms, status code distribution; lightweight in-house renderer)</td><td>❌</td></tr>
+  <tr><td><code>graceful</code></td><td>Graceful shutdown (SIGTERM/SIGINT: stop accepting, drain in-flight, phased teardown)</td><td>❌</td></tr>
+  <tr><td><code>context</code></td><td>Request context (request_id/trace_id generation and cross-protocol HTTP/MCP/gRPC/WS injection)</td><td>❌</td></tr>
+  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> + <code>#[param(ge/le/...)]</code> parameter validation; 400 with field-level errors</td><td>❌</td></tr>
+  <tr><td><code>paginate</code></td><td><code>#[forge(paginate)]</code> declarative pagination (auto page/size and the <code>{items,total,next}</code> wrapper)</td><td>❌</td></tr>
+  <tr><td><code>etag</code></td><td>ETag conditional requests (automatic SHA-256 strong ETag on GET; If-None-Match returns 304)</td><td>❌</td></tr>
+  <tr><td><code>lifecycle</code></td><td><code>#[forge(on_start/on_stop)]</code> lifecycle hooks (ordered with graceful shutdown)</td><td>❌</td></tr>
+  <tr><td><code>hooks</code></td><td>Pre/post handler hook pipeline (middleware-style, unified error contract)</td><td>❌</td></tr>
+  <tr><td><code>otel</code></td><td>OTLP/HTTP JSON export of request spans and metric snapshots (zero extra dependencies)</td><td>❌</td></tr>
   <tr><td><code>logging</code></td><td>Structured request logging</td><td>❌</td></tr>
   <tr><td><code>timestamp</code></td><td>Response timestamps</td><td>❌</td></tr>
   <tr><td><code>inklog</code></td><td>inklog structured logging bridge</td><td>❌</td></tr>
   <tr><td><code>i18n</code></td><td>ICU4X internationalization (locale-aware formatting + Accept-Language parsing)</td><td>❌</td></tr>
-  <tr><td><code>simd-json</code></td><td>SIMD-accelerated JSON serialization</td><td>❌</td></tr>
+  <tr><td><code>simd-json</code></td><td>SIMD-accelerated JSON serialization/deserialization</td><td>❌</td></tr>
   <tr><td><code>limiteron-integration</code></td><td>Pulls in the limiteron dependency (foundation for kit)</td><td>❌</td></tr>
   <tr><td><code>kit</code></td><td>trait-kit AsyncKit integration (SdforgeModule graph)</td><td>❌</td></tr>
   <tr><td><code>tokio</code></td><td>Internal feature: enables the tokio dependency (pulled in automatically by other features)</td><td>❌</td></tr>
@@ -304,77 +276,23 @@ Sample configuration files live in `examples/config/` (`default.toml`, `minimal.
 
 ## 🏗️ Architecture
 
-SDForge consists of two crates: `macros/sdforge-macros` parses the `#[forge]` / `#[service_module]` annotations and generates feature-gated registration code, while `sdforge` is the runtime library. The runtime skeleton is built on inventory: registrations are submitted at compile time via `inventory::submit!()` and collected once at startup by `init_all_plugins()` into a `OnceLock`, preventing link-time elimination in release builds. The protocol modules (http / mcp / grpc / websocket / streaming / cli) are mutually independent and compiled per feature, all sharing the unified handler contract in `core` (`HandlerArgs` + `HandlerState`). The gRPC protobuf lives in `proto/sdforge.v1.proto` (`SdForgeService` with `Call` / `GetInfo`) and is generated by `build.rs` via tonic-prost into `OUT_DIR`. See the [Architecture document](docs/ARCHITECTURE.md) for the full design description.
-
-```mermaid
-flowchart TD
-    MAC["macros sdforge-macros<br/>forge and service_module proc macros"] -->|"cfg feature gated codegen"| REG["inventory registrations<br/>HTTP routes MCP tools gRPC handlers CLI commands"]
-    REG --> BOOT["init_all_plugins<br/>startup collection cached in OnceLock"]
-    BOOT --> HTTP["http<br/>axum router and middleware stack"]
-    BOOT --> MCP["mcp<br/>rmcp stateless handler"]
-    BOOT --> GRPC["grpc<br/>tonic SdForgeGrpcService"]
-    BOOT --> CLI["cli<br/>clap CliBuilder"]
-    BOOT --> WS["websocket and streaming<br/>WS and SSE"]
-    GRPC --> PROTO["proto sdforge.v1.proto<br/>generated by build.rs via tonic-prost"]
-    CORE["core error domain<br/>unified handler contract and errors"] --> HTTP
-    CORE --> MCP
-    CORE --> GRPC
-    CORE --> CLI
-    HTTP --> SEC["security ratelimit cache config<br/>health metrics graceful otel"]
-    REG --> OAPI["openapi and docs<br/>OpenAPI 3.1 spec and Swagger UI"]
-```
+SDForge consists of two crates: `macros/sdforge-macros` parses the `#[forge]` / `#[service_module]` annotations and generates feature-gated registration code, while `sdforge` is the runtime library. Registrations are submitted at compile time via `inventory::submit!()` and consolidated at startup by `init_all_plugins()`; the protocol modules (http / mcp / grpc / websocket / streaming / cli) are mutually independent and compiled per feature, all sharing the unified handler contract in `core` (`HandlerArgs` + `HandlerState`). The full module-registration map, repository layout, and design rationale are in the [Architecture document](docs/ARCHITECTURE.md).
 
 ### Design principles
 
-- **Compile-time protocol selection**: disabled protocols never enter the compile graph; no runtime probing or dynamic loading
-- **Inventory registration pattern**: compile-time `inventory::submit!()`; `init_all_plugins()` prevents linker elimination and returns registration counts
-- **Unified handler contract**: every protocol follows `fn(HandlerArgs, HandlerState) -> HandlerFuture`
-- **Three construction modes**: components support `new()` (out of the box), `builder()` (builder pattern), and `with_dependencies()` (dependency injection)
-- **No database**: all data interaction goes through oxcache in-memory caching; rate limiting reuses limiteron; logging can bridge to inklog
+The five design principles — compile-time protocol selection, the inventory registration pattern, the unified handler contract, three construction modes (`new()` / `builder()` / `with_dependencies()`), and no database — are described in full in the [Architecture document](docs/ARCHITECTURE.md#-设计原则).
 
 ---
 
 ## 🔄 Core Execution Path
 
-The HTTP request hot path as an example (full data flow in the [Architecture document](docs/ARCHITECTURE.md), data flow section):
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as Client
-    participant MW as Middleware stack
-    participant RT as Version router
-    participant FN as forge handler
-    participant RS as ServiceResponse
-    C->>MW: HTTP request
-    note over MW: auth_middleware authentication<br/>RateLimitLayer rate limiting<br/>security headers and CORS
-    MW->>RT: Passes checks, forwarded
-    RT->>FN: Matches /api/v1 route<br/>extracts path and query params
-    FN->>FN: HandlerArgs and HandlerState<br/>business logic runs
-    FN-->>RS: Result value or ApiError
-    RS-->>C: JSON response<br/>optional timestamp i18n logging
-```
-
-The middleware stack order, version routing, and response pipeline are assembled by `http::build()` / `build_with_config()`; the MCP, gRPC, and CLI entrypoints reuse the same handlers and response contract.
+Taking the HTTP request hot path as an example: a request passes the middleware stack (authentication → rate limiting → security headers / CORS), the version router matches `/api/{version}`, the forge handler runs the business logic under the unified handler contract (`HandlerArgs` + `HandlerState`), and the `ServiceResponse` pipeline emits the JSON response; the MCP, gRPC, and CLI entrypoints reuse the same handlers and response contract, with middleware order, version routing, and the response pipeline assembled by `http::build()` / `build_with_config()`. The full sequence diagram and data flow are in the [Architecture document](docs/ARCHITECTURE.md#-数据流).
 
 ---
 
 ## 🌐 One Annotation, Five Protocols
 
-The `#[forge]` macro generates protocol registrations for the features currently enabled; disabled protocols generate no code at all:
-
-```mermaid
-flowchart LR
-    A["async fn annotated with forge macro"] --> B["sdforge-macros expansion"]
-    B --> C["inventory compile-time registration"]
-    C --> D["http feature<br/>RouteRegistration axum routing"]
-    C --> E["mcp feature<br/>McpToolRegistration tool schema"]
-    C --> F["grpc feature<br/>GrpcHandlerRegistration call dispatch"]
-    C --> G["cli feature<br/>CliCommandRegistration subcommands"]
-    C --> H["openapi feature<br/>OpenApiRouteInfo spec collection"]
-```
-
-MCP routes via the `Mcp-Method` / `Mcp-Name` headers (or stdio) through `StatelessServerHandler`; gRPC dispatches via `SdForgeGrpcService::call()` keyed by `grpc_method`; CLI runs parse, dispatch, output, and exit code through `CliBuilder::execute()`. Protocols are decoupled at runtime.
+The `#[forge]` macro generates protocol registrations for the features currently enabled (HTTP / MCP / gRPC / CLI / OpenAPI); disabled protocols generate no code at all. MCP routes via the `Mcp-Method` / `Mcp-Name` headers (or stdio), gRPC dispatches via `SdForgeGrpcService::call()` keyed by `grpc_method`, CLI runs parsing, dispatch, and exit codes through `CliBuilder::execute()`, and protocols are decoupled at runtime. The compile-time registration flow and request-phase data flow are detailed in the [Architecture document](docs/ARCHITECTURE.md#-数据流).
 
 ---
 
@@ -387,7 +305,7 @@ MCP routes via the `Mcp-Method` / `Mcp-Name` headers (or stdio) through `Statele
 | Unit tests | Embedded `#[cfg(test)]` in `src/`, `tests/unit/` | Module-level tests, including proptest property tests (`src/tests/property_tests.rs`) |
 | Integration tests | `tests/integration/` | Covers http / mcp / grpc / websocket / security / cache / streaming / openapi / cli / docs / health_probes / graceful_shutdown / validate / paginate / etag / lifecycle / otel_export / status_code / rbac protocol and feature combinations |
 | Macro tests | `tests/macros/`, `macros/tests/` | trybuild compile-failure cases and macro expansion verification |
-| E2E | `tests/e2e/` | `e2e_advanced` covers 12 domains with 178 tests |
+| E2E | `tests/e2e/` | `e2e_advanced` multi-domain E2E scenarios (12-domain scale baseline in [Test Scenarios](docs/TEST_SCENARIOS.md)) |
 | Examples comprehensive tests | `examples/tests/` | All-feature re-export accessibility and cross-protocol dispatch (77 tests) plus gateway E2E |
 | Benchmarks | `benches/`, `src/benches/` | criterion: `runtime_bench` / `config_and_cache_bench` / `sdforge_bench` |
 | Doc-tests | `src/` doc comments | Embedded rustdoc examples |
@@ -423,27 +341,11 @@ About **2,900** test functions (`src/` 2,015 + `tests/` 704 + `macros/` 59 + `ex
 
 ### Runtime hot path (criterion baselines)
 
-| Benchmark | Median latency | Throughput |
-|-----------|----------------|------------|
-| `plain_get` (routing dispatch, no path params) | ~553 ns | ~1.81 M req/s |
-| `path_param_get` (1 path param) | ~604 ns | ~1.65 M req/s |
-| `handler_args_build_5_params` (5-param assembly) | ~117 ns | - |
-| `serialize_nested_object` (7-field nested object) | ~137 ns | - |
-| `deserialize_nested_object` (same object) | ~383 ns | - |
-
-> Environment: WSL2 (linux 6.6.87) x64, Rust 1.97.1, release profile (`lto=fat`, `codegen-units=1`), criterion medians. Reproduce with `cargo bench --bench runtime_bench --features http`. See [Performance Baselines](docs/PERFORMANCE.md) for the full methodology.
+`plain_get` routing dispatch runs at a median of ~553 ns (~1.81 M req/s), ~604 ns with 1 path parameter; the full baselines for HandlerArgs assembly and JSON serialization/deserialization, environment details, and reproduction commands are in [Performance Baselines](docs/PERFORMANCE.md).
 
 ### Compile-time gating gains (feature gating vs full build)
 
-| Metric | http only | full | Savings |
-|--------|-----------|------|---------|
-| Compile time (debug) | 28.88s | 54.52s | **47.0%** |
-| Compile time (release) | 13.72s | 25.48s | **46.2%** |
-| Framework rlib size (debug) | 33.9 MB | 100.2 MB | **66.2%** |
-| Framework rlib size (release) | 3.57 MB | 9.07 MB | **60.6%** |
-| Unique dependency crates | 396 | 478 | 17.2% |
-
-> Data source: [compile-time gating benchmarks](docs/benchmarks/vs-server-less.md) (measured 2026-07-03 on AMD Ryzen 9 9950X / rustc 1.93.1 / WSL2); methodology and reproduction commands are included there.
+`http` only saves ~47% compile time, roughly 60% of framework rlib size, and 82 unique dependency crates compared to `full`; the full data and methodology are in the [compile-time gating benchmarks](docs/benchmarks/vs-server-less.md) (measured 2026-07-03 on AMD Ryzen 9 9950X / rustc 1.93.1 / WSL2).
 
 ---
 
@@ -451,20 +353,15 @@ About **2,900** test functions (`src/` 2,015 + `tests/` 704 + `macros/` 59 + `ex
 
 ### 🚨 Reporting vulnerabilities
 
-**Do not report security vulnerabilities through public GitHub issues.** Please use the private GitHub [Security Advisories](https://github.com/Kirky-X/sdforge/security/advisories/new) disclosure channel. The project commits to acknowledging reports within 48 hours and providing an initial assessment within 7 days. See [docs/SECURITY.md](docs/SECURITY.md).
+**Do not report security vulnerabilities through public GitHub issues.** Please use the private GitHub [Security Advisories](https://github.com/Kirky-X/sdforge/security/advisories/new) disclosure channel; response timelines and the process are in [docs/SECURITY.md](docs/SECURITY.md).
 
 ### 🛡️ Security design highlights
 
-- **Authentication**: API Key (versioning, LRU cache, explicit seeding, fail-loud on empty store) and JWT Bearer (HMAC-SHA256 verification, `MIN_SECRET_LENGTH=32` enforced)
-- **Fail-safe defaults**: `ServerConfig` binds `127.0.0.1` by default; CORS validation checks both scheme and host
-- **Unspoofable client IP**: `X-Forwarded-For` / `X-Real-IP` are not trusted without `ConnectInfo`; rate limiting and bans rely only on the TCP peer address
-- **Audit**: `AuditLogger` records security events with optional HMAC-SHA256 tamper-proof signatures; key rotation is audited
-- **Error sanitization**: `ApiError::Internal` is sanitized before output with an `error_id`; `ErrorContext` stays server-side only
-- **Input defense**: required / unknown-field validation of MCP tool `input_schema`; 1 MiB payload caps for MCP and gRPC
+The design rationale for authentication (API Key / JWT Bearer with enforced key length), fail-safe defaults (binding `127.0.0.1` by default), unspoofable client IPs, audit signing, error sanitization, and input defense (MCP schema validation and 1 MiB payload caps) is in the [Architecture document](docs/ARCHITECTURE.md#-安全设计) and [docs/SECURITY.md](docs/SECURITY.md).
 
 ### 🔍 Supply chain security
 
-CI security gates are always on: `cargo deny check` ([deny.toml](deny.toml) policy: advisories, licenses, duplicate dependencies) + `cargo audit`, together with CodeQL, Dependabot, and pre-commit secret scanning (detect-secrets).
+CI security gates are always on: `cargo deny check` ([deny.toml](deny.toml) policy) + `cargo audit`, together with CodeQL, Dependabot, and pre-commit secret scanning (detect-secrets); releases additionally require the tiangang SAST and diting review gates — see the release process in the [Contributing Guide](docs/CONTRIBUTING.md).
 
 ---
 
@@ -483,22 +380,7 @@ CI security gates are always on: `cargo deny check` ([deny.toml](deny.toml) poli
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read the [Contributing Guide](docs/CONTRIBUTING.md) first.
-
-```bash
-git clone https://github.com/Kirky-X/sdforge.git
-cd sdforge
-
-# Toolchain: Rust 1.97.1 (pinned by rust-toolchain.toml); grpc needs protoc
-# Install lefthook / pre-commit hooks (fmt / clippy / cargo-deny / secret scanning)
-./scripts/install-pre-commit.sh
-
-# Verify the environment
-cargo build --all-features
-cargo test --all-features --lib
-```
-
-Commit messages follow Conventional Commits (`feat` / `fix` / `refactor` / `docs` / `test` / `chore`, etc.); the commit-msg hook enforces this.
+Contributions are welcome! Development environment setup (toolchain, protoc, lefthook / pre-commit hooks), the TDD workflow, feature-combination checks, and the Conventional Commits message convention (enforced by the commit-msg hook) are described in the [Contributing Guide](docs/CONTRIBUTING.md).
 
 ---
 

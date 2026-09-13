@@ -77,34 +77,7 @@ async fn main() {
 
 ### `#[forge]` 宏
 
-| 参数           | 说明                                        | 必填 | 默认值 |
-|----------------|---------------------------------------------|------|--------|
-| `name`         | 端点名称                                    | 是   | -      |
-| `version`      | API 版本                                    | 是   | -      |
-| `path`         | HTTP 路径（如 `/users/:id`）                | 否   | -      |
-| `method`       | HTTP 方法（GET/POST/PUT/DELETE 等）         | 否   | GET    |
-| `status`       | 显式声明成功状态码（如 201 用于 POST 创建） | 否   | 200    |
-| `description`  | 端点描述                                    | 否   | -      |
-| `tool_name`    | MCP 工具名称                                | 否   | -      |
-| `grpc_method`  | gRPC 方法名（`grpc` feature）               | 否   | -      |
-| `cli`          | 是否注册为 CLI 命令（`cli` feature）        | 否   | false  |
-
-<details>
-<summary>🔧 进阶参数与裸旗标</summary>
-
-| 参数 | 说明 | 默认值 |
-|------|------|--------|
-| `i18n_key` | `description` 的运行时翻译键（经 `sdforge::i18n` 翻译注册表解析） | - |
-| `cache_ttl` | 结果缓存 TTL 秒数（`cache` feature） | - |
-| `ws_path` | WebSocket 路径（`websocket` feature） | - |
-| `stream` / `streaming` | SSE 流式响应开关 | false |
-| `no_prefix` | 跳过模块/版本前缀拼接 | false |
-| `validate` | 裸旗标：启用 `#[param(...)]` 参数校验（`validate` feature） | false |
-| `paginate` | 裸旗标：声明式分页包装（`paginate` feature） | false |
-| `on_start` / `on_stop` | 裸旗标：进程生命周期钩子（`lifecycle` feature） | false |
-| `auth(role = "...")` | 端点级 RBAC 角色（无匹配角色返回 403） | - |
-
-</details>
+`#[forge]` 必填 `name` 与 `version`；`path` / `method` / `status` / `description` 等基础参数，以及 `i18n_key` / `cache_ttl` / `ws_path` / `stream` / `no_prefix` / `validate` / `paginate` / `on_start` / `on_stop` / `auth(role = "...")` 等进阶参数与裸旗标的完整列表、语义与默认值，见 [API 参考](API_REFERENCE.md#forge-参数) 的「`#[forge]` 参数」一节。
 
 ### 版本路由
 
@@ -130,21 +103,7 @@ async fn main() {
 
 ### 配置类型
 
-配置模块（`sdforge::config`，需 `http` feature）提供：
-
-| 类型 | 用途 |
-|------|------|
-| `AppConfig` | 应用配置聚合根（含 `Default` 与 Builder，含 `security` / `cache` 字段） |
-| `ServerConfig` | 服务器监听配置（默认 `host: 127.0.0.1`、`port: 8080`、`request_timeout_secs: 30`） |
-| `ApiConfig` | API 行为配置（前缀、默认版本） |
-| `AuthConfig` | 认证配置（API Key 播种 `keys: Vec<ApiKeySeed>`、JWT 等） |
-| `CorsConfig` | CORS 配置（校验失败会拒绝非法 origin） |
-| `TlsConfig` | TLS 配置 |
-| `TracingConfig` | 追踪/日志配置 |
-| `CacheConfig` | 缓存配置（`enabled`、`default_ttl_secs`、`max_items`、`track_stats`） |
-| `SecurityConfig` | 安全响应头配置（CSP、X-Frame-Options 等） |
-| `EnvHelper` | 运行环境名称辅助类型（`environment` 字段） |
-| `ConfigError` | 配置错误类型 |
+配置模块（`sdforge::config`，需 `http` feature）提供 `AppConfig` / `ServerConfig` / `ApiConfig` / `AuthConfig` / `CorsConfig` / `TlsConfig` / `TracingConfig` / `CacheConfig` / `SecurityConfig` / `EnvHelper` / `ConfigError` 等类型；各类型的用途与默认值见 [API 参考](API_REFERENCE.md#️-配置扩展-api) 的配置模块一节。
 
 ### 使用配置构建
 
@@ -212,27 +171,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### CLI 应用
 
-启用 `cli` feature 后，`#[forge(cli = true)]` 注册命令；`CliBuilder::execute()` 一站式完成构建/解析/分发/输出/退出：
+启用 `cli` feature 后，`#[forge(cli = true)]` 注册命令；`CliBuilder::execute()` 一站式完成构建/解析/分发/输出/退出。最小可运行示例见 [README 快速开始](../README.md#-最小可运行示例)（源码 `examples/basic_cli.rs`）。
 
-```rust
-use sdforge::cli::CliBuilder;
-use sdforge::core::ApiError;
-use sdforge::forge;
-
-#[forge(name = "echo", version = "1.0", description = "Echo a greeting", cli = true)]
-async fn echo(name: String) -> Result<String, ApiError> {
-    Ok(format!("Hello, {}!", name))
-}
-
-#[tokio::main]
-async fn main() {
-    sdforge::init_all_plugins();
-    // execute() 返回 `!`：内部 std::process::exit(0/1)
-    CliBuilder::new().execute().await;
-}
-```
-
-返回 `Value::String` 时输出原始串（不带引号），其他类型输出 JSON。`CliBuilder` 还支持 `with_dependencies()`（注入状态）、`with_name()`（程序名）与 `with_global_arg()`（全局参数）。完整示例：`cargo run --example basic_cli --features cli -- echo --name world`。
+返回 `Value::String` 时输出原始串（不带引号），其他类型输出 JSON。`CliBuilder` 还支持 `with_dependencies()`（注入状态）、`with_name()`（程序名）与 `with_global_arg()`（全局参数）。
 
 ### MCP 集成
 
@@ -245,17 +186,7 @@ async fn main() {
 
 ### OpenAPI 文档
 
-启用 `openapi` feature 后，`#[forge]` 自动注册 `OpenApiRouteInfo`：
-
-```rust
-use sdforge::openapi::{generate_openapi_spec, OpenApiBuilder};
-
-let spec = generate_openapi_spec(); // 收集全部路由
-let spec = OpenApiBuilder::new()    // 或自定义元数据
-    .title("My Service")
-    .version("2.0.0")
-    .build();
-```
+启用 `openapi` feature 后，`#[forge]` 自动注册 `OpenApiRouteInfo`；`generate_openapi_spec()` 与 `OpenApiBuilder` 的用法示例见 [API 参考](API_REFERENCE.md#openapi-生成)。
 
 启用 `docs` feature 可进一步获得 Swagger UI（`swagger_ui_router()`，需 `http`）与 CLI/MCP Markdown 文档输出（`generate_docs` / `write_docs`）。
 
@@ -278,12 +209,9 @@ let spec = OpenApiBuilder::new()    // 或自定义元数据
 1. **按需启用特性** — 只需 HTTP 时用 `--features http`，不要默认上 `full`：编译时间节省约 46–47%、库体积缩减约六成（见[编译期门控基准](benchmarks/vs-server-less.md)）
 2. **在 `main` 开头调用 `init_all_plugins()`** — 否则 release 构建（LTO + 死代码消除）可能剔除 inventory 注册项
 3. **用 `From<MyError> for ServiceError` 统一错误** — 业务错误通过 `?` 自动转换，错误码/状态码集中管理
-4. **生产部署修改默认 host** — `ServerConfig::default()` 绑定 `127.0.0.1`（fail-safe），对外服务需显式配置
-5. **JWT 密钥 ≥ 32 字符** — 框架强制校验（`MIN_SECRET_LENGTH=32`）
-6. **配置 `ConnectInfo`** — 生产环境务必配置，否则客户端 IP 提取返回 `None`，IP 限流/封禁不生效
-7. **显式播种 API Key** — 通过 `AuthConfig::ApiKey.keys` 提供密钥，空库会 fail-loud
-8. **为写操作声明状态码** — POST 创建类端点用 `#[forge(status = 201)]` 或 `ServiceResponse::success_with_status`
-9. **参考示例代码** — `examples/src/` 按协议分模块，`security/comprehensive.rs` 是完整安全栈的参考实现
+4. **安全相关部署实践以安全文档为准** — 生产 host、JWT 密钥 ≥ 32 字符、`ConnectInfo` 配置、API Key 显式播种与轮换等，见[安全文档](SECURITY.md#-安全最佳实践)
+5. **为写操作声明状态码** — POST 创建类端点用 `#[forge(status = 201)]` 或 `ServiceResponse::success_with_status`
+6. **参考示例代码** — `examples/src/` 按协议分模块，`security/comprehensive.rs` 是完整安全栈的参考实现
 
 ## 🛠️ 故障排查
 
