@@ -39,8 +39,6 @@ Annotate a function once with `#[forge]`; registration code for HTTP, MCP, gRPC,
 - [📚 Documentation](#-documentation)
 - [💻 Examples](#-examples)
 - [🏗️ Architecture](#️-architecture)
-- [🔄 Core Execution Path](#-core-execution-path)
-- [🌐 One Annotation, Five Protocols](#-one-annotation-five-protocols)
 - [🧪 Testing](#-testing)
 - [📊 Performance](#-performance)
 - [🔒 Security](#-security)
@@ -282,15 +280,13 @@ SDForge consists of two crates: `macros/sdforge-macros` parses the `#[forge]` / 
 
 The five design principles — compile-time protocol selection, the inventory registration pattern, the unified handler contract, three construction modes (`new()` / `builder()` / `with_dependencies()`), and no database — are described in full in the [Architecture document](docs/ARCHITECTURE.md#-设计原则).
 
----
 
-## 🔄 Core Execution Path
+### 🔄 Core Execution Path
 
 Taking the HTTP request hot path as an example: a request passes the middleware stack (authentication → rate limiting → security headers / CORS), the version router matches `/api/{version}`, the forge handler runs the business logic under the unified handler contract (`HandlerArgs` + `HandlerState`), and the `ServiceResponse` pipeline emits the JSON response; the MCP, gRPC, and CLI entrypoints reuse the same handlers and response contract, with middleware order, version routing, and the response pipeline assembled by `http::build()` / `build_with_config()`. The full sequence diagram and data flow are in the [Architecture document](docs/ARCHITECTURE.md#-数据流).
 
----
 
-## 🌐 One Annotation, Five Protocols
+### 🌐 One Annotation, Five Protocols
 
 The `#[forge]` macro generates protocol registrations for the features currently enabled (HTTP / MCP / gRPC / CLI / OpenAPI); disabled protocols generate no code at all. MCP routes via the `Mcp-Method` / `Mcp-Name` headers (or stdio), gRPC dispatches via `SdForgeGrpcService::call()` keyed by `grpc_method`, CLI runs parsing, dispatch, and exit codes through `CliBuilder::execute()`, and protocols are decoupled at runtime. The compile-time registration flow and request-phase data flow are detailed in the [Architecture document](docs/ARCHITECTURE.md#-数据流).
 

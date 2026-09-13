@@ -39,8 +39,6 @@
 - [📚 文档](#-文档)
 - [💻 示例](#-示例)
 - [🏗️ 架构](#️-架构)
-- [🔄 核心执行路径](#-核心执行路径)
-- [🌐 一份注解，五种协议](#-一份注解五种协议)
 - [🧪 测试](#-测试)
 - [📊 性能](#-性能)
 - [🔒 安全](#-安全)
@@ -282,15 +280,13 @@ SDForge 由两个 crate 组成：`macros/sdforge-macros` 负责解析 `#[forge]`
 
 编译时协议选择、inventory 注册模式、统一 handler 契约、三种构造模式（`new()` / `builder()` / `with_dependencies()`）、零数据库五大原则的完整阐述见 [架构文档](docs/ARCHITECTURE.md#-设计原则)。
 
----
 
-## 🔄 核心执行路径
+### 🔄 核心执行路径
 
 以 HTTP 请求热路径为例：请求经中间件栈（认证 → 限流 → 安全头 / CORS）进入版本路由匹配 `/api/{version}`，由 forge handler 在统一 handler 契约（`HandlerArgs` + `HandlerState`）中执行业务逻辑，经 `ServiceResponse` 响应管道输出 JSON；MCP、gRPC、CLI 入口复用同一批 handler 与响应契约，中间件栈顺序、版本路由与响应管道由 `http::build()` / `build_with_config()` 装配。完整时序图与数据流见 [架构文档](docs/ARCHITECTURE.md#-数据流)。
 
----
 
-## 🌐 一份注解，五种协议
+### 🌐 一份注解，五种协议
 
 `#[forge]` 宏按当前启用的 feature 生成对应协议的注册项（HTTP / MCP / gRPC / CLI / OpenAPI），未启用的协议不生成任何代码；MCP 经 `Mcp-Method` / `Mcp-Name` 头（或 stdio）路由，gRPC 经 `SdForgeGrpcService::call()` 按 `grpc_method` 分发，CLI 经 `CliBuilder::execute()` 完成解析、分发与退出码，协议之间无运行时耦合。编译期注册流与请求期数据流详见 [架构文档](docs/ARCHITECTURE.md#-数据流)。
 
