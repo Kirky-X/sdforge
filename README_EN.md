@@ -14,17 +14,14 @@
 
 ---
 
-SDForge is a declarative SDK framework for Rust. Annotate a function once with the `#[forge]` procedural macro, and the framework generates registration code for five protocols at compile time: HTTP, MCP, gRPC, WebSocket, and CLI. Protocol selection is decided entirely by Cargo features; protocols you do not enable produce zero compiled code.
+<div align="center" style="padding: 32px; margin: 24px 0">
 
-<div align="center">
+### 🎯 One Annotation, Five Protocols
 
-<table>
-  <tr>
-    <td align="center" width="25%">🎯<br><b>Unified Annotation</b><br>One <code>#[forge]</code> macro defines an endpoint<br>five protocols consume the same metadata</td>
-    <td align="center" width="25%">⚡<br><b>Compile-Time Selection</b><br>feature-gated code generation<br>unused protocols compile to nothing</td>
-    <td align="center" width="25%">🌐<br><b>Five Protocol Entrypoints</b><br>HTTP / MCP / gRPC<br>WebSocket / CLI</td>
-    <td align="center" width="25%">🛡️<br><b>Secure Defaults</b><br>auth, rate limiting, audit<br>fail-safe defaults</td>
-  </tr>
+Annotate a function once with `#[forge]`; registration code for HTTP, MCP, gRPC, WebSocket, and CLI is generated at compile time:
+
+<table style="width:100%; border-collapse: collapse">
+<tr><td align="center" width="25%" style="padding: 12px">🎯<br><b>Unified Annotation</b><br><span style="color:#64748B">one #[forge] macro defines an endpoint, five protocols share metadata</span></td><td align="center" width="25%" style="padding: 12px">⚡<br><b>Compile-Time Selection</b><br><span style="color:#64748B">feature-gated generation, unused protocols compile to nothing</span></td><td align="center" width="25%" style="padding: 12px">🌐<br><b>Five Protocol Entrypoints</b><br><span style="color:#64748B">HTTP / MCP / gRPC / WebSocket / CLI</span></td><td align="center" width="25%" style="padding: 12px">🛡️<br><b>Secure Defaults</b><br><span style="color:#64748B">auth, rate limiting, audit with fail-safe defaults</span></td></tr>
 </table>
 
 </div>
@@ -34,7 +31,7 @@ SDForge is a declarative SDK framework for Rust. Annotate a function once with t
 ## 📋 Table of Contents
 
 <details open>
-<summary>📑 Table of Contents</summary>
+<summary>📑 目录</summary>
 
 - [✨ Features](#-features)
 - [🚀 Quick Start](#-quick-start)

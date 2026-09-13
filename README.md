@@ -14,17 +14,14 @@
 
 ---
 
-SDForge 是基于 Rust 的声明式 SDK 框架。用 `#[forge]` 过程宏标注一次函数，框架在编译期生成 HTTP、MCP、gRPC、WebSocket、CLI 五种协议的注册代码；协议选择完全由 Cargo features 决定，未启用的协议不产生任何编译代码。
+<div align="center" style="padding: 32px; margin: 24px 0">
 
-<div align="center">
+### 🎯 一份注解，五种协议
 
-<table>
-  <tr>
-    <td align="center" width="25%">🎯<br><b>统一注解</b><br><code>#[forge]</code> 单宏定义端点<br>五种协议消费同一份元数据</td>
-    <td align="center" width="25%">⚡<br><b>编译时协议选择</b><br>feature 门控代码生成<br>未启用协议零编译代码</td>
-    <td align="center" width="25%">🌐<br><b>五种协议入口</b><br>HTTP / MCP / gRPC<br>WebSocket / CLI</td>
-    <td align="center" width="25%">🛡️<br><b>安全默认</b><br>认证、限流、审计<br>fail-safe 默认值</td>
-  </tr>
+用 `#[forge]` 宏标注一次函数，编译期生成 HTTP、MCP、gRPC、WebSocket、CLI 注册代码：
+
+<table style="width:100%; border-collapse: collapse">
+<tr><td align="center" width="25%" style="padding: 12px">🎯<br><b>统一注解</b><br><span style="color:#64748B">#[forge] 单宏定义端点，五协议消费同一份元数据</span></td><td align="center" width="25%" style="padding: 12px">⚡<br><b>编译时协议选择</b><br><span style="color:#64748B">feature 门控代码生成，未启用协议零编译代码</span></td><td align="center" width="25%" style="padding: 12px">🌐<br><b>五种协议入口</b><br><span style="color:#64748B">HTTP / MCP / gRPC / WebSocket / CLI</span></td><td align="center" width="25%" style="padding: 12px">🛡️<br><b>安全默认</b><br><span style="color:#64748B">认证、限流、审计，fail-safe 默认值</span></td></tr>
 </table>
 
 </div>
