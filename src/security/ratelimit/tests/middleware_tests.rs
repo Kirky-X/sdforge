@@ -110,7 +110,7 @@ impl Service<Request<Body>> for EchoService {
 /// When the limiter rejects (returns `Err`), the middleware must short-circuit
 /// with `StatusCode::TOO_MANY_REQUESTS` (429) and NOT call the inner service.
 ///
-/// This is the canonical acceptance test from `tasks.md`.
+/// This is the canonical acceptance test for the reject path.
 #[tokio::test]
 async fn middleware_returns_429_when_limiter_rejects() {
     let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiter {
@@ -139,7 +139,7 @@ async fn middleware_returns_429_when_limiter_rejects() {
 /// When the limiter approves (returns `Ok`), the middleware must forward the
 /// request to the inner service unchanged.
 ///
-/// This test is the second acceptance criterion from `tasks.md`.
+/// This test is the second acceptance criterion (approve path forwards unchanged).
 #[tokio::test]
 async fn middleware_forwards_request_when_limiter_approves() {
     let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiter {

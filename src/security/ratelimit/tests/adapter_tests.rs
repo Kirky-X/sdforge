@@ -142,7 +142,7 @@ async fn with_dependencies_accepts_prebuilt_governor() {
 /// default config (TokenBucket capacity=100, refill_rate=10) allows the first
 /// request.
 ///
-/// This is the canonical acceptance test from `tasks.md`.
+/// This is the canonical acceptance test for the default-config allow path.
 #[tokio::test]
 async fn check_allows_first_request_with_default_config() {
     let adapter = LimiteronAdapter::new().await;
