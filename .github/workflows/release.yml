@@ -83,5 +83,49 @@ jobs:
         # 本地/重跑路径已发布时撞车属幂等成功，不阻断 Release 交付
         continue-on-error: true
 
-  # sdforge 定位：仅发布 tag 与 crates.io 包，不创建 GitHub Release
-  # （tag 即交付标记；github-release job 已按此口径移除）
+  github-release:
+    name: Create GitHub Release
+    needs: [verify, publish-crates]
+    if: ${{ !cancelled() && !failure() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Get version from tag
+        id: version
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG_NAME#v}"
+          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install protoc (for grpc feature)
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Package sdforge-macros
+        run: cargo package --no-verify --manifest-path macros/Cargo.toml
+
+      - name: Package sdforge
+        continue-on-error: true
+        run: cargo package --no-verify --features full
+
+      - name: Collect crate packages
+        run: |
+          mkdir -p release-assets
+          cp target/package/sdforge-macros-*.crate release-assets/ 2>/dev/null || true
+          cp target/package/sdforge-*.crate release-assets/ 2>/dev/null || true
+          ls -la release-assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        with:
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          name: Release ${{ steps.version.outputs.tag_name }}
+          generate_release_notes: true
+          files: |
+            release-assets/*.crate
+          draft: false
+          prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
