@@ -5,6 +5,7 @@
 ## 📋 目录
 
 <details open>
+<summary>📑 目录</summary>
 
 - [欢迎](#-欢迎)
 - [环境准备](#-环境准备)
@@ -66,9 +67,9 @@ git checkout -b feat/<功能名>   # 或 chore/<任务名>
 2. **写测试** — 基于接口编写单元测试（`#[cfg(test)] mod tests { ... }`），此时测试应失败（red）
 3. **写代码** — 实现接口，使测试通过（green）
 4. **跑测试** — `cargo test --features <对应特性> --lib`，确保所有测试通过
-5. **commit** — 通过后执行 `git add . && git commit -m "feat(<模块>): <描述>"`
-6. **gitnexus analyze** — 用 gitnexus 工具分析本任务对其他模块的影响，识别需联动修改的代码
-7. **继续下一个** — 基于 analyze 结果调整后续任务，再开始下一轮循环
+5. **commit** — 通过后只暂存本次改动文件并提交：`git add <改动文件> && git commit -m "feat(<模块>): <描述>"`
+6. **影响面分析** — 分析本次变更对其他模块的影响，识别需联动修改的代码与文档
+7. **继续下一个** — 基于分析结果调整后续任务，再开始下一轮循环
 
 ### 3. 测试要求
 
@@ -76,6 +77,7 @@ git checkout -b feat/<功能名>   # 或 chore/<任务名>
 - 单元测试内嵌在源文件 `#[cfg(test)] mod tests` 中；集成测试放 `tests/integration/`
 - 确保所有特性组合可编译：`cargo test --features "<feature>"`
 - 覆盖率目标：核心逻辑 80%+，工具代码 70%+
+- 测试金字塔基线与 E2E 场景定义见[测试场景](TEST_SCENARIOS.md)
 
 ### 4. 特性组合校验
 
@@ -136,7 +138,7 @@ let component = Component::with_dependencies(dep_a, dep_b);
 
 遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)：
 
-```
+```text
 type(scope): subject
 
 type: feat, fix, refactor, docs, test, ci, chore, perf, build, revert, style
@@ -145,7 +147,7 @@ scope: 可选的模块名
 
 示例：
 
-```
+```text
 feat(security): add API key rotation support
 fix(websocket): resolve connection leak on disconnect
 docs(readme): update installation instructions

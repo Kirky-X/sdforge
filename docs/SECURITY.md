@@ -5,6 +5,7 @@
 ## 📋 目录
 
 <details open>
+<summary>📑 目录</summary>
 
 - [支持版本](#-支持版本)
 - [漏洞报告流程](#-漏洞报告流程)
@@ -52,11 +53,13 @@
 
 ### 内置安全特性（`security` feature）
 
-- **认证**：API Key 与 JWT Bearer Token 认证（`ApiKeyAuth` / `BearerAuth`，含 `auth_middleware` 中间件）
-- **限流**：基于 limiteron 的按连接 / 按 IP 限流（`ratelimit` 核心与 `ratelimit-http` Tower 中间件）
-- **安全头**：标准安全响应头（CORS、CSP 等，`SecurityHeaders`）
-- **审计日志**：安全事件审计追踪（`AuditLogger`，支持 HMAC-SHA256 签名防篡改）
-- **输入校验**：完善的输入校验（邮箱、长度等）
+| 能力 | 说明 |
+|------|------|
+| 认证 | API Key 与 JWT Bearer Token 认证（`ApiKeyAuth` / `BearerAuth`，含 `auth_middleware` 中间件） |
+| 限流 | 基于 limiteron 的按连接 / 按 IP 限流（`ratelimit` 核心与 `ratelimit-http` Tower 中间件） |
+| 安全头 | 标准安全响应头（CORS、CSP 等，`SecurityHeaders`） |
+| 审计日志 | 安全事件审计追踪（`AuditLogger`，支持 HMAC-SHA256 签名防篡改） |
+| 输入校验 | 完善的输入校验（邮箱、长度等） |
 
 ### 安全默认值（v0.3.0+ 收紧）
 
@@ -76,10 +79,14 @@
 
 我们通过以下方式监控依赖：
 
-- **cargo-audit**：扫描依赖中的已知漏洞
-- **cargo-deny**：强制执行许可与漏洞策略（`deny.toml`）
-- **Dependabot**：自动化依赖更新 PR
-- **CodeQL**：语义化代码安全分析
+| 工具 | 作用 |
+|------|------|
+| cargo-audit | 扫描依赖中的已知漏洞 |
+| cargo-deny | 强制执行许可与漏洞策略（`deny.toml`） |
+| Dependabot | 自动化依赖更新 PR |
+| CodeQL | 语义化代码安全分析 |
+
+框架内部的安全设计取舍见[架构文档](ARCHITECTURE.md)安全设计一节；使用侧的最佳实践（`ConnectInfo` 配置、API Key 轮换等）与[用户指南](USER_GUIDE.md)最佳实践一节重叠部分以本文为准。
 
 ## ✅ 安全最佳实践
 

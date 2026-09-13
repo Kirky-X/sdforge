@@ -1,10 +1,11 @@
 # 📘 Sdforge API 参考
 
-本文档基于 `src/` 公开接口与 README 用法，汇总 SDForge 的公开 API。SDForge 的 API 面由两部分组成：始终可用的核心类型与宏，以及通过 Cargo features 门控的协议/能力模块——未启用的 feature 对应的 API 不参与编译，这正是"编译时协议选择"的落点。完整的类型签名与文档请以 [docs.rs/sdforge](https://docs.rs/sdforge) 为准。
+本文档基于 `src/` 公开接口与 README 用法，汇总 SDForge 的公开 API。SDForge 的 API 面由两部分组成：始终可用的核心类型与宏，以及通过 Cargo features 门控的协议/能力模块：未启用的 feature 对应的 API 不参与编译，这正是"编译时协议选择"的落点。完整的类型签名与文档请以 [docs.rs/sdforge](https://docs.rs/sdforge) 为准。
 
 ## 📋 目录
 
 <details open>
+<summary>📑 目录</summary>
 
 - [概述](#-概述)
 - [核心 API](#-核心-api)
@@ -20,7 +21,7 @@
 
 - **crate**：`sdforge`（运行时库）+ `sdforge-macros`（过程宏，经根 crate re-export）
 - **统一入口**：绝大多数使用场景从 `use sdforge::prelude::*;` 开始，即可获得核心类型、宏以及 feature 对应的常用 re-export
-- **依赖转发**：框架将宏生成代码所需的依赖以 re-export 形式转发（`sdforge::serde`、`sdforge::inventory`、`sdforge::axum`、`sdforge::rmcp`、`sdforge::tonic`、`sdforge::prost`、`sdforge::utoipa`、`sdforge::clap`、`sdforge::anyhow`、`sdforge::tokio_stream`、`sdforge::oxcache`、`sdforge::tower`、`sdforge::tower_http`），下游 crate 无需为使用 `#[forge]` 而直接依赖这些框架库
+- **依赖转发**：框架将宏生成代码所需的依赖以 re-export 形式转发（`sdforge::serde`、`sdforge::serde_json`、`sdforge::inventory`、`sdforge::axum`、`sdforge::rmcp`、`sdforge::tonic`、`sdforge::prost`、`sdforge::utoipa`、`sdforge::clap`、`sdforge::anyhow`、`sdforge::tokio_stream`、`sdforge::oxcache`、`sdforge::tower`、`sdforge::tower_http`），下游 crate 无需为使用 `#[forge]` 而直接依赖这些框架库
 
 ### 宏（无 feature 门控）
 
@@ -29,8 +30,30 @@
 | `#[forge(...)]` | 统一端点注解，按启用的 feature 生成 HTTP / MCP / gRPC / WebSocket / CLI / OpenAPI 注册代码 |
 | `#[service_module(prefix = "...")]` | 为模块内全部端点添加统一路径前缀 |
 | `impl_default_new!(Type)` | 为单元结构体生成 `new()` 并实现 `Default` |
+| `test_macro!` | 测试辅助：将函数包装为测试入口（随 prelude 导出） |
 
-`#[forge]` 参数：`name`（必填）、`version`（必填）、`path`、`method`（默认 GET）、`status`（默认 200）、`description`、`tool_name`、`grpc_method`、`cli`。
+### `#[forge]` 参数
+
+| 参数 | 说明 | 必填 | 默认值 |
+|------|------|------|--------|
+| `name` | 端点名称（不可为 Rust 保留字） | 是 | - |
+| `version` | API 版本 | 是 | - |
+| `path` | HTTP 路径（如 `/users/:id`） | 否 | - |
+| `method` | HTTP 方法（GET/POST/PUT/DELETE 等） | 否 | GET |
+| `status` | 成功状态码（100..=999） | 否 | 200 |
+| `description` | 端点描述 | 否 | - |
+| `i18n_key` | `description` 的运行时翻译键 | 否 | - |
+| `tool_name` | MCP 工具名称（`mcp`） | 否 | - |
+| `grpc_method` | gRPC 方法名（`grpc`） | 否 | - |
+| `cli` | 注册为 CLI 命令（`cli`） | 否 | false |
+| `cache_ttl` | 结果缓存 TTL 秒数（`cache`） | 否 | - |
+| `ws_path` | WebSocket 路径（`websocket`） | 否 | - |
+| `stream` / `streaming` | SSE 流式响应开关 | 否 | false |
+| `no_prefix` | 跳过模块/版本前缀拼接 | 否 | false |
+| `validate` | 裸旗标：启用 `#[param(...)]` 校验（`validate`） | 否 | false |
+| `paginate` | 裸旗标：声明式分页（`paginate`） | 否 | false |
+| `on_start` / `on_stop` | 裸旗标：进程生命周期钩子（`lifecycle`） | 否 | false |
+| `auth(role = "...")` | 端点级 RBAC 角色（`http`） | 否 | - |
 
 ## 🧱 核心 API
 
@@ -57,8 +80,8 @@
 ### 始终可用的其他 API
 
 - `sdforge::error`：`SdForgeError`（统一错误枚举）、`SdForgeResult<T>` 别名、`ErrorContext`
-- `sdforge::i18n`：`register_translation(locale, key, value)`、`set_locale`、`get_locale`、`translate_or_fallback(default, i18n_key)`、`clear_translations` —— 翻译注册表无需任何 feature，可对宏属性 `description` 做运行时多语言替换
-- `sdforge::serde`：serde 的无条件 re-export（仅供类型引用；derive 宏仍需下游直接依赖 serde）
+- `sdforge::i18n`：`register_translation(locale, key, value)`、`set_locale`、`get_locale`、`translate_or_fallback(default, i18n_key)`、`clear_translations`，翻译注册表无需任何 feature，可对宏属性 `description` 做运行时多语言替换
+- `sdforge::serde` / `sdforge::serde_json`：无条件 re-export（仅供类型引用；derive 宏仍需下游直接依赖 serde）
 
 ## ⚙️ 配置/扩展 API
 
@@ -66,13 +89,13 @@
 
 | 类型/函数 | 说明 |
 |-----------|------|
-| `AppConfig` / `AppConfigBuilder` | 应用配置聚合根与 Builder |
+| `AppConfig` / `AppConfigBuilder` | 应用配置聚合根与 Builder（含 `security` / `cache` 字段与 `build_rate_limiter()` 自动装配） |
 | `ServerConfig` / `TlsConfig` / `TimeoutConfig` | 监听（默认 `127.0.0.1:8080`、30s 超时）、TLS、超时 |
-| `ApiConfig` / `TracingConfig` / `EnvHelper` | API 行为、追踪配置、环境变量辅助 |
+| `ApiConfig` / `TracingConfig` / `EnvHelper` | API 行为、追踪配置、运行环境名称辅助 |
 | `AuthConfig` / `ApiKeySeed` | 认证配置与 API Key 播种 |
 | `CacheConfig` | 缓存配置（`enabled`、`default_ttl_secs`、`max_items`、`track_stats`） |
+| `SecurityConfig` / `defaults` | 安全响应头配置与集中默认值（`MIN_SECRET_LENGTH=32` 等） |
 | `CorsConfig` / `build_cors_layer` | CORS 配置与层构建（校验非法 origin） |
-| `SecurityConfig` / `defaults` | 安全配置与集中默认值 |
 | `ConfigError` | 配置错误类型（实现 `ValidateConfig` 的类型另有 `validate()`） |
 
 HTTP 构建入口 `sdforge::http`（`http` feature）：
@@ -80,7 +103,7 @@ HTTP 构建入口 `sdforge::http`（`http` feature）：
 | 函数/类型 | 说明 |
 |-----------|------|
 | `build() -> Router` | 从 inventory 注册项构建 Axum Router（开箱即用） |
-| `build_with_config(&AppConfig) -> Result<Router, ConfigError>` | 按配置构建 |
+| `build_with_config(&AppConfig) -> Result<Router, ConfigError>` | 按配置构建（自动装配中间件与 health/metrics 探针） |
 | `build_with_redirect() -> Router` | 含重定向行为的构建 |
 | `build_json_response` / `build_fallback_response` | JSON 响应与兜底响应构造 |
 | `HttpRoute` / `RouteRegistration` | 路由描述与 inventory 注册项 |
@@ -99,10 +122,11 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 | 变体 | 字段 | 分类 |
 |------|------|------|
 | `NotFound` | `resource`、`resource_id: Option<String>` | ClientError |
-| `InvalidInput` | `message`、`field`、`value` | ClientError |
+| `InvalidInput` | `message`、`field: Option<String>`、`value: Option<Value>` | ClientError |
 | `AuthenticationFailed` | `reason` | AuthError |
-| `AccessDenied` | `permission`、`user_id` | AuthError |
+| `AccessDenied` | `permission`、`user_id: Option<String>` | AuthError |
 | `RateLimitExceeded` | `limit`、`window_seconds` | RateLimitError |
+| `QuotaExhausted` | `used`、`total` | RateLimitError |
 | `Internal` | `message`（脱敏）、`error_id`、`source`、`context: Option<Box<ErrorContext>>` | ServerError |
 | `ServiceUnavailable` | `service`、`retry_after: Option<u64>`、`source` | ServerError |
 | `ValidationError` | `field`、`constraint` | ValidationError |
@@ -111,8 +135,8 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 
 ### `ServiceError` / `ServiceResponse`（`sdforge::core`）
 
-- `ServiceError::new(code, message, status)` / `ServiceError::with_details(code, message, details, status)` —— 业务错误统一载体，支持 `From<MyError>` 转换
-- `ServiceResponse::success_with_status(data, code)` —— 动态指定成功状态码（与 `#[forge(status = ...)]` 对应）
+- `ServiceError::new(code, message, status)` / `ServiceError::with_details(code, message, details, status)`：业务错误统一载体，支持 `From<MyError>` 转换
+- `ServiceResponse::success_with_status(data, code)`：动态指定成功状态码（与 `#[forge(status = ...)]` 对应）
 
 ### `SdForgeError`（框架统一错误）
 
@@ -122,21 +146,28 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 
 | Feature | 模块 | 主要 API |
 |---------|------|----------|
-| `http` | `sdforge::http` / `config` / `axum`（facade） | `build`、`build_with_config`、`build_with_redirect`、`RouteRegistration`、`validate_email` / `validate_length`；axum/tower/tower-http re-export |
+| `http` | `sdforge::http` / `config` / `axum`（facade）/ `rbac` | `build`、`build_with_config`、`build_with_redirect`、`RouteRegistration`、`validate_email` / `validate_length`、`require_role`（配合 `#[forge(auth(role = "..."))]`）；axum/tower/tower-http re-export |
 | `mcp` | `sdforge::mcp` | `SdForgeMcpServer`、`StatelessServerHandler`、`McpToolInstance` / `McpToolRegistration`、`build()`、`get_mcp_tools()`、`serve_stdio()`、`parse_mcp_headers` / `McpHeaderInfo`、`InputRequiredResult`、`MrtrSession` / `MrtrSessionManager`、`cache_semantics`；`rmcp` / `anyhow` re-export |
-| `grpc` | `sdforge::grpc` | `SdForgeGrpcService`（`call()` 路由 / `serve()`）、`GrpcServerConfig`（含 `state: Option<Arc<dyn Any + Send + Sync>>`）、`build_server(_with_config)`、`GrpcRoute`、`CallRequest` / `CallResponse` / `InfoRequest` / `InfoResponse`、`SdForgeServiceServer`；`tonic` / `prost` re-export |
+| `grpc` | `sdforge::grpc` | `SdForgeGrpcService`（`Call` / `GetInfo`）、`GrpcServerConfig`（`state: Option<Arc<dyn Any + Send + Sync>>`、`require_auth`、`rate_limiter`）、`build_server(_with_config)`、`GrpcRoute`、`CallRequest` / `CallResponse` / `InfoRequest` / `InfoResponse`、`SdForgeServiceServer`；`tonic` / `prost` re-export |
 | `websocket` | `sdforge::websocket` | `WebSocketRoute` / `WebSocketHandler`、`websocket_upgrade` / `ValidatedWebSocketUpgrade`、`ConnectionManager`、`WebSocketConfig` / `WebSocketConnection` / `WebSocketMessage`、`parse_websocket_message` |
 | `streaming` | `sdforge::streaming` | `StreamEvent`、`StreamResponse`、`stream_to_sse`、`create_stream_channel`；`tokio_stream` re-export |
-| `security` / `ratelimit` / `ratelimit-http` | `sdforge::security` | 认证：`ApiKeyAuth`、`BearerAuth(+Builder)`、`AppApiKeyAuth(+Builder)`、`AuthContext`、`AuthExtractor`、`auth_middleware`；审计：`AuditLogger` / `AppAuditLogger(+Builder)`、`AuditLog` / `AuditResult`；限流：`RateLimiter` trait、`LimiteronAdapter`、`RateLimitLayer`（`ratelimit-http`） |
-| `cache` | `sdforge::cache` | `Cache` / `CacheKey`、`SyncCache` / `SharedCache`、`DashMapCache`（`OxcacheSyncCache` 别名）；`oxcache` re-export |
+| `security` / `ratelimit` / `ratelimit-http` | `sdforge::security` | 认证：`ApiKeyAuth`、`BearerAuth(+Builder)`、`AppApiKeyAuth(+Builder)`、`AuthContext`、`AuthExtractor`、`auth_middleware`；审计：`AuditLogger` / `AppAuditLogger(+Builder)`、`AuditLog` / `AuditResult`、`AuditSink`；限流：`RateLimiter` trait、`LimiteronAdapter`、`RateLimitLayer`（`ratelimit-http`） |
+| `cache` | `sdforge::cache` | `Cache` / `CacheKey`、`SyncCache` / `SharedCache`、`DashMapCache`（`OxcacheSyncCache` 别名）、`ResponseCacheLayer` / `ResponseCacheMiddleware`（另需 `http`）；`oxcache` re-export |
 | `openapi` | `sdforge::openapi` | `generate_openapi_spec()`、`OpenApiBuilder`（`title` / `version` / `description` / `build`）、`OpenApiRouteInfo` / `OpenApiPathParam`；`utoipa` re-export |
 | `cli` | `sdforge::cli` | `CliBuilder`（`new`、`with_dependencies`、`with_name`、`with_global_arg`、`build -> clap::Command`、`execute -> !`）、`dispatch`、`GlobalArg`、`CliCommandRegistration` / `CliHandlerRegistration`；`clap` re-export |
 | `docs` | `sdforge::docs` | `generate_docs` / `write_docs`、`DocFormat` / `DocError`；`swagger_ui_router`（另需 `http`） |
-| `inklog` | `sdforge::inklog` | `init_inklog_logger()` —— 将 `log` 调用桥接到 inklog 结构化管道 |
+| `health` | `sdforge::health` | `CheckOutcome`（`healthy` / `unhealthy`）、`ReadinessCheck` / `HealthDataSource` trait、`register_readiness_check(_fn)` |
+| `metrics` | `sdforge::metrics` | `MetricsRegistry`（`record` / `render`）、`global_registry()`、`record_request()`（Prometheus 文本格式 `/metrics`） |
+| `context` | `sdforge::context` | `RequestContext`、`generate_id`、`scope`（request_id/trace_id 跨协议注入） |
+| `lifecycle` | `sdforge::lifecycle` | `LifecycleHookRegistration`、`run_on_start` / `run_on_stop`（配合 `#[forge(on_start / on_stop)]`） |
+| `hooks` | `sdforge::hooks` | `RequestHooks` trait、`install_hooks`、`hooks_middleware`（处理器前后钩子管道） |
+| `otel` | `sdforge::otel` | `start_span` / `with_attr` / `finish_span` / `take_spans`、`OtelConfig`（OTLP/HTTP JSON 导出） |
+| `inklog` | `sdforge::inklog` | `init_inklog_logger()`：将 `log` 调用桥接到 inklog 结构化管道 |
 | `i18n` | `sdforge::i18n` | `HttpI18nFormatter`（ICU4X 本地化格式化）、`I18nError` |
-| `simd-json` | - | SIMD 加速 JSON 序列化路径 |
-| `limiteron-integration` / `kit` | `sdforge::integrations` | trait-kit 0.3 AsyncKit 集成（`SdforgeModule`）、`LimiteronForgeAdapter` |
+| `limiteron-integration` / `kit` | `sdforge::integrations` | trait-kit AsyncKit 集成（`SdforgeModule`）、`LimiteronForgeAdapter` |
 
+> 无独立模块的能力：`validate`（`#[forge(validate)]` + `#[param(...)]`）、`paginate`（`#[forge(paginate)]`）、`etag`（GET 强 ETag + 304）、`graceful`（优雅停机）、`timestamp`（响应时间戳）、`simd-json`（SIMD JSON 路径）经宏旗标或构建配置生效。
+>
 > 独立性说明：`mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` 均独立于 `http`，可单独启用；`security` 拉入 `http` + `ratelimit-http` + `cache`；`websocket` 需 `http` + `streaming`；`docs` 需 `openapi` + `cli`。
 
 ## 💻 使用示例
@@ -147,15 +178,16 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 use sdforge::prelude::*;
 
 #[forge(name = "get_user", version = "v1", path = "/users/:id", method = "GET")]
-async fn get_user(id: u64) -> Result<User, ApiError> {
-    Ok(User { id, name: "Test".into() })
+async fn get_user(id: u64) -> Result<serde_json::Value, ApiError> {
+    Ok(serde_json::json!({ "id": id, "name": "Test" }))
 }
 
 #[tokio::main]
 async fn main() {
+    sdforge::init_all_plugins();
     let app = sdforge::http::build();
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    sdforge::axum::serve(listener, app).await.unwrap();
 }
 ```
 

@@ -1,47 +1,48 @@
-# ⚡ Sdforge 性能基准：vs Serverless
+# 📊 Sdforge 编译期门控基准
 
-本报告量化 SDForge 编译时特性门控（按需启用协议）与全量打包（`--features full`）两种交付模式在**编译时间**与**产物体积**上的差异。全部数据为实测，测量日期 2026-07-03，复现命令见文末。
+本报告量化 SDForge 编译时特性门控（按需启用协议）与全量打包（`--features full`）两种交付模式在**编译时间**与**产物体积**上的差异。全部数据为实测，测量日期 2026-07-03，复现命令见文末。运行时热路径基线见[性能基线](../PERFORMANCE.md)。
 
 ## 📋 目录
 
 <details open>
+<summary>📑 目录</summary>
 
-- [概述](#概述)
-- [方法论](#方法论)
-- [基准环境](#基准环境)
-- [依赖规模对比](#依赖规模对比)
-- [编译时间对比](#编译时间对比)
-- [二进制 / 产物体积对比](#二进制--产物体积对比)
-- [分析](#分析)
-- [结论](#结论)
-- [复现方法](#复现方法)
+- [概述](#-概述)
+- [方法论](#-方法论)
+- [基准环境](#️-基准环境)
+- [依赖规模对比](#-依赖规模对比)
+- [编译时间对比](#️-编译时间对比)
+- [二进制 / 产物体积对比](#-二进制--产物体积对比)
+- [分析](#-分析)
+- [结论](#-结论)
+- [复现方法](#-复现方法)
 
 </details>
 
-## 概述
+## 🧭 概述
 
-SDForge 是一个声明式 SDK 框架，核心设计理念之一是 **编译时协议选择——未使用的协议产生零编译代码**。通过 Cargo feature flag 与 `#[cfg(feature = "...")]` 的组合，框架仅在启用对应协议时才将其实现代码与依赖纳入编译图。
+SDForge 是一个声明式 SDK 框架，核心设计理念之一是**编译时协议选择：未使用的协议产生零编译代码**。通过 Cargo feature flag 与 `#[cfg(feature = "...")]` 的组合，框架仅在启用对应协议时才将其实现代码与依赖纳入编译图。
 
 本文档对比两种交付模式：
 
 - **SDForge（特性门控）**：按需启用协议，默认仅编译 HTTP（`cargo build`），未启用的 MCP / WebSocket / gRPC / streaming / security / cache 等模块其源码与依赖完全不进入编译产物。
-- **Server-less（全量打包）**：对应 SDForge 的 `--features full`，把所有协议实现与依赖一次性编译进产物。这也是多数"开箱即用"框架的默认形态——无法在编译期裁剪未用功能。
+- **Server-less（全量打包）**：对应 SDForge 的 `--features full`，把所有协议实现与依赖一次性编译进产物。这也是多数"开箱即用"框架的默认形态：无法在编译期裁剪未用功能。
 
-目标是量化特性门控带来的 **编译时间** 与 **产物体积** 优势。
+目标是量化特性门控带来的**编译时间**与**产物体积**优势。
 
-## 方法论
+## 🔬 方法论
 
 - **测量方法**：每次测量前执行 `cargo clean` 清空 `target/`，随后 `cargo build` 计时。编译时间取 cargo 自身报告的 `Finished ... in Xs`；同时记录 wall-clock（含 cargo 启动/链接开销）作为参考。
 - **测量场景**：`--features http`（默认，仅 HTTP）vs `--features full`（全量协议）。
 - **构建模式**：`dev`（debug）profile 与 `release` profile。release profile 配置为 `lto = true`、`codegen-units = 1`、`opt-level = "z"`（体积优化）。
 - **体积指标**：
-  - `libsdforge.rlib`——框架库编译产物，是反映框架代码体积最干净的单一指标；
-  - `target/debug|release/deps` 与 `target/` 目录总大小——反映全部依赖编译产物的磁盘占用；
-  - `sdforge` 二进制——注意：`full` 特性 **不含** `cli`，因此默认二进制是 `panic` stub，需另行测量 `--features <x>,cli` 才能得到真实 CLI 二进制体积。
+  - `libsdforge.rlib`：框架库编译产物，是反映框架代码体积最干净的单一指标；
+  - `target/debug|release/deps` 与 `target/` 目录总大小：反映全部依赖编译产物的磁盘占用；
+  - `sdforge` 二进制：注意，`full` 特性**不含** `cli`，因此默认二进制是 `panic` stub，需另行测量 `--features <x>,cli` 才能得到真实 CLI 二进制体积。
 - **依赖规模**：用 `cargo tree` 统计去重后的唯一 crate 数。
 - 每个场景独立测量，未跨场景复用缓存。
 
-## 基准环境
+## 🖥️ 基准环境
 
 | 项目 | 值 |
 |------|-----|
@@ -51,9 +52,9 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是 **编译时�
 | 内存 | 70 GiB 总计 / 60 GiB 可用 |
 | 构建配置 | release: `lto=true`, `codegen-units=1`, `opt-level="z"`；dev: `debug=true`, 依赖 `opt-level=2` |
 
-> 注：`full` 特性集合为 `http, mcp, streaming, timestamp, security, hot-reload, cache, websocket, grpc, logging, openapi`，**不包含** `cli` 与 `simd-json`。
+> 注：测量时点的 `full` 特性集合为 `http, mcp, streaming, timestamp, security, hot-reload, cache, websocket, grpc, logging, openapi`，**不包含** `cli` 与 `simd-json`（该集合为 2026-07-03 口径，与当前 `full` 定义略有差异）。
 
-## 依赖规模对比
+## 📦 依赖规模对比
 
 | 指标 | http only | full | 差异 |
 |------|-----------|------|------|
@@ -62,7 +63,7 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是 **编译时�
 
 `full` 额外引入的典型重型依赖：`tonic`/`prost`/`tonic-prost`（gRPC）、`tokio-tungstenite`（WebSocket）、`rmcp`（MCP）、`argon2`/`sha2`/`hmac`/`secrets`（security）、`utoipa`（openapi）、`oxcache`（cache）等。这些在 `http only` 构建中完全不出现在依赖图里。
 
-## 编译时间对比
+## ⏱️ 编译时间对比
 
 编译时间取 cargo 报告值（`Finished ... in Xs`），wall-clock 为含进程启停的端到端耗时。
 
@@ -75,7 +76,7 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是 **编译时�
 
 **结论**：无论 debug 还是 release，`http only` 都比 `full` 节省约 **46–47%** 的编译时间。Debug 模式下省下约 25.6s，release 模式下省下约 11.8s。
 
-## 二进制 / 产物体积对比
+## 💾 二进制 / 产物体积对比
 
 ### 框架库体积（`libsdforge.rlib`，最干净的框架代码指标）
 
@@ -101,7 +102,7 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是 **编译时�
 | http only | 3.73 MB（3,911,120 B） | 349 KB（357,296 B） |
 | full | 3.73 MB（3,911,120 B，**完全相同**） | 349 KB（357,296 B，**完全相同**） |
 
-> **重要说明**：`full` 特性不含 `cli`，因此 `src/main.rs` 在两种场景下都退化成同一个 `panic` stub（`#[cfg(not(feature = "cli"))] fn main()`）。这意味着 **默认二进制体积无法反映协议裁剪的差异**，必须以 `rlib` 或真实 CLI 二进制来评估。
+> **重要说明**：`full` 特性不含 `cli`，因此 `src/main.rs` 在两种场景下都退化成同一个 `panic` stub（`#[cfg(not(feature = "cli"))] fn main()`）。这意味着**默认二进制体积无法反映协议裁剪的差异**，必须以 `rlib` 或真实 CLI 二进制来评估。
 
 ### 真实 CLI 二进制体积（追加 `cli` 特性，release）
 
@@ -114,7 +115,7 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是 **编译时�
 
 > 即便启用 `cli`，最终二进制仅差 2.4%：release 的 `lto=true` + `opt-level="z"` + `codegen-units=1` 对二进制做了激进的死代码消除，未被 `main.rs` 实际引用的协议实现会在链接期被剔除。**但这只影响最终二进制体积，编译期的依赖编译成本依旧要付**（见上表编译时间）。
 
-## 分析
+## 🔍 分析
 
 ### 1. 编译时间差异的原因
 
@@ -122,17 +123,18 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是 **编译时�
 
 ### 2. 产物体积差异的原因
 
-`rlib` 是反映框架代码体积最准确的单一指标：debug 下 full 是 http 的 2.96×（100.2 MB vs 33.9 MB），release 下是 2.54×（9.07 MB vs 3.57 MB）。差异完全来自被裁剪掉的协议实现及其内联进 rlib 的依赖代码。`target/` 目录总占用 debug 下从 1.1 GB 增至 2.0 GB（+82%），release 下从 608 MB 增至 832 MB（+37%）——这对 CI 缓存与磁盘预算有实际影响。
+`rlib` 是反映框架代码体积最准确的单一指标：debug 下 full 是 http 的 2.96×（100.2 MB vs 33.9 MB），release 下是 2.54×（9.07 MB vs 3.57 MB）。差异完全来自被裁剪掉的协议实现及其内联进 rlib 的依赖代码。`target/` 目录总占用 debug 下从 1.1 GB 增至 2.0 GB（+82%），release 下从 608 MB 增至 832 MB（+37%），这对 CI 缓存与磁盘预算有实际影响。
 
 ### 3. 零开销抽象的实际效果
 
-数据印证了"未使用协议产生零编译代码"：在 `http only` 构建中，MCP/WebSocket/gRPC/security 等模块的源码既不出现在 `cargo tree`（396 vs 478 crate），也不出现在 `libsdforge.rlib`（33.9 MB vs 100.2 MB）。这不是运行时判断或运行时加载，而是 **编译期完全裁剪**——未启用特性的代码根本不会被 rustc 处理。量化收益：debug 下省 47% 编译时间、66% 库体积；release 下省 46% 编译时间、61% 库体积。
+数据印证了"未使用协议产生零编译代码"：在 `http only` 构建中，MCP/WebSocket/gRPC/security 等模块的源码既不出现在 `cargo tree`（396 vs 478 crate），也不出现在 `libsdforge.rlib`（33.9 MB vs 100.2 MB）。这不是运行时判断或运行时加载，而是**编译期完全裁剪**：未启用特性的代码根本不会被 rustc 处理。量化收益：debug 下省 47% 编译时间、66% 库体积；release 下省 46% 编译时间、61% 库体积。
 
 ### 4. 二进制体积评估的注意事项
 
 默认 `sdforge` 二进制在 http 与 full 下完全相同（均为 panic stub），**不能**用作特性裁剪的体积证据。真实 CLI 二进制（追加 `cli`）release 下仅差 2.4%，因为链接器死代码消除了未引用代码。这揭示一个重要区别：
+
 - **编译期成本**（编译时间、依赖图、rlib 体积）由 feature flag 决定，特性门控收益显著；
-- **最终二进制体积**还受 LTO/死代码消除影响，特性门控的边际收益在二进制层面被部分稀释——但前提是你愿意为 `full` 付完整编译时间。
+- **最终二进制体积**还受 LTO/死代码消除影响，特性门控的边际收益在二进制层面被部分稀释，但前提是你愿意为 `full` 付完整编译时间。
 
 ### 5. 对开发体验与 CI/CD 的影响
 
@@ -140,7 +142,7 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是 **编译时�
 - **CI 矩阵**：可按目标协议组合构建（如仅 `http`、`http,websocket`、`mcp`），缩短总流水线时间、降低缓存压力（target 目录小 37–82%）。
 - **产物体积敏感场景**（嵌入式/边缘/容器镜像）：release rlib 从 9.07 MB 降到 3.57 MB，对镜像分层与冷启动有正向收益。
 
-## 结论
+## ✅ 结论
 
 SDForge 的编译时特性门控实现了真正的"未使用协议产生零编译代码"，量化收益如下：
 
@@ -153,9 +155,9 @@ SDForge 的编译时特性门控实现了真正的"未使用协议产生零编�
 | 构建产物总占用（debug target） | 45%（1.1 GB vs 2.0 GB） |
 | 唯一依赖 crate 数 | 17.2%（396 vs 478） |
 
-相比 server-less（全量打包）方案，SDForge 让仅需要 HTTP 的用户 **少编译 82 个 crate、少付近一半编译时间、库体积缩减约六成**，且这一收益发生在编译期、零运行时开销。最终二进制体积在 LTO 死代码消除下差异较小（CLI 二进制仅 2.4%），但编译期成本与磁盘占用的节省是确定且显著的。
+相比 server-less（全量打包）方案，SDForge 让仅需要 HTTP 的用户**少编译 82 个 crate、少付近一半编译时间、库体积缩减约六成**，且这一收益发生在编译期、零运行时开销。最终二进制体积在 LTO 死代码消除下差异较小（CLI 二进制仅 2.4%），但编译期成本与磁盘占用的节省是确定且显著的。
 
-## 复现方法
+## 🔁 复现方法
 
 > 在 SDForge 仓库根目录执行。每次测量前 `cargo clean` 以确保从零编译。
 

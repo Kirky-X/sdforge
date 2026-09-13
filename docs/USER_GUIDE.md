@@ -1,10 +1,11 @@
 # 📖 Sdforge 用户指南
 
-本指南面向 SDForge 的使用者，覆盖从安装、核心概念、配置到进阶用法的完整流程。SDForge 是一个基于 Rust 的声明式 SDK 框架，通过 `#[forge]` 过程宏从统一的函数注解自动生成多协议服务接口（HTTP + MCP + gRPC + WebSocket + CLI），并通过 Cargo features 进行编译时协议选择——未使用的协议产生零编译代码。
+本指南面向 SDForge 的使用者，覆盖从安装、核心概念、配置到进阶用法的完整流程。SDForge 是一个基于 Rust 的声明式 SDK 框架，通过 `#[forge]` 过程宏从统一的函数注解自动生成多协议服务接口（HTTP + MCP + gRPC + WebSocket + CLI），并通过 Cargo features 进行编译时协议选择：未启用的协议产生零编译代码。
 
 ## 📋 目录
 
 <details open>
+<summary>📑 目录</summary>
 
 - [简介](#-简介)
 - [快速开始](#-快速开始)
@@ -26,7 +27,7 @@ SDForge 的核心思路是：**一份函数注解，多协议消费**。你只�
 - 启用 `cli` → clap 命令
 - 启用 `openapi` → OpenAPI 3.1 规范条目
 
-未启用的协议完全不进入编译产物，这是 SDForge 与"全量打包"框架的根本区别（量化对比见 [性能基准](benchmarks/vs-server-less.md)）。
+未启用的协议完全不进入编译产物，这是 SDForge 与"全量打包"框架的根本区别（量化对比见[编译期门控基准](benchmarks/vs-server-less.md)）。
 
 ## 🚀 快速开始
 
@@ -36,11 +37,11 @@ SDForge 的核心思路是：**一份函数注解，多协议消费**。你只�
 cargo add sdforge
 ```
 
-或手动添加到 `Cargo.toml`：
+或手动添加到 `Cargo.toml`（当前版本 `0.5.0-rc.3`）：
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5.0-rc.2", features = ["http"] }
+sdforge = { version = "0.5.0-rc.3", features = ["http"] }
 ```
 
 > `sdforge` 默认不启用任何特性（`default = []`），需按需显式启用。
@@ -55,22 +56,22 @@ use sdforge::prelude::*;
     version = "v1",
     path = "/users/:id",
     method = "GET",
-    tool_name = "get_user",
     description = "Get a user by ID"
 )]
-async fn get_user(id: u64) -> Result<User, ApiError> {
-    Ok(User { id, name: "Test".into() })
+async fn get_user(id: u64) -> Result<serde_json::Value, ApiError> {
+    Ok(serde_json::json!({ "id": id, "name": "Test" }))
 }
 
 #[tokio::main]
 async fn main() {
+    sdforge::init_all_plugins(); // 固化 inventory 注册项，防链接器剔除
     let app = sdforge::http::build();
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
+    sdforge::axum::serve(listener, app).await.unwrap();
 }
 ```
 
-运行后即可访问 `GET /api/v1/users/42`（版本会自动拼入路径前缀 `/api/{version}`）。
+运行后即可访问 `GET /api/v1/users/42`（版本会自动拼入路径前缀 `/api/{version}`）。示例中的 `sdforge::axum` 是框架转发的 axum 门面，下游无需直接依赖 axum。
 
 ## 🧩 核心概念
 
@@ -87,6 +88,23 @@ async fn main() {
 | `tool_name`    | MCP 工具名称                                | 否   | -      |
 | `grpc_method`  | gRPC 方法名（`grpc` feature）               | 否   | -      |
 | `cli`          | 是否注册为 CLI 命令（`cli` feature）        | 否   | false  |
+
+<details>
+<summary>🔧 进阶参数与裸旗标</summary>
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `i18n_key` | `description` 的运行时翻译键（经 `sdforge::i18n` 翻译注册表解析） | - |
+| `cache_ttl` | 结果缓存 TTL 秒数（`cache` feature） | - |
+| `ws_path` | WebSocket 路径（`websocket` feature） | - |
+| `stream` / `streaming` | SSE 流式响应开关 | false |
+| `no_prefix` | 跳过模块/版本前缀拼接 | false |
+| `validate` | 裸旗标：启用 `#[param(...)]` 参数校验（`validate` feature） | false |
+| `paginate` | 裸旗标：声明式分页包装（`paginate` feature） | false |
+| `on_start` / `on_stop` | 裸旗标：进程生命周期钩子（`lifecycle` feature） | false |
+| `auth(role = "...")` | 端点级 RBAC 角色（无匹配角色返回 403） | - |
+
+</details>
 
 ### 版本路由
 
@@ -116,15 +134,16 @@ async fn main() {
 
 | 类型 | 用途 |
 |------|------|
-| `AppConfig` | 应用配置聚合根（含 `Default` 与 Builder） |
+| `AppConfig` | 应用配置聚合根（含 `Default` 与 Builder，含 `security` / `cache` 字段） |
 | `ServerConfig` | 服务器监听配置（默认 `host: 127.0.0.1`、`port: 8080`、`request_timeout_secs: 30`） |
-| `ApiConfig` | API 行为配置 |
+| `ApiConfig` | API 行为配置（前缀、默认版本） |
 | `AuthConfig` | 认证配置（API Key 播种 `keys: Vec<ApiKeySeed>`、JWT 等） |
 | `CorsConfig` | CORS 配置（校验失败会拒绝非法 origin） |
 | `TlsConfig` | TLS 配置 |
 | `TracingConfig` | 追踪/日志配置 |
 | `CacheConfig` | 缓存配置（`enabled`、`default_ttl_secs`、`max_items`、`track_stats`） |
-| `EnvHelper` | 环境变量辅助读取 |
+| `SecurityConfig` | 安全响应头配置（CSP、X-Frame-Options 等） |
+| `EnvHelper` | 运行环境名称辅助类型（`environment` 字段） |
 | `ConfigError` | 配置错误类型 |
 
 ### 使用配置构建
@@ -157,25 +176,14 @@ max_items = 5000
 track_stats = true
 ```
 
-### 环境变量
-
-生产部署常用：
-
-```bash
-export RUST_LOG=info
-export SD_FORGE_PORT=3000
-export SD_FORGE_HOST=0.0.0.0
-export SD_FORGE_CONFIG_PATH=/etc/sdforge/config.toml
-export SD_FORGE_FEATURES=full
-```
-
-## 🚧 进阶用法
+## 🔧 进阶用法
 
 ### gRPC 服务
 
-启用 `grpc` feature 后，`#[forge(grpc_method = "...")]` 通过 inventory 注册 handler，由 `SdForgeGrpcService::call()` 路由：
+启用 `grpc` feature 后，`#[forge(grpc_method = "...")]` 通过 inventory 注册 handler，由 `SdForgeGrpcService` 按 `grpc_method` 路由（实现 `Call` / `GetInfo` 两个 RPC）。服务器经 `build_server_with_config` 启动：
 
 ```rust
+use sdforge::grpc::{GrpcServerConfig, build_server_with_config};
 use sdforge::prelude::*;
 use sdforge::forge;
 
@@ -192,13 +200,15 @@ async fn echo(msg: String) -> Result<serde_json::Value, ApiError> {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sdforge::init_all_plugins();
-    let server = sdforge::grpc::SdForgeGrpcService::default();
-    server.serve("0.0.0.0:50051").await?;
+    let config = GrpcServerConfig::default();
+    // security feature 启用时，require_auth 默认为 true：
+    // 未配置 auth 服务器会拒绝启动（fail-safe），开发环境可显式置 false
+    build_server_with_config("0.0.0.0:50051", config).await?;
     Ok(())
 }
 ```
 
-返回值需满足 `serde::Serialize`，错误类型需为 `ApiError`；参数载荷上限 1 MiB。
+返回值需满足 `serde::Serialize`，错误类型需为 `ApiError`；参数载荷上限 1 MiB。应用状态经 `GrpcServerConfig.state` 注入（`Arc<dyn Any + Send + Sync>`）。
 
 ### CLI 应用
 
@@ -256,7 +266,7 @@ let spec = OpenApiBuilder::new()    // 或自定义元数据
 
 ### 缓存
 
-启用 `cache` feature 后直接透传 oxcache：`SyncCache` / `SharedCache` / `DashMapCache`（`OxcacheSyncCache` 别名），支持键规范化、模式失效（`invalidate(pattern)`）、批量删除（`delete_many`）与统计（`get_stats`）。
+启用 `cache` feature 后直接透传 oxcache：`SyncCache` / `SharedCache` / `DashMapCache`（`OxcacheSyncCache` 别名），支持键规范化、模式失效（`invalidate(pattern)`）、批量删除（`delete_many`）与统计（`get_stats`）。HTTP 侧另有 `ResponseCacheLayer` 响应缓存中间件（需 `cache` + `http`），GET 路由成功响应自动缓存。
 
 ### 国际化与日志
 
@@ -265,7 +275,7 @@ let spec = OpenApiBuilder::new()    // 或自定义元数据
 
 ## 💡 最佳实践
 
-1. **按需启用特性** — 只需 HTTP 时用 `--features http`，不要默认上 `full`：编译时间节省约 46–47%、库体积缩减约六成（见 [性能基准](benchmarks/vs-server-less.md)）
+1. **按需启用特性** — 只需 HTTP 时用 `--features http`，不要默认上 `full`：编译时间节省约 46–47%、库体积缩减约六成（见[编译期门控基准](benchmarks/vs-server-less.md)）
 2. **在 `main` 开头调用 `init_all_plugins()`** — 否则 release 构建（LTO + 死代码消除）可能剔除 inventory 注册项
 3. **用 `From<MyError> for ServiceError` 统一错误** — 业务错误通过 `?` 自动转换，错误码/状态码集中管理
 4. **生产部署修改默认 host** — `ServerConfig::default()` 绑定 `127.0.0.1`（fail-safe），对外服务需显式配置
@@ -286,6 +296,7 @@ let spec = OpenApiBuilder::new()    // 或自定义元数据
 | 短 JWT 密钥被拒绝 | v0.3.0 起强制 `MIN_SECRET_LENGTH=32`，更换强密钥 |
 | IP 限流/封禁不生效 | 未配置 `ConnectInfo`；v0.4.4 起无 `ConnectInfo` 时不再信任 `X-Forwarded-For` / `X-Real-IP` |
 | MCP 请求返回 400 | 无状态协议要求请求头 `Mcp-Method` / `Mcp-Name`，缺失即 400（2026-07-28 规范行为） |
+| gRPC 服务器拒绝启动并提示 authentication | 启用 `security` 时 `GrpcServerConfig.require_auth` 默认 `true`，需配置 `auth`（开发环境可显式置 `false`） |
 | 端口冲突 | `lsof -i :3000` 查找占用进程后更换端口或结束进程 |
-| 需要定位性能问题 | `RUST_LOG=debug cargo run --features logging` 看日志；`cargo flamegraph --bin sdforge --features full` 剖析 |
+| 需要定位性能问题 | `cargo bench --bench runtime_bench --features http` 对照[性能基线](PERFORMANCE.md)；编译期成本对照[编译期门控基准](benchmarks/vs-server-less.md) |
 | 其他问题 | 查阅 [API 参考](API_REFERENCE.md) 与 [架构文档](ARCHITECTURE.md)，或在 [Issues](https://github.com/Kirky-X/sdforge/issues) 提问 |
