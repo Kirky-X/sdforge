@@ -5,9 +5,146 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，
 本项目遵循 [语义化版本规范](https://semver.org/lang/zh-CN/spec/v2.0.0.html)。
 
+## 📋 目录
+
+<details open>
+<summary>📑 目录</summary>
+
+- [Unreleased](#unreleased)
+- [0.5.0-rc.3](#050-rc3---2026-09-10)
+- [0.5.0-rc.2](#050-rc2---2026-09-07)
+- [0.4.7](#047---2026-07-23)
+- [0.4.6](#046---2026-07-22)
+- [0.4.5](#045---2026-07-22)
+- [0.4.4](#044---2026-07-18)
+- [0.4.3](#043---2026-07-17)
+- [0.4.2](#042---2026-07-15)
+- [0.4.1](#041---2026-07-13)
+- [0.4.0](#040---2026-07-13)
+- [0.3.5](#035---2026-07-12)
+- [0.3.4](#034---2026-07-12)
+- [0.3.3](#033---2026-07-11)
+- [0.3.0](#030---2026-07-04)
+- [0.2.0](#020---2026-07-04)
+- [0.1.0](#010---2026-01-19)
+
+</details>
+
 ## [Unreleased]
 
-_暂无变更。_
+### ⚠️ 破坏性变更 (Breaking Changes)
+
+- **`security::api_key::AppApiKeyAuth::add_key_version` 签名变更**：返回类型从 `()` 改为
+  `Result<(), String>`。当已存在的 key 元数据损坏/不可反序列化时，本方法现在返回 `Err`
+  且**不注册任何凭据**（安全不变量：绝不产生"可认证但无法 revoke/rotate"的孤儿 key）。
+  此前它会静默注册 key hash 后跳过元数据更新。调用方需追加 `?` / `.unwrap()`。
+- **`error::api_error::ApiError` 新增 `QuotaExhausted { used, total }` 变体**：
+  `RateLimitError::QuotaExhausted` 现在映射到该变体（HTTP 429），不再映射到
+  `RateLimitExceeded` 并把 `used` 塞进 `window_seconds`（design.md D8 tech debt 已清偿）。
+  对 `ApiError` 做穷尽 `match` 的下游代码需补充分支。
+- **`config::server::ServerConfig` 新增 `max_body_size: usize` 字段**（默认 10 MiB，
+  `#[serde(default)]` 兼容旧配置文件）。以结构体字面量构造 `ServerConfig` 的代码需补充
+  该字段或使用 `..Default::default()`。
+- **`security::bearer::BearerAuth`**：新增手动 `Drop`（销毁时 volatile 擦除 secret）与
+  手动 `Debug`（secret 恒输出 `[REDACTED]`）。builder 现拒绝空 `audience`/`issuer`
+  （返回 `AuthConfigError::InvalidSecret`）。
+- **错误脱敏统一（行为变更）**：`ApiError::internal_*` 构造器现在强制对 message 执行
+  敏感信息脱敏（JWT/密钥/信用卡/SSN/文件路径 + 500 字符截断）；`SdForgeError::Internal`
+  的 `sanitized_message()` 与 `to_service_error()`、`ApiError::Internal` 的 `to_mcp_json()`
+  现在统一输出通用文案 `"An internal error occurred. Please try again later."`，原始
+  消息只保留在 `Display`/`Debug`（日志）中。断言原始消息会出现在外部输出的测试需更新。
+- **基准目标更名**：Cargo.toml `[[bench]]` 目标 `axiom_bench` 更名为 `sdforge_bench`
+  （原 `src/benches/axiom_bench.rs` 为空壳孤儿文件，已删除）。
+
+### 新增 (Added)
+
+- `http::VersionRedirectLayer` / `VersionRedirectService`：可注入 `VersionRouterConfig`
+  的版本重定向层。此前 `version_redirect_middleware` 硬编码默认配置，导致
+  `redirect_unknown` / `sunset_header` / `deprecated_versions` 三个配置字段全部无效。
+- `core::RegexCache::common::is_strong_password()`：完整密码强度检查
+  （≥8 位 + 小写/大写/数字/特殊字符各至少一个）。
+- `ServerConfig::max_body_size`：请求体上限可配置化（此前硬编码 10 MB）。
+- 回归测试：广播可达性、超大消息连接清理、深度嵌套空容器拒绝、孤儿 key 拒绝、
+  rotate 后旧 key 失效、终态会话驱逐、审计并发不丢日志、超时丢弃计数等。
+
+### 修复 (Fixed)
+
+- **WebSocket**（`src/websocket/handler.rs`）：
+  - 修复广播/推送整体失效：`handle_socket` 此前丢弃 `WebSocketConnection::new`
+    返回的 receiver，manager 注册的所有连接均为死通道，`broadcast` 必然失败并误删
+    连接。现在所有出站消息统一经通道由 forwarder 任务写回 socket。
+  - 修复连接泄漏 DoS：超大消息早退路径跳过 `remove_connection` 且无 RAII 兜底，
+    连接条目永久泄漏。现在以 Drop guard 保证所有退出路径清理。
+  - 修复 JSON 深度检查绕过：`calculate_value_depth` 不计容器自身层级，
+    17~128 层纯空容器嵌套（如 `[[[...]]]`）深度算成 0，绕过 `MAX_JSON_DEPTH=16`。
+  - `MAX_STRING_LENGTH`（64KB）从 `cfg(test)` 文档性常量变为 `parse_websocket_message`
+    强制校验（`id`/`method`/`error`/`event`）。
+- **CORS**（`src/config/cors.rs`）：`build_cors_layer` 硬编码
+  `.allow_methods(Any).allow_headers(Any)`，`allowed_methods` / `allowed_headers`
+  配置完全无效。现在配置精确生效（空列表/`*` 保持 Any 兼容；非法头部名报错）。
+- **API Key**（`src/security/api_key.rs`、`api_key_manager.rs`）：
+  - 孤儿 key（见破坏性变更）；
+  - `rotate_key` 无 `rotation_config` 时旧 key 永久有效（现在轮换即替换）；
+  - 元数据反序列化 `i64 as u64` 回绕导致 `Instant` 运算 panic / 永不过期
+    （现在钳制，fail-closed）；
+  - `cleanup_versions` retain 路径不重算 `active_version_index` 导致活动版本丢失。
+- **审计日志**（`src/security/audit/`）：
+  - `log()` 对同用户日志列表的 get→push→set 无互斥，并发写互相覆盖丢审计记录
+    （新增 `merge_lock`，log() 与 worker 合并共用）；
+  - trait 路径 `total_log_count` 被新建 0 值计数器顶替，监控指标失真；
+  - 信号量超时丢弃不递增 `dropped_log_count`；
+  - builder 零值（`queue_size(0)` panic、`max_concurrent_ops(0)` 全超时、
+    `max_logs_per_user(0)` 全丢弃）统一钳制为最小 1。
+- **缓存**（`src/cache/cache_impl.rs`）：`SyncCache::delete` 在 backend 删除失败时
+  仍返回 `existed=true`，违反 trait 契约；现在返回 `false`。
+- **国际化**（`src/i18n/mod.rs`）：`translate_or_fallback` 两次独立加锁之间存在
+  TOCTOU，`set_locale` 并发时用过期 locale 查表（现在单锁完成快照+查表）。
+- **MRTR**（`src/mcp/mrtr.rs`）：`get_session` 静默吞掉毒化锁（现记录告警）；
+  Completed/Cancelled 终态会话永不驱逐，积累至 `MAX_MRTR_SESSIONS` 后
+  `create_session` 永久失败（现按超时窗口老化）。
+- **HTTP 路由**（`src/http/version_routing.rs`）：重定向丢弃 query string
+  （`/api/test?foo=bar` → `/api/v1/test`，现保留）；`sunset_header` 配置头名生效。
+- **HTTP 中间件**（`src/http/http_impl.rs`）：`resolve_route_path` 的 `base_path[1..]`
+  防御性切片（空串/多字节首字符 panic、无前导斜杠静默丢首字符）。
+- **正则**（`src/core/regex_cache.rs`）：`password_strong` 注释宣称强制复杂度而实际
+  仅查长度（现在文档诚实，完整检查请用 `is_strong_password`）。
+- **错误**（`src/error/context.rs`）：`ErrorContext::current()` 的 `file`/`line`
+  恒指向 context.rs 自身、`function` 恒为 `"()"`（现 `#[track_caller]` 捕获真实
+  调用方，`function` 诚实为 `None`）。
+- **JWT/Bearer**（`src/security/bearer/bearer_impl.rs`）：base64url 解码器查找表以
+  0 初始化，任何非法字节被静默当作 `'A'` 解码（现以 0xFF 哨兵严格拒绝）。
+- **基准正确性**（`src/benches/sdforge_bench.rs`）：cache_clear 首迭代后度量空缓存、
+  失效基准把 O(n) 重填充计入度量（改 `iter_batched`）、eviction 吞吐声明 150 与
+  实际 50 次操作不符、denied 路径 `let _ =` 掩盖回归（改断言）、
+  `jwt_secret_validation` 重复度量生成成本（现仅度量校验）。
+
+### 安全加固 (Security Hardening)
+
+- CI workflows（ci.yml / codeql.yml / release.yml / tag-deleted.yml）的所有第三方
+  action 引用从可变 tag 固定为 40 位 commit SHA（附版本注释）——消除供应链
+  tag 劫持风险（tiangang SAST 扫描 Medium 发现）。
+- `ApiError::internal_*` 构造器强制脱敏改为 feature 感知：`security` feature
+  关闭时退化为原样存储，保证裸默认构建与 ratelimit-only 构建可编译。
+- `to_service_error` 的 `Internal` 分支与 `sanitized_message` / `to_mcp_json`
+  三轨完全统一：HTTP 500 响应体现在不可能携带原始内部消息。
+
+### 已知依赖健康信号 (Known Dependency Signals)
+
+- `bincode 2.0.1`：RUSTSEC-2025-0141 标记为 unmaintained（informational，非漏洞，
+  trivy + cargo-audit 双通道均 0 CVE）。可留意 postcard/rkyv 等替代方案，无需
+  紧急行动。
+
+### 文档 (Documentation)
+
+- `hash_key`：补充无盐 SHA256 存储的威胁模型说明（确定性查找前提 + 依赖 key 高熵，
+  禁止低熵口令直入 `add_key`）。
+- `key_id`：说明 64-bit 截断是有意的审计隐私取舍，不参与认证决策。
+- `validate_key`：明确 `client_ip` 参数当前未使用（保持 API 兼容）。
+- `build_with_redirect`：明确警示其不挂载安全中间件，生产用 `build_with_config`。
+- `canonicalize_cache_key`：明确其为调用方工具函数，缓存内部不会自动调用。
+- `VersionRouterConfig::supported_versions`：明确版本合法性门控委托给路由注册。
+- `examples/src/security/api_key.rs`、`examples/src/websocket/chat.rs`：显著标注
+  认证/WS 端点为演示桩，禁止复制到生产。
 
 ---
 
@@ -15,15 +152,15 @@ _暂无变更。_
 
 ### Added
 
-- **AppConfig 安全/缓存字段**：`AppConfig` 新增 `security: SecurityConfig` + `cache: CacheConfig`（feature-gated），builder 同步支持 `.security()` / `.cache()` 方法（T060）
-- **`build_rate_limiter()` 自动装配**：`AppConfig::build_rate_limiter()` 从 `security.rate_limit` 配置自动构造 `LimiteronAdapter`（T060）
-- **响应缓存中间件**：`ResponseCacheLayer` / `ResponseCacheMiddleware` — GET 路由自动缓存成功响应，key 经 `canonicalize_cache_key` 规范化，命中短路、未命中回源回写（T061）
-- **`AuditSink` trait**：抽象审计日志存储后端（`write` / `read` / `clear`），内存环形缓冲保留为默认 sink（T062）
-- **`InklogAuditSink`**：`inklog` feature 下桥接审计事件到 inklog 结构化输出管道（T062）
+- **AppConfig 安全/缓存字段**：`AppConfig` 新增 `security: SecurityConfig` + `cache: CacheConfig`（feature-gated），builder 同步支持 `.security()` / `.cache()` 方法
+- **`build_rate_limiter()` 自动装配**：`AppConfig::build_rate_limiter()` 从 `security.rate_limit` 配置自动构造 `LimiteronAdapter`
+- **响应缓存中间件**：`ResponseCacheLayer` / `ResponseCacheMiddleware` — GET 路由自动缓存成功响应，key 经 `canonicalize_cache_key` 规范化，命中短路、未命中回源回写
+- **`AuditSink` trait**：抽象审计日志存储后端（`write` / `read` / `clear`），内存环形缓冲保留为默认 sink
+- **`InklogAuditSink`**：`inklog` feature 下桥接审计事件到 inklog 结构化输出管道
 
 ### Changed
 
-- 移除 `ratelimit-http` feature 中的 `limiteron/tower-middleware` 死重使能（全仓 0 import，sdforge 自带 Tower middleware 实现）（T060）
+- 移除 `ratelimit-http` feature 中的 `limiteron/tower-middleware` 死重使能（全仓 0 import，sdforge 自带 Tower middleware 实现）
 - 版本递增至 `0.5.0-rc.3`
 - trait-kit → `0.5.0-rc.3`、oxcache → `0.5.0-rc.4`、limiteron → `0.3.0-rc.3`、inklog → `0.3.0-rc.3`
 - 新增 `[patch.crates-io]` 本地路径联调
@@ -51,6 +188,8 @@ _暂无变更。_
 
 - rmcp 版本描述 2.1→3.2（6 处）；安装示例统一 0.5.0-rc.2；CONTRIBUTING MSRV 对齐 1.97.1；sdforge-macros html_root_url 对齐
 
+---
+
 ## [0.4.7] - 2026-07-23
 
 ### Changed
@@ -60,8 +199,10 @@ _暂无变更。_
 
 ### Security
 
-- **[LOW-1 披露]** 补公开 `deny.toml` 中 `bincode` [RUSTSEC-2025-0141](https://rustsec.org/advisories/RUSTSEC-2025-0141.html)（unmaintained）的 ignore 决策（此前未在 CHANGELOG 披露）。bincode v2.0.1 为本 crate 直接依赖（`Cargo.toml`），其维护团队因 doxxing/harassment 事件永久停维，公告标注 "No safe upgrade available"。短期保留（功能稳定 + cargo-deny 持续监控公告），中期评估迁移至 `postcard` / `bitcode` / `rkyv`。本次仅透明化已知风险，无主动安全行为变更。
+- 补公开 `deny.toml` 中 `bincode` [RUSTSEC-2025-0141](https://rustsec.org/advisories/RUSTSEC-2025-0141.html)（unmaintained）的 ignore 决策（此前未在 CHANGELOG 披露）。bincode v2.0.1 为本 crate 直接依赖（`Cargo.toml`），其维护团队因 doxxing/harassment 事件永久停维，公告标注 "No safe upgrade available"。短期保留（功能稳定 + cargo-deny 持续监控公告），中期评估迁移至 `postcard` / `bitcode` / `rkyv`。本次仅透明化已知风险，无主动安全行为变更。
 - `cargo deny check advisories bans` 通过，无已知漏洞
+
+---
 
 ## [0.4.6] - 2026-07-22
 
@@ -70,6 +211,8 @@ _暂无变更。_
 - 修复 CI Clippy Lint job 失败：MSRV 从 1.89 升至 1.94（inklog 0.1.11+ 要求 rustc 1.94，`--all-features` CI 启用了可选的 inklog 依赖）
 - 恢复 examples/Cargo.toml 的 `serde` 依赖：0.4.5 误删 serde 导致 `#[derive(Serialize, Deserialize)]` 编译失败（E0463: can't find crate for `serde`），影响 CI Build job 和 Release verify job
 - 修复 `tests/e2e_advanced.rs` 中 17 个 clippy lint（MSRV 升级后新暴露）：移除 Copy 类型 `RegexCacheStats` 上的 `.clone()`、将 16 个常量断言转为编译时 `const { assert!(..) }` 块
+
+---
 
 ## [0.4.5] - 2026-07-22
 
@@ -81,24 +224,28 @@ _暂无变更。_
 
 - 移除未使用依赖：serde（examples）
 
+---
+
 ## [0.4.4] - 2026-07-18
 
 ### Fixed
 
-- **[HIGH-2]** `extract_client_ip_core` 收紧：无 `ConnectInfo` 时不再 last-resort 信任 `X-Forwarded-For` / `X-Real-IP` 头，直接返回 `None`（调用方 fallback 至 `"unknown"`）。消除未配置 `ConnectInfo` 部署下 IP 限流/封禁被伪造头绕过的向量。两处生产调用点（`http_impl` 鉴权、`ratelimit` 适配器）已对 `None` 安全兜底，无 panic 风险。
-- **[vuln0002 schema]** `#[forge]` 宏生成 `input_schema` 的 `required` 字段元素不再带多余引号。此前 `macros/src/lib.rs` 对字段名 `format!("\"{}\"", name)` 手动加引号，叠加 `serde_json::json!` 宏二次加引号，致 `required: ["\"message\""]`（元素内容带引号），`schema_validation` 永远匹配不上 args key，对 `#[forge]` 工具的 required / unknown-field 校验形同虚设。改为 `name.to_string()` 后校验生效（`test_vuln0002_valid_field_accepted` / `test_vuln0002_unknown_field_rejected` 转绿，cargo test --all-features 全量 0 failed）。
+- `extract_client_ip_core` 收紧：无 `ConnectInfo` 时不再 last-resort 信任 `X-Forwarded-For` / `X-Real-IP` 头，直接返回 `None`（调用方 fallback 至 `"unknown"`）。消除未配置 `ConnectInfo` 部署下 IP 限流/封禁被伪造头绕过的向量。两处生产调用点（`http_impl` 鉴权、`ratelimit` 适配器）已对 `None` 安全兜底，无 panic 风险。
+- `#[forge]` 宏生成 `input_schema` 的 `required` 字段元素不再带多余引号。此前 `macros/src/lib.rs` 对字段名 `format!("\"{}\"", name)` 手动加引号，叠加 `serde_json::json!` 宏二次加引号，致 `required: ["\"message\""]`（元素内容带引号），`schema_validation` 永远匹配不上 args key，对 `#[forge]` 工具的 required / unknown-field 校验形同虚设。改为 `name.to_string()` 后校验生效（`test_vuln0002_valid_field_accepted` / `test_vuln0002_unknown_field_rejected` 转绿，cargo test --all-features 全量 0 failed）。
 
 ### Changed
 
 - **BREAKING** `ApiError::Internal.context` 字段类型 `Option<ErrorContext>` → `Option<Box<ErrorContext>>`。消除 clippy 1.96 `result_large_err`（`ErrorContext` 含 `HashMap` 致 `ApiError` enum 变体超 128 字节阈值）。所有构造点（生产代码 `error/api_error.rs` + 集成测试）已同步 `Some(Box::new(ctx))`。
 - clippy 1.96 兼容（语义不变）：`mcp/schema_validation.rs` 嵌套 `if let` → let-chain（edition 2024，消 `collapsible_if`）；`examples/tests/comprehensive_features.rs` `iter().any(|m| *m == x)` → `contains(&x)`（消 `manual_contains`）。
-- `tests/integration/grpc_tests.rs` 3 处 `GrpcServerConfig` 构造补全 `rate_limiter` 字段（`None`）——该字段由 vuln-0006 引入，但测试构造此前被 clippy 门禁阻断从未编译，本次同步修复。
+- `tests/integration/grpc_tests.rs` 3 处 `GrpcServerConfig` 构造补全 `rate_limiter` 字段（`None`）——该字段由 gRPC 限流加固引入，但测试构造此前被 clippy 门禁阻断从未编译，本次同步修复。
+
+---
 
 ## [0.4.3] - 2026-07-17
 
 ### ⚠️ BREAKING CHANGES
 
-specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协议运行时 dispatch：
+统一 handler 契约 + 多协议运行时 dispatch：
 
 - **`CliHandlerFn` 删除** — 不再有独立的 CLI handler 函数指针类型。CLI handler 现在通过 `CliHandlerRegistration` 复用统一的 `HandlerFn` 签名（与 HTTP / gRPC / MCP 一致）
 - **handler 签名统一** — 所有协议的 handler 现在遵循 `fn(HandlerArgs, HandlerState) -> HandlerFuture` 契约。`HandlerArgs` 自动从 clap / tonic / axum extractor 构造；`HandlerState` 通过 `downcast_state::<T>()` 注入。返回类型约束为 `T: Serialize`
@@ -107,9 +254,9 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 
 ### Added
 
-- **`CliBuilder::execute()`** — 一站式 CLI 入口（决策 D6：async）：`build() → get_matches() → dispatch() → extract_value() → println! → std::process::exit(0/1)`。返回 `!`，调用方只需 `#[tokio::main] async fn main() { cli.execute().await }`
-- **`sdforge::cli::dispatch`** — 暴露的自由 dispatch 函数（位于 `src/cli/dispatch.rs`，由 `cli::mod.rs` re-export），供不退出的自定义调用场景使用（R-cli-001）；`CliBuilder::execute()` 内部即调用此函数
-- **`core::extract_value(&Value)`** — 智能返回值提取：`Value::String` → 原始串（无引号）；其他 → JSON 序列化（H3 智能提取）
+- **`CliBuilder::execute()`** — 一站式 CLI 入口（async）：`build() → get_matches() → dispatch() → extract_value() → println! → std::process::exit(0/1)`。返回 `!`，调用方只需 `#[tokio::main] async fn main() { cli.execute().await }`
+- **`sdforge::cli::dispatch`** — 暴露的自由 dispatch 函数（位于 `src/cli/dispatch.rs`，由 `cli::mod.rs` re-export），供不退出的自定义调用场景使用；`CliBuilder::execute()` 内部即调用此函数
+- **`core::extract_value(&Value)`** — 智能返回值提取：`Value::String` → 原始串（无引号）；其他 → JSON 序列化
 - **`core::downcast_state::<T>(HandlerState)`** — 运行时 state 类型转换，handler 中通过 `#[state] db: Arc<Db>` 参数声明，宏生成 `let db = downcast_state::<Db>(state)?;`
 - **`pub use anyhow;` re-export**（gated by `mcp`）— `#[forge(tool_name = "...")]` 宏生成的 MCP tool impl 引用 `sdforge::anyhow::anyhow!` / `sdforge::anyhow::Error`，下游无需直接依赖 anyhow
 - **`pub use tonic;` re-export**（gated by `grpc`）— 下游可使用 `sdforge::tonic::transport::Channel` 等
@@ -127,12 +274,14 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 
 - 修复 `#[forge]` 宏生成代码中裸 `anyhow::anyhow!` / `anyhow::Error` 引用 → 改为 `sdforge::anyhow::anyhow!` / `sdforge::anyhow::Error`，下游无需直接依赖 anyhow
 - 修复 `logging` feature 缺 `dep:once_cell` 导致单独编译失败（之前依赖 `http` feature 间接启用 `once_cell`）
-- **[vuln-0002 补强]** gRPC `call` 路径新增参数载荷大小上限（1 MiB，与 MCP `MAX_ARGUMENTS_SIZE_BYTES` 对齐），关闭此前绕过 MCP schema/大小校验的超大载荷 DoS 向量
+- gRPC `call` 路径新增参数载荷大小上限（1 MiB，与 MCP `MAX_ARGUMENTS_SIZE_BYTES` 对齐），关闭此前绕过 MCP schema/大小校验的超大载荷 DoS 向量
 - **[版本修正]** 发布版本号由误标的 0.5.0 修正为 0.4.3（Cargo.toml / macros / CHANGELOG 一致）
 
 ### ⚠️ Known Limitations（本次发布披露）
 
-- **[HIGH-2]** `extract_client_ip_core` 在无 `ConnectInfo`（未配置 axum `with_make_service_with_connect_info`）的部署下，last-resort fallback 会直接信任 `X-Forwarded-For` / `X-Real-IP` 头。这是有意的文档化权衡（无 ConnectInfo 时无法获取真实 TCP 对端 IP），但意味着此类部署的 IP 限流/封禁可被伪造头绕过。生产部署**必须**配置 `ConnectInfo` 以启用不可伪造的 TCP 对端 IP 提取。后续版本计划将 fallback 改为仅在显式配置「无代理受信」时生效。
+- `extract_client_ip_core` 在无 `ConnectInfo`（未配置 axum `with_make_service_with_connect_info`）的部署下，last-resort fallback 会直接信任 `X-Forwarded-For` / `X-Real-IP` 头。这是有意的文档化权衡（无 ConnectInfo 时无法获取真实 TCP 对端 IP），但意味着此类部署的 IP 限流/封禁可被伪造头绕过。生产部署**必须**配置 `ConnectInfo` 以启用不可伪造的 TCP 对端 IP 提取。后续版本计划将 fallback 改为仅在显式配置「无代理受信」时生效。
+
+---
 
 ## [0.4.2] - 2026-07-15
 
@@ -147,6 +296,8 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 ### Changed
 
 - regex `~1.12` → `~1.13`
+
+---
 
 ## [0.4.1] - 2026-07-13
 
@@ -165,6 +316,8 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 - `AuthGrpcInterceptor` 可见性从 `struct`（私有）扩展为 `pub(crate) struct`（测试可见性需求）
 - 添加 `#[cfg(test)]` 条件编译标注以隔离测试专用 re-export（`sanitize_error_message`、`make_auth_interceptor`、`Registration`、`Ordering`）
 - 同步更新 7 处源码文档注释中的 `trait-kit 0.2.2` → `trait-kit 0.3` 引用
+
+---
 
 ## [0.4.0] - 2026-07-13
 
@@ -186,6 +339,8 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 
 - sdforge-macros 0.3.5 → 0.4.0
 
+---
+
 ## [0.3.5] - 2026-07-12
 
 ### Changed
@@ -205,6 +360,8 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 - inklog 0.1.4 → 0.1.6
 - limiteron 0.2.3 → 0.2.4
 
+---
+
 ## [0.3.4] - 2026-07-12
 
 ### Changed
@@ -214,13 +371,15 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 - ci.yml MSRV 环境变量更新为 1.85
 - 移除 module.rs 中过时的 TypeId::of const fn 注释
 
+---
+
 ## [0.3.3] - 2026-07-11
 
 ### 概览
 
 无功能性代码变更，CI/clippy 修复和 MSRV 提升至 1.91
 
-### 变更（Phase 6 前置）
+### 变更
 
 - **edition 2024 升级** — 从 edition 2021 升级至 edition 2024，采用最新 Rust 语言特性
 - **rust-version 1.85** — 最低支持的 Rust 版本提升至 1.85（edition 2024 所需）
@@ -294,7 +453,7 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 
 ### 概览
 
-本次重大更新包含 Phase 1 架构改进（统一注册系统、配置管理重构、安全模块增强、缓存系统优化）、MCP SDK 迁移、OpenAPI 自动生成、文件拆分、代码质量清理（specmark code-quality-cleanup），以及性能基准文档。
+本次重大更新包含架构改进（统一注册系统、配置管理重构、安全模块增强、缓存系统优化）、MCP SDK 迁移、OpenAPI 自动生成、文件拆分与代码质量清理，以及性能基准文档。
 
 #### BREAKING 变更 ⚠️
 
@@ -352,12 +511,10 @@ specmark change `grpc-cli-runtime-dispatch` — 统一 handler 契约 + 多协�
 
 #### 文件拆分（降低单文件复杂度）
 
-**Phase 1 拆分：**
 - `src/mcp/mod.rs` 拆分为 `server.rs`、`handler.rs`、`stateless.rs`、`headers.rs`、`cache_semantics.rs`、`mrtr.rs`、`protocol.rs` + `tests/`（mod.rs 从 800+ 行降至 200 行）
 - `src/websocket/mod.rs` 拆分为 `connection.rs`、`handler.rs`、`broadcast.rs`、`message.rs` + `tests/`（mod.rs 从 2742 行降至 69 行）
 - `src/core/error/mod.rs` 拆分为 `api_error.rs`、`i18n.rs`、`context.rs`、`sdforge_error.rs` + `tests/`（mod.rs 从 800+ 行降至 23 行）
 
-**代码质量清理拆分（specmark code-quality-cleanup）：**
 - `src/security/audit.rs` (2210 行) → `audit/mod.rs` + `audit/tests/`（54 audit_logger + 10 builder 测试）
 - `src/security/bearer.rs` (2107 行) → `bearer/mod.rs` + `bearer/tests/`（71 bearer_auth + 11 builder 测试）
 - `src/security/types.rs` (1565 行) → `types/mod.rs` + `types/tests/`（75 types 测试）
