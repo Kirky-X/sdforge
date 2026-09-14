@@ -131,6 +131,65 @@ pub async fn serve_with_graceful_shutdown(
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
     config: GracefulShutdownConfig,
 ) -> std::io::Result<()> {
+    serve_graceful(router.into_make_service(), listener, shutdown, config).await
+}
+
+/// Serve `router` on `listener` with the graceful shutdown sequence, exposing
+/// the direct TCP peer address as `ConnectInfo<SocketAddr>` on every request.
+///
+/// Identical to [`serve_with_graceful_shutdown`] except the router is served
+/// via `into_make_service_with_connect_info`, so handlers and middleware can
+/// extract the unspoofable peer IP (`req.extensions().get::<ConnectInfo<..>>()`).
+/// IP-based security layers (rate limiting, auth) should prefer this variant:
+/// without `ConnectInfo`, client-IP extraction must fall back to spoofable
+/// forwarded headers or a shared `"unknown"` bucket.
+pub async fn serve_with_graceful_shutdown_connect_info(
+    router: axum::Router,
+    listener: tokio::net::TcpListener,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+    config: GracefulShutdownConfig,
+) -> std::io::Result<()> {
+    serve_graceful(
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        listener,
+        shutdown,
+        config,
+    )
+    .await
+}
+
+/// Shared graceful-shutdown choreography for both serve variants.
+///
+/// Fan the phase-1 trigger out so both axum's graceful-shutdown future and
+/// the drain deadline observe the same signal instant; run start hooks before
+/// accepting connections and stop hooks before returning in either path.
+async fn serve_graceful<M, S>(
+    make_service: M,
+    listener: tokio::net::TcpListener,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+    config: GracefulShutdownConfig,
+) -> std::io::Result<()>
+where
+    // Bounds mirror `axum::serve` (which uses `tower_service::Service`,
+    // re-exported as `tower::Service`) so both `IntoMakeService` and
+    // `IntoMakeServiceWithConnectInfo` fit.
+    M: for<'a> tower::Service<
+            axum::serve::IncomingStream<'a, tokio::net::TcpListener>,
+            Error = std::convert::Infallible,
+            Response = S,
+        > + Send
+        + 'static,
+    for<'a> <M as tower::Service<axum::serve::IncomingStream<'a, tokio::net::TcpListener>>>::Future:
+        Send,
+    S: tower::Service<
+            axum::extract::Request,
+            Error = std::convert::Infallible,
+            Response = axum::response::Response,
+        > + Clone
+        + Send
+        + 'static,
+    S::Future: Send,
+{
     // Fan the phase-1 trigger out so both axum's graceful-shutdown future and
     // the drain deadline observe the same signal instant.
     let (trigger_tx, mut trigger_rx) = tokio::sync::watch::channel(false);
@@ -142,7 +201,7 @@ pub async fn serve_with_graceful_shutdown(
     // run on_start hooks before accepting connections.
     run_lifecycle_start_hooks().await;
 
-    let server = axum::serve(listener, router).with_graceful_shutdown(axum_shutdown);
+    let server = axum::serve(listener, make_service).with_graceful_shutdown(axum_shutdown);
 
     // Deadline window: opens when the trigger fires, closes after
     // drain_timeout. Winning this race force-aborts the server (phase 2 cap).

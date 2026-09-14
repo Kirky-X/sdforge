@@ -86,7 +86,7 @@ fn default_config() -> FlowControlConfig {
 
 /// Extract the client identifier (IP) from an HTTP request.
 ///
-/// Delegates to [`crate::security::extract_client_ip_core`] so that
+/// Delegates to [`crate::security::extract_client_ip`] so that
 /// the rate-limit adapter applies the **same spoofing-defense logic** as the
 /// authentication middleware:
 ///
@@ -104,7 +104,7 @@ fn default_config() -> FlowControlConfig {
 /// allow-by-spoofed-header).
 #[cfg(feature = "ratelimit-http")]
 fn extract_identifier(req: &Request<Body>) -> String {
-    crate::security::extract_client_ip_core(req).unwrap_or_else(|| "unknown".to_string())
+    crate::security::extract_client_ip(req).unwrap_or_else(|| "unknown".to_string())
 }
 
 impl LimiteronAdapter {

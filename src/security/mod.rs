@@ -76,9 +76,10 @@ pub use ratelimit::{LimiteronAdapter, RateLimitError, RateLimiter};
 #[cfg(feature = "ratelimit-http")]
 pub use ratelimit::{HttpRequestRateLimiter, RateLimitLayer, RateLimitMiddleware};
 
-// Re-export the shared IP-extraction helper for crate-internal use.
 #[cfg(any(feature = "security", feature = "ratelimit-http"))]
-pub(crate) use ip_util::extract_client_ip_core;
+// Public client-IP extraction for downstream `HttpRequestRateLimiter`/
+// auth implementors — one shared spoofing-defense path (single source of truth).
+pub use ip_util::extract_client_ip;
 
 // Re-export key management types (full security feature only)
 #[cfg(feature = "security")]

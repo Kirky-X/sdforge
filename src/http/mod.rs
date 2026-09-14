@@ -45,7 +45,10 @@ pub use http_impl::rate_limit_layer;
 pub use http_impl::{build, build_with_config, build_with_redirect};
 
 #[cfg(feature = "graceful")]
-pub use graceful::{GracefulShutdownConfig, default_shutdown_signal, serve_with_graceful_shutdown};
+pub use graceful::{
+    GracefulShutdownConfig, default_shutdown_signal, serve_with_graceful_shutdown,
+    serve_with_graceful_shutdown_connect_info,
+};
 
 // Re-export internal helpers for test access.
 #[cfg(all(test, feature = "grpc"))]

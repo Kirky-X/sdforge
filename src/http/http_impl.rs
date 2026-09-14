@@ -413,9 +413,9 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
                     };
 
                     // Use trusted-proxy-aware IP extraction (vuln-0001 fix):
-                    // direct header reads allow IP spoofing; extract_client_ip_core
+                    // direct header reads allow IP spoofing; extract_client_ip
                     // only trusts X-Forwarded-For / X-Real-IP from trusted proxies.
-                    let client_ip = crate::security::extract_client_ip_core(req)
+                    let client_ip = crate::security::extract_client_ip(req)
                         .unwrap_or_else(|| "unknown".to_string());
 
                     // Security fix: Validate prefix is not empty before checking
