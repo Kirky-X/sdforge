@@ -35,6 +35,11 @@ type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
 /// Holds an `Arc<dyn HttpRequestRateLimiter>` so the same limiter can be
 /// shared across multiple routes/services. Cloning is cheap (just bumps the
 /// `Arc` refcount).
+///
+/// `Clone` is required by `axum::Router::layer` (`L: Layer<Route> + Clone`);
+/// the field is an `Arc`, so the derive is a trivial refcount bump and the
+/// shared limiter semantics are unchanged.
+#[derive(Clone)]
 pub struct RateLimitLayer {
     limiter: Arc<dyn HttpRequestRateLimiter>,
 }

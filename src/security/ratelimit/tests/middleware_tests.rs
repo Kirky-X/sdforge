@@ -339,3 +339,97 @@ async fn middleware_limiteron_error_returns_500() {
         "Internal errors must not suggest a retry cadence"
     );
 }
+
+// ============================================================================
+// Layer Clone regression (axum Router::layer requires `L: Layer + Clone`)
+// ============================================================================
+
+/// `RateLimitLayer` must be `Clone` so it can mount directly via
+/// `axum::Router::layer` (which bounds the layer by `Clone`).
+#[test]
+fn rate_limit_layer_is_clone() {
+    let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiter {
+        should_reject: false,
+    });
+    let layer = RateLimitLayer::new(limiter);
+    let clone = layer.clone();
+
+    // Both layer instances must produce working middleware from the same
+    // shared limiter (Arc refcount semantics, not a structural copy).
+    let a: RateLimitMiddleware<EchoService> = layer.layer(EchoService);
+    let b: RateLimitMiddleware<EchoService> = clone.layer(EchoService);
+    let _ = (a, b);
+
+    // Compile-time Clone bound: exactly what `Router::layer` requires.
+    fn assert_clone<T: Clone>(_: &T) {}
+    assert_clone(&layer);
+}
+
+/// Cloned layers enforce a SHARED limit: exhausting the limit through a
+/// service built from the original layer also rejects through a service
+/// built from the clone (proves the Arc is shared, not duplicated).
+#[tokio::test]
+async fn cloned_layer_shares_limiter_state() {
+    #[derive(Clone, Default)]
+    struct OnceLimiter {
+        remaining: Arc<std::sync::atomic::AtomicU64>,
+    }
+
+    impl RateLimiter for OnceLimiter {
+        fn check<'a>(
+            &'a self,
+            _identifier: &'a str,
+        ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>> {
+            Box::pin(async move {
+                if self
+                    .remaining
+                    .fetch_sub(1, std::sync::atomic::Ordering::SeqCst)
+                    > 1
+                {
+                    Ok(())
+                } else {
+                    Err(RateLimitError::Exceeded {
+                        limit: 1,
+                        window_seconds: 60,
+                    })
+                }
+            })
+        }
+    }
+
+    impl HttpRequestRateLimiter for OnceLimiter {
+        fn check_request<'a>(
+            &'a self,
+            _req: &'a Request<Body>,
+        ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>> {
+            Box::pin(async move { self.check("test").await })
+        }
+    }
+
+    let limiter = OnceLimiter {
+        remaining: Arc::new(std::sync::atomic::AtomicU64::new(2)),
+    };
+
+    let original = RateLimitLayer::new(Arc::new(limiter.clone()));
+    let cloned = original.clone();
+
+    let mut via_original: RateLimitMiddleware<EchoService> = original.layer(EchoService);
+    let mut via_cloned: RateLimitMiddleware<EchoService> = cloned.layer(EchoService);
+
+    let req = || {
+        Request::builder()
+            .body(Body::empty())
+            .expect("request build")
+    };
+
+    // First request (via original): consumes the shared budget → allowed.
+    let resp = via_original.call(req()).await.expect("call must succeed");
+    assert_eq!(resp.status(), StatusCode::OK);
+    // Second request (via CLONE): shared budget now empty → 429.
+    let resp = via_cloned.call(req()).await.expect("call must succeed");
+    assert_eq!(
+        resp.status(),
+        StatusCode::TOO_MANY_REQUESTS,
+        "clone must share the limiter state (Arc), not duplicate it"
+    );
+}
