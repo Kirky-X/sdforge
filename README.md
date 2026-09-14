@@ -56,20 +56,32 @@
 
 ## ✨ 功能特性
 
-| 特性 | 说明 |
-|------|------|
-| 🎯 **统一接口定义** | 单个 `#[forge]` 宏同时配置 HTTP、MCP、gRPC、WebSocket、CLI |
-| ⚡ **零协议税** | 协议选择发生在编译期，运行期无协议探测或动态加载 |
-| 🌐 **多协议支持** | Axum 0.8、rmcp 3.2（MCP 2026-07-28 规范）、tonic、WebSocket、SSE、clap |
-| 🔒 **类型安全** | 接口定义编译期验证，trybuild 覆盖编译失败用例 |
-| 🛡️ **安全特性** | API Key / JWT Bearer 认证、limiteron 限流、审计日志、安全头 |
-| 💾 **内存缓存** | oxcache 提供 LRU、模式失效、批量操作与统计，无数据库依赖 |
-| 🔧 **配置管理** | 自包含 TOML 配置，模块化默认值与 Builder 模式 |
-| 📊 **版本管理** | 内置 `/api/{version}` 多版本路由与 `#[service_module]` 模块前缀 |
-| 📜 **OpenAPI 3.1** | utoipa 编译期收集路由，运行时生成规范 + Swagger UI |
-| 🌍 **国际化** | ICU4X 本地化格式化与 Accept-Language 解析 |
-| 🔭 **可观测性** | Prometheus 指标、OTLP 导出、健康探针、优雅停机、请求上下文 |
-| 🧩 **特性组合** | 30+ Cargo features 按需装配，常驻核心不依赖任何协议栈 |
+<table style="width:100%; border-collapse: collapse">
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🎯 <b>统一接口定义</b><br><span style="color:#64748B">单个 <code>#[forge]</code> 宏同时配置 HTTP、MCP、gRPC、WebSocket、CLI</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">⚡ <b>零协议税</b><br><span style="color:#64748B">协议选择发生在编译期，运行期无协议探测或动态加载</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🌐 <b>多协议支持</b><br><span style="color:#64748B">Axum 0.8、rmcp 3.2（MCP 2026-07-28 规范）、tonic、WebSocket、SSE、clap</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🔒 <b>类型安全</b><br><span style="color:#64748B">接口定义编译期验证，trybuild 覆盖编译失败用例</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🛡️ <b>安全特性</b><br><span style="color:#64748B">API Key / JWT Bearer 认证、limiteron 限流、审计日志、安全头</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">💾 <b>内存缓存</b><br><span style="color:#64748B">oxcache 提供 LRU、模式失效、批量操作与统计，无数据库依赖</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🔧 <b>配置管理</b><br><span style="color:#64748B">自包含 TOML 配置，模块化默认值与 Builder 模式</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">📊 <b>版本管理</b><br><span style="color:#64748B">内置 <code>/api/{version}</code> 多版本路由与 <code>#[service_module]</code> 模块前缀</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">📜 <b>OpenAPI 3.1</b><br><span style="color:#64748B">utoipa 编译期收集路由，运行时生成规范 + Swagger UI</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🌍 <b>国际化</b><br><span style="color:#64748B">ICU4X 本地化格式化与 Accept-Language 解析</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🔭 <b>可观测性</b><br><span style="color:#64748B">Prometheus 指标、OTLP 导出、健康探针、优雅停机、请求上下文</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🧩 <b>特性组合</b><br><span style="color:#64748B">30+ Cargo features 按需装配，常驻核心不依赖任何协议栈</span></td>
+</tr>
+</table>
 
 <details>
 <summary>🔧 按需启用的进阶能力</summary>
