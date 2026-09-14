@@ -76,7 +76,9 @@ fn test_build_with_config_oauth2_error() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        #[cfg(feature = "cache")]
         cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
         security: SecurityConfig::default(),
     };
 
@@ -232,7 +234,9 @@ fn test_build_with_config_zero_body_size_rejected() {
         },
         authentication: AuthConfig::None,
         timeout: None,
+        #[cfg(feature = "cache")]
         cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
         security: SecurityConfig::default(),
     };
 
