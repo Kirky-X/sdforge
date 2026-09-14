@@ -1985,7 +1985,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     // entry without `body = ...` so handler return types are NOT required
     // to derive `ToSchema`.
     //
-    // M-2: `status` code is no longer hard-coded to 200 — when the macro
+    // `status` code is no longer hard-coded to 200 — when the macro
     // `status` argument is set (e.g. `#[forge(status = 201)]`), the OpenAPI
     // response entry uses that code so the spec matches the actual HTTP
     // success code clients will receive. Defaults to 200 when unset.

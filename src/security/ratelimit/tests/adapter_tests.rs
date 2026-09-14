@@ -47,7 +47,7 @@ async fn default_matches_new_behavior() {
 /// `LimiteronAdapter::builder().build().await` constructs an instance using
 /// `default_config()` when no custom config is supplied.
 ///
-/// HIGH-1 regression: `build()` now returns `Result<LimiteronAdapter,
+/// regression: `build()` now returns `Result<LimiteronAdapter,
 /// RateLimitError>` instead of panicking via `.expect()`. Callers must
 /// handle the error path (Rule 12: failures must be explicit).
 #[tokio::test]
