@@ -8,7 +8,6 @@
 use serde::{Deserialize, Serialize};
 
 use crate::config::ConfigError;
-use crate::config::ValidateConfig;
 use crate::config::{AuthConfig, ServerConfig, TimeoutConfig};
 
 /// Application configuration
@@ -50,12 +49,13 @@ impl AppConfig {
         }
 
         // Validate security configuration
+        // UFCS 全限定调用：不依赖 trait 导入（避免与 use 清理互相冲突）
         #[cfg(feature = "security")]
-        self.security.validate()?;
+        crate::config::ValidateConfig::validate(&self.security)?;
 
         // Validate cache configuration
         #[cfg(feature = "cache")]
-        self.cache.validate()?;
+        crate::config::ValidateConfig::validate(&self.cache)?;
 
         Ok(())
     }
