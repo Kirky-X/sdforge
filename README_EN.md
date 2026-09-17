@@ -145,7 +145,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 | HTTP only | `["http"]` | Traditional REST APIs |
 | MCP only | `["mcp"]` | AI tool integration |
 | HTTP + MCP dual protocol | `["http", "mcp"]` | One codebase, two entrypoints |
-| Full runtime features | `["full"]` | All protocols and capabilities (excludes `simd-json`/`hex`) |
+| Full runtime features | `["full"]` | All protocols and capabilities (24 features; excludes `simd-json`/`kit`/`limiteron-integration` optional heavy deps) |
 
 `grpc`, `websocket`, `streaming`, `openapi`, `cli`, and `cache` can all be enabled independently of `http`, in any combination.
 
@@ -187,8 +187,7 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>limiteron-integration</code></td><td>Pulls in the limiteron dependency (foundation for kit)</td><td>❌</td></tr>
   <tr><td><code>kit</code></td><td>trait-kit AsyncKit integration (SdforgeModule graph)</td><td>❌</td></tr>
   <tr><td><code>tokio</code></td><td>Internal feature: enables the tokio dependency (pulled in automatically by other features)</td><td>❌</td></tr>
-  <tr><td><code>hex</code></td><td>Hex encoding utility feature</td><td>❌</td></tr>
-  <tr><td><code>full</code></td><td>All runtime features (excludes <code>simd-json</code> and <code>hex</code>)</td><td>❌</td></tr>
+  <tr><td><code>full</code></td><td>All runtime features (24: http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/logging/timestamp/openapi/cli/docs/inklog/i18n; excludes <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code> optional heavy deps)</td><td>❌</td></tr>
 </table>
 
 <details>
@@ -198,7 +197,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 - Derived from `http`: `security` (includes `ratelimit-http` → `ratelimit` and `cache`), `ratelimit-http`, `websocket` (includes `streaming`), `health` / `metrics` / `graceful` / `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
 - `docs` = `openapi` + `cli` (mounting the Swagger UI additionally requires `http`)
 - `kit` = `trait-kit` (health + lifecycle) + `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
-- `full` covers 18 runtime features and excludes `simd-json` / `hex`
+- `full` covers 24 runtime features and excludes `simd-json` / `kit` / `limiteron-integration` — optional heavy deps (SIMD JSON, trait-kit module graph, rate-limit integration foundation) to be enabled individually as needed
 
 </details>
 

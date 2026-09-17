@@ -3448,9 +3448,9 @@ dependencies = [
 
 [[package]]
 name = "rmcp"
-version = "3.2.0"
+version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42b6914fac0be956fe704a38239c3f44a9f841d1b06a5713d2f638065593f5b5"
+checksum = "b23c62fe489ac1d401ab32688cfacac3737a8978dc3343e5361464c7724fd3cb"
 dependencies = [
  "chrono",
  "futures",
@@ -4889,9 +4889,9 @@ dependencies = [
 
 [[package]]
 name = "trait-kit"
-version = "0.5.0-rc.4"
+version = "0.5.0-rc.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94e896c580ee8995766ef4bd58734ecb4bc88118ccb73cb67f38d6ef3c8ad739"
+checksum = "2645fc42f8787abe89d0031b798c0a881087ebc2ebb40a67ad71fa65def62534"
 
 [[package]]
 name = "try-lock"

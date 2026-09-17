@@ -62,8 +62,8 @@
 //!
 //! `#[forge]` 宏生成的 `cfg(feature = "mcp"/"websocket"/...)` 引用的是
 //! sdforge crate 的 features（而非 examples crate 的 `*_examples`
-//! features），因此允许 `unexpected_cfgs` 以避免误报警告。
-#![allow(unexpected_cfgs)]
+//! features）。这些名字已在 Cargo.toml 的 `[lints.rust]`
+//! unexpected_cfgs 白名单中登记，无需裸 allow 属性。
 
 // ============================================================================
 // 模块导出 — 每个模块由对应的 feature 门控

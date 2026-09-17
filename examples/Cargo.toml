@@ -10,17 +10,26 @@ keywords = ["examples", "sdforge", "http", "mcp"]
 categories = ["web-programming", "development-tools"]
 publish = false
 
-[lints]
-workspace = true
+# `#[forge]` 宏向本 crate 发射 `#[cfg(feature = "…")]` 门控，引用的是
+# sdforge 的 feature 名（http/mcp/grpc/cli/websocket/openapi/security/lifecycle），
+# 而非本 crate 的 `*_examples` 开关。除 `lifecycle` 外这些名字已由下方
+# 别名层 feature 定义（cargo 视为已知 cfg）；此处登记宏发射全集作为
+# 自解释白名单，取代裸 `#![allow(unexpected_cfgs)]` 属性
+# （src/lib.rs 与 main.rs 中的同名属性已删）。
+# 注：workspace 的 [workspace.lints] 目前为空，故本表以本地 lints 取代
+# `lints.workspace = true`（cargo 不允许两者共存）；workspace lints
+# 未来新增条目时需同步至此。
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(feature, values("http", "mcp", "grpc", "cli", "websocket", "openapi", "security", "lifecycle"))'] }
 
 [dependencies]
 sdforge = { path = ".." }
-tokio = { version = "1.52", features = ["rt", "rt-multi-thread", "macros"] }
-serde = { version = "1.0", default-features = false, features = ["std", "derive"] }
-serde_json = "1.0"
-thiserror = "2.0"
-uuid = { version = "1.23", features = ["v4"] }
-chrono = { version = "0.4", features = ["serde"] }
+tokio = { workspace = true, features = ["rt"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
 # Note: `inventory`, `axum`, `clap`, `rmcp`, `tonic`, `prost` are
 # re-exported by sdforge (sdforge::inventory, sdforge::axum, sdforge::clap,
 # sdforge::rmcp, sdforge::tonic, sdforge::prost). Downstream

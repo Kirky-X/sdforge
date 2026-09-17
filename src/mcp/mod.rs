@@ -138,10 +138,6 @@ pub trait SdForgeTool: Send + Sync + 'static {
 #[cfg(feature = "mcp")]
 define_registration!(McpToolRegistration, Arc<dyn SdForgeTool>, ApiMetadata);
 
-#[cfg(not(feature = "mcp"))]
-/// Stub struct for non-MCP builds
-pub struct McpToolRegistration;
-
 // ============================================================================
 // get_mcp_tools — collect all registered tools from inventory
 // ============================================================================

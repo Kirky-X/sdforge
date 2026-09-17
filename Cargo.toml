@@ -34,7 +34,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std", "
 tokio-stream = { version = "0.1", default-features = false }
 
 # 工具依赖
-uuid = { version = "1.23", default-features = false, features = ["std", "v4"] }
+uuid = { version = "1.26", default-features = false, features = ["std", "v4"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "serde", "clock"] }
 regex = { version = "1.13", default-features = false, features = ["std", "perf"] }
 validator = { version = "0.21", default-features = false, features = ["derive"] }
@@ -53,7 +53,7 @@ toml = { version = "1.1", default-features = false, features = ["parse", "displa
 
 # 缓存依赖 - oxcache 0.3 用 minimal feature 提供内存后端 + 序列化 + tracing
 oxcache = { version = "0.5.0-rc.4", default-features = false, features = ["minimal"] }
-http = { version = "1.4", default-features = false, features = ["std"] }
+http = { version = "1.5", default-features = false, features = ["std"] }
 bincode = { version = "2.0", default-features = false, features = ["std", "serde"] }
 
 # WebSocket 依赖
@@ -166,7 +166,7 @@ axum-extra = { workspace = true, optional = true, features = ["typed-header"] }
 
 # MCP dependencies (migrated from mcp-sdk 0.0.3 to official rmcp)
 # transport-io enables rmcp::transport::stdio() used by serve_stdio()
-rmcp = { version = "3.2", optional = true, default-features = false, features = ["server", "transport-io"] }
+rmcp = { version = "3.4", optional = true, default-features = false, features = ["server", "transport-io"] }
 anyhow = { version = "1.0", optional = true, default-features = false, features = ["std"] }
 
 # Streaming dependencies
@@ -225,7 +225,7 @@ limiteron = { workspace = true, optional = true }
 # trait-kit 0.3 is published to crates.io.
 # Mirrors dbnexus's pattern.
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
-trait-kit = { version = "0.5.0-rc.4", features = ["async"], optional = true, default-features = false }
+trait-kit = { version = "0.5.0-rc.5", features = ["async"], optional = true, default-features = false }
 
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # 纯 crates.io 版本依赖（rc.2 已发布）。
@@ -312,10 +312,9 @@ security = [
     "dep:once_cell",
     "dep:rand",
     "dep:regex",
-    "oxcache/minimal",
     "dep:bincode",
     "cache",
-    "hex",
+    "dep:hex",
     "dep:base64",
     "ratelimit-http",
 ]
@@ -422,7 +421,10 @@ inklog = ["dep:inklog"]
 # Accept-Language header parsing via the `icu` crate (ICU4X 2.x).
 i18n = ["dep:icu", "dep:writeable"]
 
-# Full 特性
+# Full 特性 — 全量运行时特性集（24 项）。
+# 刻意排除 simd-json / kit / limiteron-integration：三者均为可选重依赖
+# （SIMD 加速 JSON、trait-kit 模块图集成、限流集成基座），收益依赖特定
+# 部署环境，按需单独启用，避免 full 拖入非必要编译成本。
 full = [
     "http",
     "mcp",
@@ -436,6 +438,12 @@ full = [
     "context",
     "websocket",
     "grpc",
+    "validate",
+    "paginate",
+    "etag",
+    "hooks",
+    "lifecycle",
+    "otel",
     "logging",
     "openapi",
     "cli",
@@ -443,8 +451,9 @@ full = [
     "inklog",
     "i18n",
 ]
-hex = ["dep:hex"]
 
+# build 脚本依赖无法随 feature 条件化（cargo 限制），故保持无条件声明；
+# 未启用 grpc 时它们只参与 build.rs 编译、不执行 protoc 代码生成。
 [build-dependencies]
 tonic-build = { version = "0.14", default-features = false }
 tonic-prost-build = { version = "0.14", default-features = false }

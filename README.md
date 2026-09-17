@@ -157,7 +157,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 | 仅 HTTP | `["http"]` | 传统 REST API |
 | 仅 MCP | `["mcp"]` | AI 工具集成 |
 | HTTP + MCP 双协议 | `["http", "mcp"]` | 同一份代码双入口 |
-| 全量运行时特性 | `["full"]` | 全部协议与能力（不含 `simd-json`/`hex`） |
+| 全量运行时特性 | `["full"]` | 全部协议与能力（24 项；不含 `simd-json`/`kit`/`limiteron-integration` 可选重依赖） |
 
 `grpc`、`websocket`、`streaming`、`openapi`、`cli`、`cache` 均可独立于 `http` 启用，任意组合。
 
@@ -199,8 +199,7 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>limiteron-integration</code></td><td>引入 limiteron 依赖（kit 集成基座）</td><td>❌</td></tr>
   <tr><td><code>kit</code></td><td>trait-kit AsyncKit 集成（SdforgeModule 模块图）</td><td>❌</td></tr>
   <tr><td><code>tokio</code></td><td>内部特性：启用 tokio 依赖（随其他特性自动引入）</td><td>❌</td></tr>
-  <tr><td><code>hex</code></td><td>十六进制编解码工具特性</td><td>❌</td></tr>
-  <tr><td><code>full</code></td><td>全部运行时特性（不含 <code>simd-json</code> 与 <code>hex</code>）</td><td>❌</td></tr>
+  <tr><td><code>full</code></td><td>全部运行时特性（24 项：http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/logging/timestamp/openapi/cli/docs/inklog/i18n；不含 <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code> 可选重依赖）</td><td>❌</td></tr>
 </table>
 
 <details>
@@ -210,7 +209,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 - 派生自 `http`：`security`（含 `ratelimit-http` → `ratelimit` 与 `cache`）、`ratelimit-http`、`websocket`（含 `streaming`）、`health` / `metrics` / `graceful` / `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
 - `docs` = `openapi` + `cli`（Swagger UI 挂载需另启用 `http`）
 - `kit` = `trait-kit`（health + lifecycle）+ `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
-- `full` 覆盖 18 项运行时特性，不含 `simd-json` / `hex`
+- `full` 覆盖 24 项运行时特性，不含 `simd-json` / `kit` / `limiteron-integration`——三者是可选重依赖（SIMD JSON、trait-kit 模块图、限流集成基座），按需单独启用
 
 </details>
 

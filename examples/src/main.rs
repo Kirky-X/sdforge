@@ -49,8 +49,6 @@
 //! | `/stream/events` | 事件流 |
 //! | `/stream/progress` | 进度流 |
 
-#![allow(unexpected_cfgs)]
-
 /// 主函数
 ///
 /// 根据启用的 features 启动相应的服务

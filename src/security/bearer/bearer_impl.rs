@@ -228,19 +228,6 @@ impl BearerAuth {
         a.ct_eq(b).into()
     }
 
-    /// Fallback constant-time comparison when subtle is not available
-    #[cfg(not(feature = "security"))]
-    pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-        if a.len() != b.len() {
-            return false;
-        }
-        let mut result = 0u8;
-        for (byte_a, byte_b) in a.iter().zip(b.iter()) {
-            result |= byte_a ^ byte_b;
-        }
-        result == 0
-    }
-
     /// Base64url decode (JWT uses URL-safe base64)
     ///
     /// HIGH 修复（#344）：严格解码。此前查找表以 0 初始化且合法字符只覆盖
@@ -464,7 +451,6 @@ impl BearerAuth {
     ///     auth.start_blacklist_cleanup(Duration::from_secs(60));
     /// }
     /// ```
-    #[cfg(feature = "tokio")]
     pub fn start_blacklist_cleanup(&self, interval: std::time::Duration) {
         let _blacklisted = Arc::clone(&self.blacklisted_tokens);
 
