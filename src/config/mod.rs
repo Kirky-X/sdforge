@@ -162,7 +162,7 @@ mod tests {
     #[test]
     fn test_app_config_default() {
         let config = AppConfig::default();
-        // LOW-001: ServerConfig::default() 现在使用 fail-safe loopback host
+        // ServerConfig::default() 现在使用 fail-safe loopback host
         assert_eq!(config.server.host, "127.0.0.1");
         matches!(config.authentication, AuthConfig::None);
     }

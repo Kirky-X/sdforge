@@ -508,7 +508,7 @@ impl ApiError {
                 if let Some(ctx) = context {
                     details["context"] = serde_json::to_value(ctx).unwrap_or(serde_json::json!({}));
                 }
-                // MED-002 收尾：与 sanitized_message / to_mcp_json 三轨统一——
+                // 收尾：与 sanitized_message / to_mcp_json 三轨统一 ——
                 // 即使调用方绕过构造器以字面量构造 Internal（未过构造期脱敏），
                 // HTTP 响应体也绝不携带原始内部消息。完整消息仍留在 Debug/日志。
                 ServiceError::with_details(

@@ -4,7 +4,7 @@
 //!
 //! `build_with_config` auto-mounts `/healthz` (liveness) and `/readyz`
 //! (readiness) **after** the auth/rate-limit/security layers, so probes
-//! bypass authentication by construction (R-sd4-001).
+//! bypass authentication by construction.
 //!
 //! # Readiness data sources
 //!
@@ -72,7 +72,7 @@ pub trait ReadinessCheck: Send + Sync {
     fn check(&self) -> CheckOutcome;
 }
 
-/// Health data source port for kit-style aggregates (R-sd4-001).
+/// Health data source port for kit-style aggregates.
 ///
 /// The JSON payload mirrors trait-kit's `HealthAggregate` shape:
 /// `{"status":"healthy","healthy":true,"modules":[...]}`. When a source is

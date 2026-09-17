@@ -110,7 +110,7 @@ pub struct WebSocketConfig {
     /// Only available when the `security` feature is enabled; omitted
     /// otherwise so that `http,websocket` (without `security`) compiles.
     ///
-    /// # Security Warning (LOW-003)
+    /// # Security Warning
     ///
     /// When the `security` feature is NOT enabled, this field does not exist
     /// and **all WebSocket upgrade requests are accepted without authentication**.
@@ -209,7 +209,7 @@ impl ConnectionManager {
 
     /// Remove a connection from the manager.
     ///
-    /// BUG-1 修复: 仅在确实移除连接时才递减 `connection_count`，
+    /// 仅在确实移除连接时才递减 `connection_count`，
     /// 避免并发 remove 同一 id 导致 usize 下溢为 `usize::MAX`。
     pub async fn remove_connection(&self, id: &str) {
         let existed = {

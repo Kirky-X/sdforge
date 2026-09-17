@@ -117,7 +117,7 @@ impl SyncCache for OxcacheSyncCache {
     fn set(&self, key: &str, value: Vec<u8>) {
         use oxcache::backend::SyncCacheWriter;
         // 持有 index 锁直到 backend 操作完成，保证 backend 与 index 一致性
-        // (HIGH-001: 避免并发下 backend 有键但 index 缺失的竞态)
+        // (避免并发下 backend 有键但 index 缺失的竞态)
         let mut idx = match self.key_index.lock() {
             Ok(idx) => idx,
             Err(_) => {
@@ -131,7 +131,7 @@ impl SyncCache for OxcacheSyncCache {
                 return;
             }
         };
-        // HIGH-002: 不静默吞掉 backend 错误；失败时不更新 index 以保持一致
+        // 不静默吞掉 backend 错误；失败时不更新 index 以保持一致
         if let Err(e) = self.backend.set(Arc::from(key), Arc::new(value), None) {
             log::warn!("cache backend set failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
             return;
@@ -160,7 +160,7 @@ impl SyncCache for OxcacheSyncCache {
         };
         let existed = self.backend.exists(key).unwrap_or(false);
         if existed {
-            // HIGH-002: backend 失败时不更新 index，保持一致
+            // backend 失败时不更新 index，保持一致
             if let Err(e) = self.backend.delete(key) {
                 log::warn!("cache backend delete failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                 // 契约修复：删除失败返回 false（键仍存在），调用方不得误以为已删除。
@@ -210,7 +210,7 @@ impl SyncCache for OxcacheSyncCache {
             Ok(idx) => idx,
             Err(_) => return Vec::new(),
         };
-        // BUG-4 修复: oxcache backend 达到容量时会内部驱逐键，但 `key_index` 不会同步感知，
+        // oxcache backend 达到容量时会内部驱逐键，但 `key_index` 不会同步感知，
         // 导致 index 逐渐成为 backend 的超集，`find_keys_by_pattern` 返回已不存在的键。
         //
         // 修复策略：遍历 index 时通过 `backend.exists()` 过滤，并惰性清理已被驱逐的键，
@@ -332,7 +332,7 @@ impl SyncCache for OxcacheSyncCache {
         );
         // 透传 backend stats（命中数、未命中数、命中率等）
         //
-        // BUG-5 修复: 原代码仅尝试 `v.parse::<u64>()`，对 float 类型统计
+        // 原代码仅尝试 `v.parse::<u64>`，对 float 类型统计
         // （如 hit_rate="0.85"）静默丢弃，违反 Rule 12（失败必须显性化）。
         //
         // 修复策略：

@@ -56,7 +56,7 @@ pub fn build_custom_config() -> AppConfig {
     let auth = AuthConfig::ApiKey {
         header_name: "X-API-Key".to_string(),
         prefix: "sk_".to_string(),
-        // HIGH-003 修复后：配置里声明种子键，避免空 key store 把 API 锁死在 401
+        // 后：配置里声明种子键，避免空 key store 把 API 锁死在 401
         keys: vec![ApiKeySeed {
             key: "sk_demo_0123456789abcdef".to_string(),
             permissions: vec!["read".to_string()],
@@ -255,7 +255,7 @@ mod tests {
     #[test]
     fn test_default_config_has_server() {
         let config = default_config();
-        // LOW-001: ServerConfig::default() 现在使用 fail-safe 常量（loopback + 8080）
+        // ServerConfig::default() 现在使用 fail-safe 常量
         assert_eq!(
             config.server.host, "127.0.0.1",
             "default host is fail-safe loopback"

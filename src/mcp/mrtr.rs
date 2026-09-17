@@ -40,7 +40,7 @@ pub const MAX_RESUME_PAYLOAD_SIZE_BYTES: usize = 0x10_0000;
 /// default thread stack size.
 pub const MAX_RESUME_PAYLOAD_DEPTH: usize = 64;
 
-/// 并发 MRTR 会话数上限（diting MED-001：防未认证客户端无限建会话撑爆内存）。
+/// 并发 MRTR 会话数上限（防未认证客户端无限建会话撑爆内存）。
 /// 超限时先清理已超时的 pending 会话，仍满则拒绝新建。
 pub const MAX_MRTR_SESSIONS: usize = 10_000;
 
@@ -244,7 +244,7 @@ impl MrtrSessionManager {
             .lock()
             .map_err(|_| ErrorData::internal_error("session manager lock poisoned", None))?;
 
-        // diting MED-001：建会话前清理已超时的 pending 会话，并施加会话数上限，
+        // 建会话前清理已超时的 pending 会话，并施加会话数上限，
         // 防止未认证客户端用任意 session_id 无限增长内存。
         sessions.retain(|_, session| {
             if session.is_timed_out() && session.state == SessionState::Pending {

@@ -112,7 +112,7 @@ mod tests {
     #[test]
     fn handler_types_are_send_static() {
         // HandlerFn / HandlerFuture 必须满足 Send + 'static，方可在 tonic/clap
-        // 运行时跨线程调用（R-unified-handler-001）。
+        // 运行时跨线程调用。
         fn assert_send_static<T: Send + 'static>() {}
         assert_send_static::<HandlerFn>();
         assert_send_static::<HandlerFuture>();

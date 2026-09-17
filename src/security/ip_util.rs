@@ -76,7 +76,7 @@ pub fn extract_client_ip(req: &Request<Body>) -> Option<String> {
     // No ConnectInfo available: do NOT trust forwarded headers. Without a
     // verified TCP peer, X-Forwarded-For / X-Real-IP are attacker-controlled
     // and trivially spoofable. Return None so callers fall back to "unknown"
-    // rather than trusting forged input (HIGH-2 hardening).
+    // rather than trusting forged input (hardening).
     None
 }
 
@@ -318,7 +318,7 @@ mod tests {
 
     #[test]
     fn test_extract_client_ip_x_forwarded_for_single() {
-        // No ConnectInfo: forwarded headers must NOT be trusted (HIGH-2)
+        // No ConnectInfo: forwarded headers must NOT be trusted
         let mut req = Request::new(Body::empty());
         req.headers_mut()
             .insert("X-Forwarded-For", "8.8.8.8".parse().unwrap());
@@ -330,7 +330,7 @@ mod tests {
     #[test]
     fn test_extract_client_ip_x_forwarded_for_multiple() {
         // No ConnectInfo: forwarded headers must NOT be trusted even when
-        // well-formed (HIGH-2 hardening against IP spoofing)
+        // well-formed (hardening against IP spoofing)
         let mut req = Request::new(Body::empty());
         req.headers_mut().insert(
             "X-Forwarded-For",
@@ -376,7 +376,7 @@ mod tests {
 
     #[test]
     fn test_extract_client_ip_x_real_ip() {
-        // No ConnectInfo: X-Real-IP must NOT be trusted (HIGH-2)
+        // No ConnectInfo: X-Real-IP must NOT be trusted
         let mut req = Request::new(Body::empty());
         req.headers_mut()
             .insert("X-Real-IP", "8.8.8.8".parse().unwrap());

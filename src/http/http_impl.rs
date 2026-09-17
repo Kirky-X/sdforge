@@ -383,7 +383,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
             keys,
         } = auth_config
         {
-            // diting HIGH-003：播种配置声明的 key；为空时显式构建错误，
+            // 播种配置声明的 key；为空时显式构建错误，
             // 不再静默创建空 key store 把整条 API 锁死在 401。
             if keys.is_empty() {
                 return Err(ConfigError::ValidationError(
@@ -444,7 +444,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
         } else if let AuthConfig::Jwt { secret, .. } = auth_config {
             // 使用 try_new 而非 new：AuthConfig::validate() 接受的 secret（仅长度+弱词校验）
             // 可能不满足 BearerAuth 的强复杂度要求，`new` 会在启动时 panic；
-            // 改为返回构建错误，由调用方处理而非崩溃（diting HIGH-005）。
+            // 改为返回构建错误，由调用方处理而非崩溃。
             let auth = Arc::new(
                 BearerAuth::try_new(secret)
                     .map_err(|e| ConfigError::ValidationError(e.to_string()))?,

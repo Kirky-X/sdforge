@@ -68,7 +68,7 @@ where
     T: Serialize,
 {
     fn into_response(self) -> axum::response::Response {
-        // 优先级链（LOW-3 防御性修复）：
+        // 优先级链（防御性修复）
         //   - 成功路径（error.is_none()）：status_code 字段 > 200
         //     success_with_status 设置的字段直接生效；未设置则默认 200。
         //   - 错误路径（error.is_some()）：始终使用 error.http_status，
@@ -463,19 +463,19 @@ mod tests {
     // ============================================================================
     // forge-success-status-code: ServiceResponse::into_response status_code 优先级
     //
-    // R-http-protocol-001: 成功侧 status_code 字段优先
-    // R-http-protocol-002: 错误侧不回归
-    // R-http-protocol-003: 默认 200 零破坏
+    // 成功侧 status_code 字段优先
+    // 错误侧不回归
+    // 默认 200 零破坏
     // ============================================================================
 
-    /// R-http-protocol-001: success_with_status("x", 201) → HTTP 201。
+    /// success_with_status("x", 201) → HTTP 201。
     #[test]
     fn test_service_response_into_response_with_status_code() {
         let resp = ServiceResponse::success_with_status("x", 201).into_response();
         assert_eq!(resp.status(), axum::http::StatusCode::CREATED);
     }
 
-    /// R-http-protocol-001: 边界码 100/999 也能正确传递。
+    /// 边界码 100/999 也能正确传递。
     #[test]
     fn test_service_response_into_response_status_code_boundaries() {
         let resp = ServiceResponse::success_with_status("x", 100).into_response();
@@ -490,7 +490,7 @@ mod tests {
         );
     }
 
-    /// R-http-protocol-002: 错误侧仍按 ServiceError.http_status 取值（不回归）。
+    /// 错误侧仍按 ServiceError.http_status 取值（不回归）。
     #[test]
     fn test_service_response_into_response_error_status_no_regression() {
         let err = crate::core::ServiceError::new("E", "m", 418);
@@ -501,7 +501,7 @@ mod tests {
         );
     }
 
-    /// R-http-protocol-003: 无 status_code 字段且无 error → 200（零破坏）。
+    /// 无 status_code 字段且无 error → 200（零破坏）。
     #[test]
     fn test_service_response_into_response_default_200_no_regression() {
         let resp = ServiceResponse::success("x").into_response();

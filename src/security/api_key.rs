@@ -149,7 +149,7 @@ impl AppApiKeyAuth {
     }
 
     /// 记录该 key_hash 的过期时间（UNIX 秒）—— validate_key 强制过期的反向索引
-    /// （diting HIGH-004 修复：此前 ttl 只写进版本元数据，校验路径从不检查）
+    /// （此前 ttl 只写进版本元数据，校验路径从不检查）
     fn set_expiry_index(&self, key_hash: &str, ttl: Duration) {
         let expiry_epoch = std::time::SystemTime::now()
             .checked_add(ttl)
@@ -237,7 +237,7 @@ impl AppApiKeyAuth {
             serialize_permissions(&permissions),
         );
 
-        // 带 ttl 的版本：登记过期反向索引，validate_key 据此强制过期（HIGH-004）
+        // 带 ttl 的版本：登记过期反向索引，validate_key 据此强制过期
         if let Some(ttl) = ttl {
             self.set_expiry_index(&key_hash, ttl);
         }
@@ -334,7 +334,7 @@ impl AppApiKeyAuth {
             serialize_permissions(&new_permissions),
         );
 
-        // 轮换生成的版本按 rotation_interval 登记过期（HIGH-004）
+        // 轮换生成的版本按 rotation_interval 登记过期
         if let Some(ttl) = ttl {
             self.set_expiry_index(&new_key_hash, ttl);
         }
@@ -386,7 +386,7 @@ impl AppApiKeyAuth {
             if p.is_empty() { None } else { Some(p) }
         });
 
-        // diting HIGH-004：强制过期——带 ttl 的版本到期后立即失效
+        // 强制过期 ——带 ttl 的版本到期后立即失效
         //（过期判断与 perms 查询解耦，恒定时间延迟对两种结果一致）
         let perms = if self.is_hash_expired(&key_hash) {
             None
@@ -553,7 +553,7 @@ mod tests {
         assert!(perms.is_none());
     }
 
-    /// diting HIGH-004 回归：带 ttl 的版本到期后 validate_key 必须拒绝
+    /// 回归：带 ttl 的版本到期后 validate_key 必须拒绝
     #[test]
     fn test_validate_key_enforces_expiry() {
         let auth = AppApiKeyAuth::new();

@@ -27,7 +27,7 @@ pub struct ServerConfig {
 
 impl Default for ServerConfig {
     /// Fail-safe 默认值：loopback host + 合理 port/timeout
-    /// (LOW-001: 避免 derive(Default) 产生空 host/port=0 的无效配置)
+    /// (避免 derive(Default) 产生空 host/port=0 的无效配置)
     fn default() -> Self {
         use crate::config::{DEFAULT_HOST, DEFAULT_PORT, DEFAULT_REQUEST_TIMEOUT_SECS};
         Self {
@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn test_server_config_default() {
-        // LOW-001: Default 现在使用 fail-safe 常量（loopback + 合理端口/超时）
+        // Default 现在使用 fail-safe 常量（loopback + 合理端口/超时）
         let config = ServerConfig::default();
         assert_eq!(config.host, "127.0.0.1"); // fail-safe loopback
         assert_eq!(config.port, 8080);
@@ -338,7 +338,7 @@ mod tests {
         let config: ServerConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.host, "0.0.0.0");
         assert_eq!(config.port, 3000);
-        // LOW-001: #[serde(default)] 现在使用 Default trait，request_timeout_secs 默认 30
+        // #[serde(default)] 现在使用 Default trait，request_timeout_secs 默认 30
         assert_eq!(
             config.request_timeout_secs, 30,
             "Missing field should use Default (30 secs, fail-safe)"

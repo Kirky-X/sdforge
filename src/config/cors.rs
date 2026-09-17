@@ -35,7 +35,7 @@ impl CorsConfig {
                     origin
                 )));
             }
-            // 检查 host 部分非空，与 build_cors_layer 行为一致（MED-004）
+            // 检查 host 部分非空，与 build_cors_layer 行为一致
             let after_scheme = origin.split("://").nth(1).unwrap_or("");
             if after_scheme.is_empty() {
                 return Err(crate::config::ConfigError::ValidationError(format!(
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_cors_config_validate_invalid_origin_http_only() {
-        // MED-004: "http://" 仅含 scheme 无 host，应被拒绝（与 build_cors_layer 一致）
+        // "http://" 仅含 scheme 无 host，应被拒绝（与 build_cors_layer 一致）
         let config = CorsConfig {
             allowed_origins: vec!["http://".to_string()],
             allowed_methods: vec!["GET".to_string()],

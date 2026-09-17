@@ -65,7 +65,7 @@ async fn builder_build_with_default_config_succeeds() {
     );
 }
 
-/// HIGH-1: `LimiteronAdapter::builder().build()` returns `Err` (not panic)
+/// `LimiteronAdapter::builder().build()` returns `Err` (not panic)
 /// when the configured `FlowControlConfig` is invalid. We construct an
 /// invalid config with an empty `rules` vec (limiteron's `validate()`
 /// rejects it with "至少需要一个规则").
@@ -368,7 +368,7 @@ async fn check_request_falls_back_to_unknown_identifier() {
     );
 }
 
-/// H-1 security regression: a request from a non-trusted direct IP (8.8.8.8)
+/// security regression: a request from a non-trusted direct IP
 /// carrying a spoofed `X-Forwarded-For` header must NOT trust the header.
 /// The identifier extracted must be the direct connection IP, not the
 /// spoofed value. This prevents bypassing rate limits by rotating the
@@ -450,7 +450,7 @@ async fn check_request_ignores_spoofed_x_forwarded_for_from_non_trusted_source()
     );
 }
 
-/// H-1 positive case: a request from a trusted reverse proxy (10.0.0.1)
+/// positive case: a request from a trusted reverse proxy
 /// carrying `X-Forwarded-For: 203.0.113.5` must trust the header and
 /// extract `203.0.113.5` as the client identifier.
 #[cfg(feature = "ratelimit-http")]

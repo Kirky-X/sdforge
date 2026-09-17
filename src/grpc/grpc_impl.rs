@@ -45,7 +45,7 @@ pub struct SdForgeGrpcService {
     handlers: OnceLock<HashMap<&'static str, HandlerFn>>,
     /// Lazy-built `method -> body_param name` lookup table.
     body_params: OnceLock<HashMap<&'static str, Option<&'static str>>>,
-    /// Lazy-built `method -> macro-level status` lookup table (H-1 fix).
+    /// Lazy-built `method -> macro-level status` lookup table (fix).
     /// Carries the `#[forge(status = <code>)]` argument into the gRPC layer
     /// so `call`'s success path can apply the priority chain:
     /// `ServiceResponse.status_code` > `default_status` > 200.
@@ -152,7 +152,7 @@ impl SdForgeGrpcService {
     }
 
     /// Build (or reuse) the `method -> default_status` cache from inventory
-    /// (H-1 fix). Carries the macro-level `#[forge(status = <code>)]`
+    /// (fix). Carries the macro-level `#[forge(status = <code>)]`
     /// argument so the gRPC success path can mirror the HTTP success code.
     #[must_use]
     fn default_statuses(&self) -> &HashMap<&'static str, Option<u16>> {
@@ -253,7 +253,7 @@ impl SdForgeGrpcService {
             )));
         }
 
-        // R-grpc-001: lookup handler by method name
+        // lookup handler by method name
         let handler = self.handlers().get(req.method.as_str()).copied().ok_or_else(
             || {
                 Status::not_found(format!(
@@ -263,7 +263,7 @@ impl SdForgeGrpcService {
             },
         )?;
 
-        // R-grpc-003: parameters → args, data → body_param key
+        // parameters → args, data → body_param key
         let mut args: HandlerArgs = req.parameters.into_iter().collect();
         if !req.data.is_empty() {
             match self
@@ -284,7 +284,7 @@ impl SdForgeGrpcService {
             }
         }
 
-        // R-grpc-005: catch_unwind so a panicking handler never leaks internal
+        // catch_unwind so a panicking handler never leaks internal
         // paths / stack data through gRPC error messages (security rule).
         use futures_util::FutureExt;
         use std::panic::AssertUnwindSafe;
@@ -294,8 +294,8 @@ impl SdForgeGrpcService {
 
         match outcome {
             Ok(Ok(value)) => {
-                // R-grpc-004: smart extract_value (String → raw, others → JSON)
-                // forge-success-status-code (H-1): 优先级链 —
+                // smart extract_value (String → raw, others → JSON)
+                // forge-success-status-code 优先级链 —
                 //   ServiceResponse.status_code 字段（动态入口）
                 //   > 宏 #[forge(status = <code>)] 参数（静态入口，default_status）
                 //   > 200（零破坏默认）
@@ -318,7 +318,7 @@ impl SdForgeGrpcService {
                 }))
             }
             Ok(Err(e)) => {
-                // R-grpc-005: business error → success:false + Status::ok (so
+                // business error → success:false + Status::ok (so
                 // the client can read the body for error details).
                 let status_code = map_error_to_http(&e);
                 Ok(Response::new(CallResponse {
@@ -329,7 +329,7 @@ impl SdForgeGrpcService {
                 }))
             }
             Err(_panic) => {
-                // R-grpc-005: handler panicked → generic internal error.
+                // handler panicked → generic internal error.
                 // Never expose panic payload to the client (security).
                 Err(Status::internal("handler panicked"))
             }
@@ -372,7 +372,7 @@ impl SdForgeService for SdForgeGrpcService {
 /// otherwise). This helper reads that field so gRPC clients see the same
 /// success status code as HTTP clients.
 ///
-/// # Duck-typing contract (M-3)
+/// # Duck-typing contract
 ///
 /// Detection is **structural**, not nominal: any JSON object that
 /// simultaneously contains a `success` boolean field AND a numeric
@@ -390,7 +390,7 @@ impl SdForgeService for SdForgeGrpcService {
 ///
 /// - `Some(code)` when the value is a JSON object containing both a
 ///   `success` key and a numeric `status_code` key whose value fits in the
-///   HTTP status code range `100..=999` (LOW-2: prevents `u64 → i32`
+///   HTTP status code range `100..=999` (prevents `u64 → i32`
 ///   truncation from out-of-range inputs).
 /// - `None` otherwise — the caller applies the `default_status` fallback
 ///   (macro `status` argument) and finally 200.
@@ -401,7 +401,7 @@ fn extract_status_code(value: &serde_json::Value) -> Option<i32> {
         .filter(|obj| obj.contains_key("success"))
         .and_then(|obj| obj.get("status_code"))
         .and_then(|v| v.as_u64())
-        // LOW-2: 防止 u64 → i32 截断（仅接受有效 HTTP 状态码范围 100..=999）
+        // 防止 u64 → i32 截断（仅接受有效 HTTP 状态码范围 100..=999）
         .filter(|&u| (100..=999).contains(&u))
         .map(|u| u as i32)
 }
@@ -609,7 +609,7 @@ impl SdForgeGrpcService {
         self.body_params()
     }
 
-    /// Test-only accessor: borrow the `default_status` map (H-1).
+    /// Test-only accessor: borrow the `default_status` map.
     #[cfg(test)]
     pub(crate) fn default_statuses_map(&self) -> &HashMap<&'static str, Option<u16>> {
         self.default_statuses()
@@ -645,7 +645,7 @@ mod tests {
     }
 
     /// Handler that always returns `Err(NotFound)` — verifies the error →
-    /// `success:false` + `status_code:404` + `Status::ok` mapping (R-grpc-005).
+    /// `success:false` + `status_code:404` + `Status::ok` mapping.
     fn not_found_handler(_args: HandlerArgs, _state: HandlerState) -> crate::core::HandlerFuture {
         Box::pin(async {
             Err(ApiError::NotFound {
@@ -703,7 +703,7 @@ mod tests {
 
     /// Handler returning a `ServiceResponse` with `status_code = 201` —
     /// verifies the gRPC layer reads the field and populates
-    /// `CallResponse.status_code` (R-grpc-protocol-001 dynamic path).
+    /// `CallResponse.status_code` (dynamic path).
     fn status_code_handler(_args: HandlerArgs, _state: HandlerState) -> crate::core::HandlerFuture {
         Box::pin(async move {
             let resp = crate::core::ServiceResponse::success_with_status("created", 201);
@@ -753,7 +753,7 @@ mod tests {
     }
 
     // ========================================================================
-    // forge-success-status-code (H-1): gRPC 路径消费宏 `status` 参数测试
+    // forge-success-status-code gRPC 路径消费宏 `status` 参数测试
     //
     // 验证优先级链：ServiceResponse.status_code 字段 > 宏 default_status > 200。
     // ========================================================================
@@ -840,13 +840,13 @@ mod tests {
         assert!(table.contains_key("test_not_found"));
         assert!(table.contains_key("test_panic"));
         assert!(table.contains_key("test_body"));
-        // H-1: 新增的 default_status 测试 handler 也必须被 inventory 收集
+        // 新增的 default_status 测试 handler 也必须被 inventory 收集
         assert!(table.contains_key("test_bare_with_default_status"));
         assert!(table.contains_key("test_service_response_with_default_status"));
         assert!(table.contains_key("test_service_response_field_overrides_default"));
     }
 
-    /// H-1: `default_statuses` cache 从 inventory 正确构建。
+    /// `default_statuses` cache 从 inventory 正确构建。
     #[test]
     fn default_statuses_cache_built_correctly() {
         let service = SdForgeGrpcService::default();
@@ -871,7 +871,7 @@ mod tests {
 
     #[test]
     fn lookup_cache_is_idempotent() {
-        // R-grpc-006: subsequent `handlers()` calls return the same map.
+        // subsequent `handlers()` calls return the same map.
         let service = SdForgeGrpcService::default();
         let first = service.handlers();
         let second = service.handlers();
@@ -888,7 +888,7 @@ mod tests {
 
     #[tokio::test]
     async fn call_routes_to_registered_handler() {
-        // R-grpc-001: real routing replaces stub `processed` response.
+        // real routing replaces stub `processed` response.
         let service = SdForgeGrpcService::default();
         let mut params = HashMap::new();
         params.insert("msg".to_string(), "hello world".to_string());
@@ -906,7 +906,7 @@ mod tests {
 
     #[tokio::test]
     async fn call_unknown_method_returns_not_found() {
-        // R-grpc-005: method not registered → Status::not_found
+        // method not registered → Status::not_found
         let service = SdForgeGrpcService::default();
         let req = Request::new(CallRequest {
             method: "no_such_method".to_string(),
@@ -920,7 +920,7 @@ mod tests {
 
     #[tokio::test]
     async fn call_data_without_body_param_returns_invalid_argument() {
-        // R-grpc-003: data non-empty but method has no body_param → invalid_argument
+        // data non-empty but method has no body_param → invalid_argument
         let service = SdForgeGrpcService::default();
         let req = Request::new(CallRequest {
             method: "test_echo".to_string(),
@@ -933,7 +933,7 @@ mod tests {
 
     #[tokio::test]
     async fn call_routes_data_to_body_param() {
-        // R-grpc-003: data injected into body_param key
+        // data injected into body_param key
         let service = SdForgeGrpcService::default();
         let req = Request::new(CallRequest {
             method: "test_body".to_string(),
@@ -947,7 +947,7 @@ mod tests {
 
     #[tokio::test]
     async fn call_business_error_returns_success_false_with_status_code() {
-        // R-grpc-005: business error → Status::ok, success:false, error in body
+        // business error → Status::ok, success:false, error in body
         let service = SdForgeGrpcService::default();
         let req = Request::new(CallRequest {
             method: "test_not_found".to_string(),
@@ -963,7 +963,7 @@ mod tests {
 
     #[tokio::test]
     async fn call_panic_handler_returns_status_internal() {
-        // R-grpc-005: handler panic → Status::internal, message generic
+        // handler panic → Status::internal, message generic
         let service = SdForgeGrpcService::default();
         let req = Request::new(CallRequest {
             method: "test_panic".to_string(),
@@ -980,11 +980,11 @@ mod tests {
     // ========================================================================
     // forge-success-status-code: gRPC status_code 透传测试
     //
-    // R-grpc-protocol-001: 成功 status_code 透传（ServiceResponse 字段 → CallResponse）
-    // R-grpc-protocol-002: 错误路径不回归（已由 call_business_error_returns_success_false_with_status_code 覆盖）
+    // 成功 status_code 透传（ServiceResponse 字段 → CallResponse）
+    // 错误路径不回归（已由 call_business_error_returns_success_false_with_status_code 覆盖）
     // ========================================================================
 
-    /// R-grpc-protocol-001: fn 返回 success_with_status(d, 201) → CallResponse.status_code == 201。
+    /// fn 返回 success_with_status(d, 201) → CallResponse.status_code == 201。
     #[tokio::test]
     async fn call_returns_status_code_from_service_response_field() {
         let service = SdForgeGrpcService::default();
@@ -1001,7 +1001,7 @@ mod tests {
         );
     }
 
-    /// R-grpc-protocol-001: 裸类型返回值（无 ServiceResponse）→ CallResponse.status_code == 200。
+    /// 裸类型返回值（无 ServiceResponse）→ CallResponse.status_code == 200。
     #[tokio::test]
     async fn call_bare_type_returns_default_200() {
         let service = SdForgeGrpcService::default();
@@ -1020,7 +1020,7 @@ mod tests {
         );
     }
 
-    /// R-grpc-protocol-001: ServiceResponse::success（无 status_code 字段）→ 200（零破坏）。
+    /// ServiceResponse::success（无 status_code 字段）→ 200（零破坏）。
     #[tokio::test]
     async fn call_service_response_without_status_code_defaults_200() {
         let service = SdForgeGrpcService::default();
@@ -1039,8 +1039,8 @@ mod tests {
 
     /// extract_status_code 单元测试：边界与防御逻辑。
     ///
-    /// H-1: 函数返回 `Option<i32>`（None 表示 caller 应使用 default_status fallback）。
-    /// LOW-2: 范围 100..=999 之外的 status_code 被过滤为 None（防 u64→i32 截断）。
+    /// 函数返回 `Option<i32>`（None 表示 caller 应使用 default_status fallback）。
+    /// 范围 100..=999 之外的 status_code 被过滤为 None（防 u64→i32 截断）。
     #[test]
     fn extract_status_code_handles_various_values() {
         use serde_json::json;
@@ -1062,7 +1062,7 @@ mod tests {
         assert_eq!(extract_status_code(&v), Some(100));
         let v = json!({"success": true, "status_code": 999});
         assert_eq!(extract_status_code(&v), Some(999));
-        // LOW-2: 范围外（< 100 或 > 999）→ None（防截断）
+        // 范围外（< 100 或 > 999）→ None（防截断）
         let v = json!({"success": true, "status_code": 99});
         assert_eq!(
             extract_status_code(&v),
@@ -1089,12 +1089,12 @@ mod tests {
     }
 
     // ========================================================================
-    // forge-success-status-code (H-1): gRPC 路径消费宏 `status` 参数 e2e 测试
+    // forge-success-status-code gRPC 路径消费宏 `status` 参数 e2e 测试
     //
     // 优先级链：ServiceResponse.status_code 字段 > 宏 default_status > 200
     // ========================================================================
 
-    /// H-1: 裸类型 + `default_status = Some(201)` → CallResponse.status_code == 201。
+    /// 裸类型 + `default_status = Some(201)` → CallResponse.status_code == 201。
     /// 模拟 `#[forge(grpc_method = "...", status = 201)]` 的端到端行为。
     #[tokio::test]
     async fn call_bare_type_with_default_status_returns_201() {
@@ -1115,7 +1115,7 @@ mod tests {
         assert_eq!(resp.data, "created");
     }
 
-    /// H-1: ServiceResponse::success（无字段）+ `default_status = Some(202)` → 202。
+    /// ServiceResponse::success（无字段）+ `default_status = Some(202)` → 202。
     #[tokio::test]
     async fn call_service_response_no_field_with_default_status_returns_202() {
         let service = SdForgeGrpcService::default();
@@ -1132,7 +1132,7 @@ mod tests {
         );
     }
 
-    /// H-1 优先级链：ServiceResponse.status_code 字段(208) > 宏 default_status(201)。
+    /// 优先级链：ServiceResponse.status_code 字段(208) > 宏 default_status(201)。
     #[tokio::test]
     async fn call_service_response_field_overrides_default_status() {
         let service = SdForgeGrpcService::default();
@@ -1151,7 +1151,7 @@ mod tests {
 
     #[test]
     fn map_error_to_http_covers_all_variants() {
-        // R-grpc-005: exhaustive ApiError → HTTP code mapping
+        // exhaustive ApiError → HTTP code mapping
         let cases: Vec<(ApiError, i32)> = vec![
             (
                 ApiError::NotFound {
@@ -1215,14 +1215,14 @@ mod tests {
 
     #[test]
     fn default_state_is_none() {
-        // R-grpc-007: Default::default().state == None
+        // Default::default().state == None
         let config = GrpcServerConfig::default();
         assert!(config.state.is_none());
     }
 
     #[tokio::test]
     async fn state_injected_to_service_can_be_downcast() {
-        // R-grpc-007: state injected via GrpcServerConfig reaches the service.
+        // state injected via GrpcServerConfig reaches the service.
         use std::any::Any;
         let state: Arc<dyn Any + Send + Sync> = Arc::new(42_i32);
         let service = SdForgeGrpcService::with_state(Some(state));

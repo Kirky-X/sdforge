@@ -11,7 +11,7 @@
 //!
 //! # Rule 7 divergence from `spec.md`
 //!
-//! `spec.md` R-sdforge-module-002 wrote the error mapping as
+//! `spec.md` wrote the error mapping as
 //! `ForgeError::rate_limiter(message)`. The actual `ForgeError` enum (defined
 //! at `domain/rate_limiter.rs`) has **no `rate_limiter` constructor**;
 //! the closest semantic match is [`ForgeError::internal(impl Display)`], which
@@ -124,7 +124,7 @@ mod tests {
             .expect("minimal config must produce a valid Governor")
     }
 
-    /// R-sdforge-module-002 #1: `LimiteronForgeAdapter::new` accepts an
+    /// #1: `LimiteronForgeAdapter::new` accepts an
     /// `Arc<Governor>` and returns a `LimiteronForgeAdapter`.
     #[tokio::test]
     async fn limiteron_forge_adapter_new_accepts_arc_governor() {
@@ -132,7 +132,7 @@ mod tests {
         let _adapter = LimiteronForgeAdapter::new(Arc::new(governor));
     }
 
-    /// R-sdforge-module-002 #2: `check` delegates to `Governor::check` and
+    /// #2: `check` delegates to `Governor::check` and
     /// returns `Ok(true)` when the request is allowed (TokenBucket has tokens).
     #[tokio::test]
     async fn check_returns_ok_true_when_allowed() {
@@ -148,7 +148,7 @@ mod tests {
         );
     }
 
-    /// R-sdforge-module-002 #3: `record` is a no-op returning `Ok(())`
+    /// #3: `record` is a no-op returning `Ok()`
     /// (Governor::check is atomic — check + consume together; there is no
     /// separate `record` method on `Governor`).
     #[tokio::test]
@@ -161,7 +161,7 @@ mod tests {
             .expect("record should be a no-op Ok");
     }
 
-    /// R-sdforge-module-002 #4: `LimiteronForgeAdapter` implements
+    /// #4: `LimiteronForgeAdapter` implements
     /// `ForgeRateLimiter` — object-safe via `Arc<dyn ForgeRateLimiter +
     /// Send + Sync>`. This is the dyn-dispatch path `SdforgeModule::build`
     /// will use .
@@ -177,7 +177,7 @@ mod tests {
         assert!(allowed, "dyn-dispatched check must return Ok(true)");
     }
 
-    /// R-sdforge-module-002 #5: `LimiteronForgeAdapter` is `Send + Sync`
+    /// #5: `LimiteronForgeAdapter` is `Send + Sync`
     /// (required by `ForgeRateLimiter: Send + Sync`).
     #[test]
     fn adapter_is_send_sync() {
@@ -185,7 +185,7 @@ mod tests {
         assert_send_sync::<LimiteronForgeAdapter>();
     }
 
-    /// R-sdforge-module-002 #6: `check` maps `Decision::Rejected` to
+    /// #6: `check` maps `Decision::Rejected` to
     /// `Ok(false)` (throttled, not an error). With capacity=1/refill=1,
     /// the 1st request consumes the only token; the 2nd immediate request
     /// is rejected because <1 second has elapsed (negligible refill).

@@ -98,7 +98,7 @@ pub struct ValidatedWebSocketUpgrade {
     ws: WebSocketUpgrade,
     manager: Arc<ConnectionManager>,
     /// 该路由对应的自定义消息处理器；由 `build()` 链路注入。
-    /// 为 `None` 时回退到 `DefaultWebSocketHandler`（diting HIGH-002 修复）。
+    /// 为 `None` 时回退到 `DefaultWebSocketHandler`。
     handler: Option<Arc<dyn WebSocketHandler>>,
 }
 
@@ -303,7 +303,7 @@ async fn handle_socket_inner(
 
                     match parse_websocket_message(text) {
                         Ok(ws_msg) => {
-                            // 使用该连接路由绑定的自定义 handler（diting HIGH-002 修复）；
+                            // 使用该连接路由绑定的自定义 handler；
                             // 未注入时回退到 DefaultWebSocketHandler。
                             // 响应经通道由 forwarder 写回，保证与广播一致的单出站路径。
                             let response = handler.handle(ws_msg).await;
@@ -355,7 +355,6 @@ pub fn build() -> Router {
         // Use the registration name to construct the path
         let path = format!("/{}", route.name);
         // 将路由的自定义 handler 注入升级提取器，使连接真正分发到用户 handler
-        // （diting HIGH-002 修复）
         router = router.route(
             &path,
             axum::routing::get(move |ws: ValidatedWebSocketUpgrade| async move {

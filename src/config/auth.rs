@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// ApiKey 认证的种子键条目（diting HIGH-003 修复）。
+/// ApiKey 认证的种子键条目。
 ///
 /// 此前 `AuthConfig::ApiKey` 只携带 header/prefix，无任何键材料，
 /// `build_with_config` 会创建空 key store → 整条 API 被 401 锁死且无播种途径。
@@ -123,7 +123,7 @@ impl AuthConfig {
                     ));
                 }
 
-                // LOW-002: 强制最小密钥长度（256-bit entropy recommended for HS256）
+                // 强制最小密钥长度（256-bit entropy recommended for HS256）
                 // 之前 MIN_SECRET_LENGTH=32 定义在 defaults.rs 但未被引用，形同虚设
                 let min_len = crate::config::defaults::jwt::MIN_SECRET_LENGTH;
                 if secret.len() < min_len {
@@ -327,13 +327,13 @@ mod tests {
         assert!(err.to_string().contains("empty"));
     }
 
-    /// Test JWT validation rejects short secrets (LOW-002: 强制最小 32 字符)
+    /// Test JWT validation rejects short secrets (强制最小 32 字符)
     #[test]
     fn test_jwt_validate_short_secret_rejected() {
         let config = AuthConfig::Jwt {
             secret: "short".to_string(),
         };
-        // LOW-002: 短 secret 现在被拒绝（之前只是 warn 后接受）
+        // 短 secret 现在被拒绝（之前只是 warn 后接受）
         let result = config.validate();
         assert!(
             result.is_err(),

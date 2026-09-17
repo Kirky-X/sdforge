@@ -178,7 +178,7 @@ async fn test_grpc_service_call_with_empty_method() {
         data: "".to_string(),
     };
 
-    // Unregistered method → Status::not_found (R-grpc-001)
+    // Unregistered method → Status::not_found
     let result = service.call(Request::new(request)).await;
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
@@ -264,7 +264,7 @@ async fn test_grpc_service_call_with_invalid_json() {
         data: "invalid json {{{".to_string(),
     };
 
-    // Unregistered method → Status::not_found (R-grpc-001)
+    // Unregistered method → Status::not_found
     let result = service.call(Request::new(request)).await;
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
@@ -1005,7 +1005,7 @@ async fn test_grpc_service_call_with_special_characters_in_method() {
         data: "".to_string(),
     };
 
-    // Unregistered method → Status::not_found (R-grpc-001)
+    // Unregistered method → Status::not_found
     let result = service.call(Request::new(request)).await;
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
@@ -1024,7 +1024,7 @@ async fn test_grpc_service_call_with_unicode_method() {
         data: "".to_string(),
     };
 
-    // Unregistered method → Status::not_found (R-grpc-001)
+    // Unregistered method → Status::not_found
     let result = service.call(Request::new(request)).await;
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
@@ -1044,7 +1044,7 @@ async fn test_grpc_service_call_with_very_long_method_name() {
         data: "".to_string(),
     };
 
-    // Unregistered method → Status::not_found (R-grpc-001)
+    // Unregistered method → Status::not_found
     let result = service.call(Request::new(request)).await;
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().code(), tonic::Code::NotFound);
@@ -1228,7 +1228,7 @@ async fn test_call_response_data_contains_method() {
     let result = service.call(Request::new(request)).await.unwrap();
     let response = result.into_inner();
 
-    // R-grpc-004: String return → raw string (no JSON wrapper)
+    // String return → raw string (no JSON wrapper)
     assert_eq!(response.data, "my_custom_method");
 }
 
@@ -1251,7 +1251,7 @@ async fn test_call_response_data_contains_result() {
     let result = service.call(Request::new(request)).await.unwrap();
     let response = result.into_inner();
 
-    // R-grpc-004: String return → raw string
+    // String return → raw string
     assert_eq!(response.data, "processed");
 }
 

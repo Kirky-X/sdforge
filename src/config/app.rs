@@ -153,7 +153,7 @@ impl AppConfigBuilder {
 
     /// Build AppConfig with validation
     ///
-    /// BUG-3 修复: `timeout` 缺省时回退到 `TimeoutConfig::default()`，
+    /// `timeout` 缺省时回退到 `TimeoutConfig::default()`，
     /// 与 `AppConfig::default()` 的行为保持一致。
     /// 原代码 `timeout: self.timeout` 在调用方未设置时产生 `None`，
     /// 而 `Default` 产生 `Some(TimeoutConfig::default())`，
@@ -183,7 +183,7 @@ mod tests {
     #[test]
     fn test_app_config_default() {
         let config = AppConfig::default();
-        // LOW-001: ServerConfig::default() 现在使用 fail-safe 常量
+        // ServerConfig::default() 现在使用 fail-safe 常量
         assert_eq!(config.server.host, "127.0.0.1"); // fail-safe loopback
         assert_eq!(config.server.port, 8080);
 

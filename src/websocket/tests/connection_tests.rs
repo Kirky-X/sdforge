@@ -16,7 +16,7 @@ fn test_websocket_connection_new() {
 
 /// Test WebSocketConfig default values.
 ///
-/// Replaces the old `test_rate_limit_config_default` (R-websocket-003):
+/// Replaces the old `test_rate_limit_config_default`
 /// `max_message_size` is now a top-level field (default 1 MiB), and
 /// `rate_limit` (when `ratelimit` feature is on) is a `FlowControlConfig`.
 #[test]
@@ -286,7 +286,7 @@ async fn connection_manager_broadcast_single() {
 /// Test AppState::with_config preserves custom `max_message_size`.
 ///
 /// Replaces the old `app_state_with_config_preserves_rate_limit` test
-/// (R-websocket-003): the `RateLimitConfig` struct is gone; we now verify
+/// the `RateLimitConfig` struct is gone; we now verify
 /// that the migrated `max_message_size` field survives the round-trip
 /// through `AppState::with_config`.
 #[cfg(feature = "websocket")]

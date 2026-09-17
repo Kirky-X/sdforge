@@ -681,7 +681,7 @@ mod tests {
         assert!(INFO.success_status.is_none());
     }
 
-    /// R-openapi-generation-001: `#[forge(status = 201)]` should produce an
+    /// `#[forge(status = 201)]` should produce an
     /// OpenAPI spec where the route's `responses` object contains a `"201"`
     /// key (not `"200"`).
     ///
@@ -718,7 +718,7 @@ mod tests {
         );
     }
 
-    /// R-openapi-generation-002: Routes without `status` should produce a
+    /// Routes without `status` should produce a
     /// `"200"` response key (backward-compatible with pre-change behavior).
     ///
     /// Uses the test-only route `/__openapi_test_marker__` registered above

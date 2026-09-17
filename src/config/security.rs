@@ -251,7 +251,7 @@ mod tests {
     /// Test `SecurityConfig::default().rate_limit` is `None` when the
     /// `ratelimit` feature is enabled.
     ///
-    /// Covers R-security-config-001: the new optional `rate_limit` field
+    /// Covers the new optional `rate_limit` field
     /// defaults to `None` so existing configs are unaffected.
     #[cfg(feature = "ratelimit")]
     #[test]
@@ -262,7 +262,7 @@ mod tests {
 
     /// Test `SecurityConfig` can be constructed with a `FlowControlConfig`.
     ///
-    /// Covers R-security-config-002: users can supply a rate-limit config
+    /// Covers users can supply a rate-limit config
     /// via struct literal construction.
     #[cfg(feature = "ratelimit")]
     #[test]

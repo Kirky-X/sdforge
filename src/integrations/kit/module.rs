@@ -11,7 +11,7 @@
 //! # Rule 7 divergences from `spec.md` / `design.md` (expose, don't paper
 //! over)
 //!
-//! `spec.md` R-sdforge-module-003 and `design.md` Decision 3 (lines 441-470)
+//! `spec.md` and `design.md` Decision 3 (lines 441-470)
 //! wrote the following pseudo-code; sdforge's actual API diverges on **four**
 //! independent points, all surfaced here rather than papered over:
 //!
@@ -135,13 +135,13 @@ mod tests {
         config
     }
 
-    /// R-sdforge-module-003 #1: `SdforgeModule::NAME == "sdforge"`.
+    /// #1: `SdforgeModule::NAME == "sdforge"`.
     #[test]
     fn sdforge_module_meta_name() {
         assert_eq!(SdforgeModule::NAME, "sdforge");
     }
 
-    /// R-sdforge-module-003 #2: `SdforgeModule::dependencies()` declares a
+    /// #2: `SdforgeModule::dependencies()` declares a
     /// dependency on `LimiteronModule`.
     #[test]
     fn sdforge_module_meta_dependencies() {
@@ -155,7 +155,7 @@ mod tests {
         );
     }
 
-    /// R-sdforge-module-003 #3: `SdforgeModule` satisfies `AsyncAutoBuilder`
+    /// #3: `SdforgeModule` satisfies `AsyncAutoBuilder`
     /// trait bounds — `Capability: Clone + Send + Sync + 'static` and
     /// `Error: std::error::Error + Send + 'static`.
     #[test]
@@ -166,7 +166,7 @@ mod tests {
         assert_err::<SdForgeError>();
     }
 
-    /// R-sdforge-module-003 #4: Full integration — register OxcacheModule +
+    /// #4: Full integration — register OxcacheModule +
     /// LimiteronModule + SdforgeModule, set config, build, require
     /// SdforgeModule → get a working `Arc<dyn ForgeRateLimiter + Send + Sync>`
     /// that delegates `check` to the underlying `Governor`.
@@ -198,7 +198,7 @@ mod tests {
         assert!(allowed, "first request must be allowed");
     }
 
-    /// R-sdforge-module-003 #5: build fails with a clear error if
+    /// #5: build fails with a clear error if
     /// LimiteronModule is not registered (dependency missing).
     #[tokio::test]
     async fn sdforge_module_build_fails_without_limiteron() {

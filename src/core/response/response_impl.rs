@@ -26,7 +26,7 @@ where
     /// in `status_code` and takes precedence over any macro-level `status`
     /// argument at response-build time (see `with_status_code_opt`).
     ///
-    /// LOW-4: `debug_assert` enforces the HTTP status code range `100..=999`
+    /// `debug_assert` enforces the HTTP status code range `100..=999`
     /// in debug builds. Out-of-range codes are a programmer error (the macro
     /// `status` argument is range-checked at compile time; this guard catches
     /// runtime callers that bypass the macro). Release builds keep the value

@@ -290,13 +290,13 @@ mod tests {
     // ============================================================================
     // forge-success-status-code: status_code field + constructors
     //
-    // R-core-response-001: 字段与零破坏序列化
-    // R-core-response-002: success_with_status 动态构造器
-    // R-core-response-003: with_status_code_opt 合并语义（字段优先）
-    // R-core-response-004: status_code 访问器
+    // 字段与零破坏序列化
+    // success_with_status 动态构造器
+    // with_status_code_opt 合并语义（字段优先）
+    // status_code 访问器
     // ============================================================================
 
-    /// R-core-response-001: success("x") 序列化结果不含 status_code 键。
+    /// success("x") 序列化结果不含 status_code 键。
     #[test]
     fn test_status_code_field_absent_on_success() {
         let response = ServiceResponse::success("x");
@@ -308,7 +308,7 @@ mod tests {
         );
     }
 
-    /// R-core-response-001: 反序列化历史 JSON（无 status_code 键）成功且字段为 None。
+    /// 反序列化历史 JSON（无 status_code 键）成功且字段为 None。
     #[test]
     fn test_status_code_field_backward_compatible_deserialization() {
         let json = r#"{"success":true,"data":"x"}"#;
@@ -318,7 +318,7 @@ mod tests {
         assert_eq!(response.status_code(), None);
     }
 
-    /// R-core-response-002: success_with_status 构造 success=true 且 status_code=Some(code)。
+    /// success_with_status 构造 success=true 且 status_code=Some(code)。
     #[test]
     fn test_success_with_status_sets_field() {
         let response = ServiceResponse::success_with_status("x", 201);
@@ -327,7 +327,7 @@ mod tests {
         assert_eq!(response.data(), Some(&"x"));
     }
 
-    /// R-core-response-002: code 取合法边界 100、999 时正常构造。
+    /// code 取合法边界 100、999 时正常构造。
     #[test]
     fn test_success_with_status_boundary_codes() {
         for code in [100u16, 999] {
@@ -336,14 +336,14 @@ mod tests {
         }
     }
 
-    /// R-core-response-003: with_status_code_opt 在字段 None 时填入。
+    /// with_status_code_opt 在字段 None 时填入。
     #[test]
     fn test_with_status_code_opt_fills_when_none() {
         let response = ServiceResponse::success("x").with_status_code_opt(Some(201));
         assert_eq!(response.status_code(), Some(201));
     }
 
-    /// R-core-response-003: 字段优先 — 已有值时不被 with_status_code_opt 覆盖。
+    /// 字段优先 — 已有值时不被 with_status_code_opt 覆盖。
     #[test]
     fn test_with_status_code_opt_does_not_overwrite_existing() {
         let response =
@@ -355,20 +355,20 @@ mod tests {
         );
     }
 
-    /// R-core-response-003: with_status_code_opt(None) 不改字段（None 不改）。
+    /// with_status_code_opt(None) 不改字段（None 不改）。
     #[test]
     fn test_with_status_code_opt_none_is_noop() {
         let response = ServiceResponse::success("x").with_status_code_opt(None);
         assert_eq!(response.status_code(), None);
     }
 
-    /// R-core-response-004: success("x").status_code() == None。
+    /// success("x").status_code() == None。
     #[test]
     fn test_status_code_accessor_none_on_success() {
         assert_eq!(ServiceResponse::success("x").status_code(), None);
     }
 
-    /// R-core-response-004: success_with_status("x", 201).status_code() == Some(201)。
+    /// success_with_status("x", 201).status_code() == Some(201)。
     #[test]
     fn test_status_code_accessor_some_on_success_with_status() {
         assert_eq!(

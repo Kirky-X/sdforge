@@ -58,7 +58,7 @@ impl SecurityHeaders {
 
     /// Create security headers with relaxed settings (for development only).
     ///
-    /// # Security Warning (LOW-004)
+    /// # Security Warning
     ///
     /// This configuration includes `'unsafe-inline'` and `'unsafe-eval'` in the
     /// Content Security Policy, which **significantly weakens XSS protection**:

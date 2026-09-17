@@ -164,7 +164,7 @@ mod tests {
         }
     }
 
-    /// R-sdforge-module-001 #1: `ForgeRateLimiter` trait exists and its
+    /// #1: `ForgeRateLimiter` trait exists and its
     /// `check` method returns `Pin<Box<dyn Future<Output = Result<bool,
     /// ForgeError>> + Send + 'a>>` (returns true = allowed).
     #[tokio::test]
@@ -175,7 +175,7 @@ mod tests {
         assert!(result.unwrap());
     }
 
-    /// R-sdforge-module-001 #2: `record` method returns
+    /// #2: `record` method returns
     /// `Pin<Box<dyn Future<Output = Result<(), ForgeError>> + Send + 'a>>`.
     #[tokio::test]
     async fn forge_rate_limiter_record_returns_pin_box_future() {
@@ -184,7 +184,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    /// R-sdforge-module-001 #3: `ForgeRateLimiter` is object-safe —
+    /// #3: `ForgeRateLimiter` is object-safe —
     /// `dyn ForgeRateLimiter` compiles. This is required for the kit
     /// integration to store the rate limiter as `Arc<dyn ForgeRateLimiter +
     /// Send + Sync>`.
@@ -197,7 +197,7 @@ mod tests {
         assert!(!allowed);
     }
 
-    /// R-sdforge-module-001 #4: `ForgeRateLimiter` trait inherits
+    /// #4: `ForgeRateLimiter` trait inherits
     /// `Send + Sync` (required for `Arc<dyn ForgeRateLimiter + Send + Sync>`).
     #[test]
     fn forge_rate_limiter_requires_send_sync() {
@@ -205,7 +205,7 @@ mod tests {
         assert_send_sync::<MockForgeRateLimiter>();
     }
 
-    /// R-sdforge-module-001 #5: `ForgeError` implements `std::error::Error`
+    /// #5: `ForgeError` implements `std::error::Error`
     /// (required by `AsyncAutoBuilder::Error` bound when used as a trait
     /// method return type) and is `Send + 'static`.
     #[test]
@@ -214,7 +214,7 @@ mod tests {
         assert_error::<ForgeError>();
     }
 
-    /// R-sdforge-module-001 #6: `ForgeError` can be constructed and displayed.
+    /// #6: `ForgeError` can be constructed and displayed.
     #[test]
     fn forge_error_display() {
         let err = ForgeError::RateLimited {

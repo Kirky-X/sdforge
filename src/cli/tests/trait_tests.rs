@@ -68,7 +68,7 @@ fn test_cli_arg_info_new_with_default() {
     assert_eq!(arg.default, Some("10"));
 }
 
-/// Verify `CliArgInfo::new` is usable in a `const` context (required by R-cli-002).
+/// Verify `CliArgInfo::new` is usable in a `const` context (required by ).
 #[test]
 fn test_cli_arg_info_new_is_const_fn() {
     const ARG: CliArgInfo = CliArgInfo::new("id", "Resource ID", CliArgType::Path, true, None);

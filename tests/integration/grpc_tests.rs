@@ -943,7 +943,7 @@ mod grpc_integration_tests {
         assert!(result.is_ok(), "Call should succeed");
         let response = result.unwrap().into_inner();
 
-        // R-grpc-004: smart extract_value — String return → raw string (no quotes).
+        // smart extract_value — String return → raw string (no quotes).
         assert_eq!(response.data, "hello");
         assert!(response.success);
     }
@@ -951,7 +951,7 @@ mod grpc_integration_tests {
     /// Test: unregistered method returns Status::not_found
     ///
     /// Replaces the old stub tests that called arbitrary method names and
-    /// expected success. With the new routing (R-grpc-001/005), unregistered
+    /// expected success. With the new routing unregistered
     /// methods are correctly rejected.
     #[tokio::test]
     #[ignore = "environmental issue: real network binding to 127.0.0.1:0, hangs in CI/sandboxed environments"]

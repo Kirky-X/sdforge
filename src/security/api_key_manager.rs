@@ -44,7 +44,7 @@ impl Serialize for ApiKeyVersion {
         let created_nanos = self.created_at.elapsed().as_nanos() as i64;
         state.serialize_field("created_at", &created_nanos)?;
         // 注意：对将来的 expires_at 时刻，`elapsed()` 会饱和为 0，导致持久化后
-        // 还原出的按键立即过期。这里改存"剩余时长"（diting HIGH-004 修复）。
+        // 还原出的按键立即过期。这里改存"剩余时长"。
         let expires_nanos = self
             .expires_at
             .map(|i| i.saturating_duration_since(Instant::now()).as_nanos() as i64);
@@ -75,7 +75,7 @@ impl<'de> Deserialize<'de> for ApiKeyVersion {
             key_hash: helper.key_hash,
             permissions: helper.permissions,
             created_at: instant_elapsed_nanos_ago(helper.created_at),
-            // 与 serialize 对应：expires_at 存的是"剩余时长"，还原时做加法（HIGH-004 修复）。
+            // 与 serialize 对应：expires_at 存的是"剩余时长"，还原时做加法。
             // 负剩余时长 = 已过期，钳制为立即过期（fail-closed），不得回绕成"永不过期"。
             expires_at: helper.expires_at.map(instant_in_nanos_from_now),
             is_active: helper.is_active,
@@ -896,7 +896,7 @@ mod tests {
     fn test_lru_eviction_deletes_cache_values() {
         use crate::cache::DashMapCache;
 
-        // Regression test for H-2/H1: LruCacheManager eviction previously only
+        // Regression test for /H1: LruCacheManager eviction previously only
         // removed access-tracking metadata while leaving the actual cached values
         // in the backing cache — causing unbounded memory growth. This test
         // verifies that evicted keys are deleted from the backing cache.

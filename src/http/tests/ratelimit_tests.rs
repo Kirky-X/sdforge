@@ -12,7 +12,7 @@ use std::sync::Arc;
 /// Test `rate_limit_layer` constructs a `RateLimitLayer` from a
 /// `LimiteronAdapter` without panicking.
 ///
-/// Covers R-ratelimit-004: the public `rate_limit_layer` helper accepts any
+/// Covers the public `rate_limit_layer` helper accepts any
 /// `Arc<dyn HttpRequestRateLimiter>` and returns a usable `RateLimitLayer`.
 #[cfg(feature = "ratelimit-http")]
 #[tokio::test]

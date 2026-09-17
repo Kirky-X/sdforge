@@ -548,7 +548,7 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
                 })?)
             }
             "status" => {
-                // M-1/LOW-1: 解析为 u16 后立即校验范围 100..=999，使错误消息
+                // 解析为 u16 后立即校验范围 100..=999，使错误消息
                 // 与实际校验逻辑一致（此前消息声称 100..=999 但未实际检查）。
                 let parsed = value.parse::<u16>().map_err(|_| {
                     syn::Error::new(
@@ -1242,7 +1242,7 @@ fn derive_body_param(params: &[ParamInfo]) -> Option<String> {
 /// construct the `Some("x")` / `None` literal explicitly to match the
 /// `Option<&'static str>` field type.
 ///
-/// `default_status` (H-1) carries the macro-level `#[forge(status = <code>)]`
+/// `default_status` carries the macro-level `#[forge(status = <code>)]`
 /// argument into the gRPC layer. The gRPC success path applies the priority
 /// chain: `ServiceResponse.status_code` field > `default_status` > 200. See
 /// `extract_status_code` + `SdForgeGrpcService::call` for the consumer.
@@ -1265,7 +1265,7 @@ fn generate_grpc_handler_registration(
         Some(name) => quote! { Some(#name) },
         None => quote! { None },
     };
-    // H-1: 同样需要显式构造 `Option<u16>` 字面量以匹配
+    // 同样需要显式构造 `Option<u16>` 字面量以匹配
     // `default_status: Option<u16>` 字段类型。
     let default_status: TokenStream2 = match status {
         Some(code) => quote! { Some(#code as u16) },
@@ -1495,7 +1495,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Build parameter patterns based on type
     // For streaming endpoints, body params should use raw Value (no Json wrapper)
-    // diting HIGH-001 修复：axum 的 `Path<T>` 单值提取器无法处理多路径参数
+    // axum 的 `Path<T>` 单值提取器无法处理多路径参数
     //（url_params.len() != 1 时对每个参数都反序列化失败 → 恒 400）。
     // 多路径参数改为生成单个 `Path<(T1, T2, ...)>` 元组提取器，在闭包体内按序解构。
     let multi_path = params
@@ -1537,7 +1537,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         .collect();
 
     // 闭包参数：多路径参数时用单个元组提取器替换全部路径参数位置，
-    // Query 参数（diting HIGH-001 Query 部分）：serde_urlencoded 顶层按 map 反序列化，
+    // Query 参数（Query 部分）：serde_urlencoded 顶层按 map 反序列化，
     // 标量 `Query<T>`（String/Option<u32> 等）必然失败 → 恒 400。
     // 有 Query 参数时生成路由级结构体，统一单个 `Query<__ForgeQueryParams>` 提取后按字段解构。
     let query_params: Vec<_> = params
@@ -2531,7 +2531,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         // SdForgeGrpcService::call can route CallRequest to the forge
         // fn instead of the legacy stub. The GrpcRouteRegistration below
         // carries only metadata; this adds the invocable handler pointer.
-        // H-1: pass the macro-level `status` argument so the gRPC layer can
+        // pass the macro-level `status` argument so the gRPC layer can
         // mirror the HTTP success code (priority chain: field > macro > 200).
         let grpc_handler_reg = generate_grpc_handler_registration(
             fn_name,
@@ -3314,7 +3314,7 @@ mod macro_parsing_tests {
             s.contains("body_param : Some (\"payload\")"),
             "body_param must be Some(\"payload\") for a Body param: {s}"
         );
-        // H-1: default_status must be emitted (None when no macro status arg)
+        // default_status must be emitted (None when no macro status arg)
         assert!(
             s.contains("default_status : None"),
             "default_status must be None when no macro status arg: {s}"
@@ -3345,14 +3345,14 @@ mod macro_parsing_tests {
             s.contains("method : \"ping\""),
             "method must still be set: {s}"
         );
-        // H-1: default_status must also be None
+        // default_status must also be None
         assert!(
             s.contains("default_status : None"),
             "default_status must be None when no macro status arg: {s}"
         );
     }
 
-    /// H-1: when `status = Some(code)` is passed, the generated
+    /// when `status = Some(code)` is passed, the generated
     /// `GrpcHandlerRegistration` must carry `default_status: Some(<code>)`.
     #[test]
     fn test_generate_grpc_handler_registration_emits_default_status_when_set() {
@@ -3382,7 +3382,7 @@ mod macro_parsing_tests {
     // ========================================================================
     // forge-success-status-code: detect_service_response 返回类型检测
     //
-    // R-forge-macro-002: 检测 fn 返回类型是否为 ServiceResponse（含 Result 包装）
+    // 检测 fn 返回类型是否为 ServiceResponse（含 Result 包装）
     // ========================================================================
 
     /// 解析 `-> T` 形式的返回类型字符串为 syn::ReturnType。
@@ -3392,42 +3392,42 @@ mod macro_parsing_tests {
         item_fn.sig.output
     }
 
-    /// R-forge-macro-002: `-> ServiceResponse<T>` → true。
+    /// `-> ServiceResponse<T>` → true。
     #[test]
     fn test_detect_service_response_bare() {
         let rt = parse_return_type("-> ServiceResponse<String>");
         assert!(detect_service_response(&rt));
     }
 
-    /// R-forge-macro-002: `-> Result<ServiceResponse<T>, E>` → true。
+    /// `-> Result<ServiceResponse<T>, E>` → true。
     #[test]
     fn test_detect_service_response_result_wrapped() {
         let rt = parse_return_type("-> Result<ServiceResponse<String>, ApiError>");
         assert!(detect_service_response(&rt));
     }
 
-    /// R-forge-macro-002: `-> Result<User, E>` → false。
+    /// `-> Result<User, E>` → false。
     #[test]
     fn test_detect_service_response_result_of_bare_type() {
         let rt = parse_return_type("-> Result<User, ApiError>");
         assert!(!detect_service_response(&rt));
     }
 
-    /// R-forge-macro-002: `-> User` → false。
+    /// `-> User` → false。
     #[test]
     fn test_detect_service_response_plain_bare_type() {
         let rt = parse_return_type("-> User");
         assert!(!detect_service_response(&rt));
     }
 
-    /// R-forge-macro-002: 无返回类型（unit）→ false。
+    /// 无返回类型（unit）→ false。
     #[test]
     fn test_detect_service_response_unit_return() {
         let rt = syn::ReturnType::Default;
         assert!(!detect_service_response(&rt));
     }
 
-    /// R-forge-macro-002: `-> ServiceResponse` 无泛型参数 → true。
+    /// `-> ServiceResponse` 无泛型参数 → true。
     #[test]
     fn test_detect_service_response_no_generic_param() {
         let rt = parse_return_type("-> ServiceResponse");
