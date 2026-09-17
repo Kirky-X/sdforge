@@ -21,7 +21,7 @@ pub mod mcp_markdown;
 pub mod swagger;
 
 #[cfg(feature = "http")]
-pub use swagger::swagger_ui_router;
+pub use swagger::{swagger_ui_router, swagger_ui_router_with_spec};
 
 pub use cli_markdown::generate_cli_docs;
 #[cfg(feature = "mcp")]

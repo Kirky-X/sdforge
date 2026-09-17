@@ -27,12 +27,40 @@ use utoipa_swagger_ui::{Config, serve};
 /// use sdforge::docs::swagger_ui_router;
 /// let app = axum::Router::new().merge(swagger_ui_router());
 /// ```
+///
+/// # 路径冲突
+///
+/// 本函数注册自带的 `/api-docs/openapi.json` 路由；宿主应用若已在该路径
+/// 提供自己的 spec，请改用 [`swagger_ui_router_with_spec`]（只挂 UI，spec
+/// 指向宿主既有端点），避免 `Router::merge` 因路径重复 panic。
 pub fn swagger_ui_router() -> axum::Router {
-    let config: Arc<Config<'static>> =
-        Arc::new(Config::new(["/api-docs/openapi.json".to_string()]));
-
     axum::Router::new()
         .route("/api-docs/openapi.json", get(serve_openapi_json))
+        .merge(swagger_ui_router_with_spec("/api-docs/openapi.json"))
+}
+
+/// 构建仅含 Swagger UI 路由的 axum Router，spec 地址由调用方指定。
+///
+/// 不注册 `/api-docs/openapi.json`——宿主应用自行提供 spec 端点（可以是
+/// 动态生成的、带认证的或来自独立文档服务的），Swagger UI 从
+/// `openapi_url` 加载。
+///
+/// # 参数
+///
+/// - `openapi_url`: Swagger UI 页面加载的 OpenAPI JSON 端点（绝对路径）。
+///
+/// # 示例
+///
+/// ```ignore
+/// use sdforge::docs::swagger_ui_router_with_spec;
+/// // 宿主已在 /api-docs/openapi.json 提供自己的 spec
+/// let app = axum::Router::new()
+///     .merge(swagger_ui_router_with_spec("/api-docs/openapi.json"));
+/// ```
+pub fn swagger_ui_router_with_spec(openapi_url: &str) -> axum::Router {
+    let config: Arc<Config<'static>> = Arc::new(Config::new([openapi_url.to_string()]));
+
+    axum::Router::new()
         .route("/swagger-ui/", get(serve_swagger_ui))
         .route("/swagger-ui/{*rest}", get(serve_swagger_ui))
         .layer(Extension(config))
