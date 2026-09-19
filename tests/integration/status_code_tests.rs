@@ -194,3 +194,85 @@ async fn test_service_response_body_contains_status_code_field() {
     assert_eq!(body_json["status_code"], 201);
     assert_eq!(body_json["data"]["name"], "Alice");
 }
+
+// ============================================================================
+// (d) `status = 204` → HTTP 204 无 body（bare-type Result 与裸值两条路径）
+// ============================================================================
+
+#[forge(
+    name = "status_code_delete_with_204",
+    version = "v1",
+    path = "/items-with-204/{id}",
+    method = "DELETE",
+    status = 204,
+    description = "Delete returning 204 no-content (Result path)"
+)]
+async fn delete_with_204(id: u64) -> Result<(), sdforge::core::ApiError> {
+    let _ = id;
+    Ok(())
+}
+
+#[forge(
+    name = "status_code_delete_with_204_bare",
+    version = "v1",
+    path = "/items-with-204-bare/{id}",
+    method = "DELETE",
+    status = 204,
+    description = "Delete returning 204 no-content (non-Result path)"
+)]
+async fn delete_with_204_bare(id: u64) {
+    let _ = id;
+}
+
+/// Helper: send a DELETE request and return the response.
+async fn send_delete(uri: &str) -> axum::http::Response<Body> {
+    let router = build_router();
+    router
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(uri)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
+/// `#[forge(status = 204)]` on a Result-returning DELETE → HTTP 204, empty body.
+#[tokio::test]
+async fn test_forge_status_204_delete_result_path_no_body() {
+    let response = send_delete("/api/v1/items-with-204/42").await;
+    assert_eq!(
+        response.status(),
+        StatusCode::NO_CONTENT,
+        "expected 204 No Content from #[forge(status = 204)] (Result path)"
+    );
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert!(
+        body_bytes.is_empty(),
+        "204 response must not carry a body, got: {:?}",
+        String::from_utf8_lossy(&body_bytes)
+    );
+}
+
+/// `#[forge(status = 204)]` on a bare (non-Result) DELETE → HTTP 204, empty body.
+#[tokio::test]
+async fn test_forge_status_204_delete_bare_path_no_body() {
+    let response = send_delete("/api/v1/items-with-204-bare/7").await;
+    assert_eq!(
+        response.status(),
+        StatusCode::NO_CONTENT,
+        "expected 204 No Content from #[forge(status = 204)] (non-Result path)"
+    );
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert!(
+        body_bytes.is_empty(),
+        "204 response must not carry a body, got: {:?}",
+        String::from_utf8_lossy(&body_bytes)
+    );
+}

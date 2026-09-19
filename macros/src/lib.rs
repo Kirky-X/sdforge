@@ -2140,6 +2140,11 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             // 200); the macro `status` only fills in when the field is None.
             // Bare-type path injects the macro `status` directly into a
             // StatusCode tuple response; non-numeric codes fall back to 200.
+            //
+            // 204/304（无 body 语义的 status code）：bare-type 路径不再包 Json，
+            // 生成纯 StatusCode 响应（RFC 9110：204/304 不得携带 body）。
+            // 业务函数照常执行（保留副作用与 Err 错误路径），仅丢弃序列化产物。
+            let bodyless = matches!(status, Some(204) | Some(304));
             let handler_closure = match (is_result, is_service_response) {
                 (true, true) => quote! {
                     |#(#closure_params),*| {
@@ -2153,25 +2158,47 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     }
                 },
-                (true, false) => quote! {
-                    |#(#closure_params),*| {
-                        async move {
-                            use sdforge::prelude::*;
-                            #path_destructure
-                            match #fn_name(#(#param_call_args),*).await {
-                                Ok(value) => {
-                                    let __forge_result = { #value_wrap_expr };
-                                    (
-                                        sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
-                                            .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
-                                        sdforge::axum::extract::Json(__forge_result),
-                                    ).into_response()
+                (true, false) => {
+                    if bodyless {
+                        quote! {
+                            |#(#closure_params),*| {
+                                async move {
+                                    use sdforge::prelude::*;
+                                    #path_destructure
+                                    match #fn_name(#(#param_call_args),*).await {
+                                        // 204/304：执行业务逻辑，Ok 分支返回无 body 的纯状态码
+                                        Ok(_) => {
+                                            sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
+                                                .unwrap_or(sdforge::axum::http::status::StatusCode::OK)
+                                                .into_response()
+                                        }
+                                        Err(e) => e.into_response(),
+                                    }
                                 }
-                                Err(e) => e.into_response(),
+                            }
+                        }
+                    } else {
+                        quote! {
+                            |#(#closure_params),*| {
+                                async move {
+                                    use sdforge::prelude::*;
+                                    #path_destructure
+                                    match #fn_name(#(#param_call_args),*).await {
+                                        Ok(value) => {
+                                            let __forge_result = { #value_wrap_expr };
+                                            (
+                                                sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
+                                                    .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
+                                                sdforge::axum::extract::Json(__forge_result),
+                                            ).into_response()
+                                        }
+                                        Err(e) => e.into_response(),
+                                    }
+                                }
                             }
                         }
                     }
-                },
+                }
                 (false, true) => quote! {
                     |#(#closure_params),*| {
                         async move {
@@ -2182,21 +2209,39 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     }
                 },
-                (false, false) => quote! {
-                    |#(#closure_params),*| {
-                        async move {
-                            use sdforge::prelude::*;
-                            #path_destructure
-                            let result = #fn_name(#(#param_call_args),*).await;
-                            let __forge_result = { #result_wrap_expr };
-                            (
-                                sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
-                                    .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
-                                sdforge::axum::extract::Json(__forge_result),
-                            ).into_response()
+                (false, false) => {
+                    if bodyless {
+                        quote! {
+                            |#(#closure_params),*| {
+                                async move {
+                                    use sdforge::prelude::*;
+                                    #path_destructure
+                                    let result = #fn_name(#(#param_call_args),*).await;
+                                    let _ = { #result_wrap_expr };
+                                    sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
+                                        .unwrap_or(sdforge::axum::http::status::StatusCode::OK)
+                                        .into_response()
+                                }
+                            }
+                        }
+                    } else {
+                        quote! {
+                            |#(#closure_params),*| {
+                                async move {
+                                    use sdforge::prelude::*;
+                                    #path_destructure
+                                    let result = #fn_name(#(#param_call_args),*).await;
+                                    let __forge_result = { #result_wrap_expr };
+                                    (
+                                        sdforge::axum::http::status::StatusCode::from_u16(#status_expr.unwrap_or(200u16))
+                                            .unwrap_or(sdforge::axum::http::status::StatusCode::OK),
+                                        sdforge::axum::extract::Json(__forge_result),
+                                    ).into_response()
+                                }
+                            }
                         }
                     }
-                },
+                }
             };
 
             quote! {
