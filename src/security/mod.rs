@@ -17,13 +17,13 @@ pub use traits::*;
 pub use types::*;
 
 #[cfg(feature = "security")]
-pub use api_key::{SdForgeApiKeyAuthBuilder, SdForgeApiKeyAuth};
+pub use api_key::{SdForgeApiKeyAuth, SdForgeApiKeyAuthBuilder};
 #[cfg(feature = "security")]
 pub use audit::AuditSink;
 #[cfg(all(feature = "security", feature = "inklog"))]
 pub use audit::InklogAuditSink;
 #[cfg(feature = "security")]
-pub use audit::{SdForgeAuditLoggerBuilder, SdForgeAuditLogger};
+pub use audit::{SdForgeAuditLogger, SdForgeAuditLoggerBuilder};
 #[cfg(feature = "security")]
 pub use bearer::{BearerAuth, BearerAuthBuilder, generate_secure_jwt_secret};
 #[cfg(feature = "security")]
