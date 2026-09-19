@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 
-use super::{AppAuditLoggerBuilder, AuditLogBatch, SdForgeAuditLogger};
+use super::{SdForgeAuditLoggerBuilder, AuditLogBatch, SdForgeAuditLogger};
 use crate::cache::SharedCache;
 use crate::security::{
     AuditLog, AuditResult, AuthContext, AuthMetadata, deserialize_audit_logs, serialize_audit_logs,
@@ -128,14 +128,14 @@ impl Default for SdForgeAuditLogger {
 }
 
 impl SdForgeAuditLogger {
-    /// Create a new AppAuditLoggerBuilder for custom configuration.
+    /// Create a new SdForgeAuditLoggerBuilder for custom configuration.
     ///
     /// This is the recommended way to create an SdForgeAuditLogger when you need
     /// to customize any of the default settings.
     ///
     /// # Returns
     ///
-    /// Returns a new AppAuditLoggerBuilder instance.
+    /// Returns a new SdForgeAuditLoggerBuilder instance.
     ///
     /// # Errors
     ///
@@ -156,8 +156,8 @@ impl SdForgeAuditLogger {
     ///     let _ = logger;
     /// }
     /// ```
-    pub fn builder() -> AppAuditLoggerBuilder {
-        AppAuditLoggerBuilder::new()
+    pub fn builder() -> SdForgeAuditLoggerBuilder {
+        SdForgeAuditLoggerBuilder::new()
     }
 
     /// Create new audit logger with default limit
@@ -516,14 +516,14 @@ impl crate::security::AuditLogger for SdForgeAuditLogger {
     }
 }
 
-impl Default for AppAuditLoggerBuilder {
+impl Default for SdForgeAuditLoggerBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl AppAuditLoggerBuilder {
-    /// Create a new AppAuditLoggerBuilder with default settings.
+impl SdForgeAuditLoggerBuilder {
+    /// Create a new SdForgeAuditLoggerBuilder with default settings.
     ///
     /// Default values:
     /// - `max_logs_per_user`: 1000
@@ -541,9 +541,9 @@ impl AppAuditLoggerBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::AppAuditLoggerBuilder;
+    /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
-    /// let builder = AppAuditLoggerBuilder::new();
+    /// let builder = SdForgeAuditLoggerBuilder::new();
     /// let _ = builder;
     /// ```
     pub fn new() -> Self {
@@ -573,9 +573,9 @@ impl AppAuditLoggerBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::AppAuditLoggerBuilder;
+    /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
-    /// let builder = AppAuditLoggerBuilder::new().max_logs_per_user(500);
+    /// let builder = SdForgeAuditLoggerBuilder::new().max_logs_per_user(500);
     /// let _ = builder;
     /// ```
     pub fn max_logs_per_user(mut self, max_logs: usize) -> Self {
@@ -603,9 +603,9 @@ impl AppAuditLoggerBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::AppAuditLoggerBuilder;
+    /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
-    /// let builder = AppAuditLoggerBuilder::new().max_concurrent_ops(50);
+    /// let builder = SdForgeAuditLoggerBuilder::new().max_concurrent_ops(50);
     /// let _ = builder;
     /// ```
     pub fn max_concurrent_ops(mut self, max_concurrent: usize) -> Self {
@@ -632,9 +632,9 @@ impl AppAuditLoggerBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::AppAuditLoggerBuilder;
+    /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
-    /// let builder = AppAuditLoggerBuilder::new().queue_size(2000);
+    /// let builder = SdForgeAuditLoggerBuilder::new().queue_size(2000);
     /// let _ = builder;
     /// ```
     pub fn queue_size(mut self, queue_size: usize) -> Self {
@@ -658,11 +658,11 @@ impl AppAuditLoggerBuilder {
     /// # Examples
     ///
     /// ```ignore
-    /// use sdforge::security::AppAuditLoggerBuilder;
+    /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let logger = AppAuditLoggerBuilder::new()
+    ///     let logger = SdForgeAuditLoggerBuilder::new()
     ///         .max_logs_per_user(500)
     ///         .max_concurrent_ops(50)
     ///         .queue_size(2000)

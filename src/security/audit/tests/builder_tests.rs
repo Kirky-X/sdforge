@@ -1,18 +1,18 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! Tests for `AppAuditLoggerBuilder` and `SdForgeAuditLogger::builder()`.
+//! Tests for `SdForgeAuditLoggerBuilder` and `SdForgeAuditLogger::builder()`.
 
 use super::super::*;
 use super::make_test_audit_log;
 use crate::security::{AuditResult, AuthMetadata, serialize_audit_logs};
 
 // ============================================================================
-// AppAuditLoggerBuilder Tests
+// SdForgeAuditLoggerBuilder Tests
 // ============================================================================
 
 #[test]
 fn test_builder_new_default_values() {
-    let builder = AppAuditLoggerBuilder::new();
+    let builder = SdForgeAuditLoggerBuilder::new();
     assert_eq!(builder.max_logs_per_user, 1000);
     assert_eq!(builder.max_concurrent_ops, 100);
     assert_eq!(builder.queue_size, 1000);
@@ -20,7 +20,7 @@ fn test_builder_new_default_values() {
 
 #[test]
 fn test_builder_default_trait() {
-    let builder = AppAuditLoggerBuilder::default();
+    let builder = SdForgeAuditLoggerBuilder::default();
     assert_eq!(builder.max_logs_per_user, 1000);
     assert_eq!(builder.max_concurrent_ops, 100);
     assert_eq!(builder.queue_size, 1000);
@@ -28,25 +28,25 @@ fn test_builder_default_trait() {
 
 #[test]
 fn test_builder_max_logs_per_user() {
-    let builder = AppAuditLoggerBuilder::new().max_logs_per_user(500);
+    let builder = SdForgeAuditLoggerBuilder::new().max_logs_per_user(500);
     assert_eq!(builder.max_logs_per_user, 500);
 }
 
 #[test]
 fn test_builder_max_concurrent_ops() {
-    let builder = AppAuditLoggerBuilder::new().max_concurrent_ops(50);
+    let builder = SdForgeAuditLoggerBuilder::new().max_concurrent_ops(50);
     assert_eq!(builder.max_concurrent_ops, 50);
 }
 
 #[test]
 fn test_builder_queue_size() {
-    let builder = AppAuditLoggerBuilder::new().queue_size(2000);
+    let builder = SdForgeAuditLoggerBuilder::new().queue_size(2000);
     assert_eq!(builder.queue_size, 2000);
 }
 
 #[test]
 fn test_builder_chaining() {
-    let builder = AppAuditLoggerBuilder::new()
+    let builder = SdForgeAuditLoggerBuilder::new()
         .max_logs_per_user(500)
         .max_concurrent_ops(50)
         .queue_size(2000);
@@ -57,7 +57,7 @@ fn test_builder_chaining() {
 
 #[tokio::test]
 async fn test_builder_build() {
-    let logger = AppAuditLoggerBuilder::new()
+    let logger = SdForgeAuditLoggerBuilder::new()
         .max_logs_per_user(500)
         .max_concurrent_ops(50)
         .queue_size(2000)
@@ -87,7 +87,7 @@ async fn test_default_audit_logger() {
 // ============================================================================
 // Builder build() worker tests
 //
-// AppAuditLoggerBuilder::build() also spawns a worker with the same
+// SdForgeAuditLoggerBuilder::build() also spawns a worker with the same
 // fallback merge logic. This test exercises the builder's worker path.
 // ============================================================================
 

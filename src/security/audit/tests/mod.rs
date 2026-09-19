@@ -7,7 +7,7 @@
 //!   `SdForgeAuditLogger` logging/get/clear, key rotation, total/dropped counts,
 //!   failure sanitization, trait impl, multi-user, truncation, serialization,
 //!   signing key, fallback merge, dedup, worker drain, channel/semaphore edges)
-//! - `builder_tests`: `AppAuditLoggerBuilder` and `SdForgeAuditLogger::builder()`
+//! - `builder_tests`: `SdForgeAuditLoggerBuilder` and `SdForgeAuditLogger::builder()`
 //!   construction, defaults, chaining, `build()`, and builder worker fallback merge
 
 mod audit_logger_tests;

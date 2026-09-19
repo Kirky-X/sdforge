@@ -12,7 +12,7 @@
 mod security_tests {
     use hmac::{Hmac, KeyInit, Mac};
     use sdforge::security::{
-        ApiKeyMetadata, AppApiKeyAuthBuilder, AuditResult, AuthContext, AuthMetadata, BearerAuth,
+        ApiKeyMetadata, SdForgeApiKeyAuthBuilder, AuditResult, AuthContext, AuthMetadata, BearerAuth,
         BearerAuthBuilder, LruConfig, RotationConfig, SdForgeApiKeyAuth, SdForgeAuditLogger,
     };
     use sha2::Sha256;
@@ -274,7 +274,7 @@ mod security_tests {
     /// Verifies that the builder correctly configures LRU and rotation parameters.
     #[tokio::test]
     async fn test_api_key_auth_builder_configuration() {
-        let auth = AppApiKeyAuthBuilder::new()
+        let auth = SdForgeApiKeyAuthBuilder::new()
             .lru(LruConfig::default())
             .rotation(RotationConfig::default())
             .build();

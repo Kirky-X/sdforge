@@ -92,8 +92,8 @@ impl SdForgeApiKeyAuth {
     }
 
     /// Create builder for configuration
-    pub fn builder() -> AppApiKeyAuthBuilder {
-        AppApiKeyAuthBuilder::new()
+    pub fn builder() -> SdForgeApiKeyAuthBuilder {
+        SdForgeApiKeyAuthBuilder::new()
     }
 
     /// Hash API key using SHA256 for deterministic storage and lookup
@@ -446,12 +446,12 @@ impl Default for SdForgeApiKeyAuth {
 
 /// Builder for SdForgeApiKeyAuth configuration
 #[derive(Debug, Clone, Default)]
-pub struct AppApiKeyAuthBuilder {
+pub struct SdForgeApiKeyAuthBuilder {
     lru_config: Option<LruConfig>,
     rotation_config: Option<RotationConfig>,
 }
 
-impl AppApiKeyAuthBuilder {
+impl SdForgeApiKeyAuthBuilder {
     /// Create a new ApiKeyAuthBuilder.
     ///
     /// # Returns
@@ -461,9 +461,9 @@ impl AppApiKeyAuthBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::AppApiKeyAuthBuilder;
+    /// use sdforge::security::SdForgeApiKeyAuthBuilder;
     ///
-    /// let builder = AppApiKeyAuthBuilder::new();
+    /// let builder = SdForgeApiKeyAuthBuilder::new();
     /// let _ = builder;
     /// ```
     pub fn new() -> Self {
@@ -494,9 +494,9 @@ impl AppApiKeyAuthBuilder {
     /// # Examples
     ///
     /// ```rust
-    /// use sdforge::security::AppApiKeyAuthBuilder;
+    /// use sdforge::security::SdForgeApiKeyAuthBuilder;
     ///
-    /// let auth = AppApiKeyAuthBuilder::new().build();
+    /// let auth = SdForgeApiKeyAuthBuilder::new().build();
     /// let _ = auth;
     /// ```
     pub fn build(self) -> SdForgeApiKeyAuth {
@@ -617,7 +617,7 @@ mod tests {
 
     #[test]
     fn test_builder() {
-        let auth = AppApiKeyAuthBuilder::new().build();
+        let auth = SdForgeApiKeyAuthBuilder::new().build();
 
         auth.add_key("test", vec!["write".to_string()]);
         let perms = auth.validate_key("test", "127.0.0.1");
@@ -626,7 +626,7 @@ mod tests {
 
     #[test]
     fn test_builder_with_lru() {
-        let auth = AppApiKeyAuthBuilder::new()
+        let auth = SdForgeApiKeyAuthBuilder::new()
             .lru(LruConfig::default())
             .build();
 
@@ -635,7 +635,7 @@ mod tests {
 
     #[test]
     fn test_builder_with_rotation() {
-        let auth = AppApiKeyAuthBuilder::new()
+        let auth = SdForgeApiKeyAuthBuilder::new()
             .rotation(RotationConfig::default())
             .build();
 
@@ -878,7 +878,7 @@ mod tests {
 
     #[test]
     fn test_builder_with_both_lru_and_rotation() {
-        let auth = AppApiKeyAuthBuilder::new()
+        let auth = SdForgeApiKeyAuthBuilder::new()
             .lru(LruConfig::default())
             .rotation(RotationConfig::default())
             .build();

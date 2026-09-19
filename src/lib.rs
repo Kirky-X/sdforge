@@ -282,8 +282,8 @@ pub mod security;
 pub use security::{
     // Trait interfaces (feature layer)
     ApiKeyAuth,
-    AppApiKeyAuthBuilder,
-    AppAuditLoggerBuilder,
+    SdForgeApiKeyAuthBuilder,
+    SdForgeAuditLoggerBuilder,
     AuditLog,
     AuditLogger,
     // Supporting types

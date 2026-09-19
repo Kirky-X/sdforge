@@ -115,7 +115,7 @@ pub struct SdForgeAuditLogger {
 ///     let _ = logger;
 /// }
 /// ```
-pub struct AppAuditLoggerBuilder {
+pub struct SdForgeAuditLoggerBuilder {
     /// Maximum number of logs to retain per user
     max_logs_per_user: usize,
     /// Maximum number of concurrent log operations (semaphore permits)
