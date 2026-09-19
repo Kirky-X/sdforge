@@ -150,6 +150,12 @@ pub use tower;
 #[cfg(feature = "http")]
 pub use tower_http;
 
+/// validator 全量 re-export：`ValidatedParam`/`extract_validated` 依赖其 `Validate`
+/// trait，consumer 侧 DTO 的 `#[derive(Validate)]` 经 `sdforge::validator::Validate`
+/// 引用，不再直接依赖 validator crate（与 tower_http re-export 同模式）。
+#[cfg(feature = "http")]
+pub use validator;
+
 /// Commonly used types and re-exports
 pub mod prelude {
     pub use crate::core::{ApiError, ApiMetadata, ServiceError, ServiceResponse};
@@ -282,8 +288,6 @@ pub mod security;
 pub use security::{
     // Trait interfaces (feature layer)
     ApiKeyAuth,
-    SdForgeApiKeyAuthBuilder,
-    SdForgeAuditLoggerBuilder,
     AuditLog,
     AuditLogger,
     // Supporting types
@@ -297,7 +301,9 @@ pub use security::{
     BearerAuthBuilder,
     // Concrete implementations (renamed structs)
     SdForgeApiKeyAuth,
+    SdForgeApiKeyAuthBuilder,
     SdForgeAuditLogger,
+    SdForgeAuditLoggerBuilder,
     auth_middleware,
 };
 
