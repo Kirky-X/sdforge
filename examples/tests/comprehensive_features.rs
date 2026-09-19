@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Comprehensive integration tests for sdforge features via the examples crate.
 //!
@@ -191,12 +191,12 @@ fn http_simple_api_user_request_constructible() {
 #[cfg(feature = "http_examples")]
 #[test]
 fn http_types_and_errors_app_error_constructible() {
-    use sdforge_examples::basics::types_and_errors::AppError;
-    let err = AppError::UserNotFound { user_id: 42 };
+    use sdforge_examples::basics::types_and_errors::SdForgeExampleError;
+    let err = SdForgeExampleError::UserNotFound { user_id: 42 };
     let msg = err.to_string();
     assert!(
         msg.contains("42"),
-        "AppError message should contain user_id"
+        "SdForgeExampleError message should contain user_id"
     );
 }
 
@@ -511,18 +511,18 @@ fn security_comprehensive_user_and_role_constructible() {
 #[cfg(feature = "security_examples")]
 #[tokio::test]
 async fn security_comprehensive_app_state_default_has_seed_users() {
-    // `AppState::default()` constructs an `AppAuditLogger` whose `Default`
+    // `SdForgeExampleState::default()` constructs an `SdForgeAuditLogger` whose `Default`
     // impl spins up a Tokio task (mpsc channel), requiring a runtime context.
     // Hence `#[tokio::test]`. The `users` field is a `tokio::sync::RwLock`,
     // so we use `.read().await` (not `blocking_read()`, which panics inside
     // an async context).
-    use sdforge_examples::security::comprehensive::AppState;
-    let state = AppState::default();
+    use sdforge_examples::security::comprehensive::SdForgeExampleState;
+    let state = SdForgeExampleState::default();
     let users = state.users.read().await;
     assert_eq!(
         users.len(),
         2,
-        "AppState::default should seed 2 users (admin + user1)"
+        "SdForgeExampleState::default should seed 2 users (admin + user1)"
     );
     assert_eq!(users[0].username, "admin");
     assert_eq!(users[1].username, "user1");
@@ -532,8 +532,8 @@ async fn security_comprehensive_app_state_default_has_seed_users() {
 #[tokio::test]
 async fn security_comprehensive_cache_set_get_delete() {
     use sdforge::SyncCache;
-    use sdforge_examples::security::comprehensive::AppState;
-    let state = AppState::default();
+    use sdforge_examples::security::comprehensive::SdForgeExampleState;
+    let state = SdForgeExampleState::default();
     state.cache.set("test-key", vec![1, 2, 3]);
     let value = state.cache.get("test-key");
     assert!(value.is_some(), "cache get after set should return Some");

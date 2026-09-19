@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 
 use super::*;
@@ -271,7 +271,7 @@ pub fn build_with_redirect() -> Router {
 /// # Note
 /// This is the recommended function for production use. It applies security headers,
 /// CORS, rate limiting, compression, and timeout middleware based on the config.
-pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, ConfigError> {
+pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router, ConfigError> {
     #[cfg(feature = "security")]
     use std::sync::Arc;
 
@@ -372,7 +372,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
     #[cfg(feature = "security")]
     {
         use crate::config::AuthConfig;
-        use crate::security::{AppApiKeyAuth, AuthContext, AuthError, BearerAuth, auth_middleware};
+        use crate::security::{SdForgeApiKeyAuth, AuthContext, AuthError, BearerAuth, auth_middleware};
         use axum::http::HeaderValue;
 
         let auth_config = &config.authentication;
@@ -393,7 +393,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
                         .to_string(),
                 ));
             }
-            let auth = Arc::new(AppApiKeyAuth::new());
+            let auth = Arc::new(SdForgeApiKeyAuth::new());
             for seed in keys {
                 auth.add_key(seed.key.clone(), seed.permissions.clone());
             }
@@ -428,7 +428,7 @@ pub fn build_with_config(config: &crate::config::AppConfig) -> Result<Router, Co
                         let key = &header_value[prefix.len()..];
                         if let Some(permissions) = auth.validate_key(key, &client_ip) {
                             Ok(AuthContext {
-                                user_id: Some(AppApiKeyAuth::key_id(key)),
+                                user_id: Some(SdForgeApiKeyAuth::key_id(key)),
                                 permissions,
                                 metadata: crate::security::AuthMetadata::default(),
                             })

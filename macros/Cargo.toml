@@ -1,4 +1,5 @@
 [package]
+authors = ["Kirky-X <Kirky-X@outlook.com>"]
 name = "sdforge-macros"
 version.workspace = true
 edition.workspace = true

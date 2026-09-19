@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! e2e: built-in health probes.
 //!
@@ -10,7 +10,7 @@
 #![cfg(feature = "health")]
 
 use axum::body::Body;
-use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
+use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
 use sdforge::http::build_with_config;
 
 // A user route registered through inventory, used to prove that global auth
@@ -53,8 +53,8 @@ sdforge::inventory::submit!(sdforge::http::RouteRegistration::new(
     user_metadata,
 ));
 
-fn jwt_config() -> AppConfig {
-    AppConfig {
+fn jwt_config() -> SdForgeConfig {
+    SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,

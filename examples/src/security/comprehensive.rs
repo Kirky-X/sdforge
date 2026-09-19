@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Comprehensive Security Example
 //!
@@ -22,7 +22,7 @@
 
 use sdforge::cache::{DashMapCache, SyncCache};
 use sdforge::prelude::*;
-use sdforge::security::{AppApiKeyAuth, AppAuditLogger, AuthContext, AuthMetadata, BearerAuth};
+use sdforge::security::{SdForgeApiKeyAuth, SdForgeAuditLogger, AuthContext, AuthMetadata, BearerAuth};
 use sdforge::serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -73,17 +73,17 @@ pub struct UserResponse {
 // =============================================================================
 
 /// Application state shared across handlers
-pub struct AppState {
+pub struct SdForgeExampleState {
     pub cache: Arc<DashMapCache>,
-    pub audit_logger: AppAuditLogger,
+    pub audit_logger: SdForgeAuditLogger,
     pub users: Arc<tokio::sync::RwLock<Vec<User>>>,
 }
 
-impl Default for AppState {
+impl Default for SdForgeExampleState {
     fn default() -> Self {
         Self {
             cache: Arc::new(DashMapCache::new()),
-            audit_logger: AppAuditLogger::default(),
+            audit_logger: SdForgeAuditLogger::default(),
             users: Arc::new(tokio::sync::RwLock::new(vec![
                 User {
                     id: 1,
@@ -112,7 +112,7 @@ fn anonymous_context() -> AuthContext {
 // =============================================================================
 // API Endpoints
 //
-// NOTE: 下面的 handler 接受 `&AppState` 引用参数，不是有效的 axum extractor，
+// NOTE: 下面的 handler 接受 `&SdForgeExampleState` 引用参数，不是有效的 axum extractor，
 // 因此不使用 `#[forge]` 宏注册为 HTTP 端点。它们作为业务逻辑示例，
 // 展示如何在真实应用中组合认证、缓存、审计等横切关注点。
 // =============================================================================
@@ -124,7 +124,7 @@ fn anonymous_context() -> AuthContext {
 /// - Input validation
 /// - Audit logging
 /// - Caching
-async fn get_user(id: u64, state: &AppState) -> Result<UserResponse, ApiError> {
+async fn get_user(id: u64, state: &SdForgeExampleState) -> Result<UserResponse, ApiError> {
     // 1. Check cache first
     let cache_key = format!("user:{}", id);
     if let Some(cached) = state.cache.get(&cache_key) {
@@ -208,7 +208,7 @@ async fn get_user(id: u64, state: &AppState) -> Result<UserResponse, ApiError> {
 /// - Audit logging with signature
 async fn create_user(
     request: CreateUserRequest,
-    state: &AppState,
+    state: &SdForgeExampleState,
 ) -> Result<UserResponse, ApiError> {
     use sdforge::core::validation::MIN_PASSWORD_LENGTH;
     use sdforge::core::validation::validators::{validate_email, validate_length};
@@ -266,7 +266,7 @@ async fn create_user(
     // 6. Invalidate cache
     state.cache.delete("users:list");
 
-    // 7. Log creation via AppAuditLogger.
+    // 7. Log creation via SdForgeAuditLogger.
     // Tamper-proof signatures are applied automatically when the
     // SDFORGE_AUDIT_SIGNING_KEY environment variable is set.
     let ctx = anonymous_context();
@@ -295,7 +295,7 @@ async fn create_user(
 /// - Resource deletion
 /// - Cache invalidation
 /// - Critical action auditing
-async fn delete_user(id: u64, state: &AppState) -> Result<ServiceResponse<()>, ApiError> {
+async fn delete_user(id: u64, state: &SdForgeExampleState) -> Result<ServiceResponse<()>, ApiError> {
     // 1. Check if user exists
     let user_exists = {
         let users = state.users.read().await;
@@ -320,7 +320,7 @@ async fn delete_user(id: u64, state: &AppState) -> Result<ServiceResponse<()>, A
     state.cache.delete(&cache_key);
     state.cache.delete("users:list");
 
-    // 4. Log critical action via AppAuditLogger.
+    // 4. Log critical action via SdForgeAuditLogger.
     // Signatures are applied automatically when SDFORGE_AUDIT_SIGNING_KEY is set.
     let ctx = anonymous_context();
     state
@@ -348,11 +348,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("========================================\n");
 
     // Initialize application state
-    let state = Arc::new(AppState::default());
+    let state = Arc::new(SdForgeExampleState::default());
 
     // Setup API Key manager
-    // AppApiKeyAuth::add_key takes (key, permissions: Vec<String>)
-    let api_key_manager = AppApiKeyAuth::builder().build();
+    // SdForgeApiKeyAuth::add_key takes (key, permissions: Vec<String>)
+    let api_key_manager = SdForgeApiKeyAuth::builder().build();
 
     // Add some test API keys with associated permissions
     api_key_manager.add_key(
@@ -443,7 +443,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_operations() {
-        let state = AppState::default();
+        let state = SdForgeExampleState::default();
 
         // Set value
         state.cache.set("test_key", vec![1, 2, 3]);
@@ -475,7 +475,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_audit_logger_records_entries() {
-        let state = AppState::default();
+        let state = SdForgeExampleState::default();
         let ctx = anonymous_context();
 
         // Log an event
@@ -501,7 +501,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_from_default_state() {
-        let state = AppState::default();
+        let state = SdForgeExampleState::default();
 
         // Default state seeds two users; id=1 should exist
         let response = get_user(1, &state).await;
@@ -516,7 +516,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_not_found() {
-        let state = AppState::default();
+        let state = SdForgeExampleState::default();
 
         let response = get_user(9999, &state).await;
         assert!(response.is_err());
@@ -528,7 +528,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_user_validates_email() {
-        let state = AppState::default();
+        let state = SdForgeExampleState::default();
         let request = CreateUserRequest {
             username: "newuser".to_string(),
             email: "invalid-email".to_string(),

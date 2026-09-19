@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! API Key authentication implementation with versioning, LRU eviction, and rotation support
 //!
@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 /// Storage: All internal state is stored via `Arc<dyn SyncCache>` trait,
 /// allowing injection of custom storage backends for testing or production.
 #[derive(Clone)]
-pub struct AppApiKeyAuth {
+pub struct SdForgeApiKeyAuth {
     /// Valid API keys (stored as SHA256 hash -> permissions) via SyncCache
     valid_keys: SharedCache,
     /// API key metadata (key_id -> ApiKeyMetadata) for versioning support
@@ -36,7 +36,7 @@ pub struct AppApiKeyAuth {
     rotation_config: Option<RotationConfig>,
 }
 
-impl AppApiKeyAuth {
+impl SdForgeApiKeyAuth {
     /// Create new API key authentication
     pub fn new() -> Self {
         let valid_keys = Arc::new(crate::cache::DashMapCache::new());
@@ -156,7 +156,7 @@ impl AppApiKeyAuth {
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs())
             .unwrap_or(u64::MAX);
-        if let Ok(bytes) = bincode::serde::encode_to_vec(expiry_epoch, bincode::config::standard())
+        if let Ok(bytes) = postcard::to_allocvec(&(expiry_epoch))
         {
             self.key_metadata
                 .set(&format!("expires:{}", key_hash), bytes);
@@ -168,9 +168,8 @@ impl AppApiKeyAuth {
         let Some(data) = self.key_metadata.get(&format!("expires:{}", key_hash)) else {
             return false;
         };
-        let Ok((expiry_epoch, _)) =
-            bincode::serde::decode_from_slice::<u64, _>(&data, bincode::config::standard())
-        else {
+        let Ok(expiry_epoch) =
+            postcard::from_bytes::<u64>(&data)else {
             return false;
         };
         let now = std::time::SystemTime::now()
@@ -214,11 +213,9 @@ impl AppApiKeyAuth {
         let metadata_key = format!("metadata:{}", key_id);
 
         let mut metadata = match self.key_metadata.get(&metadata_key) {
-            Some(data) => bincode::serde::decode_from_slice::<ApiKeyMetadata, _>(
-                &data,
-                bincode::config::standard(),
+            Some(data) => postcard::from_bytes::<ApiKeyMetadata>(
+            &data
             )
-            .map(|(v, _)| v)
             .map_err(|e| format!("Failed to deserialize metadata: {}", e))?,
             None => ApiKeyMetadata::new(key_id, None),
         };
@@ -228,7 +225,7 @@ impl AppApiKeyAuth {
             permissions.clone(),
             ttl,
         ));
-        let encoded = bincode::serde::encode_to_vec(&metadata, bincode::config::standard())
+        let encoded = postcard::to_allocvec(&metadata)
             .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
 
         // 元数据已就绪，现在才能注册可认证凭据
@@ -275,11 +272,9 @@ impl AppApiKeyAuth {
             .get(&metadata_key)
             .ok_or_else(|| "Key not found".to_string())?;
 
-        let mut metadata: ApiKeyMetadata = bincode::serde::decode_from_slice::<ApiKeyMetadata, _>(
-            &data,
-            bincode::config::standard(),
+        let mut metadata: ApiKeyMetadata = postcard::from_bytes::<ApiKeyMetadata>(
+        &data
         )
-        .map(|(v, _)| v)
         .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
 
         // Create new version
@@ -325,7 +320,7 @@ impl AppApiKeyAuth {
         };
 
         // 编码成功后才允许任何写入，避免半完成状态
-        let encoded = bincode::serde::encode_to_vec(&metadata, bincode::config::standard())
+        let encoded = postcard::to_allocvec(&metadata)
             .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
 
         // Store new key hash
@@ -356,8 +351,9 @@ impl AppApiKeyAuth {
     pub fn get_key_metadata(&self, key_id: &str) -> Option<ApiKeyMetadata> {
         let metadata_key = format!("metadata:{}", key_id);
         let data = self.key_metadata.get(&metadata_key)?;
-        bincode::serde::decode_from_slice::<ApiKeyMetadata, _>(&data, bincode::config::standard())
-            .map(|(v, _)| v)
+        postcard::from_bytes::<ApiKeyMetadata>(
+            &data
+            )
             .ok()
     }
 
@@ -426,11 +422,9 @@ impl AppApiKeyAuth {
             .get(&metadata_key)
             .ok_or_else(|| "Key not found".to_string())?;
 
-        let mut metadata: ApiKeyMetadata = bincode::serde::decode_from_slice::<ApiKeyMetadata, _>(
-            &data,
-            bincode::config::standard(),
+        let mut metadata: ApiKeyMetadata = postcard::from_bytes::<ApiKeyMetadata>(
+        &data
         )
-        .map(|(v, _)| v)
         .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
 
         // Delete each version's key_hash from valid_keys cache so revoked keys
@@ -448,7 +442,7 @@ impl AppApiKeyAuth {
         // Save updated metadata
         self.key_metadata.set(
             &metadata_key,
-            bincode::serde::encode_to_vec(&metadata, bincode::config::standard())
+            postcard::to_allocvec(&metadata)
                 .unwrap_or_default(),
         );
 
@@ -456,13 +450,13 @@ impl AppApiKeyAuth {
     }
 }
 
-impl Default for AppApiKeyAuth {
+impl Default for SdForgeApiKeyAuth {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// Builder for AppApiKeyAuth configuration
+/// Builder for SdForgeApiKeyAuth configuration
 #[derive(Debug, Clone, Default)]
 pub struct AppApiKeyAuthBuilder {
     lru_config: Option<LruConfig>,
@@ -503,11 +497,11 @@ impl AppApiKeyAuthBuilder {
         self
     }
 
-    /// Build an AppApiKeyAuth instance using the configured settings.
+    /// Build an SdForgeApiKeyAuth instance using the configured settings.
     ///
     /// # Returns
     ///
-    /// Returns a fully configured AppApiKeyAuth instance.
+    /// Returns a fully configured SdForgeApiKeyAuth instance.
     ///
     /// # Examples
     ///
@@ -517,8 +511,8 @@ impl AppApiKeyAuthBuilder {
     /// let auth = AppApiKeyAuthBuilder::new().build();
     /// let _ = auth;
     /// ```
-    pub fn build(self) -> AppApiKeyAuth {
-        let mut auth = AppApiKeyAuth::new();
+    pub fn build(self) -> SdForgeApiKeyAuth {
+        let mut auth = SdForgeApiKeyAuth::new();
 
         if let Some(lru_config) = self.lru_config {
             auth = auth.with_lru(lru_config);
@@ -538,7 +532,7 @@ mod tests {
 
     #[test]
     fn test_add_and_validate_key() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key("test_key", vec!["read".to_string()]);
 
         let perms = auth.validate_key("test_key", "127.0.0.1");
@@ -548,7 +542,7 @@ mod tests {
 
     #[test]
     fn test_invalid_key() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         let perms = auth.validate_key("invalid_key", "127.0.0.1");
         assert!(perms.is_none());
     }
@@ -556,7 +550,7 @@ mod tests {
     /// 回归：带 ttl 的版本到期后 validate_key 必须拒绝
     #[test]
     fn test_validate_key_enforces_expiry() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         // ttl = 0 → 立即过期
         auth.add_key_version(
             "exp-key",
@@ -578,7 +572,7 @@ mod tests {
 
     #[test]
     fn test_add_key_version() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
             .unwrap();
@@ -592,7 +586,7 @@ mod tests {
 
     #[test]
     fn test_key_rotation() {
-        let auth = AppApiKeyAuth::new().with_rotation(RotationConfig::default());
+        let auth = SdForgeApiKeyAuth::new().with_rotation(RotationConfig::default());
 
         // Add initial version
         auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
@@ -617,7 +611,7 @@ mod tests {
 
     #[test]
     fn test_revoke_key() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
             .unwrap();
@@ -666,14 +660,14 @@ mod tests {
 
     #[test]
     fn test_validate_key_empty_string() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         let perms = auth.validate_key("", "127.0.0.1");
         assert!(perms.is_none());
     }
 
     #[test]
     fn test_add_key_empty_permissions() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key("test_key", vec![]);
         let perms = auth.validate_key("test_key", "127.0.0.1");
         assert!(perms.is_none());
@@ -681,7 +675,7 @@ mod tests {
 
     #[test]
     fn test_add_key_whitespace_only_key() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key("   ", vec!["read".to_string()]);
         let perms = auth.validate_key("   ", "127.0.0.1");
         assert!(perms.is_some());
@@ -694,7 +688,7 @@ mod tests {
 
     #[test]
     fn test_add_key_unicode_characters() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key("密钥_测试", vec!["read".to_string()]);
 
         let perms = auth.validate_key("密钥_测试", "127.0.0.1");
@@ -704,7 +698,7 @@ mod tests {
 
     #[test]
     fn test_add_key_special_characters() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key("key!@#$%^&*()", vec!["admin".to_string()]);
 
         let perms = auth.validate_key("key!@#$%^&*()", "127.0.0.1");
@@ -714,7 +708,7 @@ mod tests {
 
     #[test]
     fn test_add_key_very_long_key() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         let long_key = "x".repeat(1000);
         auth.add_key(long_key.clone(), vec!["read".to_string()]);
 
@@ -725,7 +719,7 @@ mod tests {
 
     #[test]
     fn test_add_key_newline_characters() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key("key\nwith\nnewlines", vec!["write".to_string()]);
 
         let perms = auth.validate_key("key\nwith\nnewlines", "127.0.0.1");
@@ -739,7 +733,7 @@ mod tests {
 
     #[test]
     fn test_add_key_duplicate_permissions() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key(
             "dup_perm_key",
             vec!["read".to_string(), "read".to_string(), "write".to_string()],
@@ -752,7 +746,7 @@ mod tests {
 
     #[test]
     fn test_add_key_special_char_permissions() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key(
             "special_perm_key",
             vec!["read:users".to_string(), "write:posts".to_string()],
@@ -772,7 +766,7 @@ mod tests {
 
     #[test]
     fn test_add_same_key_twice() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key("duplicate_key", vec!["read".to_string()]);
         auth.add_key("duplicate_key", vec!["write".to_string()]);
         let perms = auth.validate_key("duplicate_key", "127.0.0.1");
@@ -783,7 +777,7 @@ mod tests {
 
     #[test]
     fn test_add_key_different_permissions_same_key() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key("update_key", vec!["read".to_string(), "write".to_string()]);
         auth.add_key("update_key", vec!["admin".to_string()]);
 
@@ -799,7 +793,7 @@ mod tests {
 
     #[test]
     fn test_rotate_key_nonexistent_key_id() {
-        let auth = AppApiKeyAuth::new().with_rotation(RotationConfig::default());
+        let auth = SdForgeApiKeyAuth::new().with_rotation(RotationConfig::default());
         let result = auth.rotate_key(
             "nonexistent_key",
             "new_key_value",
@@ -812,7 +806,7 @@ mod tests {
 
     #[test]
     fn test_rotate_key_empty_new_key() {
-        let auth = AppApiKeyAuth::new().with_rotation(RotationConfig::default());
+        let auth = SdForgeApiKeyAuth::new().with_rotation(RotationConfig::default());
         auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
             .unwrap();
         let result = auth.rotate_key("key1", "", vec!["write".to_string()], "v2");
@@ -824,7 +818,7 @@ mod tests {
 
     #[test]
     fn test_revoke_key_nonexistent_key_id() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         let result = auth.revoke_key("nonexistent_key");
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Key not found"));
@@ -832,7 +826,7 @@ mod tests {
 
     #[test]
     fn test_revoke_key_then_validate() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
             .unwrap();
         let perms = auth.validate_key("secret_v1", "127.0.0.1");
@@ -850,7 +844,7 @@ mod tests {
 
     #[test]
     fn test_get_key_metadata_nonexistent() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         let metadata = auth.get_key_metadata("nonexistent_key");
         assert!(metadata.is_none());
     }
@@ -861,8 +855,8 @@ mod tests {
 
     #[test]
     fn test_default_trait() {
-        let auth1 = AppApiKeyAuth::default();
-        let auth2 = AppApiKeyAuth::new();
+        let auth1 = SdForgeApiKeyAuth::default();
+        let auth2 = SdForgeApiKeyAuth::new();
 
         assert!(auth1.lru_manager.is_some());
         assert!(auth2.lru_manager.is_some());
@@ -885,7 +879,7 @@ mod tests {
             keep_versions: 5,
         };
 
-        let auth = AppApiKeyAuth::builder()
+        let auth = SdForgeApiKeyAuth::builder()
             .lru(lru_config.clone())
             .rotation(rotation_config.clone())
             .build();
@@ -911,7 +905,7 @@ mod tests {
 
     #[test]
     fn test_add_multiple_key_versions_same_id() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
             .unwrap();
@@ -939,7 +933,7 @@ mod tests {
 
     #[test]
     fn test_validate_key_after_rotation() {
-        let auth = AppApiKeyAuth::new().with_rotation(RotationConfig::default());
+        let auth = SdForgeApiKeyAuth::new().with_rotation(RotationConfig::default());
 
         auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
             .unwrap();
@@ -971,7 +965,7 @@ mod tests {
         use std::sync::Arc;
 
         let custom_cache = Arc::new(crate::cache::DashMapCache::new());
-        let auth = AppApiKeyAuth::with_dependencies(custom_cache.clone(), None);
+        let auth = SdForgeApiKeyAuth::with_dependencies(custom_cache.clone(), None);
 
         auth.add_key("custom_key", vec!["read".to_string()]);
         let perms = auth.validate_key("custom_key", "127.0.0.1");
@@ -994,7 +988,7 @@ mod tests {
         let valid_keys = Arc::new(crate::cache::DashMapCache::new());
         let key_metadata = Arc::new(crate::cache::DashMapCache::new());
 
-        let auth = AppApiKeyAuth::with_dependencies(valid_keys.clone(), Some(key_metadata.clone()));
+        let auth = SdForgeApiKeyAuth::with_dependencies(valid_keys.clone(), Some(key_metadata.clone()));
 
         // Add a versioned key — this writes to key_metadata
         auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None)
@@ -1025,7 +1019,7 @@ mod tests {
             grace_period: std::time::Duration::from_secs(60),
             keep_versions: 1,
         };
-        let auth = AppApiKeyAuth::new().with_rotation(rotation_config);
+        let auth = SdForgeApiKeyAuth::new().with_rotation(rotation_config);
 
         // Add initial version
         auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None)
@@ -1061,7 +1055,7 @@ mod tests {
     /// revoke/rotate"的孤儿 key（此前版本会静默注册，已修复）。
     #[test]
     fn test_add_key_version_rejects_corrupted_metadata() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         // Manually store corrupted metadata for "kid1"
         auth.key_metadata
@@ -1100,7 +1094,7 @@ mod tests {
     /// （此前旧 hash 永远留在 valid_keys 中，旧 key 永久可用）。
     #[test]
     fn test_rotate_key_without_config_invalidates_old_key() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
             .unwrap();
 

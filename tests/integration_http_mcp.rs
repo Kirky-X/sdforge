@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 // Integration tests for HTTP+MCP protocol combinations
 //
@@ -88,9 +88,9 @@ mod integration_tests {
 
     #[test]
     fn test_http_build_with_app_config() {
-        use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
+        use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
 
-        let config = AppConfig {
+        let config = SdForgeConfig {
             server: ServerConfig {
                 host: "127.0.0.1".to_string(),
                 port: 3000,

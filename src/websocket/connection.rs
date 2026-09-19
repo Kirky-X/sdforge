@@ -1,10 +1,10 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! WebSocket connection management.
 //!
 //! Provides [`WebSocketConnection`] for individual connections, [`ConnectionManager`]
 //! for tracking active connections, and the related configuration types
-//! ([`WebSocketConfig`], [`AppState`]).
+//! ([`WebSocketConfig`], [`SdForgeState`]).
 //!
 //! Broadcast logic lives in [`crate::websocket::broadcast`].
 
@@ -124,7 +124,7 @@ pub struct WebSocketConfig {
     /// connections that present a valid API key when the bearer token path
     /// is not used; reuses the HTTP key store type.
     #[cfg(feature = "security")]
-    pub api_key_auth: Option<std::sync::Arc<crate::security::AppApiKeyAuth>>,
+    pub api_key_auth: Option<std::sync::Arc<crate::security::SdForgeApiKeyAuth>>,
     /// Maximum message size in bytes. Default 1 MiB.
     ///
     /// Migrated out of the deleted `RateLimitConfig` (the old 4-field config
@@ -158,7 +158,7 @@ impl Default for WebSocketConfig {
 /// Application state for the WebSocket router.
 ///
 /// Combines WebSocket configuration with connection manager for active connection tracking.
-pub struct AppState {
+pub struct SdForgeState {
     /// WebSocket configuration including optional auth.
     pub config: Arc<WebSocketConfig>,
     /// Connection manager for tracking active WebSocket connections.
@@ -166,8 +166,8 @@ pub struct AppState {
 }
 
 #[cfg(feature = "websocket")]
-impl AppState {
-    /// Create a new AppState with default WebSocketConfig.
+impl SdForgeState {
+    /// Create a new SdForgeState with default WebSocketConfig.
     pub fn new(manager: Arc<ConnectionManager>) -> Self {
         Self {
             config: Arc::new(WebSocketConfig::default()),
@@ -175,7 +175,7 @@ impl AppState {
         }
     }
 
-    /// Create a new AppState with custom WebSocketConfig.
+    /// Create a new SdForgeState with custom WebSocketConfig.
     pub fn with_config(config: WebSocketConfig, manager: Arc<ConnectionManager>) -> Self {
         Self {
             config: Arc::new(config),

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! WebSocket support for Axiom
 //!
@@ -29,7 +29,7 @@
 //!
 //! - `message`: [`WebSocketMessage`] enum, parsing, and depth/size limits
 //! - `connection`: [`WebSocketConnection`], [`ConnectionManager`],
-//!   [`WebSocketConfig`], `AppState`
+//!   [`WebSocketConfig`], `SdForgeState`
 //! - `broadcast`: [`ConnectionManager::broadcast`] fan-out implementation
 //! - `handler`: [`WebSocketHandler`] trait, `DefaultWebSocketHandler`,
 //!   [`ValidatedWebSocketUpgrade`], [`websocket_upgrade`], `handle_socket`, [`build`]
@@ -50,7 +50,7 @@ mod tests;
 // Re-export public API. Order mirrors the original `mod.rs` declarations so
 // downstream `use crate::websocket::*` continues to resolve every type.
 #[cfg(feature = "websocket")]
-pub use connection::{AppState, ConnectionManager, WebSocketConfig, WebSocketConnection};
+pub use connection::{SdForgeState, ConnectionManager, WebSocketConfig, WebSocketConnection};
 #[cfg(feature = "websocket")]
 pub use handler::{
     BoxFuture, DefaultWebSocketHandler, ValidatedWebSocketUpgrade, WebSocketHandler,

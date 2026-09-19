@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 
 use super::*;
@@ -24,28 +24,30 @@ impl CacheNamespace {
 
 /// Serialize a list of permissions (`Vec<String>`) to bytes
 pub fn serialize_permissions(perms: &[String]) -> Vec<u8> {
-    bincode::serde::encode_to_vec(perms, bincode::config::standard()).unwrap_or_default()
+    postcard::to_allocvec(&(perms)).unwrap_or_default()
 }
 
 /// Deserialize a list of permissions from bytes
 pub fn deserialize_permissions(data: &[u8]) -> Vec<String> {
-    bincode::serde::decode_from_slice::<Vec<String>, _>(data, bincode::config::standard())
-        .map(|(v, _)| v)
+    postcard::from_bytes::<Vec<String>>(
+        data
+        )
         .unwrap_or_default()
 }
 
-/// Serialize AuthContext to bytes using bincode
+/// Serialize AuthContext to bytes using postcard
 pub fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {
-    bincode::serde::encode_to_vec(ctx, bincode::config::standard()).unwrap_or_default()
+    postcard::to_allocvec(&(ctx)).unwrap_or_default()
 }
 
-/// Deserialize AuthContext from bytes using bincode.
+/// Deserialize AuthContext from bytes using postcard.
 ///
 /// Reserved as the serialization pair for serialize_auth_context.
 /// Kept for future use when AuthContext deserialization from cache is needed.
 pub fn deserialize_auth_context(data: &[u8]) -> Option<AuthContext> {
-    bincode::serde::decode_from_slice::<AuthContext, _>(data, bincode::config::standard())
-        .map(|(v, _)| v)
+    postcard::from_bytes::<AuthContext>(
+        data
+        )
         .ok()
 }
 

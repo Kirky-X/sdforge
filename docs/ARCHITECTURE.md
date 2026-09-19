@@ -89,7 +89,7 @@ sdforge/
 | `cache/` | `cache` | oxcache 透传与适配：`SyncCache` / `SharedCache` / `DashMapCache`、`ResponseCacheLayer` |
 | `openapi/` | `openapi` | `OpenApiRouteInfo` 收集与 utoipa 规范生成、`OpenApiBuilder`、路径参数 schema 映射 |
 | `docs/` | `docs` | 统一文档输出：Swagger UI 路由、CLI/MCP Markdown（`generate_docs` / `write_docs`） |
-| `config/` | `http` | `AppConfig` / `ServerConfig` / `AuthConfig` / `CorsConfig` / `CacheConfig` 等模块化配置 + 集中默认值 + Builder |
+| `config/` | `http` | `SdForgeConfig` / `ServerConfig` / `AuthConfig` / `CorsConfig` / `CacheConfig` 等模块化配置 + 集中默认值 + Builder |
 | `logging.rs` | `logging` | `StructuredLogger`、全局 Logger |
 | `inklog.rs` | `inklog` | 裸 `log` → inklog `LoggerManager` 桥接 |
 | `integrations/` | `limiteron-integration` / `kit` | trait-kit AsyncKit 集成（`SdforgeModule`）、`LimiteronForgeAdapter` |

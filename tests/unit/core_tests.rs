@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 // Unit tests for SDForge framework
 // Tests core functionality and module integration
@@ -167,11 +167,11 @@ mod core_tests {
 
 #[cfg(test)]
 mod config_tests {
-    use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
+    use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
 
     #[test]
     fn test_app_config_default() {
-        let config = AppConfig::default();
+        let config = SdForgeConfig::default();
         // Verify we can create a default config and access its fields
         let _ = config.server.port;
         let _ = config.server.host.clone();
@@ -179,7 +179,7 @@ mod config_tests {
 
     #[test]
     fn test_app_config_builder() {
-        let config = AppConfig::builder()
+        let config = SdForgeConfig::builder()
             .server(ServerConfig {
                 host: "127.0.0.1".to_string(),
                 port: 3000,

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 use crate::core::ApiMetadata;
 use crate::core::Registration;
@@ -283,7 +283,7 @@ async fn handle_socket_echoes_notification_messages() {
 
 /// Test the extractor accepts a WebSocket upgrade when no auth is configured.
 ///
-/// Covers the path where `app_state` is `None` (no AppState in extensions),
+/// Covers the path where `app_state` is `None` (no SdForgeState in extensions),
 /// skipping the auth block and creating a default ConnectionManager
 /// via the `unwrap_or_else` branch.
 #[tokio::test]
@@ -314,7 +314,7 @@ fn build_ws_test_server_with_auth() -> axum_test::TestServer {
         ..Default::default()
     };
     let manager = Arc::new(ConnectionManager::new());
-    let app_state = Arc::new(AppState::with_config(config, manager));
+    let app_state = Arc::new(SdForgeState::with_config(config, manager));
     let app = Router::new()
         .route("/ws", axum::routing::get(websocket_upgrade))
         .layer(axum::Extension(app_state));

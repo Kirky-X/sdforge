@@ -1,11 +1,11 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! # 应用配置示例
 //!
 //! 本示例展示 SDForge 配置管理的三种使用模式：
 //!
-//! 1. **开箱即用** — `AppConfig::default()`
-//! 2. **Builder 模式** — `AppConfig::builder().server(...).build()`
+//! 1. **开箱即用** — `SdForgeConfig::default()`
+//! 2. **Builder 模式** — `SdForgeConfig::builder().server(...).build()`
 //! 3. **序列化/反序列化** — 通过 serde 持久化配置
 //!
 //! ## 运行方式
@@ -19,7 +19,7 @@
 #![allow(dead_code)]
 
 use sdforge::config::{
-    ApiConfig, ApiKeySeed, AppConfig, AuthConfig, EnvHelper, ServerConfig, TimeoutConfig,
+    ApiConfig, ApiKeySeed, SdForgeConfig, AuthConfig, EnvHelper, ServerConfig, TimeoutConfig,
     TracingConfig,
 };
 
@@ -29,12 +29,12 @@ use sdforge::config::{
 
 /// 使用默认值创建应用配置。
 ///
-/// `AppConfig::default()` 提供合理的默认值：
+/// `SdForgeConfig::default()` 提供合理的默认值：
 /// - server: `127.0.0.1:8080`, 30s 请求超时
 /// - authentication: `AuthConfig::None`
 /// - timeout: 默认 30s 超时 + 上传/导出路由特殊超时
-pub fn default_config() -> AppConfig {
-    AppConfig::default()
+pub fn default_config() -> SdForgeConfig {
+    SdForgeConfig::default()
 }
 
 // =============================================================================
@@ -44,7 +44,7 @@ pub fn default_config() -> AppConfig {
 /// 使用 Builder 模式构建自定义配置。
 ///
 /// Builder 允许部分定制 — 未指定的字段使用默认值。
-pub fn build_custom_config() -> AppConfig {
+pub fn build_custom_config() -> SdForgeConfig {
     let server = ServerConfig {
         host: "127.0.0.1".to_string(),
         port: 3000,
@@ -68,7 +68,7 @@ pub fn build_custom_config() -> AppConfig {
         route_timeouts: std::collections::HashMap::new(),
     };
 
-    AppConfig::builder()
+    SdForgeConfig::builder()
         .server(server)
         .authentication(auth)
         .timeout(timeout)
@@ -83,12 +83,12 @@ pub fn build_custom_config() -> AppConfig {
 /// 将配置序列化为 JSON 字符串。
 ///
 /// 可用于持久化配置或通过网络传输。
-pub fn serialize_config(config: &AppConfig) -> Result<String, String> {
+pub fn serialize_config(config: &SdForgeConfig) -> Result<String, String> {
     serde_json::to_string_pretty(config).map_err(|e| e.to_string())
 }
 
 /// 从 JSON 字符串反序列化配置。
-pub fn deserialize_config(json: &str) -> Result<AppConfig, String> {
+pub fn deserialize_config(json: &str) -> Result<SdForgeConfig, String> {
     serde_json::from_str(json).map_err(|e| e.to_string())
 }
 
@@ -166,7 +166,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("==================================\n");
 
     // 模式 1: 默认配置
-    println!("📦 模式 1: 默认配置 (AppConfig::default())");
+    println!("📦 模式 1: 默认配置 (SdForgeConfig::default())");
     let default = default_config();
     println!(
         "  server: {}:{}, timeout: {}s",

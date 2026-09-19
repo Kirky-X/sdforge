@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Caching and Performance Optimization Example
 //!
@@ -15,10 +15,6 @@
 //! ```bash
 //! cargo run --features "http cache" --example cache/performance
 //! ```
-
-//! 参考型演示模块（未接线为 bin 目标）：handler 与辅助函数仅供文档阅读，
-//! 编译为库模块时允许保留未调用项。
-#![allow(dead_code)]
 
 use sdforge::cache::{DashMapCache, SyncCache};
 use sdforge::prelude::*;
@@ -65,8 +61,8 @@ pub struct ComputationResult {
 
 /// Two-level cache system
 pub struct TwoLevelCache {
-    l1_cache: Arc<DashMapCache>, // Fast, small L1 cache
-    l2_cache: Arc<DashMapCache>, // Larger, slower L2 cache
+    l1_cache: Arc<DashMapCache>, // Fast, small cache
+    l2_cache: Arc<DashMapCache>, // Larger, slower cache
     l1_max_size: usize,
 }
 
@@ -80,16 +76,16 @@ impl TwoLevelCache {
         }
     }
 
-    /// Get value from cache (L1 first, then L2)
+    /// Get value from cache (first, then )
     pub async fn get<T: Cacheable>(&self, key: &str) -> Option<T> {
-        // Try L1 first (fastest)
+        // Try first (fastest)
         if let Some(data) = self.l1_cache.get(key) {
             return serde_json::from_slice(&data).ok();
         }
 
-        // Try L2
+        // Try
         if let Some(data) = self.l2_cache.get(key) {
-            // Promote to L1
+            // Promote to
             self.l1_cache.set(key, data.clone());
             return serde_json::from_slice(&data).ok();
         }
@@ -100,10 +96,10 @@ impl TwoLevelCache {
     /// Set value in both cache levels
     pub async fn set<T: Cacheable>(&self, key: &str, value: &T) {
         if let Ok(serialized) = serde_json::to_vec(value) {
-            // Always set in L2
+            // Always set in
             self.l2_cache.set(key, serialized.clone());
 
-            // Set in L1 if under size limit
+            // Set in if under size limit
             if self.l1_cache.len() < self.l1_max_size {
                 self.l1_cache.set(key, serialized);
             }
@@ -208,7 +204,7 @@ impl WriteThroughPattern {
 ///
 /// Demonstrates:
 /// - Two-level caching
-/// - Cache promotion (L2 → L1)
+/// - Cache promotion (→ )
 /// - Serialization/deserialization
 async fn get_product(id: u64, cache: &TwoLevelCache) -> Result<Product, ApiError> {
     let cache_key = format!("product:{}", id);
@@ -304,7 +300,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=========================================\n");
 
     // Initialize two-level cache
-    let _two_level_cache = TwoLevelCache::new(1000); // L1 max 1000 items
+    let _two_level_cache = TwoLevelCache::new(1000); // max 1000 items
 
     println!("✓ Two-Level Cache initialized:");
     println!("  L1 Cache: Max {} items (fast access)", 1000);

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! WebSocket handler trait, default implementation, and Axum integration.
 //!
@@ -34,7 +34,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 #[cfg(feature = "websocket")]
-use crate::websocket::{AppState, ConnectionManager};
+use crate::websocket::{SdForgeState, ConnectionManager};
 #[cfg(feature = "websocket")]
 use crate::websocket::{MAX_MESSAGE_SIZE, WebSocketMessage, parse_websocket_message};
 
@@ -80,7 +80,7 @@ impl WebSocketHandler for DefaultWebSocketHandler {
 ///
 /// This type handles the entire WebSocket upgrade lifecycle:
 /// 1. Reads the `Authorization` header from the request
-/// 2. If auth is configured in `AppState`, validates the bearer token (returns 401 if invalid)
+/// 2. If auth is configured in `SdForgeState`, validates the bearer token (returns 401 if invalid)
 /// 3. Extracts the WebSocketUpgrade
 /// 4. Implements `IntoResponse` to perform the actual upgrade
 ///
@@ -143,9 +143,9 @@ where
             .and_then(|h| h.strip_prefix("Bearer "))
             .map(String::from);
 
-        // Get AppState from request extensions (injected via with_state by axum)
-        // The state parameter is &Arc<AppState> since that's what we registered
-        let app_state = req.extensions().get::<Arc<AppState>>().cloned();
+        // Get SdForgeState from request extensions (injected via with_state by axum)
+        // The state parameter is &Arc<SdForgeState> since that's what we registered
+        let app_state = req.extensions().get::<Arc<SdForgeState>>().cloned();
 
         // Validate auth if configured. The `auth` field only exists when the
         // `security` feature is enabled (see WebSocketConfig), so the entire
@@ -349,7 +349,7 @@ use crate::websocket::WebSocketConnection;
 pub fn build() -> Router {
     let mut router = Router::new();
     let manager = Arc::new(ConnectionManager::new());
-    let state = Arc::new(AppState::new(manager));
+    let state = Arc::new(SdForgeState::new(manager));
 
     for route in inventory::iter::<WebSocketRoute> {
         // Use the registration name to construct the path
@@ -424,7 +424,7 @@ mod tests {
     #[tokio::test]
     async fn broadcast_reaches_connected_client() {
         let manager = Arc::new(ConnectionManager::new());
-        let state = Arc::new(AppState::new(manager.clone()));
+        let state = Arc::new(SdForgeState::new(manager.clone()));
         let app = Router::new()
             .route("/ws", axum::routing::get(websocket_upgrade))
             .layer(axum::Extension(state));
@@ -464,7 +464,7 @@ mod tests {
     #[tokio::test]
     async fn oversized_message_removes_connection_from_manager() {
         let manager = Arc::new(ConnectionManager::new());
-        let state = Arc::new(AppState::new(manager.clone()));
+        let state = Arc::new(SdForgeState::new(manager.clone()));
         let app = Router::new()
             .route("/ws", axum::routing::get(websocket_upgrade))
             .layer(axum::Extension(state));

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tests for core audit logger functionality.
 
@@ -84,7 +84,7 @@ fn test_global_regex_patterns_are_initialized() {
 
 #[tokio::test]
 async fn test_audit_logger() {
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let context = AuthContext {
         user_id: Some("test_user".to_string()),
         permissions: vec![],
@@ -102,14 +102,14 @@ async fn test_audit_logger() {
 
 #[tokio::test]
 async fn test_get_logs_empty() {
-    let logger = AppAuditLogger::new();
+    let logger = SdForgeAuditLogger::new();
     let logs = logger.get_logs("nonexistent_user");
     assert_eq!(logs.len(), 0);
 }
 
 #[tokio::test]
 async fn test_clear_logs() {
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let context = AuthContext {
         user_id: Some("test_user".to_string()),
         permissions: vec![],
@@ -126,12 +126,12 @@ async fn test_clear_logs() {
 }
 
 // ============================================================================
-// AppAuditLogger::log_key_rotation Tests
+// SdForgeAuditLogger::log_key_rotation Tests
 // ============================================================================
 
 #[tokio::test]
 async fn test_log_key_rotation_success() {
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     logger
         .log_key_rotation("key-123", "v1", "v2", true, None)
         .await;
@@ -144,7 +144,7 @@ async fn test_log_key_rotation_success() {
 
 #[tokio::test]
 async fn test_log_key_rotation_failure() {
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     logger
         .log_key_rotation(
             "key-456",
@@ -161,18 +161,18 @@ async fn test_log_key_rotation_failure() {
 }
 
 // ============================================================================
-// AppAuditLogger::total_log_count Tests
+// SdForgeAuditLogger::total_log_count Tests
 // ============================================================================
 
 #[tokio::test]
 async fn test_total_log_count_returns_zero() {
-    let logger = AppAuditLogger::new();
+    let logger = SdForgeAuditLogger::new();
     assert_eq!(logger.total_log_count(), 0);
 }
 
 #[tokio::test]
 async fn test_total_log_count_after_logging() {
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let context = AuthContext {
         user_id: Some("test_user".to_string()),
         permissions: vec![],
@@ -186,18 +186,18 @@ async fn test_total_log_count_after_logging() {
 }
 
 // ============================================================================
-// AppAuditLogger::dropped_log_count Tests
+// SdForgeAuditLogger::dropped_log_count Tests
 // ============================================================================
 
 #[tokio::test]
 async fn test_dropped_log_count_initial_value() {
-    let logger = AppAuditLogger::new();
+    let logger = SdForgeAuditLogger::new();
     assert_eq!(logger.dropped_log_count(), 0);
 }
 
 #[tokio::test]
 async fn test_dropped_log_count_after_logging() {
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let context = AuthContext {
         user_id: Some("test_user".to_string()),
         permissions: vec![],
@@ -209,12 +209,12 @@ async fn test_dropped_log_count_after_logging() {
 }
 
 // ============================================================================
-// AppAuditLogger::log() with Failure + Error Sanitization Tests
+// SdForgeAuditLogger::log() with Failure + Error Sanitization Tests
 // ============================================================================
 
 #[tokio::test]
 async fn test_log_failure_with_message() {
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let context = AuthContext {
         user_id: Some("test_user".to_string()),
         permissions: vec![],
@@ -243,7 +243,7 @@ async fn test_log_failure_with_message() {
 
 #[tokio::test]
 async fn test_log_failure_sanitizes_sensitive_data() {
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let context = AuthContext {
         user_id: Some("test_user".to_string()),
         permissions: vec![],
@@ -280,7 +280,7 @@ async fn test_log_failure_sanitizes_sensitive_data() {
 
 #[tokio::test]
 async fn test_log_failure_default_message() {
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let context = AuthContext {
         user_id: Some("test_user".to_string()),
         permissions: vec![],
@@ -311,7 +311,7 @@ fn test_audit_logger_trait_log() {
     // Use a runtime to ensure tokio tasks are properly scheduled
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
-        let logger = AppAuditLogger::with_limit(10);
+        let logger = SdForgeAuditLogger::with_limit(10);
         let log = AuditLog {
             id: "trait-test-id".to_string(),
             timestamp: chrono::Utc::now().timestamp(),
@@ -341,7 +341,7 @@ fn test_audit_logger_trait_log_failure() {
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
-        let logger = AppAuditLogger::with_limit(10);
+        let logger = SdForgeAuditLogger::with_limit(10);
         let log = AuditLog {
             id: "trait-fail-id".to_string(),
             timestamp: chrono::Utc::now().timestamp(),
@@ -377,7 +377,7 @@ fn test_audit_logger_trait_log_failure() {
 
 #[tokio::test]
 async fn test_multiple_log_entries_per_user() {
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let context = AuthContext {
         user_id: Some("multi_user".to_string()),
         permissions: vec![],
@@ -402,7 +402,7 @@ async fn test_multiple_log_entries_per_user() {
 
 #[tokio::test]
 async fn test_log_truncation_when_exceeding_limit() {
-    let logger = AppAuditLogger::with_limit(3);
+    let logger = SdForgeAuditLogger::with_limit(3);
     let context = AuthContext {
         user_id: Some("trunc_user".to_string()),
         permissions: vec![],
@@ -428,7 +428,7 @@ async fn test_log_truncation_when_exceeding_limit() {
 
 #[tokio::test]
 async fn test_multiple_users_independent_logs() {
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
 
     let context1 = AuthContext {
         user_id: Some("user_a".to_string()),
@@ -459,7 +459,7 @@ async fn test_multiple_users_independent_logs() {
 
 #[tokio::test]
 async fn test_log_with_anonymous_user() {
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let context = AuthContext {
         user_id: None,
         permissions: vec![],
@@ -704,7 +704,7 @@ async fn test_log_with_signing_key_generates_signature() {
         );
     }
 
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let context = AuthContext {
         user_id: Some("signing_user".to_string()),
         permissions: vec![],
@@ -737,7 +737,7 @@ async fn test_log_with_empty_signing_key_warns() {
         std::env::set_var("SDFORGE_AUDIT_SIGNING_KEY", "");
     }
 
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let context = AuthContext {
         user_id: Some("empty_key_user".to_string()),
         permissions: vec![],
@@ -770,7 +770,7 @@ async fn test_log_without_signing_key_warns() {
         std::env::remove_var("SDFORGE_AUDIT_SIGNING_KEY");
     }
 
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let context = AuthContext {
         user_id: Some("no_key_user".to_string()),
         permissions: vec![],
@@ -799,7 +799,7 @@ async fn test_log_without_signing_key_warns() {
 
 #[tokio::test]
 async fn test_log_merges_fallback_logs_synchronously() {
-    let logger = AppAuditLogger::with_limit(100);
+    let logger = SdForgeAuditLogger::with_limit(100);
 
     // Manually populate fallback_logs with a serialized AuditLog
     let fallback_log = AuditLog {
@@ -857,7 +857,7 @@ async fn test_log_merges_fallback_logs_synchronously() {
 async fn test_log_fallback_merge_respects_max_logs() {
     // When merging fallback + primary exceeds max_logs_per_user, the
     // merged result should be truncated.
-    let logger = AppAuditLogger::with_limit(2); // Very small limit
+    let logger = SdForgeAuditLogger::with_limit(2); // Very small limit
 
     // Populate primary with 1 log
     let primary_log = AuditLog {
@@ -927,7 +927,7 @@ async fn test_log_fallback_merge_respects_max_logs() {
 
 #[tokio::test]
 async fn test_get_logs_deduplicates_by_id() {
-    let logger = AppAuditLogger::with_limit(100);
+    let logger = SdForgeAuditLogger::with_limit(100);
 
     // Create a log that appears in BOTH primary and fallback (same ID)
     let shared_log = AuditLog {
@@ -985,7 +985,7 @@ async fn test_get_logs_deduplicates_by_id() {
 
 #[tokio::test]
 async fn test_get_logs_with_only_fallback() {
-    let logger = AppAuditLogger::with_limit(100);
+    let logger = SdForgeAuditLogger::with_limit(100);
 
     // Populate only fallback (no primary)
     let fallback_log = AuditLog {
@@ -1024,7 +1024,7 @@ async fn test_get_logs_with_only_fallback() {
 
 #[tokio::test]
 async fn test_worker_merges_fallback_from_queue() {
-    let logger = AppAuditLogger::with_limit(100);
+    let logger = SdForgeAuditLogger::with_limit(100);
 
     // Populate fallback_logs for "worker_user"
     let fallback_log = AuditLog {
@@ -1085,7 +1085,7 @@ async fn test_worker_merges_fallback_from_queue() {
 async fn test_worker_no_fallback_does_nothing() {
     // When there's no fallback data, the worker should just drain the
     // queue without modifying primary storage.
-    let logger = AppAuditLogger::with_limit(100);
+    let logger = SdForgeAuditLogger::with_limit(100);
 
     // Populate primary only (no fallback)
     let primary_log = AuditLog {
@@ -1134,7 +1134,7 @@ async fn test_audit_logger_trait_no_runtime_path() {
 
     // with_limit() calls tokio::spawn(), so we need a runtime.
     // The spawned thread below has NO runtime, testing the no-runtime fallback path.
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let log = make_test_audit_log("no_rt_user", "no_runtime_action");
 
     // Spawn a plain OS thread with NO tokio runtime. The trait impl's
@@ -1162,7 +1162,7 @@ async fn test_audit_logger_trait_no_runtime_path() {
 async fn test_audit_logger_trait_with_runtime_spawns_task() {
     use crate::security::AuditLogger as AuditLoggerTrait;
 
-    let logger = AppAuditLogger::with_limit(10);
+    let logger = SdForgeAuditLogger::with_limit(10);
     let log = make_test_audit_log("rt_user", "runtime_action");
 
     // Call the trait method from within a tokio runtime — it should
@@ -1210,7 +1210,7 @@ async fn test_log_handles_full_queue() {
     };
     assert!(sender.try_send(filler).is_ok());
 
-    let logger = AppAuditLogger {
+    let logger = SdForgeAuditLogger {
         logs: Arc::new(crate::cache::DashMapCache::new()),
         max_logs_per_user: 100,
         semaphore: Arc::new(tokio::sync::Semaphore::new(10)),
@@ -1246,7 +1246,7 @@ async fn test_log_handles_closed_channel() {
     let (sender, receiver) = tokio::sync::mpsc::channel::<AuditLogBatch>(1);
     drop(receiver); // closes the channel
 
-    let logger = AppAuditLogger {
+    let logger = SdForgeAuditLogger {
         logs: Arc::new(crate::cache::DashMapCache::new()),
         max_logs_per_user: 100,
         semaphore: Arc::new(tokio::sync::Semaphore::new(10)),
@@ -1283,7 +1283,7 @@ async fn test_log_handles_closed_channel() {
 /// then calls log() which must wait and eventually time out.
 #[tokio::test]
 async fn test_log_skips_when_semaphore_times_out() {
-    let logger = AppAuditLogger::builder()
+    let logger = SdForgeAuditLogger::builder()
         .max_logs_per_user(100)
         .max_concurrent_ops(1)
         .queue_size(100)
@@ -1324,7 +1324,7 @@ async fn test_log_skips_when_semaphore_times_out() {
 /// （此前 get→push→set 读改写无互斥，写并发会静默丢失审计记录）。
 #[tokio::test]
 async fn test_concurrent_same_user_logs_not_lost() {
-    let logger = AppAuditLogger::with_limit(1000);
+    let logger = SdForgeAuditLogger::with_limit(1000);
 
     let mut handles = Vec::new();
     for i in 0..50 {
@@ -1362,7 +1362,7 @@ async fn test_concurrent_same_user_logs_not_lost() {
 #[tokio::test]
 async fn test_timeout_drop_increments_dropped_count() {
     // 0 permits → acquire 必然超时（1s），触发丢弃路径
-    let logger = AppAuditLogger {
+    let logger = SdForgeAuditLogger {
         logs: Arc::new(crate::cache::DashMapCache::new()),
         max_logs_per_user: 100,
         semaphore: Arc::new(tokio::sync::Semaphore::new(0)),

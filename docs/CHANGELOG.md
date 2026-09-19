@@ -34,7 +34,7 @@
 
 ### ⚠️ 破坏性变更 (Breaking Changes)
 
-- **`security::api_key::AppApiKeyAuth::add_key_version` 签名变更**：返回类型从 `()` 改为
+- **`security::api_key::SdForgeApiKeyAuth::add_key_version` 签名变更**：返回类型从 `()` 改为
   `Result<(), String>`。当已存在的 key 元数据损坏/不可反序列化时，本方法现在返回 `Err`
   且**不注册任何凭据**（安全不变量：绝不产生"可认证但无法 revoke/rotate"的孤儿 key）。
   此前它会静默注册 key hash 后跳过元数据更新。调用方需追加 `?` / `.unwrap()`。
@@ -152,8 +152,8 @@
 
 ### Added
 
-- **AppConfig 安全/缓存字段**：`AppConfig` 新增 `security: SecurityConfig` + `cache: CacheConfig`（feature-gated），builder 同步支持 `.security()` / `.cache()` 方法
-- **`build_rate_limiter()` 自动装配**：`AppConfig::build_rate_limiter()` 从 `security.rate_limit` 配置自动构造 `LimiteronAdapter`
+- **SdForgeConfig 安全/缓存字段**：`SdForgeConfig` 新增 `security: SecurityConfig` + `cache: CacheConfig`（feature-gated），builder 同步支持 `.security()` / `.cache()` 方法
+- **`build_rate_limiter()` 自动装配**：`SdForgeConfig::build_rate_limiter()` 从 `security.rate_limit` 配置自动构造 `LimiteronAdapter`
 - **响应缓存中间件**：`ResponseCacheLayer` / `ResponseCacheMiddleware` — GET 路由自动缓存成功响应，key 经 `canonicalize_cache_key` 规范化，命中短路、未命中回源回写
 - **`AuditSink` trait**：抽象审计日志存储后端（`write` / `read` / `clear`），内存环形缓冲保留为默认 sink
 - **`InklogAuditSink`**：`inklog` feature 下桥接审计事件到 inklog 结构化输出管道
@@ -405,7 +405,7 @@
 5. **ServerConfig 默认值变更** — `DEFAULT_HOST` 从 `"0.0.0.0"`（fail-open，绑定所有网卡）改为 `"127.0.0.1"`（fail-safe 回环）。`Default` 实现改用常量：host="127.0.0.1"、port=8080、request_timeout_secs=30。
 6. **JWT 密钥强制最小 32 字符** — `MIN_SECRET_LENGTH=32` 常量现已实际用于校验，短于 32 字符的密钥将被拒绝并返回错误。
 7. **CORS 校验收紧** — `"http://"`（仅 scheme 无 host）在 `validate()` 与 `build_cors_layer()` 中均被拒绝。
-8. **AppConfigBuilder::build() 一致性修复** — 未设置 `timeout` 字段时默认填充 `Some(TimeoutConfig::default())`，与 `AppConfig::default()` 行为一致。
+8. **SdForgeConfigBuilder::build() 一致性修复** — 未设置 `timeout` 字段时默认填充 `Some(TimeoutConfig::default())`，与 `SdForgeConfig::default()` 行为一致。
 
 #### 安全修复（diting 审计 — 10 项）
 
@@ -424,7 +424,7 @@
 
 - **BUG-1 [严重]**：`remove_connection` usize 下溢 — 现先检查 `map.remove(id).is_some()` 再 `fetch_sub(1)`，防止 `usize::MAX` 下溢导致所有新连接被永久阻塞
 - **BUG-2 [低]**：`check_and_record` 窗口重置 off-by-one — 窗口重置时计数设为 1（非 0），当前消息被计入（原先每窗口允许 max+1 条消息）
-- **BUG-3 [中]**：`AppConfigBuilder::build()` timeout 不一致 — 已修复（见 BREAKING 第 8 项）
+- **BUG-3 [中]**：`SdForgeConfigBuilder::build()` timeout 不一致 — 已修复（见 BREAKING 第 8 项）
 - **BUG-4 [中]**：缓存 backend 容量驱逐后 `key_index` 成为超集 — `find_keys_by_pattern` 现通过 `backend.exists()` 过滤并惰性清理过期索引项
 - **BUG-5 [低]**：`get_stats` 静默丢弃浮点统计 — 现尝试 u64 → f64（rate/ratio/pct ×100）→ `log::warn!`（不再静默）
 
@@ -467,7 +467,7 @@
 - 新增 Multi Round-Trip Requests (MRTR) 支持，`MrtrSessionManager` 管理 300 秒超时会话
 
 **配置验证统一：**
-- `AuthConfig`、`ServerConfig`、`AppConfig` 的 `ValidateConfig` trait 实现委托给 inherent `validate()` 方法，消除双实现行为分叉
+- `AuthConfig`、`ServerConfig`、`SdForgeConfig` 的 `ValidateConfig` trait 实现委托给 inherent `validate()` 方法，消除双实现行为分叉
 
 #### 新增特性
 
@@ -540,7 +540,7 @@
 #### 正确性修复
 
 - **CRIT-3**：移除 `macros/src/lib.rs` 中 `_param_unwraps` 的逐字重复定义
-- **CRIT-4**：`AuthConfig`/`ServerConfig`/`AppConfig` 双 `validate()` 实现统一为单一来源
+- **CRIT-4**：`AuthConfig`/`ServerConfig`/`SdForgeConfig` 双 `validate()` 实现统一为单一来源
 - **CRIT-5**：`MrtrSessionManager::create_session` 添加会话 ID 冲突检查，冲突时返回 `ErrorData::invalid_params`（原静默覆盖）
 - **CRIT-6**：SSE 流 30 秒超时后发送 `Error` 事件，客户端可区分超时与正常完成
 - **HIGH-003**：修复 `RegexCache` LRU 驱逐逻辑（`Reverse(time)` 导致驱逐 MRU 而非 LRU）

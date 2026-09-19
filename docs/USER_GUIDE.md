@@ -96,15 +96,15 @@ async fn main() {
 
 ### 配置类型
 
-配置模块（`sdforge::config`，需 `http` feature）提供 `AppConfig` / `ServerConfig` / `ApiConfig` / `AuthConfig` / `CorsConfig` / `TlsConfig` / `TracingConfig` / `CacheConfig` / `SecurityConfig` / `EnvHelper` / `ConfigError` 等类型；各类型的用途与默认值见 [API 参考](API_REFERENCE.md#️-配置扩展-api) 的配置模块一节。
+配置模块（`sdforge::config`，需 `http` feature）提供 `SdForgeConfig` / `ServerConfig` / `ApiConfig` / `AuthConfig` / `CorsConfig` / `TlsConfig` / `TracingConfig` / `CacheConfig` / `SecurityConfig` / `EnvHelper` / `ConfigError` 等类型；各类型的用途与默认值见 [API 参考](API_REFERENCE.md#️-配置扩展-api) 的配置模块一节。
 
 ### 使用配置构建
 
 ```rust
-use sdforge::config::AppConfig;
+use sdforge::config::SdForgeConfig;
 use sdforge::http::build_with_config;
 
-let config = AppConfig::default();
+let config = SdForgeConfig::default();
 let app = build_with_config(&config)?;
 ```
 

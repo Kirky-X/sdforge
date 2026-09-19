@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Configuration management module
 //!
@@ -41,7 +41,7 @@ pub mod defaults;
 
 // Re-export all configuration types
 pub use api::{ApiConfig, EnvHelper, TracingConfig};
-pub use app::{AppConfig, AppConfigBuilder};
+pub use app::{SdForgeConfig, SdForgeConfigBuilder};
 pub use auth::{ApiKeySeed, AuthConfig};
 pub use cache::CacheConfig;
 pub use cors::{CorsConfig, build_cors_layer};
@@ -106,7 +106,7 @@ pub enum ConfigError {
 mod tests {
     use super::*;
 
-    /// Test AppConfig deserialization with JSON
+    /// Test SdForgeConfig deserialization with JSON
     #[test]
     fn test_app_config_json_deserialization() {
         let json = r#"{
@@ -121,7 +121,7 @@ mod tests {
                 "prefix": "key-"
             }
         }"#;
-        let config: AppConfig = serde_json::from_str(json).unwrap();
+        let config: SdForgeConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 3000);
         match &config.authentication {
@@ -137,11 +137,11 @@ mod tests {
         }
     }
 
-    /// Test AppConfig with authentication alias
+    /// Test SdForgeConfig with authentication alias
     #[test]
     fn test_app_config_auth_alias() {
-        // Test that we can create AppConfig with minimal fields
-        let config = AppConfig {
+        // Test that we can create SdForgeConfig with minimal fields
+        let config = SdForgeConfig {
             server: ServerConfig::default(),
             authentication: AuthConfig::Jwt {
                 secret: "test".to_string(),
@@ -158,19 +158,19 @@ mod tests {
         }
     }
 
-    /// Test AppConfig default
+    /// Test SdForgeConfig default
     #[test]
     fn test_app_config_default() {
-        let config = AppConfig::default();
+        let config = SdForgeConfig::default();
         // ServerConfig::default() 现在使用 fail-safe loopback host
         assert_eq!(config.server.host, "127.0.0.1");
         matches!(config.authentication, AuthConfig::None);
     }
 
-    /// Test AppConfig builder
+    /// Test SdForgeConfig builder
     #[test]
     fn test_app_config_builder() {
-        let config = AppConfig::builder()
+        let config = SdForgeConfig::builder()
             .server(ServerConfig {
                 host: "localhost".to_string(),
                 port: 8080,
@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_app_config_builder_with_timeout() {
-        let result = AppConfig::builder()
+        let result = SdForgeConfig::builder()
             .server(ServerConfig {
                 host: "0.0.0.0".to_string(),
                 port: 8080,
@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn test_app_config_builder_full() {
-        let result = AppConfig::builder()
+        let result = SdForgeConfig::builder()
             .server(ServerConfig {
                 host: "0.0.0.0".to_string(),
                 port: 8080,
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_app_config_serialization_roundtrip() {
-        let original = AppConfig {
+        let original = SdForgeConfig {
             server: ServerConfig {
                 host: "127.0.0.1".to_string(),
                 port: 4000,
@@ -254,7 +254,7 @@ mod tests {
             ..Default::default()
         };
         let json = serde_json::to_string(&original).unwrap();
-        let deserialized: AppConfig = serde_json::from_str(&json).unwrap();
+        let deserialized: SdForgeConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.server.host, "127.0.0.1");
         assert_eq!(deserialized.server.port, 4000);
     }
@@ -296,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_app_config_validate_valid() {
-        let config = AppConfig {
+        let config = SdForgeConfig {
             server: ServerConfig {
                 host: "localhost".to_string(),
                 port: 8080,
@@ -320,7 +320,7 @@ mod tests {
 
     #[test]
     fn test_app_config_validate_invalid_server_port() {
-        let config = AppConfig {
+        let config = SdForgeConfig {
             server: ServerConfig {
                 host: "localhost".to_string(),
                 port: 0,
@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn test_app_config_validate_invalid_auth_prefix() {
-        let config = AppConfig {
+        let config = SdForgeConfig {
             server: ServerConfig {
                 host: "localhost".to_string(),
                 port: 8080,

@@ -1,11 +1,11 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 // WebSocket Integration Tests
 // Tests WebSocket upgrade with authentication flow
 
 #[cfg(feature = "websocket")]
 mod websocket_integration_tests {
-    use sdforge::websocket::{AppState, ConnectionManager, WebSocketConfig};
+    use sdforge::websocket::{SdForgeState, ConnectionManager, WebSocketConfig};
     use std::sync::Arc;
 
     #[test]
@@ -27,7 +27,7 @@ mod websocket_integration_tests {
     #[test]
     fn test_app_state_with_manager() {
         let manager = Arc::new(ConnectionManager::new());
-        let state = AppState::new(manager);
+        let state = SdForgeState::new(manager);
         // Verify state is created
         let _state_clone = state.clone();
         assert_eq!(state.config.max_message_size, 1_048_576);
@@ -38,7 +38,7 @@ mod websocket_integration_tests {
         // Test basic WebSocket integration components
         let _config = WebSocketConfig::default();
         let manager = Arc::new(ConnectionManager::new());
-        let state = AppState::new(manager);
+        let state = SdForgeState::new(manager);
 
         // Basic verification - state was created successfully
         assert_eq!(state.config.max_message_size, 1_048_576);

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Audit logging implementation
 //!
@@ -24,9 +24,9 @@ pub(crate) use audit_impl::{JWT_PATTERN, PATH_PATTERN, SECRET_PATTERN};
 /// Abstract audit log storage backend.
 ///
 /// `AuditSink` decouples *where* audit logs are stored from the
-/// `AppAuditLogger`'s DoS-protection machinery (semaphore, queue,
+/// `SdForgeAuditLogger`'s DoS-protection machinery (semaphore, queue,
 /// merge-lock). The default implementation is an in-memory ring buffer
-/// (`AppAuditLogger`'s existing `SharedCache`-backed storage). When the
+/// (`SdForgeAuditLogger`'s existing `SharedCache`-backed storage). When the
 /// `inklog` feature is enabled, an [`InklogAuditSink`] bridges audit
 /// events to inklog's structured output pipeline.
 ///
@@ -74,7 +74,7 @@ pub(crate) struct AuditLogBatch {
 /// - Fallback storage when async channel is full (prevents log loss)
 ///
 #[derive(Clone)]
-pub struct AppAuditLogger {
+pub struct SdForgeAuditLogger {
     /// Logs storage via SyncCache (keyed by user_id)
     logs: SharedCache,
     /// Maximum logs per user
@@ -95,7 +95,7 @@ pub struct AppAuditLogger {
     merge_lock: Arc<std::sync::Mutex<()>>,
 }
 
-/// Builder for creating AppAuditLogger with custom configuration.
+/// Builder for creating SdForgeAuditLogger with custom configuration.
 ///
 /// This builder allows fine-grained control over audit logger settings
 /// including log limits, concurrency, and queue size.
@@ -103,11 +103,11 @@ pub struct AppAuditLogger {
 /// # Examples
 ///
 /// ```ignore
-/// use sdforge::security::AppAuditLogger;
+/// use sdforge::security::SdForgeAuditLogger;
 ///
 /// #[tokio::main]
 /// async fn main() {
-///     let logger = AppAuditLogger::builder()
+///     let logger = SdForgeAuditLogger::builder()
 ///         .max_logs_per_user(500)
 ///         .max_concurrent_ops(50)
 ///         .queue_size(2000)

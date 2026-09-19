@@ -169,10 +169,10 @@ cargo run --example perf_batch_ops --features cache
 关键代码（节选自源文件）：
 
 ```rust
-use sdforge::security::{AppApiKeyAuth, AppAuditLogger, AuthContext, AuthMetadata, BearerAuth};
+use sdforge::security::{SdForgeApiKeyAuth, SdForgeAuditLogger, AuthContext, AuthMetadata, BearerAuth};
 
 // API Key：注册密钥并绑定权限
-let api_key_manager = AppApiKeyAuth::builder().build();
+let api_key_manager = SdForgeApiKeyAuth::builder().build();
 api_key_manager.add_key(
     "testkey_test_admin_123456".to_string(),
     vec!["admin".to_string(), "read".to_string(), "write".to_string()],

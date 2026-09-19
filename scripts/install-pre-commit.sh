@@ -1,17 +1,6 @@
 #!/bin/bash
-# Copyright (c) 2026 Kirky.X
+# Copyright (c) 2026 Kirky.X🌠
 # SPDX-License-Identifier: MIT
-# =============================================================================
-# SDForge Pre-commit Installation Script
-# =============================================================================
-# This script installs and configures the pre-commit hooks for the SDForge project.
-#
-# Usage:
-#   ./scripts/install-pre-commit.sh        # Install hooks
-#   ./scripts/install-pre-commit.sh --force  # Force reinstall
-#   ./scripts/install-pre-commit.sh --uninstall # Remove hooks
-#   ./scripts/install-pre-commit.sh --help    # Show help
-# =============================================================================
 
 set -euo pipefail
 

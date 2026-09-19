@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! `LimiteronForgeAdapter` — adapts `limiteron::Governor` to `ForgeRateLimiter`.
 //!
@@ -190,7 +190,7 @@ mod tests {
     /// the 1st request consumes the only token; the 2nd immediate request
     /// is rejected because <1 second has elapsed (negligible refill).
     ///
-    /// Note: Governor's L1 cache is hardcoded `true` (governor.rs line 241),
+    /// Note: Governor's cache is hardcoded `true` (governor.rs line 241),
     /// independent of `CacheBackend` config. Without `clear_l1_cache()`,
     /// the 2nd check returns the cached `Allowed` decision, masking the
     /// exhausted token bucket.
@@ -201,7 +201,7 @@ mod tests {
         // 1st request — allowed (1 token available, capacity=1).
         let allowed = adapter.check("9.9.9.9").await.expect("first check");
         assert!(allowed, "first request must be allowed");
-        // Clear L1 cache so the 2nd check hits the actual token bucket
+        // Clear cache so the 2nd check hits the actual token bucket
         // (not a cached Allowed decision).
         governor.clear_l1_cache().await;
         // 2nd request immediately after — rejected (0 tokens, refill=1/sec).

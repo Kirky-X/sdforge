@@ -1,19 +1,19 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 #[cfg(feature = "http")]
 mod config_tests {
-    use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
+    use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
 
     #[test]
     fn test_app_config_default() {
-        let config = AppConfig::default();
+        let config = SdForgeConfig::default();
         // Just verify we can create a default config
         let _ = config.server.port;
     }
 
     #[test]
     fn test_app_config_builder() {
-        let config = AppConfig::builder()
+        let config = SdForgeConfig::builder()
             .server(ServerConfig {
                 host: "127.0.0.1".to_string(),
                 port: 3000,
@@ -89,7 +89,7 @@ mod config_tests {
 // Enhanced Config module tests - comprehensive coverage
 #[cfg(feature = "http")]
 mod config_enhanced_tests {
-    use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
+    use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
 
     // ============================================================================
     // ServerConfig boundary tests
@@ -359,10 +359,10 @@ mod config_enhanced_tests {
     }
 
     // ============================================================================
-    // AppConfig comprehensive tests
+    // SdForgeConfig comprehensive tests
     // ============================================================================
 
-    /// Test 7: AppConfig builder pattern - all fields
+    /// Test 7: SdForgeConfig builder pattern - all fields
     #[test]
     fn test_app_config_builder_all_fields() {
         let server = ServerConfig {
@@ -373,7 +373,7 @@ mod config_enhanced_tests {
             ..Default::default()
         };
 
-        let config = AppConfig::builder()
+        let config = SdForgeConfig::builder()
             .server(server)
             .build()
             .expect("build should succeed with valid config");
@@ -383,10 +383,10 @@ mod config_enhanced_tests {
         assert_eq!(config.server.request_timeout_secs, 60);
     }
 
-    /// Test 8: AppConfig Default trait implementation
+    /// Test 8: SdForgeConfig Default trait implementation
     #[test]
     fn test_app_config_default_implementation() {
-        let default = AppConfig::default();
+        let default = SdForgeConfig::default();
 
         // Verify we can access all major fields
         let _ = &default.server;
@@ -396,10 +396,10 @@ mod config_enhanced_tests {
         // Test passed: default config is valid and accessible
     }
 
-    /// Test 9: AppConfig multiple builds with different configs
+    /// Test 9: SdForgeConfig multiple builds with different configs
     #[test]
     fn test_app_config_multiple_builds() {
-        let config1 = AppConfig::builder()
+        let config1 = SdForgeConfig::builder()
             .server(ServerConfig {
                 host: "127.0.0.1".to_string(),
                 port: 3000,
@@ -410,7 +410,7 @@ mod config_enhanced_tests {
             .build()
             .expect("build1 should succeed");
 
-        let config2 = AppConfig::builder()
+        let config2 = SdForgeConfig::builder()
             .server(ServerConfig {
                 host: "0.0.0.0".to_string(),
                 port: 8080,

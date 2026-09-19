@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! collision semantics: a user route that already claims `/healthz`
 //! takes precedence — `build_with_config` skips the built-in probe instead
@@ -10,7 +10,7 @@
 #![cfg(feature = "health")]
 
 use axum::body::Body;
-use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
+use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
 use sdforge::http::build_with_config;
 
 fn shadow_route() -> sdforge::http::HttpRoute {
@@ -49,7 +49,7 @@ sdforge::inventory::submit!(sdforge::http::RouteRegistration::new(
 
 #[tokio::test]
 async fn user_route_takes_precedence_over_builtin_healthz() {
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,

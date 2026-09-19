@@ -1,7 +1,7 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 
-use super::{AppAuditLogger, AppAuditLoggerBuilder, AuditLogBatch};
+use super::{SdForgeAuditLogger, AppAuditLoggerBuilder, AuditLogBatch};
 use crate::cache::SharedCache;
 use crate::security::{
     AuditLog, AuditResult, AuthContext, AuthMetadata, deserialize_audit_logs, serialize_audit_logs,
@@ -121,16 +121,16 @@ pub(crate) fn sanitize_error_message(message: &str) -> String {
     result
 }
 
-impl Default for AppAuditLogger {
+impl Default for SdForgeAuditLogger {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl AppAuditLogger {
+impl SdForgeAuditLogger {
     /// Create a new AppAuditLoggerBuilder for custom configuration.
     ///
-    /// This is the recommended way to create an AppAuditLogger when you need
+    /// This is the recommended way to create an SdForgeAuditLogger when you need
     /// to customize any of the default settings.
     ///
     /// # Returns
@@ -144,11 +144,11 @@ impl AppAuditLogger {
     /// # Examples
     ///
     /// ```ignore
-    /// use sdforge::security::AppAuditLogger;
+    /// use sdforge::security::SdForgeAuditLogger;
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let logger = AppAuditLogger::builder()
+    ///     let logger = SdForgeAuditLogger::builder()
     ///         .max_logs_per_user(500)
     ///         .max_concurrent_ops(50)
     ///         .queue_size(2000)
@@ -450,8 +450,8 @@ impl AppAuditLogger {
     }
 }
 
-/// Implement AuditLogger trait for AppAuditLogger
-impl crate::security::AuditLogger for AppAuditLogger {
+/// Implement AuditLogger trait for SdForgeAuditLogger
+impl crate::security::AuditLogger for SdForgeAuditLogger {
     fn log(&self, log: AuditLog) {
         // Build an AuthContext from the audit log for the async log method
         let context = AuthContext {
@@ -486,7 +486,7 @@ impl crate::security::AuditLogger for AppAuditLogger {
         match tokio::runtime::Handle::try_current() {
             Ok(handle) => {
                 handle.spawn(async move {
-                    let logger = AppAuditLogger {
+                    let logger = SdForgeAuditLogger {
                         logs,
                         max_logs_per_user,
                         semaphore,
@@ -642,14 +642,14 @@ impl AppAuditLoggerBuilder {
         self
     }
 
-    /// Build an AppAuditLogger instance using the configured settings.
+    /// Build an SdForgeAuditLogger instance using the configured settings.
     ///
     /// This method spawns a background worker task for async log processing.
     /// Ensure tokio runtime is available when calling this method.
     ///
     /// # Returns
     ///
-    /// Returns a fully configured AppAuditLogger instance.
+    /// Returns a fully configured SdForgeAuditLogger instance.
     ///
     /// # Errors
     ///
@@ -670,7 +670,7 @@ impl AppAuditLoggerBuilder {
     ///     let _ = logger;
     /// }
     /// ```
-    pub fn build(self) -> AppAuditLogger {
+    pub fn build(self) -> SdForgeAuditLogger {
         // HIGH 修复（#20/#304）：零值防护——此前 builder 不做任何校验：
         // queue_size(0) 触发 tokio bounded channel 断言 panic；
         // max_concurrent_ops(0) 使每条日志等待 1s 超时后丢弃；
@@ -719,7 +719,7 @@ impl AppAuditLoggerBuilder {
             }
         });
 
-        AppAuditLogger {
+        SdForgeAuditLogger {
             logs,
             max_logs_per_user,
             semaphore: Arc::new(tokio::sync::Semaphore::new(max_concurrent_ops)),

@@ -1,9 +1,9 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 #[cfg(feature = "websocket")]
 mod websocket_tests {
     use sdforge::websocket::{
-        AppState, ConnectionManager, WebSocketConfig, WebSocketConnection, WebSocketMessage,
+        SdForgeState, ConnectionManager, WebSocketConfig, WebSocketConnection, WebSocketMessage,
         parse_websocket_message,
     };
     use std::sync::{Arc, Mutex};
@@ -514,7 +514,7 @@ mod websocket_tests {
     #[test]
     fn test_app_state_new() {
         let manager = Arc::new(ConnectionManager::new());
-        let state = AppState::new(manager);
+        let state = SdForgeState::new(manager);
         let _ = state;
     }
 
@@ -1020,15 +1020,15 @@ mod websocket_tests {
     }
 
     // ============================================================================
-    // AppState 集成测试
+    // SdForgeState 集成测试
     // ============================================================================
 
-    /// 测试 AppState 与 ConnectionManager 集成
-    /// 验证 AppState 能正确管理连接
+    /// 测试 SdForgeState 与 ConnectionManager 集成
+    /// 验证 SdForgeState 能正确管理连接
     #[tokio::test]
     async fn test_app_state_connection_management() {
         let manager = Arc::new(ConnectionManager::new());
-        let state = AppState::new(manager.clone());
+        let state = SdForgeState::new(manager.clone());
 
         // 通过 state 添加连接
         let (conn, _) = WebSocketConnection::new("app-state-conn".to_string());
@@ -1052,8 +1052,8 @@ mod websocket_tests {
         state.manager.remove_connection("app-state-conn").await;
     }
 
-    /// 测试 AppState 使用自定义配置
-    /// 验证可以创建带有自定义配置的 AppState
+    /// 测试 SdForgeState 使用自定义配置
+    /// 验证可以创建带有自定义配置的 SdForgeState
     #[cfg(feature = "security")]
     #[tokio::test]
     async fn test_app_state_custom_config() {
@@ -1068,7 +1068,7 @@ mod websocket_tests {
         };
 
         let manager = Arc::new(ConnectionManager::new());
-        let state = AppState::with_config(config, manager.clone());
+        let state = SdForgeState::with_config(config, manager.clone());
 
         // 验证配置被正确应用
         assert!(state.config.auth.is_some());

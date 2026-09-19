@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tests for `LimiteronAdapter` — construction and `RateLimiter` impl.
 //!
@@ -195,7 +195,7 @@ async fn check_returns_exceeded_after_capacity_exhausted() {
         .with_config(config)
         .with_storage(storage)
         .with_ban_storage(ban_storage)
-        // Disable L1 cache: by default Governor caches the first Allowed
+        // Disable cache: by default Governor caches the first Allowed
         // decision and returns it for subsequent identical requests, which
         // would prevent us from observing token-bucket exhaustion.
         .with_l1_cache_enabled(false)
@@ -232,15 +232,15 @@ async fn check_returns_exceeded_after_capacity_exhausted() {
 }
 
 // ============================================================================
-// vuln-0007: L1 cache must be disabled in production Governor construction
+// vuln-0007: cache must be disabled in production Governor construction
 // ============================================================================
 
-/// vuln-0007: `LimiteronAdapterBuilder::build()` must disable L1 cache.
+/// vuln-0007: `LimiteronAdapterBuilder::build()` must disable cache.
 ///
 /// Without `.with_l1_cache_enabled(false)`, the Governor caches the first
 /// `Allowed` decision and returns it for all subsequent identical requests,
 /// allowing rate-limit bypass. This test verifies that `build()` produces
-/// an adapter where token-bucket exhaustion is observable (i.e., L1 cache
+/// an adapter where token-bucket exhaustion is observable (i.e., cache
 /// is disabled).
 #[tokio::test]
 async fn test_vuln0007_build_disables_l1_cache() {
@@ -271,8 +271,8 @@ async fn test_vuln0007_build_disables_l1_cache() {
         .await
         .expect("tight config must be valid");
 
-    // Fire 5 rapid requests. With L1 cache disabled (fix), at most 2 allowed
-    // (1 capacity + ~1 refill). With L1 cache enabled (bug), all 5 cached
+    // Fire 5 rapid requests. With cache disabled (fix), at most 2 allowed
+    // (1 capacity + ~1 refill). With cache enabled (bug), all 5 cached
     // as Allowed -> 0 rejections.
     let mut rejections = 0;
     for _ in 0..5 {
@@ -289,21 +289,21 @@ async fn test_vuln0007_build_disables_l1_cache() {
     );
 }
 
-/// vuln-0007: `LimiteronAdapter::new()` must disable L1 cache.
+/// vuln-0007: `LimiteronAdapter::new()` must disable cache.
 ///
 /// Same vulnerability as `build()` — `new()` constructs a Governor without
 /// `.with_l1_cache_enabled(false)`, allowing rate-limit bypass via cached
 /// decisions. We verify by sending 110 requests against the default config
-/// (capacity=100, refill_rate=10). With L1 cache disabled, at least 1
-/// request must be rejected. With L1 cache enabled, all 110 are cached
+/// (capacity=100, refill_rate=10). With cache disabled, at least 1
+/// request must be rejected. With cache enabled, all 110 are cached
 /// as Allowed -> 0 rejections.
 #[tokio::test]
 async fn test_vuln0007_new_disables_l1_cache() {
     let adapter = LimiteronAdapter::new().await;
 
     // Default config: capacity=100, refill_rate=10. Send 110 rapid requests.
-    // With L1 cache disabled: ~100 allowed, ~10 rejected (test runs in <1ms,
-    // so refill is negligible). With L1 cache enabled: all 110 cached -> 0
+    // With cache disabled: ~100 allowed, ~10 rejected (test runs in <1ms,
+    // so refill is negligible). With cache enabled: all 110 cached -> 0
     // rejections.
     let mut rejections = 0;
     for _ in 0..110 {

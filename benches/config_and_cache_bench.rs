@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Configuration and Cache Performance Benchmarks
 //!
@@ -14,12 +14,12 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 /// Benchmark configuration validation performance
 #[cfg(feature = "http")]
 fn benchmark_config_validation(c: &mut Criterion) {
-    use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
+    use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
 
     let mut group = c.benchmark_group("config_validation");
 
     // Valid configuration
-    let valid_config = AppConfig {
+    let valid_config = SdForgeConfig {
         server: ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 8080,
@@ -41,7 +41,7 @@ fn benchmark_config_validation(c: &mut Criterion) {
     });
 
     // Invalid configuration (empty prefix)
-    let invalid_api_key_config = AppConfig {
+    let invalid_api_key_config = SdForgeConfig {
         server: ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 8080,
@@ -68,13 +68,13 @@ fn benchmark_config_validation(c: &mut Criterion) {
 /// Benchmark builder pattern with validation
 #[cfg(feature = "http")]
 fn benchmark_builder_with_validation(c: &mut Criterion) {
-    use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
+    use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
 
     let mut group = c.benchmark_group("builder_validation");
 
     group.bench_function("build_valid_config", |b| {
         b.iter(|| {
-            AppConfig::builder()
+            SdForgeConfig::builder()
                 .server(ServerConfig {
                     host: "0.0.0.0".to_string(),
                     port: 8080,
@@ -92,7 +92,7 @@ fn benchmark_builder_with_validation(c: &mut Criterion) {
     });
 
     group.bench_function("build_minimal_config", |b| {
-        b.iter(|| AppConfig::builder().build())
+        b.iter(|| SdForgeConfig::builder().build())
     });
 
     group.finish();

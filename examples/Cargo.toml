@@ -39,7 +39,7 @@ chrono = { workspace = true }
 # which requires `utoipa` to be resolvable in the current crate.
 utoipa = { workspace = true }
 oxcache = { workspace = true, optional = true }
-dbnexus = { version = "0.6.0-rc.4", default-features = false, features = ["embedded", "sql-parser"], optional = true }
+dbnexus = { version = "0.6.0-rc.4", path = "../../dbnexus", default-features = false, features = ["embedded", "sql-parser"], optional = true }
 
 [features]
 default = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "cache_examples", "grpc_examples", "logging_examples", "openapi_examples", "cli_examples", "docs_examples", "combined_examples"]

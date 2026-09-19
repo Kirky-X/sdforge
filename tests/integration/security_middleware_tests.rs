@@ -1,15 +1,15 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 // Security Middleware Integration Tests
 // Tests security components with actual HTTP requests
 
 #[cfg(feature = "security")]
 mod security_tests {
-    use sdforge::security::AppApiKeyAuth;
+    use sdforge::security::SdForgeApiKeyAuth;
 
     #[test]
     fn test_api_key_auth_builder() {
-        let auth = AppApiKeyAuth::builder().build();
+        let auth = SdForgeApiKeyAuth::builder().build();
 
         // Verify the builder works and creates a valid instance
         assert!(
@@ -20,7 +20,7 @@ mod security_tests {
 
     #[test]
     fn test_api_key_auth_new() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         assert!(
             !std::ptr::eq(&auth, std::ptr::null()),
             "API Key Auth new() should create an instance"
@@ -34,9 +34,9 @@ mod security_tests {
     /// Test: API key validation performance
     #[test]
     fn test_api_key_validation_performance() {
-        use sdforge::security::{ApiKeyMetadata, AppApiKeyAuth};
+        use sdforge::security::{ApiKeyMetadata, SdForgeApiKeyAuth};
 
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         let _metadata = ApiKeyMetadata::new("perf-test-key".to_string(), None);
 
         let start = std::time::Instant::now();
@@ -55,10 +55,10 @@ mod security_tests {
     /// Test: Concurrent API key validation
     #[tokio::test]
     async fn test_concurrent_api_key_validation() {
-        use sdforge::security::AppApiKeyAuth;
+        use sdforge::security::SdForgeApiKeyAuth;
         use std::sync::Arc;
 
-        let auth = Arc::new(AppApiKeyAuth::new());
+        let auth = Arc::new(SdForgeApiKeyAuth::new());
         let mut handles = vec![];
 
         // Spawn 10 concurrent validation tasks
@@ -82,9 +82,9 @@ mod security_tests {
     /// Test: Multiple API keys stress test
     #[test]
     fn test_multiple_api_keys_stress() {
-        use sdforge::security::{ApiKeyMetadata, AppApiKeyAuth};
+        use sdforge::security::{ApiKeyMetadata, SdForgeApiKeyAuth};
 
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         // Create and validate many different keys
         for i in 0..100 {
@@ -99,9 +99,9 @@ mod security_tests {
     /// Test: API key with edge case inputs
     #[test]
     fn test_api_key_edge_cases() {
-        use sdforge::security::AppApiKeyAuth;
+        use sdforge::security::SdForgeApiKeyAuth;
 
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         // Empty key
         let _ = auth.validate_key("", "127.0.0.1");
@@ -125,7 +125,7 @@ mod security_tests {
 // Enhanced Security Middleware tests
 #[cfg(feature = "security")]
 mod security_middleware_enhanced_tests {
-    use sdforge::AppApiKeyAuth;
+    use sdforge::SdForgeApiKeyAuth;
     use sdforge::security::ApiKeyMetadata;
 
     // ============================================================================
@@ -189,22 +189,22 @@ mod security_middleware_enhanced_tests {
     }
 
     // ============================================================================
-    // AppApiKeyAuth tests
+    // SdForgeApiKeyAuth tests
     // ============================================================================
 
-    /// Test 6: AppApiKeyAuth basic functionality
+    /// Test 6: SdForgeApiKeyAuth basic functionality
     #[test]
     fn test_app_api_key_auth_basic() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         // Verify we can call basic methods without panic
         let _ = auth.validate_key("test-key", "127.0.0.1");
     }
 
-    /// Test 7: AppApiKeyAuth builder pattern
+    /// Test 7: SdForgeApiKeyAuth builder pattern
     #[test]
     fn test_app_api_key_auth_builder_pattern() {
-        let builder = AppApiKeyAuth::builder();
+        let builder = SdForgeApiKeyAuth::builder();
         let auth = builder.build();
 
         // Verify builder creates valid instance
@@ -214,8 +214,8 @@ mod security_middleware_enhanced_tests {
     /// Test 8: Multiple auth instances are independent
     #[test]
     fn test_multiple_auth_instances_independent() {
-        let auth1 = AppApiKeyAuth::new();
-        let auth2 = AppApiKeyAuth::new();
+        let auth1 = SdForgeApiKeyAuth::new();
+        let auth2 = SdForgeApiKeyAuth::new();
 
         // Verify they are separate instances
         assert!(!std::ptr::eq(&auth1, &auth2));

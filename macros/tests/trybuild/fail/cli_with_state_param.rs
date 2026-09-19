@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Converge fix: `cli = true` + State parameter must emit a clear compile
 //! error instead of generating a handler call with mismatched argument count
@@ -6,10 +6,10 @@
 //! failure with confusing message about argument count mismatch).
 use sdforge_macros::forge;
 
-struct AppState;
+struct SdForgeState;
 
 #[forge(name = "test_cli_state", version = "v1", cli = true)]
-async fn test_cli_state(id: u64, #[state] state: AppState) -> String {
+async fn test_cli_state(id: u64, #[state] state: SdForgeState) -> String {
     format!("id={}", id)
 }
 

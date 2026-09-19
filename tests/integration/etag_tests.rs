@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! e2e: ETag / conditional requests through `build_with_config`.
 //!
@@ -37,7 +37,7 @@ async fn create_report() -> serde_json::Value {
 }
 
 fn app() -> axum::Router {
-    let config = sdforge::config::AppConfig::default();
+    let config = sdforge::config::SdForgeConfig::default();
     build_with_config(&config).unwrap()
 }
 

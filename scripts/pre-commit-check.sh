@@ -1,23 +1,6 @@
 #!/bin/bash
-# Copyright (c) 2026 Kirky.X
+# Copyright (c) 2026 Kirky.X🌠
 # SPDX-License-Identifier: MIT
-# =============================================================================
-# SDForge Pre-commit Check Script
-# =============================================================================
-# This script performs comprehensive checks before allowing a git commit.
-# It checks code formatting, linting, compilation, and more.
-#
-# Usage:
-#   ./pre-commit-check.sh                    # Run all checks
-#   ./pre-commit-check.sh --check-conflicts  # Check for merge conflicts
-#   ./pre-commit-check.sh --check-large-files # Check for large files
-#   ./pre-commit-check.sh --fix-whitespace   # Fix trailing whitespace
-#   ./pre-commit-check.sh --check-compile    # Check compilation only
-#   ./pre-commit-check.sh --check-build      # Check build only
-#   ./pre-commit-check.sh --check-format     # Check formatting only
-#   ./pre-commit-check.sh --check-clippy     # Check clippy only
-#   ./pre-commit-check.sh --help             # Show this help
-# =============================================================================
 
 set -euo pipefail
 

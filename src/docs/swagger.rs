@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Swagger UI Router 集成。
 //!
@@ -95,7 +95,7 @@ async fn serve_swagger_ui(
             .into_response(),
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(error) => {
-            // 不向客户端泄露内部错误详情（tiangang 发现 3），仅记录日志。
+            // 不向客户端泄露内部错误详情，仅记录日志。
             log::error!("Swagger UI serve failed: {}", error);
             (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
         }

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Performance benchmarks for SdForge
 //!
@@ -424,9 +424,9 @@ criterion_group!(
 /// key validation) into a single bench function covering all four scenarios.
 #[cfg(feature = "security")]
 fn benchmark_api_key_validation(c: &mut Criterion) {
-    use sdforge::security::AppApiKeyAuth;
+    use sdforge::security::SdForgeApiKeyAuth;
 
-    let auth = AppApiKeyAuth::new();
+    let auth = SdForgeApiKeyAuth::new();
     let api_key = "testkey1234567890abcdef";
 
     // Add a test key
@@ -769,7 +769,7 @@ fn benchmark_regex_caching(c: &mut Criterion) {
 /// Benchmark for HTTP router construction
 #[cfg(feature = "http")]
 fn benchmark_http_router_construction(c: &mut Criterion) {
-    use sdforge::config::{AppConfig, AuthConfig, ServerConfig};
+    use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
 
     c.bench_function("http_router_build", |b| b.iter(sdforge::http::build));
 
@@ -777,7 +777,7 @@ fn benchmark_http_router_construction(c: &mut Criterion) {
         b.iter(sdforge::http::build_with_redirect)
     });
 
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 3000,
@@ -794,7 +794,7 @@ fn benchmark_http_router_construction(c: &mut Criterion) {
         b.iter(|| sdforge::http::build_with_config(black_box(&config)))
     });
 
-    let config_cors = AppConfig {
+    let config_cors = SdForgeConfig {
         server: ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 3000,

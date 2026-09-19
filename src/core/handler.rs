@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Unified handler contract shared across protocols (gRPC, CLI, ...).
 //!
@@ -44,7 +44,7 @@ pub type HandlerFuture =
 /// from either protocol with zero duplication.
 pub type HandlerFn = fn(HandlerArgs, HandlerState) -> HandlerFuture;
 
-/// Smart `Value` → `String` extraction (H3 decision).
+/// Smart `Value` → `String` extraction (decision).
 ///
 /// `Value::String` yields the raw string (no quotes) — friendly for CLI
 /// output (`Hello, world!` not `"Hello, world!"`). Any other JSON type

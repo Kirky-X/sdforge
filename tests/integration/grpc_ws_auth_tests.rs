@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! e2e: non-HTTP protocol authentication — gRPC interceptor and WS
 //! handshake, reusing the HTTP credential stores (bearer JWT / API key).
@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use sdforge::grpc::SdForgeGrpcService;
 use sdforge::grpc::sdforge_v1::sd_forge_service_server::SdForgeService;
-use sdforge::security::AppApiKeyAuth;
+use sdforge::security::SdForgeApiKeyAuth;
 use sdforge::security::grpc_auth::{ApiKeyVerifier, BearerVerifier};
 
 // =============================================================================
@@ -91,7 +91,7 @@ async fn grpc_with_valid_bearer_proceeds_to_dispatch() {
 
 #[tokio::test]
 async fn grpc_with_valid_api_key_proceeds_to_dispatch() {
-    let store = Arc::new(AppApiKeyAuth::new());
+    let store = Arc::new(SdForgeApiKeyAuth::new());
     store.add_key("grpc-secret-key-9", vec!["admin".to_string()]);
     let service = grpc_service_with(Arc::new(ApiKeyVerifier::new(store, "sk_")));
 
@@ -142,11 +142,11 @@ fn mint_jwt(secret: &str) -> String {
 mod ws_handshake {
     use super::*;
     use axum::body::Body;
-    use sdforge::websocket::{AppState, ConnectionManager, WebSocketConfig, websocket_upgrade};
+    use sdforge::websocket::{SdForgeState, ConnectionManager, WebSocketConfig, websocket_upgrade};
     use tower::ServiceExt;
 
     fn ws_app_with(config: WebSocketConfig) -> axum::Router {
-        let state = Arc::new(AppState {
+        let state = Arc::new(SdForgeState {
             config: Arc::new(config),
             manager: Arc::new(ConnectionManager::new()),
         });
@@ -182,7 +182,7 @@ mod ws_handshake {
             ),
             ..Default::default()
         };
-        let store = Arc::new(AppApiKeyAuth::new());
+        let store = Arc::new(SdForgeApiKeyAuth::new());
         store.add_key("ws-secret-key-1", vec!["viewer".to_string()]);
         config.api_key_auth = Some(store);
         config

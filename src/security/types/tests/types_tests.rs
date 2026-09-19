@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tests for security module shared types.
 //!
@@ -229,7 +229,7 @@ fn test_serialize_deserialize_permissions_empty() {
 
 #[test]
 fn test_deserialize_permissions_invalid_data() {
-    let result = deserialize_permissions(b"invalid bincode data");
+    let result = deserialize_permissions(b"invalid postcard data");
     assert_eq!(result, Vec::<String>::new());
 }
 

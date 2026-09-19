@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! # 类型系统和错误处理示例
 //!
@@ -42,15 +42,15 @@
 //! use thiserror::Error;
 //!
 //! #[derive(Debug, Error)]
-//! pub enum AppError {
+//! pub enum SdForgeExampleError {
 //!     #[error("User not found: {user_id}")]
 //!     UserNotFound { user_id: u64 },
 //! }
 //!
-//! impl From<AppError> for ApiError {
-//!     fn from(err: AppError) -> Self {
+//! impl From<SdForgeExampleError> for ApiError {
+//!     fn from(err: SdForgeExampleError) -> Self {
 //!         match err {
-//!             AppError::UserNotFound { user_id } => ApiError::NotFound { ... },
+//!             SdForgeExampleError::UserNotFound { user_id } => ApiError::NotFound { ... },
 //!         }
 //!     }
 //! }
@@ -84,12 +84,12 @@ use thiserror::Error;
 /// - `ValidationError` - 输入验证失败
 /// - `DatabaseError` - 数据库操作失败
 #[derive(Debug, Error)]
-pub enum AppError {
+pub enum SdForgeExampleError {
     /// 用户不存在错误
     ///
     /// # 示例
     /// ```text
-    /// AppError::UserNotFound { user_id: 123 }
+    /// SdForgeExampleError::UserNotFound { user_id: 123 }
     /// ```
     #[error("用户不存在: {user_id}")]
     UserNotFound { user_id: u64 },
@@ -111,32 +111,32 @@ pub enum AppError {
     ///
     /// # 示例
     /// ```text
-    /// AppError::DatabaseError { details: "Connection timeout".into() }
+    /// SdForgeExampleError::DatabaseError { details: "Connection timeout".into() }
     /// ```
     #[error("数据库错误: {details}")]
     DatabaseError { details: String },
 }
 
-/// 将 AppError 转换为 ApiError
+/// 将 SdForgeExampleError 转换为 ApiError
 ///
-/// 实现 `From<AppError>` 使得可以使用 `?` 运算符自动转换错误。
+/// 实现 `From<SdForgeExampleError>` 使得可以使用 `?` 运算符自动转换错误。
 /// 这是在实际应用中处理错误的推荐方式。
-impl From<AppError> for ApiError {
-    fn from(err: AppError) -> Self {
+impl From<SdForgeExampleError> for ApiError {
+    fn from(err: SdForgeExampleError) -> Self {
         match err {
             // 用户不存在 -> 404 Not Found
-            AppError::UserNotFound { user_id } => ApiError::NotFound {
+            SdForgeExampleError::UserNotFound { user_id } => ApiError::NotFound {
                 resource: "User".to_string(),
                 resource_id: Some(user_id.to_string()),
             },
             // 验证错误 -> 400 Bad Request
-            AppError::ValidationError { message, field } => ApiError::InvalidInput {
+            SdForgeExampleError::ValidationError { message, field } => ApiError::InvalidInput {
                 message,
                 field,
                 value: None,
             },
             // 数据库错误 -> 500 Internal Server Error
-            AppError::DatabaseError { details } => ApiError::InvalidInput {
+            SdForgeExampleError::DatabaseError { details } => ApiError::InvalidInput {
                 message: format!("数据库错误: {}", details),
                 field: None,
                 value: None,
@@ -322,7 +322,7 @@ async fn get_user_with_error(id: u64) -> Result<String, ApiError> {
     // 验证: ID 不能超过 1000
     if id > 1000 {
         // 使用自定义错误，通过 From trait 自动转换
-        return Err(AppError::UserNotFound { user_id: id }.into());
+        return Err(SdForgeExampleError::UserNotFound { user_id: id }.into());
     }
 
     // 正常情况
@@ -360,7 +360,7 @@ async fn get_user_with_error(id: u64) -> Result<String, ApiError> {
 async fn validate_user(request: ValidateUserRequest) -> Result<String, ApiError> {
     // 验证 name 字段
     if request.name.is_empty() {
-        return Err(AppError::ValidationError {
+        return Err(SdForgeExampleError::ValidationError {
             message: "用户名不能为空".to_string(),
             field: Some("name".to_string()),
         }
@@ -369,7 +369,7 @@ async fn validate_user(request: ValidateUserRequest) -> Result<String, ApiError>
 
     // 验证 email 格式
     if !request.email.contains('@') {
-        return Err(AppError::ValidationError {
+        return Err(SdForgeExampleError::ValidationError {
             message: "邮箱格式不正确".to_string(),
             field: Some("email".to_string()),
         }

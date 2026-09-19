@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! e2e: endpoint-level RBAC via `#[forge(auth(role = "..."))]`.
 //!
@@ -9,7 +9,7 @@
 
 #![cfg(all(feature = "http", feature = "security"))]
 
-use sdforge::config::{ApiKeySeed, AppConfig, AuthConfig, ServerConfig};
+use sdforge::config::{ApiKeySeed, SdForgeConfig, AuthConfig, ServerConfig};
 use sdforge::http::build_with_config;
 
 #[sdforge::forge(
@@ -35,8 +35,8 @@ async fn open_ping() -> serde_json::Value {
     serde_json::json!({ "pong": true })
 }
 
-fn apikey_config(admin_key: &str, viewer_key: &str) -> AppConfig {
-    AppConfig {
+fn apikey_config(admin_key: &str, viewer_key: &str) -> SdForgeConfig {
+    SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,

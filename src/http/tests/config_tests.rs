@@ -1,11 +1,11 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tests for `build_with_config()`: various `ServerConfig`, `AuthConfig`, and
 //! `CorsConfig` combinations, middleware layer wiring, and feature-gated
 //! inventory preservation through `build()`.
 
 use crate::config::{
-    ApiKeySeed, AppConfig, AuthConfig, CacheConfig, CorsConfig, SecurityConfig, ServerConfig,
+    ApiKeySeed, SdForgeConfig, AuthConfig, CacheConfig, CorsConfig, SecurityConfig, ServerConfig,
 };
 #[cfg(any(feature = "mcp", feature = "websocket", feature = "grpc"))]
 use crate::http::build;
@@ -14,7 +14,7 @@ use crate::http::build_with_config;
 /// Test build_with_config with JWT authentication
 #[test]
 fn test_build_with_config_jwt() {
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 3000,
@@ -36,7 +36,7 @@ fn test_build_with_config_jwt() {
 /// Test build_with_config with ApiKey authentication
 #[test]
 fn test_build_with_config_api_key() {
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 3000,
@@ -66,7 +66,7 @@ fn test_build_with_config_api_key() {
 /// Test build_with_config with OAuth2 returns error
 #[test]
 fn test_build_with_config_oauth2_error() {
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 3000,
@@ -89,7 +89,7 @@ fn test_build_with_config_oauth2_error() {
 /// Test build_with_config with CORS configuration
 #[test]
 fn test_build_with_config_cors() {
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 3000,
@@ -119,7 +119,7 @@ fn test_build_with_config_cors() {
 #[test]
 fn test_build_with_config_request_id_middleware() {
     // Tests the request ID middleware (lines 226-240)
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -139,7 +139,7 @@ fn test_build_with_config_request_id_middleware() {
 #[test]
 fn test_build_with_config_body_limit() {
     // Tests body limit layer (lines 243-245)
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -159,7 +159,7 @@ fn test_build_with_config_body_limit() {
 #[test]
 fn test_build_with_config_compression_layer() {
     // Tests compression layer (line 248)
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -179,7 +179,7 @@ fn test_build_with_config_compression_layer() {
 #[test]
 fn test_build_with_config_timeout_layer() {
     // Tests timeout layer (lines 251-255)
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -201,7 +201,7 @@ fn test_build_with_config_zero_timeout() {
     // Zero timeout would time out every request (a TimeoutLayer of 0s never
     // yields), so build_with_config rejects it up front — mirroring
     // ServerConfig::validate.
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -224,7 +224,7 @@ fn test_build_with_config_zero_timeout() {
 #[test]
 fn test_build_with_config_zero_body_size_rejected() {
     // max_body_size = 0 would reject every request that carries a body.
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -247,7 +247,7 @@ fn test_build_with_config_zero_body_size_rejected() {
 #[test]
 fn test_build_with_config_large_timeout() {
     // Test with large timeout value
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -267,7 +267,7 @@ fn test_build_with_config_large_timeout() {
 #[test]
 fn test_build_with_config_cors_various_origins() {
     // Test CORS with multiple origins
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -295,7 +295,7 @@ fn test_build_with_config_cors_various_origins() {
 #[test]
 fn test_build_with_config_cors_all_methods() {
     // Test CORS with valid origins and common methods
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -326,7 +326,7 @@ fn test_build_with_config_cors_all_methods() {
 #[test]
 fn test_build_with_config_api_key_empty_prefix() {
     // Test ApiKey with empty prefix (lines 306-308)
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -353,7 +353,7 @@ fn test_build_with_config_api_key_empty_prefix() {
 #[test]
 fn test_build_with_config_api_key_long_prefix() {
     // Test ApiKey with long prefix
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -380,7 +380,7 @@ fn test_build_with_config_api_key_long_prefix() {
 #[test]
 fn test_build_with_config_api_key_special_chars() {
     // Test ApiKey with special characters in prefix
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -412,7 +412,7 @@ fn test_build_with_config_api_key_special_chars() {
 fn test_build_with_config_jwt_short_secret() {
     // JWT requires minimum secret length and character classes
     // This tests that valid secrets work correctly
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -434,7 +434,7 @@ fn test_build_with_config_jwt_short_secret() {
 #[test]
 fn test_build_with_config_jwt_special_chars() {
     // Test JWT secret with special characters (must meet complexity requirements)
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -457,7 +457,7 @@ fn test_build_with_config_jwt_special_chars() {
 fn test_build_with_config_jwt_empty_secret() {
     // Note: BearerAuth::new() panics with empty/invalid secrets.
     // This test uses a valid secret to verify build path works.
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -514,7 +514,7 @@ fn test_build_preserves_grpc_inventory_with_routes() {
 #[test]
 fn test_build_with_config_full_jwt_cors() {
     // Test with all middleware: JWT + CORS + security headers + timeout
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 443,
@@ -540,7 +540,7 @@ fn test_build_with_config_full_jwt_cors() {
 #[test]
 fn test_build_with_config_full_api_key_cors() {
     // Test with all middleware: ApiKey + CORS + security headers + timeout
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 8443,
@@ -580,7 +580,7 @@ fn test_build_with_config_full_api_key_cors() {
 /// verifying the non-security, non-auth path through the function.
 #[test]
 fn test_build_with_config_no_auth() {
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "0.0.0.0".to_string(),
             port: 8080,
@@ -606,7 +606,7 @@ fn test_build_with_config_no_auth() {
 /// applied without panic.
 #[test]
 fn test_build_with_config_minimal_config() {
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: String::new(),
             port: 1,

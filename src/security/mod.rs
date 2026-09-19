@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Security module providing authentication and audit logging
 //!
@@ -17,13 +17,13 @@ pub use traits::*;
 pub use types::*;
 
 #[cfg(feature = "security")]
-pub use api_key::{AppApiKeyAuth, AppApiKeyAuthBuilder};
+pub use api_key::{SdForgeApiKeyAuth, AppApiKeyAuthBuilder};
 #[cfg(feature = "security")]
 pub use audit::AuditSink;
 #[cfg(all(feature = "security", feature = "inklog"))]
 pub use audit::InklogAuditSink;
 #[cfg(feature = "security")]
-pub use audit::{AppAuditLogger, AppAuditLoggerBuilder};
+pub use audit::{SdForgeAuditLogger, AppAuditLoggerBuilder};
 #[cfg(feature = "security")]
 pub use bearer::{BearerAuth, BearerAuthBuilder, generate_secure_jwt_secret};
 #[cfg(feature = "security")]
@@ -102,25 +102,25 @@ mod tests {
     /// Uses fully-qualified syntax to force the trait impl in this module.
     #[test]
     fn trait_validate_key_returns_permissions_for_valid_key() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key("test-key", vec!["read".to_string()]);
-        let result = <AppApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "test-key", "127.0.0.1");
+        let result = <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "test-key", "127.0.0.1");
         assert_eq!(result, Some(vec!["read".to_string()]));
     }
 
     /// Trait dispatch path returns `None` for an unknown key.
     #[test]
     fn trait_validate_key_returns_none_for_unknown_key() {
-        let auth = AppApiKeyAuth::new();
-        let result = <AppApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "unknown-key", "127.0.0.1");
+        let auth = SdForgeApiKeyAuth::new();
+        let result = <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "unknown-key", "127.0.0.1");
         assert_eq!(result, None);
     }
 
     /// Trait dispatch path returns `None` for an empty key.
     #[test]
     fn trait_validate_key_returns_none_for_empty_key() {
-        let auth = AppApiKeyAuth::new();
-        let result = <AppApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "", "127.0.0.1");
+        let auth = SdForgeApiKeyAuth::new();
+        let result = <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "", "127.0.0.1");
         assert_eq!(result, None);
     }
 
@@ -128,9 +128,9 @@ mod tests {
     /// making the key immediately validatable via the trait path.
     #[test]
     fn trait_add_key_delegates_to_inherent_method() {
-        let auth = AppApiKeyAuth::new();
-        <AppApiKeyAuth as ApiKeyAuth>::add_key(&auth, "trait-key", vec!["admin".to_string()]);
-        let result = <AppApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "trait-key", "127.0.0.1");
+        let auth = SdForgeApiKeyAuth::new();
+        <SdForgeApiKeyAuth as ApiKeyAuth>::add_key(&auth, "trait-key", vec!["admin".to_string()]);
+        let result = <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "trait-key", "127.0.0.1");
         assert_eq!(result, Some(vec!["admin".to_string()]));
     }
 
@@ -138,9 +138,9 @@ mod tests {
     /// through the trait dispatch path.
     #[test]
     fn trait_add_key_with_string_literal_works() {
-        let auth = AppApiKeyAuth::new();
-        <AppApiKeyAuth as ApiKeyAuth>::add_key(&auth, "literal-key", vec!["read".to_string()]);
-        let result = <AppApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "literal-key", "127.0.0.1");
+        let auth = SdForgeApiKeyAuth::new();
+        <SdForgeApiKeyAuth as ApiKeyAuth>::add_key(&auth, "literal-key", vec!["read".to_string()]);
+        let result = <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "literal-key", "127.0.0.1");
         assert_eq!(result, Some(vec!["read".to_string()]));
     }
 
@@ -148,15 +148,15 @@ mod tests {
     /// confirming the trait impl is a pure delegation wrapper.
     #[test]
     fn trait_dispatch_matches_inherent_dispatch() {
-        let auth1 = AppApiKeyAuth::new();
-        let auth2 = AppApiKeyAuth::new();
+        let auth1 = SdForgeApiKeyAuth::new();
+        let auth2 = SdForgeApiKeyAuth::new();
         let perms = vec!["read".to_string(), "write".to_string()];
         auth1.add_key("shared-key", perms.clone());
-        <AppApiKeyAuth as ApiKeyAuth>::add_key(&auth2, "shared-key", perms);
+        <SdForgeApiKeyAuth as ApiKeyAuth>::add_key(&auth2, "shared-key", perms);
 
         let inherent_result = auth1.validate_key("shared-key", "127.0.0.1");
         let trait_result =
-            <AppApiKeyAuth as ApiKeyAuth>::validate_key(&auth2, "shared-key", "127.0.0.1");
+            <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth2, "shared-key", "127.0.0.1");
 
         assert_eq!(inherent_result, trait_result);
     }

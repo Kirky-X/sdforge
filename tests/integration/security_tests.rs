@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Security Authentication Integration Tests
 //!
@@ -12,7 +12,7 @@
 mod security_tests {
     use hmac::{Hmac, KeyInit, Mac};
     use sdforge::security::{
-        ApiKeyMetadata, AppApiKeyAuth, AppApiKeyAuthBuilder, AppAuditLogger, AuditResult,
+        ApiKeyMetadata, SdForgeApiKeyAuth, AppApiKeyAuthBuilder, SdForgeAuditLogger, AuditResult,
         AuthContext, AuthMetadata, BearerAuth, BearerAuthBuilder, LruConfig, RotationConfig,
     };
     use sha2::Sha256;
@@ -127,7 +127,7 @@ mod security_tests {
     /// the expected permissions.
     #[tokio::test]
     async fn test_api_key_valid_authentication() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         let test_key = "test_api_key_12345";
         let permissions = vec!["read".to_string(), "write".to_string()];
 
@@ -149,7 +149,7 @@ mod security_tests {
     /// Verifies that an invalid API key returns None and does not panic.
     #[tokio::test]
     async fn test_api_key_invalid_key() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         // Validate with an invalid key
         let result = auth.validate_key("invalid_key_not_registered", "192.168.1.100");
@@ -162,7 +162,7 @@ mod security_tests {
     /// Verifies that API key validation works correctly regardless of client IP.
     #[tokio::test]
     async fn test_api_key_prefix_matching() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         let test_key = "prefix_test_key_v1";
         let permissions = vec!["admin".to_string()];
 
@@ -183,7 +183,7 @@ mod security_tests {
     /// Verifies that API keys are case-sensitive.
     #[tokio::test]
     async fn test_api_key_case_sensitivity() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         let original_key = "CaseSensitiveKey";
         let permissions = vec!["read".to_string()];
 
@@ -214,7 +214,7 @@ mod security_tests {
             keep_versions: 3,
         };
 
-        let auth = AppApiKeyAuth::builder().rotation(rotation_config).build();
+        let auth = SdForgeApiKeyAuth::builder().rotation(rotation_config).build();
 
         // Add initial key version
         auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
@@ -242,7 +242,7 @@ mod security_tests {
     /// Verifies that versioned API keys are correctly stored and retrieved.
     #[tokio::test]
     async fn test_api_key_version_metadata() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         auth.add_key_version(
             "app_key_1",
@@ -288,7 +288,7 @@ mod security_tests {
     /// Verifies that revoked keys are correctly invalidated.
     #[tokio::test]
     async fn test_api_key_revocation() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         // Add key and verify it works
         auth.add_key_version(
@@ -584,7 +584,7 @@ mod security_tests {
     /// Verifies that successful requests are correctly logged.
     #[tokio::test]
     async fn test_audit_log_successful_request() {
-        let logger = AppAuditLogger::with_limit(100);
+        let logger = SdForgeAuditLogger::with_limit(100);
         let context = create_test_context(Some("user123"));
 
         // Log a successful action
@@ -606,7 +606,7 @@ mod security_tests {
     /// with error messages.
     #[tokio::test]
     async fn test_audit_log_failed_authentication() {
-        let logger = AppAuditLogger::with_limit(100);
+        let logger = SdForgeAuditLogger::with_limit(100);
         let context = create_test_context(Some("anonymous"));
 
         // Log a failed authentication
@@ -640,7 +640,7 @@ mod security_tests {
     /// and can be retrieved.
     #[tokio::test]
     async fn test_audit_log_multiple_entries() {
-        let logger = AppAuditLogger::with_limit(100);
+        let logger = SdForgeAuditLogger::with_limit(100);
         let context = create_test_context(Some("user456"));
 
         // Log multiple actions
@@ -676,7 +676,7 @@ mod security_tests {
     /// Verifies that the audit logger builder correctly configures parameters.
     #[tokio::test]
     async fn test_audit_logger_builder_configuration() {
-        let logger = AppAuditLogger::builder()
+        let logger = SdForgeAuditLogger::builder()
             .max_logs_per_user(500)
             .max_concurrent_ops(50)
             .queue_size(2000)
@@ -699,7 +699,7 @@ mod security_tests {
     /// Verifies that logs can be cleared for a specific user.
     #[tokio::test]
     async fn test_audit_log_clear() {
-        let logger = AppAuditLogger::with_limit(100);
+        let logger = SdForgeAuditLogger::with_limit(100);
         let context = create_test_context(Some("user789"));
 
         // Add logs
@@ -724,7 +724,7 @@ mod security_tests {
     /// Verifies that sensitive data is properly sanitized in logs.
     #[tokio::test]
     async fn test_audit_log_sanitization() {
-        let logger = AppAuditLogger::with_limit(100);
+        let logger = SdForgeAuditLogger::with_limit(100);
         let context = create_test_context(Some("security_test_user"));
 
         // Log with potentially sensitive data in message
@@ -762,7 +762,7 @@ mod security_tests {
     /// Verifies that Bearer token validation can be combined with audit logging.
     #[tokio::test]
     async fn test_bearer_with_audit_logging() {
-        let logger = AppAuditLogger::with_limit(100);
+        let logger = SdForgeAuditLogger::with_limit(100);
 
         // Log the authentication attempt
         let context = create_test_context(Some("service_account"));
@@ -781,8 +781,8 @@ mod security_tests {
     /// Simulates a complete security flow: authentication -> logging.
     #[tokio::test]
     async fn test_end_to_end_security_flow() {
-        let auth = AppApiKeyAuth::new();
-        let logger = AppAuditLogger::with_limit(100);
+        let auth = SdForgeApiKeyAuth::new();
+        let logger = SdForgeAuditLogger::with_limit(100);
 
         // Setup
         auth.add_key("e2e_test_key", vec!["admin".to_string()]);
@@ -810,8 +810,8 @@ mod security_tests {
     /// Verifies that the system gracefully handles requests with unknown keys.
     #[tokio::test]
     async fn test_unknown_key_graceful_handling() {
-        let auth = AppApiKeyAuth::new();
-        let logger = AppAuditLogger::with_limit(100);
+        let auth = SdForgeApiKeyAuth::new();
+        let logger = SdForgeAuditLogger::with_limit(100);
         let context = create_test_context(Some("unknown_user"));
 
         // Try to validate unknown key
@@ -844,7 +844,7 @@ mod security_tests {
     /// Verifies that keys with empty permissions are handled correctly.
     #[tokio::test]
     async fn test_empty_permissions() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         auth.add_key("empty_perms_key", vec![]);
 
         let result = auth.validate_key("empty_perms_key", "192.168.1.100");
@@ -906,7 +906,7 @@ mod security_tests {
     /// Verifies that API key validation works with various client IPs.
     #[tokio::test]
     async fn test_api_key_different_client_ips() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         let test_key = "ip_test_key";
         auth.add_key(test_key, vec!["read".to_string()]);
 
@@ -928,7 +928,7 @@ mod security_tests {
     /// Verifies that missing API key is handled correctly.
     #[tokio::test]
     async fn test_api_key_missing_header() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         // Simulate missing API key (empty string)
         let result = auth.validate_key("", "192.168.1.100");
@@ -962,7 +962,7 @@ mod security_tests {
     /// Verifies that the same key always produces the same result.
     #[tokio::test]
     async fn test_api_key_hash_consistency() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
         let test_key = "consistency_test_key";
         auth.add_key(test_key, vec!["admin".to_string()]);
 
@@ -982,7 +982,7 @@ mod security_tests {
     /// Verifies that multiple API keys can coexist.
     #[tokio::test]
     async fn test_multiple_api_keys() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         // Add multiple keys
         auth.add_key("key1", vec!["read".to_string()]);
@@ -1008,7 +1008,7 @@ mod security_tests {
     /// Verifies that permissions can be updated by adding same key.
     #[tokio::test]
     async fn test_api_key_update_permissions() {
-        let auth = AppApiKeyAuth::new();
+        let auth = SdForgeApiKeyAuth::new();
 
         // Add key with initial permissions
         auth.add_key("update_test_key", vec!["read".to_string()]);
@@ -1026,7 +1026,7 @@ mod security_tests {
     /// Verifies that audit logs include metadata correctly.
     #[tokio::test]
     async fn test_audit_log_with_metadata() {
-        let logger = AppAuditLogger::with_limit(100);
+        let logger = SdForgeAuditLogger::with_limit(100);
 
         let metadata = AuthMetadata::new(
             Some("203.0.113.50".to_string()),

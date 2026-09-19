@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! E2E advanced tests covering uncovered scenarios from `temp/feature-usage-scenarios.md`.
 //!
@@ -191,7 +191,7 @@ mod cache_advanced {
 #[cfg(feature = "http")]
 mod config_advanced {
     use sdforge::config::{
-        AppConfig, AuthConfig, ConfigError, CorsConfig, ServerConfig, TimeoutConfig, ValidateConfig,
+        SdForgeConfig, AuthConfig, ConfigError, CorsConfig, ServerConfig, TimeoutConfig, ValidateConfig,
     };
 
     #[test]
@@ -392,7 +392,7 @@ mod config_advanced {
 
     #[test]
     fn test_config_app_config_validate_invalid_server() {
-        let config = AppConfig {
+        let config = SdForgeConfig {
             server: ServerConfig {
                 host: "localhost".to_string(),
                 port: 0,
@@ -409,7 +409,7 @@ mod config_advanced {
 
     #[test]
     fn test_config_app_config_builder_valid() {
-        let config = AppConfig::builder()
+        let config = SdForgeConfig::builder()
             .server(ServerConfig {
                 host: "0.0.0.0".to_string(),
                 port: 8080,

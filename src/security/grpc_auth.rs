@@ -1,13 +1,13 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Non-HTTP protocol authentication port.
 //!
 //! Protocol-neutral verifier consumed by the gRPC interceptor
 //! (`SdForgeGrpcService::with_auth_interceptor`) — and usable by any other
 //! transport — reusing the same credential stores as the HTTP stack
-//! (`BearerAuth` JWT / `AppApiKeyAuth` API keys).
+//! (`BearerAuth` JWT / `SdForgeApiKeyAuth` API keys).
 
-use crate::security::{AppApiKeyAuth, BearerAuth};
+use crate::security::{SdForgeApiKeyAuth, BearerAuth};
 use std::sync::Arc;
 
 /// Verifies transport credentials for non-HTTP protocols.
@@ -55,17 +55,17 @@ impl GrpcAuthVerifier for BearerVerifier {
     }
 }
 
-/// API-key verifier backed by [`AppApiKeyAuth`] (same key store as the HTTP
+/// API-key verifier backed by [`SdForgeApiKeyAuth`] (same key store as the HTTP
 /// middleware).
 pub struct ApiKeyVerifier {
-    auth: Arc<AppApiKeyAuth>,
+    auth: Arc<SdForgeApiKeyAuth>,
     /// Required key prefix (e.g. `sk_`); empty = raw keys.
     prefix: String,
 }
 
 impl ApiKeyVerifier {
     /// Build from a seeded key store and prefix.
-    pub fn new(auth: Arc<AppApiKeyAuth>, prefix: impl Into<String>) -> Self {
+    pub fn new(auth: Arc<SdForgeApiKeyAuth>, prefix: impl Into<String>) -> Self {
         Self {
             auth,
             prefix: prefix.into(),
@@ -116,7 +116,7 @@ mod tests {
 
     #[test]
     fn api_key_verifier_rejects_missing_and_wrong_keys() {
-        let store = Arc::new(AppApiKeyAuth::new());
+        let store = Arc::new(SdForgeApiKeyAuth::new());
         store.add_key("secret-key-1".to_string(), vec!["admin".to_string()]);
         let v = ApiKeyVerifier::new(store, "sk_");
         assert!(v.verify(None, None).is_err());

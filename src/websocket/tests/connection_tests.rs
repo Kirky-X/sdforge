@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 use crate::websocket::*;
 use futures_util::FutureExt;
@@ -62,7 +62,7 @@ fn test_websocket_config_with_auth() {
     assert!(config.auth.is_some());
 }
 
-/// Test AppState creation with custom config
+/// Test SdForgeState creation with custom config
 #[cfg(feature = "security")]
 #[test]
 fn test_app_state_with_config() {
@@ -74,7 +74,7 @@ fn test_app_state_with_config() {
         auth: Some(auth),
         ..Default::default()
     };
-    let state = AppState::with_config(config, manager.clone());
+    let state = SdForgeState::with_config(config, manager.clone());
     assert!(state.config.auth.is_some());
 }
 
@@ -235,7 +235,7 @@ async fn connection_manager_default() {
 #[test]
 fn app_state_new_default_config() {
     let manager = Arc::new(ConnectionManager::new());
-    let state = AppState::new(manager);
+    let state = SdForgeState::new(manager);
     assert!(state.config.auth.is_none());
 }
 
@@ -243,7 +243,7 @@ fn app_state_new_default_config() {
 #[test]
 fn app_state_clone() {
     let manager = Arc::new(ConnectionManager::new());
-    let state = AppState::new(manager);
+    let state = SdForgeState::new(manager);
     let cloned = state.clone();
     assert!(cloned.config.auth.is_none());
 }
@@ -283,12 +283,12 @@ async fn connection_manager_broadcast_single() {
     }
 }
 
-/// Test AppState::with_config preserves custom `max_message_size`.
+/// Test SdForgeState::with_config preserves custom `max_message_size`.
 ///
 /// Replaces the old `app_state_with_config_preserves_rate_limit` test
 /// the `RateLimitConfig` struct is gone; we now verify
 /// that the migrated `max_message_size` field survives the round-trip
-/// through `AppState::with_config`.
+/// through `SdForgeState::with_config`.
 #[cfg(feature = "websocket")]
 #[test]
 fn app_state_with_config_preserves_max_message_size() {
@@ -297,11 +297,11 @@ fn app_state_with_config_preserves_max_message_size() {
         max_message_size: 2048,
         ..Default::default()
     };
-    let state = AppState::with_config(config, manager.clone());
+    let state = SdForgeState::with_config(config, manager.clone());
     assert_eq!(state.config.max_message_size, 2048);
 }
 
-/// Test AppState::with_config preserves custom config (with auth)
+/// Test SdForgeState::with_config preserves custom config (with auth)
 #[cfg(feature = "security")]
 #[test]
 fn app_state_with_config_preserves_settings() {
@@ -311,21 +311,21 @@ fn app_state_with_config_preserves_settings() {
         max_message_size: 2048,
         ..Default::default()
     };
-    let state = AppState::with_config(config, manager.clone());
+    let state = SdForgeState::with_config(config, manager.clone());
     assert_eq!(state.config.max_message_size, 2048);
 }
 
-/// Test AppState clone shares underlying data
+/// Test SdForgeState clone shares underlying data
 #[test]
 fn app_state_clone_shares_data() {
     let manager = Arc::new(ConnectionManager::new());
-    let state = AppState::new(manager.clone());
+    let state = SdForgeState::new(manager.clone());
     let cloned = state.clone();
     assert!(Arc::ptr_eq(&state.manager, &cloned.manager));
     assert!(Arc::ptr_eq(&state.config, &cloned.config));
 }
 
-/// Test AppState full config with auth
+/// Test SdForgeState full config with auth
 #[cfg(feature = "security")]
 #[test]
 fn app_state_full_config() {
@@ -337,7 +337,7 @@ fn app_state_full_config() {
         max_message_size: 2_097_152,
         ..Default::default()
     };
-    let state = AppState::with_config(config, manager);
+    let state = SdForgeState::with_config(config, manager);
     assert!(state.config.auth.is_some());
     assert_eq!(state.config.max_message_size, 2_097_152);
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Prometheus metrics.
 //!
@@ -309,7 +309,7 @@ mod tests {
     #[serial_test::serial]
     async fn metrics_endpoint_serves_prometheus_text() {
         global_registry().reset();
-        let router = crate::http::build_with_config(&crate::config::AppConfig::default()).unwrap();
+        let router = crate::http::build_with_config(&crate::config::SdForgeConfig::default()).unwrap();
         // generate some traffic through an inventory route? /metrics itself is skipped;
         // just verify the endpoint content type + format header lines.
         let resp = router

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Built-in health probes.
 //!
@@ -18,7 +18,7 @@
 //! # Example
 //!
 //! ```ignore
-//! let config = AppConfig::default();
+//! let config = SdForgeConfig::default();
 //! let router = sdforge::http::build_with_config(&config)?;
 //! // GET /healthz -> 200 {"status":"healthy",...}
 //! // GET /readyz  -> 200 {"status":"ready","checks":[...]} or 503

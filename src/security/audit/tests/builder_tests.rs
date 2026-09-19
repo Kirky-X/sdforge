@@ -1,6 +1,6 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! Tests for `AppAuditLoggerBuilder` and `AppAuditLogger::builder()`.
+//! Tests for `AppAuditLoggerBuilder` and `SdForgeAuditLogger::builder()`.
 
 use super::super::*;
 use super::make_test_audit_log;
@@ -67,12 +67,12 @@ async fn test_builder_build() {
 }
 
 // ============================================================================
-// AppAuditLogger::builder() Tests
+// SdForgeAuditLogger::builder() Tests
 // ============================================================================
 
 #[test]
 fn test_audit_logger_builder_method() {
-    let builder = AppAuditLogger::builder();
+    let builder = SdForgeAuditLogger::builder();
     assert_eq!(builder.max_logs_per_user, 1000);
     assert_eq!(builder.max_concurrent_ops, 100);
     assert_eq!(builder.queue_size, 1000);
@@ -80,7 +80,7 @@ fn test_audit_logger_builder_method() {
 
 #[tokio::test]
 async fn test_default_audit_logger() {
-    let logger = AppAuditLogger::default();
+    let logger = SdForgeAuditLogger::default();
     assert_eq!(logger.max_logs_per_user, 1000);
 }
 
@@ -93,7 +93,7 @@ async fn test_default_audit_logger() {
 
 #[tokio::test]
 async fn test_builder_build_worker_merges_fallback() {
-    let logger = AppAuditLogger::builder()
+    let logger = SdForgeAuditLogger::builder()
         .max_logs_per_user(100)
         .max_concurrent_ops(10)
         .queue_size(100)

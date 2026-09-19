@@ -89,7 +89,7 @@
 
 | 类型/函数 | 说明 |
 |-----------|------|
-| `AppConfig` / `AppConfigBuilder` | 应用配置聚合根与 Builder（含 `security` / `cache` 字段与 `build_rate_limiter()` 自动装配） |
+| `SdForgeConfig` / `SdForgeConfigBuilder` | 应用配置聚合根与 Builder（含 `security` / `cache` 字段与 `build_rate_limiter()` 自动装配） |
 | `ServerConfig` / `TlsConfig` / `TimeoutConfig` | 监听（默认 `127.0.0.1:8080`、30s 超时）、TLS、超时 |
 | `ApiConfig` / `TracingConfig` / `EnvHelper` | API 行为（路由前缀、默认版本）、追踪配置、运行环境名称辅助（`environment` 字段） |
 | `AuthConfig` / `ApiKeySeed` | 认证配置与 API Key 播种 |
@@ -103,7 +103,7 @@ HTTP 构建入口 `sdforge::http`（`http` feature）：
 | 函数/类型 | 说明 |
 |-----------|------|
 | `build() -> Router` | 从 inventory 注册项构建 Axum Router（开箱即用） |
-| `build_with_config(&AppConfig) -> Result<Router, ConfigError>` | 按配置构建（自动装配中间件与 health/metrics 探针） |
+| `build_with_config(&SdForgeConfig) -> Result<Router, ConfigError>` | 按配置构建（自动装配中间件与 health/metrics 探针） |
 | `build_with_redirect() -> Router` | 含重定向行为的构建 |
 | `build_json_response` / `build_fallback_response` | JSON 响应与兜底响应构造 |
 | `HttpRoute` / `RouteRegistration` | 路由描述与 inventory 注册项 |
@@ -151,7 +151,7 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 | `grpc` | `sdforge::grpc` | `SdForgeGrpcService`（`Call` / `GetInfo`）、`GrpcServerConfig`（`state: Option<Arc<dyn Any + Send + Sync>>`、`require_auth`、`rate_limiter`）、`build_server(_with_config)`、`GrpcRoute`、`CallRequest` / `CallResponse` / `InfoRequest` / `InfoResponse`、`SdForgeServiceServer`；`tonic` / `prost` re-export |
 | `websocket` | `sdforge::websocket` | `WebSocketRoute` / `WebSocketHandler`、`websocket_upgrade` / `ValidatedWebSocketUpgrade`、`ConnectionManager`、`WebSocketConfig` / `WebSocketConnection` / `WebSocketMessage`、`parse_websocket_message` |
 | `streaming` | `sdforge::streaming` | `StreamEvent`、`StreamResponse`、`stream_to_sse`、`create_stream_channel`；`tokio_stream` re-export |
-| `security` / `ratelimit` / `ratelimit-http` | `sdforge::security` | 认证：`ApiKeyAuth`、`BearerAuth(+Builder)`、`AppApiKeyAuth(+Builder)`、`AuthContext`、`AuthExtractor`、`auth_middleware`；审计：`AuditLogger` / `AppAuditLogger(+Builder)`、`AuditLog` / `AuditResult`、`AuditSink`；限流：`RateLimiter` trait、`LimiteronAdapter`、`RateLimitLayer`（`ratelimit-http`） |
+| `security` / `ratelimit` / `ratelimit-http` | `sdforge::security` | 认证：`ApiKeyAuth`、`BearerAuth(+Builder)`、`SdForgeApiKeyAuth(+Builder)`、`AuthContext`、`AuthExtractor`、`auth_middleware`；审计：`AuditLogger` / `SdForgeAuditLogger(+Builder)`、`AuditLog` / `AuditResult`、`AuditSink`；限流：`RateLimiter` trait、`LimiteronAdapter`、`RateLimitLayer`（`ratelimit-http`） |
 | `cache` | `sdforge::cache` | `Cache` / `CacheKey`、`SyncCache` / `SharedCache`、`DashMapCache`（`OxcacheSyncCache` 别名）、`ResponseCacheLayer` / `ResponseCacheMiddleware`（另需 `http`）；`oxcache` re-export |
 | `openapi` | `sdforge::openapi` | `generate_openapi_spec()`、`OpenApiBuilder`（`title` / `version` / `description` / `build`）、`OpenApiRouteInfo` / `OpenApiPathParam`；`utoipa` re-export |
 | `cli` | `sdforge::cli` | `CliBuilder`（`new`、`with_dependencies`、`with_name`、`with_global_arg`、`build -> clap::Command`、`execute -> !`）、`dispatch`、`GlobalArg`、`CliCommandRegistration` / `CliHandlerRegistration`；`clap` re-export |

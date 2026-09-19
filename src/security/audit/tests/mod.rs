@@ -1,13 +1,13 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Audit module test suites.
 //!
 //! Tests are organized by responsibility:
 //! - `audit_logger_tests`: core logger functionality (`sanitize_error_message`,
-//!   `AppAuditLogger` logging/get/clear, key rotation, total/dropped counts,
+//!   `SdForgeAuditLogger` logging/get/clear, key rotation, total/dropped counts,
 //!   failure sanitization, trait impl, multi-user, truncation, serialization,
 //!   signing key, fallback merge, dedup, worker drain, channel/semaphore edges)
-//! - `builder_tests`: `AppAuditLoggerBuilder` and `AppAuditLogger::builder()`
+//! - `builder_tests`: `AppAuditLoggerBuilder` and `SdForgeAuditLogger::builder()`
 //!   construction, defaults, chaining, `build()`, and builder worker fallback merge
 
 mod audit_logger_tests;

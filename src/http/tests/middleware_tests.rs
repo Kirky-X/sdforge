@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tests for middleware execution via real requests: request ID middleware,
 //! JWT and ApiKey auth middleware (security feature), and hot-reload
@@ -9,9 +9,9 @@ use axum::Router;
 use axum::body::Body;
 
 #[cfg(feature = "security")]
-use crate::config::{ApiKeySeed, AppConfig, AuthConfig, ServerConfig};
+use crate::config::{ApiKeySeed, SdForgeConfig, AuthConfig, ServerConfig};
 #[cfg(not(feature = "security"))]
-use crate::config::{AppConfig, AuthConfig, ServerConfig};
+use crate::config::{SdForgeConfig, AuthConfig, ServerConfig};
 use crate::http::{X_REQUEST_ID, build_with_config};
 
 // ============================================================================
@@ -23,7 +23,7 @@ use crate::http::{X_REQUEST_ID, build_with_config};
 #[cfg(not(feature = "context"))]
 #[tokio::test]
 async fn test_request_id_middleware_generates_uuid_when_absent() {
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -57,7 +57,7 @@ async fn test_request_id_middleware_generates_uuid_when_absent() {
 
 #[tokio::test]
 async fn test_request_id_middleware_preserves_custom_id() {
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -89,7 +89,7 @@ async fn test_request_id_middleware_preserves_custom_id() {
 #[cfg(not(feature = "context"))]
 #[tokio::test]
 async fn test_request_id_middleware_non_utf8_header_generates_uuid() {
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -150,7 +150,7 @@ fn create_test_jwt(secret: &[u8], payload: &serde_json::Value) -> String {
 
 #[cfg(feature = "security")]
 fn build_jwt_test_router(secret: &str) -> Router {
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -276,7 +276,7 @@ async fn test_jwt_auth_valid_token_returns_200() {
 
 #[cfg(feature = "security")]
 fn build_apikey_test_router(header_name: &str, prefix: &str) -> Router {
-    let config = AppConfig {
+    let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
             port: 8080,
@@ -378,7 +378,7 @@ async fn test_apikey_auth_empty_prefix_returns_401() {
 #[tokio::test]
 async fn test_apikey_auth_unregistered_key_returns_401() {
     // Valid format (correct prefix) but key is not registered in the
-    // empty AppApiKeyAuth — validate_key returns None (lines 322-324)
+    // empty SdForgeApiKeyAuth — validate_key returns None (lines 322-324)
     let router = build_apikey_test_router("X-API-Key", "key-");
     let response = tower::ServiceExt::oneshot(
         router,

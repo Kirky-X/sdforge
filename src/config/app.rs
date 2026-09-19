@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Application configuration
 //!
@@ -13,7 +13,7 @@ use crate::config::{AuthConfig, ServerConfig, TimeoutConfig};
 /// Application configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
-pub struct AppConfig {
+pub struct SdForgeConfig {
     /// Server configuration
     pub server: ServerConfig,
     /// Authentication configuration
@@ -29,10 +29,10 @@ pub struct AppConfig {
     pub cache: crate::config::CacheConfig,
 }
 
-impl AppConfig {
+impl SdForgeConfig {
     /// Create builder for configuration
-    pub fn builder() -> AppConfigBuilder {
-        AppConfigBuilder::default()
+    pub fn builder() -> SdForgeConfigBuilder {
+        SdForgeConfigBuilder::default()
     }
 
     /// Validate configuration with cross-field validation
@@ -83,16 +83,16 @@ impl AppConfig {
     }
 }
 
-impl crate::config::ValidateConfig for AppConfig {
+impl crate::config::ValidateConfig for SdForgeConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
         // Delegate to inherent method to keep a single source of truth.
         // Previously this body was a near-duplicate of the inherent impl and
         // contained a YAGNI "Cross-field validation" placeholder comment.
-        AppConfig::validate(self)
+        SdForgeConfig::validate(self)
     }
 }
 
-impl Default for AppConfig {
+impl Default for SdForgeConfig {
     fn default() -> Self {
         Self {
             server: ServerConfig::default(),
@@ -106,9 +106,9 @@ impl Default for AppConfig {
     }
 }
 
-/// Builder for AppConfig
+/// Builder for SdForgeConfig
 #[derive(Default)]
-pub struct AppConfigBuilder {
+pub struct SdForgeConfigBuilder {
     server: Option<ServerConfig>,
     authentication: Option<AuthConfig>,
     timeout: Option<TimeoutConfig>,
@@ -118,7 +118,7 @@ pub struct AppConfigBuilder {
     cache: Option<crate::config::CacheConfig>,
 }
 
-impl AppConfigBuilder {
+impl SdForgeConfigBuilder {
     /// Set server configuration
     pub fn server(mut self, server: ServerConfig) -> Self {
         self.server = Some(server);
@@ -151,15 +151,15 @@ impl AppConfigBuilder {
         self
     }
 
-    /// Build AppConfig with validation
+    /// Build SdForgeConfig with validation
     ///
     /// `timeout` 缺省时回退到 `TimeoutConfig::default()`，
-    /// 与 `AppConfig::default()` 的行为保持一致。
+    /// 与 `SdForgeConfig::default()` 的行为保持一致。
     /// 原代码 `timeout: self.timeout` 在调用方未设置时产生 `None`，
     /// 而 `Default` 产生 `Some(TimeoutConfig::default())`，
     /// 导致两条构造路径语义不一致，下游 `if let Some(timeout)` 检查可能跳过验证。
-    pub fn build(self) -> Result<AppConfig, crate::config::ConfigError> {
-        let config = AppConfig {
+    pub fn build(self) -> Result<SdForgeConfig, crate::config::ConfigError> {
+        let config = SdForgeConfig {
             server: self.server.unwrap_or_default(),
             authentication: self.authentication.unwrap_or_default(),
             timeout: self.timeout.or_else(|| Some(TimeoutConfig::default())),
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn test_app_config_default() {
-        let config = AppConfig::default();
+        let config = SdForgeConfig::default();
         // ServerConfig::default() 现在使用 fail-safe 常量
         assert_eq!(config.server.host, "127.0.0.1"); // fail-safe loopback
         assert_eq!(config.server.port, 8080);
@@ -194,7 +194,7 @@ mod tests {
 
     #[test]
     fn test_app_config_builder() {
-        let result = AppConfig::builder()
+        let result = SdForgeConfig::builder()
             .server(ServerConfig {
                 host: "127.0.0.1".to_string(),
                 port: 9000,
@@ -211,13 +211,13 @@ mod tests {
         assert_eq!(config.server.port, 9000);
     }
 
-    /// Cover the `ValidateConfig for AppConfig` trait impl (lines 50, 54)
+    /// Cover the `ValidateConfig for SdForgeConfig` trait impl (lines 50, 54)
     /// which delegates to the inherent `validate()` method. Existing tests
     /// only call the inherent method, leaving the trait impl body uncovered.
     #[test]
     fn test_validate_config_trait_for_app_config() {
         use crate::config::ValidateConfig;
-        let config = AppConfig::default();
+        let config = SdForgeConfig::default();
         assert!(ValidateConfig::validate(&config).is_ok());
     }
 }
