@@ -1857,7 +1857,8 @@ mod cross_module_advanced {
     fn test_cross_error_localized_fr_not_found() {
         let err = ApiError::not_found("User", None);
         let msg = err.localized_message(&"fr".to_string());
-        assert!(msg.contains("Ressource introuvable"));
+        // unify-rust-i18n: 第三语言（fr）不再内建，回退英文规范 Display。
+        assert!(msg.contains("Resource not found"));
         assert!(msg.contains("User"));
     }
 
@@ -1865,14 +1866,16 @@ mod cross_module_advanced {
     fn test_cross_error_localized_fr_fr_variant() {
         let err = ApiError::not_found("Doc", None);
         let msg = err.localized_message(&"fr-FR".to_string());
-        assert!(msg.contains("Ressource introuvable"));
+        // unify-rust-i18n: fr-FR 回退英文规范 Display。
+        assert!(msg.contains("Resource not found"));
     }
 
     #[test]
     fn test_cross_error_localized_es_not_found() {
         let err = ApiError::not_found("User", None);
         let msg = err.localized_message(&"es".to_string());
-        assert!(msg.contains("Recurso no encontrado"));
+        // unify-rust-i18n: 第三语言（es）不再内建，回退英文规范 Display。
+        assert!(msg.contains("Resource not found"));
         assert!(msg.contains("User"));
     }
 
@@ -1880,7 +1883,8 @@ mod cross_module_advanced {
     fn test_cross_error_localized_es_es_variant() {
         let err = ApiError::not_found("Doc", None);
         let msg = err.localized_message(&"es-ES".to_string());
-        assert!(msg.contains("Recurso no encontrado"));
+        // unify-rust-i18n: es-ES 回退英文规范 Display。
+        assert!(msg.contains("Resource not found"));
     }
 
     #[test]

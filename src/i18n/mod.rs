@@ -55,7 +55,11 @@
 // ============================================================================
 
 use std::collections::HashMap;
-use std::sync::{LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex, OnceLock};
+
+use fluent_bundle::concurrent::FluentBundle;
+use fluent_bundle::{FluentArgs, FluentResource, FluentValue};
+use unic_langid::LanguageIdentifier;
 
 /// Embedded built-in catalog for English (compile-time `include_str!`).
 const EN_FTL: &str = include_str!("../../locales/en/messages.ftl");
@@ -63,66 +67,93 @@ const EN_FTL: &str = include_str!("../../locales/en/messages.ftl");
 /// Embedded built-in catalog for Simplified Chinese (compile-time `include_str!`).
 const ZH_FTL: &str = include_str!("../../locales/zh/messages.ftl");
 
-/// Global translation state: active locale + host translations + built-in catalog.
+/// Global translation state: active locale + host translations. The built-in
+/// en/zh catalog lives in the [`EN_BUNDLE`] / [`ZH_BUNDLE`] Fluent bundles.
 struct TranslationRegistry {
     /// Active locale. Empty until [`set_locale`] is called or the first
     /// [`get_locale`] triggers lazy system-locale detection.
     locale: String,
-    /// Host-registered translations — always win over `builtin`.
+    /// Host-registered translations — always win over the built-in catalog.
     translations: HashMap<(String, String), String>,
-    /// Built-in en/zh catalog loaded from the embedded FTL files at init.
-    builtin: HashMap<(String, String), String>,
 }
 
 static REGISTRY: LazyLock<Mutex<TranslationRegistry>> = LazyLock::new(|| {
     Mutex::new(TranslationRegistry {
         locale: String::new(),
         translations: HashMap::new(),
-        builtin: load_builtin_catalog(),
     })
 });
 
-/// Parse a flat Fluent (FTL) resource into `(key, value)` pairs.
+// ============================================================================
+// Built-in Fluent bundles (en/zh) — dbnexus catalog.rs concurrent pattern.
+// ============================================================================
+
+/// Cached concurrent Fluent bundle for the built-in English catalog
+/// (thread-safe, built once on first access).
+static EN_BUNDLE: OnceLock<FluentBundle<FluentResource>> = OnceLock::new();
+
+/// Cached concurrent Fluent bundle for the built-in Simplified Chinese catalog.
+static ZH_BUNDLE: OnceLock<FluentBundle<FluentResource>> = OnceLock::new();
+
+/// Format the built-in message `key` for `lang` (`"en"` / `"zh"`) with `args`.
 ///
-/// Only the subset used by the bundled catalogs is handled: one
-/// `key = value` entry per line; blank lines and `#` comments are skipped.
-/// `{ $name }` placeholders are kept verbatim in the stored template and
-/// substituted by [`format_template`] at lookup time.
-fn parse_ftl(source: &str) -> Vec<(String, String)> {
-    source
-        .lines()
-        .filter_map(|line| {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                return None;
-            }
-            let (key, value) = trimmed.split_once('=')?;
-            let key = key.trim();
-            if key.is_empty() {
-                return None;
-            }
-            Some((key.to_string(), value.trim().to_string()))
-        })
-        .collect()
+/// The built-in catalog ships for en/zh only, so any other locale misses here
+/// (callers fall back to the English bundle via [`translate_for`]). Returns
+/// `None` for unknown keys too; `{ $name }` placeholders are interpolated by
+/// the Fluent engine and never panic.
+fn format_from_builtin(lang: &str, key: &str, args: &[(&str, String)]) -> Option<String> {
+    let bundle = match lang {
+        "zh" => ZH_BUNDLE.get_or_init(build_zh_bundle),
+        "en" => EN_BUNDLE.get_or_init(build_en_bundle),
+        // No built-in resources for other locales → miss (en fallback upstream).
+        _ => return None,
+    };
+
+    let msg = bundle.get_message(key)?;
+    let pattern = msg.value()?;
+
+    let mut fluent_args = FluentArgs::new();
+    for (name, value) in args {
+        fluent_args.set(*name, FluentValue::from(value.clone()));
+    }
+
+    let mut errors = vec![];
+    let result = bundle.format_pattern(pattern, Some(&fluent_args), &mut errors);
+    Some(result.to_string())
 }
 
-/// Load the built-in en/zh catalogs from the embedded FTL files.
-fn load_builtin_catalog() -> HashMap<(String, String), String> {
-    let mut catalog = HashMap::new();
-    for (key, value) in parse_ftl(EN_FTL) {
-        catalog.insert(("en".to_string(), key), value);
-    }
-    for (key, value) in parse_ftl(ZH_FTL) {
-        catalog.insert(("zh".to_string(), key), value);
-    }
-    catalog
+fn build_en_bundle() -> FluentBundle<FluentResource> {
+    build_bundle("en", EN_FTL)
 }
 
-/// Substitute `{ $name }` placeholders in a catalog template with `args`.
+fn build_zh_bundle() -> FluentBundle<FluentResource> {
+    build_bundle("zh", ZH_FTL)
+}
+
+/// Parse `source` into a concurrent Fluent bundle for `lang`.
 ///
-/// Placeholders without a matching argument are left untouched; substituted
-/// values are never re-scanned. Templates without placeholders are returned
-/// unchanged.
+/// A malformed resource keeps its partial contents (`try_new` error payload),
+/// so a broken catalog degrades to missing keys instead of panicking.
+fn build_bundle(lang: &str, source: &'static str) -> FluentBundle<FluentResource> {
+    let resource = FluentResource::try_new(source.to_string()).unwrap_or_else(|e| e.0);
+    let langid: LanguageIdentifier = lang
+        .parse()
+        .unwrap_or_else(|_| LanguageIdentifier::default());
+    let mut bundle = FluentBundle::new_concurrent(vec![langid]);
+    bundle.set_use_isolating(false);
+    bundle
+        .add_resource(resource)
+        .unwrap_or_else(|e| panic!("{lang} resources should add without conflict: {e:?}"));
+    bundle
+}
+
+/// Substitute `{ $name }` placeholders in a **host-registered** template with
+/// `args`.
+///
+/// Host registrations store arbitrary text, so this keeps the lightweight
+/// substitution rules instead of the Fluent engine: placeholders without a
+/// matching argument are left untouched; substituted values are never
+/// re-scanned; templates without placeholders are returned unchanged.
 fn format_template(template: &str, args: &[(&str, String)]) -> String {
     if args.is_empty() || !template.contains('{') {
         return template.to_string();
@@ -295,14 +326,15 @@ pub fn translate_for(locale: &str, key: &str, args: &[(&str, String)]) -> String
 }
 
 /// Look up `key` for `locale` (host registrations first, then the built-in
-/// catalog) and format its template with `args`.
+/// en/zh Fluent catalog) and format it with `args`.
 fn lookup_translation(locale: &str, key: &str, args: &[(&str, String)]) -> Option<String> {
     let reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
-    let template = reg
-        .translations
-        .get(&(locale.to_string(), key.to_string()))
-        .or_else(|| reg.builtin.get(&(locale.to_string(), key.to_string())))?;
-    Some(format_template(template, args))
+    match reg.translations.get(&(locale.to_string(), key.to_string())) {
+        // Host registration wins; its template keeps the lightweight
+        // `{ $name }` substitution (host strings are arbitrary text).
+        Some(template) => Some(format_template(template, args)),
+        None => format_from_builtin(locale, key, args),
+    }
 }
 
 /// Look up a translation for the active locale, falling back to `default`
@@ -602,9 +634,18 @@ mod builtin_catalog_tests {
     use super::*;
     use std::collections::BTreeSet;
 
-    /// Extract the key set of an FTL source (line-based `key = ` prefix).
+    /// Extract the key set of an FTL source (line-based `key = ` prefix;
+    /// blank lines and `#` comments skipped — matches the top-level key
+    /// discovery of the Fluent parser for the flat bundled catalogs).
     fn keys_of(source: &str) -> BTreeSet<String> {
-        parse_ftl(source).into_iter().map(|(key, _)| key).collect()
+        source
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .filter_map(|line| line.split_once('='))
+            .map(|(key, _)| key.trim().to_string())
+            .filter(|key| !key.is_empty())
+            .collect()
     }
 
     /// 守卫：en 与 zh 内建目录键集合必须完全一致（缺键会使输出点退化为裸键）。

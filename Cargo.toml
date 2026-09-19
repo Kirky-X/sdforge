@@ -88,6 +88,11 @@ simd-json = { version = "0.18", default-features = false, features = ["serde_imp
 # 系统语言探测 - i18n 检测链尾段（SDFORGE_LANG → LC_ALL → LC_MESSAGES → LANG → sys-locale → en）
 sys-locale = { version = "0.3", default-features = false }
 
+# Fluent 本地化 - 内建 en/zh 目录经 concurrent FluentBundle 双束解析（unify-rust-i18n）；
+# 翻译注册表常驻编译，故无条件依赖（同 dbnexus/limiteron/trait-kit 口径）
+fluent-bundle = "0.16"
+unic-langid = "0.9"
+
 # 开发依赖
 tempfile = { version = "3.27", default-features = false }
 serial_test = { version = "4.0", default-features = false }
@@ -243,6 +248,12 @@ writeable = { version = "0.6", optional = true }
 # System locale detection for the i18n detection chain (i18n feature only;
 # without the feature the chain stops at the POSIX env variables).
 sys-locale = { workspace = true, optional = true }
+
+# Fluent message resolution for the built-in en/zh catalogs — the translation
+# registry (t()/translate_for()/register_translation) is always compiled, so
+# these are unconditional (not feature-gated).
+fluent-bundle = { workspace = true }
+unic-langid = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

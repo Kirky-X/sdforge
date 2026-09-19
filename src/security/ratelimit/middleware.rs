@@ -135,24 +135,26 @@ fn rate_limit_rejection_response(err: RateLimitError) -> Response {
             crate::i18n::t("ratelimit-exceeded", &[]),
             Some(*window_seconds),
         ),
-        RateLimitError::Banned { reason } => {
-            (StatusCode::FORBIDDEN, format!("Banned: {}", reason), None)
-        }
+        RateLimitError::Banned { reason } => (
+            StatusCode::FORBIDDEN,
+            crate::i18n::t("ratelimit-banned", &[("reason", reason.clone())]),
+            None,
+        ),
         RateLimitError::CircuitOpen => (
             StatusCode::SERVICE_UNAVAILABLE,
-            "Circuit breaker open".to_string(),
+            crate::i18n::t("ratelimit-circuit-open", &[]),
             // No window boundary available; suggest a conservative back-off
             // so callers don't hammer the breaker while it's half-open.
             Some(60),
         ),
         RateLimitError::QuotaExhausted { .. } => (
             StatusCode::TOO_MANY_REQUESTS,
-            "Quota exhausted".to_string(),
+            crate::i18n::t("ratelimit-quota-exhausted", &[]),
             None,
         ),
         RateLimitError::Limiteron(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal rate limit error".to_string(),
+            crate::i18n::t("ratelimit-internal-error", &[]),
             None,
         ),
     };
