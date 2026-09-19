@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tests for `stream_to_sse` SSE conversion and `StreamResponse`'s `IntoResponse`
 //! HTTP SSE response impl.

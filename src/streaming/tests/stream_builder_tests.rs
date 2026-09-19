@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tests for `StreamResponse`, `StreamEvent`, and `create_stream_channel`:
 //! construction, serialization, deserialization, channel behavior, and Debug impls.

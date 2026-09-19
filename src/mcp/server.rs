@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! `SdForgeMcpServer` — MCP server that implements rmcp's `ServerHandler` trait.
 //!

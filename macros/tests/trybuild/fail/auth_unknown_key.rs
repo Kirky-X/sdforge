@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 // unknown keys inside auth(...) are reported at the key token.
 use sdforge_macros::forge;

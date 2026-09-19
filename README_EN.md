@@ -383,7 +383,7 @@ Contributions are welcome! Development environment setup (toolchain, protoc, lef
 
 See [CHANGELOG.md](docs/CHANGELOG.md). Highlights of recent releases:
 
-- **[0.5.0-rc.3]** (2026-09-10): `ResponseCacheLayer` response caching middleware, `AppConfig` security/cache fields, `AuditSink` abstraction and `InklogAuditSink`
+- **[0.5.0-rc.3]** (2026-09-10): `ResponseCacheLayer` response caching middleware, `SdForgeConfig` security/cache fields, `AuditSink` abstraction and `InklogAuditSink`
 - **[0.5.0-rc.2]** (2026-09-07): `#[forge(status = <code>)]` custom success status codes, `i18n_key` parameter and translation registry, rmcp 2.2 → 3.2
 - **[0.4.7]** (2026-07-23): Removed tilde constraints from dependency versions; published the `bincode` RUSTSEC-2025-0141 ignore decision
 
@@ -393,7 +393,7 @@ See [CHANGELOG.md](docs/CHANGELOG.md). Highlights of recent releases:
 
 This project is licensed under **MIT + Commons Clause**: free to use, modify, and distribute under the MIT License, but selling requires separate written authorization from the licensor. See [LICENSE](LICENSE).
 
-Copyright (c) 2026 Kirky.X
+Copyright (c) 2026 Kirky.X🌠
 
 ---
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! e2e: `#[forge(on_start/on_stop)]` lifecycle hooks coordinated with
 //! the graceful-shutdown sequence.

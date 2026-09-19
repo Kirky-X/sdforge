@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tests for `BearerAuth` — construction, secret validation, JWT token
 //! verification, claim validation, token blacklist, constant-time comparison,

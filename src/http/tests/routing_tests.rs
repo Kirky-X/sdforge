@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tests for HTTP routing: `HttpRoute`/`RouteRegistration` construction,
 //! `resolve_route_path`, `build()`/`build_with_redirect()`, inventory

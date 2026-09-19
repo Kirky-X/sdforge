@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! inklog 结构化日志集成 — 将裸 `log` 输出桥接到 inklog LoggerManager。
 //!

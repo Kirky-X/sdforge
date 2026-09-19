@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tests for `SdForgeGrpcService` methods, `GrpcRoute`/`GrpcRouteRegistration`
 //! construction & accessors, `GrpcServerConfig`, address validation, `build_server`,

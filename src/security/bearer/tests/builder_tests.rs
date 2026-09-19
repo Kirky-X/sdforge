@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tests for `BearerAuthBuilder` — fluent builder pattern, secret validation
 //! at build time, and audience/issuer configuration.

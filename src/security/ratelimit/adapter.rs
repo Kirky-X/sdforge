@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! `LimiteronAdapter` — concrete `RateLimiter` wrapping `limiteron::Governor`.
 //!

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 // unknown attribute diagnostics must point at the offending key token.
 use sdforge_macros::forge;

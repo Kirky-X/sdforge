@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! # ⚠️ SECURITY DEMO ONLY（HIGH 修复 #225-228 加注）
 //!

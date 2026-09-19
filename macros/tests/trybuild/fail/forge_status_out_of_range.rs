@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! `status` 必须在 100..=999 范围内 — 99 编译失败。
 use sdforge_macros::forge;
