@@ -19,7 +19,7 @@
 #![allow(dead_code)]
 
 use sdforge::config::{
-    ApiConfig, ApiKeySeed, SdForgeConfig, AuthConfig, EnvHelper, ServerConfig, TimeoutConfig,
+    ApiConfig, ApiKeySeed, AuthConfig, EnvHelper, SdForgeConfig, ServerConfig, TimeoutConfig,
     TracingConfig,
 };
 

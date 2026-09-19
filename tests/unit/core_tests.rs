@@ -167,7 +167,7 @@ mod core_tests {
 
 #[cfg(test)]
 mod config_tests {
-    use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
+    use sdforge::config::{AuthConfig, SdForgeConfig, ServerConfig};
 
     #[test]
     fn test_app_config_default() {

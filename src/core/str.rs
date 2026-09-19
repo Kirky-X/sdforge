@@ -41,7 +41,10 @@ pub fn format_env_key(prefix: &str, key: &str) -> String {
 ///
 /// Formatted error message like "Resource not found: user" (English locale)
 pub fn format_not_found(resource: &str) -> String {
-    crate::i18n::t("core-resource-not-found", &[("resource", resource.to_string())])
+    crate::i18n::t(
+        "core-resource-not-found",
+        &[("resource", resource.to_string())],
+    )
 }
 
 /// Format a validation error message.

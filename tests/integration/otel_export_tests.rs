@@ -98,7 +98,8 @@ async fn spans_and_metrics_export_to_mock_collector() {
 
     // Generate a request span through the real middleware stack (the
     // #[forge] route above is already registered via inventory).
-    let router = sdforge::http::build_with_config(&sdforge::config::SdForgeConfig::default()).unwrap();
+    let router =
+        sdforge::http::build_with_config(&sdforge::config::SdForgeConfig::default()).unwrap();
     let resp = router
         .oneshot(
             axum::http::Request::builder()

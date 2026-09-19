@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 
-use super::{SdForgeAuditLogger, AppAuditLoggerBuilder, AuditLogBatch};
+use super::{AppAuditLoggerBuilder, AuditLogBatch, SdForgeAuditLogger};
 use crate::cache::SharedCache;
 use crate::security::{
     AuditLog, AuditResult, AuthContext, AuthMetadata, deserialize_audit_logs, serialize_audit_logs,

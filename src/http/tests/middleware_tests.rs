@@ -9,9 +9,9 @@ use axum::Router;
 use axum::body::Body;
 
 #[cfg(feature = "security")]
-use crate::config::{ApiKeySeed, SdForgeConfig, AuthConfig, ServerConfig};
+use crate::config::{ApiKeySeed, AuthConfig, SdForgeConfig, ServerConfig};
 #[cfg(not(feature = "security"))]
-use crate::config::{SdForgeConfig, AuthConfig, ServerConfig};
+use crate::config::{AuthConfig, SdForgeConfig, ServerConfig};
 use crate::http::{X_REQUEST_ID, build_with_config};
 
 // ============================================================================

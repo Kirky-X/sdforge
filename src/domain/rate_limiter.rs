@@ -92,10 +92,9 @@ impl ForgeError {
                     ("window_seconds", window_seconds.to_string()),
                 ],
             ),
-            ForgeError::Internal { message } => crate::i18n::t(
-                "forge-limiter-internal",
-                &[("message", message.clone())],
-            ),
+            ForgeError::Internal { message } => {
+                crate::i18n::t("forge-limiter-internal", &[("message", message.clone())])
+            }
             // Not in the bundled catalog yet — fall back to the canonical
             // English Display string.
             other => other.to_string(),

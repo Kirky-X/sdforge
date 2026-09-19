@@ -372,7 +372,9 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
     #[cfg(feature = "security")]
     {
         use crate::config::AuthConfig;
-        use crate::security::{SdForgeApiKeyAuth, AuthContext, AuthError, BearerAuth, auth_middleware};
+        use crate::security::{
+            AuthContext, AuthError, BearerAuth, SdForgeApiKeyAuth, auth_middleware,
+        };
         use axum::http::HeaderValue;
 
         let auth_config = &config.authentication;

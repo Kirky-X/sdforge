@@ -88,7 +88,7 @@ mod integration_tests {
 
     #[test]
     fn test_http_build_with_app_config() {
-        use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
+        use sdforge::config::{AuthConfig, SdForgeConfig, ServerConfig};
 
         let config = SdForgeConfig {
             server: ServerConfig {

@@ -191,7 +191,8 @@ mod cache_advanced {
 #[cfg(feature = "http")]
 mod config_advanced {
     use sdforge::config::{
-        SdForgeConfig, AuthConfig, ConfigError, CorsConfig, ServerConfig, TimeoutConfig, ValidateConfig,
+        AuthConfig, ConfigError, CorsConfig, SdForgeConfig, ServerConfig, TimeoutConfig,
+        ValidateConfig,
     };
 
     #[test]

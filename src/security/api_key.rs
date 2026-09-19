@@ -156,8 +156,7 @@ impl SdForgeApiKeyAuth {
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .map(|d| d.as_secs())
             .unwrap_or(u64::MAX);
-        if let Ok(bytes) = postcard::to_allocvec(&(expiry_epoch))
-        {
+        if let Ok(bytes) = postcard::to_allocvec(&(expiry_epoch)) {
             self.key_metadata
                 .set(&format!("expires:{}", key_hash), bytes);
         }
@@ -168,8 +167,7 @@ impl SdForgeApiKeyAuth {
         let Some(data) = self.key_metadata.get(&format!("expires:{}", key_hash)) else {
             return false;
         };
-        let Ok(expiry_epoch) =
-            postcard::from_bytes::<u64>(&data)else {
+        let Ok(expiry_epoch) = postcard::from_bytes::<u64>(&data) else {
             return false;
         };
         let now = std::time::SystemTime::now()
@@ -213,10 +211,8 @@ impl SdForgeApiKeyAuth {
         let metadata_key = format!("metadata:{}", key_id);
 
         let mut metadata = match self.key_metadata.get(&metadata_key) {
-            Some(data) => postcard::from_bytes::<ApiKeyMetadata>(
-            &data
-            )
-            .map_err(|e| format!("Failed to deserialize metadata: {}", e))?,
+            Some(data) => postcard::from_bytes::<ApiKeyMetadata>(&data)
+                .map_err(|e| format!("Failed to deserialize metadata: {}", e))?,
             None => ApiKeyMetadata::new(key_id, None),
         };
         metadata.add_version(ApiKeyVersion::new(
@@ -272,10 +268,8 @@ impl SdForgeApiKeyAuth {
             .get(&metadata_key)
             .ok_or_else(|| "Key not found".to_string())?;
 
-        let mut metadata: ApiKeyMetadata = postcard::from_bytes::<ApiKeyMetadata>(
-        &data
-        )
-        .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
+        let mut metadata: ApiKeyMetadata = postcard::from_bytes::<ApiKeyMetadata>(&data)
+            .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
 
         // Create new version
         let ttl = self
@@ -351,10 +345,7 @@ impl SdForgeApiKeyAuth {
     pub fn get_key_metadata(&self, key_id: &str) -> Option<ApiKeyMetadata> {
         let metadata_key = format!("metadata:{}", key_id);
         let data = self.key_metadata.get(&metadata_key)?;
-        postcard::from_bytes::<ApiKeyMetadata>(
-            &data
-            )
-            .ok()
+        postcard::from_bytes::<ApiKeyMetadata>(&data).ok()
     }
 
     /// Validate an API key with constant-time checking
@@ -422,10 +413,8 @@ impl SdForgeApiKeyAuth {
             .get(&metadata_key)
             .ok_or_else(|| "Key not found".to_string())?;
 
-        let mut metadata: ApiKeyMetadata = postcard::from_bytes::<ApiKeyMetadata>(
-        &data
-        )
-        .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
+        let mut metadata: ApiKeyMetadata = postcard::from_bytes::<ApiKeyMetadata>(&data)
+            .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
 
         // Delete each version's key_hash from valid_keys cache so revoked keys
         // can no longer authenticate (validate_key only checks valid_keys, not metadata).
@@ -442,8 +431,7 @@ impl SdForgeApiKeyAuth {
         // Save updated metadata
         self.key_metadata.set(
             &metadata_key,
-            postcard::to_allocvec(&metadata)
-                .unwrap_or_default(),
+            postcard::to_allocvec(&metadata).unwrap_or_default(),
         );
 
         Ok(())
@@ -988,7 +976,8 @@ mod tests {
         let valid_keys = Arc::new(crate::cache::DashMapCache::new());
         let key_metadata = Arc::new(crate::cache::DashMapCache::new());
 
-        let auth = SdForgeApiKeyAuth::with_dependencies(valid_keys.clone(), Some(key_metadata.clone()));
+        let auth =
+            SdForgeApiKeyAuth::with_dependencies(valid_keys.clone(), Some(key_metadata.clone()));
 
         // Add a versioned key — this writes to key_metadata
         auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None)

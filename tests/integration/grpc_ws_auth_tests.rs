@@ -142,7 +142,7 @@ fn mint_jwt(secret: &str) -> String {
 mod ws_handshake {
     use super::*;
     use axum::body::Body;
-    use sdforge::websocket::{SdForgeState, ConnectionManager, WebSocketConfig, websocket_upgrade};
+    use sdforge::websocket::{ConnectionManager, SdForgeState, WebSocketConfig, websocket_upgrade};
     use tower::ServiceExt;
 
     fn ws_app_with(config: WebSocketConfig) -> axum::Router {

@@ -769,7 +769,7 @@ fn benchmark_regex_caching(c: &mut Criterion) {
 /// Benchmark for HTTP router construction
 #[cfg(feature = "http")]
 fn benchmark_http_router_construction(c: &mut Criterion) {
-    use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
+    use sdforge::config::{AuthConfig, SdForgeConfig, ServerConfig};
 
     c.bench_function("http_router_build", |b| b.iter(sdforge::http::build));
 

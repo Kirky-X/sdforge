@@ -22,7 +22,9 @@
 
 use sdforge::cache::{DashMapCache, SyncCache};
 use sdforge::prelude::*;
-use sdforge::security::{SdForgeApiKeyAuth, SdForgeAuditLogger, AuthContext, AuthMetadata, BearerAuth};
+use sdforge::security::{
+    AuthContext, AuthMetadata, BearerAuth, SdForgeApiKeyAuth, SdForgeAuditLogger,
+};
 use sdforge::serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -295,7 +297,10 @@ async fn create_user(
 /// - Resource deletion
 /// - Cache invalidation
 /// - Critical action auditing
-async fn delete_user(id: u64, state: &SdForgeExampleState) -> Result<ServiceResponse<()>, ApiError> {
+async fn delete_user(
+    id: u64,
+    state: &SdForgeExampleState,
+) -> Result<ServiceResponse<()>, ApiError> {
     // 1. Check if user exists
     let user_exists = {
         let users = state.users.read().await;

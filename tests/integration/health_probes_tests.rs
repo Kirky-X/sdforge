@@ -10,7 +10,7 @@
 #![cfg(feature = "health")]
 
 use axum::body::Body;
-use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
+use sdforge::config::{AuthConfig, SdForgeConfig, ServerConfig};
 use sdforge::http::build_with_config;
 
 // A user route registered through inventory, used to prove that global auth

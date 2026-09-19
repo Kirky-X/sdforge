@@ -5,7 +5,7 @@
 
 #[cfg(feature = "websocket")]
 mod websocket_integration_tests {
-    use sdforge::websocket::{SdForgeState, ConnectionManager, WebSocketConfig};
+    use sdforge::websocket::{ConnectionManager, SdForgeState, WebSocketConfig};
     use std::sync::Arc;
 
     #[test]

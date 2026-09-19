@@ -7,7 +7,7 @@
 //! transport — reusing the same credential stores as the HTTP stack
 //! (`BearerAuth` JWT / `SdForgeApiKeyAuth` API keys).
 
-use crate::security::{SdForgeApiKeyAuth, BearerAuth};
+use crate::security::{BearerAuth, SdForgeApiKeyAuth};
 use std::sync::Arc;
 
 /// Verifies transport credentials for non-HTTP protocols.

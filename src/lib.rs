@@ -282,10 +282,7 @@ pub mod security;
 pub use security::{
     // Trait interfaces (feature layer)
     ApiKeyAuth,
-    // Concrete implementations (renamed structs)
-    SdForgeApiKeyAuth,
     AppApiKeyAuthBuilder,
-    SdForgeAuditLogger,
     AppAuditLoggerBuilder,
     AuditLog,
     AuditLogger,
@@ -298,6 +295,9 @@ pub use security::{
     AuthResult,
     BearerAuth,
     BearerAuthBuilder,
+    // Concrete implementations (renamed structs)
+    SdForgeApiKeyAuth,
+    SdForgeAuditLogger,
     auth_middleware,
 };
 
@@ -307,8 +307,8 @@ pub mod config;
 
 #[cfg(feature = "http")]
 pub use config::{
-    ApiConfig, SdForgeConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper, ServerConfig, TlsConfig,
-    TracingConfig,
+    ApiConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper, SdForgeConfig, ServerConfig,
+    TlsConfig, TracingConfig,
 };
 
 /// 直接透传 oxcache 库（缓存功能由 oxcache 统一提供）

@@ -50,7 +50,7 @@ mod tests;
 // Re-export public API. Order mirrors the original `mod.rs` declarations so
 // downstream `use crate::websocket::*` continues to resolve every type.
 #[cfg(feature = "websocket")]
-pub use connection::{SdForgeState, ConnectionManager, WebSocketConfig, WebSocketConnection};
+pub use connection::{ConnectionManager, SdForgeState, WebSocketConfig, WebSocketConnection};
 #[cfg(feature = "websocket")]
 pub use handler::{
     BoxFuture, DefaultWebSocketHandler, ValidatedWebSocketUpgrade, WebSocketHandler,

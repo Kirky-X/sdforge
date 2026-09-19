@@ -17,13 +17,13 @@ pub use traits::*;
 pub use types::*;
 
 #[cfg(feature = "security")]
-pub use api_key::{SdForgeApiKeyAuth, AppApiKeyAuthBuilder};
+pub use api_key::{AppApiKeyAuthBuilder, SdForgeApiKeyAuth};
 #[cfg(feature = "security")]
 pub use audit::AuditSink;
 #[cfg(all(feature = "security", feature = "inklog"))]
 pub use audit::InklogAuditSink;
 #[cfg(feature = "security")]
-pub use audit::{SdForgeAuditLogger, AppAuditLoggerBuilder};
+pub use audit::{AppAuditLoggerBuilder, SdForgeAuditLogger};
 #[cfg(feature = "security")]
 pub use bearer::{BearerAuth, BearerAuthBuilder, generate_secure_jwt_secret};
 #[cfg(feature = "security")]
@@ -104,7 +104,8 @@ mod tests {
     fn trait_validate_key_returns_permissions_for_valid_key() {
         let auth = SdForgeApiKeyAuth::new();
         auth.add_key("test-key", vec!["read".to_string()]);
-        let result = <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "test-key", "127.0.0.1");
+        let result =
+            <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "test-key", "127.0.0.1");
         assert_eq!(result, Some(vec!["read".to_string()]));
     }
 
@@ -112,7 +113,8 @@ mod tests {
     #[test]
     fn trait_validate_key_returns_none_for_unknown_key() {
         let auth = SdForgeApiKeyAuth::new();
-        let result = <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "unknown-key", "127.0.0.1");
+        let result =
+            <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "unknown-key", "127.0.0.1");
         assert_eq!(result, None);
     }
 
@@ -130,7 +132,8 @@ mod tests {
     fn trait_add_key_delegates_to_inherent_method() {
         let auth = SdForgeApiKeyAuth::new();
         <SdForgeApiKeyAuth as ApiKeyAuth>::add_key(&auth, "trait-key", vec!["admin".to_string()]);
-        let result = <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "trait-key", "127.0.0.1");
+        let result =
+            <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "trait-key", "127.0.0.1");
         assert_eq!(result, Some(vec!["admin".to_string()]));
     }
 
@@ -140,7 +143,8 @@ mod tests {
     fn trait_add_key_with_string_literal_works() {
         let auth = SdForgeApiKeyAuth::new();
         <SdForgeApiKeyAuth as ApiKeyAuth>::add_key(&auth, "literal-key", vec!["read".to_string()]);
-        let result = <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "literal-key", "127.0.0.1");
+        let result =
+            <SdForgeApiKeyAuth as ApiKeyAuth>::validate_key(&auth, "literal-key", "127.0.0.1");
         assert_eq!(result, Some(vec!["read".to_string()]));
     }
 

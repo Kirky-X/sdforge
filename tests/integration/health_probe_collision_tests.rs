@@ -10,7 +10,7 @@
 #![cfg(feature = "health")]
 
 use axum::body::Body;
-use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
+use sdforge::config::{AuthConfig, SdForgeConfig, ServerConfig};
 use sdforge::http::build_with_config;
 
 fn shadow_route() -> sdforge::http::HttpRoute {

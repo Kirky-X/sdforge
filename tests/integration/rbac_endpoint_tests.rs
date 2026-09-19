@@ -9,7 +9,7 @@
 
 #![cfg(all(feature = "http", feature = "security"))]
 
-use sdforge::config::{ApiKeySeed, SdForgeConfig, AuthConfig, ServerConfig};
+use sdforge::config::{ApiKeySeed, AuthConfig, SdForgeConfig, ServerConfig};
 use sdforge::http::build_with_config;
 
 #[sdforge::forge(

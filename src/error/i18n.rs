@@ -159,16 +159,17 @@ impl LocalizedError for ApiError {
             ApiError::AccessDenied { permission, .. } => {
                 crate::i18n::translate_for("zh", key, &[("permission", permission.clone())])
             }
-            ApiError::RateLimitExceeded { limit, window_seconds } => {
-                crate::i18n::translate_for(
-                    "zh",
-                    key,
-                    &[
-                        ("limit", limit.to_string()),
-                        ("window_seconds", window_seconds.to_string()),
-                    ],
-                )
-            }
+            ApiError::RateLimitExceeded {
+                limit,
+                window_seconds,
+            } => crate::i18n::translate_for(
+                "zh",
+                key,
+                &[
+                    ("limit", limit.to_string()),
+                    ("window_seconds", window_seconds.to_string()),
+                ],
+            ),
             ApiError::QuotaExhausted { used, total } => crate::i18n::translate_for(
                 "zh",
                 key,

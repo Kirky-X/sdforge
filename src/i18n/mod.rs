@@ -214,7 +214,10 @@ pub fn get_locale() -> String {
 pub fn detect_locale() -> String {
     #[cfg(feature = "i18n")]
     {
-        detect_from(|key| std::env::var(key).ok(), sys_locale::get_locale().as_deref())
+        detect_from(
+            |key| std::env::var(key).ok(),
+            sys_locale::get_locale().as_deref(),
+        )
     }
     #[cfg(not(feature = "i18n"))]
     {
@@ -813,7 +816,10 @@ mod builtin_catalog_tests {
             "zh"
         );
         assert_eq!(
-            detect_from(env_of(&[("LC_ALL", "POSIX"), ("LANG", "en_US.UTF-8")]), None),
+            detect_from(
+                env_of(&[("LC_ALL", "POSIX"), ("LANG", "en_US.UTF-8")]),
+                None
+            ),
             "en"
         );
         assert_eq!(
@@ -831,7 +837,10 @@ mod builtin_catalog_tests {
     fn test_normalize_lang() {
         assert_eq!(normalize_lang("zh_CN.UTF-8"), Some("zh".to_string()));
         assert_eq!(normalize_lang("zh-TW"), Some("zh".to_string()));
-        assert_eq!(normalize_lang("zh-Hans-SG@calendar=x"), Some("zh".to_string()));
+        assert_eq!(
+            normalize_lang("zh-Hans-SG@calendar=x"),
+            Some("zh".to_string())
+        );
         assert_eq!(normalize_lang("en_US.UTF-8"), Some("en".to_string()));
         assert_eq!(normalize_lang("EN"), Some("en".to_string()));
         assert_eq!(normalize_lang("C"), None);

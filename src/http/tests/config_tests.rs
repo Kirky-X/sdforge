@@ -5,7 +5,7 @@
 //! inventory preservation through `build()`.
 
 use crate::config::{
-    ApiKeySeed, SdForgeConfig, AuthConfig, CacheConfig, CorsConfig, SecurityConfig, ServerConfig,
+    ApiKeySeed, AuthConfig, CacheConfig, CorsConfig, SdForgeConfig, SecurityConfig, ServerConfig,
 };
 #[cfg(any(feature = "mcp", feature = "websocket", feature = "grpc"))]
 use crate::http::build;

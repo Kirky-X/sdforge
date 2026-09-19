@@ -29,10 +29,7 @@ pub fn serialize_permissions(perms: &[String]) -> Vec<u8> {
 
 /// Deserialize a list of permissions from bytes
 pub fn deserialize_permissions(data: &[u8]) -> Vec<String> {
-    postcard::from_bytes::<Vec<String>>(
-        data
-        )
-        .unwrap_or_default()
+    postcard::from_bytes::<Vec<String>>(data).unwrap_or_default()
 }
 
 /// Serialize AuthContext to bytes using postcard
@@ -45,10 +42,7 @@ pub fn serialize_auth_context(ctx: &AuthContext) -> Vec<u8> {
 /// Reserved as the serialization pair for serialize_auth_context.
 /// Kept for future use when AuthContext deserialization from cache is needed.
 pub fn deserialize_auth_context(data: &[u8]) -> Option<AuthContext> {
-    postcard::from_bytes::<AuthContext>(
-        data
-        )
-        .ok()
+    postcard::from_bytes::<AuthContext>(data).ok()
 }
 
 /// Parse a single AuditLog from a serde_json::Value object.

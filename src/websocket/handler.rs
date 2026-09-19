@@ -34,7 +34,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 #[cfg(feature = "websocket")]
-use crate::websocket::{SdForgeState, ConnectionManager};
+use crate::websocket::{ConnectionManager, SdForgeState};
 #[cfg(feature = "websocket")]
 use crate::websocket::{MAX_MESSAGE_SIZE, WebSocketMessage, parse_websocket_message};
 

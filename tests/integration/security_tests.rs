@@ -12,8 +12,8 @@
 mod security_tests {
     use hmac::{Hmac, KeyInit, Mac};
     use sdforge::security::{
-        ApiKeyMetadata, SdForgeApiKeyAuth, AppApiKeyAuthBuilder, SdForgeAuditLogger, AuditResult,
-        AuthContext, AuthMetadata, BearerAuth, BearerAuthBuilder, LruConfig, RotationConfig,
+        ApiKeyMetadata, AppApiKeyAuthBuilder, AuditResult, AuthContext, AuthMetadata, BearerAuth,
+        BearerAuthBuilder, LruConfig, RotationConfig, SdForgeApiKeyAuth, SdForgeAuditLogger,
     };
     use sha2::Sha256;
     use std::time::Duration;
@@ -214,7 +214,9 @@ mod security_tests {
             keep_versions: 3,
         };
 
-        let auth = SdForgeApiKeyAuth::builder().rotation(rotation_config).build();
+        let auth = SdForgeApiKeyAuth::builder()
+            .rotation(rotation_config)
+            .build();
 
         // Add initial key version
         auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)

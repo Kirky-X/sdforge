@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 #[cfg(feature = "http")]
 mod config_tests {
-    use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
+    use sdforge::config::{AuthConfig, SdForgeConfig, ServerConfig};
 
     #[test]
     fn test_app_config_default() {
@@ -89,7 +89,7 @@ mod config_tests {
 // Enhanced Config module tests - comprehensive coverage
 #[cfg(feature = "http")]
 mod config_enhanced_tests {
-    use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
+    use sdforge::config::{AuthConfig, SdForgeConfig, ServerConfig};
 
     // ============================================================================
     // ServerConfig boundary tests

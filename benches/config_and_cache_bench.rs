@@ -14,7 +14,7 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 /// Benchmark configuration validation performance
 #[cfg(feature = "http")]
 fn benchmark_config_validation(c: &mut Criterion) {
-    use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
+    use sdforge::config::{AuthConfig, SdForgeConfig, ServerConfig};
 
     let mut group = c.benchmark_group("config_validation");
 
@@ -68,7 +68,7 @@ fn benchmark_config_validation(c: &mut Criterion) {
 /// Benchmark builder pattern with validation
 #[cfg(feature = "http")]
 fn benchmark_builder_with_validation(c: &mut Criterion) {
-    use sdforge::config::{SdForgeConfig, AuthConfig, ServerConfig};
+    use sdforge::config::{AuthConfig, SdForgeConfig, ServerConfig};
 
     let mut group = c.benchmark_group("builder_validation");
 
