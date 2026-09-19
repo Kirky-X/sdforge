@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Middleware implementations for authentication
 //!
@@ -28,7 +28,8 @@ pub fn auth_middleware<T: Clone + Send + Sync + 'static>(
                     next.run(req).await
                 }
                 Err(_) => {
-                    let mut response = Response::new(Body::from("Unauthorized"));
+                    let mut response =
+                        Response::new(Body::from(crate::i18n::t("http-unauthorized", &[])));
                     *response.status_mut() = StatusCode::UNAUTHORIZED;
                     response
                 }

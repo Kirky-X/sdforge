@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! String helper utilities for consistent formatting.
 //!
@@ -30,18 +30,24 @@ pub fn format_env_key(prefix: &str, key: &str) -> String {
 
 /// Format a "not found" error message.
 ///
+/// Resolved through the i18n registry (built-in `en` / `zh` catalogs; key
+/// `core-resource-not-found`), so the text follows the active locale.
+///
 /// # Arguments
 ///
 /// * `resource` - Type of resource that was not found
 ///
 /// # Returns
 ///
-/// Formatted error message like "Resource not found: user"
+/// Formatted error message like "Resource not found: user" (English locale)
 pub fn format_not_found(resource: &str) -> String {
-    format!("Resource not found: {}", resource)
+    crate::i18n::t("core-resource-not-found", &[("resource", resource.to_string())])
 }
 
 /// Format a validation error message.
+///
+/// Resolved through the i18n registry (built-in `en` / `zh` catalogs; key
+/// `core-validation-failed`), so the text follows the active locale.
 ///
 /// # Arguments
 ///
@@ -50,9 +56,16 @@ pub fn format_not_found(resource: &str) -> String {
 ///
 /// # Returns
 ///
-/// Formatted error message like "Validation failed for email: must be valid email"
+/// Formatted error message like "Validation failed for email: must be valid
+/// email" (English locale)
 pub fn format_validation_error(field: &str, constraint: &str) -> String {
-    format!("Validation failed for {}: {}", field, constraint)
+    crate::i18n::t(
+        "core-validation-failed",
+        &[
+            ("field", field.to_string()),
+            ("constraint", constraint.to_string()),
+        ],
+    )
 }
 
 /// Format an "empty field" error message.
@@ -162,15 +175,38 @@ mod tests {
 
     #[test]
     fn test_format_not_found() {
-        assert_eq!(format_not_found("user"), "Resource not found: user");
-        assert_eq!(format_not_found("config"), "Resource not found: config");
+        // Output follows the active locale; assert against the explicit-en
+        // catalog entry so the test is independent of the ambient locale.
+        assert_eq!(
+            format_not_found("user"),
+            crate::i18n::translate_for(
+                "en",
+                "core-resource-not-found",
+                &[("resource", "user".to_string())]
+            )
+        );
+        assert_eq!(
+            format_not_found("config"),
+            crate::i18n::translate_for(
+                "en",
+                "core-resource-not-found",
+                &[("resource", "config".to_string())]
+            )
+        );
     }
 
     #[test]
     fn test_format_validation_error() {
         assert_eq!(
             format_validation_error("email", "must be valid email"),
-            "Validation failed for email: must be valid email"
+            crate::i18n::translate_for(
+                "en",
+                "core-validation-failed",
+                &[
+                    ("field", "email".to_string()),
+                    ("constraint", "must be valid email".to_string())
+                ]
+            )
         );
     }
 
@@ -228,14 +264,28 @@ mod tests {
 
     #[test]
     fn test_format_not_found_empty() {
-        assert_eq!(format_not_found(""), "Resource not found: ");
+        assert_eq!(
+            format_not_found(""),
+            crate::i18n::translate_for(
+                "en",
+                "core-resource-not-found",
+                &[("resource", "".to_string())]
+            )
+        );
     }
 
     #[test]
     fn test_format_validation_error_empty() {
         assert_eq!(
             format_validation_error("", "required"),
-            "Validation failed for : required"
+            crate::i18n::translate_for(
+                "en",
+                "core-validation-failed",
+                &[
+                    ("field", "".to_string()),
+                    ("constraint", "required".to_string())
+                ]
+            )
         );
     }
 

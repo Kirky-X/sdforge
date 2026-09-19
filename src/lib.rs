@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! SDForge runtime library
 //!
@@ -283,9 +283,9 @@ pub use security::{
     // Trait interfaces (feature layer)
     ApiKeyAuth,
     // Concrete implementations (renamed structs)
-    AppApiKeyAuth,
+    SdForgeApiKeyAuth,
     AppApiKeyAuthBuilder,
-    AppAuditLogger,
+    SdForgeAuditLogger,
     AppAuditLoggerBuilder,
     AuditLog,
     AuditLogger,
@@ -307,7 +307,7 @@ pub mod config;
 
 #[cfg(feature = "http")]
 pub use config::{
-    ApiConfig, AppConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper, ServerConfig, TlsConfig,
+    ApiConfig, SdForgeConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper, ServerConfig, TlsConfig,
     TracingConfig,
 };
 
@@ -372,11 +372,16 @@ pub mod inklog;
 
 /// Internationalization support — translation registry + ICU4X formatting.
 ///
-/// The translation registry (`register_translation`, `set_locale`,
-/// `translate_or_fallback`) is always available and enables runtime
-/// translation of proc-macro attribute `description` strings at the
+/// The translation registry (`register_translation`, `set_locale`, `t`,
+/// `translate_for`, `translate_or_fallback`) is always available and enables
+/// runtime translation of proc-macro attribute `description` strings at the
 /// wired-up protocol consumption points (MCP, CLI; OpenAPI and gRPC
-/// integration is planned).
+/// integration is planned). The registry bundles built-in `en` / `zh`
+/// Fluent catalogs (`locales/{en,zh}/messages.ftl`) for the framework's own
+/// user-facing messages; host registrations always win over the built-in
+/// catalog. The active locale is resolved explicitly via `set_locale`, or
+/// auto-detected from the environment (`SDFORGE_LANG` → `LC_ALL` →
+/// `LC_MESSAGES` → `LANG` → system locale → `en`) on first use.
 ///
 /// The ICU4X-backed `HttpI18nFormatter` (locale-aware number/date/plural
 /// formatting) requires the `i18n` cargo feature.

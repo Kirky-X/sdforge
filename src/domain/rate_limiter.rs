@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Rate limiter abstraction for the trait-kit 0.3 `AsyncKit` integration.
 //!
@@ -68,6 +68,37 @@ impl ForgeError {
     pub fn internal(error: impl std::fmt::Display) -> Self {
         Self::Internal {
             message: error.to_string(),
+        }
+    }
+
+    /// Localized user-facing message for this error, resolved through the
+    /// framework i18n registry (built-in `en` / `zh` catalogs; hosts may
+    /// override via `sdforge::i18n::register_translation`).
+    ///
+    /// The [`std::fmt::Display`] implementation intentionally keeps the
+    /// English canonical string (error-type dual-track convention);
+    /// presentation layers that talk to end users should prefer this method
+    /// so the message follows the active locale.
+    #[must_use]
+    pub fn localized_message(&self) -> String {
+        match self {
+            ForgeError::RateLimited {
+                limit,
+                window_seconds,
+            } => crate::i18n::t(
+                "forge-rate-limited",
+                &[
+                    ("limit", limit.to_string()),
+                    ("window_seconds", window_seconds.to_string()),
+                ],
+            ),
+            ForgeError::Internal { message } => crate::i18n::t(
+                "forge-limiter-internal",
+                &[("message", message.clone())],
+            ),
+            // Not in the bundled catalog yet — fall back to the canonical
+            // English Display string.
+            other => other.to_string(),
         }
     }
 }
@@ -249,5 +280,35 @@ mod tests {
             reason: "abuse".into(),
         };
         assert!(err.to_string().contains("abuse"));
+    }
+
+    /// `localized_message` routes the audited variants through the i18n
+    /// registry (active locale — en or zh — must keep the numeric args) and
+    /// falls back to the canonical Display string for uncovered variants.
+    #[test]
+    fn forge_error_localized_message_routes_through_catalog() {
+        let err = ForgeError::RateLimited {
+            limit: 100,
+            window_seconds: 60,
+        };
+        let msg = err.localized_message();
+        assert!(msg.contains("100"), "localized message keeps limit: {msg}");
+        assert!(
+            msg.contains("60"),
+            "localized message keeps window_seconds: {msg}"
+        );
+
+        let internal = ForgeError::internal("backend down");
+        let msg = internal.localized_message();
+        assert!(
+            msg.contains("backend down"),
+            "localized message keeps source: {msg}"
+        );
+
+        // Banned is not in the bundled catalog yet → canonical Display.
+        let banned = ForgeError::Banned {
+            reason: "abuse".into(),
+        };
+        assert_eq!(banned.localized_message(), banned.to_string());
     }
 }

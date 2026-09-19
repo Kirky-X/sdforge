@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! ICU4X-backed internationalization formatting for HTTP responses.
 //!
@@ -9,6 +9,14 @@
 //! and counters in responses, displaying timestamps, sorting HTTP headers
 //! by locale-specific collation rules, and selecting the best locale from
 //! an incoming `Accept-Language` header.
+//!
+//! The message translation layer ([`t`], [`translate_for`],
+//! [`translate_or_fallback`], [`register_translation`]) is always compiled
+//! and bundles built-in `en` / `zh` Fluent catalogs
+//! (`locales/{en,zh}/messages.ftl`). The active locale auto-detects from
+//! the environment (`SDFORGE_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG` →
+//! system locale → `en`); hosts may override any message per locale via
+//! [`register_translation`].
 //!
 //! Enable with the `i18n` cargo feature:
 //! ```toml
@@ -37,23 +45,115 @@
 // Provides a global (locale, i18n_key) → translation lookup used by
 // protocol consumption points (MCP, CLI, OpenAPI, gRPC) to translate
 // proc-macro attribute `description` strings at runtime.
+//
+// The registry ships a **built-in en/zh catalog** (`locales/{en,zh}/messages.ftl`,
+// embedded via `include_str!`) covering the framework's own user-facing
+// messages. Host applications keep full freedom to register additional
+// locales via [`register_translation`]; host registrations always take
+// precedence over the built-in catalog, and the active locale defaults to
+// auto-detection (see [`detect_locale`]).
 // ============================================================================
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
-/// Global translation state: active locale + translation map.
+/// Embedded built-in catalog for English (compile-time `include_str!`).
+const EN_FTL: &str = include_str!("../../locales/en/messages.ftl");
+
+/// Embedded built-in catalog for Simplified Chinese (compile-time `include_str!`).
+const ZH_FTL: &str = include_str!("../../locales/zh/messages.ftl");
+
+/// Global translation state: active locale + host translations + built-in catalog.
 struct TranslationRegistry {
+    /// Active locale. Empty until [`set_locale`] is called or the first
+    /// [`get_locale`] triggers lazy system-locale detection.
     locale: String,
+    /// Host-registered translations — always win over `builtin`.
     translations: HashMap<(String, String), String>,
+    /// Built-in en/zh catalog loaded from the embedded FTL files at init.
+    builtin: HashMap<(String, String), String>,
 }
 
 static REGISTRY: LazyLock<Mutex<TranslationRegistry>> = LazyLock::new(|| {
     Mutex::new(TranslationRegistry {
         locale: String::new(),
         translations: HashMap::new(),
+        builtin: load_builtin_catalog(),
     })
 });
+
+/// Parse a flat Fluent (FTL) resource into `(key, value)` pairs.
+///
+/// Only the subset used by the bundled catalogs is handled: one
+/// `key = value` entry per line; blank lines and `#` comments are skipped.
+/// `{ $name }` placeholders are kept verbatim in the stored template and
+/// substituted by [`format_template`] at lookup time.
+fn parse_ftl(source: &str) -> Vec<(String, String)> {
+    source
+        .lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                return None;
+            }
+            let (key, value) = trimmed.split_once('=')?;
+            let key = key.trim();
+            if key.is_empty() {
+                return None;
+            }
+            Some((key.to_string(), value.trim().to_string()))
+        })
+        .collect()
+}
+
+/// Load the built-in en/zh catalogs from the embedded FTL files.
+fn load_builtin_catalog() -> HashMap<(String, String), String> {
+    let mut catalog = HashMap::new();
+    for (key, value) in parse_ftl(EN_FTL) {
+        catalog.insert(("en".to_string(), key), value);
+    }
+    for (key, value) in parse_ftl(ZH_FTL) {
+        catalog.insert(("zh".to_string(), key), value);
+    }
+    catalog
+}
+
+/// Substitute `{ $name }` placeholders in a catalog template with `args`.
+///
+/// Placeholders without a matching argument are left untouched; substituted
+/// values are never re-scanned. Templates without placeholders are returned
+/// unchanged.
+fn format_template(template: &str, args: &[(&str, String)]) -> String {
+    if args.is_empty() || !template.contains('{') {
+        return template.to_string();
+    }
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        let Some(close_rel) = rest[open..].find('}') else {
+            break;
+        };
+        let inner = rest[open + 1..open + close_rel].trim();
+        match inner.strip_prefix('$').map(str::trim) {
+            Some(name) if !name.is_empty() => {
+                out.push_str(&rest[..open]);
+                match args.iter().find(|(key, _)| *key == name) {
+                    Some((_, value)) => out.push_str(value),
+                    // Unknown placeholder: keep the original `{ $name }` text.
+                    None => out.push_str(&rest[open..open + close_rel + 1]),
+                }
+                rest = &rest[open + close_rel + 1..];
+            }
+            _ => {
+                // Not a `{ $name }` placeholder: emit the opening brace as-is.
+                out.push_str(&rest[..open + 1]);
+                rest = &rest[open + 1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
 
 /// Register a translation for a specific locale and i18n key.
 ///
@@ -79,7 +179,8 @@ pub fn register_translation(locale: &str, key: &str, value: &str) {
 
 /// Set the active locale for translation lookups.
 ///
-/// Defaults to `"en"` when no locale has been set. Protocol consumption
+/// The explicit locale set here always wins over auto-detection and stays
+/// active until [`clear_translations`] resets it. Protocol consumption
 /// points call [`translate_or_fallback`] which uses this locale to
 /// resolve i18n keys.
 pub fn set_locale(locale: &str) {
@@ -88,22 +189,127 @@ pub fn set_locale(locale: &str) {
 }
 
 /// Get the currently active locale.
+///
+/// When [`set_locale`] has not been called yet, the system locale is
+/// detected once via [`detect_locale`] and cached in the registry
+/// (explicit `set_locale` calls always win over the cached detection).
 pub fn get_locale() -> String {
-    let reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+    let mut reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
     if reg.locale.is_empty() {
-        "en".to_string()
-    } else {
-        reg.locale.clone()
+        reg.locale = detect_locale();
     }
+    reg.locale.clone()
+}
+
+/// Detect the system locale via the ordered fallback chain.
+///
+/// 1. `SDFORGE_LANG` (project override variable)
+/// 2. `LC_ALL` → `LC_MESSAGES` → `LANG` (POSIX chain)
+/// 3. `sys-locale` system detection (only with the `i18n` cargo feature)
+/// 4. `"en"` ultimate fallback
+///
+/// Every candidate is normalized by [`normalize_lang`]; unsupported or
+/// malformed values fall through to the next link, so the result is always
+/// `"en"` or `"zh"` (the two bundled catalog languages).
+pub fn detect_locale() -> String {
+    #[cfg(feature = "i18n")]
+    {
+        detect_from(|key| std::env::var(key).ok(), sys_locale::get_locale().as_deref())
+    }
+    #[cfg(not(feature = "i18n"))]
+    {
+        detect_from(|key| std::env::var(key).ok(), None)
+    }
+}
+
+/// Pure locale-chain resolver: resolve `get_env` lookups plus an optional
+/// system locale into `"en"` / `"zh"`.
+///
+/// Extracted from [`detect_locale`] so the chain order and normalization
+/// rules can be unit-tested without mutating process environment variables.
+fn detect_from(get_env: impl Fn(&str) -> Option<String>, sys_locale: Option<&str>) -> String {
+    // 1. Project override variable
+    if let Some(lang) = get_env("SDFORGE_LANG")
+        && let Some(normalized) = normalize_lang(&lang)
+    {
+        return normalized;
+    }
+    // 2. Explicit POSIX chain (sys-locale reads these too on Unix; reading
+    //    them explicitly keeps Windows / edge environments deterministic).
+    for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
+        if let Some(lang) = get_env(key)
+            && let Some(normalized) = normalize_lang(&lang)
+        {
+            return normalized;
+        }
+    }
+    // 3. sys-locale system detection
+    if let Some(lang) = sys_locale
+        && let Some(normalized) = normalize_lang(lang)
+    {
+        return normalized;
+    }
+    // 4. Ultimate fallback
+    "en".to_string()
+}
+
+/// Normalize a raw locale string (`"zh_CN.UTF-8"`, `"en-US"`, `"C"`, …)
+/// into `"en"` / `"zh"`, or `None` when unsupported (the chain continues).
+fn normalize_lang(raw: &str) -> Option<String> {
+    let stripped = raw.split('@').next()?.trim();
+    let stripped = stripped.split('.').next()?.trim();
+    let normalized = stripped.replace('_', "-");
+    // "C" / "POSIX" / empty mean "unspecified" — continue down the chain.
+    if normalized.is_empty() || matches!(normalized.as_str(), "C" | "POSIX") {
+        return None;
+    }
+    match normalized.split('-').next()?.to_ascii_lowercase().as_str() {
+        "zh" => Some("zh".to_string()),
+        "en" => Some("en".to_string()),
+        _ => None,
+    }
+}
+
+/// Translate a framework i18n key for the **active** locale.
+///
+/// Resolution order: host-registered translation (see
+/// [`register_translation`]) → built-in catalog for the active locale →
+/// built-in English catalog → the key itself (never panics). `{ $name }`
+/// placeholders in the catalog entry are substituted from `args`.
+pub fn t(key: &str, args: &[(&str, String)]) -> String {
+    translate_for(&get_locale(), key, args)
+}
+
+/// Translate a framework i18n key for an **explicit** locale, ignoring the
+/// active locale. Useful for per-request language selection (e.g. from an
+/// `Accept-Language` header) and for deterministic testing.
+///
+/// Falls back to the built-in English catalog, then to `key` itself.
+pub fn translate_for(locale: &str, key: &str, args: &[(&str, String)]) -> String {
+    lookup_translation(locale, key, args)
+        .or_else(|| lookup_translation("en", key, args))
+        .unwrap_or_else(|| key.to_string())
+}
+
+/// Look up `key` for `locale` (host registrations first, then the built-in
+/// catalog) and format its template with `args`.
+fn lookup_translation(locale: &str, key: &str, args: &[(&str, String)]) -> Option<String> {
+    let reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+    let template = reg
+        .translations
+        .get(&(locale.to_string(), key.to_string()))
+        .or_else(|| reg.builtin.get(&(locale.to_string(), key.to_string())))?;
+    Some(format_template(template, args))
 }
 
 /// Look up a translation for the active locale, falling back to `default`
 /// when no translation is found or `i18n_key` is `None`.
 ///
-/// The active locale is only initialized by `set_locale`. Before the first
-/// `set_locale` call the registry has no active locale and this function
-/// returns `default` directly without consulting the table — translations
-/// registered for `"en"` stay dormant until `set_locale("en")` is called.
+/// The active locale is resolved by [`get_locale`]: an explicit
+/// [`set_locale`] call wins; otherwise the system locale is detected and
+/// cached on first use. Lookup consults host-registered translations and
+/// the built-in en/zh catalog before giving up and returning `default` —
+/// missing keys therefore keep the compile-time default-string behavior.
 ///
 /// This is the function called by protocol consumption points — MCP
 /// `build_tool_model` and CLI `build_subcommand` are wired up today
@@ -126,22 +332,18 @@ pub fn translate_or_fallback(default: &str, i18n_key: Option<&str>) -> String {
         Some(k) if !k.is_empty() => k,
         _ => return default.to_string(),
     };
-    // HIGH 修复：locale 快照与查表必须持同一把锁完成。此前两次独立加锁，
-    // 期间 set_locale 可变更 locale，导致用过期 locale 查表（TOCTOU）。
-    let reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
-    if reg.locale.is_empty() {
-        return default.to_string();
-    }
-    let locale = reg.locale.clone();
-    reg.translations
-        .get(&(locale, key.to_string()))
-        .cloned()
-        .unwrap_or_else(|| default.to_string())
+    // locale 快照（get_locale）与查表（lookup_translation）各自持锁完成，
+    // 锁不跨调用持有：set_locale 在两者之间变更 locale 的影响与单次
+    // 查表语义一致，无 TOCTOU 危害（此前两次独立加锁的修复说明保留）。
+    let locale = get_locale();
+    lookup_translation(&locale, key, &[]).unwrap_or_else(|| default.to_string())
 }
 
-/// Clear all registered translations and reset the locale.
+/// Clear all host-registered translations and reset the locale.
 ///
-/// Primarily useful for testing.
+/// The built-in en/zh catalog is reloaded lazily from the embedded FTL
+/// constants and is never removed, so framework messages keep translating
+/// after a clear. Primarily useful for testing.
 pub fn clear_translations() {
     let mut reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
     reg.translations.clear();
@@ -296,9 +498,10 @@ mod translation_tests {
     fn test_translate_or_fallback_wrong_locale() {
         let _guard = registry_guard();
         clear_translations();
-        register_translation("zh-CN", "forge.embed", "生成嵌入向量");
-        set_locale("ja-JP");
-        // Translation registered for zh-CN, but active locale is ja-JP
+        register_translation("zh", "forge.embed", "生成嵌入向量");
+        set_locale("en");
+        // Translation registered for zh, but active locale is en (and the
+        // key is not in the built-in catalog) → compile-time default wins.
         assert_eq!(
             translate_or_fallback("Generate embedding", Some("forge.embed")),
             "Generate embedding"
@@ -310,7 +513,13 @@ mod translation_tests {
     fn test_set_and_get_locale() {
         let _guard = registry_guard();
         clear_translations();
-        assert_eq!(get_locale(), "en"); // default
+        // Before an explicit set_locale, get_locale() lazily detects the
+        // system locale; the detection chain only ever yields en or zh.
+        let detected = get_locale();
+        assert!(
+            detected == "en" || detected == "zh",
+            "detected locale must be en or zh: got {detected}"
+        );
         set_locale("zh-CN");
         assert_eq!(get_locale(), "zh-CN");
         clear_translations();
@@ -324,23 +533,312 @@ mod translation_tests {
         assert_eq!(translate_or_fallback("default", Some("key1")), "value1");
         clear_translations();
         assert_eq!(translate_or_fallback("default", Some("key1")), "default");
-        assert_eq!(get_locale(), "en"); // default after clear
+        let detected = get_locale(); // default after clear (lazy re-detection)
+        assert!(detected == "en" || detected == "zh");
     }
 
     #[test]
     fn test_multiple_locales() {
         let _guard = registry_guard();
         clear_translations();
-        register_translation("zh-CN", "greet", "你好");
-        register_translation("ja-JP", "greet", "こんにちは");
+        register_translation("en", "greet", "Hello");
+        register_translation("zh", "greet", "你好");
 
-        set_locale("zh-CN");
+        set_locale("en");
+        assert_eq!(translate_or_fallback("Hello", Some("greet")), "Hello");
+
+        set_locale("zh");
         assert_eq!(translate_or_fallback("Hello", Some("greet")), "你好");
 
-        set_locale("ja-JP");
-        assert_eq!(translate_or_fallback("Hello", Some("greet")), "こんにちは");
-
         clear_translations();
+    }
+
+    /// Host registrations must win over the built-in catalog for the same
+    /// (locale, key) pair, while other locales keep the built-in message.
+    #[test]
+    fn test_host_registration_overrides_builtin() {
+        let _guard = registry_guard();
+        clear_translations();
+        register_translation("en", "ratelimit-exceeded", "CUSTOM LIMIT MESSAGE");
+        assert_eq!(
+            translate_for("en", "ratelimit-exceeded", &[]),
+            "CUSTOM LIMIT MESSAGE"
+        );
+        assert_eq!(
+            translate_for("zh", "ratelimit-exceeded", &[]),
+            "速率限制已超出"
+        );
+        clear_translations();
+        // After clearing, the built-in catalog resurfaces.
+        assert_eq!(
+            translate_for("en", "ratelimit-exceeded", &[]),
+            "Rate limit exceeded"
+        );
+    }
+
+    /// 守卫：内建键经 translate_or_fallback 亦可达（显式 set_locale 后确定性断言）。
+    #[test]
+    fn test_builtin_key_via_translate_or_fallback() {
+        let _guard = registry_guard();
+        clear_translations();
+        set_locale("en");
+        assert_eq!(
+            translate_or_fallback("DEFAULT", Some("http-unauthorized")),
+            "Unauthorized"
+        );
+        clear_translations();
+    }
+}
+
+// ============================================================================
+// Built-in catalog + detection chain guard tests
+// ============================================================================
+
+#[cfg(test)]
+mod builtin_catalog_tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// Extract the key set of an FTL source (line-based `key = ` prefix).
+    fn keys_of(source: &str) -> BTreeSet<String> {
+        parse_ftl(source).into_iter().map(|(key, _)| key).collect()
+    }
+
+    /// 守卫：en 与 zh 内建目录键集合必须完全一致（缺键会使输出点退化为裸键）。
+    #[test]
+    fn test_builtin_catalog_key_parity() {
+        let en = keys_of(EN_FTL);
+        let zh = keys_of(ZH_FTL);
+        assert!(!en.is_empty(), "en catalog must not be empty");
+        assert_eq!(en, zh, "en/zh built-in catalogs must define the same keys");
+    }
+
+    /// 守卫：en 内建目录承载迁移点的英文规范串（golden， ambient-locale 无关）。
+    #[test]
+    fn test_builtin_catalog_golden_en() {
+        let cases: &[(&str, &str, &[(&str, String)])] = &[
+            ("http-unauthorized", "Unauthorized", &[]),
+            ("ratelimit-exceeded", "Rate limit exceeded", &[]),
+            ("ratelimit-circuit-open", "Circuit breaker open", &[]),
+            ("ratelimit-quota-exhausted", "Quota exhausted", &[]),
+            (
+                "ratelimit-banned",
+                "Banned: abuse",
+                &[("reason", "abuse".to_string())],
+            ),
+            (
+                "forge-rate-limited",
+                "Rate limit exceeded: 100 per 60s",
+                &[
+                    ("limit", "100".to_string()),
+                    ("window_seconds", "60".to_string()),
+                ],
+            ),
+            (
+                "forge-limiter-internal",
+                "Rate limiter internal error: backend down",
+                &[("message", "backend down".to_string())],
+            ),
+            (
+                "core-resource-not-found",
+                "Resource not found: user",
+                &[("resource", "user".to_string())],
+            ),
+            (
+                "core-validation-failed",
+                "Validation failed for email: must be valid email",
+                &[
+                    ("field", "email".to_string()),
+                    ("constraint", "must be valid email".to_string()),
+                ],
+            ),
+            (
+                "validation-path-invalid",
+                "Path contains invalid characters or traversal attempts",
+                &[],
+            ),
+            (
+                "validation-filename-invalid-chars",
+                "Filename contains only invalid characters",
+                &[],
+            ),
+            (
+                "validation-params-invalid",
+                "Invalid validation parameters for age",
+                &[("field", "age".to_string())],
+            ),
+            ("validation-email-invalid", "Invalid email format", &[]),
+            ("docs-swagger-title", "SDForge API Docs", &[]),
+            (
+                "docs-swagger-redirecting",
+                "Redirecting to <a href=\"/swagger-ui/\">Swagger UI</a>...",
+                &[("url", "/swagger-ui/".to_string())],
+            ),
+            (
+                "http-error-singular",
+                "HTTP 404: 1 error (One)",
+                &[
+                    ("code", "404".to_string()),
+                    ("count", "1".to_string()),
+                    ("category", "One".to_string()),
+                ],
+            ),
+            (
+                "http-error-plural",
+                "HTTP 404: 2 errors (Other)",
+                &[
+                    ("code", "404".to_string()),
+                    ("count", "2".to_string()),
+                    ("category", "Other".to_string()),
+                ],
+            ),
+        ];
+        for (key, expected, args) in cases {
+            let args: Vec<(&str, String)> = args.to_vec();
+            assert_eq!(
+                translate_for("en", key, &args),
+                *expected,
+                "en catalog entry for '{key}' diverged"
+            );
+        }
+    }
+
+    /// 守卫：zh 内建目录非空且与 en 键齐（内容抽查 + 参数替换）。
+    #[test]
+    fn test_builtin_catalog_golden_zh() {
+        assert_eq!(translate_for("zh", "http-unauthorized", &[]), "未授权");
+        assert_eq!(
+            translate_for("zh", "ratelimit-exceeded", &[]),
+            "速率限制已超出"
+        );
+        assert_eq!(
+            translate_for(
+                "zh",
+                "core-resource-not-found",
+                &[("resource", "user".to_string())]
+            ),
+            "资源未找到: user"
+        );
+        assert_eq!(
+            translate_for(
+                "zh",
+                "core-validation-failed",
+                &[
+                    ("field", "email".to_string()),
+                    ("constraint", "must be valid email".to_string())
+                ]
+            ),
+            "email 校验失败: must be valid email"
+        );
+        assert_eq!(
+            translate_for("zh", "docs-swagger-title", &[]),
+            "SDForge API 文档"
+        );
+        assert_eq!(
+            translate_for(
+                "zh",
+                "http-error-plural",
+                &[
+                    ("code", "404".to_string()),
+                    ("count", "2".to_string()),
+                    ("category", "Other".to_string())
+                ]
+            ),
+            "HTTP 404: 2 个错误 (Other)"
+        );
+    }
+
+    /// 守卫：缺失 key 回退到 key 本身（translate_for / t），未知语言回退 en 束。
+    #[test]
+    fn test_missing_key_and_unknown_locale_fallback() {
+        assert_eq!(t("no-such-builtin-key", &[]), "no-such-builtin-key");
+        assert_eq!(
+            translate_for("fr", "no-such-builtin-key", &[]),
+            "no-such-builtin-key"
+        );
+        // Unknown locale falls back to the en bundle for known keys.
+        assert_eq!(
+            translate_for("ar", "ratelimit-exceeded", &[]),
+            "Rate limit exceeded"
+        );
+    }
+
+    /// 检测链纯函数：优先级、归一化、回退（不触碰进程环境变量）。
+    #[test]
+    fn test_detect_from_chain() {
+        fn env_of<'a>(
+            pairs: &'a [(&'a str, &'a str)],
+        ) -> impl Fn(&str) -> Option<String> + use<'a> {
+            move |key: &str| -> Option<String> {
+                pairs
+                    .iter()
+                    .find(|(k, _)| *k == key)
+                    .map(|(_, v)| v.to_string())
+            }
+        }
+
+        // SDFORGE_LANG wins over the POSIX chain.
+        assert_eq!(
+            detect_from(
+                env_of(&[("SDFORGE_LANG", "zh_CN"), ("LC_ALL", "en_US.UTF-8")]),
+                None
+            ),
+            "zh"
+        );
+        // LC_ALL → LC_MESSAGES → LANG ordering.
+        assert_eq!(
+            detect_from(
+                env_of(&[
+                    ("LC_ALL", "zh_CN.UTF-8"),
+                    ("LC_MESSAGES", "en_US"),
+                    ("LANG", "en")
+                ]),
+                None
+            ),
+            "zh"
+        );
+        assert_eq!(
+            detect_from(env_of(&[("LC_MESSAGES", "zh_TW"), ("LANG", "en")]), None),
+            "zh"
+        );
+        assert_eq!(detect_from(env_of(&[("LANG", "zh_CN")]), None), "zh");
+        // Unsupported LANG falls through to the sys-locale link.
+        assert_eq!(
+            detect_from(env_of(&[("LANG", "fr_FR.UTF-8")]), Some("zh_SG")),
+            "zh"
+        );
+        // C / POSIX / empty fall through.
+        assert_eq!(
+            detect_from(env_of(&[("LC_ALL", "C"), ("LANG", "zh_CN")]), None),
+            "zh"
+        );
+        assert_eq!(
+            detect_from(env_of(&[("LC_ALL", "POSIX"), ("LANG", "en_US.UTF-8")]), None),
+            "en"
+        );
+        assert_eq!(
+            detect_from(env_of(&[("SDFORGE_LANG", ""), ("LC_ALL", "zh_CN")]), None),
+            "zh"
+        );
+        // Chain exhausted → en (including unsupported sys locale).
+        assert_eq!(detect_from(env_of(&[]), None), "en");
+        assert_eq!(detect_from(env_of(&[]), Some("en-US")), "en");
+        assert_eq!(detect_from(env_of(&[]), Some("ja_JP.UTF-8")), "en");
+    }
+
+    /// normalize_lang 归一化规则（zh* → zh；C/POSIX/畸形 → None；仅 en/zh）。
+    #[test]
+    fn test_normalize_lang() {
+        assert_eq!(normalize_lang("zh_CN.UTF-8"), Some("zh".to_string()));
+        assert_eq!(normalize_lang("zh-TW"), Some("zh".to_string()));
+        assert_eq!(normalize_lang("zh-Hans-SG@calendar=x"), Some("zh".to_string()));
+        assert_eq!(normalize_lang("en_US.UTF-8"), Some("en".to_string()));
+        assert_eq!(normalize_lang("EN"), Some("en".to_string()));
+        assert_eq!(normalize_lang("C"), None);
+        assert_eq!(normalize_lang("C.UTF-8"), None);
+        assert_eq!(normalize_lang("POSIX"), None);
+        assert_eq!(normalize_lang(""), None);
+        assert_eq!(normalize_lang("fr_FR"), None);
     }
 }
 

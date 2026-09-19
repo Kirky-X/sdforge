@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 use crate::core::ServiceError;
 use crate::error::*;
@@ -798,7 +798,12 @@ fn test_to_mcp_json_rate_limit_exceeded() {
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
     assert_eq!(parsed["error"]["code"], "RATE_LIMIT_EXCEEDED");
-    assert_eq!(parsed["error"]["message"], "Rate limit exceeded");
+    // Message goes through the i18n registry; assert against the explicit-en
+    // catalog entry so the test is independent of the ambient locale.
+    assert_eq!(
+        parsed["error"]["message"],
+        crate::i18n::translate_for("en", "ratelimit-exceeded", &[])
+    );
 }
 
 #[test]

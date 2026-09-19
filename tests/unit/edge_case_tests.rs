@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Edge Case Tests for SDForge Core Modules
 //!
@@ -68,9 +68,18 @@ mod core_edge_case_tests {
     /// Test: Not found with various resources
     #[test]
     fn test_format_not_found_edge_cases() {
+        // Output follows the active locale; expectations use the explicit-en
+        // catalog entry so the test is independent of the ambient locale.
         // Empty resource
         let result = format_not_found("");
-        assert_eq!(result, "Resource not found: ");
+        assert_eq!(
+            result,
+            sdforge::i18n::translate_for(
+                "en",
+                "core-resource-not-found",
+                &[("resource", "".to_string())]
+            )
+        );
 
         // Long resource name
         let long_name = "User".repeat(100);
@@ -79,7 +88,14 @@ mod core_edge_case_tests {
 
         // Unicode resource
         let result = format_not_found("用户");
-        assert_eq!(result, "Resource not found: 用户");
+        assert_eq!(
+            result,
+            sdforge::i18n::translate_for(
+                "en",
+                "core-resource-not-found",
+                &[("resource", "用户".to_string())]
+            )
+        );
     }
 
     /// Test: Validation error formatting
@@ -87,7 +103,14 @@ mod core_edge_case_tests {
     fn test_format_validation_error_edge_cases() {
         // Empty field and constraint
         let result = format_validation_error("", "");
-        assert_eq!(result, "Validation failed for : ");
+        assert_eq!(
+            result,
+            sdforge::i18n::translate_for(
+                "en",
+                "core-validation-failed",
+                &[("field", "".to_string()), ("constraint", "".to_string())]
+            )
+        );
 
         // Long field name
         let long_field = "field_name".repeat(50);

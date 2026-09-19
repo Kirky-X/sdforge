@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 
 use super::*;
@@ -75,21 +75,30 @@ fn generate_mcp_markdown() -> String {
 ///
 /// 返回一个简单的 HTML 页面，包含指向 `/swagger-ui/` 的链接和自动跳转脚本。
 /// 实际的 Swagger UI 界面由 [`swagger_ui_router`] 挂载的 axum Router 提供。
+///
+/// 页面文案（标题 / 跳转提示）经 i18n 内建目录输出（`docs-swagger-title` /
+/// `docs-swagger-redirecting`），随激活语言变化。
 #[cfg(feature = "http")]
 fn generate_swagger_html() -> String {
-    r#"<!DOCTYPE html>
+    let title = crate::i18n::t("docs-swagger-title", &[]);
+    let redirecting = crate::i18n::t(
+        "docs-swagger-redirecting",
+        &[("url", "/swagger-ui/".to_string())],
+    );
+    format!(
+        r#"<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>SDForge API Docs</title>
+    <title>{title}</title>
     <meta http-equiv="refresh" content="0; url=/swagger-ui/">
     <script>window.location.replace('/swagger-ui/');</script>
 </head>
 <body>
-    <p>Redirecting to <a href="/swagger-ui/">Swagger UI</a>...</p>
+    <p>{redirecting}</p>
 </body>
 </html>"#
-        .to_string()
+    )
 }
 
 /// 将指定格式的文档写入文件。

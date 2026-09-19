@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tower middleware for HTTP rate limiting.
 //!
@@ -132,7 +132,7 @@ fn rate_limit_rejection_response(err: RateLimitError) -> Response {
     let (status, body, retry_after_secs) = match &err {
         RateLimitError::Exceeded { window_seconds, .. } => (
             StatusCode::TOO_MANY_REQUESTS,
-            "Rate limit exceeded".to_string(),
+            crate::i18n::t("ratelimit-exceeded", &[]),
             Some(*window_seconds),
         ),
         RateLimitError::Banned { reason } => {

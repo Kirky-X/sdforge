@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Parameter validation and type conversion utilities
 //!
@@ -311,7 +311,7 @@ pub(crate) mod sanitizer {
         if cleaned.contains("..") || cleaned.contains("//") {
             return Err(ApiError::validation_error(
                 "INVALID_PATH",
-                "Path contains invalid characters or traversal attempts",
+                crate::i18n::t("validation-path-invalid", &[]),
             ));
         }
 
@@ -342,7 +342,7 @@ pub(crate) mod sanitizer {
         if sanitized.is_empty() {
             return Err(ApiError::validation_error(
                 "INVALID_FILENAME",
-                "Filename contains only invalid characters",
+                crate::i18n::t("validation-filename-invalid-chars", &[]),
             ));
         }
 
@@ -394,7 +394,10 @@ pub(crate) mod sanitizer {
     ) -> Result<String, ApiError> {
         if min > max {
             return Err(ApiError::InvalidInput {
-                message: format!("Invalid validation parameters for {}", field_name),
+                message: crate::i18n::t(
+                    "validation-params-invalid",
+                    &[("field", field_name.to_string())],
+                ),
                 field: Some(field_name.to_string()),
                 value: None,
             });
@@ -439,7 +442,7 @@ pub(crate) mod sanitizer {
         if trimmed.starts_with('@') || trimmed.ends_with('@') {
             return Err(ApiError::validation_error(
                 "INVALID_EMAIL",
-                "Invalid email format",
+                crate::i18n::t("validation-email-invalid", &[]),
             ));
         }
 
@@ -617,7 +620,12 @@ mod tests {
             value: _,
         }) = result
         {
-            assert!(msg.contains("invalid") || msg.contains("traversal"));
+            // Output follows the active locale — assert against the
+            // explicit-en catalog entry to stay ambient-locale independent.
+            assert_eq!(
+                msg,
+                crate::i18n::translate_for("en", "validation-path-invalid", &[])
+            );
         } else {
             panic!("Expected InvalidInput error");
         }

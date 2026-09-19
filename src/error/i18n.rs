@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 use std::collections::HashMap;
 use std::error::Error as StdError;
@@ -124,121 +124,67 @@ impl TranslationStore {
 // =============================================================================
 
 impl LocalizedError for ApiError {
+    /// 简体中文经内建 FTL 目录（`crate::i18n`）翻译；其余 locale（含 en，以及
+    /// unify-rust-i18n 前遗留的 fr/es 等第三语言）一律回退到英文规范 Display
+    /// （[`default_message`]）。合规：仅 en/zh 双语，禁止第三语言硬编码，回退终结于 en。
     fn localized_message(&self, locale: &Locale) -> String {
-        // In production, you would use a global TranslationStore loaded from files
-        // For now, we provide built-in translations for common locales
-
-        match locale.as_str() {
-            // Chinese (Simplified)
-            "zh" | "zh-CN" | "zh-Hans" => match self {
-                ApiError::NotFound { resource, .. } => {
-                    format!("资源未找到：{}", resource)
-                }
-                ApiError::InvalidInput { message, .. } => {
-                    format!("无效输入：{}", message)
-                }
-                ApiError::AuthenticationFailed { reason } => {
-                    format!("认证失败：{}", reason)
-                }
-                ApiError::AccessDenied { permission, .. } => {
-                    format!("访问被拒绝：{}", permission)
-                }
-                ApiError::RateLimitExceeded {
-                    limit,
-                    window_seconds,
-                } => {
-                    format!("请求频率超限：{} 次 / {} 秒", limit, window_seconds)
-                }
-                ApiError::QuotaExhausted { used, total } => {
-                    format!("配额已用尽：{}/{}", used, total)
-                }
-                ApiError::Internal { message, .. } => {
-                    format!("内部错误：{}", message)
-                }
-                ApiError::ServiceUnavailable { service, .. } => {
-                    format!("服务不可用：{}", service)
-                }
-                ApiError::ValidationError { field, constraint } => {
-                    format!("验证失败：{} - {}", field, constraint)
-                }
-            },
-
-            // French
-            "fr" | "fr-FR" => match self {
-                ApiError::NotFound { resource, .. } => {
-                    format!("Ressource introuvable: {}", resource)
-                }
-                ApiError::InvalidInput { message, .. } => {
-                    format!("Entrée invalide: {}", message)
-                }
-                ApiError::AuthenticationFailed { reason } => {
-                    format!("Échec de l'authentification: {}", reason)
-                }
-                ApiError::AccessDenied { permission, .. } => {
-                    format!("Accès refusé: {}", permission)
-                }
-                ApiError::RateLimitExceeded {
-                    limit,
-                    window_seconds,
-                } => {
-                    format!(
-                        "Limite de débit dépassée: {} requêtes / {} secondes",
-                        limit, window_seconds
-                    )
-                }
-                ApiError::QuotaExhausted { used, total } => {
-                    format!("Quota épuisé : {}/{}", used, total)
-                }
-                ApiError::Internal { message, .. } => {
-                    format!("Erreur interne: {}", message)
-                }
-                ApiError::ServiceUnavailable { service, .. } => {
-                    format!("Service indisponible: {}", service)
-                }
-                ApiError::ValidationError { field, constraint } => {
-                    format!("Erreur de validation: {} - {}", field, constraint)
-                }
-            },
-
-            // Spanish
-            "es" | "es-ES" => match self {
-                ApiError::NotFound { resource, .. } => {
-                    format!("Recurso no encontrado: {}", resource)
-                }
-                ApiError::InvalidInput { message, .. } => {
-                    format!("Entrada inválida: {}", message)
-                }
-                ApiError::AuthenticationFailed { reason } => {
-                    format!("Autenticación fallida: {}", reason)
-                }
-                ApiError::AccessDenied { permission, .. } => {
-                    format!("Acceso denegado: {}", permission)
-                }
-                ApiError::RateLimitExceeded {
-                    limit,
-                    window_seconds,
-                } => {
-                    format!(
-                        "Límite de tasa excedido: {} solicitudes / {} segundos",
-                        limit, window_seconds
-                    )
-                }
-                ApiError::QuotaExhausted { used, total } => {
-                    format!("Cuota agotada: {}/{}", used, total)
-                }
-                ApiError::Internal { message, .. } => {
-                    format!("Error interno: {}", message)
-                }
-                ApiError::ServiceUnavailable { service, .. } => {
-                    format!("Servicio no disponible: {}", service)
-                }
-                ApiError::ValidationError { field, constraint } => {
-                    format!("Error de validación: {} - {}", field, constraint)
-                }
-            },
-
-            // Default to English for unknown locales
-            _ => self.default_message(),
+        let is_zh = locale
+            .trim()
+            .get(..2)
+            .is_some_and(|p| p.eq_ignore_ascii_case("zh"));
+        if !is_zh {
+            return self.default_message();
+        }
+        let key = match self {
+            ApiError::NotFound { .. } => "api-error-not-found",
+            ApiError::InvalidInput { .. } => "api-error-invalid-input",
+            ApiError::AuthenticationFailed { .. } => "api-error-auth-failed",
+            ApiError::AccessDenied { .. } => "api-error-access-denied",
+            ApiError::RateLimitExceeded { .. } => "api-error-rate-limit",
+            ApiError::QuotaExhausted { .. } => "api-error-quota-exhausted",
+            ApiError::Internal { .. } => "api-error-internal",
+            ApiError::ServiceUnavailable { .. } => "api-error-service-unavailable",
+            ApiError::ValidationError { .. } => "api-error-validation",
+        };
+        match self {
+            ApiError::NotFound { resource, .. } => {
+                crate::i18n::translate_for("zh", key, &[("resource", resource.clone())])
+            }
+            ApiError::InvalidInput { message, .. } => {
+                crate::i18n::translate_for("zh", key, &[("message", message.clone())])
+            }
+            ApiError::AuthenticationFailed { reason } => {
+                crate::i18n::translate_for("zh", key, &[("reason", reason.clone())])
+            }
+            ApiError::AccessDenied { permission, .. } => {
+                crate::i18n::translate_for("zh", key, &[("permission", permission.clone())])
+            }
+            ApiError::RateLimitExceeded { limit, window_seconds } => {
+                crate::i18n::translate_for(
+                    "zh",
+                    key,
+                    &[
+                        ("limit", limit.to_string()),
+                        ("window_seconds", window_seconds.to_string()),
+                    ],
+                )
+            }
+            ApiError::QuotaExhausted { used, total } => crate::i18n::translate_for(
+                "zh",
+                key,
+                &[("used", used.to_string()), ("total", total.to_string())],
+            ),
+            ApiError::Internal { message, .. } => {
+                crate::i18n::translate_for("zh", key, &[("message", message.clone())])
+            }
+            ApiError::ServiceUnavailable { service, .. } => {
+                crate::i18n::translate_for("zh", key, &[("service", service.clone())])
+            }
+            ApiError::ValidationError { field, constraint } => crate::i18n::translate_for(
+                "zh",
+                key,
+                &[("field", field.clone()), ("constraint", constraint.clone())],
+            ),
         }
     }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 
 use super::*;
@@ -109,17 +109,31 @@ impl HttpI18nFormatter {
     /// form (e.g. `"HTTP 404: 1 error (One)"` for English count=1,
     /// `"HTTP 404: 2 errors (Other)"` for count=2).
     ///
+    /// The message text comes from the built-in `en` / `zh` catalogs
+    /// (`http-error-singular` / `http-error-plural`) selected by the
+    /// formatter's locale language; locales without a bundled catalog fall
+    /// back to the English entry.
+    ///
     /// # Errors
     /// Returns [`I18nError::InvalidNumber`] if the count cannot be formatted.
     pub fn format_error_message(&self, code: u16, count: u64) -> Result<String, I18nError> {
         let count_str = self.format_number(count as f64)?;
         let category = self.plural_rules.category_for(count);
         let plural_name = plural_category_name(category);
-        let noun = match category {
-            PluralCategory::One => "error",
-            _ => "errors",
+        let key = match category {
+            PluralCategory::One => "http-error-singular",
+            _ => "http-error-plural",
         };
-        Ok(format!("HTTP {code}: {count_str} {noun} ({plural_name})"))
+        let lang = self.locale.id.language.as_str().to_string();
+        Ok(super::translate_for(
+            &lang,
+            key,
+            &[
+                ("code", code.to_string()),
+                ("count", count_str),
+                ("category", plural_name.to_string()),
+            ],
+        ))
     }
 
     /// Format an ISO calendar date (year / month / day) as an HTTP

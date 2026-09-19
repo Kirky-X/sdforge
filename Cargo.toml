@@ -6,7 +6,7 @@ resolver = "2"
 version = "0.5.0-rc.4"
 edition = "2024"
 rust-version = "1.97.1"
-authors = ["Kirky.X"]
+authors = ["Kirky-X <Kirky-X@outlook.com>"]
 license = "MIT"
 repository = "https://github.com/Kirky-X/sdforge"
 
@@ -52,9 +52,9 @@ base64 = { version = "0.23", default-features = false, features = ["std", "alloc
 toml = { version = "1.1", default-features = false, features = ["parse", "display"] }
 
 # 缓存依赖 - oxcache 0.3 用 minimal feature 提供内存后端 + 序列化 + tracing
-oxcache = { version = "0.5.0-rc.4", default-features = false, features = ["minimal"] }
+oxcache = { version = "0.5.0-rc.4", path = "../oxcache", default-features = false, features = ["minimal"] }
 http = { version = "1.5", default-features = false, features = ["std"] }
-bincode = { version = "2.0", default-features = false, features = ["std", "serde"] }
+postcard = { version = "1.1", default-features = false, features = ["use-std"] }
 
 # WebSocket 依赖
 axum-extra = { version = "0.12", default-features = false, features = ["typed-header"] }
@@ -66,7 +66,7 @@ tonic-prost = { version = "0.14", default-features = false }
 
 # 流控依赖 - limiteron 0.2.1 提供统一限流/封禁/配额/熔断
 # 纯 crates.io 版本依赖（rc.2 已发布；本地跨仓联调可用 .cargo/config.toml [patch]）。
-limiteron = { version = "0.3.0-rc.4", default-features = false }
+limiteron = { version = "0.3.0-rc.4", path = "../limiteron", default-features = false }
 
 # OpenAPI 依赖
 utoipa = { version = "5.5", default-features = false, features = ["macros"] }
@@ -84,6 +84,9 @@ clap-markdown = { version = "0.1", default-features = false }
 # 其他依赖
 url = { version = "2.5", default-features = false }
 simd-json = { version = "0.18", default-features = false, features = ["serde_impl"] }
+
+# 系统语言探测 - i18n 检测链尾段（SDFORGE_LANG → LC_ALL → LC_MESSAGES → LANG → sys-locale → en）
+sys-locale = { version = "0.3", default-features = false }
 
 # 开发依赖
 tempfile = { version = "3.27", default-features = false }
@@ -213,7 +216,7 @@ oxcache = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 
 # Serialization for SyncCache storage values
-bincode = { workspace = true, optional = true }
+postcard = { workspace = true, optional = true }
 
 # SIMD-accelerated JSON (optional, requires SIMD support)
 simd-json = { workspace = true, optional = true }
@@ -225,18 +228,21 @@ limiteron = { workspace = true, optional = true }
 # trait-kit 0.3 is published to crates.io.
 # Mirrors dbnexus's pattern.
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
-trait-kit = { version = "0.5.0-rc.5", features = ["async"], optional = true, default-features = false }
+trait-kit = { version = "0.5.0-rc.5", path = "../trait-kit", default-features = false, features = ["async"], optional = true }
 
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # 纯 crates.io 版本依赖（rc.2 已发布）。
 # default-features = false (Rule 6) — only core logging is pulled in.
-inklog = { version = "0.3.0-rc.4", default-features = false, optional = true }
+inklog = { version = "0.3.0-rc.4", path = "../inklog", default-features = false, optional = true }
 
 # ICU4X internationalization (optional, feature-gated via `i18n`).
 # icu 2.2 provides locale-aware number/date/plural/collation formatting +
 # Accept-Language HTTP header parsing for HTTP responses.
-icu = { version = "2.3", optional = true }
+icu = { version = "2.3", default-features = false, features = ["compiled_data"], optional = true }
 writeable = { version = "0.6", optional = true }
+# System locale detection for the i18n detection chain (i18n feature only;
+# without the feature the chain stops at the POSIX env variables).
+sys-locale = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
@@ -312,7 +318,7 @@ security = [
     "dep:once_cell",
     "dep:rand",
     "dep:regex",
-    "dep:bincode",
+    "dep:postcard",
     "cache",
     "dep:hex",
     "dep:base64",
@@ -419,7 +425,10 @@ inklog = ["dep:inklog"]
 # ICU4X-backed internationalization: locale-aware HTTP error messages,
 # number/timestamp formatting, plural rules, header collation, and
 # Accept-Language header parsing via the `icu` crate (ICU4X 2.x).
-i18n = ["dep:icu", "dep:writeable"]
+# sys-locale completes the locale detection chain (env vars → system locale).
+# The bundled en/zh FTL catalogs and the translation registry itself are
+# always compiled and do not require this feature.
+i18n = ["dep:icu", "dep:writeable", "dep:sys-locale"]
 
 # Full 特性 — 全量运行时特性集（24 项）。
 # 刻意排除 simd-json / kit / limiteron-integration：三者均为可选重依赖

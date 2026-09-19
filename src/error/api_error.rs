@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Kirky.X
+// Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 use serde::{Deserialize, Serialize};
 use std::error::Error as StdError;
@@ -401,7 +401,7 @@ impl ApiError {
                 ("ACCESS_DENIED", format!("Access denied: {}", permission))
             }
             ApiError::RateLimitExceeded { .. } => {
-                ("RATE_LIMIT_EXCEEDED", "Rate limit exceeded".to_string())
+                ("RATE_LIMIT_EXCEEDED", crate::i18n::t("ratelimit-exceeded", &[]))
             }
             // HIGH 修复：Internal 的 MCP 输出与 sanitized_message 一致地脱敏，
             // 不再把原始内部消息（可能含主机名/路径/SQL 等）泄漏到外部协议。
@@ -484,7 +484,7 @@ impl ApiError {
                 window_seconds,
             } => ServiceError::with_details(
                 "RATE_LIMIT_EXCEEDED",
-                "Rate limit exceeded".to_string(),
+                crate::i18n::t("ratelimit-exceeded", &[]),
                 serde_json::json!({ "limit": limit, "window_seconds": window_seconds }),
                 429,
             ),
