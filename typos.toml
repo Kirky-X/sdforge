@@ -1,0 +1,17 @@
+# typos 白名单 —— 仅收录已人工核实的"非笔误"用法
+# (缩写、故意构造的测试数据、外文示例)，避免 typos --write-changes 误改真实内容。
+# 新增条目务必写明依据，禁止整目录/整文件排除。
+
+[default]
+
+# extend-words: 单词级白名单(值等于键 = 该词永远合法)
+[default.extend-words]
+# macros/src/lib.rs: role_lits = role literals 的惯用缩写
+lits = "lits"
+# macros/tests/trybuild/fail/unknown_attribute_precise_span.{rs,stderr}:
+# 故意拼错的属性名(nmae2)，用于验证宏的 unknown attribute 诊断与 span 精度，
+# 与 .stderr 期望输出必须逐字一致，不可"修正"
+nmae = "nmae"
+# src/error/i18n.rs 文档示例中的法语译文，属真实外文内容
+Ressource = "Ressource"
+invalide = "invalide"
