@@ -648,6 +648,9 @@ mod builtin_catalog_tests {
             .collect()
     }
 
+    /// en golden 用例：(catalog key, 期望英文串, 翻译参数表)。
+    type GoldenCase<'a> = (&'a str, &'a str, &'a [(&'a str, String)]);
+
     /// 守卫：en 与 zh 内建目录键集合必须完全一致（缺键会使输出点退化为裸键）。
     #[test]
     fn test_builtin_catalog_key_parity() {
@@ -660,7 +663,7 @@ mod builtin_catalog_tests {
     /// 守卫：en 内建目录承载迁移点的英文规范串（golden， ambient-locale 无关）。
     #[test]
     fn test_builtin_catalog_golden_en() {
-        let cases: &[(&str, &str, &[(&str, String)])] = &[
+        let cases: &[GoldenCase<'_>] = &[
             ("http-unauthorized", "Unauthorized", &[]),
             ("ratelimit-exceeded", "Rate limit exceeded", &[]),
             ("ratelimit-circuit-open", "Circuit breaker open", &[]),
