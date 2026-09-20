@@ -20,7 +20,7 @@ use rmcp::RoleServer;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, ErrorData, InitializeResult, ListToolsResult,
-    PaginatedRequestParams, ServerInfo,
+    PaginatedRequestParams, ServerConfig,
 };
 use rmcp::service::RequestContext;
 
@@ -64,7 +64,7 @@ impl Default for StatelessServerHandler {
 }
 
 impl ServerHandler for StatelessServerHandler {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> ServerConfig {
         self.inner.get_info()
     }
 

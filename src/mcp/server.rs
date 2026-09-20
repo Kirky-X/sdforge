@@ -10,7 +10,7 @@ use rmcp::RoleServer;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ErrorData, ListToolsResult,
-    PaginatedRequestParams, ServerInfo, Tool,
+    PaginatedRequestParams, ServerConfig, Tool,
 };
 use rmcp::service::RequestContext;
 
@@ -223,12 +223,12 @@ impl SdForgeMcpServer {
 }
 
 impl ServerHandler for SdForgeMcpServer {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> ServerConfig {
         use rmcp::model::{Implementation, ServerCapabilities};
         let mut server_info = Implementation::default();
         server_info.name = self.server_name.clone();
         server_info.version = self.server_version.clone();
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(server_info)
     }
 
