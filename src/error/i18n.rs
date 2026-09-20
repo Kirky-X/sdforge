@@ -126,7 +126,7 @@ impl TranslationStore {
 impl LocalizedError for ApiError {
     /// 简体中文经内建 FTL 目录（`crate::i18n`）翻译；其余 locale（含 en，以及
     /// unify-rust-i18n 前遗留的 fr/es 等第三语言）一律回退到英文规范 Display
-    /// （[`default_message`]）。合规：仅 en/zh 双语，禁止第三语言硬编码，回退终结于 en。
+    /// （[`Self::default_message()`]）。合规：仅 en/zh 双语，禁止第三语言硬编码，回退终结于 en。
     fn localized_message(&self, locale: &Locale) -> String {
         let is_zh = locale
             .trim()

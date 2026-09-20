@@ -10,13 +10,15 @@
 //! by locale-specific collation rules, and selecting the best locale from
 //! an incoming `Accept-Language` header.
 //!
-//! The message translation layer ([`t`], [`translate_for`],
-//! [`translate_or_fallback`], [`register_translation`]) is always compiled
-//! and bundles built-in `en` / `zh` Fluent catalogs
+//! The message translation layer ([`t()`](crate::i18n::t),
+//! [`translate_for()`](crate::i18n::translate_for),
+//! [`translate_or_fallback()`](crate::i18n::translate_or_fallback),
+//! [`register_translation()`](crate::i18n::register_translation)) is always
+//! compiled and bundles built-in `en` / `zh` Fluent catalogs
 //! (`locales/{en,zh}/messages.ftl`). The active locale auto-detects from
 //! the environment (`SDFORGE_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG` →
 //! system locale → `en`); hosts may override any message per locale via
-//! [`register_translation`].
+//! [`register_translation()`](crate::i18n::register_translation).
 //!
 //! Enable with the `i18n` cargo feature:
 //! ```toml
@@ -239,7 +241,7 @@ pub fn get_locale() -> String {
 /// 3. `sys-locale` system detection (only with the `i18n` cargo feature)
 /// 4. `"en"` ultimate fallback
 ///
-/// Every candidate is normalized by [`normalize_lang`]; unsupported or
+/// Every candidate is normalized by `normalize_lang`; unsupported or
 /// malformed values fall through to the next link, so the result is always
 /// `"en"` or `"zh"` (the two bundled catalog languages).
 pub fn detect_locale() -> String {
