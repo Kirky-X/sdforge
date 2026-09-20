@@ -3,7 +3,7 @@ members = [".", "examples", "macros"]
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0-rc.4"
+version = "0.5.0-rc.5"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kirky-X <Kirky-X@outlook.com>"]
@@ -52,7 +52,7 @@ base64 = { version = "0.23", default-features = false, features = ["std", "alloc
 toml = { version = "1.1", default-features = false, features = ["parse", "display"] }
 
 # 缓存依赖 - oxcache 0.3 用 minimal feature 提供内存后端 + 序列化 + tracing
-oxcache = { version = "0.5.0-rc.4", path = "../oxcache", default-features = false, features = ["minimal"] }
+oxcache = { version = "0.5.0-rc.4", default-features = false, features = ["minimal"] }
 http = { version = "1.5", default-features = false, features = ["std"] }
 postcard = { version = "1.1", default-features = false, features = ["use-std"] }
 
@@ -66,7 +66,7 @@ tonic-prost = { version = "0.14", default-features = false }
 
 # 流控依赖 - limiteron 0.2.1 提供统一限流/封禁/配额/熔断
 # 纯 crates.io 版本依赖（rc.2 已发布；本地跨仓联调可用 .cargo/config.toml [patch]）。
-limiteron = { version = "0.3.0-rc.4", path = "../limiteron", default-features = false }
+limiteron = { version = "0.3.0-rc.4", default-features = false }
 
 # OpenAPI 依赖
 utoipa = { version = "5.5", default-features = false, features = ["macros"] }
@@ -162,7 +162,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.4", path = "./macros" }
+sdforge-macros = { version = "0.5.0-rc.5", path = "./macros" }
 
 # HTTP dependencies
 axum = { workspace = true, optional = true }
@@ -233,12 +233,12 @@ limiteron = { workspace = true, optional = true }
 # trait-kit 0.3 is published to crates.io.
 # Mirrors dbnexus's pattern.
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
-trait-kit = { version = "0.5.0-rc.5", path = "../trait-kit", default-features = false, features = ["async"], optional = true }
+trait-kit = { version = "0.5.0-rc.6", default-features = false, features = ["async"], optional = true }
 
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # 纯 crates.io 版本依赖（rc.2 已发布）。
 # default-features = false (Rule 6) — only core logging is pulled in.
-inklog = { version = "0.3.0-rc.4", path = "../inklog", default-features = false, optional = true }
+inklog = { version = "0.3.0-rc.5", default-features = false, optional = true }
 
 # ICU4X internationalization (optional, feature-gated via `i18n`).
 # icu 2.2 provides locale-aware number/date/plural/collation formatting +

@@ -83,6 +83,28 @@ jobs:
         # 本地/重跑路径已发布时撞车属幂等成功，不阻断 Release 交付
         continue-on-error: true
 
+      # publish 带幂等 continue-on-error,但版本最终必须可查——
+      # 否则此处硬失败,防止"绿色 Release 实际没发出去"的静默漏发。
+      # crates.io API 必须带 User-Agent,否则 403。
+      - name: Verify on crates.io
+        if: always()
+        run: |
+          for crate in sdforge sdforge-macros; do
+            ok=""
+            for i in 1 2 3 4 5; do
+              sleep 20
+              CODE=$(curl -s -o /dev/null -w "%{http_code}" -H 'User-Agent: kirky-x-release-verify' \
+                "https://crates.io/api/v1/crates/${crate}/0.5.0-rc.5")
+              echo "try$i ${crate}: HTTP ${CODE}"
+              if [ "$CODE" = "200" ]; then ok=1; break; fi
+              if [ "$CODE" != "403" ]; then break; fi
+            done
+            if [ -z "$ok" ]; then
+              echo "::error::${crate} 0.5.0-rc.5 未出现在 crates.io(HTTP ${CODE})"
+              exit 1
+            fi
+          done
+
   github-release:
     name: Create GitHub Release
     needs: [verify, publish-crates]
@@ -100,31 +122,13 @@ jobs:
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Install protoc (for grpc feature)
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-
-      - name: Package sdforge-macros
-        run: cargo package --no-verify --manifest-path macros/Cargo.toml
-
-      - name: Package sdforge
-        continue-on-error: true
-        run: cargo package --no-verify --features full
-
-      - name: Collect crate packages
-        run: |
-          mkdir -p release-assets
-          cp target/package/sdforge-macros-*.crate release-assets/ 2>/dev/null || true
-          cp target/package/sdforge-*.crate release-assets/ 2>/dev/null || true
-          ls -la release-assets/
-
+      # Release 只带 GitHub 自动生成的源码压缩包,不附 .crate/二进制产物。
       - name: Create Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           tag_name: ${{ steps.version.outputs.tag_name }}
           name: Release ${{ steps.version.outputs.tag_name }}
           generate_release_notes: true
-          files: |
-            release-assets/*.crate
           draft: false
           prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') || contains(github.ref, '-alpha') }}
         env:

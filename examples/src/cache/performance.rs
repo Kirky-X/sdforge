@@ -15,6 +15,9 @@
 //! ```bash
 //! cargo run --features "http cache" --example cache/performance
 //! ```
+// 与 app_config/grpc server 等示例文件同惯例:业务 handler 展示集成方式,
+// 不接入 axum 路由,lib target 下按 crate 惯例整体放行 dead_code。
+#![allow(dead_code)]
 
 use sdforge::cache::{DashMapCache, SyncCache};
 use sdforge::prelude::*;
