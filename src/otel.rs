@@ -332,8 +332,12 @@ pub fn flush_metrics(config: &OtelConfig) -> Result<u16, String> {
 mod tests {
     use super::*;
 
+    /// take_spans() 清空进程级缓冲;并行测试共享该缓冲,必须串行触碰。
+    static BUF_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn span_lifecycle_records_data() {
+        let _guard = BUF_LOCK.lock().unwrap();
         let span = start_span("unit.op");
         let span = with_attr(span, "k", serde_json::json!("v"));
         finish_span(span);
@@ -350,6 +354,7 @@ mod tests {
 
     #[test]
     fn trace_payload_shape_is_otlp_json() {
+        let _guard = BUF_LOCK.lock().unwrap();
         let span = start_span("shape.check");
         finish_span(span);
         let spans = take_spans();
