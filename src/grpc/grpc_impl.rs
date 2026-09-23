@@ -45,6 +45,8 @@ pub struct SdForgeGrpcService {
     handlers: OnceLock<HashMap<&'static str, HandlerFn>>,
     /// Lazy-built `method -> body_param name` lookup table.
     body_params: OnceLock<HashMap<&'static str, Option<&'static str>>>,
+    /// Lazy-built `method -> roles` lookup table (endpoint RBAC).
+    roles: OnceLock<HashMap<&'static str, &'static [&'static str]>>,
     /// Lazy-built `method -> macro-level status` lookup table (fix).
     /// Carries the `#[forge(status = <code>)]` argument into the gRPC layer
     /// so `call`'s success path can apply the priority chain:
@@ -68,6 +70,7 @@ impl Default for SdForgeGrpcService {
             state: None,
             handlers: OnceLock::new(),
             body_params: OnceLock::new(),
+            roles: OnceLock::new(),
             default_statuses: OnceLock::new(),
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
@@ -87,6 +90,7 @@ impl SdForgeGrpcService {
             state,
             handlers: OnceLock::new(),
             body_params: OnceLock::new(),
+            roles: OnceLock::new(),
             default_statuses: OnceLock::new(),
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
@@ -123,6 +127,7 @@ impl SdForgeGrpcService {
             state,
             handlers: OnceLock::new(),
             body_params: OnceLock::new(),
+            roles: OnceLock::new(),
             default_statuses: OnceLock::new(),
             rate_limiter,
             #[cfg(feature = "security")]
@@ -162,6 +167,16 @@ impl SdForgeGrpcService {
                 .collect()
         })
     }
+
+    /// Build (or reuse) the `method -> roles` cache from inventory.
+    #[must_use]
+    fn roles(&self) -> &HashMap<&'static str, &'static [&'static str]> {
+        self.roles.get_or_init(|| {
+            inventory::iter::<GrpcHandlerRegistration>()
+                .map(|r| (r.method, r.roles))
+                .collect()
+        })
+    }
 }
 
 #[cfg(feature = "grpc")]
@@ -172,15 +187,39 @@ impl SdForgeGrpcService {
         &self,
         request: Request<CallRequest>,
     ) -> Result<Response<CallResponse>, Status> {
-        // verify credentials before any dispatch.
+        // verify credentials before any dispatch; 成功后保留身份供 RBAC 检查
+        // （此前 `Result<(), _>` 把身份丢弃，gRPC 只能认证不能授权）。
         #[cfg(feature = "security")]
-        if let Some(ref verifier) = self.auth_interceptor {
+        let auth_ctx = if let Some(ref verifier) = self.auth_interceptor {
             let metadata = request.metadata();
             let authorization = metadata.get("authorization").and_then(|v| v.to_str().ok());
             let api_key = metadata.get("x-api-key").and_then(|v| v.to_str().ok());
-            if let Err(msg) = verifier.verify(authorization, api_key) {
-                return Err(Status::unauthenticated(msg));
+            match verifier.verify(authorization, api_key) {
+                Ok(ctx) => Some(ctx),
+                Err(msg) => return Err(Status::unauthenticated(msg)),
             }
+        } else {
+            None
+        };
+
+        // endpoint RBAC（协议对等，对齐 HTTP `require_role`）：声明了 roles
+        // 的方法必须由带任一匹配 permission 的已认证身份调用；security
+        // feature 关闭时 fail-safe —— 一律拒绝（角色无法验证即不可满足）。
+        let roles = self
+            .roles()
+            .get(request.get_ref().method.as_str())
+            .copied()
+            .unwrap_or(&[]);
+        #[cfg(feature = "security")]
+        let authorized =
+            matches!(&auth_ctx, Some(ctx) if roles.iter().any(|r| ctx.has_permission(r)));
+        #[cfg(not(feature = "security"))]
+        let authorized = false;
+        if !roles.is_empty() && !authorized {
+            return Err(Status::permission_denied(format!(
+                "missing required role: {}",
+                roles.join(", ")
+            )));
         }
 
         #[cfg(feature = "context")]
@@ -623,13 +662,14 @@ mod tests {
     }
 
     inventory::submit! {
-        GrpcHandlerRegistration {
-            method: "test_echo",
-            handler: echo_handler,
-            body_param: None,
-            default_status: None,
-        }
+            GrpcHandlerRegistration {
+                method: "test_echo",
+                handler: echo_handler,
+                body_param: None,
+                default_status: None,
+                roles: &[],
     }
+        }
 
     /// Handler that always returns `Err(NotFound)` — verifies the error →
     /// `success:false` + `status_code:404` + `Status::ok` mapping.
@@ -643,13 +683,14 @@ mod tests {
     }
 
     inventory::submit! {
-        GrpcHandlerRegistration {
-            method: "test_not_found",
-            handler: not_found_handler,
-            body_param: None,
-            default_status: None,
-        }
+            GrpcHandlerRegistration {
+                method: "test_not_found",
+                handler: not_found_handler,
+                body_param: None,
+                default_status: None,
+                roles: &[],
     }
+        }
 
     /// Handler that panics — verifies `catch_unwind` returns `Status::internal`
     /// without leaking the panic payload.
@@ -660,13 +701,14 @@ mod tests {
     }
 
     inventory::submit! {
-        GrpcHandlerRegistration {
-            method: "test_panic",
-            handler: panic_handler,
-            body_param: None,
-            default_status: None,
-        }
+            GrpcHandlerRegistration {
+                method: "test_panic",
+                handler: panic_handler,
+                body_param: None,
+                default_status: None,
+                roles: &[],
     }
+        }
 
     /// Handler with a Body parameter — verifies `data` is injected into
     /// the body_param key.
@@ -676,11 +718,28 @@ mod tests {
     }
 
     inventory::submit! {
+            GrpcHandlerRegistration {
+                method: "test_body",
+                handler: body_handler,
+                body_param: Some("payload"),
+                default_status: None,
+                roles: &[],
+    }
+        }
+
+    /// RBAC probe — declares `roles = &["admin"]`; all calls must present an
+    /// identity carrying the `admin` permission (or be denied).
+    fn rbac_admin_handler(_args: HandlerArgs, _state: HandlerState) -> crate::core::HandlerFuture {
+        Box::pin(async { Ok(Value::String("admin-ok".to_string())) })
+    }
+
+    inventory::submit! {
         GrpcHandlerRegistration {
-            method: "test_body",
-            handler: body_handler,
-            body_param: Some("payload"),
+            method: "test_rbac_admin",
+            handler: rbac_admin_handler,
+            body_param: None,
             default_status: None,
+            roles: &["admin"],
         }
     }
 
@@ -704,13 +763,14 @@ mod tests {
     }
 
     inventory::submit! {
-        GrpcHandlerRegistration {
-            method: "test_status_code",
-            handler: status_code_handler,
-            body_param: None,
-            default_status: None,
-        }
+            GrpcHandlerRegistration {
+                method: "test_status_code",
+                handler: status_code_handler,
+                body_param: None,
+                default_status: None,
+                roles: &[],
     }
+        }
 
     /// Handler returning a `ServiceResponse` without `status_code` (plain
     /// `success`) — verifies the gRPC layer defaults to 200 when the field
@@ -731,13 +791,14 @@ mod tests {
     }
 
     inventory::submit! {
-        GrpcHandlerRegistration {
-            method: "test_service_response_no_status",
-            handler: service_response_no_status_handler,
-            body_param: None,
-            default_status: None,
-        }
+            GrpcHandlerRegistration {
+                method: "test_service_response_no_status",
+                handler: service_response_no_status_handler,
+                body_param: None,
+                default_status: None,
+                roles: &[],
     }
+        }
 
     // ========================================================================
     // forge-success-status-code gRPC 路径消费宏 `status` 参数测试
@@ -758,13 +819,14 @@ mod tests {
     }
 
     inventory::submit! {
-        GrpcHandlerRegistration {
-            method: "test_bare_with_default_status",
-            handler: bare_type_with_default_status_handler,
-            body_param: None,
-            default_status: Some(201),
-        }
+            GrpcHandlerRegistration {
+                method: "test_bare_with_default_status",
+                handler: bare_type_with_default_status_handler,
+                body_param: None,
+                default_status: Some(201),
+                roles: &[],
     }
+        }
 
     /// `ServiceResponse::success`（无 status_code 字段）+ `default_status = Some(202)` —
     /// 验证当 ServiceResponse 自身未设置 status_code 时，default_status 作为 fallback 生效。
@@ -784,13 +846,14 @@ mod tests {
     }
 
     inventory::submit! {
-        GrpcHandlerRegistration {
-            method: "test_service_response_with_default_status",
-            handler: service_response_with_default_status_handler,
-            body_param: None,
-            default_status: Some(202),
-        }
+            GrpcHandlerRegistration {
+                method: "test_service_response_with_default_status",
+                handler: service_response_with_default_status_handler,
+                body_param: None,
+                default_status: Some(202),
+                roles: &[],
     }
+        }
 
     /// `ServiceResponse::success_with_status("x", 208)` + `default_status = Some(201)` —
     /// 验证 ServiceResponse.status_code 字段优先于 default_status（字段 > 宏 > 200）。
@@ -810,13 +873,14 @@ mod tests {
     }
 
     inventory::submit! {
-        GrpcHandlerRegistration {
-            method: "test_service_response_field_overrides_default",
-            handler: service_response_field_overrides_default_status_handler,
-            body_param: None,
-            default_status: Some(201),
-        }
+            GrpcHandlerRegistration {
+                method: "test_service_response_field_overrides_default",
+                handler: service_response_field_overrides_default_status_handler,
+                body_param: None,
+                default_status: Some(201),
+                roles: &[],
     }
+        }
 
     #[test]
     fn lookup_builds_cache_from_inventory() {
@@ -971,13 +1035,14 @@ mod tests {
             })
         }
         inventory::submit! {
-            GrpcHandlerRegistration {
-                method: "test_rate_limit_err",
-                handler: rate_limit_handler,
-                body_param: None,
-                default_status: None,
-            }
+                    GrpcHandlerRegistration {
+                        method: "test_rate_limit_err",
+                        handler: rate_limit_handler,
+                        body_param: None,
+                        default_status: None,
+                        roles: &[],
         }
+                }
         let service = SdForgeGrpcService::default();
         let req = Request::new(CallRequest {
             method: "test_rate_limit_err".to_string(),
@@ -1006,13 +1071,14 @@ mod tests {
             })
         }
         inventory::submit! {
-            GrpcHandlerRegistration {
-                method: "test_validation_err",
-                handler: validation_handler,
-                body_param: None,
-                default_status: None,
-            }
+                    GrpcHandlerRegistration {
+                        method: "test_validation_err",
+                        handler: validation_handler,
+                        body_param: None,
+                        default_status: None,
+                        roles: &[],
         }
+                }
         let service = SdForgeGrpcService::default();
         let req = Request::new(CallRequest {
             method: "test_validation_err".to_string(),
@@ -1435,5 +1501,90 @@ mod tests {
                 "default config should not enable rate limiting"
             );
         }
+    }
+
+    // ========================================================================
+    // T011: gRPC endpoint RBAC（协议对等）— fail-safe / 放行 / 低权限拒绝
+    // ========================================================================
+
+    /// 未配置任何认证（或身份缺失）时，声明了 roles 的方法必须拒绝
+    /// （fail-safe：角色无法验证即不可满足）。
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn rbac_denies_unauthenticated_caller() {
+        let service = SdForgeGrpcService::default();
+        let req = Request::new(CallRequest {
+            method: "test_rbac_admin".to_string(),
+            parameters: HashMap::new(),
+            data: String::new(),
+        });
+        let err = service.call(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+        assert!(err.message().contains("admin"));
+    }
+
+    /// 持有匹配 permission 的合法凭证放行；低权限凭证 permission_denied。
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn rbac_allows_authorized_key_and_rejects_underprivileged() {
+        use crate::security::grpc_auth::ApiKeyVerifier;
+
+        let store = std::sync::Arc::new(crate::security::SdForgeApiKeyAuth::new());
+        store.add_key("admin-key".to_string(), vec!["admin".to_string()]);
+        store.add_key("basic-key".to_string(), vec!["basic".to_string()]);
+        let service = SdForgeGrpcService::default()
+            .with_auth_interceptor(std::sync::Arc::new(ApiKeyVerifier::new(store, "")));
+
+        // admin key → 放行
+        let mut req = Request::new(CallRequest {
+            method: "test_rbac_admin".to_string(),
+            parameters: HashMap::new(),
+            data: String::new(),
+        });
+        req.metadata_mut()
+            .insert("x-api-key", "admin-key".parse().unwrap());
+        let resp = service.call(req).await.unwrap().into_inner();
+        assert_eq!(resp.data, "admin-ok");
+
+        // basic key → permission_denied，handler 未执行
+        let mut req = Request::new(CallRequest {
+            method: "test_rbac_admin".to_string(),
+            parameters: HashMap::new(),
+            data: String::new(),
+        });
+        req.metadata_mut()
+            .insert("x-api-key", "basic-key".parse().unwrap());
+        let err = service.call(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
+    }
+
+    /// roles 为空的方法不做角色检查（认证是否要求由 interceptor 配置决定）。
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn rbac_skips_methods_without_roles() {
+        let service = SdForgeGrpcService::default();
+        let req = Request::new(CallRequest {
+            method: "test_echo".to_string(),
+            parameters: HashMap::new(),
+            data: String::new(),
+        });
+        let resp = service.call(req).await.unwrap().into_inner();
+        assert!(resp.success);
+    }
+
+    /// security feature 关闭时 fail-safe：声明了 roles 的方法一律拒绝
+    /// （无认证栈可验证角色）。`cargo test --features grpc`（不含
+    /// security）下编译并生效。
+    #[cfg(not(feature = "security"))]
+    #[tokio::test]
+    async fn rbac_fail_safe_denies_without_security_feature() {
+        let service = SdForgeGrpcService::default();
+        let req = Request::new(CallRequest {
+            method: "test_rbac_admin".to_string(),
+            parameters: HashMap::new(),
+            data: String::new(),
+        });
+        let err = service.call(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::PermissionDenied);
     }
 }

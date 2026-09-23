@@ -60,6 +60,7 @@ mod grpc_integration_tests {
         handler: integration_test_echo_handler,
         body_param: None,
         default_status: None,
+        roles: &[],
     });
 
     // Handler that accepts body data (for data_call tests)
@@ -79,6 +80,7 @@ mod grpc_integration_tests {
                 handler: integration_test_echo_handler,
                 body_param: None,
                 default_status: None,
+                roles: &[],
             });
         };
     }
@@ -128,6 +130,7 @@ mod grpc_integration_tests {
         handler: integration_test_body_handler,
         body_param: Some("body"),
         default_status: None,
+        roles: &[],
     });
 
     // ============================================================================
@@ -1274,6 +1277,7 @@ mod grpc_status_code_tests {
         handler: status_code_handler,
         body_param: None,
         default_status: None,
+        roles: &[],
     });
 
     /// Handler that returns a `ServiceResponse` without `status_code` (None).
@@ -1296,6 +1300,7 @@ mod grpc_status_code_tests {
         handler: service_response_no_status_handler,
         body_param: None,
         default_status: None,
+        roles: &[],
     });
 
     /// Handler that returns a bare type (no ServiceResponse wrapper).
@@ -1314,6 +1319,7 @@ mod grpc_status_code_tests {
         handler: bare_type_handler,
         body_param: None,
         default_status: None,
+        roles: &[],
     });
 
     /// Helper: call a method on the gRPC service directly (no server needed).

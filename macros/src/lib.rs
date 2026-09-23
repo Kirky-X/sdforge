@@ -1252,6 +1252,7 @@ fn generate_grpc_handler_registration(
     params: &[ParamInfo],
     path_params: &[String],
     status: Option<u16>,
+    auth_roles: &[String],
 ) -> TokenStream2 {
     let grpc_handler_fn_name = syn::Ident::new(
         &format!("__grpc_handler_{}", fn_name),
@@ -1271,6 +1272,10 @@ fn generate_grpc_handler_registration(
         Some(code) => quote! { Some(#code as u16) },
         None => quote! { None },
     };
+    // RBAC 角色声明（`#[forge(auth(role = "..."))]`）→ `&'static [&'static str]`
+    // 切片字面量；未声明时为 `&[]`（不检查角色）。消费方：
+    // `SdForgeGrpcService::call_with_context` 分发前检查。
+    let role_lits: Vec<&str> = auth_roles.iter().map(|s| s.as_str()).collect();
 
     quote! {
         #[cfg(feature = "grpc")]
@@ -1282,6 +1287,7 @@ fn generate_grpc_handler_registration(
             handler: #grpc_handler_fn_name,
             body_param: #body_param,
             default_status: #default_status,
+            roles: &[#(#role_lits),*],
         });
     }
 }
@@ -2584,6 +2590,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             &params,
             &path_params,
             status,
+            &extras.auth_roles,
         );
         quote! {
             #[cfg(feature = "grpc")]
@@ -3336,7 +3343,7 @@ mod macro_parsing_tests {
         let path_params = vec!["payload".to_string()];
 
         let tokens =
-            generate_grpc_handler_registration(&fn_name, "embed", &params, &path_params, None);
+            generate_grpc_handler_registration(&fn_name, "embed", &params, &path_params, None, &[]);
         let s = normalize_ts(&tokens);
 
         assert!(
@@ -3379,7 +3386,7 @@ mod macro_parsing_tests {
         let path_params = vec![];
 
         let tokens =
-            generate_grpc_handler_registration(&fn_name, "ping", &params, &path_params, None);
+            generate_grpc_handler_registration(&fn_name, "ping", &params, &path_params, None, &[]);
         let s = normalize_ts(&tokens);
 
         assert!(
@@ -3411,6 +3418,7 @@ mod macro_parsing_tests {
             &params,
             &path_params,
             Some(201u16),
+            &[],
         );
         let s = normalize_ts(&tokens);
 
@@ -3421,6 +3429,43 @@ mod macro_parsing_tests {
         assert!(
             s.contains("default_status : Some (201u16 as u16)"),
             "default_status must be Some(201u16 as u16) when macro status=201: {s}"
+        );
+    }
+
+    /// `auth(role = ...)` 声明必须透传为 registration 的 `roles` 切片；
+    /// 未声明时为 `&[]`。
+    #[test]
+    fn test_generate_grpc_handler_registration_emits_roles() {
+        let fn_name = syn::Ident::new("admin_only", proc_macro2::Span::call_site());
+        let params: Vec<ParamInfo> = vec![];
+        let path_params = vec![];
+
+        let with_roles = generate_grpc_handler_registration(
+            &fn_name,
+            "admin_action",
+            &params,
+            &path_params,
+            None,
+            &["admin".to_string(), "operator".to_string()],
+        );
+        let s = normalize_ts(&with_roles);
+        assert!(
+            s.contains("roles : &[\"admin\", \"operator\"]"),
+            "roles must carry auth declarations: {s}"
+        );
+
+        let without_roles = generate_grpc_handler_registration(
+            &fn_name,
+            "open_action",
+            &params,
+            &path_params,
+            None,
+            &[],
+        );
+        let s = normalize_ts(&without_roles);
+        assert!(
+            s.contains("roles : &[]"),
+            "roles must default to empty slice: {s}"
         );
     }
 

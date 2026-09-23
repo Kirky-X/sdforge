@@ -29,6 +29,11 @@ pub struct GrpcHandlerRegistration {
     /// priority chain: `ServiceResponse.status_code` > `default_status` > 200.
     /// `None` means no macro `status` was declared (default 200).
     pub default_status: Option<u16>,
+    /// Endpoint RBAC roles from `#[forge(auth(role = "..."))]`. Empty slice
+    /// = no role requirement (authentication still applies). With the
+    /// `security` feature disabled, a non-empty declaration denies every
+    /// request — fail-safe, mirroring HTTP `require_role`.
+    pub roles: &'static [&'static str],
 }
 
 inventory::collect!(GrpcHandlerRegistration);
@@ -52,13 +57,14 @@ mod tests {
     }
 
     inventory::submit! {
-        GrpcHandlerRegistration {
-            method: "test_probe",
-            handler: dummy_handler,
-            body_param: None,
-            default_status: None,
-        }
+            GrpcHandlerRegistration {
+                method: "test_probe",
+                handler: dummy_handler,
+                body_param: None,
+                default_status: None,
+                roles: &[],
     }
+        }
 
     #[test]
     fn grpc_handler_registration_collected() {
