@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use super::*;
-use crate::core::{ApiError, HandlerArgs, HandlerFn, HandlerState, extract_value};
+use crate::core::{HandlerArgs, HandlerFn, HandlerState, extract_value};
 use crate::grpc::handler::GrpcHandlerRegistration;
 
 #[cfg(feature = "grpc")]
@@ -318,15 +318,18 @@ impl SdForgeGrpcService {
                 }))
             }
             Ok(Err(e)) => {
-                // business error → success:false + Status::ok (so
-                // the client can read the body for error details).
-                let status_code = map_error_to_http(&e);
-                Ok(Response::new(CallResponse {
-                    success: false,
-                    data: String::new(),
-                    error: e.to_string(),
-                    status_code,
-                }))
+                // business error → 真实 gRPC Status（vuln-SIMPL-002 修复）：
+                // 此前走 Status::ok + body success:false，标准 gRPC 客户端、
+                // 监控错误率与重试/熔断策略对该批错误全部失明。现按统一
+                // 映射表落到 tonic::Code，details 携带 UnifiedError JSON
+                //（机器可读 code/field/trace_id 不丢失）。
+                let unified = crate::error::unified::UnifiedError::from(&e);
+                let code = crate::error::unified::grpc_code_for(&e);
+                Err(Status::with_details(
+                    code,
+                    unified.message.clone(),
+                    tonic::codegen::Bytes::from(unified.to_json().to_string()),
+                ))
             }
             Err(_panic) => {
                 // handler panicked → generic internal error.
@@ -406,24 +409,8 @@ fn extract_status_code(value: &serde_json::Value) -> Option<i32> {
         .map(|u| u as i32)
 }
 
-/// Map an `ApiError` variant to its HTTP-equivalent status code.
-///
-/// Used to populate `CallResponse.status_code` so gRPC clients can read the
-/// semantic HTTP code of a business error without parsing the error message.
-/// Mirrors the HTTP error mapping convention.
-#[cfg(feature = "grpc")]
-fn map_error_to_http(e: &ApiError) -> i32 {
-    match e {
-        ApiError::NotFound { .. } => 404,
-        ApiError::InvalidInput { .. } | ApiError::ValidationError { .. } => 422,
-        ApiError::AuthenticationFailed { .. } => 401,
-        ApiError::AccessDenied { .. } => 403,
-        ApiError::RateLimitExceeded { .. } => 429,
-        ApiError::QuotaExhausted { .. } => 429,
-        ApiError::ServiceUnavailable { .. } => 503,
-        ApiError::Internal { .. } => 500,
-    }
-}
+// ApiError → HTTP/gRPC 映射已收敛到 `crate::error::unified`
+// （`mapping_for` / `grpc_code_for`）单一事实来源。
 
 #[cfg(feature = "grpc")]
 impl GrpcRoute {
@@ -622,7 +609,7 @@ impl SdForgeGrpcService {
 #[cfg(all(test, feature = "grpc"))]
 mod tests {
     use super::*;
-    use crate::core::HandlerArgs;
+    use crate::core::{ApiError, HandlerArgs};
     use serde_json::Value;
     use std::sync::Arc;
     use tonic::Request;
@@ -946,19 +933,97 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn call_business_error_returns_success_false_with_status_code() {
-        // business error → Status::ok, success:false, error in body
+    async fn call_business_error_returns_real_grpc_status() {
+        // business error → 真实 Status（不再是 Status::ok + success:false body）。
+        // NotFound → Status::not_found，details 携带 UnifiedError JSON。
         let service = SdForgeGrpcService::default();
         let req = Request::new(CallRequest {
             method: "test_not_found".to_string(),
             parameters: HashMap::new(),
             data: String::new(),
         });
-        let resp = service.call(req).await.unwrap().into_inner();
-        assert!(!resp.success);
-        assert_eq!(resp.status_code, 404);
-        assert!(resp.error.contains("test_resource"));
-        assert!(resp.data.is_empty());
+        let err = service.call(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::NotFound);
+        let details: serde_json::Value =
+            serde_json::from_slice(err.details()).expect("details must be UnifiedError JSON");
+        assert_eq!(details["code"], "NOT_FOUND");
+        assert!(
+            details["message"]
+                .as_str()
+                .unwrap()
+                .contains("test_resource")
+        );
+    }
+
+    /// RateLimitExceeded → Status::resource_exhausted（与限流器拦截路径同码，
+    /// 消除双形态）。
+    #[tokio::test]
+    async fn call_rate_limit_error_maps_to_resource_exhausted() {
+        fn rate_limit_handler(
+            _args: HandlerArgs,
+            _state: HandlerState,
+        ) -> crate::core::HandlerFuture {
+            Box::pin(async {
+                Err(ApiError::RateLimitExceeded {
+                    limit: 10,
+                    window_seconds: 60,
+                })
+            })
+        }
+        inventory::submit! {
+            GrpcHandlerRegistration {
+                method: "test_rate_limit_err",
+                handler: rate_limit_handler,
+                body_param: None,
+                default_status: None,
+            }
+        }
+        let service = SdForgeGrpcService::default();
+        let req = Request::new(CallRequest {
+            method: "test_rate_limit_err".to_string(),
+            parameters: HashMap::new(),
+            data: String::new(),
+        });
+        let err = service.call(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::ResourceExhausted);
+        let details: serde_json::Value = serde_json::from_slice(err.details()).unwrap();
+        assert_eq!(details["code"], "TOO_MANY_REQUESTS");
+    }
+
+    /// ValidationError → Status::invalid_argument，details 带 422 语义码与
+    /// field 字段。
+    #[tokio::test]
+    async fn call_validation_error_maps_to_invalid_argument_with_field() {
+        fn validation_handler(
+            _args: HandlerArgs,
+            _state: HandlerState,
+        ) -> crate::core::HandlerFuture {
+            Box::pin(async {
+                Err(ApiError::ValidationError {
+                    field: "email".to_string(),
+                    constraint: "format".to_string(),
+                })
+            })
+        }
+        inventory::submit! {
+            GrpcHandlerRegistration {
+                method: "test_validation_err",
+                handler: validation_handler,
+                body_param: None,
+                default_status: None,
+            }
+        }
+        let service = SdForgeGrpcService::default();
+        let req = Request::new(CallRequest {
+            method: "test_validation_err".to_string(),
+            parameters: HashMap::new(),
+            data: String::new(),
+        });
+        let err = service.call(req).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        let details: serde_json::Value = serde_json::from_slice(err.details()).unwrap();
+        assert_eq!(details["code"], "UNPROCESSABLE_ENTITY");
+        assert_eq!(details["field"], "email");
     }
 
     #[tokio::test]
@@ -1150,67 +1215,19 @@ mod tests {
     }
 
     #[test]
-    fn map_error_to_http_covers_all_variants() {
-        // exhaustive ApiError → HTTP code mapping
-        let cases: Vec<(ApiError, i32)> = vec![
-            (
-                ApiError::NotFound {
-                    resource: "x".into(),
-                    resource_id: None,
-                },
-                404,
-            ),
-            (
-                ApiError::InvalidInput {
-                    message: "x".into(),
-                    field: None,
-                    value: None,
-                },
-                422,
-            ),
-            (
-                ApiError::ValidationError {
-                    field: "x".into(),
-                    constraint: "required".into(),
-                },
-                422,
-            ),
-            (ApiError::AuthenticationFailed { reason: "x".into() }, 401),
-            (
-                ApiError::AccessDenied {
-                    permission: "x".into(),
-                    user_id: None,
-                },
-                403,
-            ),
-            (
-                ApiError::RateLimitExceeded {
-                    limit: 10,
-                    window_seconds: 60,
-                },
-                429,
-            ),
-            (
-                ApiError::ServiceUnavailable {
-                    service: "x".into(),
-                    retry_after: None,
-                    source: None,
-                },
-                503,
-            ),
-            (
-                ApiError::Internal {
-                    message: "x".into(),
-                    error_id: "x".into(),
-                    source: None,
-                    context: None,
-                },
-                500,
-            ),
-        ];
-        for (e, expected) in cases {
-            assert_eq!(map_error_to_http(&e), expected, "mismatch for {e:?}");
-        }
+    fn grpc_error_mapping_smoke_uses_unified_table() {
+        // smoke：映射职责在 unified::grpc_code_for（全变体单测见 unified.rs），
+        // 此处仅锚定本模块错误路径引用的入口未被移除。
+        let e = ApiError::NotFound {
+            resource: "x".into(),
+            resource_id: None,
+        };
+        assert_eq!(
+            crate::error::unified::grpc_code_for(&e),
+            tonic::Code::NotFound
+        );
+        let (status, code) = crate::error::unified::mapping_for(&e);
+        assert_eq!((status, code), (404, "NOT_FOUND"));
     }
 
     #[test]

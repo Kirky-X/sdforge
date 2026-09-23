@@ -47,19 +47,14 @@ pub fn build_fallback_response(status: u16, message: &str) -> axum::response::Re
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
-        let status = match self {
-            ApiError::NotFound { .. } => 404,
-            ApiError::InvalidInput { .. } => 400,
-            ApiError::AuthenticationFailed { .. } => 401,
-            ApiError::AccessDenied { .. } => 403,
-            ApiError::RateLimitExceeded { .. } => 429,
-            ApiError::QuotaExhausted { .. } => 429,
-            ApiError::Internal { .. } => 500,
-            ApiError::ServiceUnavailable { .. } => 503,
-            ApiError::ValidationError { .. } => 422,
-        };
-
-        build_json_response(status, &self, "Internal server error")
+        // 统一错误契约（单一事实来源）：状态与机器码都从 unified::mapping_for
+        // 派生，错误体渲染为 UnifiedError 载荷（含 trace_id/field），与 gRPC
+        // 侧共享同一映射表 —— 严禁在此维护第二份 ApiError→status match。
+        let unified = crate::error::unified::UnifiedError::from(&self);
+        let (status, _) = crate::error::unified::mapping_for(&self);
+        let status = axum::http::StatusCode::from_u16(status)
+            .unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+        crate::error::unified::render_http(status, &unified)
     }
 }
 
@@ -211,7 +206,55 @@ mod tests {
                 resp.status(),
                 axum::http::StatusCode::from_u16(expected_status).unwrap(),
                 "ApiError variant should map to HTTP {}",
-                expected_status
+                expected_status,
+            );
+        }
+    }
+
+    /// 统一错误契约：ApiError 响应体渲染为 UnifiedError 载荷，
+    /// `code` 字段来自 `unified::mapping_for` 派生。
+    #[tokio::test]
+    async fn test_api_error_body_carries_unified_code() {
+        let cases: Vec<(&str, ApiError)> = vec![
+            (
+                "NOT_FOUND",
+                ApiError::NotFound {
+                    resource: "User".into(),
+                    resource_id: None,
+                },
+            ),
+            (
+                "BAD_REQUEST",
+                ApiError::InvalidInput {
+                    message: "x".into(),
+                    field: Some("age".into()),
+                    value: None,
+                },
+            ),
+            (
+                "UNPROCESSABLE_ENTITY",
+                ApiError::ValidationError {
+                    field: "email".into(),
+                    constraint: "format".into(),
+                },
+            ),
+            (
+                "TOO_MANY_REQUESTS",
+                ApiError::RateLimitExceeded {
+                    limit: 1,
+                    window_seconds: 1,
+                },
+            ),
+        ];
+        for (expected_code, err) in cases {
+            let resp = err.into_response();
+            let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap();
+            let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(
+                parsed["code"], expected_code,
+                "unified code mismatch for {expected_code}"
             );
         }
     }
