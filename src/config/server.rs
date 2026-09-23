@@ -41,6 +41,9 @@ pub struct IdempotencyConfig {
     pub ttl_secs: i64,
     /// 超过该大小的响应不缓存（默认 1 MiB）。
     pub max_response_bytes: usize,
+    /// 外部注入的 store（测试/多路由共享复用）。None = 内部新建。
+    #[serde(skip, default)]
+    pub store: Option<std::sync::Arc<crate::cache::IdempotencyStore>>,
 }
 
 #[cfg(feature = "idempotency")]
@@ -50,6 +53,7 @@ impl Default for IdempotencyConfig {
             enabled: false,
             ttl_secs: 86_400,
             max_response_bytes: 1024 * 1024,
+            store: None,
         }
     }
 }

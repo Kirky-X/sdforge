@@ -40,6 +40,7 @@ fn idem_config() -> SdForgeConfig {
                 enabled: true,
                 ttl_secs: 3600,
                 max_response_bytes: 1024 * 1024,
+                store: None,
             },
             ..Default::default()
         },
@@ -120,6 +121,28 @@ async fn disabled_config_leaves_behavior_unchanged() {
         assert_eq!(resp.status(), 200);
     }
     assert_eq!(EXEC_COUNT.load(Ordering::SeqCst), 2, "disabled 时零防护");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn http_in_flight_returns_409_with_header() {
+    // T032: HTTP 层在途并发 —— 注入 store 并预占 InFlight claim，
+    // 同 key POST 得到 409 + Idempotency-Replayed: in-flight。
+    let store = Arc::new(sdforge::cache::IdempotencyStore::new());
+    assert_eq!(
+        store.begin("/api/v1/payments", "inflight-http", 30),
+        sdforge::cache::IdempotencyOutcome::Execute
+    );
+    let mut cfg = idem_config();
+    cfg.server.idempotency.store = Some(store);
+    let router = build_with_config(&cfg).unwrap();
+
+    let resp = post(router, "/api/v1/payments", Some("inflight-http"), "1").await;
+    assert_eq!(resp.status(), 409);
+    assert_eq!(
+        resp.headers().get("idempotency-replayed").unwrap(),
+        "in-flight"
+    );
 }
 
 #[tokio::test]

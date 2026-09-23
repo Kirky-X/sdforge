@@ -354,7 +354,12 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
     #[cfg(feature = "idempotency")]
     if config.server.idempotency.enabled {
         use std::sync::Arc as _idempotency_arc;
-        let store = _idempotency_arc::new(crate::cache::IdempotencyStore::new());
+        let store = config
+            .server
+            .idempotency
+            .store
+            .clone()
+            .unwrap_or_else(|| _idempotency_arc::new(crate::cache::IdempotencyStore::new()));
         let ttl = config.server.idempotency.ttl_secs;
         let max_bytes = config.server.idempotency.max_response_bytes;
         router = router.layer(axum::middleware::from_fn(move |req, next| {

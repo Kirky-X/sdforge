@@ -187,6 +187,7 @@ async fn grpc_validated(
 
 #[cfg(feature = "grpc")]
 mod grpc_parity {
+    use sdforge::forge;
     use sdforge::grpc::SdForgeGrpcService;
     use sdforge::grpc::sdforge_v1::CallRequest;
     use sdforge::grpc::sdforge_v1::sd_forge_service_server::SdForgeService;
@@ -221,5 +222,107 @@ mod grpc_parity {
         let resp = service.call(call_request("50")).await.unwrap().into_inner();
         assert!(resp.success);
         assert!(resp.data.contains("50"));
+    }
+
+    // ---- T031: 其余五种规则各一个 gRPC 侧用例（le 见上） ----
+
+    /// ge 规则：低于下限被拒。
+    #[tokio::test]
+    async fn grpc_ge_rule_rejects_below_minimum() {
+        let service = SdForgeGrpcService::default();
+        let err = service.call(call_request("0")).await.unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        let details: serde_json::Value = serde_json::from_slice(err.details()).unwrap();
+        assert_eq!(details["code"], "UNPROCESSABLE_ENTITY");
+        assert_eq!(details["field"], "size");
+    }
+
+    // ---- 多参数 handler：min_length/max_length/not_blank/email ----
+
+    #[forge(
+        name = "validate_grpc_rules",
+        version = "v1",
+        path = "/grpc-rules",
+        method = "POST",
+        grpc_method = "validate_rules_rpc",
+        validate
+    )]
+    async fn grpc_rules(
+        #[param(kind = "query", min_length = 2, max_length = 8)] name: String,
+        #[param(kind = "query", not_blank)] note: String,
+        #[param(kind = "body", email)] mail: String,
+    ) -> Result<serde_json::Value, sdforge::core::ApiError> {
+        Ok(serde_json::json!({ "name": name, "note": note, "mail": mail }))
+    }
+
+    /// name/note 走 parameters（query 对应），mail 走 data（body_param 注入）。
+    fn rules_request(name: &str, note: &str, mail: &str) -> tonic::Request<CallRequest> {
+        let mut parameters = HashMap::new();
+        parameters.insert("name".to_string(), name.to_string());
+        parameters.insert("note".to_string(), note.to_string());
+        tonic::Request::new(CallRequest {
+            method: "validate_rules_rpc".to_string(),
+            parameters,
+            data: mail.to_string(),
+        })
+    }
+
+    #[tokio::test]
+    async fn grpc_min_length_rule_rejects_short_value() {
+        let service = SdForgeGrpcService::default();
+        let err = service
+            .call(rules_request("a", "ok", "a@b.com"))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        let details: serde_json::Value = serde_json::from_slice(err.details()).unwrap();
+        assert_eq!(details["field"], "name");
+    }
+
+    #[tokio::test]
+    async fn grpc_max_length_rule_rejects_long_value() {
+        let service = SdForgeGrpcService::default();
+        let err = service
+            .call(rules_request("abcdefghi", "ok", "a@b.com"))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        let details: serde_json::Value = serde_json::from_slice(err.details()).unwrap();
+        assert_eq!(details["field"], "name");
+    }
+
+    #[tokio::test]
+    async fn grpc_not_blank_rule_rejects_blank_value() {
+        let service = SdForgeGrpcService::default();
+        let err = service
+            .call(rules_request("abc", "  ", "a@b.com"))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        let details: serde_json::Value = serde_json::from_slice(err.details()).unwrap();
+        assert_eq!(details["field"], "note");
+    }
+
+    #[tokio::test]
+    async fn grpc_email_rule_rejects_invalid_address() {
+        let service = SdForgeGrpcService::default();
+        let err = service
+            .call(rules_request("abc", "ok", "not-an-email"))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        let details: serde_json::Value = serde_json::from_slice(err.details()).unwrap();
+        assert_eq!(details["field"], "mail");
+    }
+
+    #[tokio::test]
+    async fn grpc_rules_all_valid_pass_through() {
+        let service = SdForgeGrpcService::default();
+        let resp = service
+            .call(rules_request("abc", "ok", "a@b.com"))
+            .await
+            .unwrap()
+            .into_inner();
+        assert!(resp.success);
     }
 }
