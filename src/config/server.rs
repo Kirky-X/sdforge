@@ -39,6 +39,10 @@ pub struct IdempotencyConfig {
     pub enabled: bool,
     /// 完成响应的重放窗口（秒，默认 86400 = 24h）。
     pub ttl_secs: i64,
+    /// 在途 claim 的阻塞上限（秒，默认 30）——handler 崩溃后同 key 重试
+    /// 需等待该窗口；此前硬编码 30（复查 L-7 配置化）。
+    #[serde(default)]
+    pub inflight_ttl_secs: i64,
     /// 超过该大小的响应不缓存（默认 1 MiB）。
     pub max_response_bytes: usize,
     /// 外部注入的 store（测试/多路由共享复用）。None = 内部新建。
@@ -52,6 +56,7 @@ impl Default for IdempotencyConfig {
         Self {
             enabled: false,
             ttl_secs: 86_400,
+            inflight_ttl_secs: 30,
             max_response_bytes: 1024 * 1024,
             store: None,
         }
@@ -63,6 +68,11 @@ impl IdempotencyConfig {
     /// Validate idempotency configuration.
     pub fn validate(&self) -> Result<(), crate::config::ConfigError> {
         if self.enabled && self.ttl_secs <= 0 {
+            return Err(crate::config::ConfigError::ValidationError(
+                "Idempotency ttl_secs must be positive when enabled".into(),
+            ));
+        }
+        if self.enabled && self.inflight_ttl_secs <= 0 {
             return Err(crate::config::ConfigError::ValidationError(
                 "Idempotency ttl_secs must be positive when enabled".into(),
             ));

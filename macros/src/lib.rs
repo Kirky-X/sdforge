@@ -1795,7 +1795,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // when `#[forge(validate)]` is set, emit field-level validation
     // checks into every HTTP handler closure (before the user fn runs).
-    // Violations short-circuit with 400 + {"errors":[{field,rule,message}]}.
+    // Violations short-circuit with 422 + {"errors":[{field,rule,message}]}.
     if extras.validate {
         // Target expression: Body params are Json<T> extractors (value at
         // `.0`); Path/State/Extension in single-extractor form are

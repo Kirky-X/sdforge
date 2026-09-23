@@ -28,11 +28,15 @@ fn test_grpc_server_config_with_auth() {
         timeout_seconds: 60,
         require_auth: true,
         auth: Some(auth),
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -378,11 +382,15 @@ fn test_grpc_config_zero_timeout() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -403,11 +411,15 @@ fn test_grpc_config_large_max_connections() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -427,11 +439,15 @@ fn test_grpc_config_boundary_values() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -446,11 +462,15 @@ fn test_grpc_config_boundary_values() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -907,11 +927,15 @@ fn test_grpc_server_config_clone() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -934,11 +958,15 @@ fn test_grpc_server_config_equality() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -953,11 +981,15 @@ fn test_grpc_server_config_equality() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -978,11 +1010,15 @@ fn test_grpc_server_config_with_minimal_connections() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -1002,11 +1038,15 @@ fn test_grpc_server_config_with_zero_timeout() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -1026,11 +1066,15 @@ fn test_grpc_server_config_timeout_edge_cases() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -1045,11 +1089,15 @@ fn test_grpc_server_config_timeout_edge_cases() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -1070,11 +1118,15 @@ fn test_grpc_server_config_auth_none() {
         timeout_seconds: 30,
         require_auth: false,
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -1636,11 +1688,15 @@ async fn test_build_server_with_config_zero_values_starts_serving() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -1674,11 +1730,15 @@ async fn test_build_server_with_config_large_values_starts_serving() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
@@ -1713,11 +1773,15 @@ async fn test_build_server_with_config_minimal_positive_values() {
         require_auth: false,
         #[cfg(feature = "security")]
         auth: None,
+        #[cfg(feature = "security")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]

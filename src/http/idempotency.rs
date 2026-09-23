@@ -23,11 +23,17 @@ use crate::cache::{IdempotencyOutcome, IdempotencyStore};
 pub const IDEMPOTENCY_KEY_HEADER: &str = "idempotency-key";
 /// Marker header added to replayed responses.
 pub const IDEMPOTENCY_REPLAYED_HEADER: &str = "idempotency-replayed";
+/// Marker header added when a response intentionally bypasses the cache.
+pub const IDEMPOTENCY_SKIPPED_HEADER: &str = "idempotency-skipped";
+/// 响应缓冲硬上限（防 OOM）：超过它的响应 abort 后以 500 收场。
+/// 正常业务响应远低于此；上限判定用配置的 `max_response_bytes`。
+pub const IDEMPOTENCY_HARD_CAP: usize = 32 * 1024 * 1024;
 
 /// Build the idempotency middleware for `axum::middleware::from_fn`.
 pub async fn idempotency_middleware(
     store: Arc<IdempotencyStore>,
     ttl_secs: i64,
+    inflight_ttl_secs: i64,
     max_response_bytes: usize,
     req: Request<Body>,
     next: Next,
@@ -55,13 +61,19 @@ pub async fn idempotency_middleware(
         .map(|p| p.as_str().to_string())
         .unwrap_or_else(|| "unmatched".to_string());
 
-    match store.begin(&scope, &key, 30) {
-        IdempotencyOutcome::Replay(body, status) => {
+    match store.begin(&scope, &key, inflight_ttl_secs) {
+        IdempotencyOutcome::Replay {
+            body,
+            status,
+            content_type,
+        } => {
             let status =
                 axum::http::StatusCode::from_u16(status).unwrap_or(axum::http::StatusCode::OK);
+            // T008：重放还原首次响应的 media type（缺省回退 JSON）。
+            let ct = content_type.unwrap_or_else(|| "application/json".to_string());
             let mut resp = Response::builder()
                 .status(status)
-                .header(axum::http::header::CONTENT_TYPE, "application/json")
+                .header(axum::http::header::CONTENT_TYPE, ct)
                 .header(IDEMPOTENCY_REPLAYED_HEADER, "true")
                 .body(Body::from(body))
                 .unwrap_or_else(|_| axum::response::Response::new(Body::empty()));
@@ -91,9 +103,27 @@ pub async fn idempotency_middleware(
                 return resp;
             }
             let (parts, body) = resp.into_parts();
-            match axum::body::to_bytes(body, max_response_bytes).await {
+            // 缓冲到硬上限（32 MiB）：为"超限透行"保住完整响应体。
+            // 超过硬上限的极端响应无法还原 —— abort 后返回 500（文档化边界）。
+            match axum::body::to_bytes(body, IDEMPOTENCY_HARD_CAP).await {
                 Ok(bytes) => {
-                    store.complete(&scope, &key, status, bytes.to_vec(), ttl_secs);
+                    if bytes.len() > max_response_bytes {
+                        // 复查 H-2 修复：handler 副作用已提交，响应必须原样
+                        // 返回（spec："超限不缓存但正常返回"）。返回 413 会
+                        // 诱导客户端按幂等语义重试 → 重复副作用。
+                        store.abort(&scope, &key);
+                        let mut passthrough = Response::from_parts(parts, Body::from(bytes));
+                        passthrough.headers_mut().insert(
+                            IDEMPOTENCY_SKIPPED_HEADER,
+                            axum::http::HeaderValue::from_static("oversized"),
+                        );
+                        return passthrough;
+                    }
+                    let content_type = parts
+                        .headers
+                        .get(axum::http::header::CONTENT_TYPE)
+                        .and_then(|v| v.to_str().ok());
+                    store.complete(&scope, &key, status, content_type, bytes.to_vec(), ttl_secs);
                     let mut rebuilt = Response::from_parts(parts, Body::from(bytes));
                     rebuilt.headers_mut().insert(
                         IDEMPOTENCY_REPLAYED_HEADER,
@@ -102,17 +132,17 @@ pub async fn idempotency_middleware(
                     rebuilt
                 }
                 Err(_) => {
-                    // 超过 max_response_bytes：正常返回但不缓存。
+                    // 超过硬上限：claim 释放让调用方可重试；响应体已消费
+                    // 无法还原，只能以 500 语义收场（极端边界，见上方注释）。
                     store.abort(&scope, &key);
-                    // body 已被消费且无法还原 —— 返回 413 语义的统一错误。
                     let unified = crate::error::unified::UnifiedError::new(
-                        "PAYLOAD_TOO_LARGE",
+                        "RESPONSE_TOO_LARGE",
                         format!(
-                            "response exceeds idempotency max_response_bytes ({max_response_bytes})"
+                            "response exceeds idempotency buffering cap ({IDEMPOTENCY_HARD_CAP} bytes)"
                         ),
                     );
                     crate::error::unified::render_http(
-                        axum::http::StatusCode::PAYLOAD_TOO_LARGE,
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                         &unified,
                     )
                 }

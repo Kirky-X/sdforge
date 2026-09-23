@@ -63,6 +63,9 @@ pub struct GrpcServerConfig {
     /// 重放窗口秒数（feature = `idempotency`，默认 86400）。
     #[cfg(feature = "idempotency")]
     pub idempotency_ttl_secs: i64,
+    /// 在途 claim 阻塞上限秒数（feature = `idempotency`，默认 30）。
+    #[cfg(feature = "idempotency")]
+    pub idempotency_inflight_ttl_secs: i64,
     /// Maximum number of concurrent connections
     pub max_connections: usize,
     /// Request timeout in seconds
@@ -84,10 +87,16 @@ pub struct GrpcServerConfig {
     /// parameter downcast this `Arc<dyn Any>` to their concrete type at
     /// call time. Available without the `security` feature (design D5).
     pub state: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
+    /// 生产 RBAC 接线（T001，feature = security）：装配 per-call verifier，
+    /// 使 `#[forge(auth(role))]` 声明在 build_server_with_config 路径生效
+    /// （此前只有手动 `with_auth_interceptor` 可达，生产形态是全拒绝死开关）。
+    #[cfg(feature = "security")]
+    pub auth_verifier: Option<std::sync::Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
     /// Optional rate limiter for gRPC requests (vuln-0006).
     ///
-    /// When `Some`, each incoming gRPC `call` request is checked against
-    /// the rate limiter using the client's remote address as the identifier.
+    /// When `Some`, each incoming gRPC `call`/`get_info` request is checked
+    /// against the rate limiter using the client's remote address as the
+    /// identifier.
     /// Requests that exceed the limit are rejected with
     /// `Status::resource_exhausted`. This closes the DoS vector identified
     /// in vuln-0006 (gRPC had no rate limiting while HTTP had).

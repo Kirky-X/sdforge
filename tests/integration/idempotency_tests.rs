@@ -39,6 +39,7 @@ fn idem_config() -> SdForgeConfig {
             idempotency: IdempotencyConfig {
                 enabled: true,
                 ttl_secs: 3600,
+                inflight_ttl_secs: 30,
                 max_response_bytes: 1024 * 1024,
                 store: None,
             },
@@ -121,6 +122,46 @@ async fn disabled_config_leaves_behavior_unchanged() {
         assert_eq!(resp.status(), 200);
     }
     assert_eq!(EXEC_COUNT.load(Ordering::SeqCst), 2, "disabled 时零防护");
+}
+
+#[forge(name = "idem_blob", version = "v1", path = "/blob", method = "POST")]
+async fn blob() -> Result<serde_json::Value, sdforge::core::ApiError> {
+    // ~300 字节响应体，配合 max_response_bytes=64 构造超限场景。
+    Ok(serde_json::json!({ "payload": "x".repeat(300) }))
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn oversized_response_passes_through_intact() {
+    // T002: 超过 max_response_bytes 的成功响应必须原样透传（不缓存、不 413），
+    // handler 副作用已提交 —— 413 会诱导客户端重试造成重复副作用。
+    let mut cfg = idem_config();
+    cfg.server.idempotency.enabled = true;
+    cfg.server.idempotency.max_response_bytes = 64; // 故意压到极小
+    let router = build_with_config(&cfg).unwrap();
+
+    let resp = post(router.clone(), "/api/v1/blob", Some("over-1"), "{}").await;
+    assert_eq!(resp.status(), 200, "超限成功响应必须原样返回");
+    assert_eq!(
+        resp.headers()
+            .get("idempotency-skipped")
+            .map(|v| v.to_str().unwrap()),
+        Some("oversized")
+    );
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let parsed: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        parsed["payload"].as_str().unwrap().len(),
+        300,
+        "响应体必须完整"
+    );
+
+    // claim 已 abort：同 key 重试会再次执行（而不是拿到缓存/409）。
+    let retry = post(router, "/api/v1/blob", Some("over-1"), "{}").await;
+    assert_eq!(retry.status(), 200);
+    assert!(retry.headers().get("idempotency-replayed").is_none());
 }
 
 #[tokio::test]

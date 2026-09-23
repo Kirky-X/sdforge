@@ -77,11 +77,15 @@ pub fn custom_server_config() -> GrpcServerConfig {
         require_auth: false,
         #[cfg(feature = "security_examples")]
         auth: None,
+        #[cfg(feature = "security_examples")]
+        auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency_examples")]
         idempotency_store: None,
         #[cfg(feature = "idempotency_examples")]
         idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency_examples")]
+        idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
         #[cfg(feature = "ratelimit")]

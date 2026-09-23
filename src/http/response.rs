@@ -51,7 +51,7 @@ impl IntoResponse for ApiError {
         // 派生，错误体渲染为 UnifiedError 载荷（含 trace_id/field），与 gRPC
         // 侧共享同一映射表 —— 严禁在此维护第二份 ApiError→status match。
         let unified = crate::error::unified::UnifiedError::from(&self);
-        let (status, _) = crate::error::unified::mapping_for(&self);
+        let status = crate::error::unified::http_status_for(&self);
         let status = axum::http::StatusCode::from_u16(status)
             .unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
         crate::error::unified::render_http(status, &unified)

@@ -327,8 +327,12 @@ impl SdForgeGrpcService {
             self.enforce_rate_limit(identifier.as_deref()).await?;
         }
 
-        // T022: 幂等三态防护（仅当配置了 store 且请求携带 idempotency-key
-        // metadata 时参与）。scope 绑定 gRPC method 名防跨端点键冲突。
+        // T022: 幂等 key 提取（仅当配置了 store 且请求携带 idempotency-key
+        // metadata 时参与）。metadata 须在 into_inner 消费前读取；scope 绑定
+        // gRPC method 名防跨端点键冲突。
+        // T003（复查修复）：claim 后移到全部前置校验之后 —— 此前 begin 早于
+        // payload/handler/body_param 校验，early-return 会把 InFlight claim
+        // 泄漏 30s，卡死同 key 的合法重试。
         #[cfg(all(feature = "grpc", feature = "idempotency"))]
         let idem_key = match &self.idempotency {
             Some(guard) => request
@@ -338,29 +342,6 @@ impl SdForgeGrpcService {
                 .map(|k| (guard, request.get_ref().method.clone(), k.to_string())),
             None => None,
         };
-        #[cfg(all(feature = "grpc", feature = "idempotency"))]
-        if let Some((guard, scope, key)) = &idem_key {
-            match guard.store.begin(scope, key, 30) {
-                crate::cache::IdempotencyOutcome::InFlight => {
-                    return Err(Status::already_exists(
-                        "request with this idempotency-key is already in flight",
-                    ));
-                }
-                crate::cache::IdempotencyOutcome::Replay(body, _status) => {
-                    if let Ok(cached) = serde_json::from_slice::<CachedCallResponse>(&body) {
-                        return Ok(Response::new(CallResponse {
-                            success: cached.success,
-                            data: cached.data,
-                            error: cached.error,
-                            status_code: cached.status_code,
-                        }));
-                    }
-                    // 缓存损坏 → abort 让调用方重试
-                    guard.store.abort(scope, key);
-                }
-                crate::cache::IdempotencyOutcome::Execute => {}
-            }
-        }
 
         let req = request.into_inner();
 
@@ -405,6 +386,32 @@ impl SdForgeGrpcService {
             }
         }
 
+        // T003: 前置校验全部通过 —— 此刻才 claim（InFlight → already_exists；
+        // Replay → 返回缓存；Execute → 继续）。
+        #[cfg(all(feature = "grpc", feature = "idempotency"))]
+        if let Some((guard, scope, key)) = &idem_key {
+            match guard.store.begin(scope, key, 30) {
+                crate::cache::IdempotencyOutcome::InFlight => {
+                    return Err(Status::already_exists(
+                        "request with this idempotency-key is already in flight",
+                    ));
+                }
+                crate::cache::IdempotencyOutcome::Replay { body, .. } => {
+                    if let Ok(cached) = serde_json::from_slice::<CachedCallResponse>(&body) {
+                        return Ok(Response::new(CallResponse {
+                            success: cached.success,
+                            data: cached.data,
+                            error: cached.error,
+                            status_code: cached.status_code,
+                        }));
+                    }
+                    // 缓存损坏 → abort 让调用方重试
+                    guard.store.abort(scope, key);
+                }
+                crate::cache::IdempotencyOutcome::Execute => {}
+            }
+        }
+
         // catch_unwind so a panicking handler never leaks internal
         // paths / stack data through gRPC error messages (security rule).
         use futures_util::FutureExt;
@@ -440,19 +447,27 @@ impl SdForgeGrpcService {
                 // T022: 成功响应入缓存供重放。
                 #[cfg(all(feature = "grpc", feature = "idempotency"))]
                 if let Some((guard, scope, key)) = &idem_key {
-                    guard.store.complete(
-                        scope,
-                        key,
-                        status_code.clamp(0, u16::MAX as i32) as u16,
-                        serde_json::to_vec(&CachedCallResponse {
-                            success: response.success,
-                            data: response.data.clone(),
-                            error: String::new(),
-                            status_code: response.status_code,
-                        })
-                        .unwrap_or_default(),
-                        guard.ttl_secs,
-                    );
+                    // T007：缓存体积上限（1 MiB 对齐协议 payload cap）——
+                    // 超限 abort 不缓存，避免无界内存增长。
+                    let serialized = serde_json::to_vec(&CachedCallResponse {
+                        success: response.success,
+                        data: response.data.clone(),
+                        error: String::new(),
+                        status_code: response.status_code,
+                    })
+                    .unwrap_or_default();
+                    if serialized.len() <= MAX_GRPC_ARGUMENTS_SIZE_BYTES {
+                        guard.store.complete(
+                            scope,
+                            key,
+                            status_code.clamp(0, u16::MAX as i32) as u16,
+                            None,
+                            serialized,
+                            guard.ttl_secs,
+                        );
+                    } else {
+                        guard.store.abort(scope, key);
+                    }
                 }
                 Ok(Response::new(response))
             }
@@ -509,6 +524,8 @@ impl SdForgeService for SdForgeGrpcService {
                 .or_else(|| Some("unknown".to_string()));
             self.enforce_rate_limit(identifier.as_deref()).await?;
         }
+        #[cfg(not(feature = "ratelimit"))]
+        let _ = &request;
         let response = InfoResponse {
             name: "SdForge Service".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -680,6 +697,12 @@ pub async fn build_server_with_config(
         SdForgeGrpcService::with_state_and_rate_limiter(config.state, config.rate_limiter);
     #[cfg(not(feature = "ratelimit"))]
     let service = SdForgeGrpcService::with_state(config.state);
+    // T001: RBAC 生产接线 —— per-call verifier 装配，auth(role) 声明生效。
+    #[cfg(feature = "security")]
+    let service = match config.auth_verifier {
+        Some(ref verifier) => service.with_auth_interceptor(std::sync::Arc::clone(verifier)),
+        None => service,
+    };
     // T022: 幂等 store 配置传递（None = 关闭，默认）。
     #[cfg(feature = "idempotency")]
     let service = match config.idempotency_store {
@@ -732,6 +755,8 @@ impl Default for GrpcServerConfig {
             require_auth: true, // vuln-0006: secure default
             #[cfg(feature = "security")]
             auth: None,
+            #[cfg(feature = "security")]
+            auth_verifier: None,
             state: None,
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
@@ -739,6 +764,8 @@ impl Default for GrpcServerConfig {
             idempotency_store: None,
             #[cfg(feature = "idempotency")]
             idempotency_ttl_secs: 86_400,
+            #[cfg(feature = "idempotency")]
+            idempotency_inflight_ttl_secs: 30,
             http2_keepalive_interval: None,
             http2_keepalive_timeout: None,
             #[cfg(feature = "grpc-tls")]
@@ -826,8 +853,8 @@ mod tests {
     }
         }
 
-    /// Handler that always returns `Err(NotFound)` — verifies the error →
-    /// `success:false` + `status_code:404` + `Status::ok` mapping.
+    /// Handler that always returns `Err(NotFound)` — verifies the business
+    /// error → `Status::not_found` + details `UnifiedError` mapping.
     fn not_found_handler(_args: HandlerArgs, _state: HandlerState) -> crate::core::HandlerFuture {
         Box::pin(async {
             Err(ApiError::NotFound {
@@ -1267,7 +1294,7 @@ mod tests {
     // forge-success-status-code: gRPC status_code 透传测试
     //
     // 成功 status_code 透传（ServiceResponse 字段 → CallResponse）
-    // 错误路径不回归（已由 call_business_error_returns_success_false_with_status_code 覆盖）
+    // 错误路径不回归（已由 call_business_error_returns_real_grpc_status 覆盖）
     // ========================================================================
 
     /// fn 返回 success_with_status(d, 201) → CallResponse.status_code == 201。
@@ -1449,6 +1476,13 @@ mod tests {
         );
         let (status, code) = crate::error::unified::mapping_for(&e);
         assert_eq!((status, code), (404, "NOT_FOUND"));
+    }
+
+    /// T001: auth_verifier 默认 None。
+    #[cfg(feature = "security")]
+    #[test]
+    fn grpc_server_config_auth_verifier_defaults_none() {
+        assert!(GrpcServerConfig::default().auth_verifier.is_none());
     }
 
     /// T024: keepalive 配置默认 None（tonic 默认行为）。
@@ -1899,6 +1933,53 @@ mod tests {
                 .await
                 .unwrap_err();
             assert_eq!(err.code(), tonic::Code::AlreadyExists);
+        }
+
+        /// T003（复查修复）：early-return（未知 method）不泄漏 InFlight claim
+        /// —— 立即同 key 重试不受 already_exists 卡 30s。
+        #[tokio::test]
+        async fn early_return_does_not_leak_inflight_claim() {
+            let (service, store) = service_with_store();
+
+            // 未知 method：claim 发生在前置校验之后 → 此路径根本不 claim，
+            // 直接 not_found。
+            let mut req = Request::new(CallRequest {
+                method: "no_such_method_t003".to_string(),
+                parameters: HashMap::new(),
+                data: String::new(),
+            });
+            req.metadata_mut()
+                .insert("idempotency-key", "leak-1".parse().unwrap());
+            let err = service.call(req).await.unwrap_err();
+            assert_eq!(err.code(), tonic::Code::NotFound);
+
+            // store 无残留 claim：同 key 打合法方法立即 Execute。
+            let outcome = store.begin("test_idem_echo", "leak-1", 30);
+            assert_eq!(
+                outcome,
+                crate::cache::IdempotencyOutcome::Execute,
+                "early-return 不得泄漏 InFlight claim"
+            );
+        }
+
+        /// T003（复查修复）：data 无 body_param 的 early-return 后同 key 立即可重试。
+        #[tokio::test]
+        async fn body_param_rejection_does_not_leak_claim() {
+            let (service, store) = service_with_store();
+
+            // test_echo 无 body_param，data 非空 → invalid_argument。
+            let mut req = Request::new(CallRequest {
+                method: "test_idem_echo".to_string(),
+                parameters: HashMap::new(),
+                data: "unexpected".to_string(),
+            });
+            req.metadata_mut()
+                .insert("idempotency-key", "leak-2".parse().unwrap());
+            let err = service.call(req).await.unwrap_err();
+            assert_eq!(err.code(), tonic::Code::InvalidArgument);
+
+            let outcome = store.begin("test_idem_echo", "leak-2", 30);
+            assert_eq!(outcome, crate::cache::IdempotencyOutcome::Execute);
         }
 
         #[tokio::test]

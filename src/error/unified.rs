@@ -83,6 +83,14 @@ pub fn code_for_http_status(status: u16) -> &'static str {
     }
 }
 
+/// HTTP 状态的直读入口（T004 热路径去重）：单次 `to_service_error` 构造。
+///
+/// 状态真值仍是 `to_service_error().http_status()` —— 本函数只是避免调用方
+/// 为拿一个 u16 而完整构造（含 details JSON 分配）。
+pub fn http_status_for(e: &crate::core::ApiError) -> u16 {
+    e.to_service_error().http_status()
+}
+
 /// **Single source of truth** mapping an [`ApiError`] to its
 /// `(HTTP status, machine-readable code)` pair.
 ///
@@ -91,22 +99,23 @@ pub fn code_for_http_status(status: u16) -> &'static str {
 /// The HTTP status matches `ApiError::to_service_error().http_status`; the
 /// code string is derived via [`code_for_http_status`].
 pub fn mapping_for(e: &crate::core::ApiError) -> (u16, &'static str) {
-    let status = e.to_service_error().http_status();
+    let status = http_status_for(e);
     (status, code_for_http_status(status))
 }
 
 impl From<&crate::core::ApiError> for UnifiedError {
     fn from(e: &crate::core::ApiError) -> Self {
-        let (_, code) = mapping_for(e);
-        // message 走 to_service_error 的既有脱敏管道（Internal 不泄漏原始消息）。
-        let message = e.to_service_error().message().to_string();
+        // 单次构造：status/code/message 全部取自同一个 ServiceError。
+        let svc = e.to_service_error();
+        let status = svc.http_status();
+        let message = svc.message().to_string();
         let field = match e {
             crate::core::ApiError::InvalidInput { field: Some(f), .. }
             | crate::core::ApiError::ValidationError { field: f, .. } => Some(f.clone()),
             _ => None,
         };
         Self {
-            code: code.to_string(),
+            code: code_for_http_status(status).to_string(),
             message,
             trace_id: current_trace_id(),
             field,
@@ -154,6 +163,52 @@ pub use http_render::to_response as render_http;
 mod tests {
     use super::*;
     use crate::core::ApiError;
+
+    /// T004: http_status_for / mapping_for / to_service_error 三方一致。
+    #[test]
+    fn http_status_for_consistent_with_service_error() {
+        let variants = vec![
+            ApiError::NotFound {
+                resource: "x".into(),
+                resource_id: None,
+            },
+            ApiError::InvalidInput {
+                message: "x".into(),
+                field: None,
+                value: None,
+            },
+            ApiError::ValidationError {
+                field: "f".into(),
+                constraint: "c".into(),
+            },
+            ApiError::AuthenticationFailed { reason: "x".into() },
+            ApiError::AccessDenied {
+                permission: "p".into(),
+                user_id: None,
+            },
+            ApiError::RateLimitExceeded {
+                limit: 1,
+                window_seconds: 1,
+            },
+            ApiError::QuotaExhausted { used: 1, total: 2 },
+            ApiError::ServiceUnavailable {
+                service: "s".into(),
+                retry_after: None,
+                source: None,
+            },
+            ApiError::Internal {
+                message: "x".into(),
+                error_id: "e".into(),
+                source: None,
+                context: None,
+            },
+        ];
+        for e in variants {
+            let direct = e.to_service_error().http_status();
+            assert_eq!(http_status_for(&e), direct);
+            assert_eq!(mapping_for(&e).0, direct);
+        }
+    }
 
     /// 统一映射表（单一事实来源）— 全变体断言。
     /// HTTP 状态与既有 `to_service_error` 的 http_status 一致；

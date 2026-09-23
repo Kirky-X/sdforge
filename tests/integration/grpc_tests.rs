@@ -586,6 +586,8 @@ mod grpc_integration_tests {
             require_auth: false,
             #[cfg(feature = "security")]
             auth: None,
+            #[cfg(feature = "security")]
+            auth_verifier: None,
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             state: None,
@@ -593,6 +595,8 @@ mod grpc_integration_tests {
             idempotency_store: None,
             #[cfg(feature = "idempotency")]
             idempotency_ttl_secs: 86_400,
+            #[cfg(feature = "idempotency")]
+            idempotency_inflight_ttl_secs: 30,
             #[cfg(feature = "grpc-tls")]
             tls: None,
             http2_keepalive_interval: None,
@@ -1057,6 +1061,8 @@ mod grpc_integration_tests {
             timeout_seconds: 60,
             require_auth: true,
             auth: Some(auth),
+            #[cfg(feature = "security")]
+            auth_verifier: None,
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             state: None,
@@ -1064,6 +1070,8 @@ mod grpc_integration_tests {
             idempotency_store: None,
             #[cfg(feature = "idempotency")]
             idempotency_ttl_secs: 86_400,
+            #[cfg(feature = "idempotency")]
+            idempotency_inflight_ttl_secs: 30,
             #[cfg(feature = "grpc-tls")]
             tls: None,
             http2_keepalive_interval: None,
@@ -1246,6 +1254,8 @@ mod grpc_integration_tests {
             require_auth: false,
             #[cfg(feature = "security")]
             auth: None,
+            #[cfg(feature = "security")]
+            auth_verifier: None,
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             state: None,
@@ -1253,6 +1263,8 @@ mod grpc_integration_tests {
             idempotency_store: None,
             #[cfg(feature = "idempotency")]
             idempotency_ttl_secs: 86_400,
+            #[cfg(feature = "idempotency")]
+            idempotency_inflight_ttl_secs: 30,
             #[cfg(feature = "grpc-tls")]
             tls: None,
             http2_keepalive_interval: None,

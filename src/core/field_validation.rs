@@ -5,10 +5,10 @@
 //! `#[forge(validate)]` enables enforcement of rules declared via
 //! `#[param(ge = 1, le = 100, min_length = 2, max_length = 10, not_blank,
 //! email)]` annotations on handler parameters. On violation the generated
-//! HTTP handler returns **400 Bad Request** with a field-level error body:
+//! HTTP handler returns **422 Unprocessable Entity** with a field-level error body:
 //!
 //! ```json
-//! {"code":"BAD_REQUEST","message":"validation failed",
+//! {"code":"UNPROCESSABLE_ENTITY","message":"validation failed",
 //!  "errors":[{"field":"age","rule":"ge","message":"must be >= 1"}]}
 //! ```
 //!
@@ -85,15 +85,15 @@ mod http_response {
     #[cfg(test)]
     use super::FieldError;
 
-    /// Build the standardized 400 response for a failed validation report.
+    /// Build the standardized 422 response for a failed validation report.
     /// 仅由下方 http 门控的契约测试消费，非测试构建不参与编译。
     #[cfg(test)]
     pub fn validation_failed_response(errors: Vec<FieldError>) -> axum::response::Response {
         use axum::response::IntoResponse;
         (
-            axum::http::StatusCode::BAD_REQUEST,
+            axum::http::StatusCode::UNPROCESSABLE_ENTITY,
             axum::Json(serde_json::json!({
-                "code": "BAD_REQUEST",
+                "code": "UNPROCESSABLE_ENTITY",
                 "message": "validation failed",
                 "errors": errors,
             })),
@@ -139,12 +139,12 @@ mod tests {
 
     #[cfg(feature = "http")]
     #[test]
-    fn validation_failed_response_is_400_with_contract_body() {
+    fn validation_failed_response_is_422_with_contract_body() {
         let resp = http_response::validation_failed_response(vec![FieldError::new(
             "age",
             "ge",
             "must be >= 1",
         )]);
-        assert_eq!(resp.status(), axum::http::StatusCode::BAD_REQUEST);
+        assert_eq!(resp.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
     }
 }

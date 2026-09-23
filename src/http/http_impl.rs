@@ -361,11 +361,13 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
             .clone()
             .unwrap_or_else(|| _idempotency_arc::new(crate::cache::IdempotencyStore::new()));
         let ttl = config.server.idempotency.ttl_secs;
+        let inflight_ttl = config.server.idempotency.inflight_ttl_secs;
         let max_bytes = config.server.idempotency.max_response_bytes;
         router = router.layer(axum::middleware::from_fn(move |req, next| {
             crate::http::idempotency::idempotency_middleware(
                 _idempotency_arc::clone(&store),
                 ttl,
+                inflight_ttl,
                 max_bytes,
                 req,
                 next,

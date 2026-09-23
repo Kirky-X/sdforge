@@ -43,9 +43,17 @@ pub enum IdempotencyOutcome {
     Execute,
     /// Another request currently holds the claim (in-flight).
     InFlight,
-    /// Previously completed request: replay the cached
-    /// `(body, protocol status)`.
-    Replay(Vec<u8>, u16),
+    /// Previously completed request: replay the cached payload
+    /// `(body, protocol status, content type)`。content_type 由 HTTP 侧
+    /// 写入以还原原响应 media type；gRPC 等无 media type 的协议传 None。
+    Replay {
+        /// 缓存的响应体。
+        body: Vec<u8>,
+        /// 缓存的协议状态码（HTTP status）。
+        status: u16,
+        /// 响应 media type（HTTP 重放还原用）。
+        content_type: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +65,9 @@ struct IdempotencyRecord {
     /// Cached response body (empty for in-flight claims).
     #[serde(default)]
     body: Vec<u8>,
+    /// 响应 media type（HTTP 重放还原用；None = 协议无 media type）。
+    #[serde(default)]
+    content_type: Option<String>,
     /// Unix-seconds deadline; expired records are treated as absent.
     expires_at_secs: i64,
 }
@@ -121,7 +132,11 @@ impl IdempotencyStore {
         {
             if record.expires_at_secs > now_unix_secs() {
                 if record.done {
-                    return IdempotencyOutcome::Replay(record.body, record.status);
+                    return IdempotencyOutcome::Replay {
+                        body: record.body,
+                        status: record.status,
+                        content_type: record.content_type,
+                    };
                 }
                 return IdempotencyOutcome::InFlight;
             }
@@ -132,6 +147,7 @@ impl IdempotencyStore {
             done: false,
             status: 0,
             body: Vec::new(),
+            content_type: None,
             expires_at_secs: now_unix_secs() + inflight_ttl_secs,
         };
         if let Ok(bytes) = serde_json::to_vec(&record) {
@@ -141,18 +157,29 @@ impl IdempotencyStore {
     }
 
     /// Persist the completed response for later replays.
-    pub fn complete(&self, scope: &str, key: &str, status: u16, body: Vec<u8>, ttl_secs: i64) {
+    pub fn complete(
+        &self,
+        scope: &str,
+        key: &str,
+        status: u16,
+        content_type: Option<&str>,
+        body: Vec<u8>,
+        ttl_secs: i64,
+    ) {
         let full = Self::full_key(scope, key);
-        let _guard = self.claim_lock.lock().expect("idempotency claim poisoned");
         let record = IdempotencyRecord {
             done: true,
             status,
             body,
+            content_type: content_type.map(str::to_string),
             expires_at_secs: now_unix_secs() + ttl_secs,
         };
-        if let Ok(bytes) = serde_json::to_vec(&record) {
-            self.cache.set(&full, bytes);
-        }
+        // 序列化在 claim_lock 之外：大 body 的 JSON 分配不占全局锁（复查 L-6）。
+        let Ok(bytes) = serde_json::to_vec(&record) else {
+            return;
+        };
+        let _guard = self.claim_lock.lock().expect("idempotency claim poisoned");
+        self.cache.set(&full, bytes);
     }
 
     /// Drop a claim without caching a response (handler failure) so retries
@@ -177,11 +204,15 @@ mod tests {
         assert_eq!(s.begin("route", "k1", 30), IdempotencyOutcome::Execute);
         // 并发二次（complete 未发生）→ InFlight
         assert_eq!(s.begin("route", "k1", 30), IdempotencyOutcome::InFlight);
-        s.complete("route", "k1", 201, b"payload".to_vec(), 3600);
+        s.complete("route", "k1", 201, None, b"payload".to_vec(), 3600);
         // 完成后 → 重放相同 status/body
         assert_eq!(
             s.begin("route", "k1", 30),
-            IdempotencyOutcome::Replay(b"payload".to_vec(), 201)
+            IdempotencyOutcome::Replay {
+                body: b"payload".to_vec(),
+                status: 201,
+                content_type: None,
+            }
         );
     }
 
@@ -189,7 +220,7 @@ mod tests {
     #[test]
     fn expired_record_allows_reexecute() {
         let s = store();
-        s.complete("route", "k2", 200, b"x".to_vec(), -1); // 立即过期
+        s.complete("route", "k2", 200, None, b"x".to_vec(), -1); // 立即过期
         assert_eq!(s.begin("route", "k2", 30), IdempotencyOutcome::Execute);
     }
 
