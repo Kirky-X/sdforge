@@ -236,48 +236,64 @@ impl SdForgeGrpcService {
 
 #[cfg(feature = "grpc")]
 impl SdForgeGrpcService {
+    /// 限流 guard（`call` 与 `get_info` 共用）。两个入口都始终传 Some
+    /// identifier（缺 remote_addr 时 "unknown" 兜底），None 分支保留为
+    /// 显式跳过语义以防未来新增调用方误伤。
+    #[cfg(feature = "ratelimit")]
+    async fn enforce_rate_limit(&self, identifier: Option<&str>) -> Result<(), Status> {
+        let Some(ref limiter) = self.rate_limiter else {
+            return Ok(());
+        };
+        let Some(identifier) = identifier else {
+            return Ok(());
+        };
+        if let Err(e) = limiter.check(identifier).await {
+            use crate::security::ratelimit::RateLimitError;
+            let msg = match e {
+                RateLimitError::Exceeded {
+                    limit,
+                    window_seconds,
+                } => {
+                    format!(
+                        "rate limit exceeded: {} per {}s (client: {})",
+                        limit, window_seconds, identifier
+                    )
+                }
+                RateLimitError::Banned { reason } => {
+                    format!("client banned: {} (client: {})", reason, identifier)
+                }
+                RateLimitError::CircuitOpen => {
+                    format!("circuit breaker open (client: {})", identifier)
+                }
+                RateLimitError::QuotaExhausted { used, total } => {
+                    format!(
+                        "quota exhausted: {}/{} (client: {})",
+                        used, total, identifier
+                    )
+                }
+                RateLimitError::Limiteron(e) => {
+                    format!("rate limiter error: {} (client: {})", e, identifier)
+                }
+            };
+            return Err(Status::resource_exhausted(msg));
+        }
+        Ok(())
+    }
+
     async fn call_inner(
         &self,
         request: Request<CallRequest>,
     ) -> Result<Response<CallResponse>, Status> {
         // Extract client IP from tonic's remote_addr (set by transport layer
         // from the actual TCP connection — unspoofable, unlike headers).
+        // call 路径缺 remote_addr 时以 "unknown" 共享桶兜底（现行为不变）。
         #[cfg(feature = "ratelimit")]
-        if let Some(ref limiter) = self.rate_limiter {
+        {
             let identifier = request
                 .remote_addr()
                 .map(|addr| addr.ip().to_string())
-                .unwrap_or_else(|| "unknown".to_string());
-            if let Err(e) = limiter.check(&identifier).await {
-                use crate::security::ratelimit::RateLimitError;
-                let msg = match e {
-                    RateLimitError::Exceeded {
-                        limit,
-                        window_seconds,
-                    } => {
-                        format!(
-                            "rate limit exceeded: {} per {}s (client: {})",
-                            limit, window_seconds, identifier
-                        )
-                    }
-                    RateLimitError::Banned { reason } => {
-                        format!("client banned: {} (client: {})", reason, identifier)
-                    }
-                    RateLimitError::CircuitOpen => {
-                        format!("circuit breaker open (client: {})", identifier)
-                    }
-                    RateLimitError::QuotaExhausted { used, total } => {
-                        format!(
-                            "quota exhausted: {}/{} (client: {})",
-                            used, total, identifier
-                        )
-                    }
-                    RateLimitError::Limiteron(e) => {
-                        format!("rate limiter error: {} (client: {})", e, identifier)
-                    }
-                };
-                return Err(Status::resource_exhausted(msg));
-            }
+                .or_else(|| Some("unknown".to_string()));
+            self.enforce_rate_limit(identifier.as_deref()).await?;
         }
 
         let req = request.into_inner();
@@ -388,11 +404,21 @@ impl SdForgeService for SdForgeGrpcService {
 
     async fn get_info(
         &self,
-        _request: Request<InfoRequest>,
+        request: Request<InfoRequest>,
     ) -> Result<Response<InfoResponse>, Status> {
+        // 限流覆盖 get_info（T018）：与 call 统一以 "unknown" 兜底
+        // （tonic 无 remote_addr 注入口，生产环境 TCP 连接恒有地址）。
+        #[cfg(feature = "ratelimit")]
+        {
+            let identifier = request
+                .remote_addr()
+                .map(|addr| addr.ip().to_string())
+                .or_else(|| Some("unknown".to_string()));
+            self.enforce_rate_limit(identifier.as_deref()).await?;
+        }
         let response = InfoResponse {
             name: "SdForge Service".to_string(),
-            version: "0.1.0".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
             methods: self
                 .handlers()
                 .keys()
@@ -1501,11 +1527,67 @@ mod tests {
                 "default config should not enable rate limiting"
             );
         }
+
+        /// T018: 拒绝型限流器下 get_info → resource_exhausted，不泄漏方法清单。
+        #[tokio::test]
+        async fn get_info_rate_limited_returns_resource_exhausted() {
+            let limiter: Arc<dyn RateLimiter> = Arc::new(AlwaysRejectLimiter);
+            let service = SdForgeGrpcService::with_state_and_rate_limiter(None, Some(limiter));
+            let err = service
+                .get_info(Request::new(InfoRequest {
+                    version: String::new(),
+                }))
+                .await
+                .unwrap_err();
+            assert_eq!(err.code(), tonic::Code::ResourceExhausted);
+        }
+
+        /// T018: 计数型限流器下 call 与 get_info 各恰好触发一次 check。
+        #[tokio::test]
+        async fn rate_limit_guard_covers_call_and_get_info_once() {
+            let limiter = Arc::new(CountingLimiter {
+                count: AtomicU32::new(0),
+            });
+            let count_clone = Arc::clone(&limiter);
+            let limiter_dyn: Arc<dyn RateLimiter> = limiter as Arc<dyn RateLimiter>;
+            let service = SdForgeGrpcService::with_state_and_rate_limiter(None, Some(limiter_dyn));
+
+            let req = Request::new(CallRequest {
+                method: "test_echo".to_string(),
+                parameters: HashMap::new(),
+                data: String::new(),
+            });
+            let _ = service.call(req).await;
+            let _ = service
+                .get_info(Request::new(InfoRequest {
+                    version: String::new(),
+                }))
+                .await;
+            assert_eq!(
+                count_clone.count.load(Ordering::SeqCst),
+                2,
+                "call 与 get_info 各触发一次限流检查"
+            );
+        }
     }
 
     // ========================================================================
     // T011: gRPC endpoint RBAC（协议对等）— fail-safe / 放行 / 低权限拒绝
     // ========================================================================
+
+    /// T017: get_info 版本号取 CARGO_PKG_VERSION（不再硬编码 0.1.0）。
+    #[tokio::test]
+    async fn get_info_returns_crate_version() {
+        let service = SdForgeGrpcService::default();
+        let resp = service
+            .get_info(Request::new(InfoRequest {
+                version: String::new(),
+            }))
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(resp.version, env!("CARGO_PKG_VERSION"));
+    }
 
     /// 未配置任何认证（或身份缺失）时，声明了 roles 的方法必须拒绝
     /// （fail-safe：角色无法验证即不可满足）。

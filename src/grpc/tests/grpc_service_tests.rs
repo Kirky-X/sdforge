@@ -222,7 +222,7 @@ async fn test_grpc_service_get_info() {
 
     let response = result.unwrap().into_inner();
     assert_eq!(response.name, "SdForge Service");
-    assert_eq!(response.version, "0.1.0");
+    assert_eq!(response.version, env!("CARGO_PKG_VERSION"));
     assert!(!response.methods.is_empty());
     assert_eq!(response.description, "SdForge Multi-Protocol SDK Framework");
 }
@@ -234,7 +234,7 @@ async fn test_grpc_service_get_info_methods_list() {
     let service = SdForgeGrpcService::default();
 
     let request = InfoRequest {
-        version: "0.1.0".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
     };
     let result = service.get_info(Request::new(request)).await;
     assert!(result.is_ok());
@@ -1108,7 +1108,7 @@ async fn test_grpc_service_get_info_with_version_parameter() {
     assert!(result.is_ok());
 
     let response = result.unwrap().into_inner();
-    assert_eq!(response.version, "0.1.0");
+    assert_eq!(response.version, env!("CARGO_PKG_VERSION"));
 }
 
 #[tokio::test]
@@ -1324,7 +1324,7 @@ async fn test_info_response_version_value() {
     let result = service.get_info(Request::new(request)).await.unwrap();
     let response = result.into_inner();
 
-    assert_eq!(response.version, "0.1.0");
+    assert_eq!(response.version, env!("CARGO_PKG_VERSION"));
 }
 
 #[tokio::test]

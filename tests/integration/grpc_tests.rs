@@ -814,7 +814,11 @@ mod grpc_integration_tests {
             response.name, "SdForge Service",
             "Service name should match"
         );
-        assert_eq!(response.version, "0.1.0", "Service version should match");
+        assert_eq!(
+            response.version,
+            env!("CARGO_PKG_VERSION"),
+            "Service version should match"
+        );
         assert!(
             !response.methods.is_empty(),
             "Service should have available methods"
