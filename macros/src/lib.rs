@@ -1098,11 +1098,84 @@ fn extract_arc_inner_type(ty: &syn::Type) -> Option<&syn::Type> {
 /// on the CLI (filtered out of `CliArgInfo` by `generate_cli_registration`),
 /// but ARE resolved here via `downcast_state` so the handler receives the
 /// concrete `Arc<T>` directly.
+/// 生成 `#[param(...)]` 校验规则的检查语句（单一事实来源）。
+///
+/// HTTP 与 gRPC 闭包共用本函数 —— 规则字面量只存在这一份，两协议仅在
+/// "违规收集后的处理" 上不同：HTTP 聚合 errors 数组 + 422 富载荷 early
+/// return；gRPC 首违规短路为 `Err(ApiError::ValidationError)`。
+/// `target_of` 由各协议提供：HTTP 的 Json/newtype 参数取 `.0`，gRPC 为
+/// 类型化局部变量裸标识。
+fn validation_rule_stmts(
+    params: &[ParamInfo],
+    target_of: &dyn Fn(&ParamInfo) -> TokenStream2,
+) -> Vec<TokenStream2> {
+    let mut stmts: Vec<TokenStream2> = Vec::new();
+    for p in params {
+        if p.validations.is_empty() {
+            continue;
+        }
+        let field_lit = proc_macro2::Literal::string(&p.name);
+        for rule in &p.validations {
+            let target = target_of(p);
+            match rule {
+                ValidationSpec::Ge(min) => stmts.push(quote! {
+                    if !(#target >= #min) {
+                        sdforge::core::field_validation::push_error(
+                            &mut __forge_validation_errors, #field_lit, "ge",
+                            format!("must be >= {}", #min));
+                    }
+                }),
+                ValidationSpec::Le(max) => stmts.push(quote! {
+                    if !(#target <= #max) {
+                        sdforge::core::field_validation::push_error(
+                            &mut __forge_validation_errors, #field_lit, "le",
+                            format!("must be <= {}", #max));
+                    }
+                }),
+                ValidationSpec::MinLength(n) => stmts.push(quote! {
+                    if sdforge::core::field_validation::str_len(
+                        &sdforge::core::field_validation::as_str_ref(&#target)) < #n {
+                        sdforge::core::field_validation::push_error(
+                            &mut __forge_validation_errors, #field_lit, "min_length",
+                            format!("must be at least {} characters", #n));
+                    }
+                }),
+                ValidationSpec::MaxLength(n) => stmts.push(quote! {
+                    if sdforge::core::field_validation::str_len(
+                        &sdforge::core::field_validation::as_str_ref(&#target)) > #n {
+                        sdforge::core::field_validation::push_error(
+                            &mut __forge_validation_errors, #field_lit, "max_length",
+                            format!("must be at most {} characters", #n));
+                    }
+                }),
+                ValidationSpec::NotBlank => stmts.push(quote! {
+                    if sdforge::core::field_validation::is_blank(
+                        sdforge::core::field_validation::as_str_ref(&#target)) {
+                        sdforge::core::field_validation::push_error(
+                            &mut __forge_validation_errors, #field_lit, "not_blank",
+                            "must not be blank");
+                    }
+                }),
+                ValidationSpec::Email => stmts.push(quote! {
+                    if !sdforge::core::field_validation::is_email(
+                        sdforge::core::field_validation::as_str_ref(&#target)) {
+                        sdforge::core::field_validation::push_error(
+                            &mut __forge_validation_errors, #field_lit, "email",
+                            "must be a valid email address");
+                    }
+                }),
+            }
+        }
+    }
+    stmts
+}
+
 fn generate_handler_closure(
     fn_name: &syn::Ident,
     handler_fn_name: &syn::Ident,
     params: &[ParamInfo],
     _path_params: &[String],
+    validate: bool,
 ) -> TokenStream2 {
     // Validate State params are Arc<T> — emit compile_error if not.
     for p in params
@@ -1134,10 +1207,16 @@ fn generate_handler_closure(
         }
     });
 
-    // Path/Body params participate in value extraction from HandlerArgs.
+    // Path/Body/Query params participate in value extraction from HandlerArgs.
+    // Query 此前不参与 gRPC 提取 —— validate 规则因此无法在 gRPC 路径生效。
     let handler_params: Vec<&ParamInfo> = params
         .iter()
-        .filter(|p| matches!(p.param_kind, ParamKind::Path | ParamKind::Body))
+        .filter(|p| {
+            matches!(
+                p.param_kind,
+                ParamKind::Path | ParamKind::Body | ParamKind::Query
+            )
+        })
         .collect();
 
     let param_extractions = handler_params.iter().map(|p| {
@@ -1188,11 +1267,41 @@ fn generate_handler_closure(
         .filter(|p| {
             matches!(
                 p.param_kind,
-                ParamKind::Path | ParamKind::Body | ParamKind::State
+                ParamKind::Path | ParamKind::Body | ParamKind::Query | ParamKind::State
             )
         })
         .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
         .collect();
+
+    // `#[forge(validate)]` 规则在类型化局部变量上求值（parse 成功后、用户 fn
+    // 调用前）；任一违规 → Err(ApiError::ValidationError)（首违规短路）。
+    // 与 HTTP 侧共用 validation_rule_stmts —— 规则字面量单源。
+    let validation_stmts = if validate {
+        let plain_target = |p: &ParamInfo| {
+            let n = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+            quote! { #n }
+        };
+        let stmts = validation_rule_stmts(params, &plain_target);
+        if stmts.is_empty() {
+            quote! {}
+        } else {
+            quote! {
+                let mut __forge_validation_errors: std::vec::Vec<
+                    sdforge::core::field_validation::FieldError,
+                > = std::vec::Vec::new();
+                #(#stmts)*
+                if !__forge_validation_errors.is_empty() {
+                    let __first = &__forge_validation_errors[0];
+                    return Err(sdforge::prelude::ApiError::ValidationError {
+                        field: __first.field.clone(),
+                        constraint: __first.rule.to_string(),
+                    });
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
 
     quote! {
         fn #handler_fn_name(
@@ -1202,6 +1311,7 @@ fn generate_handler_closure(
             Box::pin(async move {
                 #(#state_extractions)*
                 #(#param_extractions)*
+                #validation_stmts
                 let result = #fn_name(#(#call_idents),*).await;
                 result.and_then(|v| serde_json::to_value(&v).map_err(|e| {
                     sdforge::prelude::ApiError::internal_error(
@@ -1253,13 +1363,19 @@ fn generate_grpc_handler_registration(
     path_params: &[String],
     status: Option<u16>,
     auth_roles: &[String],
+    validate: bool,
 ) -> TokenStream2 {
     let grpc_handler_fn_name = syn::Ident::new(
         &format!("__grpc_handler_{}", fn_name),
         proc_macro2::Span::call_site(),
     );
-    let handler_fn_def =
-        generate_handler_closure(fn_name, &grpc_handler_fn_name, params, path_params);
+    let handler_fn_def = generate_handler_closure(
+        fn_name,
+        &grpc_handler_fn_name,
+        params,
+        path_params,
+        validate,
+    );
     // quote! does NOT render `None` for Option<T>, so build the field value
     // explicitly to satisfy `body_param: Option<&'static str>`.
     let body_param: TokenStream2 = match derive_body_param(params) {
@@ -1378,7 +1494,8 @@ fn generate_cli_registration(
     // signature (HandlerArgs, HandlerState) -> HandlerFuture, extracts
     // Path/Body params, awaits the forge fn, and serializes its return value
     // via serde_json::to_value (requires T: Serialize).
-    let handler_fn_def = generate_handler_closure(fn_name, &handler_fn_name, params, _path_params);
+    let handler_fn_def =
+        generate_handler_closure(fn_name, &handler_fn_name, params, _path_params, false);
 
     let fn_name_str = fn_name.to_string();
     let description_str = description.unwrap_or(name);
@@ -1680,74 +1797,20 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     // checks into every HTTP handler closure (before the user fn runs).
     // Violations short-circuit with 400 + {"errors":[{field,rule,message}]}.
     if extras.validate {
-        let mut rule_stmts: Vec<TokenStream2> = Vec::new();
-        for p in &params {
-            if p.validations.is_empty() {
-                continue;
-            }
+        // Target expression: Body params are Json<T> extractors (value at
+        // `.0`); Path/State/Extension in single-extractor form are
+        // newtype-wrapped too; Query params and multi-path destructured
+        // locals are plain values.
+        let target_of = |p: &ParamInfo| {
             let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
-            // Target expression: Body params are Json<T> extractors (value at
-            // `.0`); Path/State/Extension in single-extractor form are
-            // newtype-wrapped too; Query params and multi-path destructured
-            // locals are plain values.
-            let target = match p.param_kind {
+            match p.param_kind {
                 ParamKind::Query => quote! { #name_ident },
                 ParamKind::Path if multi_path => quote! { #name_ident },
                 ParamKind::Extension => quote! { #name_ident },
                 _ => quote! { #name_ident.0 },
-            };
-            let field_lit = proc_macro2::Literal::string(&p.name);
-            for rule in &p.validations {
-                match rule {
-                    ValidationSpec::Ge(min) => rule_stmts.push(quote! {
-                        if !(#target >= #min) {
-                            sdforge::core::field_validation::push_error(
-                                &mut __forge_validation_errors, #field_lit, "ge",
-                                format!("must be >= {}", #min));
-                        }
-                    }),
-                    ValidationSpec::Le(max) => rule_stmts.push(quote! {
-                        if !(#target <= #max) {
-                            sdforge::core::field_validation::push_error(
-                                &mut __forge_validation_errors, #field_lit, "le",
-                                format!("must be <= {}", #max));
-                        }
-                    }),
-                    ValidationSpec::MinLength(n) => rule_stmts.push(quote! {
-                        if sdforge::core::field_validation::str_len(
-                            &sdforge::core::field_validation::as_str_ref(&#target)) < #n {
-                            sdforge::core::field_validation::push_error(
-                                &mut __forge_validation_errors, #field_lit, "min_length",
-                                format!("must be at least {} characters", #n));
-                        }
-                    }),
-                    ValidationSpec::MaxLength(n) => rule_stmts.push(quote! {
-                        if sdforge::core::field_validation::str_len(
-                            &sdforge::core::field_validation::as_str_ref(&#target)) > #n {
-                            sdforge::core::field_validation::push_error(
-                                &mut __forge_validation_errors, #field_lit, "max_length",
-                                format!("must be at most {} characters", #n));
-                        }
-                    }),
-                    ValidationSpec::NotBlank => rule_stmts.push(quote! {
-                        if sdforge::core::field_validation::is_blank(
-                            sdforge::core::field_validation::as_str_ref(&#target)) {
-                            sdforge::core::field_validation::push_error(
-                                &mut __forge_validation_errors, #field_lit, "not_blank",
-                                "must not be blank");
-                        }
-                    }),
-                    ValidationSpec::Email => rule_stmts.push(quote! {
-                        if !sdforge::core::field_validation::is_email(
-                            sdforge::core::field_validation::as_str_ref(&#target)) {
-                            sdforge::core::field_validation::push_error(
-                                &mut __forge_validation_errors, #field_lit, "email",
-                                "must be a valid email address");
-                        }
-                    }),
-                }
             }
-        }
+        };
+        let rule_stmts = validation_rule_stmts(&params, &target_of);
 
         if !rule_stmts.is_empty() {
             prelude_stmts.push(quote! {
@@ -1756,10 +1819,12 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 > = std::vec::Vec::new();
                 #(#rule_stmts)*
                 if !__forge_validation_errors.is_empty() {
+                    // 422（语义约束违反）—— 与 ApiError::ValidationError 及
+                    // gRPC 映射统一；400 保留给缺参/解析失败（InvalidInput）。
                     return (
-                        sdforge::axum::http::status::StatusCode::BAD_REQUEST,
+                        sdforge::axum::http::status::StatusCode::UNPROCESSABLE_ENTITY,
                         sdforge::axum::extract::Json(sdforge::serde_json::json!({
-                            "code": "BAD_REQUEST",
+                            "code": "UNPROCESSABLE_ENTITY",
                             "message": "validation failed",
                             "errors": __forge_validation_errors,
                         })),
@@ -2591,6 +2656,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             &path_params,
             status,
             &extras.auth_roles,
+            extras.validate,
         );
         quote! {
             #[cfg(feature = "grpc")]
@@ -3342,8 +3408,15 @@ mod macro_parsing_tests {
         let params = vec![make_cli_param("payload", ParamKind::Body, false)];
         let path_params = vec!["payload".to_string()];
 
-        let tokens =
-            generate_grpc_handler_registration(&fn_name, "embed", &params, &path_params, None, &[]);
+        let tokens = generate_grpc_handler_registration(
+            &fn_name,
+            "embed",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+        );
         let s = normalize_ts(&tokens);
 
         assert!(
@@ -3385,8 +3458,15 @@ mod macro_parsing_tests {
         let params: Vec<ParamInfo> = vec![];
         let path_params = vec![];
 
-        let tokens =
-            generate_grpc_handler_registration(&fn_name, "ping", &params, &path_params, None, &[]);
+        let tokens = generate_grpc_handler_registration(
+            &fn_name,
+            "ping",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+        );
         let s = normalize_ts(&tokens);
 
         assert!(
@@ -3419,6 +3499,7 @@ mod macro_parsing_tests {
             &path_params,
             Some(201u16),
             &[],
+            false,
         );
         let s = normalize_ts(&tokens);
 
@@ -3447,10 +3528,11 @@ mod macro_parsing_tests {
             &path_params,
             None,
             &["admin".to_string(), "operator".to_string()],
+            false,
         );
         let s = normalize_ts(&with_roles);
         assert!(
-            s.contains("roles : &[\"admin\", \"operator\"]"),
+            s.contains("roles : & [\"admin\" , \"operator\"]"),
             "roles must carry auth declarations: {s}"
         );
 
@@ -3461,10 +3543,11 @@ mod macro_parsing_tests {
             &path_params,
             None,
             &[],
+            false,
         );
         let s = normalize_ts(&without_roles);
         assert!(
-            s.contains("roles : &[]"),
+            s.contains("roles : & []"),
             "roles must default to empty slice: {s}"
         );
     }
@@ -3536,7 +3619,7 @@ mod handler_closure_tests {
         let fn_name = syn::Ident::new("echo", proc_macro2::Span::call_site());
         let handler_fn_name = syn::Ident::new("__cli_handler_echo", proc_macro2::Span::call_site());
         let params: Vec<ParamInfo> = vec![];
-        let tokens = generate_handler_closure(&fn_name, &handler_fn_name, &params, &[]);
+        let tokens = generate_handler_closure(&fn_name, &handler_fn_name, &params, &[], false);
         let s = tokens.to_string();
 
         // D3.2: return value serialized via serde_json::to_value (T: Serialize).
@@ -3560,7 +3643,7 @@ mod handler_closure_tests {
         let fn_name = syn::Ident::new("ping", proc_macro2::Span::call_site());
         let handler_fn_name = syn::Ident::new("__cli_handler_ping", proc_macro2::Span::call_site());
         let params: Vec<ParamInfo> = vec![];
-        let tokens = generate_handler_closure(&fn_name, &handler_fn_name, &params, &[]);
+        let tokens = generate_handler_closure(&fn_name, &handler_fn_name, &params, &[], false);
         let s = tokens.to_string();
 
         // D3.1: signature upgraded to unified (HandlerArgs, HandlerState) -> HandlerFuture.
