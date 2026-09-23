@@ -42,6 +42,12 @@ use std::sync::Mutex;
 mod cache_impl;
 pub use cache_impl::canonicalize_cache_key;
 
+/// 幂等重放防护核心（feature = `idempotency`）。
+#[cfg(feature = "idempotency")]
+pub mod idempotency;
+#[cfg(feature = "idempotency")]
+pub use idempotency::{IdempotencyOutcome, IdempotencyStore};
+
 // Re-export matches_pattern for test access.
 #[cfg(test)]
 pub(crate) use cache_impl::matches_pattern;

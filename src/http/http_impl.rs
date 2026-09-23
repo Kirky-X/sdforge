@@ -349,6 +349,25 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
         config.server.max_body_size,
     ));
 
+    // Idempotency replay protection（feature = idempotency，enabled 默认 false；
+    // 仅携带 Idempotency-Key 的 POST/PUT/PATCH 参与，其余零开销透行）
+    #[cfg(feature = "idempotency")]
+    if config.server.idempotency.enabled {
+        use std::sync::Arc as _idempotency_arc;
+        let store = _idempotency_arc::new(crate::cache::IdempotencyStore::new());
+        let ttl = config.server.idempotency.ttl_secs;
+        let max_bytes = config.server.idempotency.max_response_bytes;
+        router = router.layer(axum::middleware::from_fn(move |req, next| {
+            crate::http::idempotency::idempotency_middleware(
+                _idempotency_arc::clone(&store),
+                ttl,
+                max_bytes,
+                req,
+                next,
+            )
+        }));
+    }
+
     // Apply response compression
     router = router.layer(tower_http::compression::CompressionLayer::new());
 

@@ -29,6 +29,10 @@ fn test_grpc_server_config_with_auth() {
         require_auth: true,
         auth: Some(auth),
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -371,6 +375,10 @@ fn test_grpc_config_zero_timeout() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -388,6 +396,10 @@ fn test_grpc_config_large_max_connections() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -404,6 +416,10 @@ fn test_grpc_config_boundary_values() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -415,6 +431,10 @@ fn test_grpc_config_boundary_values() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -868,6 +888,10 @@ fn test_grpc_server_config_clone() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -887,6 +911,10 @@ fn test_grpc_server_config_equality() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -898,6 +926,10 @@ fn test_grpc_server_config_equality() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -915,6 +947,10 @@ fn test_grpc_server_config_with_minimal_connections() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -931,6 +967,10 @@ fn test_grpc_server_config_with_zero_timeout() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -947,6 +987,10 @@ fn test_grpc_server_config_timeout_edge_cases() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -958,6 +1002,10 @@ fn test_grpc_server_config_timeout_edge_cases() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -975,6 +1023,10 @@ fn test_grpc_server_config_auth_none() {
         require_auth: false,
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -1533,6 +1585,10 @@ async fn test_build_server_with_config_zero_values_starts_serving() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -1563,6 +1619,10 @@ async fn test_build_server_with_config_large_values_starts_serving() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -1594,6 +1654,10 @@ async fn test_build_server_with_config_minimal_positive_values() {
         #[cfg(feature = "security")]
         auth: None,
         state: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };

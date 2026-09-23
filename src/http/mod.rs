@@ -40,6 +40,8 @@ pub mod etag;
 #[cfg(feature = "graceful")]
 pub mod graceful;
 mod http_impl;
+#[cfg(feature = "idempotency")]
+pub mod idempotency;
 #[cfg(feature = "ratelimit-http")]
 pub use http_impl::rate_limit_layer;
 pub use http_impl::{build, build_with_config, build_with_redirect};

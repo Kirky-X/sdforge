@@ -50,6 +50,12 @@ define_registration!(GrpcRouteRegistration, GrpcRoute, ApiMetadata);
 /// gRPC server configuration with optional JWT authentication.
 #[derive(Clone)]
 pub struct GrpcServerConfig {
+    /// 幂等重放防护 store（feature = `idempotency`）。None = 关闭。
+    #[cfg(feature = "idempotency")]
+    pub idempotency_store: Option<std::sync::Arc<crate::cache::IdempotencyStore>>,
+    /// 重放窗口秒数（feature = `idempotency`，默认 86400）。
+    #[cfg(feature = "idempotency")]
+    pub idempotency_ttl_secs: i64,
     /// Maximum number of concurrent connections
     pub max_connections: usize,
     /// Request timeout in seconds

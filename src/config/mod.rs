@@ -46,6 +46,8 @@ pub use auth::{ApiKeySeed, AuthConfig};
 pub use cache::CacheConfig;
 pub use cors::{CorsConfig, build_cors_layer};
 pub use security::SecurityConfig;
+#[cfg(feature = "idempotency")]
+pub use server::IdempotencyConfig;
 pub use server::{ServerConfig, TlsConfig};
 pub use timeout::TimeoutConfig;
 

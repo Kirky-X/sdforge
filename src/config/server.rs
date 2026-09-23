@@ -23,6 +23,53 @@ pub struct ServerConfig {
     pub max_body_size: usize,
     /// CORS configuration
     pub cors: Option<CorsConfig>,
+    /// Idempotency replay protection (feature = `idempotency`).
+    ///
+    /// `enabled` 默认 false —— 开启后仅携带 `Idempotency-Key` 头的
+    /// POST/PUT/PATCH 请求参与重放防护，其余请求零开销透行。
+    #[cfg(feature = "idempotency")]
+    pub idempotency: IdempotencyConfig,
+}
+
+/// Idempotency replay-protection configuration (feature = `idempotency`).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[cfg(feature = "idempotency")]
+pub struct IdempotencyConfig {
+    /// 是否启用幂等中间件（默认 false）。
+    pub enabled: bool,
+    /// 完成响应的重放窗口（秒，默认 86400 = 24h）。
+    pub ttl_secs: i64,
+    /// 超过该大小的响应不缓存（默认 1 MiB）。
+    pub max_response_bytes: usize,
+}
+
+#[cfg(feature = "idempotency")]
+impl Default for IdempotencyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            ttl_secs: 86_400,
+            max_response_bytes: 1024 * 1024,
+        }
+    }
+}
+
+#[cfg(feature = "idempotency")]
+impl IdempotencyConfig {
+    /// Validate idempotency configuration.
+    pub fn validate(&self) -> Result<(), crate::config::ConfigError> {
+        if self.enabled && self.ttl_secs <= 0 {
+            return Err(crate::config::ConfigError::ValidationError(
+                "Idempotency ttl_secs must be positive when enabled".into(),
+            ));
+        }
+        if self.enabled && self.max_response_bytes == 0 {
+            return Err(crate::config::ConfigError::ValidationError(
+                "Idempotency max_response_bytes cannot be 0 when enabled".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl Default for ServerConfig {
@@ -36,6 +83,8 @@ impl Default for ServerConfig {
             request_timeout_secs: DEFAULT_REQUEST_TIMEOUT_SECS,
             max_body_size: 10 * 1024 * 1024, // 10 MiB
             cors: None,
+            #[cfg(feature = "idempotency")]
+            idempotency: crate::config::IdempotencyConfig::default(),
         }
     }
 }
@@ -75,6 +124,9 @@ impl ServerConfig {
         if let Some(ref cors) = self.cors {
             cors.validate()?;
         }
+
+        #[cfg(feature = "idempotency")]
+        self.idempotency.validate()?;
 
         Ok(())
     }

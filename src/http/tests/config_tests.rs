@@ -10,6 +10,8 @@ use crate::config::{
 #[cfg(any(feature = "mcp", feature = "websocket", feature = "grpc"))]
 use crate::http::build;
 use crate::http::build_with_config;
+#[cfg(feature = "idempotency")]
+use sdforge::config::IdempotencyConfig;
 
 /// Test build_with_config with JWT authentication
 #[test]
@@ -231,6 +233,8 @@ fn test_build_with_config_zero_body_size_rejected() {
             request_timeout_secs: 30,
             cors: None,
             max_body_size: 0,
+            #[cfg(feature = "idempotency")]
+            idempotency: IdempotencyConfig::default(),
         },
         authentication: AuthConfig::None,
         timeout: None,

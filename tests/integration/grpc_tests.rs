@@ -589,6 +589,10 @@ mod grpc_integration_tests {
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             state: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_store: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_ttl_secs: 86_400,
         };
 
         assert_eq!(
@@ -1052,6 +1056,10 @@ mod grpc_integration_tests {
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             state: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_store: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_ttl_secs: 86_400,
         };
 
         assert!(config.auth.is_some(), "Config should have auth when set");
@@ -1233,6 +1241,10 @@ mod grpc_integration_tests {
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             state: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_store: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_ttl_secs: 86_400,
         };
 
         assert_eq!(config.max_connections, 200);

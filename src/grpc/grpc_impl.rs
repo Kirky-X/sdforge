@@ -27,6 +27,14 @@ use sdforge_v1::{
 #[cfg(feature = "grpc")]
 const MAX_GRPC_ARGUMENTS_SIZE_BYTES: usize = 0x10_0000;
 
+/// 幂等防护的绑定参数（store + 重放窗口），feature = `idempotency`。
+#[cfg(all(feature = "grpc", feature = "idempotency"))]
+#[derive(Clone)]
+struct IdempotencyGuard {
+    store: std::sync::Arc<crate::cache::IdempotencyStore>,
+    ttl_secs: i64,
+}
+
 /// gRPC service implementation.
 ///
 /// Holds an optional application state (mirrors `CliBuilder::with_dependencies`)
@@ -61,6 +69,10 @@ pub struct SdForgeGrpcService {
     /// request is rejected with `Status::unauthenticated`.
     #[cfg(feature = "security")]
     auth_interceptor: Option<std::sync::Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
+    /// 幂等重放防护（T022，feature = `idempotency`）：携带 `idempotency-key`
+    /// metadata 的请求经 store 三态防护，其余零开销。
+    #[cfg(feature = "idempotency")]
+    idempotency: Option<IdempotencyGuard>,
 }
 
 #[cfg(feature = "grpc")]
@@ -76,6 +88,8 @@ impl Default for SdForgeGrpcService {
             rate_limiter: None,
             #[cfg(feature = "security")]
             auth_interceptor: None,
+            #[cfg(feature = "idempotency")]
+            idempotency: None,
         }
     }
 }
@@ -96,6 +110,8 @@ impl SdForgeGrpcService {
             rate_limiter: None,
             #[cfg(feature = "security")]
             auth_interceptor: None,
+            #[cfg(feature = "idempotency")]
+            idempotency: None,
         }
     }
 
@@ -132,7 +148,22 @@ impl SdForgeGrpcService {
             rate_limiter,
             #[cfg(feature = "security")]
             auth_interceptor: None,
+            #[cfg(feature = "idempotency")]
+            idempotency: None,
         }
+    }
+
+    /// attach an idempotency store (T022)。携带 `idempotency-key` metadata
+    /// 的请求进入三态防护（Execute / InFlight → already_exists / Replay）。
+    #[cfg(all(feature = "grpc", feature = "idempotency"))]
+    #[must_use]
+    pub fn with_idempotency_store(
+        mut self,
+        store: std::sync::Arc<crate::cache::IdempotencyStore>,
+        ttl_secs: i64,
+    ) -> Self {
+        self.idempotency = Some(IdempotencyGuard { store, ttl_secs });
+        self
     }
 
     /// Build (or reuse) the `method -> handler` cache from inventory.
@@ -296,6 +327,41 @@ impl SdForgeGrpcService {
             self.enforce_rate_limit(identifier.as_deref()).await?;
         }
 
+        // T022: 幂等三态防护（仅当配置了 store 且请求携带 idempotency-key
+        // metadata 时参与）。scope 绑定 gRPC method 名防跨端点键冲突。
+        #[cfg(all(feature = "grpc", feature = "idempotency"))]
+        let idem_key = match &self.idempotency {
+            Some(guard) => request
+                .metadata()
+                .get("idempotency-key")
+                .and_then(|v| v.to_str().ok())
+                .map(|k| (guard, request.get_ref().method.clone(), k.to_string())),
+            None => None,
+        };
+        #[cfg(all(feature = "grpc", feature = "idempotency"))]
+        if let Some((guard, scope, key)) = &idem_key {
+            match guard.store.begin(scope, key, 30) {
+                crate::cache::IdempotencyOutcome::InFlight => {
+                    return Err(Status::already_exists(
+                        "request with this idempotency-key is already in flight",
+                    ));
+                }
+                crate::cache::IdempotencyOutcome::Replay(body, _status) => {
+                    if let Ok(cached) = serde_json::from_slice::<CachedCallResponse>(&body) {
+                        return Ok(Response::new(CallResponse {
+                            success: cached.success,
+                            data: cached.data,
+                            error: cached.error,
+                            status_code: cached.status_code,
+                        }));
+                    }
+                    // 缓存损坏 → abort 让调用方重试
+                    guard.store.abort(scope, key);
+                }
+                crate::cache::IdempotencyOutcome::Execute => {}
+            }
+        }
+
         let req = request.into_inner();
 
         // vuln-0002 补强：gRPC 路径此前跳过 MCP 的大小校验。
@@ -365,12 +431,30 @@ impl SdForgeGrpcService {
                 let status_code = extract_status_code(&value)
                     .or(default_status.map(|s| s as i32))
                     .unwrap_or(200);
-                Ok(Response::new(CallResponse {
+                let response = CallResponse {
                     success: true,
                     data: extract_value(&value),
                     error: String::new(),
                     status_code,
-                }))
+                };
+                // T022: 成功响应入缓存供重放。
+                #[cfg(all(feature = "grpc", feature = "idempotency"))]
+                if let Some((guard, scope, key)) = &idem_key {
+                    guard.store.complete(
+                        scope,
+                        key,
+                        status_code.clamp(0, u16::MAX as i32) as u16,
+                        serde_json::to_vec(&CachedCallResponse {
+                            success: response.success,
+                            data: response.data.clone(),
+                            error: String::new(),
+                            status_code: response.status_code,
+                        })
+                        .unwrap_or_default(),
+                        guard.ttl_secs,
+                    );
+                }
+                Ok(Response::new(response))
             }
             Ok(Err(e)) => {
                 // business error → 真实 gRPC Status（vuln-SIMPL-002 修复）：
@@ -380,6 +464,11 @@ impl SdForgeGrpcService {
                 //（机器可读 code/field/trace_id 不丢失）。
                 let unified = crate::error::unified::UnifiedError::from(&e);
                 let code = crate::error::unified::grpc_code_for(&e);
+                // 业务失败不缓存：清除在途 claim，调用方可立即重试。
+                #[cfg(all(feature = "grpc", feature = "idempotency"))]
+                if let Some((guard, scope, key)) = &idem_key {
+                    guard.store.abort(scope, key);
+                }
                 Err(Status::with_details(
                     code,
                     unified.message.clone(),
@@ -389,6 +478,10 @@ impl SdForgeGrpcService {
             Err(_panic) => {
                 // handler panicked → generic internal error.
                 // Never expose panic payload to the client (security).
+                #[cfg(all(feature = "grpc", feature = "idempotency"))]
+                if let Some((guard, scope, key)) = &idem_key {
+                    guard.store.abort(scope, key);
+                }
                 Err(Status::internal("handler panicked"))
             }
         }
@@ -429,6 +522,16 @@ impl SdForgeService for SdForgeGrpcService {
 
         Ok(Response::new(response))
     }
+}
+
+/// 幂等缓存的可序列化响应载荷（prost 消息不带 serde，自行镜像字段）。
+#[cfg(all(feature = "grpc", feature = "idempotency"))]
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CachedCallResponse {
+    success: bool,
+    data: String,
+    error: String,
+    status_code: i32,
 }
 
 /// Extract the success-side `status_code` from a handler return value.
@@ -577,6 +680,13 @@ pub async fn build_server_with_config(
         SdForgeGrpcService::with_state_and_rate_limiter(config.state, config.rate_limiter);
     #[cfg(not(feature = "ratelimit"))]
     let service = SdForgeGrpcService::with_state(config.state);
+    // T022: 幂等 store 配置传递（None = 关闭，默认）。
+    #[cfg(feature = "idempotency")]
+    let service = match config.idempotency_store {
+        Some(ref store) => service
+            .with_idempotency_store(std::sync::Arc::clone(store), config.idempotency_ttl_secs),
+        None => service,
+    };
 
     // Build server with optional JWT auth interceptor
     #[cfg(feature = "security")]
@@ -614,6 +724,10 @@ impl Default for GrpcServerConfig {
             state: None,
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_store: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_ttl_secs: 86_400,
         }
     }
 }
@@ -1668,5 +1782,113 @@ mod tests {
         });
         let err = service.call(req).await.unwrap_err();
         assert_eq!(err.code(), tonic::Code::PermissionDenied);
+    }
+    // ========================================================================
+    // T022: gRPC idempotency-key metadata 幂等防护
+    // ========================================================================
+    #[cfg(all(feature = "grpc", feature = "idempotency"))]
+    mod idempotency_tests {
+        use super::*;
+        use crate::cache::{IdempotencyOutcome, IdempotencyStore};
+
+        static EXEC_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+        fn counting_handler(args: HandlerArgs, _state: HandlerState) -> crate::core::HandlerFuture {
+            EXEC_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let msg = args.get("msg").cloned().unwrap_or_default();
+            Box::pin(async move { Ok(Value::String(msg)) })
+        }
+
+        inventory::submit! {
+            GrpcHandlerRegistration {
+                method: "test_idem_echo",
+                handler: counting_handler,
+                body_param: None,
+                default_status: None,
+                roles: &[],
+            }
+        }
+
+        fn request_with_key(key: Option<&str>) -> Request<CallRequest> {
+            let mut req = Request::new(CallRequest {
+                method: "test_idem_echo".to_string(),
+                parameters: HashMap::new(),
+                data: String::new(),
+            });
+            if let Some(k) = key {
+                req.metadata_mut()
+                    .insert("idempotency-key", k.parse().unwrap());
+            }
+            req
+        }
+
+        fn service_with_store() -> (SdForgeGrpcService, Arc<IdempotencyStore>) {
+            let store = Arc::new(IdempotencyStore::new());
+            (
+                SdForgeGrpcService::default().with_idempotency_store(store.clone(), 3600),
+                store,
+            )
+        }
+
+        #[tokio::test]
+        #[serial_test::serial]
+        async fn duplicate_key_replays_without_reexecution() {
+            EXEC_COUNT.store(0, std::sync::atomic::Ordering::SeqCst);
+            let (service, _store) = service_with_store();
+
+            let first = service
+                .call(request_with_key(Some("g-dup")))
+                .await
+                .unwrap()
+                .into_inner();
+            assert!(first.success);
+
+            let second = service
+                .call(request_with_key(Some("g-dup")))
+                .await
+                .unwrap()
+                .into_inner();
+            assert_eq!(second.data, first.data, "重放数据一致");
+            assert_eq!(
+                EXEC_COUNT.load(std::sync::atomic::Ordering::SeqCst),
+                1,
+                "handler 只执行一次"
+            );
+        }
+
+        #[tokio::test]
+        async fn in_flight_key_returns_already_exists() {
+            let (service, store) = service_with_store();
+            // 预占在途 claim
+            assert_eq!(
+                store.begin("test_idem_echo", "g-inflight", 30),
+                IdempotencyOutcome::Execute
+            );
+            let err = service
+                .call(request_with_key(Some("g-inflight")))
+                .await
+                .unwrap_err();
+            assert_eq!(err.code(), tonic::Code::AlreadyExists);
+        }
+
+        #[tokio::test]
+        #[serial_test::serial]
+        async fn without_key_proceeds_every_time() {
+            EXEC_COUNT.store(0, std::sync::atomic::Ordering::SeqCst);
+            let (service, _store) = service_with_store();
+            for _ in 0..2 {
+                let resp = service
+                    .call(request_with_key(None))
+                    .await
+                    .unwrap()
+                    .into_inner();
+                assert!(resp.success);
+            }
+            assert_eq!(
+                EXEC_COUNT.load(std::sync::atomic::Ordering::SeqCst),
+                2,
+                "无 key 不参与幂等"
+            );
+        }
     }
 }

@@ -397,6 +397,10 @@ hooks = ["http", "tokio"]
 # 请求 span 中间件 + 指标快照导出；零额外依赖（自研轻量 HTTP POST）。
 otel = ["http", "tokio"]
 
+# 幂等重放防护特性 - Idempotency-Key HTTP 中间件 + gRPC metadata 路径
+# 依赖 http（中间件）与 cache（IdempotencyStore 后端）
+idempotency = ["http", "cache", "tokio"]
+
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
 # `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
@@ -470,6 +474,7 @@ full = [
     "docs",
     "inklog",
     "i18n",
+    "idempotency",
 ]
 
 # build 脚本依赖无法随 feature 条件化（cargo 限制），故保持无条件声明；
@@ -671,6 +676,12 @@ required-features = ["grpc", "websocket", "security"]
 name = "otel_export_tests"
 path = "tests/integration/otel_export_tests.rs"
 required-features = ["http", "otel", "metrics"]
+
+# Idempotency-Key 重放防护 e2e — 重放/无 key 透行/disabled 零影响。
+[[test]]
+name = "idempotency_tests"
+path = "tests/integration/idempotency_tests.rs"
+required-features = ["http", "idempotency"]
 
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）
