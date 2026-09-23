@@ -138,6 +138,25 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 - `ServiceError::new(code, message, status)` / `ServiceError::with_details(code, message, details, status)`：业务错误统一载体，支持 `From<MyError>` 转换
 - `ServiceResponse::success_with_status(data, code)`：动态指定成功状态码（与 `#[forge(status = ...)]` 对应）
 
+### 统一错误契约（`sdforge::error::unified`，跨协议单一事实来源）
+
+- `mapping_for(&ApiError) -> (u16, &'static str)`：`ApiError` → HTTP 状态码 + 机器错误码的唯一映射表（HTTP 适配器消费）
+- `grpc_code_for(&ApiError) -> tonic::Code`（feature = `grpc`）：同一 `ApiError` → gRPC 状态码（NotFound/InvalidArgument/Unauthenticated/PermissionDenied/ResourceExhausted/Unavailable/Internal）
+- `UnifiedError`：跨协议错误载荷 `{code, message, trace_id?, field?}`，HTTP 与 gRPC `Status::details` 共享同一形状
+
+语义约定：400 = 语法畸形/缺参/解析失败（`InvalidInput`）；422 = 语义约束违反
+（`ValidationError` 及 `#[forge(validate)]` 违规，错误体含 `errors` 数组）。
+
+### 幂等防护（feature = `idempotency`）
+
+- `cache::IdempotencyStore`：协议无关三态状态机（`Execute` / `InFlight` / `Replay(body, status)`），
+  键前缀 `sdforge:idempotency:`，scope 绑定路由/gRPC method
+- `http::idempotency::idempotency_middleware`：`Idempotency-Key` 头（POST/PUT/PATCH），
+  重放响应附 `Idempotency-Replayed: true`，并发在途 409；`ServerConfig.idempotency`
+  配置节（`enabled` 默认 false / `ttl_secs` / `max_response_bytes`）
+- gRPC：`idempotency-key` metadata，在途返回 `ALREADY_EXISTS`；经
+  `GrpcServerConfig::idempotency_store` 注入
+
 ### `SdForgeError`（框架统一错误）
 
 `Api(ApiError)`、`Auth(AuthError)`、`Jwt(JwtError)`、`AuthConfig(AuthConfigError)`、`Config(ConfigError)`、`Internal(String)`；配套 `SdForgeResult<T>` 别名。

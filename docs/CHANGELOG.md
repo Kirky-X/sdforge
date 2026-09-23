@@ -34,6 +34,24 @@
 
 ### ⚠️ 破坏性变更 (Breaking Changes)
 
+- **gRPC 业务错误改返回真实 Status**（`fix-multiprotocol-contract-parity`）：
+  此前业务错误走 `Status::ok` + body `success:false`，标准 gRPC 客户端/监控/重试
+  策略对该批错误失明。现在按统一映射表落到 `tonic::Code`（NotFound→`NOT_FOUND`、
+  ValidationError→`INVALID_ARGUMENT`、RateLimitExceeded→`RESOURCE_EXHAUSTED` 等），
+  `Status::details` 携带 `UnifiedError` JSON（code/message/field/trace_id）。
+  依赖旧 body 错误形态的调用方需改读 Status。
+- **`GrpcAuthVerifier::verify` 返回类型改为 `Result<AuthContext, String>`**：
+  此前返回 `Result<(), String>` 丢弃身份导致 gRPC 路径无法做 RBAC。自定义实现需
+  适配新签名。
+- **`#[forge(validate)]` 违规状态码 400 → 422**：与 `ApiError::ValidationError`
+  及 gRPC 映射统一（RFC 9110：400=语法畸形，422=语义约束违反）；错误体 `code`
+  改为 `"UNPROCESSABLE_ENTITY"`，`errors` 数组结构保留。400 仍用于缺参/解析失败
+  （`InvalidInput`）。
+- **`ApiError` 的 HTTP 错误体改渲染 `UnifiedError` 载荷**：
+  `{"code","message","trace_id"(可选),"field"(可选)}`，跨协议共享同一形状。
+- **`GrpcHandlerRegistration` 新增 `roles: &'static [&'static str]` 字段**：
+  宏生成方无感知；手写 `inventory::submit!` 的下游需补该字段（未声明角色传 `&[]`）。
+
 - **`security::api_key::SdForgeApiKeyAuth::add_key_version` 签名变更**：返回类型从 `()` 改为
   `Result<(), String>`。当已存在的 key 元数据损坏/不可反序列化时，本方法现在返回 `Err`
   且**不注册任何凭据**（安全不变量：绝不产生"可认证但无法 revoke/rotate"的孤儿 key）。
@@ -55,6 +73,35 @@
   消息只保留在 `Display`/`Debug`（日志）中。断言原始消息会出现在外部输出的测试需更新。
 - **基准目标更名**：Cargo.toml `[[bench]]` 目标 `axiom_bench` 更名为 `sdforge_bench`
   （原 `src/benches/axiom_bench.rs` 为空壳孤儿文件，已删除）。
+
+### 新增 (Added)
+- **幂等重放防护**：新增 `idempotency` feature（已入 `full`）。HTTP 中间件支持
+  `Idempotency-Key` 头（POST/PUT/PATCH）：重放缓存响应（附 `Idempotency-Replayed: true`）、
+  并发在途 409；gRPC 支持 `idempotency-key` metadata（在途 `ALREADY_EXISTS`）。
+  核心为 `cache::IdempotencyStore` 三态状态机，`ServerConfig.idempotency` 配置节
+  （`enabled` 默认 false / `ttl_secs` / `max_response_bytes`）。
+- **gRPC RBAC 对等**：`#[forge(auth(role = "..."))]` 角色声明贯通 gRPC 路径
+  （无匹配 permission → `PERMISSION_DENIED`；security feature 关闭时 fail-safe 拒绝）。
+- **gRPC 参数校验对等**：`#[forge(validate)]` + `#[param(ge/le/min_length/max_length/
+  not_blank/email)]` 规则在 gRPC 闭包执行（首违规短路 `ValidationError`），
+  与 HTTP 共享同一规则生成单源。
+- **gRPC 服务配置**：`GrpcServerConfig` 暴露 `http2_keepalive_interval/timeout`；
+  新增 `grpc-tls` feature（`ServerTlsConfig` 接线暴露，证书加载由调用方负责）。
+- **`GrpcServerConfig` 新增 `idempotency_store`/`idempotency_ttl_secs` 字段**
+  （feature = `idempotency`）。
+
+
+### 变更 (Changed)
+
+- **错误码映射单一事实来源**：`error::unified::mapping_for`/`grpc_code_for` 统一
+  `ApiError` → HTTP 状态/错误码/gRPC Code；修正 `InvalidInput` HTTP 400 与 gRPC 侧
+  422 的两张皮分歧（gRPC 业务错误不再自报 422）。
+- **`GetInfo` 版本号取 `CARGO_PKG_VERSION`**（此前硬编码 "0.1.0"）。
+- **限流覆盖 gRPC `get_info`**（与 `call` 共用 guard，缺 remote_addr 时 "unknown" 兜底）。
+
+### 移除 (Removed)
+
+- workspace tower 依赖移除未使用的 `retry` feature（全仓无 RetryLayer 使用）。
 
 ### 新增 (Added)
 

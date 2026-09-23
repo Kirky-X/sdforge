@@ -50,6 +50,8 @@ pub fn build_custom_config() -> SdForgeConfig {
         port: 3000,
         request_timeout_secs: 60,
         max_body_size: 10 * 1024 * 1024,
+        #[cfg(feature = "idempotency_examples")]
+        idempotency: Default::default(),
         cors: None,
     };
 
@@ -103,6 +105,8 @@ pub fn demo_server_config() -> ServerConfig {
         port: 8080,
         request_timeout_secs: 30,
         max_body_size: 10 * 1024 * 1024,
+        #[cfg(feature = "idempotency_examples")]
+        idempotency: Default::default(),
         cors: None,
     }
 }
