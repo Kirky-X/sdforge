@@ -53,6 +53,13 @@ pub struct GrpcServerConfig {
     /// 幂等重放防护 store（feature = `idempotency`）。None = 关闭。
     #[cfg(feature = "idempotency")]
     pub idempotency_store: Option<std::sync::Arc<crate::cache::IdempotencyStore>>,
+    /// HTTP/2 keepalive ping 间隔（feature-gated 可选；None = tonic 默认）。
+    pub http2_keepalive_interval: Option<std::time::Duration>,
+    /// HTTP/2 keepalive 超时（None = tonic 默认）。
+    pub http2_keepalive_timeout: Option<std::time::Duration>,
+    /// 可选 TLS（feature = `grpc-tls`）。只做接线，不做证书加载/轮换。
+    #[cfg(feature = "grpc-tls")]
+    pub tls: Option<tonic::transport::server::ServerTlsConfig>,
     /// 重放窗口秒数（feature = `idempotency`，默认 86400）。
     #[cfg(feature = "idempotency")]
     pub idempotency_ttl_secs: i64,

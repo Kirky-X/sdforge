@@ -703,6 +703,17 @@ pub async fn build_server_with_config(
     if config.timeout_seconds > 0 {
         builder = builder.timeout(std::time::Duration::from_secs(config.timeout_seconds));
     }
+    // T024: HTTP/2 keepalive 配置暴露（None = tonic 默认）。
+    builder = builder
+        .http2_keepalive_interval(config.http2_keepalive_interval)
+        .http2_keepalive_timeout(config.http2_keepalive_timeout);
+    // T025: 可选 TLS 接线（feature = grpc-tls；证书加载由调用方负责）。
+    #[cfg(feature = "grpc-tls")]
+    if let Some(tls) = config.tls.clone() {
+        builder = builder
+            .tls_config(tls)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?;
+    }
 
     builder
         .add_service(SdForgeServiceServer::new(service).max_decoding_message_size(4 * 1024 * 1024))
@@ -728,6 +739,10 @@ impl Default for GrpcServerConfig {
             idempotency_store: None,
             #[cfg(feature = "idempotency")]
             idempotency_ttl_secs: 86_400,
+            http2_keepalive_interval: None,
+            http2_keepalive_timeout: None,
+            #[cfg(feature = "grpc-tls")]
+            tls: None,
         }
     }
 }
@@ -1434,6 +1449,21 @@ mod tests {
         );
         let (status, code) = crate::error::unified::mapping_for(&e);
         assert_eq!((status, code), (404, "NOT_FOUND"));
+    }
+
+    /// T024: keepalive 配置默认 None（tonic 默认行为）。
+    #[test]
+    fn grpc_server_config_keepalive_defaults_none() {
+        let config = GrpcServerConfig::default();
+        assert!(config.http2_keepalive_interval.is_none());
+        assert!(config.http2_keepalive_timeout.is_none());
+    }
+
+    /// T025: TLS 默认 None（grpc-tls feature 下也保持关闭默认）。
+    #[cfg(feature = "grpc-tls")]
+    #[test]
+    fn grpc_server_config_tls_defaults_none() {
+        assert!(GrpcServerConfig::default().tls.is_none());
     }
 
     #[test]

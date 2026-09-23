@@ -24,7 +24,7 @@ quote = { version = "1.0", default-features = false, features = ["proc-macro"] }
 
 # HTTP 依赖
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "form", "matched-path", "original-uri", "query", "tokio", "tower-log", "tracing", "ws"] }
-tower = { version = "0.5", default-features = false, features = ["log", "util", "timeout", "limit", "load-shed", "retry"] }
+tower = { version = "0.5", default-features = false, features = ["log", "util", "timeout", "limit", "load-shed"] }
 tower-http = { version = "0.7", default-features = false, features = ["cors", "limit", "timeout", "set-header", "compression-gzip", "compression-deflate"] }
 inventory = { version = "0.3", default-features = false }
 
@@ -342,6 +342,9 @@ websocket = ["http", "streaming", "dep:axum-extra", "dep:chrono"]
 # gRPC 特性
 # 独立于 http：grpc 模块只用 tonic + prost + serde_json + futures-util (catch_unwind)
 grpc = ["dep:tonic", "dep:prost", "dep:tonic-prost", "dep:inventory", "dep:futures-util"]
+
+# gRPC TLS 特性 - 只做 ServerTlsConfig 接线暴露，证书加载由调用方负责
+grpc-tls = ["grpc", "tonic/tls-aws-lc", "tonic/transport"]
 
 # OpenAPI 特性 - 自动生成 OpenAPI 3.1 规范
 # 独立于 http：openapi 模块只用 utoipa + inventory + serde_json

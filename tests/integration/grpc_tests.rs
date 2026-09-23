@@ -593,6 +593,10 @@ mod grpc_integration_tests {
             idempotency_store: None,
             #[cfg(feature = "idempotency")]
             idempotency_ttl_secs: 86_400,
+            #[cfg(feature = "grpc-tls")]
+            tls: None,
+            http2_keepalive_interval: None,
+            http2_keepalive_timeout: None,
         };
 
         assert_eq!(
@@ -1060,6 +1064,10 @@ mod grpc_integration_tests {
             idempotency_store: None,
             #[cfg(feature = "idempotency")]
             idempotency_ttl_secs: 86_400,
+            #[cfg(feature = "grpc-tls")]
+            tls: None,
+            http2_keepalive_interval: None,
+            http2_keepalive_timeout: None,
         };
 
         assert!(config.auth.is_some(), "Config should have auth when set");
@@ -1245,6 +1253,10 @@ mod grpc_integration_tests {
             idempotency_store: None,
             #[cfg(feature = "idempotency")]
             idempotency_ttl_secs: 86_400,
+            #[cfg(feature = "grpc-tls")]
+            tls: None,
+            http2_keepalive_interval: None,
+            http2_keepalive_timeout: None,
         };
 
         assert_eq!(config.max_connections, 200);

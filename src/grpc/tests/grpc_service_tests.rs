@@ -33,6 +33,10 @@ fn test_grpc_server_config_with_auth() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -379,6 +383,10 @@ fn test_grpc_config_zero_timeout() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -400,6 +408,10 @@ fn test_grpc_config_large_max_connections() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -420,6 +432,10 @@ fn test_grpc_config_boundary_values() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -435,6 +451,10 @@ fn test_grpc_config_boundary_values() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -892,6 +912,10 @@ fn test_grpc_server_config_clone() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -915,6 +939,10 @@ fn test_grpc_server_config_equality() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -930,6 +958,10 @@ fn test_grpc_server_config_equality() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -951,6 +983,10 @@ fn test_grpc_server_config_with_minimal_connections() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -971,6 +1007,10 @@ fn test_grpc_server_config_with_zero_timeout() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -991,6 +1031,10 @@ fn test_grpc_server_config_timeout_edge_cases() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -1006,6 +1050,10 @@ fn test_grpc_server_config_timeout_edge_cases() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -1027,6 +1075,10 @@ fn test_grpc_server_config_auth_none() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -1589,6 +1641,10 @@ async fn test_build_server_with_config_zero_values_starts_serving() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -1623,6 +1679,10 @@ async fn test_build_server_with_config_large_values_starts_serving() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
@@ -1658,6 +1718,10 @@ async fn test_build_server_with_config_minimal_positive_values() {
         idempotency_store: None,
         #[cfg(feature = "idempotency")]
         idempotency_ttl_secs: 86_400,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
