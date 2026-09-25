@@ -94,8 +94,20 @@ pub fn swagger_ui_router_with_openapi(spec: OpenApi) -> axum::Router {
 }
 
 /// 返回调用方提供的 OpenAPI spec。
-async fn serve_fixed_openapi_json(Extension(spec): Extension<Arc<OpenApi>>) -> impl IntoResponse {
-    Json((*spec).clone())
+///
+/// 借用序列化直出字节，避免每请求对整棵 spec 树做深拷贝。
+async fn serve_fixed_openapi_json(
+    Extension(spec): Extension<Arc<OpenApi>>,
+) -> axum::response::Response {
+    match serde_json::to_vec(&*spec) {
+        Ok(bytes) => (
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            bytes,
+        )
+            .into_response(),
+        // spec 序列化失败属服务端数据错误，不向客户端泄露细节。
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }
 
 /// 返回动态生成的 OpenAPI JSON spec。
