@@ -195,6 +195,51 @@ async fn run_readiness_checks_is_externally_callable() {
 }
 
 // =============================================================================
+// 自定义 ReadinessRenderer：库外消费方接管 /readyz 的状态码与包络
+// （默认注册位为空时行为与快照一致，见库内逐字节快照测试）。
+// =============================================================================
+#[tokio::test]
+#[serial_test::serial]
+async fn custom_readiness_renderer_controls_status_and_envelope() {
+    use axum::response::IntoResponse;
+
+    struct AlwaysReady;
+
+    impl sdforge::health::ReadinessRenderer for AlwaysReady {
+        fn render(
+            &self,
+            _all_healthy: bool,
+            _checks: Vec<sdforge::health::CheckOutcome>,
+        ) -> axum::response::Response {
+            (
+                axum::http::StatusCode::OK,
+                axum::Json(serde_json::json!({"status": "ready"})),
+            )
+                .into_response()
+        }
+    }
+
+    sdforge::health::clear_readiness_checks();
+    sdforge::health::clear_health_source();
+    sdforge::health::clear_readiness_renderer();
+
+    // 注册失败检查：默认 renderer 会 503，自定义 renderer 恒 200。
+    sdforge::health::register_readiness_check_fn("cache", || {
+        sdforge::health::CheckOutcome::unhealthy("cache", "connection refused")
+    });
+    sdforge::health::register_readiness_renderer(std::sync::Arc::new(AlwaysReady));
+
+    let router = build_with_config(&jwt_config()).unwrap();
+    let resp = get(router, "/readyz").await;
+    assert_eq!(resp.status(), axum::http::StatusCode::OK);
+    let json = body_json(resp).await;
+    assert_eq!(json["status"], "ready");
+
+    sdforge::health::clear_readiness_renderer();
+    sdforge::health::clear_readiness_checks();
+}
+
+// =============================================================================
 // kit data source (kit + health features)
 // =============================================================================
 #[cfg(feature = "kit")]

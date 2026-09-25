@@ -37,7 +37,9 @@ pub struct CheckOutcome {
     pub name: String,
     /// Whether this check passed.
     pub healthy: bool,
-    /// Optional structured details (error message, latency, kit aggregate…).
+    /// Optional structured payload the renderer may surface or drop
+    /// (canonical keys: `latency_ms`, `error`; kit aggregates embed their
+    /// report object).
     pub details: Option<serde_json::Value>,
 }
 
@@ -83,6 +85,48 @@ pub trait HealthDataSource: Send + Sync {
     fn health_json(&self) -> String;
 }
 
+/// Render the readiness aggregate into the `/readyz` response.
+///
+/// The status code and the body envelope are decided **entirely** by the
+/// renderer: the library only folds registered checks (and the kit health
+/// source, when present) into `(all_healthy, checks)` and hands them over.
+/// A consumer may therefore serve `/readyz` as always-200 with its own
+/// envelope, or replicate the default shape — both are legitimate.
+///
+/// Install a renderer via [`register_readiness_renderer`]; with none
+/// registered, [`DefaultReadinessRenderer`] serves the historical envelope.
+pub trait ReadinessRenderer: Send + Sync {
+    /// Render `(all_healthy, checks)` into the `/readyz` response.
+    fn render(&self, all_healthy: bool, checks: Vec<CheckOutcome>) -> Response;
+}
+
+/// Default `/readyz` renderer: the historical envelope, extracted verbatim.
+///
+/// 200 + `{"status":"ready","checks":[...]}` when every check passes,
+/// 503 + `{"status":"unavailable","checks":[...]}` otherwise; each check
+/// contributes `name`/`healthy`/`details`.
+pub struct DefaultReadinessRenderer;
+
+impl ReadinessRenderer for DefaultReadinessRenderer {
+    fn render(&self, all_healthy: bool, checks: Vec<CheckOutcome>) -> Response {
+        let status = if all_healthy { "ready" } else { "unavailable" };
+        let body = serde_json::json!({
+            "status": status,
+            "checks": checks.iter().map(|c| serde_json::json!({
+                "name": c.name,
+                "healthy": c.healthy,
+                "details": c.details,
+            })).collect::<Vec<_>>(),
+        });
+        let code = if all_healthy {
+            StatusCode::OK
+        } else {
+            StatusCode::SERVICE_UNAVAILABLE
+        };
+        (code, Json(body)).into_response()
+    }
+}
+
 /// Closure-based [`HealthDataSource`] adapter.
 struct FnHealthSource<F>(F)
 where
@@ -104,6 +148,7 @@ pub fn register_health_source_fn(f: impl Fn() -> String + Send + Sync + 'static)
 
 static READINESS_CHECKS: OnceLock<RwLock<Vec<Arc<dyn ReadinessCheck>>>> = OnceLock::new();
 static HEALTH_SOURCE: OnceLock<RwLock<Option<Arc<dyn HealthDataSource>>>> = OnceLock::new();
+static READINESS_RENDERER: OnceLock<RwLock<Option<Arc<dyn ReadinessRenderer>>>> = OnceLock::new();
 
 fn readiness_checks() -> &'static RwLock<Vec<Arc<dyn ReadinessCheck>>> {
     READINESS_CHECKS.get_or_init(|| RwLock::new(Vec::new()))
@@ -111,6 +156,10 @@ fn readiness_checks() -> &'static RwLock<Vec<Arc<dyn ReadinessCheck>>> {
 
 fn health_source() -> &'static RwLock<Option<Arc<dyn HealthDataSource>>> {
     HEALTH_SOURCE.get_or_init(|| RwLock::new(None))
+}
+
+fn readiness_renderer_slot() -> &'static RwLock<Option<Arc<dyn ReadinessRenderer>>> {
+    READINESS_RENDERER.get_or_init(|| RwLock::new(None))
 }
 
 /// Register a readiness check (appended; order = registration order).
@@ -164,6 +213,34 @@ pub fn register_health_source(source: Arc<dyn HealthDataSource>) {
 pub fn clear_health_source() {
     if let Ok(mut guard) = health_source().write() {
         *guard = None;
+    }
+}
+
+/// Set the `/readyz` renderer (replaces any previous one).
+///
+/// With no renderer registered, [`DefaultReadinessRenderer`] serves the
+/// historical envelope.
+pub fn register_readiness_renderer(renderer: Arc<dyn ReadinessRenderer>) {
+    if let Ok(mut guard) = readiness_renderer_slot().write() {
+        *guard = Some(renderer);
+    }
+}
+
+/// Remove the registered readiness renderer, restoring the default envelope
+/// (mainly for tests).
+pub fn clear_readiness_renderer() {
+    if let Ok(mut guard) = readiness_renderer_slot().write() {
+        *guard = None;
+    }
+}
+
+/// The active readiness renderer: the registered one, or the default.
+fn active_readiness_renderer() -> Arc<dyn ReadinessRenderer> {
+    match readiness_renderer_slot().read() {
+        Ok(guard) => guard
+            .clone()
+            .unwrap_or_else(|| Arc::new(DefaultReadinessRenderer)),
+        Err(_) => Arc::new(DefaultReadinessRenderer),
     }
 }
 
@@ -236,24 +313,14 @@ pub async fn healthz_handler() -> impl IntoResponse {
     }))
 }
 
-/// `GET /readyz` — readiness probe. 200 when all checks pass, 503 otherwise.
+/// `GET /readyz` — readiness probe.
+///
+/// The response comes from the active [`ReadinessRenderer`]; with none
+/// registered, [`DefaultReadinessRenderer`] serves 200/`ready` when all
+/// checks pass and 503/`unavailable` otherwise.
 pub async fn readyz_handler() -> Response {
     let (all_healthy, checks) = run_readiness_checks();
-    let status = if all_healthy { "ready" } else { "unavailable" };
-    let body = serde_json::json!({
-        "status": status,
-        "checks": checks.iter().map(|c| serde_json::json!({
-            "name": c.name,
-            "healthy": c.healthy,
-            "details": c.details,
-        })).collect::<Vec<_>>(),
-    });
-    let code = if all_healthy {
-        StatusCode::OK
-    } else {
-        StatusCode::SERVICE_UNAVAILABLE
-    };
-    (code, Json(body)).into_response()
+    active_readiness_renderer().render(all_healthy, checks)
 }
 
 /// Mount `/healthz` and `/readyz` on `router`, skipping any path already
@@ -291,6 +358,15 @@ mod tests {
             )
             .await
             .unwrap()
+    }
+
+    /// 恒 200 消费方 renderer：忽略聚合结果，只回自定义包络。
+    struct AlwaysOkRenderer;
+
+    impl ReadinessRenderer for AlwaysOkRenderer {
+        fn render(&self, _all_healthy: bool, _checks: Vec<CheckOutcome>) -> Response {
+            (StatusCode::OK, "ok").into_response()
+        }
     }
 
     #[tokio::test]
@@ -388,6 +464,39 @@ mod tests {
         clear_health_source();
     }
 
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn default_readyz_envelope_is_byte_exact() {
+        clear_readiness_checks();
+        clear_health_source();
+
+        // 无检查：200 + 空 checks 包络（键序 = serde_json Map 字典序）。
+        let resp = get(probe_router(), "/readyz").await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(body.to_vec()).unwrap(),
+            "{\"checks\":[],\"status\":\"ready\"}"
+        );
+
+        // 失败检查：503 + error 详情包络。
+        register_readiness_check_fn("dep-b", || {
+            CheckOutcome::unhealthy("dep-b", "connection refused")
+        });
+        let resp = get(probe_router(), "/readyz").await;
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(body.to_vec()).unwrap(),
+            "{\"checks\":[{\"details\":{\"error\":\"connection refused\"},\"healthy\":false,\"name\":\"dep-b\"}],\"status\":\"unavailable\"}"
+        );
+        clear_readiness_checks();
+    }
+
     #[test]
     #[serial_test::serial]
     fn panicking_check_is_reported_unhealthy() {
@@ -401,6 +510,35 @@ mod tests {
         assert_eq!(checks[0].name, "boom");
         assert!(!checks[0].healthy);
         clear_readiness_checks();
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn custom_renderer_replaces_envelope_and_clear_restores_default() {
+        clear_readiness_checks();
+        clear_health_source();
+        clear_readiness_renderer();
+
+        // 恒 200 消费方 renderer：状态码/包络完全由 renderer 决定。
+        register_readiness_renderer(Arc::new(AlwaysOkRenderer));
+        let resp = get(probe_router(), "/readyz").await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(String::from_utf8(body.to_vec()).unwrap(), "ok");
+
+        // 清除后恢复默认包络（与快照一致）。
+        clear_readiness_renderer();
+        let resp = get(probe_router(), "/readyz").await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            String::from_utf8(body.to_vec()).unwrap(),
+            "{\"checks\":[],\"status\":\"ready\"}"
+        );
     }
 
     #[test]
