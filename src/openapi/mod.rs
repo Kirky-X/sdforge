@@ -616,6 +616,57 @@ mod tests {
         );
     }
 
+    /// x- 扩展与顶层字段参与合并：PathItem 扩展按键保留、顶层 tags 按
+    /// name 去重追加、security 外部整体覆盖——承载安全元数据的扩展不得
+    /// 因合并静默丢失。
+    #[test]
+    fn merge_preserves_extensions_and_merges_top_level() {
+        use utoipa::openapi::extensions::Extensions;
+        use utoipa::openapi::path::OperationBuilder;
+        use utoipa::openapi::path::{HttpMethod, PathItem, Paths};
+        use utoipa::openapi::{Info, OpenApi};
+
+        let mut paths = Paths::new();
+        let mut item = PathItem::new(
+            HttpMethod::Get,
+            OperationBuilder::new().summary(Some("WITH EXT".to_string())),
+        );
+        item.extensions = Some(Extensions::from_iter([
+            ("x-required-scope", serde_json::json!("admin")),
+            ("x-rate-limit", serde_json::json!(100)),
+        ]));
+        paths.paths.insert("/__external_ext__".to_string(), item);
+
+        let mut extra = OpenApi::new(Info::new("external", "1.0.0"), paths);
+        extra.tags = Some(vec![utoipa::openapi::Tag::new("external-tag")]);
+        extra.security = Some(vec![utoipa::openapi::security::SecurityRequirement::new(
+            "oauth",
+            ["read"],
+        )]);
+
+        let spec = OpenApiBuilder::new()
+            .title("t")
+            .version("1")
+            .merge_openapi(extra)
+            .build();
+
+        let item = spec
+            .paths
+            .paths
+            .get("/__external_ext__")
+            .expect("path merged");
+        let ext = item.extensions.as_ref().expect("extensions preserved");
+        assert_eq!(
+            ext.get("x-required-scope"),
+            Some(&serde_json::json!("admin"))
+        );
+        assert_eq!(ext.get("x-rate-limit"), Some(&serde_json::json!(100)));
+
+        let tags = spec.tags.as_ref().expect("tags merged");
+        assert!(tags.iter().any(|t| t.name == "external-tag"));
+        assert!(spec.security.is_some(), "top-level security overridden");
+    }
+
     /// `paths` 链式方法：直接合并外部 Paths，同 path+method 外部优先。
     #[test]
     fn paths_chain_method_merges_external_paths() {

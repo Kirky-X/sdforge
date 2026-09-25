@@ -435,8 +435,12 @@ impl std::fmt::Debug for OpenApiBuilder {
 /// 将一个外部 spec 合并进 `spec`。
 ///
 /// - paths：同 path+method 时外部操作覆盖既有项，其余 method 原样保留；
+///   PathItem 级 `x-` 扩展按键合并（外部同名键覆盖），安全元数据（如
+///   `x-required-scope`）不因合并丢失；
 /// - components：schemas/responses/security_schemes 按名称 map 去重合并，
-///   后合并者覆盖同名条目，$ref 指针按名称保持可解析。
+///   后合并者覆盖同名条目，$ref 指针按名称保持可解析；
+/// - 顶层 tags：按 name 去重追加（已有同名 tag 保留原定义）；
+/// - 顶层 security：外部提供时整体覆盖（与 path+method 同为外部优先）。
 fn merge_extra_into(spec: &mut OpenApi, extra: &OpenApi) {
     for (path, extra_item) in &extra.paths.paths {
         let item = spec.paths.paths.entry(path.clone()).or_default();
@@ -464,6 +468,12 @@ fn merge_extra_into(spec: &mut OpenApi, extra: &OpenApi) {
         if extra_item.trace.is_some() {
             item.trace = extra_item.trace.clone();
         }
+        // x- 扩展逐键合并，外部同名键覆盖，不整体替换。
+        match (&mut item.extensions, &extra_item.extensions) {
+            (Some(dst), Some(src)) => dst.merge(src.clone()),
+            (None, Some(src)) => item.extensions = Some(src.clone()),
+            _ => {}
+        }
     }
     if let Some(extra_components) = &extra.components {
         let components = spec.components.get_or_insert_with(Default::default);
@@ -478,6 +488,19 @@ fn merge_extra_into(spec: &mut OpenApi, extra: &OpenApi) {
                 .security_schemes
                 .insert(name.clone(), scheme.clone());
         }
+    }
+    // 顶层 tags：按 name 去重追加，已有同名 tag 保留原定义。
+    if let Some(extra_tags) = &extra.tags {
+        let tags = spec.tags.get_or_insert_with(Vec::new);
+        for tag in extra_tags {
+            if !tags.iter().any(|t| t.name == tag.name) {
+                tags.push(tag.clone());
+            }
+        }
+    }
+    // 顶层 security：外部提供时整体覆盖（外部优先）。
+    if extra.security.is_some() {
+        spec.security = extra.security.clone();
     }
 }
 
