@@ -240,6 +240,30 @@ async fn custom_readiness_renderer_controls_status_and_envelope() {
 }
 
 // =============================================================================
+// AsyncReadinessCheck：库外注册异步检查，/readyz 自动切聚合路径并翻 503。
+// =============================================================================
+#[tokio::test]
+#[serial_test::serial]
+async fn async_readiness_check_flips_readyz_to_503() {
+    sdforge::health::clear_readiness_checks();
+    sdforge::health::clear_health_source();
+    sdforge::health::clear_async_readiness_checks();
+    sdforge::health::register_async_readiness_check_fn("cache-async", || async {
+        sdforge::health::CheckOutcome::unhealthy("cache-async", "connection refused")
+    });
+
+    let router = build_with_config(&jwt_config()).unwrap();
+    let resp = get(router, "/readyz").await;
+    assert_eq!(resp.status(), axum::http::StatusCode::SERVICE_UNAVAILABLE);
+    let json = body_json(resp).await;
+    assert_eq!(json["status"], "unavailable");
+    assert_eq!(json["checks"][0]["name"], "cache-async");
+    assert_eq!(json["checks"][0]["details"]["error"], "connection refused");
+
+    sdforge::health::clear_async_readiness_checks();
+}
+
+// =============================================================================
 // kit data source (kit + health features)
 // =============================================================================
 #[cfg(feature = "kit")]

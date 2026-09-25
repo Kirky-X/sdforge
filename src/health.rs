@@ -24,6 +24,8 @@
 //! // GET /readyz  -> 200 {"status":"ready","checks":[...]} or 503
 //! ```
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, OnceLock, RwLock};
 
 use axum::Json;
@@ -72,6 +74,27 @@ pub trait ReadinessCheck: Send + Sync {
     fn name(&self) -> &str;
     /// Run the check.
     fn check(&self) -> CheckOutcome;
+}
+
+/// A readiness check port that awaits I/O: named, asynchronous dependency
+/// probe, registered via [`register_async_readiness_check`].
+///
+/// A panicking check is reported as an unhealthy outcome ("check panicked"),
+/// mirroring the synchronous `catch_unwind` policy of [`ReadinessCheck`].
+///
+/// # Evolution note (dual registration surface)
+///
+/// The sync and async registration pools are a transitional shape:
+/// `/readyz` aggregates both whenever any async check is registered, so
+/// existing sync registrars keep their exact current behavior. Direction:
+/// async absorbs sync — sync checks are the degenerate never-awaiting case —
+/// and the dual surface dissolves into one async pool without any consumer
+/// change.
+pub trait AsyncReadinessCheck: Send + Sync {
+    /// Check name surfaced in the `/readyz` payload.
+    fn name(&self) -> &str;
+    /// Run the check.
+    fn check(&self) -> Pin<Box<dyn Future<Output = CheckOutcome> + Send + '_>>;
 }
 
 /// Health data source port for kit-style aggregates.
@@ -147,11 +170,17 @@ pub fn register_health_source_fn(f: impl Fn() -> String + Send + Sync + 'static)
 }
 
 static READINESS_CHECKS: OnceLock<RwLock<Vec<Arc<dyn ReadinessCheck>>>> = OnceLock::new();
+static ASYNC_READINESS_CHECKS: OnceLock<RwLock<Vec<Arc<dyn AsyncReadinessCheck>>>> =
+    OnceLock::new();
 static HEALTH_SOURCE: OnceLock<RwLock<Option<Arc<dyn HealthDataSource>>>> = OnceLock::new();
 static READINESS_RENDERER: OnceLock<RwLock<Option<Arc<dyn ReadinessRenderer>>>> = OnceLock::new();
 
 fn readiness_checks() -> &'static RwLock<Vec<Arc<dyn ReadinessCheck>>> {
     READINESS_CHECKS.get_or_init(|| RwLock::new(Vec::new()))
+}
+
+fn async_readiness_checks() -> &'static RwLock<Vec<Arc<dyn AsyncReadinessCheck>>> {
+    ASYNC_READINESS_CHECKS.get_or_init(|| RwLock::new(Vec::new()))
 }
 
 fn health_source() -> &'static RwLock<Option<Arc<dyn HealthDataSource>>> {
@@ -199,6 +228,59 @@ pub fn register_readiness_check_fn(
 pub fn clear_readiness_checks() {
     if let Ok(mut guard) = readiness_checks().write() {
         guard.clear();
+    }
+}
+
+/// Register an asynchronous readiness check (appended; order = registration
+/// order). Its outcome joins the `/readyz` aggregate alongside any sync
+/// checks.
+pub fn register_async_readiness_check(check: Arc<dyn AsyncReadinessCheck>) {
+    if let Ok(mut guard) = async_readiness_checks().write() {
+        guard.push(check);
+    }
+}
+
+/// Convenience: register an asynchronous readiness check from a closure.
+pub fn register_async_readiness_check_fn<F, Fut>(name: impl Into<String>, check: F)
+where
+    F: Fn() -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = CheckOutcome> + Send + 'static,
+{
+    struct FnAsyncCheck<F> {
+        name: String,
+        check: F,
+    }
+    impl<F, Fut> AsyncReadinessCheck for FnAsyncCheck<F>
+    where
+        F: Fn() -> Fut + Send + Sync,
+        Fut: Future<Output = CheckOutcome> + Send + 'static,
+    {
+        fn name(&self) -> &str {
+            &self.name
+        }
+        fn check(&self) -> Pin<Box<dyn Future<Output = CheckOutcome> + Send + '_>> {
+            Box::pin((self.check)())
+        }
+    }
+    register_async_readiness_check(Arc::new(FnAsyncCheck {
+        name: name.into(),
+        check,
+    }));
+}
+
+/// Remove all registered asynchronous readiness checks (mainly for tests).
+pub fn clear_async_readiness_checks() {
+    if let Ok(mut guard) = async_readiness_checks().write() {
+        guard.clear();
+    }
+}
+
+/// True when at least one async readiness check is registered — the signal
+/// for `readyz_handler` to aggregate via the async path.
+fn has_async_readiness_checks() -> bool {
+    match async_readiness_checks().read() {
+        Ok(guard) => !guard.is_empty(),
+        Err(_) => false,
     }
 }
 
@@ -305,6 +387,115 @@ pub fn run_readiness_checks() -> (bool, Vec<CheckOutcome>) {
     (all_healthy, outcomes)
 }
 
+/// Asynchronous counterpart of [`run_readiness_checks`]: sync checks run
+/// exactly as in the sync path, async checks run concurrently on a
+/// `tokio::task::JoinSet`, and the kit health source folds in last.
+///
+/// A panicking async check is reported as an unhealthy outcome ("check
+/// panicked"), mirroring the sync `catch_unwind` policy: the panic surfaces
+/// as a `JoinError` at the nested task boundary, where the check name is
+/// still in scope. Outcomes are returned in registration order (sync first,
+/// then async), not completion order.
+///
+/// The sync aggregate body is deliberately not refactored into this path —
+/// its source and output stay untouched.
+pub async fn run_readiness_checks_async() -> (bool, Vec<CheckOutcome>) {
+    let mut outcomes = Vec::new();
+    let mut all_healthy = true;
+
+    let checks: Vec<Arc<dyn ReadinessCheck>> = match readiness_checks().read() {
+        Ok(guard) => guard.clone(),
+        Err(_) => {
+            log::warn!("readiness checks lock poisoned; running with an empty check set");
+            Vec::new()
+        }
+    };
+    for check in &checks {
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| check.check()))
+            .unwrap_or_else(|_| {
+                CheckOutcome::unhealthy(check.name(), "check panicked".to_string())
+            });
+        if !outcome.healthy {
+            all_healthy = false;
+        }
+        outcomes.push(outcome);
+    }
+
+    let async_checks: Vec<Arc<dyn AsyncReadinessCheck>> = match async_readiness_checks().read() {
+        Ok(guard) => guard.clone(),
+        Err(_) => {
+            log::warn!("async readiness checks lock poisoned; running with an empty check set");
+            Vec::new()
+        }
+    };
+    if !async_checks.is_empty() {
+        let mut set = tokio::task::JoinSet::new();
+        for (idx, check) in async_checks.into_iter().enumerate() {
+            // The user future runs on a nested task so its panic is caught at
+            // `inner.await` while `name` is still owned here; the outer task
+            // runs no user code and therefore never panics.
+            set.spawn(async move {
+                let name = check.name().to_string();
+                let inner = tokio::spawn(async move { check.check().await });
+                let outcome = match inner.await {
+                    Ok(outcome) => outcome,
+                    Err(join_err) if join_err.is_panic() => {
+                        CheckOutcome::unhealthy(name.clone(), "check panicked".to_string())
+                    }
+                    Err(_) => {
+                        CheckOutcome::unhealthy(name.clone(), "check task cancelled".to_string())
+                    }
+                };
+                (idx, outcome)
+            });
+        }
+        let mut async_outcomes: Vec<(usize, CheckOutcome)> = Vec::with_capacity(set.len());
+        while let Some(joined) = set.join_next().await {
+            if let Ok((idx, outcome)) = joined {
+                if !outcome.healthy {
+                    all_healthy = false;
+                }
+                async_outcomes.push((idx, outcome));
+            }
+        }
+        async_outcomes.sort_by_key(|(idx, _)| *idx);
+        outcomes.extend(async_outcomes.into_iter().map(|(_, outcome)| outcome));
+    }
+
+    // Kit-style aggregate: mirrors the sync path — the source handle is
+    // cloned out of the lock before its `health_json()` runs.
+    let source = match health_source().read() {
+        Ok(guard) => guard.clone(),
+        Err(_) => {
+            log::warn!("health source lock poisoned; skipping the kit aggregate");
+            None
+        }
+    };
+    if let Some(source) = source {
+        let payload =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| source.health_json()))
+                .unwrap_or_else(|_| {
+                    serde_json::json!({"status": "unhealthy", "healthy": false}).to_string()
+                });
+        let value: serde_json::Value = serde_json::from_str(&payload)
+            .unwrap_or_else(|_| serde_json::json!({"status": "unhealthy"}));
+        let healthy = value
+            .get("healthy")
+            .and_then(|h| h.as_bool())
+            .unwrap_or(false);
+        if !healthy {
+            all_healthy = false;
+        }
+        outcomes.push(CheckOutcome {
+            name: "kit".to_string(),
+            healthy,
+            details: Some(value),
+        });
+    }
+
+    (all_healthy, outcomes)
+}
+
 /// `GET /healthz` — liveness probe. Always 200 while the process serves.
 pub async fn healthz_handler() -> impl IntoResponse {
     Json(serde_json::json!({
@@ -315,11 +506,18 @@ pub async fn healthz_handler() -> impl IntoResponse {
 
 /// `GET /readyz` — readiness probe.
 ///
-/// The response comes from the active [`ReadinessRenderer`]; with none
+/// Aggregation path: when at least one async readiness check is registered,
+/// the aggregate runs through [`run_readiness_checks_async`] (which also
+/// folds the sync checks); otherwise the sync path is taken unchanged. The
+/// response then comes from the active [`ReadinessRenderer`]; with none
 /// registered, [`DefaultReadinessRenderer`] serves 200/`ready` when all
 /// checks pass and 503/`unavailable` otherwise.
 pub async fn readyz_handler() -> Response {
-    let (all_healthy, checks) = run_readiness_checks();
+    let (all_healthy, checks) = if has_async_readiness_checks() {
+        run_readiness_checks_async().await
+    } else {
+        run_readiness_checks()
+    };
     active_readiness_renderer().render(all_healthy, checks)
 }
 
@@ -539,6 +737,82 @@ mod tests {
             String::from_utf8(body.to_vec()).unwrap(),
             "{\"checks\":[],\"status\":\"ready\"}"
         );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn async_panicking_check_is_reported_unhealthy() {
+        clear_readiness_checks();
+        clear_health_source();
+        clear_async_readiness_checks();
+        register_async_readiness_check_fn("boom-async", || async {
+            panic!("exploding async check");
+        });
+        let (all_healthy, checks) = run_readiness_checks_async().await;
+        assert!(!all_healthy);
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].name, "boom-async");
+        assert!(!checks[0].healthy);
+        assert_eq!(
+            checks[0].details.as_ref().unwrap()["error"],
+            "check panicked"
+        );
+        clear_async_readiness_checks();
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn sync_and_async_checks_aggregate_together() {
+        clear_readiness_checks();
+        clear_health_source();
+        clear_async_readiness_checks();
+        register_readiness_check_fn("dep-sync", || CheckOutcome::healthy("dep-sync"));
+        register_async_readiness_check_fn("dep-async-ok", || async {
+            CheckOutcome::healthy("dep-async-ok")
+        });
+        register_async_readiness_check_fn("dep-async-bad", || async {
+            CheckOutcome::unhealthy("dep-async-bad", "connection refused")
+        });
+
+        // 聚合序确定性：同步注册序在前，异步按注册序（非完成序）。
+        let (all_healthy, checks) = run_readiness_checks_async().await;
+        assert!(!all_healthy);
+        assert_eq!(checks.len(), 3);
+        assert_eq!(checks[0].name, "dep-sync");
+        assert_eq!(checks[1].name, "dep-async-ok");
+        assert_eq!(checks[2].name, "dep-async-bad");
+
+        // handler 检测到 async 注册走 async 版：/readyz 翻 503 且含全部三项。
+        let resp = get(probe_router(), "/readyz").await;
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["status"], "unavailable");
+        let names: Vec<&str> = json["checks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, vec!["dep-sync", "dep-async-ok", "dep-async-bad"]);
+        clear_async_readiness_checks();
+        clear_readiness_checks();
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn async_aggregate_matches_sync_when_no_async_registered() {
+        clear_readiness_checks();
+        clear_health_source();
+        clear_async_readiness_checks();
+        register_readiness_check_fn("only-sync", || CheckOutcome::healthy("only-sync"));
+        let (healthy, checks) = run_readiness_checks_async().await;
+        assert!(healthy);
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].name, "only-sync");
+        clear_readiness_checks();
     }
 
     #[test]
