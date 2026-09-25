@@ -27,6 +27,7 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, OnceLock, RwLock};
+use std::task::{Context, Poll};
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -69,6 +70,14 @@ impl CheckOutcome {
 ///
 /// Implement this for cache connectivity, database pings, config-loaded
 /// flags, etc., and register via `register_readiness_check`.
+///
+/// # Blocking probes
+///
+/// Sync checks run **inline** inside the (possibly async) aggregation
+/// context: a blocking probe (synchronous DB/HTTP ping) occupies a tokio
+/// worker thread for its full duration. Prefer [`AsyncReadinessCheck`] for
+/// dependency probes that block; keep this port for cheap, non-blocking
+/// flags.
 pub trait ReadinessCheck: Send + Sync {
     /// Check name surfaced in the `/readyz` payload.
     fn name(&self) -> &str;
@@ -234,6 +243,11 @@ pub fn clear_readiness_checks() {
 /// Register an asynchronous readiness check (appended; order = registration
 /// order). Its outcome joins the `/readyz` aggregate alongside any sync
 /// checks.
+///
+/// Register probes during application startup: the sync/async aggregation
+/// path is chosen per request, so registering or clearing at runtime while
+/// requests are in flight is not a stable contract (an in-flight request may
+/// take either path).
 pub fn register_async_readiness_check(check: Arc<dyn AsyncReadinessCheck>) {
     if let Ok(mut guard) = async_readiness_checks().write() {
         guard.push(check);
@@ -280,7 +294,10 @@ pub fn clear_async_readiness_checks() {
 fn has_async_readiness_checks() -> bool {
     match async_readiness_checks().read() {
         Ok(guard) => !guard.is_empty(),
-        Err(_) => false,
+        Err(_) => {
+            log::warn!("async readiness checks lock poisoned; falling back to sync path");
+            false
+        }
     }
 }
 
@@ -316,13 +333,22 @@ pub fn clear_readiness_renderer() {
     }
 }
 
-/// The active readiness renderer: the registered one, or the default.
+/// The active readiness renderer: the registered one, or the default
+/// (cached — `/readyz` is polled frequently and the default is immutable).
 fn active_readiness_renderer() -> Arc<dyn ReadinessRenderer> {
+    static DEFAULT: OnceLock<Arc<dyn ReadinessRenderer>> = OnceLock::new();
     match readiness_renderer_slot().read() {
-        Ok(guard) => guard
-            .clone()
-            .unwrap_or_else(|| Arc::new(DefaultReadinessRenderer)),
-        Err(_) => Arc::new(DefaultReadinessRenderer),
+        Ok(guard) => guard.clone().unwrap_or_else(|| {
+            DEFAULT
+                .get_or_init(|| Arc::new(DefaultReadinessRenderer))
+                .clone()
+        }),
+        Err(_) => {
+            log::warn!("readiness renderer lock poisoned; serving default envelope");
+            DEFAULT
+                .get_or_init(|| Arc::new(DefaultReadinessRenderer))
+                .clone()
+        }
     }
 }
 
@@ -387,15 +413,80 @@ pub fn run_readiness_checks() -> (bool, Vec<CheckOutcome>) {
     (all_healthy, outcomes)
 }
 
+/// Wrap a user probe: a panic in `check()` construction or during future
+/// `poll` becomes `unhealthy("check panicked")`, aligned with the sync
+/// path's `catch_unwind` policy. The abandoned future is dropped once its
+/// panic is caught.
+///
+/// Guarding every user-code path here means the JoinSet task body cannot
+/// panic on behalf of a check: construction failure is named immediately
+/// and `join_next` yields `Ok` for every spawned probe, so a check result
+/// can never silently vanish from the `/readyz` aggregate.
+struct CatchProbePanic<'a> {
+    name: String,
+    check: &'a dyn AsyncReadinessCheck,
+    fut: Option<Pin<Box<dyn Future<Output = CheckOutcome> + Send + 'a>>>,
+}
+
+impl<'a> CatchProbePanic<'a> {
+    fn new(name: String, check: &'a dyn AsyncReadinessCheck) -> Self {
+        Self {
+            name,
+            check,
+            fut: None,
+        }
+    }
+}
+
+impl<'a> Future for CatchProbePanic<'a> {
+    type Output = CheckOutcome;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+        if this.fut.is_none() {
+            // 构造段：惰性执行一次，panic 即具名 unhealthy。
+            let check: &'a dyn AsyncReadinessCheck = this.check;
+            this.fut =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| check.check())).ok();
+            let Some(fut) = this.fut.as_mut() else {
+                return Poll::Ready(CheckOutcome::unhealthy(
+                    this.name.clone(),
+                    "check panicked".to_string(),
+                ));
+            };
+            // 已构造：本次 poll 直接推进,避免空转一轮。
+            return poll_guarded(this.name.clone(), fut.as_mut(), cx);
+        }
+        let fut = this.fut.as_mut().expect("checked above");
+        poll_guarded(this.name.clone(), fut.as_mut(), cx)
+    }
+}
+
+/// poll 一次,panic 转具名 unhealthy;被捕获后原 future 即被放弃。
+fn poll_guarded(
+    name: String,
+    fut: Pin<&mut (dyn Future<Output = CheckOutcome> + Send)>,
+    cx: &mut Context<'_>,
+) -> Poll<CheckOutcome> {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| fut.poll(cx))) {
+        Ok(Poll::Ready(outcome)) => Poll::Ready(outcome),
+        Ok(Poll::Pending) => Poll::Pending,
+        Err(_) => Poll::Ready(CheckOutcome::unhealthy(name, "check panicked".to_string())),
+    }
+}
+
 /// Asynchronous counterpart of [`run_readiness_checks`]: sync checks run
 /// exactly as in the sync path, async checks run concurrently on a
 /// `tokio::task::JoinSet`, and the kit health source folds in last.
 ///
-/// A panicking async check is reported as an unhealthy outcome ("check
-/// panicked"), mirroring the sync `catch_unwind` policy: the panic surfaces
-/// as a `JoinError` at the nested task boundary, where the check name is
-/// still in scope. Outcomes are returned in registration order (sync first,
-/// then async), not completion order.
+/// Every user-code path is guarded so a check's outcome can never silently
+/// disappear: `name()` is pre-fetched under `catch_unwind` before spawn (a
+/// panicking name yields an unhealthy outcome without entering the pool),
+/// the future's construction is guarded in-task, and polls are guarded by
+/// [`CatchProbePanic`]. Cancellation propagates correctly — there is exactly
+/// one task per check, so dropping the aggregate future aborts slow probes
+/// instead of leaving them running detached. Outcomes are returned in
+/// registration order (sync first, then async), not completion order.
 ///
 /// The sync aggregate body is deliberately not refactored into this path —
 /// its source and output stay untouched.
@@ -430,32 +521,61 @@ pub async fn run_readiness_checks_async() -> (bool, Vec<CheckOutcome>) {
     };
     if !async_checks.is_empty() {
         let mut set = tokio::task::JoinSet::new();
+        let mut async_outcomes: Vec<(usize, CheckOutcome)> = Vec::with_capacity(async_checks.len());
+        // name() 属用户代码：spawn 前以 catch_unwind 预取，panic 的检查直接
+        // 产出 unhealthy 且不进入并发池——用户代码的任何 panic 都不得让
+        // 探针结果从 /readyz 结果集中消失。
+        let names: Vec<Option<String>> = async_checks
+            .iter()
+            .map(|check| {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| check.name().to_string()))
+                    .ok()
+            })
+            .collect();
+        for (idx, name) in names.iter().enumerate() {
+            if name.is_none() {
+                all_healthy = false;
+                async_outcomes.push((
+                    idx,
+                    CheckOutcome::unhealthy("<unnamed async check>", "check panicked".to_string()),
+                ));
+            }
+        }
         for (idx, check) in async_checks.into_iter().enumerate() {
-            // The user future runs on a nested task so its panic is caught at
-            // `inner.await` while `name` is still owned here; the outer task
-            // runs no user code and therefore never panics.
+            let Some(name) = names[idx].clone() else {
+                continue;
+            };
             set.spawn(async move {
-                let name = check.name().to_string();
-                let inner = tokio::spawn(async move { check.check().await });
-                let outcome = match inner.await {
-                    Ok(outcome) => outcome,
-                    Err(join_err) if join_err.is_panic() => {
-                        CheckOutcome::unhealthy(name.clone(), "check panicked".to_string())
-                    }
-                    Err(_) => {
-                        CheckOutcome::unhealthy(name.clone(), "check task cancelled".to_string())
-                    }
-                };
-                (idx, outcome)
+                // 构造段与 poll 段的 panic 均由 CatchProbePanic 具名兜底为
+                // unhealthy——任务体不含未受保护的用户代码,join_next 恒返
+                // 回 Ok;单层 spawn 保证聚合 future 被 drop 时慢探针任务随
+                // 之被 abort,不会脱离取消范围继续打向下游依赖。
+                let probe = CatchProbePanic::new(name, check.as_ref());
+                (idx, probe.await)
             });
         }
-        let mut async_outcomes: Vec<(usize, CheckOutcome)> = Vec::with_capacity(set.len());
         while let Some(joined) = set.join_next().await {
-            if let Ok((idx, outcome)) = joined {
-                if !outcome.healthy {
-                    all_healthy = false;
+            match joined {
+                Ok((idx, outcome)) => {
+                    if !outcome.healthy {
+                        all_healthy = false;
+                    }
+                    async_outcomes.push((idx, outcome));
                 }
-                async_outcomes.push((idx, outcome));
+                // 任务体的 poll 段已受保护；此臂覆盖 check() 同步构造段
+                // panic 与取消等残余路径，兜底显性化，不让任何检查静默
+                // 消失（无法归名，以占位名呈现并排至结果末尾）。
+                Err(join_err) => {
+                    log::warn!("async readiness check task did not complete: {join_err}");
+                    all_healthy = false;
+                    async_outcomes.push((
+                        usize::MAX,
+                        CheckOutcome::unhealthy(
+                            "<incomplete async check>",
+                            "check task did not complete".to_string(),
+                        ),
+                    ));
+                }
             }
         }
         async_outcomes.sort_by_key(|(idx, _)| *idx);
@@ -509,9 +629,11 @@ pub async fn healthz_handler() -> impl IntoResponse {
 /// Aggregation path: when at least one async readiness check is registered,
 /// the aggregate runs through [`run_readiness_checks_async`] (which also
 /// folds the sync checks); otherwise the sync path is taken unchanged. The
-/// response then comes from the active [`ReadinessRenderer`]; with none
-/// registered, [`DefaultReadinessRenderer`] serves 200/`ready` when all
-/// checks pass and 503/`unavailable` otherwise.
+/// registration test and the aggregate re-read the registry, so runtime
+/// register/clear racing a request can take either path — register probes at
+/// startup. The response then comes from the active [`ReadinessRenderer`];
+/// with none registered, [`DefaultReadinessRenderer`] serves 200/`ready`
+/// when all checks pass and 503/`unavailable` otherwise.
 pub async fn readyz_handler() -> Response {
     let (all_healthy, checks) = if has_async_readiness_checks() {
         run_readiness_checks_async().await
@@ -813,6 +935,48 @@ mod tests {
         assert_eq!(checks.len(), 1);
         assert_eq!(checks[0].name, "only-sync");
         clear_readiness_checks();
+    }
+
+    /// name() panic 的检查同样必须出现在结果集中并翻红聚合：任何用户代码
+    /// 路径的 panic 都不得让探针结果消失（否则 /readyz 可对上游假性 ready）。
+    struct PanickingName;
+
+    impl AsyncReadinessCheck for PanickingName {
+        fn name(&self) -> &str {
+            panic!("name exploded");
+        }
+        fn check(&self) -> Pin<Box<dyn Future<Output = CheckOutcome> + Send + '_>> {
+            Box::pin(async { CheckOutcome::healthy("never-reached") })
+        }
+    }
+
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn async_panicking_name_is_reported_unhealthy() {
+        clear_readiness_checks();
+        clear_health_source();
+        clear_async_readiness_checks();
+        register_async_readiness_check_fn("healthy-async", || async {
+            CheckOutcome::healthy("healthy-async")
+        });
+        register_async_readiness_check(Arc::new(PanickingName));
+
+        let (all_healthy, checks) = run_readiness_checks_async().await;
+        assert!(!all_healthy, "panicking name() must flip the aggregate red");
+        assert_eq!(
+            checks.len(),
+            2,
+            "every registered check must surface an outcome"
+        );
+        assert_eq!(checks[0].name, "healthy-async");
+        assert!(checks[0].healthy);
+        assert_eq!(checks[1].name, "<unnamed async check>");
+        assert!(!checks[1].healthy);
+        assert_eq!(
+            checks[1].details.as_ref().unwrap()["error"],
+            "check panicked"
+        );
+        clear_async_readiness_checks();
     }
 
     #[test]
