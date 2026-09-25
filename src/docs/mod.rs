@@ -23,7 +23,7 @@ pub mod swagger;
 #[cfg(feature = "http")]
 pub use swagger::{swagger_ui_router, swagger_ui_router_with_openapi, swagger_ui_router_with_spec};
 
-pub use cli_markdown::generate_cli_docs;
+pub use cli_markdown::{generate_cli_docs, generate_cli_docs_from_command};
 #[cfg(feature = "mcp")]
 pub use mcp_markdown::generate_mcp_docs;
 
