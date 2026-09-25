@@ -131,14 +131,19 @@ inventory::collect!(OpenApiRouteInfo);
 
 /// Builder for constructing an `OpenApi` specification with custom metadata.
 ///
-/// Routes are always collected from the global `inventory` registry; the
-/// builder only controls the top-level `info` section (title, version,
-/// description).
-#[derive(Debug, Clone, Default)]
+/// Routes are always collected from the global `inventory` registry first;
+/// the builder controls the top-level `info` section (title, version,
+/// description) and merges externally built specs/paths **after** the
+/// inventory collection, in chain order. On the same path+method the
+/// external (chained) operation wins over the inventory-generated one.
+#[derive(Clone, Default)]
 pub struct OpenApiBuilder {
     title: String,
     version: String,
     description: Option<String>,
+    /// Externally built specs merged in chain order after the inventory
+    /// collection (via `merge_openapi` / `paths` chain methods).
+    extra: Vec<utoipa::openapi::OpenApi>,
 }
 
 // Register a test-only route so inventory-driven tests have a known entry to
@@ -427,6 +432,216 @@ mod tests {
         assert_eq!(b.title, cloned.title);
         let debug = format!("{:?}", b);
         assert!(debug.contains("OpenApiBuilder"));
+    }
+
+    /// 同 path+method 冲突：build() 中 extra 依序合并，外部操作覆盖
+    /// inventory 生成的操作（外部优先）。
+    #[test]
+    fn merge_openapi_external_wins_same_path_method() {
+        use utoipa::openapi::path::OperationBuilder;
+        use utoipa::openapi::path::{HttpMethod, PathItem, Paths};
+        use utoipa::openapi::{Info, OpenApi};
+
+        let mut paths = Paths::new();
+        let item = PathItem::new(
+            HttpMethod::Get,
+            OperationBuilder::new().summary(Some("EXTERNAL WINS".to_string())),
+        );
+        paths
+            .paths
+            .insert("/__openapi_test_marker__".to_string(), item);
+        let extra = OpenApi::new(Info::new("external", "1.0.0"), paths);
+
+        let spec = OpenApiBuilder::new()
+            .title("t")
+            .version("1")
+            .merge_openapi(extra)
+            .build();
+
+        let op = spec
+            .paths
+            .get_path_operation("/__openapi_test_marker__", HttpMethod::Get)
+            .expect("merged operation must exist");
+        assert_eq!(op.summary.as_deref(), Some("EXTERNAL WINS"));
+    }
+
+    /// 外部只覆盖同 method：inventory 独有的 method 保留，外部新增的
+    /// method 并入。
+    #[test]
+    fn merge_keeps_inventory_methods_and_adds_external_ones() {
+        use utoipa::openapi::path::OperationBuilder;
+        use utoipa::openapi::path::{HttpMethod, PathItem, Paths};
+        use utoipa::openapi::{Info, OpenApi};
+
+        let mut paths = Paths::new();
+        let item = PathItem::new(
+            HttpMethod::Post,
+            OperationBuilder::new().summary(Some("EXTERNAL POST".to_string())),
+        );
+        paths
+            .paths
+            .insert("/__openapi_test_marker__".to_string(), item);
+        let extra = OpenApi::new(Info::new("external", "1.0.0"), paths);
+
+        let spec = OpenApiBuilder::new()
+            .title("t")
+            .version("1")
+            .merge_openapi(extra)
+            .build();
+
+        let inventory_get = spec
+            .paths
+            .get_path_operation("/__openapi_test_marker__", HttpMethod::Get)
+            .expect("inventory GET must survive");
+        assert_eq!(
+            inventory_get.summary.as_deref(),
+            Some("OpenAPI module test marker")
+        );
+        let external_post = spec
+            .paths
+            .get_path_operation("/__openapi_test_marker__", HttpMethod::Post)
+            .expect("external POST must be merged");
+        assert_eq!(external_post.summary.as_deref(), Some("EXTERNAL POST"));
+    }
+
+    /// extra 依序合并：多个 extra 冲突时后一个覆盖前一个；`paths` 链式
+    /// 方法与 `merge_openapi` 同样按序生效。
+    #[test]
+    fn merge_applies_extras_in_chain_order() {
+        use utoipa::openapi::path::OperationBuilder;
+        use utoipa::openapi::path::{HttpMethod, PathItem, Paths};
+        use utoipa::openapi::{Info, OpenApi};
+
+        let make_extra = |summary: &str| {
+            let mut paths = Paths::new();
+            let item = PathItem::new(
+                HttpMethod::Get,
+                OperationBuilder::new().summary(Some(summary.to_string())),
+            );
+            paths.paths.insert("/__external_only__".to_string(), item);
+            OpenApi::new(Info::new("external", "1.0.0"), paths)
+        };
+
+        let spec = OpenApiBuilder::new()
+            .title("t")
+            .version("1")
+            .merge_openapi(make_extra("FIRST"))
+            .merge_openapi(make_extra("SECOND"))
+            .build();
+
+        let op = spec
+            .paths
+            .get_path_operation("/__external_only__", HttpMethod::Get)
+            .expect("external-only path must exist");
+        assert_eq!(op.summary.as_deref(), Some("SECOND"));
+    }
+
+    /// components 合并按名称去重：两个 extra 各自定义同名 schema "Shared"
+    /// 时，结果只保留一个条目，且操作的 $ref 指针保持可解析。
+    #[test]
+    fn merge_dedupes_component_schema_refs() {
+        use utoipa::openapi::path::{HttpMethod, OperationBuilder, PathItem, Paths};
+        use utoipa::openapi::schema::{Object, ObjectBuilder, Ref};
+        use utoipa::openapi::{Components, Info, OpenApi};
+
+        let make_extra = |detail: &str| {
+            let mut paths = Paths::new();
+            let item = PathItem::new(
+                HttpMethod::Get,
+                OperationBuilder::new()
+                    .response(
+                        "200",
+                        utoipa::openapi::response::ResponseBuilder::new()
+                            .content(
+                                "application/json",
+                                utoipa::openapi::content::ContentBuilder::new()
+                                    .schema(Some(utoipa::openapi::RefOr::Ref(Ref::new(
+                                        "#/components/schemas/Shared",
+                                    ))))
+                                    .build(),
+                            )
+                            .build(),
+                    )
+                    .build(),
+            );
+            paths.paths.insert("/__ref_user__".to_string(), item);
+
+            let mut components = Components::default();
+            let schema = utoipa::openapi::schema::Schema::Object(
+                ObjectBuilder::new()
+                    .property(
+                        "detail",
+                        utoipa::openapi::RefOr::T(utoipa::openapi::schema::Schema::Object(
+                            Object::builder()
+                                .schema_type(utoipa::openapi::schema::Type::String)
+                                .build(),
+                        )),
+                    )
+                    .build(),
+            );
+            let _ = detail;
+            components
+                .schemas
+                .insert("Shared".to_string(), utoipa::openapi::RefOr::T(schema));
+            let mut extra = OpenApi::new(Info::new("external", "1.0.0"), paths);
+            extra.components = Some(components);
+            extra
+        };
+
+        let spec = OpenApiBuilder::new()
+            .title("t")
+            .version("1")
+            .merge_openapi(make_extra("first"))
+            .merge_openapi(make_extra("second"))
+            .build();
+
+        let components = spec.components.as_ref().expect("components merged");
+        assert!(
+            components.schemas.contains_key("Shared"),
+            "Shared schema must be present exactly once (map key dedup)"
+        );
+        assert_eq!(
+            components
+                .schemas
+                .keys()
+                .filter(|k| k.as_str() == "Shared")
+                .count(),
+            1
+        );
+        let json = serde_json::to_value(&spec.paths).expect("paths serialize");
+        let json = serde_json::to_string(&json).expect("paths to string");
+        assert!(
+            json.contains("#/components/schemas/Shared"),
+            "$ref pointers must survive the merge"
+        );
+    }
+
+    /// `paths` 链式方法：直接合并外部 Paths，同 path+method 外部优先。
+    #[test]
+    fn paths_chain_method_merges_external_paths() {
+        use utoipa::openapi::path::OperationBuilder;
+        use utoipa::openapi::path::{HttpMethod, PathItem, Paths};
+
+        let mut paths = Paths::new();
+        let item = PathItem::new(
+            HttpMethod::Get,
+            OperationBuilder::new().summary(Some("VIA PATHS".to_string())),
+        );
+        paths
+            .paths
+            .insert("/__openapi_test_marker__".to_string(), item);
+
+        let spec = OpenApiBuilder::new()
+            .title("t")
+            .version("1")
+            .paths(paths)
+            .build();
+
+        let op = spec
+            .paths
+            .get_path_operation("/__openapi_test_marker__", HttpMethod::Get)
+            .expect("operation exists");
+        assert_eq!(op.summary.as_deref(), Some("VIA PATHS"));
     }
 
     /// `OpenApiPathParam::new()` should populate every field verbatim.

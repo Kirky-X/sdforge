@@ -14,6 +14,7 @@ use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
+use utoipa::openapi::OpenApi;
 use utoipa_swagger_ui::{Config, serve};
 
 /// 构建挂载 Swagger UI 的 axum Router。
@@ -64,6 +65,37 @@ pub fn swagger_ui_router_with_spec(openapi_url: &str) -> axum::Router {
         .route("/swagger-ui/", get(serve_swagger_ui))
         .route("/swagger-ui/{*rest}", get(serve_swagger_ui))
         .layer(Extension(config))
+}
+
+/// 构建挂载 Swagger UI 的 axum Router，spec 由调用方直接提供。
+///
+/// 与 [`swagger_ui_router`] 相同的路径布局与冲突语义：本函数注册自带的
+/// `/api-docs/openapi.json`，但其内容是传入的 spec（而非动态生成的默认
+/// spec）。适用于消费方用 `OpenApiBuilder::merge_openapi` 自行组装了含
+/// 外部端点文档的完整 spec 的场景。
+///
+/// ```ignore
+/// let spec = sdforge::openapi::OpenApiBuilder::new()
+///     .title("Host API").version("1.0.0")
+///     .merge_openapi(my_extra_spec)
+///     .build();
+/// let app = sdforge::docs::swagger_ui_router_with_openapi(spec);
+/// ```
+pub fn swagger_ui_router_with_openapi(spec: OpenApi) -> axum::Router {
+    let config: Arc<Config<'static>> =
+        Arc::new(Config::new(["/api-docs/openapi.json".to_string()]));
+
+    axum::Router::new()
+        .route("/api-docs/openapi.json", get(serve_fixed_openapi_json))
+        .route("/swagger-ui/", get(serve_swagger_ui))
+        .route("/swagger-ui/{*rest}", get(serve_swagger_ui))
+        .layer(Extension(config))
+        .layer(Extension(Arc::new(spec)))
+}
+
+/// 返回调用方提供的 OpenAPI spec。
+async fn serve_fixed_openapi_json(Extension(spec): Extension<Arc<OpenApi>>) -> impl IntoResponse {
+    Json((*spec).clone())
 }
 
 /// 返回动态生成的 OpenAPI JSON spec。

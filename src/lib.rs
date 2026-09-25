@@ -465,6 +465,9 @@ pub use docs::{DocError, DocFormat, generate_docs, write_docs};
 #[cfg(all(feature = "docs", feature = "http"))]
 pub use docs::swagger_ui_router;
 
+#[cfg(all(feature = "docs", feature = "http"))]
+pub use docs::swagger_ui_router_with_openapi;
+
 /// 初始化所有已注册的插件，确保它们不会被链接器优化掉。
 ///
 /// This function must be called at least once to ensure that all inventory-based
