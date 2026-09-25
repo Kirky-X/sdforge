@@ -455,23 +455,29 @@ impl<'a> Future for CatchProbePanic<'a> {
                 ));
             };
             // 已构造：本次 poll 直接推进,避免空转一轮。
-            return poll_guarded(this.name.clone(), fut.as_mut(), cx);
+            return poll_guarded(&mut this.name, fut.as_mut(), cx);
         }
         let fut = this.fut.as_mut().expect("checked above");
-        poll_guarded(this.name.clone(), fut.as_mut(), cx)
+        poll_guarded(&mut this.name, fut.as_mut(), cx)
     }
 }
 
 /// poll 一次,panic 转具名 unhealthy;被捕获后原 future 即被放弃。
+///
+/// name 借用传入:正常 Pending/Ready 路径零分配,仅 panic 分支经
+/// `mem::take` 取走所有权供 outcome 使用(此后 wrapper 不再被 poll)。
 fn poll_guarded(
-    name: String,
+    name: &mut String,
     fut: Pin<&mut (dyn Future<Output = CheckOutcome> + Send)>,
     cx: &mut Context<'_>,
 ) -> Poll<CheckOutcome> {
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| fut.poll(cx))) {
         Ok(Poll::Ready(outcome)) => Poll::Ready(outcome),
         Ok(Poll::Pending) => Poll::Pending,
-        Err(_) => Poll::Ready(CheckOutcome::unhealthy(name, "check panicked".to_string())),
+        Err(_) => Poll::Ready(CheckOutcome::unhealthy(
+            std::mem::take(name),
+            "check panicked".to_string(),
+        )),
     }
 }
 
