@@ -172,7 +172,7 @@ pub fn clear_health_source() {
 /// Registered checks are cloned out of the registry under a short-lived read
 /// lock so user check code never runs while holding it — a slow or blocked
 /// check cannot stall `register_readiness_check` / `clear_readiness_checks`.
-pub(crate) fn run_readiness_checks() -> (bool, Vec<CheckOutcome>) {
+pub fn run_readiness_checks() -> (bool, Vec<CheckOutcome>) {
     let mut outcomes = Vec::new();
     let mut all_healthy = true;
 
@@ -258,7 +258,7 @@ pub async fn readyz_handler() -> Response {
 
 /// Mount `/healthz` and `/readyz` on `router`, skipping any path already
 /// claimed by a user route (avoids axum duplicate-route panics).
-pub(crate) fn mount_probes(router: axum::Router) -> axum::Router {
+pub fn mount_probes(router: axum::Router) -> axum::Router {
     let mut router = router;
     if !crate::http::route_path_taken("/healthz") {
         router = router.route("/healthz", axum::routing::get(healthz_handler));

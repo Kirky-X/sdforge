@@ -66,7 +66,7 @@ pub(crate) use http_impl::{apply_security_headers, get_or_generate_request_id};
 #[cfg(test)]
 pub(crate) use http_impl::resolve_route_path;
 #[cfg(any(feature = "health", feature = "metrics"))]
-pub(crate) use http_impl::route_path_taken;
+pub use http_impl::route_path_taken;
 
 /// Request ID header name
 #[cfg_attr(feature = "context", allow(dead_code))]

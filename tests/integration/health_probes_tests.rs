@@ -152,6 +152,49 @@ async fn readyz_passes_when_all_checks_healthy() {
 }
 
 // =============================================================================
+// 手动挂载公开面：`mount_probes` / `run_readiness_checks` / `route_path_taken`
+// 对库外消费方可见——手动构建 Router 的调用方自担路径冲突检查。
+// =============================================================================
+#[tokio::test]
+#[serial_test::serial]
+async fn manual_mount_helpers_are_externally_callable() {
+    sdforge::health::clear_readiness_checks();
+    sdforge::health::clear_health_source();
+
+    // 本文件顶部的 inventory 路由占用 /api/v1/protected，/healthz 未被占用。
+    assert!(!sdforge::http::route_path_taken("/healthz"));
+    assert!(sdforge::http::route_path_taken("/api/v1/protected"));
+
+    // mount_probes 在空 Router 上手动挂载后探针可达。
+    let router = sdforge::health::mount_probes(axum::Router::new());
+    let resp = get(router, "/healthz").await;
+    assert_eq!(resp.status(), axum::http::StatusCode::OK);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn run_readiness_checks_is_externally_callable() {
+    sdforge::health::clear_readiness_checks();
+    sdforge::health::clear_health_source();
+
+    // 无注册检查时默认 ready。
+    let (healthy, checks) = sdforge::health::run_readiness_checks();
+    assert!(healthy);
+    assert!(checks.is_empty());
+
+    // 注册的失败检查折叠进聚合结果。
+    sdforge::health::register_readiness_check_fn("cache", || {
+        sdforge::health::CheckOutcome::unhealthy("cache", "connection refused")
+    });
+    let (healthy, checks) = sdforge::health::run_readiness_checks();
+    assert!(!healthy);
+    assert_eq!(checks.len(), 1);
+    assert_eq!(checks[0].name, "cache");
+    assert!(!checks[0].healthy);
+    sdforge::health::clear_readiness_checks();
+}
+
+// =============================================================================
 // kit data source (kit + health features)
 // =============================================================================
 #[cfg(feature = "kit")]
