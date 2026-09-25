@@ -49,7 +49,7 @@ pub use http_impl::{build, build_with_config, build_with_redirect};
 #[cfg(feature = "graceful")]
 pub use graceful::{
     GracefulShutdownConfig, default_shutdown_signal, serve_with_graceful_shutdown,
-    serve_with_graceful_shutdown_connect_info,
+    serve_with_graceful_shutdown_connect_info, serve_with_graceful_shutdown_with_hooks,
 };
 
 // Re-export internal helpers for test access.

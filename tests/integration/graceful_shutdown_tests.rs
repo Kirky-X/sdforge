@@ -13,7 +13,9 @@
 
 use std::time::Duration;
 
-use sdforge::http::{GracefulShutdownConfig, serve_with_graceful_shutdown};
+use sdforge::http::{
+    GracefulShutdownConfig, serve_with_graceful_shutdown, serve_with_graceful_shutdown_with_hooks,
+};
 
 /// Bind an ephemeral listener for tests.
 async fn test_listener() -> tokio::net::TcpListener {
@@ -36,6 +38,7 @@ async fn get_status(url: String) -> Result<u16, reqwest::Error> {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn inflight_request_completes_before_shutdown() {
     let listener = test_listener().await;
     let addr = listener.local_addr().unwrap();
@@ -83,6 +86,53 @@ async fn inflight_request_completes_before_shutdown() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
+async fn after_drain_hook_runs_after_drain_before_serve_returns() {
+    let listener = test_listener().await;
+    let addr = listener.local_addr().unwrap();
+
+    let router = axum::Router::new().route("/ping", axum::routing::get(|| async { "ok" }));
+
+    let (trigger_tx, trigger_rx) = tokio::sync::oneshot::channel::<()>();
+    // 钩子启动信号：触发 shutdown 前不得运行（排空后才执行）。
+    let (hook_started_tx, mut hook_started_rx) = tokio::sync::oneshot::channel::<()>();
+    // 钩子完成信号：150ms sleep 后发送，serve 返回时必须已可读（进程退出前执行完）。
+    let (hook_done_tx, mut hook_done_rx) = tokio::sync::oneshot::channel::<()>();
+
+    let server = tokio::spawn(serve_with_graceful_shutdown_with_hooks(
+        router,
+        listener,
+        async move {
+            let _ = trigger_rx.await;
+        },
+        GracefulShutdownConfig::with_drain_timeout(Duration::from_secs(5)),
+        Some(Box::pin(async move {
+            let _ = hook_started_tx.send(());
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            let _ = hook_done_tx.send(());
+        })),
+    ));
+
+    wait_until_up(addr).await;
+
+    // 排空前：钩子未运行。
+    assert!(
+        hook_started_rx.try_recv().is_err(),
+        "after_drain hook must not run before the drain/stop phase"
+    );
+
+    let _ = trigger_tx.send(());
+    server.await.unwrap().unwrap();
+
+    // 进程退出前：serve 返回时钩子已完整执行（含 150ms sleep）。
+    assert!(
+        hook_done_rx.try_recv().is_ok(),
+        "serve must await the after_drain hook to completion before returning"
+    );
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn drain_timeout_forces_shutdown() {
     let listener = test_listener().await;
     let addr = listener.local_addr().unwrap();
@@ -170,6 +220,7 @@ mod kit_teardown {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn registered_kit_shuts_down_in_phase_three() {
         let listener = test_listener().await;
         let addr = listener.local_addr().unwrap();
