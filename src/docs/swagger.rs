@@ -105,8 +105,11 @@ async fn serve_fixed_openapi_json(
             bytes,
         )
             .into_response(),
-        // spec 序列化失败属服务端数据错误，不向客户端泄露细节。
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        // spec 序列化失败属服务端数据错误，不向客户端泄露细节，仅记日志。
+        Err(err) => {
+            log::error!("OpenAPI spec serialize failed: {err}");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
     }
 }
 
