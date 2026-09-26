@@ -6,6 +6,9 @@
 //! auth middleware, so probes bypass authentication while normal routes
 //! still require credentials. Readiness folds in registered readiness
 //! checks and (with the `kit` feature) the trait-kit health aggregate.
+//!
+//! The auth middleware itself is compiled in only with the `security`
+//! feature; the auth-contrast assertions below are gated the same way.
 
 #![cfg(feature = "health")]
 
@@ -104,8 +107,18 @@ async fn healthz_bypasses_auth() {
     assert_eq!(json["status"], "healthy");
 
     // Contrast: the ordinary route is blocked by global auth (401).
-    let resp = get(router, "/api/v1/protected").await;
-    assert_eq!(resp.status(), axum::http::StatusCode::UNAUTHORIZED);
+    // 全局认证中间件随 `security` 特性编译；仅 health 构建下不存在认证层，
+    // 该对比断言只在两者同启时才有意义。
+    #[cfg(feature = "security")]
+    {
+        let resp = get(router, "/api/v1/protected").await;
+        assert_eq!(resp.status(), axum::http::StatusCode::UNAUTHORIZED);
+    }
+    #[cfg(not(feature = "security"))]
+    {
+        // 无认证层构建下所有路由（含普通路由）均无凭证要求，探针 200 即全貌。
+        let _ = router;
+    }
 }
 
 #[tokio::test]
