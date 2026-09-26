@@ -109,22 +109,36 @@ fn test_write_docs_creates_file() {
 // generate_docs 支持 SwaggerUi
 // ============================================================================
 
-/// `generate_docs(SwaggerUi)` 应返回含 `<html` 和 `swagger-ui` 的 HTML 字符串。
+/// `generate_docs(SwaggerUi)` 的输出随 `http` 特性切换：
+///
+/// - `http` feature 启用时：返回含 `<html` 和 `swagger-ui` 的 HTML 入口页
+/// - `http` feature 未启用时：返回占位注释（告知用户需启用 http feature）
 #[test]
 fn test_generate_docs_swagger_returns_html() {
     let html = generate_docs(DocFormat::SwaggerUi).expect("generate_docs SwaggerUi");
-    assert!(!html.is_empty(), "SwaggerUi HTML 不应为空");
+    assert!(!html.is_empty(), "SwaggerUi 输出不应为空");
     let lower = html.to_lowercase();
-    assert!(
-        lower.contains("<html"),
-        "SwaggerUi 输出应含 <html 标签，实际: {}",
-        &html[..html.len().min(200)]
-    );
-    assert!(
-        lower.contains("swagger-ui"),
-        "SwaggerUi 输出应含 swagger-ui 链接，实际: {}",
-        &html[..html.len().min(200)]
-    );
+    #[cfg(feature = "http")]
+    {
+        assert!(
+            lower.contains("<html"),
+            "SwaggerUi 输出应含 <html 标签，实际: {}",
+            &html[..html.len().min(200)]
+        );
+        assert!(
+            lower.contains("swagger-ui"),
+            "SwaggerUi 输出应含 swagger-ui 链接，实际: {}",
+            &html[..html.len().min(200)]
+        );
+    }
+    #[cfg(not(feature = "http"))]
+    {
+        assert!(
+            lower.contains("requires the 'http' feature"),
+            "未启用 http 时应返回占位提示，实际: {}",
+            &html[..html.len().min(200)]
+        );
+    }
 }
 
 // ============================================================================
