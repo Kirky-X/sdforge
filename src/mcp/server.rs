@@ -14,6 +14,9 @@ use rmcp::model::{
 };
 use rmcp::service::RequestContext;
 
+#[cfg(feature = "security")]
+use crate::security::grpc_auth::GrpcAuthVerifier;
+
 use crate::mcp::McpToolInstance;
 use crate::mcp::get_mcp_tools;
 use crate::mcp::value_to_json_object_arc;
@@ -27,6 +30,44 @@ use crate::mcp::value_to_json_object_arc;
 /// 1 MiB matches the typical MCP server default and leaves ample headroom
 /// for legitimate tool inputs (most tool calls are < 4 KiB).
 pub const MAX_ARGUMENTS_SIZE_BYTES: usize = 0x10_0000;
+
+/// Transport credentials for MCP requests (feature = `security`).
+///
+/// A transport adapter (e.g. the MCP 2026-07-28 stateless HTTP layer, which
+/// owns the raw `Authorization` / `x-api-key` headers) extracts the credential
+/// header values and inserts this struct into the rmcp
+/// `RequestContext.extensions`; [`SdForgeMcpServer::call_tool`] reads it back
+/// when an auth verifier is attached. Mirrors the gRPC interceptor's
+/// `authorization` / `x-api-key` metadata extraction.
+#[cfg(feature = "security")]
+#[derive(Clone, Default)]
+pub struct McpCredentials {
+    /// Raw `Authorization` header value (e.g. `Bearer <jwt>`).
+    pub authorization: Option<String>,
+    /// Raw API key (e.g. the `x-api-key` header value).
+    pub api_key: Option<String>,
+}
+
+#[cfg(feature = "security")]
+impl std::fmt::Debug for McpCredentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // redact credential values — mirrors BearerAuth's manual Debug
+        f.debug_struct("McpCredentials")
+            .field(
+                "authorization",
+                &self.authorization.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("api_key", &self.api_key.as_ref().map(|_| "[REDACTED]"))
+            .finish()
+    }
+}
+
+/// JSON-RPC error code for rejected MCP credentials.
+///
+/// `-32001` sits in the JSON-RPC 2.0 implementation-defined server-error
+/// range (`-32000`..`-32099`), alongside rmcp's own `-32020`+ codes.
+#[cfg(feature = "security")]
+pub const MCP_UNAUTHENTICATED: rmcp::model::ErrorCode = rmcp::model::ErrorCode(-32001);
 
 /// MCP server that dispatches to tools registered via SDForge's inventory.
 ///
@@ -42,6 +83,12 @@ pub struct SdForgeMcpServer {
     pub(crate) server_name: String,
     /// Server version (defaults to "0.2.0")
     pub(crate) server_version: String,
+    /// Optional auth verifier (feature = `security`). When `Some`, every
+    /// `call_tool` must carry credentials accepted by the verifier, otherwise
+    /// the request is rejected with `MCP_UNAUTHENTICATED` before dispatch.
+    /// Mirrors `GrpcServerConfig.auth_verifier` wiring for the MCP dimension.
+    #[cfg(feature = "security")]
+    pub(crate) auth_verifier: Option<std::sync::Arc<dyn GrpcAuthVerifier>>,
 }
 
 impl Default for SdForgeMcpServer {
@@ -76,6 +123,8 @@ impl SdForgeMcpServer {
             tools,
             server_name: name,
             server_version: version,
+            #[cfg(feature = "security")]
+            auth_verifier: None,
         }
     }
 
@@ -85,6 +134,8 @@ impl SdForgeMcpServer {
             tools: Vec::new(),
             server_name: "sdforge-mcp".to_string(),
             server_version: "0.2.0".to_string(),
+            #[cfg(feature = "security")]
+            auth_verifier: None,
         }
     }
 
@@ -103,7 +154,25 @@ impl SdForgeMcpServer {
             tools,
             server_name: name,
             server_version: version,
+            #[cfg(feature = "security")]
+            auth_verifier: None,
         }
+    }
+
+    /// Attach an auth verifier (feature = `security`).
+    ///
+    /// Every `call_tool` is verified before dispatch; credentials arrive via
+    /// [`McpCredentials`] in the rmcp `RequestContext.extensions` (inserted by
+    /// the transport adapter from the raw `Authorization` / `x-api-key`
+    /// headers). Failures map to `ErrorData` with code
+    /// [`MCP_UNAUTHENTICATED`]. Reuses the same protocol-neutral
+    /// [`GrpcAuthVerifier`] port and credential stores as the gRPC
+    /// interceptor.
+    #[cfg(feature = "security")]
+    #[must_use]
+    pub fn with_auth_verifier(mut self, verifier: std::sync::Arc<dyn GrpcAuthVerifier>) -> Self {
+        self.auth_verifier = Some(verifier);
+        self
     }
 
     /// Get the number of registered tools.
@@ -153,6 +222,9 @@ impl SdForgeMcpServer {
     ///
     /// # Security
     ///
+    /// - This is the post-authentication dispatch path: credential
+    ///   enforcement lives in `ServerHandler::call_tool`, the protocol
+    ///   entry point (feature = `security`).
     /// - Arguments payload size is capped at `MAX_ARGUMENTS_SIZE_BYTES`.
     ///   Larger payloads are rejected with `invalid_params` before reaching
     ///   the tool implementation (DoS defense).
@@ -251,8 +323,25 @@ impl ServerHandler for SdForgeMcpServer {
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
-        _context: RequestContext<RoleServer>,
+        #[cfg(not(feature = "security"))] _context: RequestContext<RoleServer>,
+        #[cfg(feature = "security")] context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, ErrorData> {
+        // verify credentials before any dispatch; the transport adapter
+        // extracts header values into `McpCredentials` on the request
+        // extensions (absent credentials count as missing and are rejected).
+        #[cfg(feature = "security")]
+        if let Some(ref verifier) = self.auth_verifier {
+            let credentials = context.extensions.get::<McpCredentials>();
+            verifier
+                .verify(
+                    credentials.and_then(|c| c.authorization.as_deref()),
+                    credentials.and_then(|c| c.api_key.as_deref()),
+                )
+                .map_err(|msg| {
+                    ErrorData::new(MCP_UNAUTHENTICATED, format!("unauthenticated: {msg}"), None)
+                })?;
+        }
+
         // request.name is Cow<'static, str>; use deref via as_ref() to get &str.
         let name: &str = request.name.as_ref();
         // request.arguments is Option<JsonObject> (Map<String, Value>); convert to Value.

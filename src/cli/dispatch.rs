@@ -17,6 +17,38 @@ use std::sync::OnceLock;
 use crate::cli::{CliArgType, CliCommandRegistration, CliHandlerRegistration};
 use crate::core::{ApiError, HandlerArgs, HandlerOutput, HandlerState};
 
+/// Environment variable carrying the raw bearer JWT for CLI authentication
+/// (feature = `security`).
+pub const CLI_TOKEN_ENV: &str = "SDFORGE_TOKEN";
+
+/// Environment variable carrying the raw API key for CLI authentication
+/// (feature = `security`).
+pub const CLI_API_KEY_ENV: &str = "SDFORGE_API_KEY";
+
+/// Verify CLI credentials from the environment against `verifier`
+/// (feature = `security`).
+///
+/// `SDFORGE_TOKEN` is formatted as a `Bearer <jwt>` authorization header
+/// value; `SDFORGE_API_KEY` is passed through as the raw API key. Both are
+/// offered to the same [`GrpcAuthVerifier`] port the gRPC interceptor and
+/// the MCP `call_tool` gate consume; `Err` carries the rejection reason.
+///
+/// # Errors
+///
+/// Returns the verifier's rejection reason when no credential is present or
+/// verification fails.
+#[cfg(feature = "security")]
+pub fn authenticate_cli(
+    verifier: &dyn crate::security::grpc_auth::GrpcAuthVerifier,
+) -> Result<crate::security::AuthContext, String> {
+    let token = std::env::var(CLI_TOKEN_ENV).ok().filter(|t| !t.is_empty());
+    let api_key = std::env::var(CLI_API_KEY_ENV)
+        .ok()
+        .filter(|k| !k.is_empty());
+    let authorization = token.map(|t| format!("Bearer {t}"));
+    verifier.verify(authorization.as_deref(), api_key.as_deref())
+}
+
 /// Dispatch the selected subcommand to its registered forge handler.
 ///
 /// Looks up the subcommand name in `CliHandlerRegistration`, builds the

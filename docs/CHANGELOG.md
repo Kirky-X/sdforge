@@ -75,6 +75,14 @@
   （原 `src/benches/axiom_bench.rs` 为空壳孤儿文件，已删除）。
 
 ### 新增 (Added)
+- **MCP 与 CLI 认证对等**：认证覆盖延伸到 MCP 与 CLI 入口（复用 gRPC 拦截器的
+  `GrpcAuthVerifier` 端口与 Bearer/API-key 凭据库）。MCP：`SdForgeMcpServer::
+  with_auth_verifier` 配置后每个 `call_tool` 先校验凭据（传输适配层将
+  `Authorization`/`x-api-key` 头经 `mcp::McpCredentials` 注入 rmcp 请求
+  extensions；拒绝返回 JSON-RPC 错误码 `-32001`），stateless 适配层自动继承；
+  CLI：`CliBuilder::with_auth_verifier` 配置后 `execute` 先校验 `SDFORGE_TOKEN`
+  /`SDFORGE_API_KEY` 环境凭据再派发。未启用 `security` feature 或未配置
+  verifier 时行为完全不变。
 - **幂等重放防护**：新增 `idempotency` feature（已入 `full`）。HTTP 中间件支持
   `Idempotency-Key` 头（POST/PUT/PATCH）：重放缓存响应（附 `Idempotency-Replayed: true`）、
   并发在途 409；gRPC 支持 `idempotency-key` metadata（在途 `ALREADY_EXISTS`）。

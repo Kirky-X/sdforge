@@ -55,7 +55,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| 认证 | API Key 与 JWT Bearer Token 认证（`ApiKeyAuth` / `BearerAuth`，含 `auth_middleware` 中间件） |
+| 认证 | API Key 与 JWT Bearer Token 认证（`ApiKeyAuth` / `BearerAuth`，含 `auth_middleware` 中间件）；非 HTTP 协议入口经同一 `GrpcAuthVerifier` 端口复用同一凭据库——gRPC 拦截器、WS 握手、MCP `call_tool`（凭据经 `McpCredentials` 注入请求 extensions）、CLI `execute`（`SDFORGE_TOKEN` / `SDFORGE_API_KEY` 环境凭据） |
 | 限流 | 基于 limiteron 的按连接 / 按 IP 限流（`ratelimit` 核心与 `ratelimit-http` Tower 中间件） |
 | 安全头 | 标准安全响应头（CORS、CSP 等，`SecurityHeaders`） |
 | 审计日志 | 安全事件审计追踪（`AuditLogger`，支持 HMAC-SHA256 签名防篡改） |

@@ -9,6 +9,8 @@
 //! - `macro_integration_tests`: `#[forge(cli = true)]` end-to-end
 //! - `integration_tests`: `init_all_plugins` CLI inventory linking
 
+#[cfg(feature = "security")]
+mod auth_tests;
 mod builder_tests;
 #[cfg(feature = "docs")]
 mod docs_subcommand_tests;

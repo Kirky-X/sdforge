@@ -8,6 +8,8 @@
 //! - `protocol_tests`: `CallToolResult`, `Content`, `ErrorData` (McpError) protocol types
 //! - `migration_tests`: `McpToolRegistration`, `get_mcp_tools`, inventory collection
 
+#[cfg(feature = "security")]
+mod auth_tests;
 mod handler_tests;
 mod migration_tests;
 mod protocol_tests;

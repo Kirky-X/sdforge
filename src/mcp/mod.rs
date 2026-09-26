@@ -97,6 +97,8 @@ pub use headers::McpHeaderInfo;
 pub use mrtr::{InputRequiredResult, MrtrSession};
 #[cfg(feature = "mcp")]
 pub use server::SdForgeMcpServer;
+#[cfg(all(feature = "mcp", feature = "security"))]
+pub use server::{MCP_UNAUTHENTICATED, McpCredentials};
 #[cfg(feature = "mcp")]
 pub use stateless::StatelessServerHandler;
 

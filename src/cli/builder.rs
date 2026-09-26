@@ -39,6 +39,12 @@ pub struct CliBuilder {
     /// Global args applied to the top-level command (inherited by
     /// subcommands when `GlobalArg::global` is `true`, the default).
     global_args: Vec<GlobalArg>,
+    /// Optional auth verifier (feature = `security`). When `Some`,
+    /// `execute` verifies `SDFORGE_TOKEN` / `SDFORGE_API_KEY` environment
+    /// credentials before any dispatch. Mirrors the MCP/gRPC verifier
+    /// wiring for the CLI dimension.
+    #[cfg(feature = "security")]
+    auth_verifier: Option<Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
 }
 
 impl Default for CliBuilder {
@@ -47,6 +53,8 @@ impl Default for CliBuilder {
             state: None,
             name: env!("CARGO_PKG_NAME").to_string(),
             global_args: Vec::new(),
+            #[cfg(feature = "security")]
+            auth_verifier: None,
         }
     }
 }
@@ -72,6 +80,8 @@ impl CliBuilder {
             state: Some(state),
             name: env!("CARGO_PKG_NAME").to_string(),
             global_args: Vec::new(),
+            #[cfg(feature = "security")]
+            auth_verifier: None,
         }
     }
 
@@ -95,6 +105,24 @@ impl CliBuilder {
     #[must_use]
     pub fn with_global_arg(mut self, arg: GlobalArg) -> Self {
         self.global_args.push(arg);
+        self
+    }
+
+    /// Require authentication in [`Self::execute`] (feature = `security`).
+    ///
+    /// Credentials are read from the `SDFORGE_TOKEN` (bearer JWT) /
+    /// `SDFORGE_API_KEY` environment variables and checked against the same
+    /// [`crate::security::grpc_auth::GrpcAuthVerifier`] port used by the
+    /// gRPC interceptor and the MCP `call_tool` gate. On failure the run is
+    /// rejected through the standard `error: …` + exit(1) channel before
+    /// any dispatch.
+    #[cfg(feature = "security")]
+    #[must_use]
+    pub fn with_auth_verifier(
+        mut self,
+        verifier: Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>,
+    ) -> Self {
+        self.auth_verifier = Some(verifier);
         self
     }
 
@@ -159,6 +187,16 @@ impl CliBuilder {
     pub async fn execute(self) -> ! {
         let cmd = self.build();
         let matches = cmd.get_matches();
+        // verify credentials before any dispatch (feature = `security`);
+        // reuses the standard error channel so failures exit(1) without
+        // reaching a registered handler.
+        #[cfg(feature = "security")]
+        if let Some(ref verifier) = self.auth_verifier
+            && let Err(reason) = crate::cli::dispatch::authenticate_cli(verifier.as_ref())
+        {
+            eprintln!("error: authentication failed: {reason}");
+            std::process::exit(1);
+        }
         match crate::cli::dispatch::dispatch(&matches, self.state).await {
             Ok((_name, value)) => {
                 let out = crate::core::extract_value(&value);
