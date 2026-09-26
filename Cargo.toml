@@ -624,10 +624,12 @@ name = "macro_tests"
 path = "tests/macros/macro_tests.rs"
 
 # health probe e2e — /healthz /readyz bypass auth in build_with_config.
+# Requires `security`: the fixture configures Jwt auth, and the fail-closed
+# contract rejects an AuthConfig when the auth middleware does not exist.
 [[test]]
 name = "health_probes_tests"
 path = "tests/integration/health_probes_tests.rs"
-required-features = ["http", "health"]
+required-features = ["http", "health", "security"]
 
 [[test]]
 name = "health_probe_collision_tests"

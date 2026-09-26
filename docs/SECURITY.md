@@ -66,6 +66,7 @@
 - **JWT 密钥最小长度**：`MIN_SECRET_LENGTH=32`，短于 32 字符的密钥被拒绝
 - **ServerConfig 默认 host**：`DEFAULT_HOST` 从 `"0.0.0.0"`（fail-open）改为 `"127.0.0.1"`（fail-safe 回环），未显式配置时不会暴露到所有网卡
 - **CORS 校验收紧**：`"http://"`（仅 scheme 无 host）在 `validate()` 与 `build_cors_layer()` 中均被拒绝
+- **AuthConfig fail-closed**：配置了 `AuthConfig::ApiKey`/`Jwt` 但未启用 `security` 特性时，`SdForgeConfig::validate()` 与 `build_with_config()` 在构建期显式报错（认证中间件整体由 `security` 特性提供，此前该组合会被静默忽略、产出无认证 router）；`AuthConfig::None` + 无 `security` 特性仍是合法组合
 
 ### 关键安全修复（历史披露）
 

@@ -211,6 +211,9 @@ mod tests {
         assert_eq!(config.timeout.unwrap().default_timeout_secs, 60);
     }
 
+    // Needs the `security` feature: an ApiKey AuthConfig is only a legal
+    // combination when the auth middleware exists (fail-closed contract).
+    #[cfg(feature = "security")]
     #[test]
     fn test_app_config_builder_full() {
         let result = SdForgeConfig::builder()
@@ -296,6 +299,9 @@ mod tests {
         assert!(error.to_string().contains("Something went wrong"));
     }
 
+    // Needs the `security` feature: an ApiKey AuthConfig is only a legal
+    // combination when the auth middleware exists (fail-closed contract).
+    #[cfg(feature = "security")]
     #[test]
     fn test_app_config_validate_valid() {
         let config = SdForgeConfig {
@@ -359,5 +365,51 @@ mod tests {
             ..Default::default()
         };
         assert!(config.validate().is_err());
+    }
+
+    // Fail-closed contract: with the `security` feature disabled the auth
+    // middleware cannot exist, so validate() must reject any AuthConfig
+    // requesting authentication instead of silently accepting it.
+    #[cfg(not(feature = "security"))]
+    #[test]
+    fn test_config_validate_rejects_auth_without_security_feature() {
+        let jwt = SdForgeConfig {
+            authentication: AuthConfig::Jwt {
+                secret: "this_is_a_strong_secret_key_1234567890".to_string(),
+            },
+            ..SdForgeConfig::default()
+        };
+        let api_key = SdForgeConfig {
+            authentication: AuthConfig::ApiKey {
+                header_name: "X-API-Key".to_string(),
+                prefix: "sk-".to_string(),
+                keys: vec![ApiKeySeed {
+                    key: "test-key-0123456789abcdef".to_string(),
+                    permissions: vec![],
+                }],
+            },
+            ..SdForgeConfig::default()
+        };
+
+        for config in [jwt, api_key] {
+            let err = config
+                .validate()
+                .expect_err("AuthConfig without the `security` feature must fail validation");
+            assert!(
+                err.to_string().contains("security"),
+                "error must name the disabled `security` feature: {err}"
+            );
+        }
+    }
+
+    /// Legal combination: no AuthConfig + no `security` feature stays valid.
+    #[cfg(not(feature = "security"))]
+    #[test]
+    fn test_config_validate_accepts_none_without_security_feature() {
+        let config = SdForgeConfig {
+            authentication: AuthConfig::None,
+            ..SdForgeConfig::default()
+        };
+        assert!(config.validate().is_ok());
     }
 }

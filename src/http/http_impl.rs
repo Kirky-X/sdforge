@@ -280,6 +280,12 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
     // request) instead of wiring middleware that bricks the app.
     config.server.validate()?;
 
+    // Fail closed on auth configs the build cannot honor: without the
+    // `security` feature no auth middleware exists, so an AuthConfig
+    // requesting ApiKey/Jwt would silently produce an unauthenticated router.
+    #[cfg(not(feature = "security"))]
+    config.authentication.require_security_feature()?;
+
     let mut router = build();
 
     // request metrics middleware (count / latency / status per route

@@ -13,7 +13,12 @@ use crate::http::build_with_config;
 #[cfg(feature = "idempotency")]
 use sdforge::config::IdempotencyConfig;
 
+// Auth middleware only exists with the `security` feature. Without it the
+// fail-closed contract (see `AuthConfig::require_security_feature`) rejects
+// any AuthConfig requesting authentication, so the happy-path auth builds
+// below are security-only.
 /// Test build_with_config with JWT authentication
+#[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_jwt() {
     let config = SdForgeConfig {
@@ -36,6 +41,7 @@ fn test_build_with_config_jwt() {
 }
 
 /// Test build_with_config with ApiKey authentication
+#[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_api_key() {
     let config = SdForgeConfig {
@@ -89,6 +95,7 @@ fn test_build_with_config_oauth2_error() {
 }
 
 /// Test build_with_config with CORS configuration
+#[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_cors() {
     let config = SdForgeConfig {
@@ -327,9 +334,12 @@ fn test_build_with_config_cors_all_methods() {
 // Authentication Tests - ApiKey Edge Cases
 // ============================================================================
 
+#[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_api_key_empty_prefix() {
     // Test ApiKey with empty prefix (lines 306-308)
+    // NOTE: prefix emptiness is only rejected by the auth middleware itself;
+    // build_with_config does not run AuthConfig::validate(), so this is Ok.
     let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
@@ -354,6 +364,7 @@ fn test_build_with_config_api_key_empty_prefix() {
     assert!(result.is_ok());
 }
 
+#[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_api_key_long_prefix() {
     // Test ApiKey with long prefix
@@ -381,6 +392,7 @@ fn test_build_with_config_api_key_long_prefix() {
     assert!(result.is_ok());
 }
 
+#[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_api_key_special_chars() {
     // Test ApiKey with special characters in prefix
@@ -412,6 +424,7 @@ fn test_build_with_config_api_key_special_chars() {
 // Authentication Tests - JWT Edge Cases
 // ============================================================================
 
+#[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_jwt_short_secret() {
     // JWT requires minimum secret length and character classes
@@ -435,6 +448,7 @@ fn test_build_with_config_jwt_short_secret() {
     assert!(result.is_ok());
 }
 
+#[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_jwt_special_chars() {
     // Test JWT secret with special characters (must meet complexity requirements)
@@ -457,6 +471,7 @@ fn test_build_with_config_jwt_special_chars() {
     assert!(result.is_ok());
 }
 
+#[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_jwt_empty_secret() {
     // Note: BearerAuth::new() panics with empty/invalid secrets.
@@ -515,6 +530,7 @@ fn test_build_preserves_grpc_inventory_with_routes() {
 // build_with_config Integration Tests - All Middleware Combined
 // ============================================================================
 
+#[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_full_jwt_cors() {
     // Test with all middleware: JWT + CORS + security headers + timeout
@@ -541,6 +557,7 @@ fn test_build_with_config_full_jwt_cors() {
     assert!(result.is_ok(), "Should build with full config");
 }
 
+#[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_full_api_key_cors() {
     // Test with all middleware: ApiKey + CORS + security headers + timeout
@@ -629,4 +646,59 @@ fn test_build_with_config_minimal_config() {
         "Minimal config should build: {:?}",
         result.err()
     );
+}
+
+// ============================================================================
+// Fail-closed feature contract
+// ============================================================================
+
+/// With the `security` feature disabled, an AuthConfig requesting
+/// authentication (ApiKey/Jwt) must fail at build time instead of silently
+/// producing an unauthenticated router.
+#[cfg(not(feature = "security"))]
+#[test]
+fn test_build_with_config_auth_without_security_feature_rejected() {
+    let jwt = SdForgeConfig {
+        server: ServerConfig {
+            host: "0.0.0.0".to_string(),
+            port: 3000,
+            request_timeout_secs: 30,
+            cors: None,
+            ..Default::default()
+        },
+        authentication: AuthConfig::Jwt {
+            secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
+        },
+        timeout: None,
+        ..Default::default()
+    };
+    let api_key = SdForgeConfig {
+        server: ServerConfig {
+            host: "0.0.0.0".to_string(),
+            port: 3000,
+            request_timeout_secs: 30,
+            cors: None,
+            ..Default::default()
+        },
+        authentication: AuthConfig::ApiKey {
+            header_name: "X-API-Key".to_string(),
+            prefix: "key-".to_string(),
+            keys: vec![ApiKeySeed {
+                key: "test-key-0123456789abcdef".to_string(),
+                permissions: vec!["read".to_string()],
+            }],
+        },
+        timeout: None,
+        ..Default::default()
+    };
+
+    for config in [jwt, api_key] {
+        let err = build_with_config(&config)
+            .expect_err("AuthConfig without the `security` feature must fail at build time");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("security"),
+            "error must name the disabled `security` feature: {msg}"
+        );
+    }
 }

@@ -94,6 +94,30 @@ impl std::fmt::Debug for AuthConfig {
 }
 
 impl AuthConfig {
+    /// Fail-closed feature contract check: when authentication is requested
+    /// (ApiKey/Jwt) but the `security` feature is disabled, the auth
+    /// middleware does not exist and the config would be silently ignored —
+    /// yielding an unauthenticated router. Misconfiguration must fail at
+    /// build time instead.
+    ///
+    /// `AuthConfig::None` + no `security` feature is a legal combination.
+    ///
+    /// This method (and all its call sites) is compiled out when the
+    /// `security` feature is enabled, so it carries zero cost there.
+    #[cfg(not(feature = "security"))]
+    pub(crate) fn require_security_feature(&self) -> Result<(), crate::config::ConfigError> {
+        if matches!(self, AuthConfig::None) {
+            return Ok(());
+        }
+        Err(crate::config::ConfigError::ValidationError(
+            "authentication is configured (ApiKey/Jwt) but the `security` feature is not \
+             enabled: the auth middleware would be silently omitted, leaving every route \
+             unauthenticated. Enable the `security` feature or remove the authentication \
+             config (use AuthConfig::None)"
+                .to_string(),
+        ))
+    }
+
     /// Validate authentication configuration at load time.
     ///
     /// Security: Rejects configurations that could bypass authentication.
