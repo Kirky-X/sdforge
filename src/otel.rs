@@ -338,6 +338,9 @@ mod tests {
     #[test]
     fn span_lifecycle_records_data() {
         let _guard = BUF_LOCK.lock().unwrap();
+        // 进程级缓冲可能被同进程其它测试（如 http middleware 的 otel 中间
+        // 件）并发写入：断言前先清空，避免串扰数据混入。
+        take_spans();
         let span = start_span("unit.op");
         let span = with_attr(span, "k", serde_json::json!("v"));
         finish_span(span);
@@ -349,16 +352,27 @@ mod tests {
                     .iter()
                     .any(|(k, v)| k == "k" && v == &serde_json::json!("v"))
         }));
-        assert_eq!(buffered_span_count(), 0);
+        // 本 span 已被取走即视为清空生效；并发写者可能产生新数据，不对其
+        // 计数做强断言。
+        let again = take_spans();
+        assert!(!again.iter().any(|s| s.name == "unit.op"));
     }
 
     #[test]
     fn trace_payload_shape_is_otlp_json() {
         let _guard = BUF_LOCK.lock().unwrap();
+        // 清空并发写者的既有串扰数据后再产生本测试的 span。
+        take_spans();
         let span = start_span("shape.check");
         finish_span(span);
         let spans = take_spans();
-        let payload = build_traces_payload("svc-under-test", &spans);
+        // 只取本测试产生的 span，隔离 middleware 并发写入的 http.request。
+        let own: Vec<SpanData> = spans
+            .into_iter()
+            .filter(|s| s.name == "shape.check")
+            .collect();
+        assert_eq!(own.len(), 1, "exactly one own span expected");
+        let payload = build_traces_payload("svc-under-test", &own);
         let rs = payload["resourceSpans"][0].clone();
         assert_eq!(
             rs["resource"]["attributes"][0]["key"], "service.name",

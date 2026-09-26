@@ -96,3 +96,45 @@ fn test_generate_docs_mcp_markdown_returns_nonempty() {
     let md = generate_docs(DocFormat::McpMarkdown).expect("generate_docs McpMarkdown");
     assert!(!md.is_empty(), "MCP markdown should not be empty");
 }
+
+// ============================================================================
+// 外部命令生成：generate_cli_docs_from_command 直接渲染调用方的 Command。
+// ============================================================================
+
+/// 直接传入外部构建的 `clap::Command`（非 sdforge 注册表），应渲染出包含
+/// 命令名与选项的 Markdown。
+#[test]
+fn test_generate_cli_docs_from_command_renders_external_command() {
+    let cmd = sdforge::clap::Command::new("external-tool")
+        .about("Externally documented command")
+        .arg(
+            sdforge::clap::Arg::new("config")
+                .long("config")
+                .help("Path to config file"),
+        );
+    let md = sdforge::docs::generate_cli_docs_from_command(&cmd);
+    assert!(!md.is_empty(), "markdown should not be empty");
+    assert!(
+        md.contains("external-tool"),
+        "markdown should contain the external command name: {}",
+        &md[..md.len().min(300)]
+    );
+    assert!(
+        md.contains("config"),
+        "markdown should contain the external option: {}",
+        &md[..md.len().min(300)]
+    );
+}
+
+/// 委托路径逐字节一致：`generate_cli_docs()` 必须与对同一 Command 直接
+/// 调用 `generate_cli_docs_from_command` 输出完全相同。
+#[test]
+fn test_generate_cli_docs_delegates_byte_identical() {
+    let cmd = sdforge::cli::CliBuilder::new().build();
+    let via_wrapper = sdforge::docs::generate_cli_docs_from_command(&cmd);
+    let direct = sdforge::docs::generate_cli_docs();
+    assert_eq!(
+        via_wrapper, direct,
+        "generate_cli_docs must delegate to generate_cli_docs_from_command byte-for-byte"
+    );
+}

@@ -49,7 +49,7 @@ pub use http_impl::{build, build_with_config, build_with_redirect};
 #[cfg(feature = "graceful")]
 pub use graceful::{
     GracefulShutdownConfig, default_shutdown_signal, serve_with_graceful_shutdown,
-    serve_with_graceful_shutdown_connect_info,
+    serve_with_graceful_shutdown_connect_info, serve_with_graceful_shutdown_with_hooks,
 };
 
 // Re-export internal helpers for test access.
@@ -66,7 +66,7 @@ pub(crate) use http_impl::{apply_security_headers, get_or_generate_request_id};
 #[cfg(test)]
 pub(crate) use http_impl::resolve_route_path;
 #[cfg(any(feature = "health", feature = "metrics"))]
-pub(crate) use http_impl::route_path_taken;
+pub use http_impl::route_path_taken;
 
 /// Request ID header name
 #[cfg_attr(feature = "context", allow(dead_code))]

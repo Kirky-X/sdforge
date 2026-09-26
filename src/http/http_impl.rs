@@ -104,7 +104,7 @@ pub(crate) fn apply_security_headers(router: Router) -> Router {
 // 消费方：health 探针挂载、metrics 挂载、health 门控测试——
 // 两 feature 皆关时无消费方，不参与编译。
 #[cfg(any(feature = "health", feature = "metrics"))]
-pub(crate) fn route_path_taken(path: &str) -> bool {
+pub fn route_path_taken(path: &str) -> bool {
     use crate::core::Registration;
     let mut taken = false;
     for registration in inventory::iter::<RouteRegistration>() {

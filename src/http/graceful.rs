@@ -27,6 +27,7 @@
 //! ).await?;
 //! ```
 
+use std::pin::Pin;
 use std::time::Duration;
 
 /// Configuration for the graceful shutdown sequence.
@@ -131,7 +132,7 @@ pub async fn serve_with_graceful_shutdown(
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
     config: GracefulShutdownConfig,
 ) -> std::io::Result<()> {
-    serve_graceful(router.into_make_service(), listener, shutdown, config).await
+    serve_graceful(router.into_make_service(), listener, shutdown, config, None).await
 }
 
 /// Serve `router` on `listener` with the graceful shutdown sequence, exposing
@@ -154,6 +155,41 @@ pub async fn serve_with_graceful_shutdown_connect_info(
         listener,
         shutdown,
         config,
+        None,
+    )
+    .await
+}
+
+/// Serve `router` on `listener` with the graceful shutdown sequence, running
+/// a caller-supplied hook after the drain/stop phase.
+///
+/// Identical to [`serve_with_graceful_shutdown`], plus `after_drain`: an
+/// async hook awaited in both shutdown paths (natural drain and
+/// forced-abort) after the built-in stop hooks — kit phased shutdown, then
+/// `#[forge(on_stop)]` lifecycle hooks — and before the serve future
+/// resolves. Use it for last-mile teardown that must observe a fully
+/// drained server (health probes flipped, registry deregistration acked…).
+///
+/// # Unbounded hook
+///
+/// The hook is awaited **without any timeout**: if it never resolves, the
+/// process never exits. Callers that need a bounded shutdown must wrap the
+/// hook themselves, e.g.
+/// `Box::pin(tokio::time::timeout(Duration::from_secs(5), hook))` — the
+/// library cannot know a sensible deadline for arbitrary teardown work.
+pub async fn serve_with_graceful_shutdown_with_hooks(
+    router: axum::Router,
+    listener: tokio::net::TcpListener,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+    config: GracefulShutdownConfig,
+    after_drain: Option<Pin<Box<dyn std::future::Future<Output = ()> + Send>>>,
+) -> std::io::Result<()> {
+    serve_graceful(
+        router.into_make_service(),
+        listener,
+        shutdown,
+        config,
+        after_drain,
     )
     .await
 }
@@ -168,6 +204,7 @@ async fn serve_graceful<M, S>(
     listener: tokio::net::TcpListener,
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
     config: GracefulShutdownConfig,
+    after_drain: Option<Pin<Box<dyn std::future::Future<Output = ()> + Send>>>,
 ) -> std::io::Result<()>
 where
     // Bounds mirror `axum::serve` (which uses `tower_service::Service`,
@@ -224,6 +261,9 @@ where
         result = server => {
             run_stop_hooks();
             run_lifecycle_stop_hooks().await;
+            if let Some(hook) = after_drain {
+                hook.await;
+            }
             result
         }
         _ = deadline => {
@@ -231,6 +271,9 @@ where
             // in-flight connection — the forced path of phase 2.
             run_stop_hooks();
             run_lifecycle_stop_hooks().await;
+            if let Some(hook) = after_drain {
+                hook.await;
+            }
             Ok(())
         }
     }

@@ -271,6 +271,23 @@ impl OpenApiBuilder {
         Self::default()
     }
 
+    /// Append an externally built spec. `build()` merges it after the
+    /// inventory collection, in chain order; on the same path+method the
+    /// external operation replaces the inventory-generated one. The
+    /// extra's own `info`/`servers` do not participate in the merge.
+    pub fn merge_openapi(mut self, spec: OpenApi) -> Self {
+        self.extra.push(spec);
+        self
+    }
+
+    /// Merge external [`Paths`] — the lighter sibling of [`Self::merge_openapi`],
+    /// equivalent to merging a spec that only carries the given paths.
+    /// Merged after the inventory collection, same path+method: external wins.
+    pub fn paths(mut self, paths: utoipa::openapi::path::Paths) -> Self {
+        self.extra.push(OpenApi::new(Info::default(), paths));
+        self
+    }
+
     /// Set the API title. Chainable.
     pub fn title<S: Into<String>>(mut self, title: S) -> Self {
         self.title = title.into();
@@ -393,7 +410,97 @@ impl OpenApiBuilder {
             paths.add_path_operation(route.path, vec![route.http_method()], operation);
         }
 
-        OpenApi::new(info, paths)
+        // inventory 收集先行；extra 依序合并，同 path+method 外部优先。
+        let mut spec = OpenApi::new(info, paths);
+        for extra in &self.extra {
+            merge_extra_into(&mut spec, extra);
+        }
+        spec
+    }
+}
+
+impl std::fmt::Debug for OpenApiBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // 手写 Debug：utoipa 的 OpenApi 仅在 `debug` feature 下实现 Debug，
+        // 而 builder 需要携带 extra spec。extra 只报条目数，避免展开大对象。
+        f.debug_struct("OpenApiBuilder")
+            .field("title", &self.title)
+            .field("version", &self.version)
+            .field("description", &self.description)
+            .field("extra", &self.extra.len())
+            .finish()
+    }
+}
+
+/// 将一个外部 spec 合并进 `spec`。
+///
+/// - paths：同 path+method 时外部操作覆盖既有项，其余 method 原样保留；
+///   PathItem 级 `x-` 扩展按键合并（外部同名键覆盖），安全元数据（如
+///   `x-required-scope`）不因合并丢失；
+/// - components：schemas/responses/security_schemes 按名称 map 去重合并，
+///   后合并者覆盖同名条目，$ref 指针按名称保持可解析；
+/// - 顶层 tags：按 name 去重追加（已有同名 tag 保留原定义）；
+/// - 顶层 security：外部提供时整体覆盖（与 path+method 同为外部优先）。
+fn merge_extra_into(spec: &mut OpenApi, extra: &OpenApi) {
+    for (path, extra_item) in &extra.paths.paths {
+        let item = spec.paths.paths.entry(path.clone()).or_default();
+        if extra_item.get.is_some() {
+            item.get = extra_item.get.clone();
+        }
+        if extra_item.put.is_some() {
+            item.put = extra_item.put.clone();
+        }
+        if extra_item.post.is_some() {
+            item.post = extra_item.post.clone();
+        }
+        if extra_item.delete.is_some() {
+            item.delete = extra_item.delete.clone();
+        }
+        if extra_item.options.is_some() {
+            item.options = extra_item.options.clone();
+        }
+        if extra_item.head.is_some() {
+            item.head = extra_item.head.clone();
+        }
+        if extra_item.patch.is_some() {
+            item.patch = extra_item.patch.clone();
+        }
+        if extra_item.trace.is_some() {
+            item.trace = extra_item.trace.clone();
+        }
+        // x- 扩展逐键合并，外部同名键覆盖，不整体替换。
+        match (&mut item.extensions, &extra_item.extensions) {
+            (Some(dst), Some(src)) => dst.merge(src.clone()),
+            (None, Some(src)) => item.extensions = Some(src.clone()),
+            _ => {}
+        }
+    }
+    if let Some(extra_components) = &extra.components {
+        let components = spec.components.get_or_insert_with(Default::default);
+        for (name, schema) in &extra_components.schemas {
+            components.schemas.insert(name.clone(), schema.clone());
+        }
+        for (name, response) in &extra_components.responses {
+            components.responses.insert(name.clone(), response.clone());
+        }
+        for (name, scheme) in &extra_components.security_schemes {
+            components
+                .security_schemes
+                .insert(name.clone(), scheme.clone());
+        }
+    }
+    // 顶层 tags：按 name 去重追加，已有同名 tag 保留原定义。
+    if let Some(extra_tags) = &extra.tags {
+        let tags = spec.tags.get_or_insert_with(Vec::new);
+        for tag in extra_tags {
+            if !tags.iter().any(|t| t.name == tag.name) {
+                tags.push(tag.clone());
+            }
+        }
+    }
+    // 顶层 security：外部提供时整体覆盖（外部优先）。
+    if extra.security.is_some() {
+        spec.security = extra.security.clone();
     }
 }
 
