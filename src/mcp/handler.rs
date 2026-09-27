@@ -23,12 +23,27 @@ pub struct McpToolInstance {
     pub(crate) tool: Arc<dyn SdForgeTool>,
     /// API metadata
     pub(crate) metadata: ApiMetadata,
+    /// Endpoint RBAC roles (from `McpToolRegistration.roles`); empty = no
+    /// role requirement. Enforced in `SdForgeMcpServer::call_tool` against
+    /// the verified `AuthContext` (feature = `security`).
+    pub(crate) roles: &'static [&'static str],
 }
 
 impl McpToolInstance {
-    /// Create a new tool instance from a tool and metadata.
+    /// Create a new tool instance from a tool and metadata (no roles).
     pub fn new(tool: Arc<dyn SdForgeTool>, metadata: ApiMetadata) -> Self {
-        Self { tool, metadata }
+        Self {
+            tool,
+            metadata,
+            roles: &[],
+        }
+    }
+
+    /// Attach endpoint RBAC roles (mirrors `GrpcHandlerRegistration.roles`).
+    #[must_use]
+    pub const fn with_roles(mut self, roles: &'static [&'static str]) -> Self {
+        self.roles = roles;
+        self
     }
 
     /// Get a reference to the tool implementation.
@@ -39,6 +54,11 @@ impl McpToolInstance {
     /// Get a reference to the metadata.
     pub fn metadata(&self) -> &ApiMetadata {
         &self.metadata
+    }
+
+    /// Get the endpoint RBAC role requirement.
+    pub fn roles(&self) -> &'static [&'static str] {
+        self.roles
     }
 }
 

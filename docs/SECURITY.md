@@ -66,14 +66,13 @@
 | 能力 | HTTP | gRPC | MCP | CLI | WS |
 |------|------|------|-----|-----|-----|
 | 认证（凭据校验） | ✅ 中间件 | ✅ 拦截器 | ✅ `call_tool`/`list_tools` | ✅ `execute` | ✅ 握手 |
-| 授权（RBAC roles） | ✅ `require_role` | ✅ per-method roles | ❌ | ❌ | ❌ |
+| 授权（RBAC roles） | ✅ `require_role` | ✅ per-method roles | ✅ per-tool roles（`call_tool`/`call_tool_with_credentials`，无角色 permission → `-32003`；`security` 关闭时 fail-safe 全拒） | ❌ | ❌ |
 | 参数校验 | ✅ `#[forge(validate)]` | ✅ 对等 | ✅ input schema | — | — |
 
 > **覆盖边界是安全债登记，不是终态**：授权（`#[forge(auth(role = ...))]`/roles）
-> 在 MCP/CLI/WS 维度尚未实现——已认证的低权限身份在这些入口不受角色约束。
-> 后续任务：MCP 消费 `AuthContext` 做工具级 roles 校验（对齐 gRPC `roles()`
-> 模式），CLI/WS 按信任边界评估；发布前检查需核对本矩阵与实现的一致性，
-> 边界收敛前应在部署层（网络隔离/凭据最小权限）补偿。
+> 在 CLI/WS 维度尚未实现——CLI 属本地信任边界（进程入口即操作者），WS 握手后无
+> 逐请求身份通道；引入网络触发形态前必须先补授权或在部署层（网络隔离/凭据最小
+> 权限）补偿。发布前检查需核对本矩阵与实现的一致性。
 
 ### 安全默认值（v0.3.0+ 收紧）
 

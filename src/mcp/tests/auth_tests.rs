@@ -11,7 +11,7 @@
 
 #![cfg(all(feature = "mcp", feature = "security"))]
 
-use crate::mcp::{McpCredentials, SdForgeMcpServer};
+use crate::mcp::{McpCredentials, McpToolRegistration, SdForgeMcpServer};
 use crate::security::SdForgeApiKeyAuth;
 use crate::security::grpc_auth::{ApiKeyVerifier, BearerVerifier, GrpcAuthVerifier};
 use rmcp::handler::server::ServerHandler;
@@ -337,4 +337,153 @@ impl rmcp::transport::Transport<rmcp::RoleServer> for DummyTransport {
     fn close(&mut self) -> impl std::future::Future<Output = Result<(), Self::Error>> + Send {
         async { Ok(()) }
     }
+}
+
+// ============================================================================
+// Endpoint RBAC（对齐 gRPC per-method roles）
+// ============================================================================
+
+// RBAC fixture：声明 `mcp_admin` 角色的工具（inventory 全局注册，
+// 仅 security 测试构建可见；其他测试不调用该工具）。
+inventory::submit!(
+    McpToolRegistration::new(
+        "rbac_guarded_tool",
+        "v1",
+        create_rbac_guarded_tool,
+        create_rbac_guarded_metadata,
+    )
+    .with_roles(&["mcp_admin"])
+);
+
+fn create_rbac_guarded_tool() -> Arc<dyn crate::mcp::SdForgeTool> {
+    struct RbacGuardedTool;
+    impl crate::mcp::SdForgeTool for RbacGuardedTool {
+        fn name(&self) -> &str {
+            "rbac_guarded_tool"
+        }
+        fn description(&self) -> &str {
+            "Role-guarded RBAC test tool"
+        }
+        fn input_schema(&self) -> serde_json::Value {
+            serde_json::json!({"type": "object"})
+        }
+        fn call(
+            &self,
+            _input: Option<serde_json::Value>,
+        ) -> Result<rmcp::model::CallToolResult, crate::mcp::McpError> {
+            Ok(rmcp::model::CallToolResult::success(vec![]))
+        }
+    }
+    Arc::new(RbacGuardedTool)
+}
+
+fn create_rbac_guarded_metadata() -> crate::core::ApiMetadata {
+    crate::core::ApiMetadata {
+        name: "rbac_guarded_tool".to_string(),
+        version: "v1".to_string(),
+        description: "Role-guarded RBAC test tool".to_string(),
+        cache_ttl: None,
+        is_streaming: false,
+        i18n_key: None,
+    }
+}
+
+/// rbac_api_key(key, perms) 构造带 key store 的 verifier。
+fn rbac_server() -> SdForgeMcpServer {
+    let store = Arc::new(SdForgeApiKeyAuth::new());
+    store.add_key("rbac-admin-key".to_string(), vec!["mcp_admin".to_string()]);
+    store.add_key("rbac-basic-key".to_string(), vec!["basic".to_string()]);
+    server_with(Arc::new(ApiKeyVerifier::new(store, "sk_")))
+}
+
+/// 声明 roles 的工具 + 未认证请求 → 认证层先拒（-32001），未到授权层。
+#[tokio::test]
+async fn rbac_guarded_tool_rejects_unauthenticated_first() {
+    let server = rbac_server();
+    let context = context_with_credentials(None);
+    let err = server
+        .call_tool(call_request("rbac_guarded_tool"), context)
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode(-32001));
+}
+
+/// 已认证但不含所需 permission → MCP_FORBIDDEN（-32003），工具不执行。
+#[tokio::test]
+async fn rbac_guarded_tool_rejects_underprivileged_identity() {
+    let server = rbac_server();
+    let context = context_with_credentials(Some(McpCredentials::from_headers(
+        None,
+        Some("sk_rbac-basic-key"),
+    )));
+    let err = server
+        .call_tool(call_request("rbac_guarded_tool"), context)
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode(-32003));
+    assert!(err.message.contains("mcp_admin"), "reason: {}", err.message);
+}
+
+/// 持匹配 permission 的已认证身份 → 放行派发（跨协议权限差收敛）。
+#[tokio::test]
+async fn rbac_guarded_tool_allows_authorized_identity() {
+    let server = rbac_server();
+    let context = context_with_credentials(Some(McpCredentials::from_headers(
+        None,
+        Some("sk_rbac-admin-key"),
+    )));
+    let result = server
+        .call_tool(call_request("rbac_guarded_tool"), context)
+        .await;
+    assert!(result.is_ok(), "matching role must dispatch");
+}
+
+/// 无 verifier（身份无从建立）时 fail-safe：声明 roles 的工具一律拒绝。
+#[tokio::test]
+async fn rbac_guarded_tool_fails_closed_without_verifier() {
+    let server = SdForgeMcpServer::new();
+    let context = context_with_credentials(None);
+    let err = server
+        .call_tool(call_request("rbac_guarded_tool"), context)
+        .await
+        .unwrap_err();
+    assert_eq!(err.code, ErrorCode(-32003));
+}
+
+/// call_tool_with_credentials 走同一 RBAC 防线：低权限拒绝、高权限放行。
+#[tokio::test]
+async fn call_tool_with_credentials_enforces_rbac() {
+    let server = rbac_server();
+    let err = server
+        .call_tool_with_credentials(
+            "rbac_guarded_tool",
+            None,
+            &McpCredentials::from_headers(None, Some("sk_rbac-basic-key")),
+        )
+        .await
+        .expect_err("underprivileged identity must be denied");
+    assert_eq!(err.code, ErrorCode(-32003));
+
+    let ok = server
+        .call_tool_with_credentials(
+            "rbac_guarded_tool",
+            None,
+            &McpCredentials::from_headers(None, Some("sk_rbac-admin-key")),
+        )
+        .await;
+    assert!(ok.is_ok(), "matching role must dispatch");
+}
+
+/// 未声明 roles 的工具不受 RBAC 影响：无角色要求时任意已认证身份放行。
+#[tokio::test]
+async fn roleless_tool_admits_any_authenticated_identity() {
+    let server = rbac_server();
+    let context = context_with_credentials(Some(McpCredentials::from_headers(
+        None,
+        Some("sk_rbac-basic-key"),
+    )));
+    let result = server
+        .call_tool(call_request("coverage_test_tool"), context)
+        .await;
+    assert!(result.is_ok(), "role-less tools must not be RBAC-gated");
 }

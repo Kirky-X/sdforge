@@ -36,6 +36,13 @@ pub type ProtocolAuthVerifier = dyn GrpcAuthVerifier;
 /// low-detail phrase (`missing bearer token`, `invalid api key`, …) and
 /// MUST NOT contain credential material or other sensitive details.
 ///
+/// This is a documentation-level contract — the framework cannot sanitize a
+/// custom `Err`. A violating implementation leaks through to untrusted
+/// callers, e.g. `Err(format!("rejected key {api_key}"))` would hand the
+/// submitted key (or, worse, server-side key material) to every client that
+/// sends bad credentials; send the detail to your audit/log pipeline
+/// instead and return `"invalid api key"`.
+///
 /// On success the verifier returns the caller's [`AuthContext`] so callers
 /// can enforce **authorization** (RBAC roles) — the previous
 /// `Result<(), String>` shape discarded the identity and left non-HTTP

@@ -177,3 +177,52 @@ mod vuln0002_security_tests {
         assert!(result.is_err(), "missing required field must be rejected");
     }
 }
+
+// ============================================================================
+// auth(role = ...) → MCP RBAC roles propagation
+//
+// `#[forge(tool_name = ..., auth(role = "..."))]` must carry the declared
+// roles into `McpToolRegistration`/`McpToolInstance` so
+// `SdForgeMcpServer::call_tool` can enforce them against the verified
+// `AuthContext` (feature = `security`), mirroring the gRPC roles chain.
+// ============================================================================
+
+#[cfg(all(feature = "mcp", feature = "security"))]
+#[forge(
+    name = "rbac_macro_tool",
+    version = "v1",
+    tool_name = "rbac_macro_tool",
+    description = "RBAC propagation test tool",
+    auth(role = "mcp_admin")
+)]
+async fn rbac_macro_tool() -> Result<String, sdforge::core::ApiError> {
+    Ok("ok".to_string())
+}
+
+#[cfg(all(feature = "mcp", feature = "security"))]
+mod mcp_rbac_tests {
+    use sdforge::mcp::get_mcp_tools;
+
+    /// `auth(role = "mcp_admin")` must reach the MCP registration chain:
+    /// `get_mcp_tools` surfaces the tool with its roles intact.
+    #[test]
+    fn macro_auth_roles_propagate_to_mcp_instance() {
+        let tools = get_mcp_tools();
+        let tool = tools
+            .iter()
+            .find(|t| t.tool().name() == "rbac_macro_tool")
+            .expect("rbac_macro_tool must be registered via #[forge]");
+        assert_eq!(tool.roles(), &["mcp_admin"]);
+    }
+
+    /// Role-less tools keep an empty roles slice (no accidental tightening).
+    #[test]
+    fn macro_tool_without_auth_keeps_empty_roles() {
+        let tools = get_mcp_tools();
+        let tool = tools
+            .iter()
+            .find(|t| t.tool().name() == "vuln0002_echo")
+            .expect("vuln0002_echo must be registered via #[forge]");
+        assert!(tool.roles().is_empty());
+    }
+}

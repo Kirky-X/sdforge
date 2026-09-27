@@ -25,6 +25,7 @@ pub fn get_mcp_tools() -> Vec<McpToolInstance> {
                     reg_metadata.is_streaming(),
                 ),
             )
+            .with_roles(reg.roles)
         })
         .collect()
 }

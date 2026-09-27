@@ -75,7 +75,7 @@
   （原 `src/benches/axiom_bench.rs` 为空壳孤儿文件，已删除）。
 
 ### 新增 (Added)
-- **MCP 与 CLI 认证对等（authenticate-only）**：认证覆盖延伸到 MCP 与 CLI 入口
+- **MCP 与 CLI 认证对等**：认证覆盖延伸到 MCP 与 CLI 入口
   （复用 gRPC 拦截器的 `GrpcAuthVerifier` 端口——推荐别名 `ProtocolAuthVerifier`
   ——与 Bearer/API-key 凭据库）。MCP：`SdForgeMcpServer::with_auth_verifier`
   配置后 `call_tool` **与 `list_tools`** 先校验凭据，拒绝返回 JSON-RPC
@@ -86,6 +86,14 @@
   `SDFORGE_TOKEN`/`SDFORGE_API_KEY` 环境凭据再派发（环境变量可被同用户子进程
   读取并易泄漏进 CI 日志/`set -x`，建议短期凭据 + CI 掩码）。未启用 `security`
   feature 或未配置 verifier 时行为完全不变。
+- **MCP RBAC 对等**：`#[forge(auth(role = "..."))]`/`McpToolRegistration::
+  with_roles` 角色声明贯通 MCP 路径——`call_tool`/`call_tool_with_credentials`
+  按已验证身份的 permission 校验（无匹配 → JSON-RPC `-32003`，新增
+  `mcp::MCP_FORBIDDEN`；`security` feature 关闭时 fail-safe 全拒，
+  对齐 gRPC `roles` 语义）。`McpToolRegistration` 为承载 roles 改为手写
+  结构（`new` 四参签名不变，新增 const `with_roles`，手写
+  `inventory::submit!` 的下游零改动）。跨协议权限差收敛：同一低权限
+  API key 在 gRPC 被 roles 拒绝的方法，MCP 侧同样拒绝。
 - **`grpc_auth::make_verifier(&AuthConfig)`**：从 `AuthConfig`（Jwt/ApiKey 种子键）
   构建统一 verifier 的单一构造点——各协议入口的 verifier 接线均为手动，无配置级
   自动贯通。
@@ -97,13 +105,14 @@
   `src/mcp/tests/auth_tests.rs`）。未注入时所有受门控调用一律 `-32001` 拒绝
   （fail-closed）；内建 stdio 传输无法携带头，`serve_stdio` 在挂载 verifier 时
   输出启动警告。
-- **覆盖边界声明**：本轮为认证（authentication）拉通——MCP/CLI 维度**仅认证不授权**，
-  `#[forge(auth(role = ...))]`/roles 目前仅 HTTP 与 gRPC 覆盖；持有合法凭据的低权限
-  身份在 MCP/CLI 侧不受角色约束（SECURITY.md 建立协议覆盖矩阵并登记为后续任务）。
-  纵深防御配套：`call_tool_internal` 在挂载 verifier 时 fail-closed 拒绝（同步路径无凭据
-  通道，杜绝进程内公开旁路），进程内带外认证后的程序化调用走新增的
-  `SdForgeMcpServer::call_tool_with_credentials`（与协议路径共用同一 `enforce_auth`
-  防线）；`cli::dispatch::dispatch` 仍是无认证的进程内分发口（文档标注）。
+- **覆盖边界声明**：授权（`#[forge(auth(role = ...))]`/roles）当前覆盖 HTTP、
+  gRPC 与 MCP；**CLI/WS 维度不生效**——CLI 属本地信任边界（进程入口即操作者），
+  WS 握手后无逐请求身份通道，引入网络触发形态前必须先补授权或部署层补偿
+  （SECURITY.md 协议覆盖矩阵已登记，发布前核对）。纵深防御配套：`call_tool_internal`
+  在挂载 verifier 时 fail-closed 拒绝（同步路径无凭据通道，杜绝进程内公开旁路），
+  进程内带外认证后的程序化调用走 `SdForgeMcpServer::call_tool_with_credentials`
+  （与协议路径共用同一认证 + RBAC 防线）；`cli::dispatch::dispatch` 仍是无认证的
+  进程内分发口（文档标注）。
 - **幂等重放防护**：新增 `idempotency` feature（已入 `full`）。HTTP 中间件支持
   `Idempotency-Key` 头（POST/PUT/PATCH）：重放缓存响应（附 `Idempotency-Replayed: true`）、
   并发在途 409；gRPC 支持 `idempotency-key` metadata（在途 `ALREADY_EXISTS`）。

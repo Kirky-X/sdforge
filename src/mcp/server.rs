@@ -91,6 +91,11 @@ impl std::fmt::Debug for McpCredentials {
 #[cfg(feature = "security")]
 pub const MCP_UNAUTHENTICATED: rmcp::model::ErrorCode = rmcp::model::ErrorCode(-32001);
 
+/// JSON-RPC error code for MCP authorization failures: the caller
+/// authenticated but holds none of the tool's required RBAC roles
+/// (mirrors gRPC `Status::permission_denied`).
+pub const MCP_FORBIDDEN: rmcp::model::ErrorCode = rmcp::model::ErrorCode(-32003);
+
 /// MCP server that dispatches to tools registered via SDForge's inventory.
 ///
 /// This struct implements `rmcp::handler::server::ServerHandler` so it can be
@@ -285,14 +290,17 @@ impl SdForgeMcpServer {
     /// The programmatic counterpart to `ServerHandler::call_tool` for
     /// in-process callers that have already authenticated out of band
     /// (tests, discovery, orchestration): the call passes the **same**
-    /// `enforce_auth` gate as the protocol paths — the verifier rejects
-    /// invalid credentials with `MCP_UNAUTHENTICATED` exactly as it would
-    /// on the wire. Without a verifier it dispatches unchanged.
+    /// `enforce_auth` gate **and** the per-tool RBAC check as the protocol
+    /// paths — the verifier rejects invalid credentials with
+    /// `MCP_UNAUTHENTICATED` and role-guarded tools without a matching
+    /// permission with `MCP_FORBIDDEN`, exactly as on the wire. Without a
+    /// verifier it dispatches unchanged (role-less tools).
     ///
     /// # Errors
     ///
     /// Returns `MCP_UNAUTHENTICATED` when the verifier rejects
-    /// `credentials`, otherwise whatever the tool dispatch returns.
+    /// `credentials`, `MCP_FORBIDDEN` when the tool's role requirement is
+    /// not met, otherwise whatever the tool dispatch returns.
     #[cfg(feature = "security")]
     pub async fn call_tool_with_credentials(
         &self,
@@ -300,7 +308,8 @@ impl SdForgeMcpServer {
         arguments: Option<serde_json::Value>,
         credentials: &McpCredentials,
     ) -> Result<CallToolResult, ErrorData> {
-        self.enforce_auth(Some(credentials)).await?;
+        let auth_ctx = self.enforce_auth(Some(credentials)).await?;
+        self.enforce_rbac(name, &auth_ctx)?;
         self.call_tool_scoped(name, arguments)
     }
 
@@ -330,9 +339,12 @@ impl SdForgeMcpServer {
     /// (`verify_async`) — `ApiKeyVerifier`'s constant-time defense sleeps
     /// the OS thread for up to 100µs and must not stall a tokio worker.
     #[cfg(feature = "security")]
-    async fn enforce_auth(&self, credentials: Option<&McpCredentials>) -> Result<(), ErrorData> {
+    async fn enforce_auth(
+        &self,
+        credentials: Option<&McpCredentials>,
+    ) -> Result<Option<crate::security::AuthContext>, ErrorData> {
         let Some(ref verifier) = self.auth_verifier else {
-            return Ok(());
+            return Ok(None);
         };
         let authorization = credentials.and_then(|c| c.authorization.clone());
         let api_key = credentials.and_then(|c| c.api_key.clone());
@@ -342,8 +354,49 @@ impl SdForgeMcpServer {
             api_key,
         )
         .await
-        .map(|_| ())
+        .map(Some)
         .map_err(|msg| ErrorData::new(MCP_UNAUTHENTICATED, format!("unauthenticated: {msg}"), None))
+    }
+
+    /// Endpoint RBAC for `tools/call` (feature = `security`): a tool that
+    /// declares roles must be invoked by an authenticated identity holding
+    /// at least one of them — mirroring the gRPC per-method `roles` check.
+    /// Fail-safe matrix: no verifier (identity cannot be established) or no
+    /// matching permission → `MCP_FORBIDDEN`; tools without a role
+    /// declaration are unaffected.
+    #[cfg(feature = "security")]
+    fn enforce_rbac(
+        &self,
+        name: &str,
+        auth_ctx: &Option<crate::security::AuthContext>,
+    ) -> Result<(), ErrorData> {
+        let roles = self.find_tool(name).map(|i| i.roles()).unwrap_or(&[]);
+        let authorized =
+            matches!(auth_ctx, Some(ctx) if roles.iter().any(|r| ctx.has_permission(r)));
+        if !roles.is_empty() && !authorized {
+            return Err(ErrorData::new(
+                MCP_FORBIDDEN,
+                format!("forbidden: missing required role: {}", roles.join(", ")),
+                None,
+            ));
+        }
+        Ok(())
+    }
+
+    /// Endpoint RBAC without the `security` feature — fail-safe, mirroring
+    /// the gRPC path: declared roles cannot be verified, so every call to a
+    /// role-guarded tool is denied.
+    #[cfg(not(feature = "security"))]
+    fn enforce_rbac(&self, _name: &str) -> Result<(), ErrorData> {
+        let roles = self.find_tool(_name).map(|i| i.roles()).unwrap_or(&[]);
+        if !roles.is_empty() {
+            return Err(ErrorData::new(
+                MCP_FORBIDDEN,
+                format!("forbidden: missing required role: {}", roles.join(", ")),
+                None,
+            ));
+        }
+        Ok(())
     }
 
     fn call_tool_inner(
@@ -437,19 +490,26 @@ impl ServerHandler for SdForgeMcpServer {
         // verify credentials before any dispatch; the transport adapter
         // extracts header values into `McpCredentials` on the request
         // extensions (absent credentials count as missing and are rejected).
+        // 成功后保留身份供 endpoint RBAC 检查（对齐 gRPC call_with_context）。
         #[cfg(feature = "security")]
-        self.enforce_auth(context.extensions.get::<McpCredentials>())
+        let auth_ctx = self
+            .enforce_auth(context.extensions.get::<McpCredentials>())
             .await?;
 
         // request.name is Cow<'static, str>; use deref via as_ref() to get &str.
         let name: &str = request.name.as_ref();
+
+        // endpoint RBAC（协议对齐 gRPC per-method roles）：声明 roles 的工具
+        // 要求已认证身份持有任一角色 permission；security 关闭时 fail-safe。
+        #[cfg(feature = "security")]
+        self.enforce_rbac(name, &auth_ctx)?;
+        #[cfg(not(feature = "security"))]
+        self.enforce_rbac(name)?;
+
         // request.arguments is Option<JsonObject> (Map<String, Value>); convert to Value.
         let arguments = request.arguments.map(serde_json::Value::Object);
         self.call_tool_scoped(name, arguments)
             .map(CallToolResponse::Complete)
-        // AuthContext note: admission only — per-tool RBAC (roles) is not
-        // enforced on the MCP dimension yet; see docs/SECURITY.md coverage
-        // statement. The sync `call_tool_internal` path fails closed instead.
     }
 }
 

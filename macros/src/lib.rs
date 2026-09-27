@@ -2426,6 +2426,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let mcp_code = if let Some(ref tool_name) = tool_name {
         // Check if any parameter is State or Extension type - MCP tools cannot use state injection
+        let mcp_role_lits: Vec<&str> = extras.auth_roles.iter().map(String::as_str).collect();
         let has_state_param = params
             .iter()
             .any(|p| matches!(p.param_kind, ParamKind::State | ParamKind::Extension));
@@ -2604,12 +2605,17 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #[cfg(feature = "mcp")]
-            sdforge::inventory::submit!(sdforge::mcp::McpToolRegistration::new(
-                #mcp_tool_name,
-                #version,
-                #mcp_create_fn_name,
-                #mcp_metadata_fn_name,
-            ));
+            sdforge::inventory::submit!(
+                sdforge::mcp::McpToolRegistration::new(
+                    #mcp_tool_name,
+                    #version,
+                    #mcp_create_fn_name,
+                    #mcp_metadata_fn_name,
+                )
+                // auth(role = ...) 贯通 MCP 维度（对齐 gRPC roles 注册）：
+                // SdForgeMcpServer::call_tool 按已验证身份的 permission 校验。
+                .with_roles(&[#(#mcp_role_lits),*])
+            );
         }
     } else {
         quote! {}
