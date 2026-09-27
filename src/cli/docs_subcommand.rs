@@ -3,6 +3,8 @@
 //! `docs` 子命令处理。
 //!
 //! 仅当 `docs` feature 启用时编译（`docs` 隐式包含 `cli`）。
+//! **`docs` 是保留子命令名**：dispatch 在查找用户注册前优先拦截该名字
+//! 执行文档生成，下游经 `#[forge(cli = true)]` 注册同名命令将不可达。
 //! 提供 [`docs_subcommand_definition`] 用于在 [`crate::cli::CliBuilder`]
 //! 中注册 `docs` 子命令，以及 [`docs_subcommand`] 用于解析 `clap::ArgMatches`
 //! 后分发到 [`crate::docs::generate_docs`] 或 [`crate::docs::write_docs`]。
@@ -50,9 +52,10 @@ pub fn docs_subcommand_definition() -> clap::Command {
 /// 根据 `--format` 字符串解析出 [`DocFormat`]。
 ///
 /// 用户输入已在 clap 层通过 `value_parser` 限定为 [`FORMAT_VALUES`] 集合。
-/// 未知值只可能来自内建全局 `--format text|json` 的传播（clap 会把顶层
-/// 全局值填入未显式指定 `--format` 的子命令）：`json`/`text` 不是文档
-/// 格式，回落 docs 自身默认 [`DocFormat::All`]——两个开关语义独立。
+/// 此外，内建全局 `--format text|json` 的值会从子命令 matches 穿透读取
+/// （实测 clap 4.6：`prog --format json docs` 时 `sub.get_one("format")`
+/// 返回 `"json"`，即便传播对同 id arg 跳过）——`text`/`json` 不是文档
+/// 格式，显式回落 docs 自身默认 [`DocFormat::All`]，两个开关语义独立。
 fn parse_format(s: &str) -> DocFormat {
     match s {
         "openapi" => DocFormat::OpenApi,
@@ -61,9 +64,11 @@ fn parse_format(s: &str) -> DocFormat {
         "mcp-markdown" => DocFormat::McpMarkdown,
         "all" => DocFormat::All,
         "agent" => DocFormat::Agent,
-        // 全局 --format（text/json）传播进来的值：非文档格式，按 docs
-        // 默认（All）处理。用户给非法文档值仍会被 clap 白名单拒绝。
-        _ => DocFormat::All,
+        // 全局 --format 的穿透值：非文档格式，按 docs 默认（All）处理。
+        "text" | "json" => DocFormat::All,
+        // clap value_parser 白名单之外的值不可达；出现即说明扩展
+        // FORMAT_VALUES 时遗漏了 match 分支——loud fail 而非静默产 All。
+        _ => unreachable!("clap value_parser 已限定输入集合，得到非法值: {}", s),
     }
 }
 

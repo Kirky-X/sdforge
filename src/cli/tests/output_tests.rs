@@ -113,3 +113,14 @@ fn text_render_error_keeps_error_prefix() {
     assert!(rendered.starts_with("error: "), "got: {rendered}");
     assert!(rendered.contains("Resource not found"));
 }
+
+/// CLI text 认证失败文案保持历史小写形态（`error: authentication
+/// failed: …`），与 HTTP 共用的 Display（大写 A）隔离——按旧字符串
+/// 匹配的脚本不因本 feature 破坏。
+#[test]
+fn auth_failure_text_keeps_lowercase_compat() {
+    assert_eq!(
+        crate::cli::output::auth_failure_text("missing bearer token"),
+        "error: authentication failed: missing bearer token"
+    );
+}

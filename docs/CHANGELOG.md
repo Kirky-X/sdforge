@@ -122,10 +122,20 @@
   `sdforge.agent-knowledge/v1`）——程序标识、输出契约（`--format` 取值/退出码/
   流约定）、全部注册 CLI 子命令（含参数元数据）与 MCP 工具（含 input_schema，
   `mcp` feature 启用时），能力清单直接读 inventory 注册表，注册即入包。
+  知识包 `output_contract` 数值派生自 `cli::output` 公开常量（FORMAT_VALUES/
+  FORMAT_DEFAULT/退出码），并以一致性测试锁定与 clap 白名单/OutputFormat::default
+  的同源关系；`exceptions` 段显式声明 `docs` 子命令的独立 `--format` 语义与
+  自输出行为（全局 `--format json` 不包装其输出），`null_return` 段登记
+  handler 返回 null 时不产生 stdout 输出的哨兵行为；`docs` 为**保留子命令名**
+  （dispatch 先于用户注册拦截），`program` 段的 `name_semantics` 字段声明
+  名字来源，宿主可用 `generate_agent_knowledge_for_host` 传入 `with_name`
+  的二进制名。
   附带修复：`docs` 子命令此前只有 clap 定义、`execute` 分发路径未接通
   （`prog docs` 会落 NotFound）——现于 dispatch 接通，docs 自行完成输出
-  （返回 `Value::Null` 哨兵，execute 跳过渲染）；全局 `--format` 传播进 docs
-  的 `text`/`json` 值按 docs 默认（All）处理，两开关语义独立。
+  （返回 `Value::Null` 哨兵，execute 跳过渲染）；全局 `--format` 穿透到 docs
+  子命令 matches 的 `text`/`json` 值按 docs 默认（All）处理（clap 白名单外的
+  非法值仍 loud-fail），两开关语义独立。CLI text 模式认证失败文案保持历史
+  小写形态 `error: authentication failed: …`（与 HTTP 共用的 Display 隔离）。
 - **幂等重放防护**：新增 `idempotency` feature（已入 `full`）。HTTP 中间件支持
   `Idempotency-Key` 头（POST/PUT/PATCH）：重放缓存响应（附 `Idempotency-Replayed: true`）、
   并发在途 409；gRPC 支持 `idempotency-key` metadata（在途 `ALREADY_EXISTS`）。

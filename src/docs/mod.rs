@@ -71,7 +71,7 @@ pub enum DocError {
 
 mod agent_knowledge;
 mod docs_impl;
-pub use agent_knowledge::generate_agent_knowledge;
+pub use agent_knowledge::{generate_agent_knowledge, generate_agent_knowledge_for_host};
 pub use docs_impl::{generate_docs, write_docs};
 
 #[cfg(test)]

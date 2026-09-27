@@ -218,6 +218,9 @@ impl CliBuilder {
     ///   other → JSON to stdout. On error, `error: <e>` is printed to stderr.
     /// - `json`：successes as compact JSON and errors as `UnifiedError` JSON,
     ///   both on stdout.
+    /// - handler 返回 `Value::Null` 时不产生任何输出（`Null` 亦被 dispatch
+    ///   用作「子命令已自行输出」哨兵，见 `cli::dispatch::dispatch`）——
+    ///   需要区分业务空结果的调用方应返回 `Value::Object` 等具体形状。
     ///
     /// Exits with code 0 on success, 1 on error. The `-> !` return type
     /// guarantees the function never returns normally.
@@ -235,7 +238,16 @@ impl CliBuilder {
         // reaching a registered handler.
         #[cfg(feature = "security")]
         if let Some(reason) = self.authentication_failure() {
-            format.emit_error(&ApiError::AuthenticationFailed { reason });
+            // text 保持历史小写文案（兼容按字符串匹配的脚本）；
+            // json 走 UnifiedError 形状（AuthenticationFailed → UNAUTHORIZED）。
+            match format {
+                crate::cli::output::OutputFormat::Text => {
+                    eprintln!("{}", crate::cli::output::auth_failure_text(&reason));
+                }
+                crate::cli::output::OutputFormat::Json => {
+                    format.emit_error(&ApiError::AuthenticationFailed { reason });
+                }
+            }
             std::process::exit(1);
         }
         match crate::cli::dispatch::dispatch(&matches, self.state).await {

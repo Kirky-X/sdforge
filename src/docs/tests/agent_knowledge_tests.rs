@@ -125,3 +125,132 @@ fn agent_knowledge_lists_mcp_tools() {
         );
     }
 }
+
+// ============================================================================
+// 契约一致性锁定（审查修复）：知识包 output_contract 与 cli::output 实现
+// 同源，任一侧漂移都会在此失败。
+// ============================================================================
+
+/// output_contract 的 values/default 必须与 format_arg() 的 clap 白名单、
+/// OutputFormat::default() 完全一致（防手写副本静默漂移）。
+#[test]
+fn output_contract_matches_format_arg_whitelist_and_default() {
+    let raw = generate_docs(DocFormat::Agent).expect("agent knowledge must generate");
+    let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    let contract = &v["output_contract"];
+
+    // values 与 format_arg() 的 clap possible values 一致
+    let arg = crate::cli::output::format_arg();
+    let possible = arg.get_possible_values();
+    let mut whitelist: Vec<&str> = possible.iter().map(|pv| pv.get_name()).collect();
+    whitelist.sort_unstable();
+    // 常量单一事实源：declared 与 FORMAT_VALUES 常量严格一致（声明序）
+    assert_eq!(
+        contract["values"],
+        serde_json::json!(crate::cli::output::FORMAT_VALUES)
+    );
+    let mut declared: Vec<&str> = contract["values"]
+        .as_array()
+        .expect("values must be an array")
+        .iter()
+        .map(|v| v.as_str().expect("values entries must be strings"))
+        .collect();
+    declared.sort_unstable();
+    assert_eq!(
+        declared, whitelist,
+        "contract values must track the clap whitelist"
+    );
+
+    // default_format 与 OutputFormat::default() 一致
+    let default_str = match crate::cli::output::OutputFormat::default() {
+        crate::cli::output::OutputFormat::Text => "text",
+        crate::cli::output::OutputFormat::Json => "json",
+    };
+    assert_eq!(contract["default_format"], serde_json::json!(default_str));
+    assert_eq!(
+        contract["default_format"],
+        serde_json::json!(crate::cli::output::FORMAT_DEFAULT)
+    );
+
+    // 退出码与常量一致
+    assert_eq!(
+        contract["success_exit_code"],
+        serde_json::json!(crate::cli::output::SUCCESS_EXIT_CODE)
+    );
+    assert_eq!(
+        contract["error_exit_code"],
+        serde_json::json!(crate::cli::output::ERROR_EXIT_CODE)
+    );
+
+    // format_flag 与 FORMAT_ARG 派生一致
+    assert_eq!(
+        contract["format_flag"],
+        serde_json::json!(format!("--{}", crate::cli::output::FORMAT_ARG))
+    );
+}
+
+/// docs 子命令的例外必须显式声明：独立 --format 语义、自输出行为、
+/// 内建条目进入 commands 清单——机器消费方不会误当普通命令结果解析。
+#[test]
+fn output_contract_declares_docs_exceptions() {
+    let raw = generate_docs(DocFormat::Agent).expect("agent knowledge must generate");
+    let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    let contract = &v["output_contract"];
+
+    // null 哨兵行为登记
+    assert_eq!(
+        contract["null_return"],
+        serde_json::json!("no output on stdout")
+    );
+
+    // exceptions 声明 docs 的独立 --format 与自输出
+    let exceptions = contract["exceptions"].as_array().expect("exceptions array");
+    let docs_exc = exceptions
+        .iter()
+        .find(|e| e["command"] == serde_json::json!("docs"))
+        .expect("docs exception must be declared");
+    assert_eq!(docs_exc["independent_format_flag"], serde_json::json!(true));
+    assert_eq!(docs_exc["self_emitted_output"], serde_json::json!(true));
+}
+
+/// docs feature 下内建 docs 子命令进入 commands 清单（built_in 标记 +
+/// 独立 format 参数取值），Agent 可见实际 CLI 面。
+#[test]
+#[cfg(feature = "docs")]
+fn commands_include_builtin_docs_entry() {
+    let raw = generate_docs(DocFormat::Agent).expect("agent knowledge must generate");
+    let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    let docs_entry = v["commands"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == serde_json::json!("docs"))
+        .expect("built-in docs command must be listed");
+    assert_eq!(docs_entry["built_in"], serde_json::json!(true));
+    let args = docs_entry["args"].as_array().unwrap();
+    let format_arg_entry = args.iter().find(|a| a["name"] == "format").unwrap();
+    assert_eq!(
+        format_arg_entry["values"],
+        serde_json::json!([
+            "openapi",
+            "swagger",
+            "cli-markdown",
+            "mcp-markdown",
+            "all",
+            "agent"
+        ])
+    );
+}
+
+/// generate_agent_knowledge_for_host：宿主标识进入 program 段，
+/// name_semantics 字段声明名字来源语义。
+#[test]
+fn host_variant_uses_provided_identity() {
+    let v = crate::docs::generate_agent_knowledge_for_host("my-tool", "My tool description");
+    assert_eq!(v["program"]["name"], serde_json::json!("my-tool"));
+    assert_eq!(
+        v["program"]["description"],
+        serde_json::json!("My tool description")
+    );
+    assert!(v["program"]["name_semantics"].as_str().is_some());
+}

@@ -96,8 +96,10 @@ pub async fn dispatch(
 
     // docs 子命令自行完成输出（文档写文件 / 打印 stdout），不走
     // HandlerFn 分发；返回 `Value::Null` 作为「无返回值」哨兵——execute
-    // 据此跳过结果渲染。未接通时 `docs --format …` 会落 NotFound，
-    // 文档生成对 CLI 使用者不可达。
+    // 据此跳过结果渲染（副作用：handler 返回 null 同样无输出，已在
+    // CliBuilder::execute doc 声明）。未接通时 `docs --format …` 会落
+    // NotFound，文档生成对 CLI 使用者不可达。注意 `docs` 是保留子命令
+    // 名（本分支先于用户注册查找），下游注册同名命令不可达。
     #[cfg(feature = "docs")]
     if name == "docs" {
         crate::cli::docs_subcommand::docs_subcommand(sub)?;

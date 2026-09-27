@@ -23,6 +23,19 @@ use crate::error::UnifiedError;
 /// `--format` 参数在 clap 中的 arg id / long 名。
 pub const FORMAT_ARG: &str = "format";
 
+/// `--format` 的全部合法取值（单一事实源：`format_arg()` 的白名单与
+/// Agent 知识包的 `output_contract.values` 都从这里派生）。
+pub const FORMAT_VALUES: [&str; 2] = ["text", "json"];
+
+/// 默认取值（[`OutputFormat::default`] 对应的命令行字符串）。
+pub const FORMAT_DEFAULT: &str = "text";
+
+/// 成功退出码。
+pub const SUCCESS_EXIT_CODE: i32 = 0;
+
+/// 错误退出码。
+pub const ERROR_EXIT_CODE: i32 = 1;
+
 /// `--format` 的帮助文案（`build()` 挂载时使用）。
 pub const FORMAT_HELP: &str = "Output format: text (human-readable, default) or json (machine-readable; errors as UnifiedError JSON on stdout)";
 
@@ -87,7 +100,17 @@ pub(crate) fn format_arg() -> clap::Arg {
     clap::Arg::new(FORMAT_ARG)
         .long(FORMAT_ARG)
         .global(true)
-        .value_parser(["text", "json"])
-        .default_value("text")
+        .value_parser(FORMAT_VALUES)
+        .default_value(FORMAT_DEFAULT)
         .help(FORMAT_HELP)
+}
+
+/// CLI text 模式的认证失败文案（历史兼容）。
+///
+/// `ApiError::AuthenticationFailed` 的 `Display` 是大写
+/// `Authentication failed: …`（HTTP 共用，不可改）；CLI 历史输出为小写
+/// `authentication failed: …`，按旧字符串匹配的脚本依赖该形态，故 CLI
+/// text 路径显式构造小写文案（json 模式走 UnifiedError，不受影响）。
+pub(crate) fn auth_failure_text(reason: &str) -> String {
+    format!("error: authentication failed: {reason}")
 }

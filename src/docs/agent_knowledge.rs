@@ -8,18 +8,40 @@
 //!
 //! 能力清单直接读 `inventory` 注册表（`CliCommandRegistration` /
 //! `McpToolRegistration`），与 `CliBuilder::build()` / `get_mcp_tools()`
-//! 同源——注册即入包，无独立维护面。
+//! 同源——注册即入包，无独立维护面。输出契约的数值（取值/默认/退出码）
+//! 引用 `cli::output` 的公开常量，与实现保持编译期同源；`docs` 子命令的
+//! 独立 `--format` 语义与自输出行为在 `output_contract.exceptions` 显式
+//! 声明，解析方不会把它误当普通命令结果。
 
 use serde_json::{Value, json};
 
+use crate::cli::output::{
+    ERROR_EXIT_CODE, FORMAT_ARG, FORMAT_DEFAULT, FORMAT_VALUES, SUCCESS_EXIT_CODE,
+};
+
 /// 生成 Agent 知识包 JSON（紧凑单行）。
+///
+/// `program.name` 为 sdforge 库名（编译期 `CARGO_PKG_NAME`）；宿主二进制
+/// 名可能不同（`CliBuilder::with_name`），需要宿主标识的下游改用
+/// [`generate_agent_knowledge_for_host`]。
 pub fn generate_agent_knowledge() -> Value {
+    generate_agent_knowledge_for_host(env!("CARGO_PKG_NAME"), "SDForge multi-protocol CLI")
+}
+
+/// 以宿主程序标识生成 Agent 知识包。
+///
+/// 宿主应用用 `CliBuilder::with_name` 自定义二进制名后，据此传入同一
+/// 名字，使知识包 `program` 段与实际二进制一致。
+pub fn generate_agent_knowledge_for_host(name: &str, description: &str) -> Value {
     json!({
         "schema": "sdforge.agent-knowledge/v1",
         "program": {
-            "name": env!("CARGO_PKG_NAME"),
+            "name": name,
+            "description": description,
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "SDForge multi-protocol CLI",
+            // name 语义：无参版本为 sdforge 库名；本变体为宿主传入的
+            // 二进制名。声明字段避免消费方混淆。
+            "name_semantics": "host binary name (or the sdforge library name when generated without arguments)",
         },
         "output_contract": output_contract(),
         "commands": cli_commands(),
@@ -27,27 +49,43 @@ pub fn generate_agent_knowledge() -> Value {
     })
 }
 
-/// `--format` 输出契约（与 `crate::cli::output` 的实现一致——
-/// 修改契约时同步更新该模块与文档）。
+/// `--format` 输出契约（数值派生自 `cli::output` 公开常量——与实现
+/// 编译期同源，无手写副本）。
 fn output_contract() -> Value {
     json!({
-        "format_flag": "--format",
-        "values": ["text", "json"],
-        "default_format": "text",
-        "success_exit_code": 0,
-        "error_exit_code": 1,
+        "format_flag": format!("--{FORMAT_ARG}"),
+        "values": FORMAT_VALUES,
+        "default_format": FORMAT_DEFAULT,
+        "success_exit_code": SUCCESS_EXIT_CODE,
+        "error_exit_code": ERROR_EXIT_CODE,
         "text_success_stream": "stdout",
         "text_error_stream": "stderr",
         "text_error_prefix": "error:",
         "json_success_stream": "stdout",
         "json_error_stream": "stdout",
         "json_error_shape": "UnifiedError",
+        // handler 返回 null（或 docs 等自输出子命令的哨兵）时 stdout
+        // 不产生任何输出——调用方按空输出处理，而非字面 "null"。
+        "null_return": "no output on stdout",
+        // 例外声明：docs 子命令拥有独立的 --format（文档格式，非本契约
+        // 的取值集合），且其输出为生成的文档文本——即使全局 --format json
+        // 也不会被 JSON 渲染包装；解析 `docs` 的 stdout 时按文档产物处理。
+        "exceptions": [
+            {
+                "command": "docs",
+                "independent_format_flag": true,
+                "self_emitted_output": true,
+                "note": "docs emits generated documentation text itself; global --format json does not wrap its output",
+            }
+        ],
     })
 }
 
 /// 全部注册的 CLI 子命令（`State` 参数不外露——它们由宿主注入）。
+/// `docs` feature 启用时追加内建 `docs` 子命令的静态条目（它不经
+/// inventory 注册，但属于实际 CLI 面，Agent 必须可见）。
 fn cli_commands() -> Value {
-    let commands: Vec<Value> = inventory::iter::<crate::cli::CliCommandRegistration>()
+    let mut commands: Vec<Value> = inventory::iter::<crate::cli::CliCommandRegistration>()
         .map(|reg| {
             let args: Vec<Value> = reg
                 .args
@@ -75,6 +113,32 @@ fn cli_commands() -> Value {
             })
         })
         .collect();
+
+    #[cfg(feature = "docs")]
+    commands.push(json!({
+        "name": "docs",
+        "version": env!("CARGO_PKG_VERSION"),
+        "description": "Generate documentation files",
+        "built_in": true,
+        "args": [
+            {
+                "name": "format",
+                "description": "Documentation format (independent of the global --format output contract)",
+                "kind": "body",
+                "required": false,
+                "default": "all",
+                "values": ["openapi", "swagger", "cli-markdown", "mcp-markdown", "all", "agent"],
+            },
+            {
+                "name": "output",
+                "description": "Output file path (stdout if omitted)",
+                "kind": "body",
+                "required": false,
+                "default": null,
+            },
+        ],
+    }));
+
     Value::Array(commands)
 }
 
