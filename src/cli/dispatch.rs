@@ -33,6 +33,15 @@ pub const CLI_API_KEY_ENV: &str = "SDFORGE_API_KEY";
 /// offered to the same [`GrpcAuthVerifier`] port the gRPC interceptor and
 /// the MCP `call_tool` gate consume; `Err` carries the rejection reason.
 ///
+/// When both variables are set, the configured verifier consumes only the
+/// channel it understands (`BearerVerifier` reads the bearer token and
+/// ignores the API key, `ApiKeyVerifier` the reverse) — the ignored
+/// variable is silently unused, mirroring gRPC metadata semantics.
+///
+/// Environment variables are readable by same-user child processes
+/// (`/proc/<pid>/environ`) and leak into CI logs / `set -x` traces —
+/// prefer short-lived credentials and CI secret masking.
+///
 /// # Errors
 ///
 /// Returns the verifier's rejection reason when no credential is present or
@@ -55,6 +64,13 @@ pub fn authenticate_cli(
 /// `HandlerArgs` map from the subcommand matches (Path/Body args only;
 /// State args are skipped and resolved by the handler via `downcast_state`),
 /// and invokes the handler with the supplied `state`.
+///
+/// # Security boundary
+///
+/// This is the raw dispatch funnel: it performs **no** authentication even
+/// when a verifier is wired — credentials gate [`CliBuilder::execute`],
+/// which is the CLI process entry. Call this only from trusted in-process
+/// code.
 ///
 /// Returns `(command_name, Value)` on success — the caller decides how to
 /// format the value (typically via `extract_value`).

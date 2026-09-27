@@ -3,18 +3,38 @@
 //! Non-HTTP protocol authentication port.
 //!
 //! Protocol-neutral verifier consumed by the gRPC interceptor
-//! (`SdForgeGrpcService::with_auth_interceptor`) — and usable by any other
-//! transport — reusing the same credential stores as the HTTP stack
-//! (`BearerAuth` JWT / `SdForgeApiKeyAuth` API keys).
+//! (`SdForgeGrpcService::with_auth_interceptor`), the MCP `call_tool` gate
+//! (`SdForgeMcpServer::with_auth_verifier`) and the CLI gate
+//! (`CliBuilder::with_auth_verifier`) — reusing the same credential stores
+//! as the HTTP stack (`BearerAuth` JWT / `SdForgeApiKeyAuth` API keys).
+//! [`ProtocolAuthVerifier`] is the recommended protocol-neutral alias.
+//!
+//! Each protocol entry wires its verifier manually (no shared config pass);
+//! [`make_verifier`] builds one from an [`AuthConfig`] when a single
+//! construction point is desired.
 
-use crate::security::{AuthContext, AuthMetadata, BearerAuth, SdForgeApiKeyAuth};
+use crate::config::AuthConfig;
+use crate::security::{AuthConfigError, AuthContext, AuthMetadata, BearerAuth, SdForgeApiKeyAuth};
 use std::sync::Arc;
+
+/// Protocol-neutral alias for [`GrpcAuthVerifier`].
+///
+/// The `Grpc` prefix is historical (the port debuted on the gRPC
+/// interceptor); new code and documentation should prefer this name.
+pub type ProtocolAuthVerifier = dyn GrpcAuthVerifier;
 
 /// Verifies transport credentials for non-HTTP protocols.
 ///
 /// `authorization` is the raw `Authorization` header value (e.g.
 /// `Bearer <jwt>`); `api_key` is the raw API key (e.g. from `x-api-key`).
 /// `Err(message)` rejects the request.
+///
+/// # Contract on the `Err` payload
+///
+/// The rejection reason is echoed to the remote peer (gRPC
+/// `Status::unauthenticated`, MCP `-32001` error data): it must be a fixed,
+/// low-detail phrase (`missing bearer token`, `invalid api key`, …) and
+/// MUST NOT contain credential material or other sensitive details.
 ///
 /// On success the verifier returns the caller's [`AuthContext`] so callers
 /// can enforce **authorization** (RBAC roles) — the previous
@@ -27,6 +47,71 @@ pub trait GrpcAuthVerifier: Send + Sync {
         authorization: Option<&str>,
         api_key: Option<&str>,
     ) -> Result<AuthContext, String>;
+}
+
+/// Verify credentials off the async worker thread.
+///
+/// `ApiKeyVerifier`'s constant-time defense sleeps the OS thread for up to
+/// 100µs (`SdForgeApiKeyAuth::validate_key`); running `verify` directly
+/// inside an async handler would block a tokio worker. Async entry points
+/// (gRPC interceptor, MCP `call_tool`) route through this helper so the
+/// sleep happens on the blocking pool. The verdict is identical to the
+/// synchronous `verify`.
+///
+/// # Errors
+///
+/// Returns the verifier's rejection reason, or an error description when
+/// the blocking task panicked.
+#[cfg(feature = "security")]
+pub async fn verify_async(
+    verifier: Arc<dyn GrpcAuthVerifier>,
+    authorization: Option<String>,
+    api_key: Option<String>,
+) -> Result<AuthContext, String> {
+    tokio::task::spawn_blocking(move || {
+        verifier.verify(authorization.as_deref(), api_key.as_deref())
+    })
+    .await
+    .map_err(|e| format!("authentication worker failed: {e}"))?
+}
+
+/// Build a verifier from an [`AuthConfig`] (single construction point for
+/// manually-wired protocol entries).
+///
+/// - `Jwt` → [`BearerVerifier`] over the configured secret.
+/// - `ApiKey` → [`ApiKeyVerifier`] over a store seeded from the configured
+///   keys (empty key list is rejected, mirroring the HTTP build's explicit
+///   error for an unusable auth configuration).
+/// - `None` → error: there is no authentication to enforce; wiring a
+///   verifier for it would be dead code.
+///
+/// # Errors
+///
+/// Returns [`AuthConfigError`] for disabled auth, empty key lists, or
+/// secrets failing complexity validation.
+pub fn make_verifier(config: &AuthConfig) -> Result<Arc<dyn GrpcAuthVerifier>, AuthConfigError> {
+    match config {
+        AuthConfig::None => Err(AuthConfigError::InvalidSecret(
+            "authentication is disabled (AuthConfig::None); nothing to enforce".to_string(),
+        )),
+        AuthConfig::Jwt { secret } => Ok(Arc::new(BearerVerifier::from_secret(secret.clone())?)),
+        AuthConfig::ApiKey {
+            header_name: _,
+            prefix,
+            keys,
+        } => {
+            if keys.is_empty() {
+                return Err(AuthConfigError::InvalidSecret(
+                    "api key auth configured without any seeded keys".to_string(),
+                ));
+            }
+            let store = Arc::new(SdForgeApiKeyAuth::new());
+            for seed in keys {
+                store.add_key(seed.key.clone(), seed.permissions.clone());
+            }
+            Ok(Arc::new(ApiKeyVerifier::new(store, prefix.clone())))
+        }
+    }
 }
 
 /// JWT bearer verifier backed by [`BearerAuth`] (same secret/validation as
@@ -115,7 +200,9 @@ impl GrpcAuthVerifier for ApiKeyVerifier {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{ApiKeyVerifier, BearerVerifier, GrpcAuthVerifier, make_verifier, verify_async};
+    use crate::security::SdForgeApiKeyAuth;
+    use std::sync::Arc;
 
     fn jwt_verifier() -> BearerVerifier {
         BearerVerifier::from_secret("Grpc-Test-Secret-Key-0123456789-AbCdEf").unwrap()
@@ -188,5 +275,60 @@ mod tests {
             .verify(None, Some("sk_secret-key-1"))
             .expect("valid key must authenticate");
         assert!(ctx.has_permission("admin"));
+    }
+
+    /// verify_async 与同步 verify 判定一致（有效放行/无效拒绝），
+    /// 且不阻塞调用方 worker 线程（ApiKeyVerifier 恒定时间防御会 sleep）。
+    #[tokio::test]
+    async fn verify_async_preserves_verifier_verdict() {
+        let store = Arc::new(SdForgeApiKeyAuth::new());
+        store.add_key("async-key-1".to_string(), vec!["read".to_string()]);
+        let verifier: Arc<dyn GrpcAuthVerifier> = Arc::new(ApiKeyVerifier::new(store, "sk_"));
+
+        assert!(
+            verify_async(Arc::clone(&verifier), None, None)
+                .await
+                .is_err()
+        );
+        assert!(
+            verify_async(Arc::clone(&verifier), None, Some("sk_wrong".into()))
+                .await
+                .is_err()
+        );
+        let ctx = verify_async(verifier, None, Some("sk_async-key-1".into()))
+            .await
+            .expect("valid key must authenticate off-thread");
+        assert!(ctx.has_permission("read"));
+    }
+
+    /// make_verifier：JWT 配置 → BearerVerifier；API key 配置 → 种子键
+    /// 预载的 ApiKeyVerifier；None → 显式报错（fail-closed，不返回空 verifier）。
+    #[test]
+    fn make_verifier_builds_from_auth_config() {
+        use crate::config::AuthConfig;
+
+        let jwt = make_verifier(&AuthConfig::Jwt {
+            // 测试用假密钥，非真实凭据
+            secret: "Make-Verifier-Secret-Key-0123456789".to_string(), // pragma: allowlist secret
+        })
+        .expect("jwt config must build a bearer verifier");
+        assert!(jwt.verify(Some("Bearer junk"), None).is_err());
+
+        let api_key = make_verifier(&AuthConfig::ApiKey {
+            header_name: "x-api-key".to_string(),
+            prefix: "sk_".to_string(),
+            keys: vec![crate::config::ApiKeySeed {
+                key: "seeded-key-1".to_string(),
+                permissions: vec!["admin".to_string()],
+            }],
+        })
+        .expect("api key config must build a seeded verifier");
+        assert!(api_key.verify(None, Some("sk_unknown")).is_err());
+        let ctx = api_key
+            .verify(None, Some("sk_seeded-key-1"))
+            .expect("seeded key must authenticate");
+        assert!(ctx.has_permission("admin"));
+
+        assert!(make_verifier(&AuthConfig::None).is_err());
     }
 }

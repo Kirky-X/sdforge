@@ -55,7 +55,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| 认证 | API Key 与 JWT Bearer Token 认证（`ApiKeyAuth` / `BearerAuth`，含 `auth_middleware` 中间件）；非 HTTP 协议入口经同一 `GrpcAuthVerifier` 端口复用同一凭据库——gRPC 拦截器、WS 握手、MCP `call_tool`（凭据经 `McpCredentials` 注入请求 extensions）、CLI `execute`（`SDFORGE_TOKEN` / `SDFORGE_API_KEY` 环境凭据） |
+| 认证 | API Key 与 JWT Bearer Token 认证（`ApiKeyAuth` / `BearerAuth`，含 `auth_middleware` 中间件）。非 HTTP 入口复用同一凭据库：gRPC 拦截器与 MCP `call_tool`/`list_tools`、CLI `execute` 经 `GrpcAuthVerifier` 端口（推荐别名 `ProtocolAuthVerifier`，`make_verifier(&AuthConfig)` 提供统一构建点，各入口**手动接线**）；WS 握手走 `WebSocketConfig` 内嵌 `auth`/`api_key_auth` 直接校验（同一凭据库、独立路径，不经该端口）。MCP 凭据由传输适配层经 `McpCredentials::from_headers` 注入 JSON-RPC extensions——未注入时受门控调用全部拒绝（内建 stdio 传输无法携带凭据）。**覆盖边界：MCP/CLI 仅认证不授权**，`#[forge(auth(role = ...))]` 仅 HTTP/gRPC 生效 |
 | 限流 | 基于 limiteron 的按连接 / 按 IP 限流（`ratelimit` 核心与 `ratelimit-http` Tower 中间件） |
 | 安全头 | 标准安全响应头（CORS、CSP 等，`SecurityHeaders`） |
 | 审计日志 | 安全事件审计追踪（`AuditLogger`，支持 HMAC-SHA256 签名防篡改） |

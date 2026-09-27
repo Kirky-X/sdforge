@@ -220,12 +220,26 @@ impl SdForgeGrpcService {
     ) -> Result<Response<CallResponse>, Status> {
         // verify credentials before any dispatch; 成功后保留身份供 RBAC 检查
         // （此前 `Result<(), _>` 把身份丢弃，gRPC 只能认证不能授权）。
+        // 走 verify_async：ApiKeyVerifier 恒定时间防御会 sleep OS 线程，
+        // 不能阻塞 tokio worker（与 MCP call_tool 门同一通路）。
         #[cfg(feature = "security")]
         let auth_ctx = if let Some(ref verifier) = self.auth_interceptor {
             let metadata = request.metadata();
-            let authorization = metadata.get("authorization").and_then(|v| v.to_str().ok());
-            let api_key = metadata.get("x-api-key").and_then(|v| v.to_str().ok());
-            match verifier.verify(authorization, api_key) {
+            let authorization = metadata
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string);
+            let api_key = metadata
+                .get("x-api-key")
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string);
+            match crate::security::grpc_auth::verify_async(
+                std::sync::Arc::clone(verifier),
+                authorization,
+                api_key,
+            )
+            .await
+            {
                 Ok(ctx) => Some(ctx),
                 Err(msg) => return Err(Status::unauthenticated(msg)),
             }

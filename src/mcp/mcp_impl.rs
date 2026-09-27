@@ -56,6 +56,15 @@ pub fn build() -> SdForgeMcpServer {
 /// and `ServiceExt::serve()`, so downstream crates do not need to depend on
 /// `rmcp` directly.
 ///
+/// # Authentication caveat
+///
+/// The stdio transport carries no headers, so it has no channel for
+/// [`McpCredentials`]: a server built with
+/// `SdForgeMcpServer::with_auth_verifier` will reject **every** `call_tool`
+/// / `list_tools` served here. This guards with a startup warning; for
+/// authenticated MCP endpoints serve over a transport adapter that injects
+/// credentials (see the [`McpCredentials`] docs).
+///
 /// # Errors
 ///
 /// Returns an error if the server fails to start or the service encounters
@@ -75,6 +84,14 @@ pub fn build() -> SdForgeMcpServer {
 pub async fn serve_stdio(
     server: SdForgeMcpServer,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    #[cfg(feature = "security")]
+    if server.auth_verifier.is_some() {
+        log::warn!(
+            "serve_stdio: an auth verifier is configured but the stdio transport cannot \
+             carry transport credentials — every call_tool/list_tools will be rejected. \
+             Serve authenticated MCP over a transport adapter that injects McpCredentials."
+        );
+    }
     use rmcp::ServiceExt;
     let transport = rmcp::transport::stdio();
     let service = server.serve(transport).await?;

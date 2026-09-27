@@ -115,3 +115,40 @@ fn builder_with_verifier_chains_and_builds() {
         .build();
     assert_eq!(cmd.get_name(), "auth_cli");
 }
+
+/// execute 的认证 gate：verifier 已配置且凭据缺失 → Some(拒绝原因)，
+/// execute 据此走 error: + exit(1) 通道。
+#[test]
+#[serial]
+fn authentication_failure_reports_missing_credentials() {
+    clear_credentials();
+    let builder = CliBuilder::new().with_auth_verifier(Arc::new(jwt_verifier()));
+    assert_eq!(
+        builder.authentication_failure().as_deref(),
+        Some("missing bearer token"),
+        "configured verifier + absent credentials must yield a rejection"
+    );
+    clear_credentials();
+}
+
+/// gate 三态：无 verifier → None（行为不变）；有效凭据 → None（放行）。
+#[test]
+#[serial]
+fn authentication_failure_passes_through_when_allowed() {
+    clear_credentials();
+    assert!(
+        CliBuilder::new().authentication_failure().is_none(),
+        "no verifier → no gate"
+    );
+
+    // edition 2024：env 变更属 unsafe（进程全局状态），参照 audit 测试先例
+    unsafe {
+        std::env::set_var(CLI_TOKEN_ENV, mint_jwt());
+    }
+    let builder = CliBuilder::new().with_auth_verifier(Arc::new(jwt_verifier()));
+    assert!(
+        builder.authentication_failure().is_none(),
+        "valid credentials → run proceeds"
+    );
+    clear_credentials();
+}

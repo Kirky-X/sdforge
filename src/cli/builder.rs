@@ -116,6 +116,18 @@ impl CliBuilder {
     /// gRPC interceptor and the MCP `call_tool` gate. On failure the run is
     /// rejected through the standard `error: …` + exit(1) channel before
     /// any dispatch.
+    ///
+    /// # Exposure notes
+    ///
+    /// - Process environment variables are readable by same-user child
+    ///   processes (`/proc/<pid>/environ`) and leak easily into CI logs,
+    ///   `set -x` traces and crash reports — prefer short-lived credentials
+    ///   and secret masking in CI.
+    /// - Authentication only guards [`Self::execute`]; dispatching directly
+    ///   through `cli::dispatch::dispatch` performs **no** authentication
+    ///   (in-process library path).
+    /// - Wiring is manual per protocol entry; [`crate::security::
+    ///   grpc_auth::make_verifier`] builds a verifier from an `AuthConfig`.
     #[cfg(feature = "security")]
     #[must_use]
     pub fn with_auth_verifier(
@@ -124,6 +136,19 @@ impl CliBuilder {
     ) -> Self {
         self.auth_verifier = Some(verifier);
         self
+    }
+
+    /// Evaluate the authentication gate without running the CLI (feature =
+    /// `security`).
+    ///
+    /// `Some(reason)` reproduces exactly when [`Self::execute`] would reject
+    /// with `error: authentication failed: …` + exit(1); `None` proceeds to
+    /// dispatch. Kept as a pure function so the gate's wiring is testable
+    /// without spawning the process (`execute` is `-> !`).
+    #[cfg(feature = "security")]
+    pub(crate) fn authentication_failure(&self) -> Option<String> {
+        let verifier = self.auth_verifier.as_ref()?;
+        crate::cli::dispatch::authenticate_cli(verifier.as_ref()).err()
     }
 
     /// Borrow the injected application state, if any.
@@ -191,9 +216,7 @@ impl CliBuilder {
         // reuses the standard error channel so failures exit(1) without
         // reaching a registered handler.
         #[cfg(feature = "security")]
-        if let Some(ref verifier) = self.auth_verifier
-            && let Err(reason) = crate::cli::dispatch::authenticate_cli(verifier.as_ref())
-        {
+        if let Some(reason) = self.authentication_failure() {
             eprintln!("error: authentication failed: {reason}");
             std::process::exit(1);
         }

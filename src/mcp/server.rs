@@ -33,11 +33,21 @@ pub const MAX_ARGUMENTS_SIZE_BYTES: usize = 0x10_0000;
 
 /// Transport credentials for MCP requests (feature = `security`).
 ///
-/// A transport adapter (e.g. the MCP 2026-07-28 stateless HTTP layer, which
-/// owns the raw `Authorization` / `x-api-key` headers) extracts the credential
-/// header values and inserts this struct into the rmcp
-/// `RequestContext.extensions`; [`SdForgeMcpServer::call_tool`] reads it back
-/// when an auth verifier is attached. Mirrors the gRPC interceptor's
+/// sdforge does **not** ship an MCP transport that terminates HTTP itself —
+/// MCP is served via rmcp transports (e.g. stdio) or a downstream-owned
+/// stateless HTTP layer. The injection contract is therefore explicit:
+///
+/// 1. the transport adapter that owns the raw `Authorization` / `x-api-key`
+///    headers builds credentials via [`McpCredentials::from_headers`];
+/// 2. it inserts the struct into the JSON-RPC message's
+///    `extensions` (propagated by rmcp into `RequestContext.extensions`);
+/// 3. [`SdForgeMcpServer::call_tool`] / `list_tools` read it back when an
+///    auth verifier is attached — **no injected credentials means every
+///    gated call is rejected** (fail-closed). The bundled stdio transport
+///    cannot carry headers, so `serve_stdio` warns when a verifier is set.
+///
+/// A working injection example lives in `src/mcp/tests/auth_tests.rs`
+/// (`context_with_credentials`). Mirrors the gRPC interceptor's
 /// `authorization` / `x-api-key` metadata extraction.
 #[cfg(feature = "security")]
 #[derive(Clone, Default)]
@@ -46,6 +56,18 @@ pub struct McpCredentials {
     pub authorization: Option<String>,
     /// Raw API key (e.g. the `x-api-key` header value).
     pub api_key: Option<String>,
+}
+
+#[cfg(feature = "security")]
+impl McpCredentials {
+    /// Build credentials from the raw transport header values (the
+    /// injection entry point for transport adapters).
+    pub fn from_headers(authorization: Option<&str>, api_key: Option<&str>) -> Self {
+        Self {
+            authorization: authorization.map(str::to_string),
+            api_key: api_key.map(str::to_string),
+        }
+    }
 }
 
 #[cfg(feature = "security")]
@@ -161,13 +183,21 @@ impl SdForgeMcpServer {
 
     /// Attach an auth verifier (feature = `security`).
     ///
-    /// Every `call_tool` is verified before dispatch; credentials arrive via
-    /// [`McpCredentials`] in the rmcp `RequestContext.extensions` (inserted by
-    /// the transport adapter from the raw `Authorization` / `x-api-key`
-    /// headers). Failures map to `ErrorData` with code
-    /// [`MCP_UNAUTHENTICATED`]. Reuses the same protocol-neutral
-    /// [`GrpcAuthVerifier`] port and credential stores as the gRPC
-    /// interceptor.
+    /// Every `call_tool` **and `list_tools`** is verified before dispatch;
+    /// failures map to `ErrorData` with code [`MCP_UNAUTHENTICATED`].
+    /// Reuses the same protocol-neutral [`GrpcAuthVerifier`] port and
+    /// credential stores as the gRPC interceptor.
+    ///
+    /// # Injection contract (read before wiring)
+    ///
+    /// sdforge ships no MCP transport that terminates HTTP: credentials
+    /// must be injected by the transport adapter that owns the raw
+    /// `Authorization` / `x-api-key` headers, via [`McpCredentials::
+    /// from_headers`] inserted into the JSON-RPC message extensions (see
+    /// the [`McpCredentials`] docs). **Until that adapter injects
+    /// credentials, every gated call is rejected** — including over the
+    /// bundled stdio transport, which cannot carry headers (a warning is
+    /// logged by `serve_stdio` in that setup).
     #[cfg(feature = "security")]
     #[must_use]
     pub fn with_auth_verifier(mut self, verifier: std::sync::Arc<dyn GrpcAuthVerifier>) -> Self {
@@ -216,15 +246,16 @@ impl SdForgeMcpServer {
 
     /// Call a tool by name without a RequestContext (for testing and discovery).
     ///
-    /// Returns the `CallToolResult` on success or `ErrorData` on failure.
-    /// This is the internal entry point; the public `ServerHandler::call_tool`
-    /// delegates here after extracting parameters from `CallToolRequestParams`.
+    /// This path carries **no transport credentials**; with an auth verifier
+    /// attached it fails closed so in-process callers cannot bypass the
+    /// `ServerHandler::call_tool` gate. Unauthenticated-only builds (no
+    /// verifier) dispatch exactly as before.
     ///
     /// # Security
     ///
-    /// - This is the post-authentication dispatch path: credential
-    ///   enforcement lives in `ServerHandler::call_tool`, the protocol
-    ///   entry point (feature = `security`).
+    /// - Fail-closed under a configured verifier: every call returns
+    ///   `MCP_UNAUTHENTICATED` because this synchronous path has no channel
+    ///   for `McpCredentials` (feature = `security`).
     /// - Arguments payload size is capped at `MAX_ARGUMENTS_SIZE_BYTES`.
     ///   Larger payloads are rejected with `invalid_params` before reaching
     ///   the tool implementation (DoS defense).
@@ -235,8 +266,28 @@ impl SdForgeMcpServer {
         name: &str,
         arguments: Option<serde_json::Value>,
     ) -> Result<CallToolResult, ErrorData> {
-        // install a request context for synchronous dispatch so logs
-        // inside tool handlers carry correlation ids.
+        #[cfg(feature = "security")]
+        if self.auth_verifier.is_some() {
+            return Err(ErrorData::new(
+                MCP_UNAUTHENTICATED,
+                "unauthenticated: this synchronous dispatch path carries no transport \
+                 credentials; authenticated calls must arrive via ServerHandler::call_tool",
+                None,
+            ));
+        }
+
+        self.call_tool_scoped(name, arguments)
+    }
+
+    /// Context-scoped tool dispatch shared by the authenticated protocol
+    /// path (`ServerHandler::call_tool`) and the fail-closed sync path
+    /// (`call_tool_internal`): installs a request context so logs inside
+    /// tool handlers carry correlation ids.
+    fn call_tool_scoped(
+        &self,
+        name: &str,
+        arguments: Option<serde_json::Value>,
+    ) -> Result<CallToolResult, ErrorData> {
         #[cfg(feature = "context")]
         {
             let ctx = crate::context::current_or_new();
@@ -244,8 +295,30 @@ impl SdForgeMcpServer {
         }
         #[cfg(not(feature = "context"))]
         {
-            return self.call_tool_inner(name, arguments);
+            self.call_tool_inner(name, arguments)
         }
+    }
+
+    /// Verify transport credentials when a verifier is attached (feature =
+    /// `security`); a no-verifier server admits everything (behavior
+    /// unchanged). Verification runs on the blocking pool
+    /// (`verify_async`) — `ApiKeyVerifier`'s constant-time defense sleeps
+    /// the OS thread for up to 100µs and must not stall a tokio worker.
+    #[cfg(feature = "security")]
+    async fn enforce_auth(&self, credentials: Option<&McpCredentials>) -> Result<(), ErrorData> {
+        let Some(ref verifier) = self.auth_verifier else {
+            return Ok(());
+        };
+        let authorization = credentials.and_then(|c| c.authorization.clone());
+        let api_key = credentials.and_then(|c| c.api_key.clone());
+        crate::security::grpc_auth::verify_async(
+            std::sync::Arc::clone(verifier),
+            authorization,
+            api_key,
+        )
+        .await
+        .map(|_| ())
+        .map_err(|msg| ErrorData::new(MCP_UNAUTHENTICATED, format!("unauthenticated: {msg}"), None))
     }
 
     fn call_tool_inner(
@@ -307,8 +380,18 @@ impl ServerHandler for SdForgeMcpServer {
     async fn list_tools(
         &self,
         _request: Option<PaginatedRequestParams>,
-        _context: RequestContext<RoleServer>,
+        #[cfg(not(feature = "security"))] _context: RequestContext<RoleServer>,
+        #[cfg(feature = "security")] context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
+        // The tool inventory (names/descriptions/input schemas) shares the
+        // same enumeration defense as `call_tool`: with a verifier attached,
+        // unauthenticated listing is rejected. `get_info`/`initialize` stay
+        // open — they are the protocol handshake that precedes
+        // authentication (mirrors the MCP OAuth transport model).
+        #[cfg(feature = "security")]
+        self.enforce_auth(context.extensions.get::<McpCredentials>())
+            .await?;
+
         let tools = self.get_all_tools();
         Ok(ListToolsResult {
             meta: None,
@@ -330,24 +413,18 @@ impl ServerHandler for SdForgeMcpServer {
         // extracts header values into `McpCredentials` on the request
         // extensions (absent credentials count as missing and are rejected).
         #[cfg(feature = "security")]
-        if let Some(ref verifier) = self.auth_verifier {
-            let credentials = context.extensions.get::<McpCredentials>();
-            verifier
-                .verify(
-                    credentials.and_then(|c| c.authorization.as_deref()),
-                    credentials.and_then(|c| c.api_key.as_deref()),
-                )
-                .map_err(|msg| {
-                    ErrorData::new(MCP_UNAUTHENTICATED, format!("unauthenticated: {msg}"), None)
-                })?;
-        }
+        self.enforce_auth(context.extensions.get::<McpCredentials>())
+            .await?;
 
         // request.name is Cow<'static, str>; use deref via as_ref() to get &str.
         let name: &str = request.name.as_ref();
         // request.arguments is Option<JsonObject> (Map<String, Value>); convert to Value.
         let arguments = request.arguments.map(serde_json::Value::Object);
-        self.call_tool_internal(name, arguments)
+        self.call_tool_scoped(name, arguments)
             .map(CallToolResponse::Complete)
+        // AuthContext note: admission only — per-tool RBAC (roles) is not
+        // enforced on the MCP dimension yet; see docs/SECURITY.md coverage
+        // statement. The sync `call_tool_internal` path fails closed instead.
     }
 }
 

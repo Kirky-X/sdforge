@@ -75,14 +75,33 @@
   （原 `src/benches/axiom_bench.rs` 为空壳孤儿文件，已删除）。
 
 ### 新增 (Added)
-- **MCP 与 CLI 认证对等**：认证覆盖延伸到 MCP 与 CLI 入口（复用 gRPC 拦截器的
-  `GrpcAuthVerifier` 端口与 Bearer/API-key 凭据库）。MCP：`SdForgeMcpServer::
-  with_auth_verifier` 配置后每个 `call_tool` 先校验凭据（传输适配层将
-  `Authorization`/`x-api-key` 头经 `mcp::McpCredentials` 注入 rmcp 请求
-  extensions；拒绝返回 JSON-RPC 错误码 `-32001`），stateless 适配层自动继承；
-  CLI：`CliBuilder::with_auth_verifier` 配置后 `execute` 先校验 `SDFORGE_TOKEN`
-  /`SDFORGE_API_KEY` 环境凭据再派发。未启用 `security` feature 或未配置
-  verifier 时行为完全不变。
+- **MCP 与 CLI 认证对等（authenticate-only）**：认证覆盖延伸到 MCP 与 CLI 入口
+  （复用 gRPC 拦截器的 `GrpcAuthVerifier` 端口——推荐别名 `ProtocolAuthVerifier`
+  ——与 Bearer/API-key 凭据库）。MCP：`SdForgeMcpServer::with_auth_verifier`
+  配置后 `call_tool` **与 `list_tools`** 先校验凭据，拒绝返回 JSON-RPC
+  server-error 码 `-32001`（`get_info`/`initialize` 是先于认证的协议握手，不门控）；
+  stateless 适配层委托调用自动继承；校验经 `grpc_auth::verify_async` 在
+  blocking pool 执行（API key 恒定时间防御不阻塞 tokio worker，gRPC 拦截器
+  同批迁移）。CLI：`CliBuilder::with_auth_verifier` 配置后 `execute` 先校验
+  `SDFORGE_TOKEN`/`SDFORGE_API_KEY` 环境凭据再派发（环境变量可被同用户子进程
+  读取并易泄漏进 CI 日志/`set -x`，建议短期凭据 + CI 掩码）。未启用 `security`
+  feature 或未配置 verifier 时行为完全不变。
+- **`grpc_auth::make_verifier(&AuthConfig)`**：从 `AuthConfig`（Jwt/ApiKey 种子键）
+  构建统一 verifier 的单一构造点——各协议入口的 verifier 接线均为手动，无配置级
+  自动贯通。
+- **`grpc_auth::verify_async`**：`GrpcAuthVerifier` 的异步验证包装
+  （`spawn_blocking`），恒定时间防御与 async 调度兼容。
+- **MCP 凭据注入契约（重要）**：sdforge 不自带终结 HTTP 的 MCP 传输，凭据注入是
+  **传输适配层的显式义务**——适配层从原始 `Authorization`/`x-api-key` 头经
+  `McpCredentials::from_headers` 构建凭据并插入 JSON-RPC 消息 extensions（示例见
+  `src/mcp/tests/auth_tests.rs`）。未注入时所有受门控调用一律 `-32001` 拒绝
+  （fail-closed）；内建 stdio 传输无法携带头，`serve_stdio` 在挂载 verifier 时
+  输出启动警告。
+- **覆盖边界声明**：本轮为认证（authentication）拉通——MCP/CLI 维度**仅认证不授权**，
+  `#[forge(auth(role = ...))]`/roles 目前仅 HTTP 与 gRPC 覆盖；持有合法凭据的低权限
+  身份在 MCP/CLI 侧不受角色约束。纵深防御配套：`call_tool_internal` 在挂载 verifier
+  时 fail-closed 拒绝（同步路径无凭据通道，杜绝进程内公开旁路）；`cli::dispatch::
+  dispatch` 仍是无认证的进程内分发口（文档标注）。
 - **幂等重放防护**：新增 `idempotency` feature（已入 `full`）。HTTP 中间件支持
   `Idempotency-Key` 头（POST/PUT/PATCH）：重放缓存响应（附 `Idempotency-Replayed: true`）、
   并发在途 409；gRPC 支持 `idempotency-key` metadata（在途 `ALREADY_EXISTS`）。

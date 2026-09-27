@@ -171,6 +171,81 @@ async fn stateless_handler_inherits_call_tool_enforcement() {
     assert_eq!(err.code, ErrorCode(-32001));
 }
 
+/// verifier 已配置时 list_tools 同样拒绝未认证请求：
+/// 工具清单（名称/描述/input schema）与 call_tool 共用同一枚举防线。
+#[tokio::test]
+async fn list_tools_without_credentials_is_rejected() {
+    let server = server_with(Arc::new(jwt_verifier()));
+    let context = context_with_credentials(None);
+    let err = server
+        .list_tools(None, context)
+        .await
+        .expect_err("unauthenticated list_tools must be rejected");
+    assert_eq!(err.code, ErrorCode(-32001));
+}
+
+/// 携带有效凭据的 list_tools 正常返回工具清单。
+#[tokio::test]
+async fn list_tools_with_valid_bearer_lists_tools() {
+    let server = server_with(Arc::new(jwt_verifier()));
+    let context = context_with_credentials(Some(McpCredentials {
+        authorization: Some(format!("Bearer {}", mint_jwt())),
+        api_key: None,
+    }));
+    let result = server.list_tools(None, context).await;
+    assert!(result.is_ok(), "valid bearer must authenticate list_tools");
+    assert!(!result.unwrap().tools.is_empty());
+}
+
+/// verifier 已配置时 call_tool_internal（无凭据通道的同步路径）
+/// fail-closed 拒绝，杜绝进程内公开分发旁路。
+#[test]
+fn call_tool_internal_rejects_when_verifier_configured() {
+    let server = server_with(Arc::new(jwt_verifier()));
+    let err = server
+        .call_tool_internal("coverage_test_tool", None)
+        .expect_err("post-auth sync path must fail closed under a verifier");
+    assert_eq!(err.code, ErrorCode(-32001));
+}
+
+/// verifier 未配置时 call_tool_internal 行为不变（既有测试与发现路径）。
+#[test]
+fn call_tool_internal_unaffected_without_verifier() {
+    let server = SdForgeMcpServer::new();
+    assert!(
+        server
+            .call_tool_internal("coverage_test_tool", None)
+            .is_ok(),
+        "no verifier → internal dispatch must be unchanged"
+    );
+}
+
+/// from_headers 构造器：传输适配层从原始头值构建凭据的注入入口。
+#[test]
+fn mcp_credentials_from_headers_maps_raw_values() {
+    let creds = McpCredentials::from_headers(Some("Bearer tok"), Some("sk_key"));
+    assert_eq!(creds.authorization.as_deref(), Some("Bearer tok"));
+    assert_eq!(creds.api_key.as_deref(), Some("sk_key"));
+    let empty = McpCredentials::from_headers(None, None);
+    assert!(empty.authorization.is_none() && empty.api_key.is_none());
+}
+
+/// Debug 输出脱敏：凭据值不得出现在格式化结果中。
+#[test]
+fn mcp_credentials_debug_redacts_values() {
+    let creds = McpCredentials::from_headers(Some("Bearer secret-jwt"), Some("sk-secret"));
+    let rendered = format!("{creds:?}");
+    assert!(
+        !rendered.contains("secret-jwt"),
+        "leaked bearer: {rendered}"
+    );
+    assert!(
+        !rendered.contains("sk-secret"),
+        "leaked api key: {rendered}"
+    );
+    assert!(rendered.contains("[REDACTED]"));
+}
+
 /// 复用 server.rs tests 里的 DummyTransport（trait bound 需要本模块可见）。
 #[derive(Debug)]
 struct DummyTransportError;
