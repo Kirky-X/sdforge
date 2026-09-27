@@ -14,10 +14,10 @@ use std::path::PathBuf;
 use crate::core::ApiError;
 use crate::docs::{DocFormat, generate_docs, write_docs};
 
-/// `docs` 子命令支持的格式名称与 [`DocFormat`] 变体的映射。
-///
-/// `value_parser` 限定 clap 接受的字符串集合，这里用静态切片方便扩展。
-const FORMAT_VALUES: &[&str] = &[
+/// `docs` 子命令支持的格式名称与 [`DocFormat`] 变体的映射（单一事实源：
+/// clap 白名单、Agent 知识包的 docs 条目与一致性测试都从这里派生，
+/// 新增文档格式只改此处与 `parse_format` 分支）。
+pub(crate) const FORMAT_VALUES: [&str; 6] = [
     "openapi",
     "swagger",
     "cli-markdown",
@@ -25,6 +25,9 @@ const FORMAT_VALUES: &[&str] = &[
     "all",
     "agent",
 ];
+
+/// `docs --format` 的默认取值（与 `parse_format` 的 `all` 分支对应）。
+pub(crate) const DEFAULT_DOC_FORMAT: &str = "all";
 
 /// 构造 `docs` 子命令的 `clap::Command` 定义。
 ///
@@ -38,7 +41,7 @@ pub fn docs_subcommand_definition() -> clap::Command {
             clap::Arg::new("format")
                 .long("format")
                 .value_parser(clap::builder::PossibleValuesParser::new(FORMAT_VALUES))
-                .default_value("all")
+                .default_value(DEFAULT_DOC_FORMAT)
                 .help("Documentation format"),
         )
         .arg(

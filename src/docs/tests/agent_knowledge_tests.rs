@@ -229,16 +229,15 @@ fn commands_include_builtin_docs_entry() {
     assert_eq!(docs_entry["built_in"], serde_json::json!(true));
     let args = docs_entry["args"].as_array().unwrap();
     let format_arg_entry = args.iter().find(|a| a["name"] == "format").unwrap();
+    // 单一事实源断言：清单从 docs_subcommand::FORMAT_VALUES 派生，
+    // 常量漂移时此处失败（不与硬编码期望比较）。
     assert_eq!(
         format_arg_entry["values"],
-        serde_json::json!([
-            "openapi",
-            "swagger",
-            "cli-markdown",
-            "mcp-markdown",
-            "all",
-            "agent"
-        ])
+        serde_json::json!(crate::cli::docs_subcommand::FORMAT_VALUES)
+    );
+    assert_eq!(
+        format_arg_entry["default"],
+        serde_json::json!(crate::cli::docs_subcommand::DEFAULT_DOC_FORMAT)
     );
 }
 

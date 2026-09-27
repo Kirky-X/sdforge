@@ -15,6 +15,7 @@
 
 use serde_json::{Value, json};
 
+use crate::cli::docs_subcommand::{DEFAULT_DOC_FORMAT, FORMAT_VALUES as DOC_FORMAT_VALUES};
 use crate::cli::output::{
     ERROR_EXIT_CODE, FORMAT_ARG, FORMAT_DEFAULT, FORMAT_VALUES, SUCCESS_EXIT_CODE,
 };
@@ -126,8 +127,8 @@ fn cli_commands() -> Value {
                 "description": "Documentation format (independent of the global --format output contract)",
                 "kind": "body",
                 "required": false,
-                "default": "all",
-                "values": ["openapi", "swagger", "cli-markdown", "mcp-markdown", "all", "agent"],
+                "default": DEFAULT_DOC_FORMAT,
+                "values": DOC_FORMAT_VALUES,
             },
             {
                 "name": "output",
