@@ -279,6 +279,31 @@ impl SdForgeMcpServer {
         self.call_tool_scoped(name, arguments)
     }
 
+    /// Call a tool with explicitly supplied credentials (feature =
+    /// `security`).
+    ///
+    /// The programmatic counterpart to `ServerHandler::call_tool` for
+    /// in-process callers that have already authenticated out of band
+    /// (tests, discovery, orchestration): the call passes the **same**
+    /// `enforce_auth` gate as the protocol paths — the verifier rejects
+    /// invalid credentials with `MCP_UNAUTHENTICATED` exactly as it would
+    /// on the wire. Without a verifier it dispatches unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns `MCP_UNAUTHENTICATED` when the verifier rejects
+    /// `credentials`, otherwise whatever the tool dispatch returns.
+    #[cfg(feature = "security")]
+    pub async fn call_tool_with_credentials(
+        &self,
+        name: &str,
+        arguments: Option<serde_json::Value>,
+        credentials: &McpCredentials,
+    ) -> Result<CallToolResult, ErrorData> {
+        self.enforce_auth(Some(credentials)).await?;
+        self.call_tool_scoped(name, arguments)
+    }
+
     /// Context-scoped tool dispatch shared by the authenticated protocol
     /// path (`ServerHandler::call_tool`) and the fail-closed sync path
     /// (`call_tool_internal`): installs a request context so logs inside

@@ -99,9 +99,11 @@
   输出启动警告。
 - **覆盖边界声明**：本轮为认证（authentication）拉通——MCP/CLI 维度**仅认证不授权**，
   `#[forge(auth(role = ...))]`/roles 目前仅 HTTP 与 gRPC 覆盖；持有合法凭据的低权限
-  身份在 MCP/CLI 侧不受角色约束。纵深防御配套：`call_tool_internal` 在挂载 verifier
-  时 fail-closed 拒绝（同步路径无凭据通道，杜绝进程内公开旁路）；`cli::dispatch::
-  dispatch` 仍是无认证的进程内分发口（文档标注）。
+  身份在 MCP/CLI 侧不受角色约束（SECURITY.md 建立协议覆盖矩阵并登记为后续任务）。
+  纵深防御配套：`call_tool_internal` 在挂载 verifier 时 fail-closed 拒绝（同步路径无凭据
+  通道，杜绝进程内公开旁路），进程内带外认证后的程序化调用走新增的
+  `SdForgeMcpServer::call_tool_with_credentials`（与协议路径共用同一 `enforce_auth`
+  防线）；`cli::dispatch::dispatch` 仍是无认证的进程内分发口（文档标注）。
 - **幂等重放防护**：新增 `idempotency` feature（已入 `full`）。HTTP 中间件支持
   `Idempotency-Key` 头（POST/PUT/PATCH）：重放缓存响应（附 `Idempotency-Replayed: true`）、
   并发在途 409；gRPC 支持 `idempotency-key` metadata（在途 `ALREADY_EXISTS`）。

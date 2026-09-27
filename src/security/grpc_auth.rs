@@ -60,8 +60,10 @@ pub trait GrpcAuthVerifier: Send + Sync {
 ///
 /// # Errors
 ///
-/// Returns the verifier's rejection reason, or an error description when
-/// the blocking task panicked.
+/// Returns the verifier's rejection reason. A panicking verifier yields the
+/// fixed phrase `authentication worker failed` (panic details go to the
+/// server log, never into the returned payload — same contract as
+/// [`GrpcAuthVerifier`]'s `Err`).
 #[cfg(feature = "security")]
 pub async fn verify_async(
     verifier: Arc<dyn GrpcAuthVerifier>,
@@ -72,7 +74,10 @@ pub async fn verify_async(
         verifier.verify(authorization.as_deref(), api_key.as_deref())
     })
     .await
-    .map_err(|e| format!("authentication worker failed: {e}"))?
+    .map_err(|e| {
+        log::error!("auth verifier worker failed: {e}");
+        "authentication worker failed".to_string()
+    })?
 }
 
 /// Build a verifier from an [`AuthConfig`] (single construction point for
@@ -299,6 +304,28 @@ mod tests {
             .await
             .expect("valid key must authenticate off-thread");
         assert!(ctx.has_permission("read"));
+    }
+
+    /// verifier panic → 固定短语拒绝，panic 载荷不得随 Err 回显远端
+    /// （与 trait Err 载荷契约一致，详情只进服务端日志）。
+    #[tokio::test]
+    async fn verify_async_worker_panic_returns_fixed_phrase() {
+        struct PanickingVerifier;
+        impl GrpcAuthVerifier for PanickingVerifier {
+            fn verify(
+                &self,
+                _authorization: Option<&str>,
+                _api_key: Option<&str>,
+            ) -> Result<crate::security::AuthContext, String> {
+                panic!("boom internal verifier detail");
+            }
+        }
+
+        let err = verify_async(Arc::new(PanickingVerifier), None, None)
+            .await
+            .unwrap_err();
+        assert_eq!(err, "authentication worker failed");
+        assert!(!err.contains("boom"), "panic payload leaked: {err}");
     }
 
     /// make_verifier：JWT 配置 → BearerVerifier；API key 配置 → 种子键

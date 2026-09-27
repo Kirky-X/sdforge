@@ -171,6 +171,62 @@ async fn stateless_handler_inherits_call_tool_enforcement() {
     assert_eq!(err.code, ErrorCode(-32001));
 }
 
+/// stateless 适配层对 list_tools 的门控继承与 call_tool 对称：
+/// 委托实现一行，但枚举防线不得因包装层遗漏。
+#[tokio::test]
+async fn stateless_handler_inherits_list_tools_enforcement() {
+    let handler = crate::mcp::StatelessServerHandler::new(server_with(Arc::new(jwt_verifier())));
+    let server = SdForgeMcpServer::new();
+    let running = serve_directly(server, DummyTransport, None);
+    let peer = running.peer().clone();
+    let context = rmcp::service::RequestContext::new(rmcp::model::NumberOrString::Number(0), peer);
+    let err = handler
+        .list_tools(None, context)
+        .await
+        .expect_err("unauthenticated stateless list_tools must be rejected");
+    assert_eq!(err.code, ErrorCode(-32001));
+}
+
+/// call_tool_with_credentials：进程内带外认证后的显式带凭据入口，
+/// 与协议路径共用同一 enforce_auth 防线——无效凭据拒绝、有效凭据派发。
+#[tokio::test]
+async fn call_tool_with_credentials_shares_enforcement() {
+    let server = server_with(Arc::new(jwt_verifier()));
+
+    let err = server
+        .call_tool_with_credentials(
+            "coverage_test_tool",
+            None,
+            &McpCredentials::from_headers(Some("Bearer bogus.token.here"), None),
+        )
+        .await
+        .expect_err("invalid credentials must be rejected on the explicit path");
+    assert_eq!(err.code, ErrorCode(-32001));
+
+    let ok = server
+        .call_tool_with_credentials(
+            "coverage_test_tool",
+            None,
+            &McpCredentials::from_headers(Some(&format!("Bearer {}", mint_jwt())), None),
+        )
+        .await;
+    assert!(ok.is_ok(), "valid credentials must dispatch");
+}
+
+/// 无 verifier 时 call_tool_with_credentials 行为不变（放行派发）。
+#[tokio::test]
+async fn call_tool_with_credentials_admits_without_verifier() {
+    let server = SdForgeMcpServer::new();
+    let ok = server
+        .call_tool_with_credentials(
+            "coverage_test_tool",
+            None,
+            &McpCredentials::from_headers(None, None),
+        )
+        .await;
+    assert!(ok.is_ok(), "no verifier → explicit path must be unchanged");
+}
+
 /// verifier 已配置时 list_tools 同样拒绝未认证请求：
 /// 工具清单（名称/描述/input schema）与 call_tool 共用同一枚举防线。
 #[tokio::test]
