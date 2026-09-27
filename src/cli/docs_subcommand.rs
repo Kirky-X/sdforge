@@ -59,7 +59,7 @@ pub fn docs_subcommand_definition() -> clap::Command {
 /// （实测 clap 4.6：`prog --format json docs` 时 `sub.get_one("format")`
 /// 返回 `"json"`，即便传播对同 id arg 跳过）——`text`/`json` 不是文档
 /// 格式，显式回落 docs 自身默认 [`DocFormat::All`]，两个开关语义独立。
-fn parse_format(s: &str) -> DocFormat {
+pub(crate) fn parse_format(s: &str) -> DocFormat {
     match s {
         "openapi" => DocFormat::OpenApi,
         "swagger" => DocFormat::SwaggerUi,

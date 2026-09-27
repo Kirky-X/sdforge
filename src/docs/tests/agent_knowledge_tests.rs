@@ -228,17 +228,35 @@ fn commands_include_builtin_docs_entry() {
         .expect("built-in docs command must be listed");
     assert_eq!(docs_entry["built_in"], serde_json::json!(true));
     let args = docs_entry["args"].as_array().unwrap();
+    // values/default 清单与 FORMAT_VALUES 常量编译期同源（同一常量派生
+    // 两侧），自反断言无信息量——映射正确性由
+    // parse_format_maps_every_declared_doc_format 独立锁定。
     let format_arg_entry = args.iter().find(|a| a["name"] == "format").unwrap();
-    // 单一事实源断言：清单从 docs_subcommand::FORMAT_VALUES 派生，
-    // 常量漂移时此处失败（不与硬编码期望比较）。
-    assert_eq!(
-        format_arg_entry["values"],
-        serde_json::json!(crate::cli::docs_subcommand::FORMAT_VALUES)
-    );
-    assert_eq!(
-        format_arg_entry["default"],
-        serde_json::json!(crate::cli::docs_subcommand::DEFAULT_DOC_FORMAT)
-    );
+    assert_eq!(format_arg_entry["default"], serde_json::json!("all"));
+}
+
+/// 声明的每个文档格式必须命中 `parse_format` 的显式映射分支：
+/// 新增 FORMAT_VALUES 值而漏加 match 分支时，该测试以 panic 失败
+/// （unreachable! loud-fail），而不是等到运行时文档请求才暴露。
+#[test]
+fn parse_format_maps_every_declared_doc_format() {
+    for value in crate::cli::docs_subcommand::FORMAT_VALUES {
+        let format = crate::cli::docs_subcommand::parse_format(value);
+        match value {
+            "openapi" => assert!(matches!(format, DocFormat::OpenApi)),
+            "swagger" => assert!(matches!(format, DocFormat::SwaggerUi)),
+            "cli-markdown" => assert!(matches!(format, DocFormat::CliMarkdown)),
+            "mcp-markdown" => assert!(matches!(format, DocFormat::McpMarkdown)),
+            "all" => assert!(matches!(format, DocFormat::All)),
+            "agent" => assert!(matches!(format, DocFormat::Agent)),
+            // FORMAT_VALUES 中新出现、parse_format 未显式映射的值——
+            // 全局 --format 穿透值（text/json）已在 parse_format 显式
+            // 回落 All，其余即扩展遗漏，立即失败。
+            other => panic!(
+                "FORMAT_VALUES 值 {other:?} 在 parse_format 中缺少显式映射（新增格式需同步 match 分支）"
+            ),
+        }
+    }
 }
 
 /// generate_agent_knowledge_for_host：宿主标识进入 program 段，
