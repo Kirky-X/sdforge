@@ -17,4 +17,5 @@ mod docs_subcommand_tests;
 mod handler_tests;
 mod integration_tests;
 mod macro_integration_tests;
+mod output_tests;
 mod trait_tests;

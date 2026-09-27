@@ -18,6 +18,8 @@ use std::any::Any;
 use std::sync::Arc;
 
 use crate::cli::{CliArgType, CliCommandRegistration, GlobalArg};
+#[cfg(feature = "security")]
+use crate::core::ApiError;
 
 /// Builder that materializes a `clap::Command` from the global
 /// `CliCommandRegistration` registry.
@@ -170,6 +172,13 @@ impl CliBuilder {
     /// When the `docs` feature is enabled, the `docs` SubCommand (from
     /// [`mod@crate::cli::docs_subcommand`]) is automatically appended — users
     /// do not need to register it manually.
+    ///
+    /// A built-in global `--format text|json` flag is mounted here as well
+    /// (see [`crate::cli::output`]): `text` is the backward-compatible
+    /// default, `json` renders successes and errors as machine-readable
+    /// JSON. A downstream `--format` arg registered via
+    /// [`Self::with_global_arg`] with the same id would collide — use the
+    /// built-in one.
     pub fn build(&self) -> clap::Command {
         let mut root = clap::Command::new(self.name.clone())
             .version(env!("CARGO_PKG_VERSION"))
@@ -186,6 +195,11 @@ impl CliBuilder {
             root = root.subcommand(crate::cli::docs_subcommand_definition());
         }
 
+        // Built-in machine-readable output contract (mounted before the
+        // downstream global args so an id collision fails loudly instead of
+        // silently shadowing).
+        root = root.arg(crate::cli::output::format_arg());
+
         // Apply global args (added via with_global_arg) to the root command.
         for arg in &self.global_args {
             root = root.arg(arg.to_clap_arg());
@@ -197,10 +211,13 @@ impl CliBuilder {
     /// One-shot async runner: parse args, dispatch to handler, print result, exit.
     ///
     /// Consumes `self`, builds the `clap::Command`, dispatches the selected
-    /// subcommand to its handler, and prints the result. On success, the
-    /// handler's `Value` output is smart-extracted via `extract_value`:
-    /// `Value::String` → raw string to stdout (no quotes); other → JSON to
-    /// stdout. On error, `error: <e>` is printed to stderr.
+    /// subcommand to its handler, and prints the result. The output follows
+    /// the `--format` contract (see [`crate::cli::output`]):
+    ///
+    /// - `text`（默认）：`Value::String` → raw string to stdout (no quotes);
+    ///   other → JSON to stdout. On error, `error: <e>` is printed to stderr.
+    /// - `json`：successes as compact JSON and errors as `UnifiedError` JSON,
+    ///   both on stdout.
     ///
     /// Exits with code 0 on success, 1 on error. The `-> !` return type
     /// guarantees the function never returns normally.
@@ -212,22 +229,26 @@ impl CliBuilder {
     pub async fn execute(self) -> ! {
         let cmd = self.build();
         let matches = cmd.get_matches();
+        let format = crate::cli::output::OutputFormat::from_matches(&matches);
         // verify credentials before any dispatch (feature = `security`);
         // reuses the standard error channel so failures exit(1) without
         // reaching a registered handler.
         #[cfg(feature = "security")]
         if let Some(reason) = self.authentication_failure() {
-            eprintln!("error: authentication failed: {reason}");
+            format.emit_error(&ApiError::AuthenticationFailed { reason });
             std::process::exit(1);
         }
         match crate::cli::dispatch::dispatch(&matches, self.state).await {
             Ok((_name, value)) => {
-                let out = crate::core::extract_value(&value);
-                println!("{out}");
+                // `Value::Null` 是「子命令已自行输出」哨兵（docs 子命令
+                // 直接产出文档），execute 不再渲染，避免打印多余的 null。
+                if !value.is_null() {
+                    println!("{}", format.render_success(&value));
+                }
                 std::process::exit(0);
             }
             Err(e) => {
-                eprintln!("error: {e}");
+                format.emit_error(&e);
                 std::process::exit(1);
             }
         }

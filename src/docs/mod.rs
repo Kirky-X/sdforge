@@ -53,6 +53,9 @@ pub enum DocFormat {
     McpMarkdown,
     /// 全部格式拼接输出。
     All,
+    /// Agent 知识包：CLI 能力清单 + MCP 工具 + `--format` 输出契约，
+    /// 单个 JSON 文档（供 Agent/CI 机器消费）。
+    Agent,
 }
 
 /// 文档生成 / 写入过程中可能发生的错误。
@@ -66,7 +69,9 @@ pub enum DocError {
     Io(#[from] std::io::Error),
 }
 
+mod agent_knowledge;
 mod docs_impl;
+pub use agent_knowledge::generate_agent_knowledge;
 pub use docs_impl::{generate_docs, write_docs};
 
 #[cfg(test)]

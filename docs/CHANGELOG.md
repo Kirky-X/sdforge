@@ -113,6 +113,19 @@
   进程内带外认证后的程序化调用走 `SdForgeMcpServer::call_tool_with_credentials`
   （与协议路径共用同一认证 + RBAC 防线）；`cli::dispatch::dispatch` 仍是无认证的
   进程内分发口（文档标注）。
+- **CLI 机器可读输出契约与 Agent 知识包**：`CliBuilder::build()` 内建挂载全局
+  `--format text|json` 开关（`text` 默认，向后兼容）。`json` 模式：成功结果为
+  handler `Value` 紧凑 JSON、错误为 `UnifiedError` JSON（`{"code","message",
+  "trace_id"?,"field"?}`，与 HTTP/gRPC 同一形状）——**两者都走 stdout**；退出码
+  契约不变（成功 0 / 错误 1）；认证失败同样按 `--format` 渲染。`docs` 子命令
+  `--format` 新增 `agent` 取值：输出 Agent 知识包（schema
+  `sdforge.agent-knowledge/v1`）——程序标识、输出契约（`--format` 取值/退出码/
+  流约定）、全部注册 CLI 子命令（含参数元数据）与 MCP 工具（含 input_schema，
+  `mcp` feature 启用时），能力清单直接读 inventory 注册表，注册即入包。
+  附带修复：`docs` 子命令此前只有 clap 定义、`execute` 分发路径未接通
+  （`prog docs` 会落 NotFound）——现于 dispatch 接通，docs 自行完成输出
+  （返回 `Value::Null` 哨兵，execute 跳过渲染）；全局 `--format` 传播进 docs
+  的 `text`/`json` 值按 docs 默认（All）处理，两开关语义独立。
 - **幂等重放防护**：新增 `idempotency` feature（已入 `full`）。HTTP 中间件支持
   `Idempotency-Key` 头（POST/PUT/PATCH）：重放缓存响应（附 `Idempotency-Replayed: true`）、
   并发在途 409；gRPC 支持 `idempotency-key` metadata（在途 `ALREADY_EXISTS`）。

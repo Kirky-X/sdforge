@@ -15,7 +15,14 @@ use crate::docs::{DocFormat, generate_docs, write_docs};
 /// `docs` 子命令支持的格式名称与 [`DocFormat`] 变体的映射。
 ///
 /// `value_parser` 限定 clap 接受的字符串集合，这里用静态切片方便扩展。
-const FORMAT_VALUES: &[&str] = &["openapi", "swagger", "cli-markdown", "mcp-markdown", "all"];
+const FORMAT_VALUES: &[&str] = &[
+    "openapi",
+    "swagger",
+    "cli-markdown",
+    "mcp-markdown",
+    "all",
+    "agent",
+];
 
 /// 构造 `docs` 子命令的 `clap::Command` 定义。
 ///
@@ -42,9 +49,10 @@ pub fn docs_subcommand_definition() -> clap::Command {
 
 /// 根据 `--format` 字符串解析出 [`DocFormat`]。
 ///
-/// 输入已在 clap 层通过 `value_parser` 限定为合法值，但这里仍以
-/// `unwrap_or(DocFormat::All)` 兜底以防未来扩展遗漏——clap 已保证
-/// 不会传入非法字符串，因此兜底分支实际不可达。
+/// 用户输入已在 clap 层通过 `value_parser` 限定为 [`FORMAT_VALUES`] 集合。
+/// 未知值只可能来自内建全局 `--format text|json` 的传播（clap 会把顶层
+/// 全局值填入未显式指定 `--format` 的子命令）：`json`/`text` 不是文档
+/// 格式，回落 docs 自身默认 [`DocFormat::All`]——两个开关语义独立。
 fn parse_format(s: &str) -> DocFormat {
     match s {
         "openapi" => DocFormat::OpenApi,
@@ -52,9 +60,10 @@ fn parse_format(s: &str) -> DocFormat {
         "cli-markdown" => DocFormat::CliMarkdown,
         "mcp-markdown" => DocFormat::McpMarkdown,
         "all" => DocFormat::All,
-        // 不可达：clap value_parser 已限定输入集合。用 unreachable! 显性化失败，
-        // 避免未来扩展 FORMAT_VALUES 时遗漏此 match 分支导致静默产出 All 错误文档。
-        _ => unreachable!("clap value_parser 已限定输入集合，得到非法值: {}", s),
+        "agent" => DocFormat::Agent,
+        // 全局 --format（text/json）传播进来的值：非文档格式，按 docs
+        // 默认（All）处理。用户给非法文档值仍会被 clap 白名单拒绝。
+        _ => DocFormat::All,
     }
 }
 

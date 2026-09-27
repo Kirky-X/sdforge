@@ -14,6 +14,9 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+#[cfg(feature = "docs")]
+use serde_json::Value;
+
 use crate::cli::{CliArgType, CliCommandRegistration, CliHandlerRegistration};
 use crate::core::{ApiError, HandlerArgs, HandlerOutput, HandlerState};
 
@@ -90,6 +93,16 @@ pub async fn dispatch(
             "cli.dispatch.no_subcommand",
         )
     })?;
+
+    // docs 子命令自行完成输出（文档写文件 / 打印 stdout），不走
+    // HandlerFn 分发；返回 `Value::Null` 作为「无返回值」哨兵——execute
+    // 据此跳过结果渲染。未接通时 `docs --format …` 会落 NotFound，
+    // 文档生成对 CLI 使用者不可达。
+    #[cfg(feature = "docs")]
+    if name == "docs" {
+        crate::cli::docs_subcommand::docs_subcommand(sub)?;
+        return Ok((name.to_string(), Value::Null));
+    }
 
     let handler_reg = find_handler(name)?;
     let cmd_reg = find_command(name)?;

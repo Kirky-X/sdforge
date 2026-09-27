@@ -8,6 +8,7 @@
 //! - `cli_markdown_tests`: CLI Markdown 生成
 //! - `mcp_markdown_tests`: MCP Markdown 生成（`mcp` feature 门控）
 
+mod agent_knowledge_tests;
 mod cli_markdown_tests;
 #[cfg(feature = "mcp")]
 mod mcp_markdown_tests;

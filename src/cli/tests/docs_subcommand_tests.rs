@@ -104,3 +104,16 @@ fn test_docs_subcommand_stdout_when_no_output() {
     let result = docs_subcommand(&matches);
     assert!(result.is_ok(), "无 --output 时 docs_subcommand 必须返回 Ok");
 }
+
+/// `--format agent` 必须是 docs 子命令的合法取值（Agent 知识包输出），
+/// 且能走通 docs_subcommand 的生成路径。
+#[test]
+fn test_docs_subcommand_accepts_agent_format() {
+    let cmd = docs_subcommand_definition();
+    let matches = cmd
+        .try_get_matches_from(["docs", "--format", "agent"])
+        .expect("agent must be an accepted --format value");
+
+    let result = docs_subcommand(&matches);
+    assert!(result.is_ok(), "agent format must generate without error");
+}
