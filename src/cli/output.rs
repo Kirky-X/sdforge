@@ -111,6 +111,10 @@ pub(crate) fn format_arg() -> clap::Arg {
 /// `Authentication failed: …`（HTTP 共用，不可改）；CLI 历史输出为小写
 /// `authentication failed: …`，按旧字符串匹配的脚本依赖该形态，故 CLI
 /// text 路径显式构造小写文案（json 模式走 UnifiedError，不受影响）。
+///
+/// 唯一调用点是 `execute` 的凭据预检（`security` 特性），定义随之同门
+/// 编译，避免 `cli` 单独启用时产生 dead_code。
+#[cfg(feature = "security")]
 pub(crate) fn auth_failure_text(reason: &str) -> String {
     format!("error: authentication failed: {reason}")
 }
