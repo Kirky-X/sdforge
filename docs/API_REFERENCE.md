@@ -90,7 +90,7 @@
 | 类型/函数 | 说明 |
 |-----------|------|
 | `SdForgeConfig` / `SdForgeConfigBuilder` | 应用配置聚合根与 Builder（含 `security` / `cache` 字段与 `build_rate_limiter()` 自动装配） |
-| `ServerConfig` / `TlsConfig` / `TimeoutConfig` | 监听（默认 `127.0.0.1:8080`、30s 超时）、TLS、超时 |
+| `ServerConfig` / `TlsConfig` / `TimeoutConfig` | 监听（默认 `127.0.0.1:8080`、30s 超时）、TLS（`cert_path`/`key_path`/`alpn_protocols`，ALPN 缺省 `["h2", "http/1.1"]`）、超时 |
 | `ApiConfig` / `TracingConfig` / `EnvHelper` | API 行为（路由前缀、默认版本）、追踪配置、运行环境名称辅助（`environment` 字段） |
 | `AuthConfig` / `ApiKeySeed` | 认证配置与 API Key 播种 |
 | `CacheConfig` | 缓存配置（`enabled`、`default_ttl_secs`、`max_items`、`track_stats`） |
@@ -110,6 +110,17 @@ HTTP 构建入口 `sdforge::http`（`http` feature）：
 | `VersionRouterConfig` / `VersionedRoute` / `build_version_router` | 版本路由 |
 | `SecurityHeaders` | 安全响应头配置 |
 | `rate_limit_layer`（`ratelimit-http`） | HTTP 限流层 |
+
+TLS 终止 `sdforge::http::tls`（`serve-tls` feature，rustls aws-lc-rs；与 gRPC 侧 `grpc-tls` 的 `ServerTlsConfig` 接线实现独立）：
+
+| 函数/类型 | 说明 |
+|-----------|------|
+| `load_server_config(&TlsConfig) -> Result<rustls::ServerConfig, TlsError>` | 加载 PEM 证书/密钥（装配期校验密钥匹配）并应用 ALPN |
+| `tls_acceptor(&TlsConfig) -> Result<TlsAcceptor, TlsError>` | 静态证书 acceptor 便捷构建 |
+| `ReloadingTls::new(&TlsConfig) -> Result<ReloadingTls, TlsError>` | 可热重载的 TLS 服务端（acceptor 与重载器编译期绑定）；`acceptor()` 取 serve 句柄，`reload()` 原子换入（阻塞，tokio worker 用 `reload_async()`），失败保留旧证书 |
+| `serve_with_graceful_shutdown_tls(router, listener, acceptor, shutdown, TlsServeConfig)` | TLS 终止 serve：每请求注入 `ConnectInfo<SocketAddr>`（限流/审计取不可伪造 peer IP），复用 graceful 排空时序；accept 错误按 axum 语义退避重试不终止 |
+| `TlsServeConfig` | serve 配置：`handshake_timeout`（默认 10s）/ `header_read_timeout`（默认 30s）预认证护栏 + `graceful` 排空参数 |
+| `TlsError` | 装配错误（文件读取 / PEM 解析 / rustls 配置 / 重载任务四类失败面） |
 
 扩展方式：自定义组件遵循三种构造模式 `new()` / `builder()` / `with_dependencies()`；协议扩展通过 `define_registration!` 宏与 `Registration` trait 接入统一注册系统。
 

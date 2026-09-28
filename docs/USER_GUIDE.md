@@ -162,6 +162,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 返回值需满足 `serde::Serialize`，错误类型需为 `ApiError`；参数载荷上限 1 MiB。应用状态经 `GrpcServerConfig.state` 注入（`Arc<dyn Any + Send + Sync>`）。
 
+### HTTP TLS 终止
+
+启用 `serve-tls` feature 后，`http::tls` 在进程内以 rustls（aws-lc-rs provider）终止 TLS：证书/密钥从 `TlsConfig` 指向的 PEM 文件加载（unix 下 group/other 可读的私钥文件会打 warn，建议 `chmod 600`），ALPN 可配置（缺省 `["h2", "http/1.1"]`），每个请求自动注入 `ConnectInfo<SocketAddr>`（TLS 直连无前置代理，限流/审计因此拿到不可伪造的客户端 IP）。停机编排复用 graceful 三阶段（停止接新 → 排空在途 → 停止钩子），`TlsServeConfig` 另提供握手超时（默认 10s）与 HTTP 头读取超时（默认 30s）两道预认证护栏：
+
+```rust
+use sdforge::config::TlsConfig;
+use sdforge::http::tls::{TlsServeConfig, serve_with_graceful_shutdown_tls, tls_acceptor};
+use sdforge::http::{default_shutdown_signal, GracefulShutdownConfig};
+
+let tls = TlsConfig::new("cert.pem", "key.pem");
+let acceptor = tls_acceptor(&tls)?;
+let listener = tokio::net::TcpListener::bind("0.0.0.0:8443").await?;
+let config = TlsServeConfig::default()
+    .with_graceful(GracefulShutdownConfig::default());
+serve_with_graceful_shutdown_tls(
+    app,
+    listener,
+    acceptor,
+    default_shutdown_signal(),
+    config,
+).await?;
+```
+
+证书轮换用 `ReloadingTls`：acceptor 与重载器编译期绑定（不存在「config 与 reloader 拆开导致热重载静默失效」的错误形态），换盘后调 `reload()`——注意它是阻塞操作（文件 IO + PEM 解析），定时器线程可直呼，tokio worker 上用 `reload_async()`。重载读到的密钥对与证书不匹配时保留旧证书并返回错误，不打断在线服务。`TlsConfig` 也可写在配置文件里（`server.tls`，`SdForgeConfig::validate()` 会校验路径非空与 ALPN 合法性）。gRPC 侧的对应物是 `GrpcServerConfig::tls`（`grpc-tls` feature，tonic `ServerTlsConfig` 接线）——两者文档互链、实现独立。
+
 ### CLI 应用
 
 启用 `cli` feature 后，`#[forge(cli = true)]` 注册命令；`CliBuilder::execute()` 一站式完成构建/解析/分发/输出/退出。最小可运行示例见 [README 快速开始](../README.md#-最小可运行示例)（源码 `examples/basic_cli.rs`）。

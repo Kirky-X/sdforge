@@ -4,9 +4,11 @@
 //! `CorsConfig` combinations, middleware layer wiring, and feature-gated
 //! inventory preservation through `build()`.
 
-use crate::config::{
-    ApiKeySeed, AuthConfig, CacheConfig, CorsConfig, SdForgeConfig, SecurityConfig, ServerConfig,
-};
+#[cfg(feature = "cache")]
+use crate::config::CacheConfig;
+#[cfg(feature = "security")]
+use crate::config::SecurityConfig;
+use crate::config::{ApiKeySeed, AuthConfig, CorsConfig, SdForgeConfig, ServerConfig};
 #[cfg(any(feature = "mcp", feature = "websocket", feature = "grpc"))]
 use crate::http::build;
 use crate::http::build_with_config;
@@ -239,6 +241,7 @@ fn test_build_with_config_zero_body_size_rejected() {
             port: 8080,
             request_timeout_secs: 30,
             cors: None,
+            tls: None,
             max_body_size: 0,
             #[cfg(feature = "idempotency")]
             idempotency: IdempotencyConfig::default(),

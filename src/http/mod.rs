@@ -46,6 +46,14 @@ pub mod idempotency;
 pub use http_impl::rate_limit_layer;
 pub use http_impl::{build, build_with_config, build_with_redirect};
 
+#[cfg(feature = "serve-tls")]
+pub mod tls;
+#[cfg(feature = "serve-tls")]
+pub use tls::{
+    ReloadingTls, TlsAcceptor, TlsError, TlsServeConfig, load_server_config,
+    serve_with_graceful_shutdown_tls, tls_acceptor,
+};
+
 #[cfg(feature = "graceful")]
 pub use graceful::{
     GracefulShutdownConfig, default_shutdown_signal, serve_with_graceful_shutdown,

@@ -12,6 +12,13 @@ allowed_origins = ["https://yourdomain.com"]
 allowed_methods = ["GET", "POST", "PUT", "DELETE"]
 allowed_headers = ["Content-Type", "Authorization"]
 
+# TLS Configuration (serve-tls feature; consumed by http::tls)
+[server.tls]
+cert_path = "/etc/sdforge/tls/cert.pem"
+key_path = "/etc/sdforge/tls/key.pem"
+# ALPN offered to clients; defaults to ["h2", "http/1.1"]
+# alpn_protocols = ["h2", "http/1.1"]
+
 # Authentication Configuration
 [authentication]
 type = "jwt"

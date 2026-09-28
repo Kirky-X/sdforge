@@ -74,7 +74,7 @@ Annotate a function once with `#[forge]`; registration code for HTTP, MCP, gRPC,
 <details>
 <summary>🔧 Advanced capabilities, enabled on demand</summary>
 
-Parameter validation, declarative pagination, ETag conditional requests, lifecycle hooks, hook pipeline, graceful shutdown, health probes, Prometheus metrics, OTel export, request context, response timestamps, structured logging, inklog bridge, trait-kit integration, and SIMD JSON are each enabled on demand via an individual feature; per-item descriptions and defaults are in the [Feature Flags](#-feature-flags) section.
+Parameter validation, declarative pagination, ETag conditional requests, lifecycle hooks, hook pipeline, graceful shutdown, HTTP TLS termination, health probes, Prometheus metrics, OTel export, request context, response timestamps, structured logging, inklog bridge, trait-kit integration, and SIMD JSON are each enabled on demand via an individual feature; per-item descriptions and defaults are in the [Feature Flags](#-feature-flags) section.
 
 </details>
 
@@ -172,6 +172,7 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>health</code></td><td><code>/healthz</code> and <code>/readyz</code> probes (auto-mounted by <code>build_with_config</code>, auth bypassed)</td><td>❌</td></tr>
   <tr><td><code>metrics</code></td><td>Prometheus text-format <code>/metrics</code> endpoint (request counts, latency histograms, status code distribution; lightweight in-house renderer)</td><td>❌</td></tr>
   <tr><td><code>graceful</code></td><td>Graceful shutdown (SIGTERM/SIGINT: stop accepting, drain in-flight, phased teardown)</td><td>❌</td></tr>
+  <tr><td><code>serve-tls</code></td><td>HTTP TLS termination (rustls aws-lc-rs: PEM cert/key loading, configurable ALPN, <code>ReloadingTls</code> hot reload; per-request <code>ConnectInfo</code> injection, handshake/header-read timeout guards, shutdown choreography sharing graceful's stop phase. Doc-cross-linked with the gRPC-side <code>grpc-tls</code> but implemented independently)</td><td>❌</td></tr>
   <tr><td><code>context</code></td><td>Request context (request_id/trace_id generation and cross-protocol HTTP/MCP/gRPC/WS injection)</td><td>❌</td></tr>
   <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> + <code>#[param(ge/le/...)]</code> parameter validation; 400 with field-level errors</td><td>❌</td></tr>
   <tr><td><code>paginate</code></td><td><code>#[forge(paginate)]</code> declarative pagination (auto page/size and the <code>{items,total,next}</code> wrapper)</td><td>❌</td></tr>
@@ -194,7 +195,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 <summary>🔗 Feature dependency relations</summary>
 
 - Independent of `http`: `mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `logging` / `inklog` / `i18n` / `simd-json` / `limiteron-integration`
-- Derived from `http`: `security` (includes `ratelimit-http` → `ratelimit` and `cache`), `ratelimit-http`, `websocket` (includes `streaming`), `health` / `metrics` / `graceful` / `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
+- Derived from `http`: `security` (includes `ratelimit-http` → `ratelimit` and `cache`), `ratelimit-http`, `websocket` (includes `streaming`), `health` / `metrics` / `graceful` / `serve-tls` (includes `graceful`) / `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
 - `docs` = `openapi` + `cli` (mounting the Swagger UI additionally requires `http`)
 - `kit` = `trait-kit` (health + lifecycle) + `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
 - `full` covers 24 runtime features and excludes `simd-json` / `kit` / `limiteron-integration` — optional heavy deps (SIMD JSON, trait-kit module graph, rate-limit integration foundation) to be enabled individually as needed
@@ -298,7 +299,7 @@ The `#[forge]` macro generates protocol registrations for the features currently
 | Layer | Location | Description |
 |-------|----------|-------------|
 | Unit tests | Embedded `#[cfg(test)]` in `src/`, `tests/unit/` | Module-level tests, including proptest property tests (`src/tests/property_tests.rs`) |
-| Integration tests | `tests/integration/` | Covers http / mcp / grpc / websocket / security / cache / streaming / openapi / cli / docs / health_probes / graceful_shutdown / validate / paginate / etag / lifecycle / otel_export / status_code / rbac protocol and feature combinations |
+| Integration tests | `tests/integration/` | Covers http / mcp / grpc / websocket / security / cache / streaming / openapi / cli / docs / health_probes / graceful_shutdown / http_tls / validate / paginate / etag / lifecycle / otel_export / status_code / rbac protocol and feature combinations |
 | Macro tests | `tests/macros/`, `macros/tests/` | trybuild compile-failure cases and macro expansion verification |
 | E2E | `tests/e2e/` | `e2e_advanced` multi-domain E2E scenarios (12-domain scale baseline in [Test Scenarios](docs/TEST_SCENARIOS.md)) |
 | Examples comprehensive tests | `examples/tests/` | All-feature re-export accessibility and cross-protocol dispatch (77 tests) plus gateway E2E |

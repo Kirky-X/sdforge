@@ -23,6 +23,10 @@ pub struct ServerConfig {
     pub max_body_size: usize,
     /// CORS configuration
     pub cors: Option<CorsConfig>,
+    /// TLS configuration（消费方：`http::tls`，feature = `serve-tls`；纯数据
+    /// 配置，任何特性组合下均可声明与校验。与 gRPC 侧 `GrpcServerConfig::tls`
+    /// 的 cfg 门控不同——那边类型绑定 tonic 必须门控，这边零 TLS 依赖故恒在）。
+    pub tls: Option<TlsConfig>,
     /// Idempotency replay protection (feature = `idempotency`).
     ///
     /// `enabled` 默认 false —— 开启后仅携带 `Idempotency-Key` 头的
@@ -97,6 +101,7 @@ impl Default for ServerConfig {
             request_timeout_secs: DEFAULT_REQUEST_TIMEOUT_SECS,
             max_body_size: 10 * 1024 * 1024, // 10 MiB
             cors: None,
+            tls: None,
             #[cfg(feature = "idempotency")]
             idempotency: crate::config::IdempotencyConfig::default(),
         }
@@ -139,6 +144,10 @@ impl ServerConfig {
             cors.validate()?;
         }
 
+        if let Some(ref tls) = self.tls {
+            tls.validate()?;
+        }
+
         #[cfg(feature = "idempotency")]
         self.idempotency.validate()?;
 
@@ -154,16 +163,49 @@ impl crate::config::ValidateConfig for ServerConfig {
     }
 }
 
+/// ALPN 协议默认列表：HTTP/2 优先、HTTP/1.1 兜底（覆盖现代与旧客户端）。
+fn default_alpn_protocols() -> Vec<String> {
+    vec!["h2".to_string(), "http/1.1".to_string()]
+}
+
 /// TLS configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+///
+/// 纯数据配置：证书/密钥的加载与 TLS 终止由 `http::tls`（feature =
+/// `serve-tls`，rustls）完成；gRPC 侧的对应物是 `grpc::GrpcServerConfig::tls`
+/// （feature = `grpc-tls`，tonic `ServerTlsConfig` 接线）——两者文档互链、
+/// 实现独立。
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TlsConfig {
-    /// Path to certificate file
+    /// Path to certificate file (PEM)
     cert_path: String,
-    /// Path to private key file
+    /// Path to private key file (PEM)
     key_path: String,
+    /// 向客户端宣告的 ALPN 协议列表（TLS wire 每项 ≤ 255 字节且非空）。
+    /// 空 = 不宣告 ALPN。缺省 `["h2", "http/1.1"]`。
+    #[serde(default = "default_alpn_protocols")]
+    alpn_protocols: Vec<String>,
+}
+
+impl Default for TlsConfig {
+    fn default() -> Self {
+        Self {
+            cert_path: String::new(),
+            key_path: String::new(),
+            alpn_protocols: default_alpn_protocols(),
+        }
+    }
 }
 
 impl TlsConfig {
+    /// Create a TLS configuration from PEM file paths.
+    pub fn new(cert_path: impl Into<String>, key_path: impl Into<String>) -> Self {
+        Self {
+            cert_path: cert_path.into(),
+            key_path: key_path.into(),
+            alpn_protocols: default_alpn_protocols(),
+        }
+    }
+
     /// Get certificate path
     pub fn cert_path(&self) -> &str {
         &self.cert_path
@@ -172,6 +214,48 @@ impl TlsConfig {
     /// Get private key path
     pub fn key_path(&self) -> &str {
         &self.key_path
+    }
+
+    /// Get the ALPN protocol list offered to clients.
+    pub fn alpn_protocols(&self) -> &[String] {
+        &self.alpn_protocols
+    }
+
+    /// Override the ALPN protocol list (builder style). Empty slice = 不宣告。
+    pub fn with_alpn_protocols(mut self, protocols: Vec<String>) -> Self {
+        self.alpn_protocols = protocols;
+        self
+    }
+
+    /// Validate TLS configuration.
+    ///
+    /// 证书/密钥路径必须非空；ALPN 每项必须非空且 ≤ 255 字节
+    /// （TLS wire 格式为单字节长度前缀 + 内容，超限握手期才会暴露，
+    /// 提前到配置校验阶段拒绝）。
+    pub fn validate(&self) -> Result<(), crate::config::ConfigError> {
+        if self.cert_path.is_empty() {
+            return Err(crate::config::ConfigError::ValidationError(
+                "TLS cert_path cannot be empty".into(),
+            ));
+        }
+        if self.key_path.is_empty() {
+            return Err(crate::config::ConfigError::ValidationError(
+                "TLS key_path cannot be empty".into(),
+            ));
+        }
+        for protocol in &self.alpn_protocols {
+            if protocol.is_empty() {
+                return Err(crate::config::ConfigError::ValidationError(
+                    "TLS alpn_protocols entries cannot be empty".into(),
+                ));
+            }
+            if protocol.len() > 255 {
+                return Err(crate::config::ConfigError::ValidationError(
+                    "TLS alpn_protocols entries cannot exceed 255 bytes".into(),
+                ));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -276,24 +360,92 @@ mod tests {
 
     #[test]
     fn test_tls_config_getters() {
-        let config = TlsConfig {
-            cert_path: "/etc/ssl/cert.pem".to_string(),
-            key_path: "/etc/ssl/key.pem".to_string(),
-        };
+        let config = TlsConfig::new("/etc/ssl/cert.pem", "/etc/ssl/key.pem");
         assert_eq!(config.cert_path(), "/etc/ssl/cert.pem");
         assert_eq!(config.key_path(), "/etc/ssl/key.pem");
+        // 默认 ALPN：h2 优先、http/1.1 兜底
+        assert_eq!(
+            config.alpn_protocols(),
+            &["h2".to_string(), "http/1.1".to_string()]
+        );
     }
 
     #[test]
     fn test_tls_config_serialization() {
-        let config = TlsConfig {
-            cert_path: "/path/to/cert.pem".to_string(),
-            key_path: "/path/to/key.pem".to_string(),
-        };
+        let config = TlsConfig::new("/path/to/cert.pem", "/path/to/key.pem");
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: TlsConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.cert_path(), "/path/to/cert.pem");
         assert_eq!(deserialized.key_path(), "/path/to/key.pem");
+    }
+
+    #[test]
+    fn test_tls_config_deserialization_defaults_alpn() {
+        // 旧格式配置（无 alpn 字段）反序列化时补默认 ALPN 列表
+        let json = r#"{"cert_path": "/c.pem", "key_path": "/k.pem"}"#;
+        let config: TlsConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            config.alpn_protocols(),
+            &["h2".to_string(), "http/1.1".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_tls_config_custom_alpn_roundtrip() {
+        let config =
+            TlsConfig::new("/c.pem", "/k.pem").with_alpn_protocols(vec!["http/1.1".into()]);
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: TlsConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.alpn_protocols(), &["http/1.1".to_string()]);
+    }
+
+    #[test]
+    fn test_tls_config_validate_rejects_empty_paths() {
+        let config = TlsConfig::default();
+        let err = config.validate().unwrap_err().to_string();
+        assert!(
+            err.contains("cert_path"),
+            "empty cert_path must be named: {err}"
+        );
+
+        let config = TlsConfig::new("/c.pem", "");
+        let err = config.validate().unwrap_err().to_string();
+        assert!(
+            err.contains("key_path"),
+            "empty key_path must be named: {err}"
+        );
+    }
+
+    #[test]
+    fn test_tls_config_validate_rejects_invalid_alpn_entries() {
+        let empty = TlsConfig::new("/c.pem", "/k.pem").with_alpn_protocols(vec![String::new()]);
+        assert!(
+            empty.validate().is_err(),
+            "empty ALPN entry must be rejected"
+        );
+
+        let oversized =
+            TlsConfig::new("/c.pem", "/k.pem").with_alpn_protocols(vec!["x".repeat(256)]);
+        assert!(
+            oversized.validate().is_err(),
+            "ALPN entry over 255 bytes must be rejected"
+        );
+
+        let ok = TlsConfig::new("/c.pem", "/k.pem").with_alpn_protocols(vec!["h2".into()]);
+        assert!(ok.validate().is_ok());
+    }
+
+    #[test]
+    fn test_server_config_validate_propagates_tls_error() {
+        let config = ServerConfig {
+            tls: Some(TlsConfig::default()),
+            ..Default::default()
+        };
+        let err = config.validate().unwrap_err().to_string();
+        assert!(
+            err.contains("cert_path"),
+            "server validate must propagate TLS validation error: {err}"
+        );
     }
 
     // ============================================================================

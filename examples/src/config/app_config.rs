@@ -53,6 +53,7 @@ pub fn build_custom_config() -> SdForgeConfig {
         #[cfg(feature = "idempotency_examples")]
         idempotency: Default::default(),
         cors: None,
+        tls: None,
     };
 
     let auth = AuthConfig::ApiKey {
@@ -108,6 +109,7 @@ pub fn demo_server_config() -> ServerConfig {
         #[cfg(feature = "idempotency_examples")]
         idempotency: Default::default(),
         cors: None,
+        tls: None,
     }
 }
 

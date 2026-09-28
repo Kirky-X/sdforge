@@ -91,7 +91,7 @@ pub async fn default_shutdown_signal() {
 /// dedicated current-thread runtime + OS thread, keeping the serve future
 /// spawn-safe (Send). `#[forge(on_stop)]` lifecycle hooks hook in
 /// here once the `lifecycle` feature lands.
-fn run_stop_hooks() {
+pub(crate) fn run_stop_hooks() {
     #[cfg(feature = "kit")]
     if let Some(kit) = crate::integrations::kit::take_ready_kit() {
         let _ = std::thread::spawn(move || {
@@ -107,13 +107,13 @@ fn run_stop_hooks() {
 }
 
 /// Async stop hooks: `#[forge(on_stop)]` lifecycle hooks.
-async fn run_lifecycle_stop_hooks() {
+pub(crate) async fn run_lifecycle_stop_hooks() {
     #[cfg(feature = "lifecycle")]
     crate::lifecycle::run_on_stop().await;
 }
 
 /// Pre-serve start hooks: `#[forge(on_start)]` lifecycle hooks.
-async fn run_lifecycle_start_hooks() {
+pub(crate) async fn run_lifecycle_start_hooks() {
     #[cfg(feature = "lifecycle")]
     crate::lifecycle::run_on_start().await;
 }
@@ -194,6 +194,17 @@ pub async fn serve_with_graceful_shutdown_with_hooks(
     .await
 }
 
+/// 排空后的统一收尾：kit 三阶段关闭 → `#[forge(on_stop)]` 生命周期钩子
+/// → 调用方 `after_drain` 钩子。graceful 与 tls 两条 serve 路径共用，
+/// 收尾顺序保持单一事实源。
+pub(crate) async fn run_stop_phase(after_drain: Option<Pin<Box<dyn Future<Output = ()> + Send>>>) {
+    run_stop_hooks();
+    run_lifecycle_stop_hooks().await;
+    if let Some(hook) = after_drain {
+        hook.await;
+    }
+}
+
 /// Shared graceful-shutdown choreography for both serve variants.
 ///
 /// Fan the phase-1 trigger out so both axum's graceful-shutdown future and
@@ -259,21 +270,13 @@ where
 
     tokio::select! {
         result = server => {
-            run_stop_hooks();
-            run_lifecycle_stop_hooks().await;
-            if let Some(hook) = after_drain {
-                hook.await;
-            }
+            run_stop_phase(after_drain).await;
             result
         }
         _ = deadline => {
             // Dropping `server` here aborts the accept loop and any
             // in-flight connection — the forced path of phase 2.
-            run_stop_hooks();
-            run_lifecycle_stop_hooks().await;
-            if let Some(hook) = after_drain {
-                hook.await;
-            }
+            run_stop_phase(after_drain).await;
             Ok(())
         }
     }

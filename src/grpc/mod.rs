@@ -58,6 +58,12 @@ pub struct GrpcServerConfig {
     /// HTTP/2 keepalive 超时（None = tonic 默认）。
     pub http2_keepalive_timeout: Option<std::time::Duration>,
     /// 可选 TLS（feature = `grpc-tls`）。只做接线，不做证书加载/轮换。
+    ///
+    /// HTTP 侧的对应物是 `sdforge::http::tls` 模块（feature = `serve-tls`，
+    /// rustls 终止：证书/密钥加载 + ALPN + 可选 `ReloadingTls` 热重载）。
+    /// 两者文档互链、实现独立，可各自单独启用。门控取舍：本字段类型绑定
+    /// tonic 必须 cfg 门控；HTTP 侧 `ServerConfig.tls` 是零 TLS 依赖的纯
+    /// 数据，故不随 feature 裁剪。
     #[cfg(feature = "grpc-tls")]
     pub tls: Option<tonic::transport::server::ServerTlsConfig>,
     /// 重放窗口秒数（feature = `idempotency`，默认 86400）。
