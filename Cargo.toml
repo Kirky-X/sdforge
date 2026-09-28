@@ -3,7 +3,7 @@ members = [".", "examples", "macros"]
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0-rc.5"
+version = "0.5.0-rc.6"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kirky-X <Kirky-X@outlook.com>"]
@@ -164,7 +164,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.5", path = "./macros" }
+sdforge-macros = { version = "0.5.0-rc.6", path = "./macros" }
 
 # HTTP dependencies
 axum = { workspace = true, optional = true }
@@ -261,7 +261,7 @@ unic-langid = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.4", path = "./macros", default-features = false }
+sdforge-macros = { version = "0.5.0-rc.6", path = "./macros", default-features = false }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }

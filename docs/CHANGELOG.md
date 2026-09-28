@@ -11,7 +11,9 @@
 <summary>📑 目录</summary>
 
 - [Unreleased](#unreleased)
-- [0.5.0-rc.3](#050-rc3---2026-09-10)
+- [0.5.0-rc.6](#050-rc6---2026-09-28)
+- [0.5.0-rc.5](#050-rc5---2026-09-21)
+- [0.5.0-rc.4](#050-rc4---2026-09-14)
 - [0.5.0-rc.2](#050-rc2---2026-09-07)
 - [0.4.7](#047---2026-07-23)
 - [0.4.6](#046---2026-07-22)
@@ -31,6 +33,8 @@
 </details>
 
 ## [Unreleased]
+
+## [0.5.0-rc.6] - 2026-09-28
 
 ### ⚠️ 破坏性变更 (Breaking Changes)
 
@@ -157,6 +161,8 @@
 - **错误码映射单一事实来源**：`error::unified::mapping_for`/`grpc_code_for` 统一
   `ApiError` → HTTP 状态/错误码/gRPC Code；修正 `InvalidInput` HTTP 400 与 gRPC 侧
   422 的两张皮分歧（gRPC 业务错误不再自报 422）。
+- **性能**：OpenAPI spec 端点改借用序列化（免去每请求整树深拷贝）；健康探针
+  poll 正常路径去除 name 克隆分配。
 - **`GetInfo` 版本号取 `CARGO_PKG_VERSION`**（此前硬编码 "0.1.0"）。
 - **限流覆盖 gRPC `get_info`**（与 `call` 共用 guard，缺 remote_addr 时 "unknown" 兜底）。
 
@@ -238,6 +244,8 @@
 
 ### 已知依赖健康信号 (Known Dependency Signals)
 
+- `rustls 0.23.44 → 0.23.45`：RUSTSEC-2026-0285 安全公告驱动的依赖修复
+  （`cargo update -p rustls`），本轮已收敛。
 - `bincode 2.0.1`：RUSTSEC-2025-0141 标记为 unmaintained（informational，非漏洞，
   trivy + cargo-audit 双通道均 0 CVE）。可留意 postcard/rkyv 等替代方案，无需
   紧急行动。
@@ -256,7 +264,9 @@
 
 ---
 
-## [0.5.0-rc.3] - 2026-09-10
+## [0.5.0-rc.4] - 2026-09-14
+
+> 注：0.5.0-rc.3 未单独发布（无 tag、未上 crates.io），本节内容含原 rc.3 开发批次，随 0.5.0-rc.4 一并发布。
 
 ### Added
 
@@ -272,6 +282,30 @@
 - 版本递增至 `0.5.0-rc.3`
 - trait-kit → `0.5.0-rc.3`、oxcache → `0.5.0-rc.4`、limiteron → `0.3.0-rc.3`、inklog → `0.3.0-rc.3`
 - 新增 `[patch.crates-io]` 本地路径联调
+
+---
+
+## [0.5.0-rc.5] - 2026-09-21
+
+### 新增
+
+- **`forge` 宏 status=204/304**：生成无 body 纯状态码响应（RFC 9110）
+- **re-export validator crate**：供 consumer 复用校验能力
+- **Swagger UI 自定义 OpenAPI spec 地址**
+- **`extract_client_ip` 公开化** + `ConnectInfo` 优雅关闭 serve 变体
+- **i18n 整改**：接入 fluent-bundle 与孤儿键接线
+
+### 修复
+
+- rmcp `ServerInfo`→`ServerConfig` 弃用别名替换（SEP-2577）
+- `full` feature 补齐六项运行时特性并按需编译 proto
+- `RateLimitLayer` 派生 Clone；config validate 调用改 UFCS；http 测试构造体字段按 feature 门控
+
+### 变更
+
+- **跨仓 path 依赖改走 crates.io**；为 path-only 依赖补全 version 字段
+- **命名统一**：App* 通用类型前缀改为 `SdForge`（AppApiKeyAuthBuilder/AppAuditLoggerBuilder 等）
+- **工程加固**：detect-secrets 基线、pre-commit 门禁、codeql-action SHA 统一 bump v4.37.9、typos 白名单、版权头统一
 
 ---
 
