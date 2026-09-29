@@ -549,6 +549,11 @@ path = "tests/integration/feature_combinations.rs"
 name = "grpc_tests"
 path = "tests/integration/grpc_tests.rs"
 
+# gRPC server-streaming 端到端 — 宏生成流式 handler + 真实 tonic 网络链路。
+[[test]]
+name = "grpc_streaming_tests"
+path = "tests/integration/grpc_streaming_tests.rs"
+
 [[test]]
 name = "http_integration"
 path = "tests/integration/http_integration.rs"

@@ -8,6 +8,10 @@ package sdforge.v1;
 service SdForgeService {
   // Call a method with parameters and data
   rpc Call(CallRequest) returns (CallResponse);
+  // Call a streaming method: each item produced by the forge handler
+  // (declared with `stream = true`) arrives as one CallResponse message.
+  // Requires the `streaming` feature on the server.
+  rpc CallStream(CallRequest) returns (stream CallResponse);
   // Get service information
   rpc GetInfo(InfoRequest) returns (InfoResponse);
 }

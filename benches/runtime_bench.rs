@@ -345,6 +345,126 @@ criterion_group!(
     bench_route_dispatch,
     bench_unified_handler_dispatch,
     bench_json_serialization,
-    bench_tls_termination
+    bench_tls_termination,
+    bench_grpc_streaming
 );
 criterion_main!(benches);
+
+/// gRPC server-streaming 基线（`grpc` + `streaming`）：分发 + 逐项映射的
+/// 端到端耗时与每项序列化映射开销。`grpc`/`streaming` 未启用时空实现
+/// 占位——`--features http` 调用路径必须可编译（同 TLS 组的存根约定）。
+#[cfg(not(all(feature = "grpc", feature = "streaming")))]
+fn bench_grpc_streaming(_: &mut Criterion) {}
+
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+fn bench_grpc_streaming(c: &mut Criterion) {
+    use sdforge::grpc::sdforge_v1::sd_forge_service_server::SdForgeService;
+    use sdforge::grpc::stream_output_from;
+    use sdforge::streaming::create_stream_channel;
+
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    fn count_stream_handler(
+        args: sdforge::core::HandlerArgs,
+        _state: sdforge::core::HandlerState,
+    ) -> sdforge::grpc::GrpcStreamHandlerFuture {
+        let count: u64 = args.get("count").and_then(|s| s.parse().ok()).unwrap_or(10);
+        let (tx, response) = create_stream_channel::<serde_json::Value>(32);
+        tokio::spawn(async move {
+            for i in 0..count {
+                if tx
+                    .send(Ok(serde_json::json!({ "seq": i, "payload": "bench-item" })))
+                    .await
+                    .is_err()
+                {
+                    break;
+                }
+            }
+        });
+        Box::pin(async move { Ok(stream_output_from(response)) })
+    }
+
+    fn stream_request(count: u64) -> tonic::Request<sdforge::grpc::sdforge_v1::CallRequest> {
+        let mut parameters = std::collections::HashMap::new();
+        parameters.insert("count".to_string(), count.to_string());
+        tonic::Request::new(sdforge::grpc::sdforge_v1::CallRequest {
+            method: "bench_stream".to_string(),
+            parameters,
+            data: String::new(),
+        })
+    }
+
+    // 流式 handler 手工注册（bench 内不经宏，直接对齐 inventory 契约）。
+    inventory::submit! {
+        sdforge::grpc::GrpcStreamHandlerRegistration {
+            method: "bench_stream",
+            handler: count_stream_handler,
+            body_param: None,
+            default_status: None,
+            roles: &[],
+        }
+    }
+
+    let service = sdforge::grpc::SdForgeGrpcService::default();
+    #[allow(deprecated)]
+    let _ = &service;
+
+    let mut group = c.benchmark_group("grpc_stream");
+    group.throughput(criterion::Throughput::Elements(1));
+
+    // 端到端分发：call_stream 守卫链 + handler + 逐项映射 + 收流。
+    for items in [10u64, 100, 1000] {
+        group.bench_function(format!("call_stream_{items}_items"), |b| {
+            b.iter(|| {
+                rt.block_on(async {
+                    let response = service
+                        .call_stream(stream_request(items))
+                        .await
+                        .expect("dispatch");
+                    use tokio_stream::StreamExt;
+                    let mut n = 0u64;
+                    let mut stream = response.into_inner();
+                    while let Some(item) = stream.next().await {
+                        let resp = item.expect("item ok");
+                        assert!(resp.success);
+                        n += 1;
+                    }
+                    assert_eq!(n, items);
+                });
+            });
+        });
+    }
+
+    // 每项映射开销（stream_output_from 消费 1e4 项，不经 gRPC 分发层）。
+    group.bench_function("item_mapping_10k", |b| {
+        b.iter(|| {
+            let mut total = 0usize;
+            rt.block_on(async {
+                use tokio_stream::StreamExt;
+                // 独立构造 1e4 项的流并经 stream_output_from 逐项消费。
+                let (tx, rx) =
+                    tokio::sync::mpsc::channel::<Result<serde_json::Value, String>>(1024);
+                tokio::spawn(async move {
+                    for i in 0..10_000u64 {
+                        let _ = tx.send(Ok(serde_json::json!({ "seq": i }))).await;
+                    }
+                });
+                let mapped =
+                    sdforge::grpc::stream_output_from(sdforge::streaming::StreamResponse::new(
+                        tokio_stream::wrappers::ReceiverStream::new(rx),
+                    ));
+                let mut stream = mapped.stream;
+                while let Some(item) = stream.next().await {
+                    let _ = item.expect("item ok");
+                    total += 1;
+                }
+            });
+            assert_eq!(total, 10_000);
+        });
+    });
+
+    group.finish();
+}

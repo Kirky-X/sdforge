@@ -28,6 +28,11 @@ pub use grpc_impl::{SdForgeGrpcService, build_server, build_server_with_config};
 pub mod handler;
 #[cfg(feature = "grpc")]
 pub use handler::GrpcHandlerRegistration;
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+pub use handler::{
+    GrpcStreamHandlerFn, GrpcStreamHandlerFuture, GrpcStreamHandlerRegistration, GrpcStreamItem,
+    GrpcStreamOutput, stream_output_from,
+};
 
 #[cfg(feature = "grpc")]
 /// gRPC route registration

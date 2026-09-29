@@ -162,6 +162,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 返回值需满足 `serde::Serialize`，错误类型需为 `ApiError`；参数载荷上限 1 MiB。应用状态经 `GrpcServerConfig.state` 注入（`Arc<dyn Any + Send + Sync>`）。
 
+#### gRPC server-streaming（`streaming` × `grpc`）
+
+`#[forge(grpc_method, stream = true)]`（另需 `streaming` feature）声明流式端点：handler 返回 `StreamResponse<T>`，经 `CallStream` RPC 逐项回送 `CallResponse`——每项 success:true + JSON 数据；流式端点自带限流/认证/RBAC/载荷上限守卫链（`Call` 与 `CallStream` 两条 RPC 均为**限流最外层**——未认证洪水不进入恒时验证的 OS 线程睡眠，对齐 HTTP 栈「限流在认证外」的顺序）；项级错误以 success:false 的消息送达、流继续（对齐 SSE 错误事件语义）。unary 与流式注册表互斥：`Call` 打到流式方法、`CallStream` 打到 unary 方法均返回 `failed_precondition` 方向指引；流式路径不支持幂等重放（携带 `idempotency-key` 显式拒绝）。
+
+两条流式生命周期边界：① `context` feature 的 request_id/trace_id 作用域覆盖 handler 主体（参数装配到返回 `StreamResponse`），不跨越后续流产出阶段（该阶段由 tonic 连接任务 poll，用户自行 spawn 的生产者任务也不继承 task_local）——逐项日志需要关联 id 时应在生产者任务中显式携带；② 生产者任务 panic/中止 → 发送端 drop → 流以**正常耗尽**收尾，客户端无法区分完整流与截断流——需要 fail-visible 的调用方应持有 JoinHandle 监测并在异常退出时注入项级错误（`Err(msg)` 项 → success:false、流继续）。客户端断开则约定为取消语义：发送端 `send` 返回 Err，生产者循环应退出。
+
+```rust
+use sdforge::streaming::create_stream_channel;
+use sdforge::forge;
+
+#[forge(
+    name = "count_stream",
+    version = "v1",
+    grpc_method = "examples.count_stream",
+    stream = true
+)]
+async fn count_stream(count: Option<u64>) -> Result<sdforge::streaming::StreamResponse<String>, sdforge::core::ApiError> {
+    let (tx, response) = create_stream_channel::<String>(8);
+    tokio::spawn(async move {
+        for i in 0..count.unwrap_or(3) {
+            if tx.send(Ok(format!("evt-{i}"))).await.is_err() {
+                break; // 客户端断开 → 停止产出
+            }
+        }
+    });
+    Ok(response)
+}
+```
+
+`grpc` 开而 `streaming` 关时，`stream = true` 的声明在编译期报错（fail-loud，方法不会无声消失）；`CallStream` 在 `streaming` 关闭的服务器上返回 `unimplemented`。
+
 ### HTTP TLS 终止
 
 启用 `serve-tls` feature 后，`http::tls` 在进程内以 rustls（aws-lc-rs provider）终止 TLS：证书/密钥从 `TlsConfig` 指向的 PEM 文件加载（unix 下 group/other 可读的私钥文件会打 warn，建议 `chmod 600`），ALPN 可配置（缺省 `["h2", "http/1.1"]`），每个请求自动注入 `ConnectInfo<SocketAddr>`（TLS 直连无前置代理，限流/审计因此拿到不可伪造的客户端 IP）。停机编排复用 graceful 三阶段（停止接新 → 排空在途 → 停止钩子），`TlsServeConfig` 另提供三道预认证护栏——握手超时（默认 10s）、HTTP/1.1 头读取超时（默认 30s，仅作用 h1）与 HTTP/2 keep-alive 探测（默认 30s 间隔 / 20s 确认超时，握手后停滞不发帧的 h2 连接超窗断连，`with_http2_keepalive` 可调或关闭）：

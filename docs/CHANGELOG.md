@@ -36,6 +36,24 @@
 
 ### ✨ 新增 (Added)
 
+- **gRPC server-streaming**（`streaming` × `grpc` 组合，新增）：`#[forge(grpc_method =
+  "...", stream = true)]` 声明流式端点（handler 返回 `StreamResponse<T>`，复用
+  `create_stream_channel`），宏生成 `GrpcStreamHandlerRegistration`（与 unary 注册表
+  互斥），服务端新增 `CallStream` RPC（`sdforge.v1.proto`）逐项回送 `CallResponse`：
+  前置守卫链（限流/认证/RBAC/载荷上限）与 unary **同集合同序**（两 RPC 均为限流
+  最外层——unary 此前认证先于限流，未认证洪水每请求烧一次恒时验证的 OS 线程睡
+  眠，现与 HTTP 栈「限流在认证外」对齐）；项级错误以 success:false 消息送达、流
+  继续（对齐 SSE 错误事件语义）；per-item 状态码走 unary 同一优先级链（字段 >
+  宏 status > 200）；流式路径不支持幂等重放（携带 `idempotency-key` 显式
+  `failed_precondition`）；unary/流式双向错误调用均返回 `failed_precondition` 方向
+  指引。`context` 作用域覆盖 handler 主体（不跨越流产出阶段）；生产者任务 panic
+  以正常耗尽收尾（显式契约，契约测试锁定），取消语义为发送端 `send` 失败退出。
+  `grpc` 开而 `streaming` 关时流式声明编译期 fail-loud；`CallStream` 在无
+  `streaming` 的服务器上返回 `unimplemented`。顺带修复宏参数提取对 `Option<T>`
+  的漏判（`quote!` 类型字符串带空格曾使 Option 参数走 required 臂编译失败，
+  `Option<T>` 无 `FromStr`）。端到端测试 `grpc_streaming_tests` 走真实 tonic 链路
+  （含取消传播用例）；examples 补 `examples.count_stream` 流式端点示例。
+
 - **HTTP TLS 终止**（`serve-tls` feature，新增）：rustls（aws-lc-rs provider，与
   `grpc-tls` 同一密码学栈）在进程内终止 TLS。`http::tls` 提供：
   `load_server_config` / `tls_acceptor`（PEM 证书/密钥加载，装配期校验密钥匹配；

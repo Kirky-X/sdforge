@@ -9,6 +9,7 @@
 ```bash
 cargo bench --bench runtime_bench --features http
 cargo bench --bench runtime_bench --features serve-tls -- "tls_termination|plaintext_baseline|tls_cert_reloader"
+cargo bench --bench runtime_bench --features grpc,streaming -- "grpc_stream"
 ```
 
 > 本机基线数字用于回归参照（CI 阈值门禁待多机采样稳定后启用）。编译期成本（宏展开、依赖编译）单独记录于[编译期门控基准](benchmarks/vs-server-less.md)，不计入运行时基线。
@@ -28,6 +29,10 @@ cargo bench --bench runtime_bench --features serve-tls -- "tls_termination|plain
 | `resolve_read_path` | 证书重载器读路径（RwLock 读 + DER 访问） | ~48 ns | - |
 | `reload_from_disk` | 证书热重载（读盘 + PEM 解析 + 装配） | ~26 µs | - |
 | `reload_plus_4_concurrent_handshakes` | 1 次 reload 与 4 个并发新连接握手交叠 | ~3.26 ms | ~306 batch/s |
+| `call_stream_10_items` | gRPC 流式分发（守卫链 + handler + 10 项收流） | ~7.3 µs | ~1.4 M items/s |
+| `call_stream_100_items` | 同上（100 项） | ~45 µs | ~2.2 M items/s |
+| `call_stream_1000_items` | 同上（1000 项） | ~352 µs | ~2.8 M items/s |
+| `item_mapping_10k` | 每项序列化映射（stream_output_from，1e4 项） | ~1.52 ms | ~6.6 M items/s |
 
 ## 🔀 请求热路径（路由分发）
 
@@ -41,6 +46,14 @@ cargo bench --bench runtime_bench --features serve-tls -- "tls_termination|plain
 - **新建连接**：含完整 TLS 1.3 握手的进入成本 ~559 µs（约为复用路径 16 倍），主要来自握手非对称操作与往返；短连接高 churn 部署按此估算容量。
 - **证书热重载**：`resolve` 读路径 ~48 ns/次（握手路径上每次解析一次，`RwLock` 读无退化）；单次 `reload` ~26 µs（文件 IO + PEM 解析 + 密钥装配，tokio worker 上用 `reload_async`）；换盘与 4 路并发握手交叠的批次 ~3.26 ms——重载与进入流量互不阻塞。
 - `resolve_read_path` 以 `end_entity_certificate()` 为代理口径（rustls `ClientHello` 无法在 bench 内构造，两者同为锁读 + 终端实体 DER 访问）。
+
+## 🌊 gRPC server-streaming（`grpc` + `streaming`）
+
+`grpc_stream/*` 直调 `SdForgeGrpcService::call_stream`（不经网络，聚焦分发+映射开销）：
+
+- **增量线性**：10 项 ~7.3 µs → 1000 项 ~352 µs，每增量项约 ~350 ns（守卫链底价 + 每项映射）。
+- **每项映射**：`stream_output_from` 消费 1e4 项 ~1.52 ms（约 152 ns/项，`to_value` + `extract_value` 双阶段）。
+- 记录日期 2026-09-30（与 TLS 组同批）。
 
 ## 🧩 HandlerArgs 参数装配
 

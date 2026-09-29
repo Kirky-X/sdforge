@@ -19,6 +19,11 @@ use sdforge_v1::{
     sd_forge_service_server::{SdForgeService, SdForgeServiceServer},
 };
 
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+use crate::grpc::handler::{GrpcStreamHandlerFn, GrpcStreamHandlerRegistration};
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+use futures_util::StreamExt;
+
 /// gRPC 参数载荷大小上限（与 MCP `MAX_ARGUMENTS_SIZE_BYTES` 对齐，1 MiB）。
 ///
 /// vuln-0002 补强：gRPC `call` 路径此前跳过 MCP 的 schema/大小校验，
@@ -60,6 +65,23 @@ pub struct SdForgeGrpcService {
     /// so `call`'s success path can apply the priority chain:
     /// `ServiceResponse.status_code` > `default_status` > 200.
     default_statuses: OnceLock<HashMap<&'static str, Option<u16>>>,
+    /// Lazy-built `method -> streaming handler fn` lookup table
+    /// (feature = `streaming`). Streaming methods live apart from unary
+    /// ones so each RPC reaches exactly its own registry.
+    #[cfg(feature = "streaming")]
+    stream_handlers: OnceLock<HashMap<&'static str, GrpcStreamHandlerFn>>,
+    /// Lazy-built `method -> body_param name` lookup table for streaming
+    /// methods (feature = `streaming`).
+    #[cfg(feature = "streaming")]
+    stream_body_params: OnceLock<HashMap<&'static str, Option<&'static str>>>,
+    /// Lazy-built `method -> roles` lookup table for streaming methods
+    /// (feature = `streaming`).
+    #[cfg(feature = "streaming")]
+    stream_roles: OnceLock<HashMap<&'static str, &'static [&'static str]>>,
+    /// Lazy-built `method -> macro-level status` lookup table for streaming
+    /// methods (feature = `streaming`); applied per stream item.
+    #[cfg(feature = "streaming")]
+    stream_default_statuses: OnceLock<HashMap<&'static str, Option<u16>>>,
     /// Optional rate limiter (vuln-0006). When `Some`, each `call` request
     /// is checked against the limiter using the client's remote address.
     #[cfg(feature = "ratelimit")]
@@ -84,6 +106,14 @@ impl Default for SdForgeGrpcService {
             body_params: OnceLock::new(),
             roles: OnceLock::new(),
             default_statuses: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_handlers: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_body_params: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_roles: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_default_statuses: OnceLock::new(),
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             #[cfg(feature = "security")]
@@ -106,6 +136,14 @@ impl SdForgeGrpcService {
             body_params: OnceLock::new(),
             roles: OnceLock::new(),
             default_statuses: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_handlers: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_body_params: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_roles: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_default_statuses: OnceLock::new(),
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             #[cfg(feature = "security")]
@@ -145,6 +183,14 @@ impl SdForgeGrpcService {
             body_params: OnceLock::new(),
             roles: OnceLock::new(),
             default_statuses: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_handlers: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_body_params: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_roles: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_default_statuses: OnceLock::new(),
             rate_limiter,
             #[cfg(feature = "security")]
             auth_interceptor: None,
@@ -208,22 +254,70 @@ impl SdForgeGrpcService {
                 .collect()
         })
     }
+
+    /// Build (or reuse) the `method -> streaming handler` cache from
+    /// inventory (feature = `streaming`). Streaming methods live in a
+    /// separate registry so each RPC reaches exactly its own table.
+    #[cfg(feature = "streaming")]
+    #[must_use]
+    fn stream_handlers(&self) -> &HashMap<&'static str, GrpcStreamHandlerFn> {
+        self.stream_handlers.get_or_init(|| {
+            inventory::iter::<GrpcStreamHandlerRegistration>()
+                .map(|r| (r.method, r.handler))
+                .collect()
+        })
+    }
+
+    /// Build (or reuse) the `method -> body_param` cache for streaming
+    /// methods (feature = `streaming`).
+    #[cfg(feature = "streaming")]
+    #[must_use]
+    fn stream_body_params(&self) -> &HashMap<&'static str, Option<&'static str>> {
+        self.stream_body_params.get_or_init(|| {
+            inventory::iter::<GrpcStreamHandlerRegistration>()
+                .map(|r| (r.method, r.body_param))
+                .collect()
+        })
+    }
+
+    /// Build (or reuse) the `method -> roles` cache for streaming methods
+    /// (feature = `streaming`).
+    #[cfg(feature = "streaming")]
+    #[must_use]
+    fn stream_roles(&self) -> &HashMap<&'static str, &'static [&'static str]> {
+        self.stream_roles.get_or_init(|| {
+            inventory::iter::<GrpcStreamHandlerRegistration>()
+                .map(|r| (r.method, r.roles))
+                .collect()
+        })
+    }
+
+    /// Build (or reuse) the `method -> default_status` cache for streaming
+    /// methods (feature = `streaming`); applied per stream item.
+    #[cfg(feature = "streaming")]
+    #[must_use]
+    fn stream_default_statuses(&self) -> &HashMap<&'static str, Option<u16>> {
+        self.stream_default_statuses.get_or_init(|| {
+            inventory::iter::<GrpcStreamHandlerRegistration>()
+                .map(|r| (r.method, r.default_status))
+                .collect()
+        })
+    }
 }
 
 #[cfg(feature = "grpc")]
 impl SdForgeGrpcService {
-    /// install a request context (request_id/trace_id) for the whole
-    /// dispatch, so handlers and logs share the ambient correlation ids.
-    async fn call_with_context(
+    /// 凭据验证（`call` 与 `call_stream` 共用）：配置了拦截器时验证
+    /// Bearer/API-key 凭据，成功后保留身份供 RBAC 检查（此前
+    /// `Result<(), _>` 把身份丢弃，gRPC 只能认证不能授权）。走
+    /// verify_async：ApiKeyVerifier 恒定时间防御会 sleep OS 线程，不能
+    /// 阻塞 tokio worker（与 MCP call_tool 门同一通路）。
+    #[cfg(feature = "security")]
+    async fn authenticate(
         &self,
-        request: Request<CallRequest>,
-    ) -> Result<Response<CallResponse>, Status> {
-        // verify credentials before any dispatch; 成功后保留身份供 RBAC 检查
-        // （此前 `Result<(), _>` 把身份丢弃，gRPC 只能认证不能授权）。
-        // 走 verify_async：ApiKeyVerifier 恒定时间防御会 sleep OS 线程，
-        // 不能阻塞 tokio worker（与 MCP call_tool 门同一通路）。
-        #[cfg(feature = "security")]
-        let auth_ctx = if let Some(ref verifier) = self.auth_interceptor {
+        request: &Request<CallRequest>,
+    ) -> Result<Option<crate::security::AuthContext>, Status> {
+        if let Some(ref verifier) = self.auth_interceptor {
             let metadata = request.metadata();
             let authorization = metadata
                 .get("authorization")
@@ -240,32 +334,121 @@ impl SdForgeGrpcService {
             )
             .await
             {
-                Ok(ctx) => Some(ctx),
-                Err(msg) => return Err(Status::unauthenticated(msg)),
+                Ok(ctx) => Ok(Some(ctx)),
+                Err(msg) => Err(Status::unauthenticated(msg)),
             }
         } else {
-            None
-        };
+            Ok(None)
+        }
+    }
 
-        // endpoint RBAC（协议对等，对齐 HTTP `require_role`）：声明了 roles
-        // 的方法必须由带任一匹配 permission 的已认证身份调用；security
-        // feature 关闭时 fail-safe —— 一律拒绝（角色无法验证即不可满足）。
+    /// endpoint RBAC（协议对等，对齐 HTTP `require_role`；`call` 与
+    /// `call_stream` 共用）：声明了 roles 的方法必须由带任一匹配
+    /// permission 的已认证身份调用；security feature 关闭时 fail-safe ——
+    /// 一律拒绝（角色无法验证即不可满足）。
+    #[cfg(all(feature = "grpc", feature = "security"))]
+    fn ensure_authorized(
+        &self,
+        roles: &[&str],
+        auth_ctx: &Option<crate::security::AuthContext>,
+    ) -> Result<(), Status> {
+        let authorized =
+            matches!(auth_ctx, Some(ctx) if roles.iter().any(|r| ctx.has_permission(r)));
+        if !roles.is_empty() && !authorized {
+            Err(Status::permission_denied(format!(
+                "missing required role: {}",
+                roles.join(", ")
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// fail-safe 变体：security 关闭时非空 roles 一律拒绝（与开启路径的
+    /// `authorized = false` 语义逐字一致）。
+    #[cfg(all(feature = "grpc", not(feature = "security")))]
+    fn ensure_authorized(&self, roles: &[&str]) -> Result<(), Status> {
+        if !roles.is_empty() {
+            Err(Status::permission_denied(format!(
+                "missing required role: {}",
+                roles.join(", ")
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// 载荷上限校验（`call` 与 `call_stream` 共用；vuln-0002 补强）：
+    /// parameters + data 总大小超限即拒绝，防止超大载荷 DoS。
+    #[cfg(feature = "grpc")]
+    fn ensure_payload_size(req: &CallRequest) -> Result<(), Status> {
+        let payload_size = req.parameters.values().map(|v| v.len()).sum::<usize>() + req.data.len();
+        if payload_size > MAX_GRPC_ARGUMENTS_SIZE_BYTES {
+            Err(Status::invalid_argument(format!(
+                "arguments payload size ({}) exceeds maximum allowed size ({})",
+                payload_size, MAX_GRPC_ARGUMENTS_SIZE_BYTES
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// 参数装配（`call` 与 `call_stream` 共用）：parameters → args，
+    /// data → body_param 键（body_param 缺失而 data 非空 → 拒绝）。
+    #[cfg(feature = "grpc")]
+    fn build_handler_args(
+        req: CallRequest,
+        method: &str,
+        body_param: Option<&'static str>,
+    ) -> Result<HandlerArgs, Status> {
+        let mut args: HandlerArgs = req.parameters.into_iter().collect();
+        if !req.data.is_empty() {
+            match body_param {
+                Some(bp) => {
+                    args.insert(bp.to_string(), req.data);
+                }
+                None => {
+                    return Err(Status::invalid_argument(format!(
+                        "method '{}' has no body parameter but CallRequest.data is non-empty",
+                        method
+                    )));
+                }
+            }
+        }
+        Ok(args)
+    }
+
+    /// install a request context (request_id/trace_id) for the whole
+    /// dispatch, so handlers and logs share the ambient correlation ids.
+    /// 守卫顺序：限流 → 认证 → RBAC（与 `CallStream` 同序，见
+    /// `call_stream` 文档的顺序取舍说明）。
+    async fn call_with_context(
+        &self,
+        request: Request<CallRequest>,
+    ) -> Result<Response<CallResponse>, Status> {
+        // 限流最外层：未认证/坏凭据的洪水在进入恒时验证（sleep OS 线程）
+        // 之前即被拒绝——认证前置会让每条被拒请求都烧一次线程睡眠。
+        #[cfg(feature = "ratelimit")]
+        {
+            let identifier = request
+                .remote_addr()
+                .map(|addr| addr.ip().to_string())
+                .or_else(|| Some("unknown".to_string()));
+            self.enforce_rate_limit(identifier.as_deref()).await?;
+        }
+
+        #[cfg(feature = "security")]
+        let auth_ctx = self.authenticate(&request).await?;
+
         let roles = self
             .roles()
             .get(request.get_ref().method.as_str())
             .copied()
             .unwrap_or(&[]);
         #[cfg(feature = "security")]
-        let authorized =
-            matches!(&auth_ctx, Some(ctx) if roles.iter().any(|r| ctx.has_permission(r)));
+        self.ensure_authorized(roles, &auth_ctx)?;
         #[cfg(not(feature = "security"))]
-        let authorized = false;
-        if !roles.is_empty() && !authorized {
-            return Err(Status::permission_denied(format!(
-                "missing required role: {}",
-                roles.join(", ")
-            )));
-        }
+        self.ensure_authorized(roles)?;
 
         #[cfg(feature = "context")]
         {
@@ -329,17 +512,7 @@ impl SdForgeGrpcService {
         &self,
         request: Request<CallRequest>,
     ) -> Result<Response<CallResponse>, Status> {
-        // Extract client IP from tonic's remote_addr (set by transport layer
-        // from the actual TCP connection — unspoofable, unlike headers).
-        // call 路径缺 remote_addr 时以 "unknown" 共享桶兜底（现行为不变）。
-        #[cfg(feature = "ratelimit")]
-        {
-            let identifier = request
-                .remote_addr()
-                .map(|addr| addr.ip().to_string())
-                .or_else(|| Some("unknown".to_string()));
-            self.enforce_rate_limit(identifier.as_deref()).await?;
-        }
+        // 限流已上移至 call_with_context 最外层（与 CallStream 同序）。
 
         // T022: 幂等 key 提取（仅当配置了 store 且请求携带 idempotency-key
         // metadata 时参与）。metadata 须在 into_inner 消费前读取；scope 绑定
@@ -361,44 +534,30 @@ impl SdForgeGrpcService {
 
         // vuln-0002 补强：gRPC 路径此前跳过 MCP 的大小校验。
         // 在 handler 调用前对 parameters + data 总大小设上限，防止超大载荷 DoS。
-        let payload_size = req.parameters.values().map(|v| v.len()).sum::<usize>() + req.data.len();
-        if payload_size > MAX_GRPC_ARGUMENTS_SIZE_BYTES {
-            return Err(Status::invalid_argument(format!(
-                "arguments payload size ({}) exceeds maximum allowed size ({})",
-                payload_size, MAX_GRPC_ARGUMENTS_SIZE_BYTES
-            )));
-        }
+        Self::ensure_payload_size(&req)?;
+
+        // method 名在 parameters/data 消费前克隆（build_handler_args 按值
+        // 接收 req，错误消息与状态链仍需 method 名）。
+        let method = req.method.clone();
 
         // lookup handler by method name
-        let handler = self.handlers().get(req.method.as_str()).copied().ok_or_else(
-            || {
-                Status::not_found(format!(
-                    "method '{}' not registered (no matching #[forge(grpc_method = \"...\")] declaration)",
-                    req.method
-                ))
-            },
-        )?;
+        let handler = self.handlers().get(method.as_str()).copied().ok_or_else(|| {
+            #[cfg(feature = "streaming")]
+            if self.stream_handlers().contains_key(method.as_str()) {
+                return Status::failed_precondition(format!(
+                    "method '{}' is a streaming method; invoke it via CallStream",
+                    method
+                ));
+            }
+            Status::not_found(format!(
+                "method '{}' not registered (no matching #[forge(grpc_method = \"...\")] declaration)",
+                method
+            ))
+        })?;
 
         // parameters → args, data → body_param key
-        let mut args: HandlerArgs = req.parameters.into_iter().collect();
-        if !req.data.is_empty() {
-            match self
-                .body_params()
-                .get(req.method.as_str())
-                .copied()
-                .flatten()
-            {
-                Some(bp) => {
-                    args.insert(bp.to_string(), req.data);
-                }
-                None => {
-                    return Err(Status::invalid_argument(format!(
-                        "method '{}' has no body parameter but CallRequest.data is non-empty",
-                        req.method
-                    )));
-                }
-            }
-        }
+        let body_param = self.body_params().get(method.as_str()).copied().flatten();
+        let args = Self::build_handler_args(req, &method, body_param)?;
 
         // T003: 前置校验全部通过 —— 此刻才 claim（InFlight → already_exists；
         // Replay → 返回缓存；Execute → 继续）。
@@ -446,7 +605,7 @@ impl SdForgeGrpcService {
                 // default_status fallback；两者皆无则 200。
                 let default_status = self
                     .default_statuses()
-                    .get(req.method.as_str())
+                    .get(method.as_str())
                     .copied()
                     .flatten();
                 let status_code = extract_status_code(&value)
@@ -524,6 +683,180 @@ impl SdForgeService for SdForgeGrpcService {
         self.call_with_context(request).await
     }
 
+    /// Server-streaming dispatch（feature = `streaming`）：前置守卫链
+    /// （限流 → 认证 → RBAC → 载荷上限）与 unary 路径**同集合同序**（两
+    /// 条 RPC 均为限流最外层——未认证洪水不进入恒时验证的 OS 线程睡眠，
+    /// 对齐 HTTP 栈「限流层在认证外层」的顺序），随后解析流式 handler，
+    /// 每项映射为一条 `CallResponse`。流式路径不参与幂等重放（无单点可
+    /// 缓存响应体，携带 `idempotency-key` 以 `failed_precondition` 显式
+    /// 拒绝）；`streaming` 关闭时 fail-loud 返回 `unimplemented`（而非让
+    /// 方法无声消失）。
+    ///
+    /// context（feature = `context`）：handler 主体（参数装配 → 用户 fn
+    /// 执行到返回 `StreamResponse`）在 request_id/trace_id 作用域内执行，
+    /// 与 unary 对齐；作用域不跨越后续的流产出阶段（该阶段由 tonic 连接
+    /// 任务在 scope 之外 poll，用户自行 spawn 的生产者任务也不继承
+    /// task_local）——需要在逐项日志里带关联 id 的调用方应在生产者任务
+    /// 中显式携带上下文字段。
+    #[cfg(feature = "streaming")]
+    type CallStreamStream =
+        std::pin::Pin<Box<dyn futures_util::Stream<Item = Result<CallResponse, Status>> + Send>>;
+
+    #[cfg(feature = "streaming")]
+    async fn call_stream(
+        &self,
+        request: Request<CallRequest>,
+    ) -> Result<Response<Self::CallStreamStream>, Status> {
+        // 限流最外层（与 unary 同序）：remote_addr 不可伪造，缺省
+        // "unknown" 兜底。
+        #[cfg(feature = "ratelimit")]
+        {
+            let identifier = request
+                .remote_addr()
+                .map(|addr| addr.ip().to_string())
+                .or_else(|| Some("unknown".to_string()));
+            self.enforce_rate_limit(identifier.as_deref()).await?;
+        }
+
+        #[cfg(feature = "security")]
+        let auth_ctx = self.authenticate(&request).await?;
+        #[cfg(not(feature = "security"))]
+        let auth_ctx: Option<()> = None;
+        let _ = &auth_ctx;
+
+        let roles = self
+            .stream_roles()
+            .get(request.get_ref().method.as_str())
+            .copied()
+            .unwrap_or(&[]);
+        #[cfg(feature = "security")]
+        self.ensure_authorized(roles, &auth_ctx)?;
+        #[cfg(not(feature = "security"))]
+        self.ensure_authorized(roles)?;
+
+        // 流式路径不参与幂等重放：流式响应无单点可缓存体，重放语义不
+        // 成立——显式拒绝而非静默忽略（错误必须可见，禁止静默降级）。
+        #[cfg(feature = "idempotency")]
+        if self.idempotency.is_some() && request.metadata().contains_key("idempotency-key") {
+            return Err(Status::failed_precondition(
+                "CallStream does not support idempotency replay; drop the idempotency-key metadata",
+            ));
+        }
+
+        let req = request.into_inner();
+        Self::ensure_payload_size(&req)?;
+
+        let method = req.method.clone();
+
+        // handler 缺失时区分方向指引：unary 表里有 → 指回 Call；
+        // 两表皆无 → not_found（与 unary 缺失消息同文案口径）。
+        let stream_handler = self
+            .stream_handlers()
+            .get(method.as_str())
+            .copied()
+            .ok_or_else(|| {
+                if self.handlers().contains_key(method.as_str()) {
+                    Status::failed_precondition(format!(
+                        "method '{}' is not a streaming method; invoke it via Call",
+                        method
+                    ))
+                } else {
+                    Status::not_found(format!(
+                        "method '{}' not registered (no matching #[forge(grpc_method = \"...\")] declaration)",
+                        method
+                    ))
+                }
+            })?;
+
+        let body_param = self
+            .stream_body_params()
+            .get(method.as_str())
+            .copied()
+            .flatten();
+        let args = Self::build_handler_args(req, &method, body_param)?;
+
+        // catch_unwind：panicking handler 不得经 gRPC 泄漏内部信息（与
+        // unary 同一安全规则）。context 开启时 handler 主体在
+        // request_id/trace_id 作用域内执行（作用域不跨越流产出阶段——
+        // 见本函数文档的边界说明）。handler 的调用本身包在 async 块内：
+        // 其同步构造段（参数 move、闭包体开头）必须已在 scope 内执行。
+        use futures_util::FutureExt;
+        use std::panic::AssertUnwindSafe;
+        let dispatch = AssertUnwindSafe(async move { stream_handler(args, self.state.clone()) })
+            .catch_unwind();
+        #[cfg(feature = "context")]
+        let outcome = {
+            let ctx = crate::context::current_or_new();
+            crate::context::scope(ctx, dispatch).await
+        };
+        #[cfg(not(feature = "context"))]
+        let outcome = dispatch.await;
+
+        match outcome {
+            Ok(handler_future) => match handler_future.await {
+                Ok(output) => {
+                    let default_status = self
+                        .stream_default_statuses()
+                        .get(method.as_str())
+                        .copied()
+                        .flatten();
+                    // 逐项映射：Ok(value) → success:true 的 CallResponse（状态
+                    // 优先级链与 unary 同源）；Err(msg) → success:false 的项级
+                    // 错误（流继续，与 SSE 错误事件语义对齐）。
+                    let stream = output.stream.map(move |item| match item {
+                        Ok(value) => {
+                            let status_code = extract_status_code(&value)
+                                .or(default_status.map(|s| s as i32))
+                                .unwrap_or(200);
+                            Ok(CallResponse {
+                                success: true,
+                                data: extract_value(&value),
+                                error: String::new(),
+                                status_code,
+                            })
+                        }
+                        Err(message) => Ok(CallResponse {
+                            success: false,
+                            data: String::new(),
+                            error: message,
+                            status_code: 500,
+                        }),
+                    });
+                    Ok(Response::new(Box::pin(stream) as Self::CallStreamStream))
+                }
+                Err(e) => {
+                    // handler 启动失败（参数/校验等业务错误）→ 真实 gRPC
+                    // Status，details 携带 UnifiedError JSON（与 unary 同映射）。
+                    let unified = crate::error::unified::UnifiedError::from(&e);
+                    let code = crate::error::unified::grpc_code_for(&e);
+                    Err(Status::with_details(
+                        code,
+                        unified.message.clone(),
+                        tonic::codegen::Bytes::from(unified.to_json().to_string()),
+                    ))
+                }
+            },
+            Err(_panic) => Err(Status::internal("handler panicked")),
+        }
+    }
+
+    /// `streaming` 关闭时的占位实现：编译必须过（trait 有 CallStream
+    /// 成员），但调用 fail-loud——`unimplemented` 指明需启用 `streaming`
+    /// feature，而非让方法无声 404。
+    #[cfg(not(feature = "streaming"))]
+    type CallStreamStream =
+        std::pin::Pin<Box<dyn futures_util::Stream<Item = Result<CallResponse, Status>> + Send>>;
+
+    #[cfg(not(feature = "streaming"))]
+    async fn call_stream(
+        &self,
+        _request: Request<CallRequest>,
+    ) -> Result<Response<Self::CallStreamStream>, Status> {
+        Err(Status::unimplemented(
+            "server-streaming dispatch requires the `streaming` feature on the server",
+        ))
+    }
+
     async fn get_info(
         &self,
         request: Request<InfoRequest>,
@@ -543,11 +876,19 @@ impl SdForgeService for SdForgeGrpcService {
         let response = InfoResponse {
             name: "SdForge Service".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
-            methods: self
-                .handlers()
-                .keys()
-                .map(|k| (*k).to_string())
-                .collect::<Vec<_>>(),
+            methods: {
+                // unary + streaming 两个注册表的方法并集（streaming 关闭时
+                // 与既有行为逐字一致）。
+                #[allow(unused_mut)]
+                let mut methods = self
+                    .handlers()
+                    .keys()
+                    .map(|k| (*k).to_string())
+                    .collect::<Vec<_>>();
+                #[cfg(feature = "streaming")]
+                methods.extend(self.stream_handlers().keys().map(|k| (*k).to_string()));
+                methods
+            },
             description: "SdForge Multi-Protocol SDK Framework".to_string(),
         };
 
@@ -2013,6 +2354,531 @@ mod tests {
                 EXEC_COUNT.load(std::sync::atomic::Ordering::SeqCst),
                 2,
                 "无 key 不参与幂等"
+            );
+        }
+    }
+
+    // ========================================================================
+    // server-streaming dispatch（feature = streaming）
+    // ========================================================================
+
+    #[cfg(feature = "streaming")]
+    mod grpc_streaming {
+        use super::*;
+        use futures_util::StreamExt;
+        use std::future::Future;
+        use std::pin::Pin;
+
+        /// 三条目流式 handler：逐项产出 JSON 值（`inventory::submit!`
+        /// 注册，与 unary 探针同模式）。
+        fn range_stream_handler(
+            args: HandlerArgs,
+            _state: HandlerState,
+        ) -> crate::grpc::GrpcStreamHandlerFuture {
+            let count: u64 = args.get("count").and_then(|s| s.parse().ok()).unwrap_or(3);
+            let (tx, rx) = tokio::sync::mpsc::channel::<crate::grpc::GrpcStreamItem>(8);
+            tokio::spawn(async move {
+                for i in 0..count {
+                    let _ = tx.send(Ok(Value::String(format!("item-{i}")))).await;
+                }
+            });
+            Box::pin(async move {
+                Ok(crate::grpc::GrpcStreamOutput {
+                    stream: Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)),
+                })
+            })
+        }
+
+        inventory::submit! {
+            crate::grpc::GrpcStreamHandlerRegistration {
+                method: "test_stream_range",
+                handler: range_stream_handler,
+                body_param: None,
+                default_status: None,
+                roles: &[],
+            }
+        }
+
+        /// 每项带 `ServiceResponse.status_code` 语义的流式 handler：奇数项
+        /// 返回 201（验证 per-item 状态优先级链的字段入口）。
+        fn status_stream_handler(
+            _args: HandlerArgs,
+            _state: HandlerState,
+        ) -> crate::grpc::GrpcStreamHandlerFuture {
+            let (tx, rx) = tokio::sync::mpsc::channel::<crate::grpc::GrpcStreamItem>(4);
+            tokio::spawn(async move {
+                let _ = tx
+                    .send(Ok(serde_json::json!({
+                        "success": true,
+                        "status_code": 201,
+                        "payload": "created"
+                    })))
+                    .await;
+                let _ = tx.send(Ok(Value::String("plain-item".to_string()))).await;
+            });
+            Box::pin(async move {
+                Ok(crate::grpc::GrpcStreamOutput {
+                    stream: Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)),
+                })
+            })
+        }
+
+        inventory::submit! {
+            crate::grpc::GrpcStreamHandlerRegistration {
+                method: "test_stream_status",
+                handler: status_stream_handler,
+                body_param: None,
+                default_status: None,
+                roles: &[],
+            }
+        }
+
+        /// 项级错误流：第二项返回 Err —— 流必须继续到第三项（与 SSE 错误
+        /// 事件语义对齐，不终止整个流）。
+        fn item_error_stream_handler(
+            _args: HandlerArgs,
+            _state: HandlerState,
+        ) -> crate::grpc::GrpcStreamHandlerFuture {
+            let (tx, rx) = tokio::sync::mpsc::channel::<crate::grpc::GrpcStreamItem>(4);
+            tokio::spawn(async move {
+                let _ = tx.send(Ok(Value::String("first".to_string()))).await;
+                let _ = tx.send(Err("item-level failure".to_string())).await;
+                let _ = tx.send(Ok(Value::String("third".to_string()))).await;
+            });
+            Box::pin(async move {
+                Ok(crate::grpc::GrpcStreamOutput {
+                    stream: Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)),
+                })
+            })
+        }
+
+        inventory::submit! {
+            crate::grpc::GrpcStreamHandlerRegistration {
+                method: "test_stream_item_error",
+                handler: item_error_stream_handler,
+                body_param: None,
+                default_status: None,
+                roles: &[],
+            }
+        }
+
+        /// body_param 注入：`CallRequest.data` → `payload` 键。
+        fn body_stream_handler(
+            args: HandlerArgs,
+            _state: HandlerState,
+        ) -> crate::grpc::GrpcStreamHandlerFuture {
+            let payload = args.get("payload").cloned().unwrap_or_default();
+            let (tx, rx) = tokio::sync::mpsc::channel::<crate::grpc::GrpcStreamItem>(2);
+            tokio::spawn(async move {
+                let _ = tx.send(Ok(Value::String(payload))).await;
+            });
+            Box::pin(async move {
+                Ok(crate::grpc::GrpcStreamOutput {
+                    stream: Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)),
+                })
+            })
+        }
+
+        inventory::submit! {
+            crate::grpc::GrpcStreamHandlerRegistration {
+                method: "test_stream_body",
+                handler: body_stream_handler,
+                body_param: Some("payload"),
+                default_status: None,
+                roles: &[],
+            }
+        }
+
+        fn stream_call_request(method: &str, data: &str) -> Request<CallRequest> {
+            Request::new(CallRequest {
+                method: method.to_string(),
+                parameters: HashMap::new(),
+                data: data.to_string(),
+            })
+        }
+
+        async fn collect_stream(
+            stream: <SdForgeGrpcService as SdForgeService>::CallStreamStream,
+        ) -> Vec<Result<CallResponse, Status>> {
+            stream.collect::<Vec<_>>().await
+        }
+
+        #[test]
+        fn stream_registries_built_from_inventory() {
+            let service = SdForgeGrpcService::default();
+            assert!(service.stream_handlers().contains_key("test_stream_range"));
+            // 双表互斥：流式方法不在 unary 表，unary 方法不在流式表。
+            assert!(!service.handlers().contains_key("test_stream_range"));
+            assert!(!service.stream_handlers().contains_key("test_echo"));
+        }
+
+        #[tokio::test]
+        async fn call_stream_dispatches_items_in_order() {
+            let service = SdForgeGrpcService::default();
+            let response = service
+                .call_stream(stream_call_request("test_stream_range", ""))
+                .await
+                .expect("stream dispatch succeeds");
+            let items = collect_stream(response.into_inner()).await;
+            assert_eq!(items.len(), 3, "three items must be streamed: {items:?}");
+            for (i, item) in items.iter().enumerate() {
+                let resp = item.as_ref().expect("each item is Ok(CallResponse)");
+                assert!(resp.success, "item {i} must be success: {resp:?}");
+                assert_eq!(resp.data, format!("item-{i}"));
+                assert_eq!(resp.status_code, 200);
+            }
+        }
+
+        #[tokio::test]
+        async fn call_stream_empty_stream_yields_no_items() {
+            // count=0 → 空流：合法产出，零条消息，不报错。
+            let service = SdForgeGrpcService::default();
+            let mut req = stream_call_request("test_stream_range", "");
+            req.get_mut()
+                .parameters
+                .insert("count".to_string(), "0".to_string());
+            let response = service.call_stream(req).await.expect("empty stream ok");
+            let items = collect_stream(response.into_inner()).await;
+            assert!(
+                items.is_empty(),
+                "empty stream must carry no items: {items:?}"
+            );
+        }
+
+        #[tokio::test]
+        async fn call_stream_per_item_status_chain() {
+            let service = SdForgeGrpcService::default();
+            let response = service
+                .call_stream(stream_call_request("test_stream_status", ""))
+                .await
+                .expect("dispatch");
+            let items = collect_stream(response.into_inner()).await;
+            assert_eq!(items.len(), 2);
+            let first = items[0].as_ref().expect("first item");
+            assert_eq!(first.status_code, 201, "field status_code must win");
+            let second = items[1].as_ref().expect("second item");
+            assert_eq!(second.status_code, 200, "bare value falls back to 200");
+        }
+
+        #[tokio::test]
+        async fn call_stream_item_error_does_not_abort_stream() {
+            let service = SdForgeGrpcService::default();
+            let response = service
+                .call_stream(stream_call_request("test_stream_item_error", ""))
+                .await
+                .expect("dispatch");
+            let items = collect_stream(response.into_inner()).await;
+            assert_eq!(items.len(), 3, "error item must not abort the stream");
+            let failed = items[1].as_ref().expect("error arrives as CallResponse");
+            assert!(!failed.success, "item-level error maps to success:false");
+            assert_eq!(failed.error, "item-level failure");
+            let third = items[2].as_ref().expect("stream continues after error");
+            assert_eq!(third.data, "third");
+        }
+
+        #[tokio::test]
+        async fn call_stream_injects_data_into_body_param() {
+            let service = SdForgeGrpcService::default();
+            let response = service
+                .call_stream(stream_call_request("test_stream_body", "the-payload"))
+                .await
+                .expect("dispatch");
+            let items = collect_stream(response.into_inner()).await;
+            assert_eq!(items.len(), 1);
+            assert_eq!(
+                items[0].as_ref().expect("item").data,
+                "the-payload",
+                "CallRequest.data must reach the declared body_param"
+            );
+        }
+
+        #[tokio::test]
+        async fn call_stream_data_without_body_param_is_invalid_argument() {
+            let service = SdForgeGrpcService::default();
+            let err = service
+                .call_stream(stream_call_request("test_stream_range", "unexpected"))
+                .await;
+            let err = match err {
+                Err(status) => status,
+                Ok(_) => panic!("data with no body_param must fail"),
+            };
+            assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        }
+
+        #[tokio::test]
+        async fn call_stream_unknown_method_is_not_found() {
+            let service = SdForgeGrpcService::default();
+            let err = service
+                .call_stream(stream_call_request("totally_absent", ""))
+                .await;
+            let err = match err {
+                Err(status) => status,
+                Ok(_) => panic!("unknown method must fail"),
+            };
+            assert_eq!(err.code(), tonic::Code::NotFound);
+        }
+
+        #[tokio::test]
+        async fn call_stream_to_unary_method_is_failed_precondition() {
+            // test_echo 在 unary 表：CallStream 必须给出方向指引而非 not_found。
+            let service = SdForgeGrpcService::default();
+            let err = service
+                .call_stream(stream_call_request("test_echo", ""))
+                .await;
+            let err = match err {
+                Err(status) => status,
+                Ok(_) => panic!("unary method must be rejected on CallStream"),
+            };
+            assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+            assert!(
+                err.message().contains("Call"),
+                "error must point the caller at the unary RPC: {err}"
+            );
+        }
+
+        #[tokio::test]
+        async fn unary_call_to_streaming_method_is_failed_precondition() {
+            // test_stream_range 在流式表：Call 必须给出方向指引而非 not_found。
+            let service = SdForgeGrpcService::default();
+            let err = service
+                .call(stream_call_request("test_stream_range", ""))
+                .await;
+            let err = match err {
+                Err(status) => status,
+                Ok(_) => panic!("streaming method must be rejected on unary Call"),
+            };
+            assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+            assert!(
+                err.message().contains("CallStream"),
+                "error must point the caller at CallStream: {err}"
+            );
+        }
+
+        #[cfg(feature = "idempotency")]
+        #[tokio::test]
+        async fn call_stream_rejects_idempotency_key() {
+            use crate::cache::IdempotencyStore;
+            let service = SdForgeGrpcService::default()
+                .with_idempotency_store(Arc::new(IdempotencyStore::new()), 86_400);
+            let mut req = stream_call_request("test_stream_range", "");
+            req.metadata_mut()
+                .insert("idempotency-key", "stream-key".parse().unwrap());
+            let err = match service.call_stream(req).await {
+                Err(status) => status,
+                Ok(_) => panic!("streaming + idempotency-key must be rejected"),
+            };
+            assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+        }
+
+        #[tokio::test]
+        async fn call_stream_oversized_payload_is_invalid_argument() {
+            let service = SdForgeGrpcService::default();
+            let err = service
+                .call_stream(stream_call_request(
+                    "test_stream_range",
+                    &"x".repeat(MAX_GRPC_ARGUMENTS_SIZE_BYTES + 1),
+                ))
+                .await;
+            let err = match err {
+                Err(status) => status,
+                Ok(_) => panic!("oversized payload must fail"),
+            };
+            assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        }
+
+        #[tokio::test]
+        async fn get_info_lists_streaming_methods() {
+            let service = SdForgeGrpcService::default();
+            let info = service
+                .get_info(Request::new(InfoRequest::default()))
+                .await
+                .unwrap()
+                .into_inner();
+            assert!(
+                info.methods.iter().any(|m| m == "test_stream_range"),
+                "get_info must list streaming methods: {:?}",
+                info.methods
+            );
+        }
+
+        /// context 注入（feature = `context`）：handler 主体在
+        /// request_id/trace_id 作用域内执行，与 unary 对齐。
+        #[cfg(feature = "context")]
+        #[tokio::test]
+        async fn call_stream_installs_request_context_in_handler() {
+            fn context_probe_handler(
+                _args: HandlerArgs,
+                _state: HandlerState,
+            ) -> crate::grpc::GrpcStreamHandlerFuture {
+                let observed = crate::context::current();
+                let (tx, rx) = tokio::sync::mpsc::channel::<crate::grpc::GrpcStreamItem>(2);
+                tokio::spawn(async move {
+                    match observed {
+                        Some(ctx) => {
+                            let _ = tx
+                                .send(Ok(Value::String(format!(
+                                    "{}|{}",
+                                    ctx.request_id(),
+                                    ctx.trace_id()
+                                ))))
+                                .await;
+                        }
+                        None => {
+                            let _ = tx.send(Err("no ambient context".to_string())).await;
+                        }
+                    }
+                });
+                Box::pin(async move {
+                    Ok(crate::grpc::GrpcStreamOutput {
+                        stream: Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)),
+                    })
+                })
+            }
+
+            inventory::submit! {
+                crate::grpc::GrpcStreamHandlerRegistration {
+                    method: "test_stream_context",
+                    handler: context_probe_handler,
+                    body_param: None,
+                    default_status: None,
+                    roles: &[],
+                }
+            }
+
+            let service = SdForgeGrpcService::default();
+            let response = service
+                .call_stream(stream_call_request("test_stream_context", ""))
+                .await
+                .expect("dispatch");
+            let items = collect_stream(response.into_inner()).await;
+            assert_eq!(items.len(), 1);
+            let resp = items[0].as_ref().expect("item");
+            assert!(
+                resp.success,
+                "ambient context must be installed: {}",
+                resp.error
+            );
+            assert!(
+                resp.data.starts_with("req-") && resp.data.contains("|trace-"),
+                "handler must observe request_id/trace_id inside the scope: {}",
+                resp.data
+            );
+        }
+
+        /// 契约测试（显性化既有行为）：生产者任务 panic → tx drop →
+        /// ReceiverStream 耗尽 → 流以**正常收尾**结束，已产出项照常送达，
+        /// 但客户端无法区分完整流与截断流。该边界是当前流式语义的一部分
+        /// （handler.rs / USER_GUIDE 均有记载）——生产者需要 fail-visible
+        /// 的调用方应自行 JoinHandle 监测并注入项级错误。此测试锁定该
+        /// 契约：若未来实现改为 panic 传播，此处会失败并提示更新文档。
+        #[tokio::test]
+        async fn producer_panic_truncates_stream_silently_by_contract() {
+            fn panicking_producer_handler(
+                _args: HandlerArgs,
+                _state: HandlerState,
+            ) -> crate::grpc::GrpcStreamHandlerFuture {
+                let (tx, rx) = tokio::sync::mpsc::channel::<crate::grpc::GrpcStreamItem>(4);
+                tokio::spawn(async move {
+                    let _ = tx.send(Ok(Value::String("before".to_string()))).await;
+                    panic!("producer exploded — must not crash the dispatcher");
+                });
+                Box::pin(async move {
+                    Ok(crate::grpc::GrpcStreamOutput {
+                        stream: Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)),
+                    })
+                })
+            }
+
+            inventory::submit! {
+                crate::grpc::GrpcStreamHandlerRegistration {
+                    method: "test_stream_producer_panic",
+                    handler: panicking_producer_handler,
+                    body_param: None,
+                    default_status: None,
+                    roles: &[],
+                }
+            }
+
+            let service = SdForgeGrpcService::default();
+            let response = service
+                .call_stream(stream_call_request("test_stream_producer_panic", ""))
+                .await
+                .expect("dispatch survives producer panic");
+            let items = collect_stream(response.into_inner()).await;
+            assert_eq!(
+                items.len(),
+                1,
+                "items produced before the panic must arrive: {items:?}"
+            );
+            assert!(items[0].as_ref().expect("item").success);
+            // 流以 None 耗尽收尾（不是 Status 错误）——collect 已证明这一点。
+        }
+
+        /// 守卫顺序契约（限流 → 认证，两条 RPC 同序）：拒绝性限流器 +
+        /// 无凭据请求必须得到 resource_exhausted——若认证先于限流，同一
+        /// 请求会返回 unauthenticated。
+        #[cfg(all(feature = "security", feature = "ratelimit"))]
+        #[tokio::test]
+        async fn guard_order_rate_limit_precedes_auth() {
+            use crate::security::grpc_auth::ApiKeyVerifier;
+
+            struct RejectLimiter;
+            impl crate::security::ratelimit::RateLimiter for RejectLimiter {
+                fn check<'a>(
+                    &'a self,
+                    _identifier: &'a str,
+                ) -> Pin<
+                    Box<
+                        dyn Future<Output = Result<(), crate::security::ratelimit::RateLimitError>>
+                            + Send
+                            + 'a,
+                    >,
+                > {
+                    Box::pin(async {
+                        Err(crate::security::ratelimit::RateLimitError::Exceeded {
+                            limit: 1,
+                            window_seconds: 60,
+                        })
+                    })
+                }
+            }
+
+            let store = std::sync::Arc::new(crate::security::SdForgeApiKeyAuth::new());
+            let verifier: std::sync::Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier> =
+                std::sync::Arc::new(ApiKeyVerifier::new(store, ""));
+            let limiter: std::sync::Arc<dyn crate::security::ratelimit::RateLimiter> =
+                std::sync::Arc::new(RejectLimiter);
+
+            // unary Call：限流先行 → resource_exhausted（而非 unauthenticated）。
+            let unary = SdForgeGrpcService::with_state_and_rate_limiter(
+                None,
+                Some(std::sync::Arc::clone(&limiter)),
+            )
+            .with_auth_interceptor(std::sync::Arc::clone(&verifier));
+            let err = match unary.call(stream_call_request("test_echo", "")).await {
+                Err(status) => status,
+                Ok(_) => panic!("rejected by limiter"),
+            };
+            assert_eq!(
+                err.code(),
+                tonic::Code::ResourceExhausted,
+                "rate limit must fire before auth on the unary path: {err}"
+            );
+
+            // CallStream：同序。
+            let streaming = SdForgeGrpcService::with_state_and_rate_limiter(None, Some(limiter))
+                .with_auth_interceptor(verifier);
+            let err = match streaming
+                .call_stream(stream_call_request("test_stream_range", ""))
+                .await
+            {
+                Err(status) => status,
+                Ok(_) => panic!("rejected by limiter"),
+            };
+            assert_eq!(
+                err.code(),
+                tonic::Code::ResourceExhausted,
+                "rate limit must fire before auth on the streaming path: {err}"
             );
         }
     }

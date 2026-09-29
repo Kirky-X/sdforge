@@ -9,6 +9,14 @@
 
 use crate::core::HandlerFn;
 
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+use std::future::Future;
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+use std::pin::Pin;
+
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+use crate::core::{HandlerArgs, HandlerState};
+
 /// Registration linking a gRPC `CallRequest.method` to a forge handler.
 ///
 /// All fields are `Copy` (`&'static str` / `fn` pointer / `Option<&str>` /
@@ -37,6 +45,96 @@ pub struct GrpcHandlerRegistration {
 }
 
 inventory::collect!(GrpcHandlerRegistration);
+
+/// Server-streaming handler registration（feature = `grpc` + `streaming`）。
+///
+/// Links a `CallRequest.method` to a forge handler declared with
+/// `#[forge(grpc_method = "...", stream = true)]`; invoked via the
+/// `CallStream` RPC (`SdForgeService::call_stream`). Streaming methods live
+/// in a registry separate from [`GrpcHandlerRegistration`], so the unary
+/// `Call` path rejects them (`failed_precondition` → 指引改走 `CallStream`)
+/// and vice versa — 一个方法只会落在两张表中的一张。
+///
+/// 语义差异（相对 unary）：流式路径不参与幂等重放（流式响应没有单点可
+/// 缓存的响应体，重放语义不成立）——携带 `idempotency-key` metadata 的
+/// `CallStream` 请求以 `failed_precondition` 显式拒绝，而非静默忽略。
+#[derive(Debug, Clone, Copy)]
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+pub struct GrpcStreamHandlerRegistration {
+    /// `CallRequest.method` match key (= the forge macro's `grpc_method` value).
+    pub method: &'static str,
+    /// Streaming handler pointer. Resolves to a per-item stream of JSON
+    /// values (or item-level error strings) consumed by `call_stream`.
+    pub handler: GrpcStreamHandlerFn,
+    /// Body parameter name, if any — same injection contract as the unary
+    /// registration (`CallRequest.data` → this key).
+    pub body_param: Option<&'static str>,
+    /// Macro-level `status` argument, applied per stream item with the same
+    /// priority chain as the unary path: `ServiceResponse.status_code` >
+    /// `default_status` > 200.
+    pub default_status: Option<u16>,
+    /// Endpoint RBAC roles — same fail-safe contract as the unary path.
+    pub roles: &'static [&'static str],
+}
+
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+inventory::collect!(GrpcStreamHandlerRegistration);
+
+/// 单条流式项：`Ok` = handler 产出的一个 JSON 值（每项映射为一条
+/// `success: true` 的 `CallResponse`），`Err` = 项级业务错误消息（映射为
+/// `success: false` 的 `CallResponse`，流继续——与 SSE 错误事件对齐）。
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+pub type GrpcStreamItem = Result<crate::core::HandlerOutput, String>;
+
+/// 流式 handler 的产出：逐项流 + 每项状态码回退链的输入。
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+pub struct GrpcStreamOutput {
+    /// 逐项流。每项消费为一条 `CallResponse` 消息推给客户端。
+    pub stream:
+        std::pin::Pin<Box<dyn futures_util::Stream<Item = GrpcStreamItem> + Send + 'static>>,
+}
+
+/// Boxed, sendable future returned by a streaming handler.
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+pub type GrpcStreamHandlerFuture =
+    Pin<Box<dyn Future<Output = Result<GrpcStreamOutput, crate::core::ApiError>> + Send + 'static>>;
+
+/// Unified function-pointer type for server-streaming gRPC registrations.
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+pub type GrpcStreamHandlerFn = fn(HandlerArgs, HandlerState) -> GrpcStreamHandlerFuture;
+
+/// 把 [`crate::streaming::StreamResponse`] 逐项序列化为流式 gRPC 产出
+/// （宏为 `#[forge(grpc_method, stream = true)]` 生成的 handler 闭包消费）。
+///
+/// 每项经 `serde_json::to_value` 转为 [`crate::core::HandlerOutput`]；
+/// 序列化失败的项降级为项级错误消息（流继续，不终止）——与 unary 路径
+/// 的 `extract_value` 单源语义保持一致。
+///
+/// # 生产者生命周期边界（显式契约）
+///
+/// 用户 handler 内 `tokio::spawn` 的生产者任务 panic 或中止时，channel
+/// 发送端 drop、流以**正常耗尽**收尾——已产出项照常送达，但客户端无法
+/// 区分完整流与截断流（对比 unary：handler panic 经 catch_unwind 映射为
+/// `Status::internal`）。这是当前流式语义的一部分（契约测试
+/// `producer_panic_truncates_stream_silently_by_contract` 锁定）。需要
+/// fail-visible 生产者的调用方应自行持有 JoinHandle 监测，在异常退出时
+/// 向 channel 注入项级错误（`Err(msg)` 项 → success:false 消息、流继续）。
+/// 另：客户端断开 → 发送端 `send` 返回 Err → 生产者循环应退出（取消
+/// 传播依赖此约定）。
+#[cfg(all(feature = "grpc", feature = "streaming"))]
+pub fn stream_output_from<T>(response: crate::streaming::StreamResponse<T>) -> GrpcStreamOutput
+where
+    T: serde::Serialize + Send + 'static,
+{
+    use futures_util::StreamExt;
+
+    let mapped = response
+        .into_stream()
+        .map(|item| item.and_then(|t| serde_json::to_value(&t).map_err(|e| e.to_string())));
+    GrpcStreamOutput {
+        stream: Box::pin(mapped),
+    }
+}
 
 #[cfg(test)]
 mod tests {

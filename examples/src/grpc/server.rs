@@ -96,13 +96,55 @@ pub fn custom_server_config() -> GrpcServerConfig {
 }
 
 // =============================================================================
+// Server-streaming 示例（features: grpc + streaming）
+// =============================================================================
+
+/// server-streaming 端点演示：`#[forge(grpc_method, stream = true)]` 声明的
+/// handler 返回 `StreamResponse<T>`，经 `CallStream` RPC 逐项回送
+/// `CallResponse`（每项 success:true + JSON 数据）。
+///
+/// 客户端调用（grpcurl 需流式调用形态）：
+/// ```text
+/// CallStream(CallRequest { method: "examples.count_stream",
+///                          parameters: {"count": "3"} })
+///   → CallResponse { success: true, data: "evt-0" }
+///   → CallResponse { success: true, data: "evt-1" }
+///   → CallResponse { success: true, data: "evt-2" }
+/// ```
+#[cfg(feature = "streaming_examples")]
+#[sdforge::forge(
+    name = "examples_count_stream",
+    version = "v1",
+    description = "streams count items over gRPC CallStream",
+    path = "/examples/stream/count",
+    method = "GET",
+    grpc_method = "examples.count_stream",
+    stream = true
+)]
+pub async fn examples_count_stream(
+    count: Option<u64>,
+) -> Result<sdforge::streaming::StreamResponse<String>, sdforge::core::ApiError> {
+    let count = count.unwrap_or(3);
+    // create_stream_channel：生产者任务逐项投递，StreamResponse 持接收端。
+    let (tx, response) = sdforge::streaming::create_stream_channel::<String>(8);
+    tokio::spawn(async move {
+        for i in 0..count {
+            if tx.send(Ok(format!("evt-{i}"))).await.is_err() {
+                break; // 客户端断开 → 停止产出
+            }
+        }
+    });
+    Ok(response)
+}
+
+// =============================================================================
 // 默认服务
 // =============================================================================
 
 /// 默认 gRPC 服务实例。
 ///
 /// `SdForgeGrpcService` 实现了 `SdForgeService` trait，
-/// 提供 `Call` 和 `GetInfo` 两个 RPC 方法。
+/// 提供 `Call`、`CallStream` 与 `GetInfo` RPC 方法。
 pub fn default_service() -> SdForgeGrpcService {
     SdForgeGrpcService::default()
 }

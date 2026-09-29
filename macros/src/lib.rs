@@ -789,15 +789,20 @@ impl ParamInfo {
 
             // Check for explicit #[param(kind = "...")] attribute
             let (explicit_annotation, validations) = Self::parse_param_attributes(pat_type)?;
+            // quote! 的 ToTokens 输出在 token 之间带空格；类型前缀判断
+            // （Option< / Vec< / HeaderMap）统一基于归一化字符串。
+            let ty_str_normalized = ty_str.replace(' ', "");
 
             // Determine extraction kind based on explicit annotation first, then path parameters, then type inference
             let param_kind = if let Some(ref kind) = explicit_annotation {
                 kind.clone()
             } else if path_params.contains(&name) {
                 ParamKind::Path
-            } else if ty_str_trimmed.starts_with("Option<") {
-                // Check if it's Option<HeaderMap<...>> or similar
-                let inner = &ty_str_trimmed[7..ty_str_trimmed.len() - 1];
+            } else if ty_str_normalized.starts_with("Option<") {
+                // Check if it's Option<HeaderMap<...>> or similar. quote! 的
+                // ToTokens 输出在 token 之间带空格（Option < u64 >），必须
+                // 归一化后再前缀匹配，否则 Option 参数全部漏判为非 Option。
+                let inner = &ty_str_normalized[7..ty_str_normalized.len() - 1];
                 if inner.starts_with("HeaderMap") || inner.starts_with("HeaderValue") {
                     ParamKind::Header
                 } else {
@@ -813,11 +818,11 @@ impl ParamInfo {
                 ParamKind::Body
             };
 
-            let (is_option, is_vec, inner_type) = if ty_str_trimmed.starts_with("Option<") {
-                let inner = &ty_str_trimmed[7..ty_str_trimmed.len() - 1];
+            let (is_option, is_vec, inner_type) = if ty_str_normalized.starts_with("Option<") {
+                let inner = &ty_str_normalized[7..ty_str_normalized.len() - 1];
                 (true, false, inner.to_string())
-            } else if ty_str_trimmed.starts_with("Vec<") {
-                let inner = &ty_str_trimmed[4..ty_str_trimmed.len() - 1];
+            } else if ty_str_normalized.starts_with("Vec<") {
+                let inner = &ty_str_normalized[4..ty_str_normalized.len() - 1];
                 (false, true, inner.to_string())
             } else {
                 (false, false, ty_str_trimmed.clone())
@@ -1170,11 +1175,16 @@ fn validation_rule_stmts(
     stmts
 }
 
-fn generate_handler_closure(
+/// Generate the shared pre-call body of a unified handler closure: State
+/// downcasts, Path/Body/Query extractions, validation-rule evaluation, and
+/// the awaited call. Ends with `let result = #fn_name(...).await;`; the
+/// protocol-specific tails consume `result`:
+/// - unary（HTTP/gRPC/CLI）→ serialize the value (`Result<Value, ApiError>`)
+/// - gRPC server-streaming → map a `StreamResponse` into a per-item stream
+///   (`Result<GrpcStreamOutput, ApiError>`)
+fn handler_closure_pre_call(
     fn_name: &syn::Ident,
-    handler_fn_name: &syn::Ident,
     params: &[ParamInfo],
-    _path_params: &[String],
     validate: bool,
 ) -> TokenStream2 {
     // Validate State params are Arc<T> — emit compile_error if not.
@@ -1245,10 +1255,16 @@ fn generate_handler_closure(
                     })?;
             }
         } else {
-            // Option<T> — absent key yields None; present key must parse.
+            // Option<T> — absent key yields None; present key parses the
+            // inner type (Option<T> itself has no FromStr). inner_type is
+            // the macro-parsed `<…>` payload (e.g. "u64" for Option<u64>).
+            let inner: proc_macro2::TokenStream = p
+                .inner_type
+                .parse()
+                .expect("inner_type is a valid type string");
             quote! {
                 let #pname: #pty = args.get(#pname_str)
-                    .map(|s| s.parse())
+                    .map(|s| s.parse::<#inner>())
                     .transpose()
                     .map_err(|e| sdforge::prelude::ApiError::InvalidInput {
                         message: format!("invalid argument {}: {}", #pname_str, e),
@@ -1304,21 +1320,60 @@ fn generate_handler_closure(
     };
 
     quote! {
+        #(#state_extractions)*
+        #(#param_extractions)*
+        #validation_stmts
+        let result = #fn_name(#(#call_idents),*).await;
+    }
+}
+
+fn generate_handler_closure(
+    fn_name: &syn::Ident,
+    handler_fn_name: &syn::Ident,
+    params: &[ParamInfo],
+    _path_params: &[String],
+    validate: bool,
+) -> TokenStream2 {
+    let pre_call = handler_closure_pre_call(fn_name, params, validate);
+
+    quote! {
         fn #handler_fn_name(
             args: sdforge::core::HandlerArgs,
             state: sdforge::core::HandlerState,
         ) -> sdforge::core::HandlerFuture {
             Box::pin(async move {
-                #(#state_extractions)*
-                #(#param_extractions)*
-                #validation_stmts
-                let result = #fn_name(#(#call_idents),*).await;
+                #pre_call
                 result.and_then(|v| serde_json::to_value(&v).map_err(|e| {
                     sdforge::prelude::ApiError::internal_error(
                         format!("failed to serialize handler return value: {e}"),
                         "forge.serialize_return_value",
                     )
                 }))
+            })
+        }
+    }
+}
+
+/// Generate the gRPC server-streaming handler closure: identical State/
+/// param/validation prefix to the unary closure, but the tail maps the
+/// handler's `Result<StreamResponse<T>, ApiError>` into a per-item stream
+/// (`GrpcStreamOutput`) instead of a single serialized value.
+fn generate_grpc_stream_handler_closure(
+    fn_name: &syn::Ident,
+    handler_fn_name: &syn::Ident,
+    params: &[ParamInfo],
+    validate: bool,
+) -> TokenStream2 {
+    let pre_call = handler_closure_pre_call(fn_name, params, validate);
+
+    quote! {
+        fn #handler_fn_name(
+            args: sdforge::core::HandlerArgs,
+            state: sdforge::core::HandlerState,
+        ) -> sdforge::grpc::GrpcStreamHandlerFuture {
+            Box::pin(async move {
+                #pre_call
+                result.map(|stream_response| sdforge::grpc::stream_output_from(stream_response))
             })
         }
     }
@@ -1405,6 +1460,65 @@ fn generate_grpc_handler_registration(
             default_status: #default_status,
             roles: &[#(#role_lits),*],
         });
+    }
+}
+
+/// Generate gRPC server-streaming handler registration tokens for a
+/// `#[forge(grpc_method, stream = true)]` function.
+///
+/// Mirrors [`generate_grpc_handler_registration`] but links into the
+/// `GrpcStreamHandlerRegistration` inventory (consumed by
+/// `SdForgeGrpcService::call_stream`) instead of the unary one — a method
+/// lands in exactly one of the two registries. All emitted items are gated
+/// `#[cfg(all(feature = "grpc", feature = "streaming"))]`; a
+/// `stream = true` + `grpc_method` declaration compiled without the
+/// `streaming` feature emits a loud `compile_error!` (fail-loud：否则该
+/// grpc_method 会无声地从两个注册表同时消失，unary/stream 两条 RPC 都
+/// 不可达)。
+fn generate_grpc_stream_handler_registration(
+    fn_name: &syn::Ident,
+    grpc_method: &str,
+    params: &[ParamInfo],
+    status: Option<u16>,
+    auth_roles: &[String],
+    validate: bool,
+) -> TokenStream2 {
+    let grpc_handler_fn_name = syn::Ident::new(
+        &format!("__grpc_stream_handler_{}", fn_name),
+        proc_macro2::Span::call_site(),
+    );
+    let handler_fn_def =
+        generate_grpc_stream_handler_closure(fn_name, &grpc_handler_fn_name, params, validate);
+    let body_param: TokenStream2 = match derive_body_param(params) {
+        Some(name) => quote! { Some(#name) },
+        None => quote! { None },
+    };
+    let default_status: TokenStream2 = match status {
+        Some(code) => quote! { Some(#code as u16) },
+        None => quote! { None },
+    };
+    let role_lits: Vec<&str> = auth_roles.iter().map(|s| s.as_str()).collect();
+
+    quote! {
+        #[cfg(all(feature = "grpc", feature = "streaming"))]
+        #handler_fn_def
+
+        #[cfg(all(feature = "grpc", feature = "streaming"))]
+        sdforge::inventory::submit!(sdforge::grpc::GrpcStreamHandlerRegistration {
+            method: #grpc_method,
+            handler: #grpc_handler_fn_name,
+            body_param: #body_param,
+            default_status: #default_status,
+            roles: &[#(#role_lits),*],
+        });
+
+        // streaming handler 需要 streaming feature 才能注册：grpc 开而
+        // streaming 关时该 grpc_method 无任何可达入口，fail-loud。
+        #[cfg(all(feature = "grpc", not(feature = "streaming")))]
+        compile_error! {
+            "grpc_method with `stream = true` requires the `streaming` feature \
+             (server-streaming dispatch lives behind grpc + streaming)"
+        }
     }
 }
 
@@ -2649,21 +2763,34 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let grpc_code = if let Some(grpc_method_name) = grpc_method.as_deref() {
-        // emit the GrpcHandlerRegistration (method → handler link) so
-        // SdForgeGrpcService::call can route CallRequest to the forge
-        // fn instead of the legacy stub. The GrpcRouteRegistration below
-        // carries only metadata; this adds the invocable handler pointer.
+        // emit the handler registration (method → handler link) so
+        // SdForgeGrpcService can route CallRequest/CallStream to the forge
+        // fn. The GrpcRouteRegistration below carries only metadata; this
+        // adds the invocable handler pointer. `stream = true` routes to the
+        // server-streaming registry (consumed by CallStream) instead of the
+        // unary one — a method is reachable via exactly one of the two RPCs.
         // pass the macro-level `status` argument so the gRPC layer can
         // mirror the HTTP success code (priority chain: field > macro > 200).
-        let grpc_handler_reg = generate_grpc_handler_registration(
-            fn_name,
-            grpc_method_name,
-            &params,
-            &path_params,
-            status,
-            &extras.auth_roles,
-            extras.validate,
-        );
+        let grpc_handler_reg = if stream.unwrap_or(false) {
+            generate_grpc_stream_handler_registration(
+                fn_name,
+                grpc_method_name,
+                &params,
+                status,
+                &extras.auth_roles,
+                extras.validate,
+            )
+        } else {
+            generate_grpc_handler_registration(
+                fn_name,
+                grpc_method_name,
+                &params,
+                &path_params,
+                status,
+                &extras.auth_roles,
+                extras.validate,
+            )
+        };
         quote! {
             #[cfg(feature = "grpc")]
             fn #grpc_create_fn_name() -> sdforge::grpc::GrpcRoute {
@@ -3487,6 +3614,77 @@ mod macro_parsing_tests {
         assert!(
             s.contains("default_status : None"),
             "default_status must be None when no macro status arg: {s}"
+        );
+    }
+
+    /// `Option<T>` 参数（quote! 输出的类型字符串带空格：`Option < u64 >`）
+    /// 必须被判为 is_option —— 归一化缺失曾使 Option 参数全部走 required
+    /// 提取臂（`Option<u64>: FromStr` 编译失败）。
+    #[test]
+    fn test_param_info_option_detection_survives_token_spacing() {
+        let arg: syn::FnArg = syn::parse_quote!(count: Option<u64>);
+        let info = ParamInfo::from_arg(&arg, &[], Some("GET"), &[])
+            .expect("param parses")
+            .expect("non-receiver param is classified");
+        assert!(info.is_option, "Option<u64> must be detected as Option");
+        assert!(matches!(info.param_kind, ParamKind::Query));
+        assert_eq!(info.inner_type, "u64");
+
+        let closure = generate_handler_closure(
+            &syn::Ident::new("probe", proc_macro2::Span::call_site()),
+            &syn::Ident::new("__probe_handler", proc_macro2::Span::call_site()),
+            &[info],
+            &[],
+            false,
+        );
+        let s = normalize_ts(&closure);
+        assert!(
+            s.contains("parse :: < u64 >"),
+            "Option extraction must parse the inner type, not Option<u64>: {s}"
+        );
+        assert!(
+            !s.contains("let count : Option < u64 > = args . get (\"count\") . ok_or_else"),
+            "absent key must yield None, not a missing-argument error: {s}"
+        );
+    }
+
+    /// `stream = true` 的 grpc_method 必须落进流式注册表
+    /// （`GrpcStreamHandlerRegistration` + `stream_output_from` 尾部），
+    /// 而非 unary 的 `GrpcHandlerRegistration`。
+    #[test]
+    fn test_generate_grpc_stream_handler_registration_routes_to_stream_inventory() {
+        let fn_name = syn::Ident::new("streamer", proc_macro2::Span::call_site());
+        let params = vec![make_cli_param("count", ParamKind::Query, true)];
+
+        let tokens = generate_grpc_stream_handler_registration(
+            &fn_name,
+            "streamer",
+            &params,
+            None,
+            &[],
+            false,
+        );
+        let s = normalize_ts(&tokens);
+
+        assert!(
+            s.contains("GrpcStreamHandlerRegistration"),
+            "must submit the streaming registration: {s}"
+        );
+        assert!(
+            !s.contains("GrpcHandlerRegistration {"),
+            "must not touch the unary registration struct: {s}"
+        );
+        assert!(
+            s.contains("__grpc_stream_handler_streamer"),
+            "handler fn must carry the stream prefix: {s}"
+        );
+        assert!(
+            s.contains("stream_output_from"),
+            "closure tail must map StreamResponse via stream_output_from: {s}"
+        );
+        assert!(
+            s.contains("requires the `streaming` feature"),
+            "grpc-without-streaming arm must carry the fail-loud compile_error: {s}"
         );
     }
 
