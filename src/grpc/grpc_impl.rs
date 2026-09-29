@@ -889,7 +889,13 @@ impl SdForgeService for SdForgeGrpcService {
                 methods.extend(self.stream_handlers().keys().map(|k| (*k).to_string()));
                 methods
             },
-            description: "SdForge Multi-Protocol SDK Framework".to_string(),
+            // 服务级描述经 i18n 注册表按当前 locale 翻译（宿主可经
+            // register_translation 注册 "sdforge.service.description" 键）；
+            // 无翻译时回退英文原文——gRPC wire 唯一的描述输出点。
+            description: crate::i18n::translate_or_fallback(
+                "SdForge Multi-Protocol SDK Framework",
+                Some("sdforge.service.description"),
+            ),
         };
 
         Ok(Response::new(response))
@@ -1205,6 +1211,7 @@ mod tests {
                 body_param: None,
                 default_status: None,
                 roles: &[],
+        i18n_key: None,
     }
         }
 
@@ -1226,6 +1233,7 @@ mod tests {
                 body_param: None,
                 default_status: None,
                 roles: &[],
+        i18n_key: None,
     }
         }
 
@@ -1244,6 +1252,7 @@ mod tests {
                 body_param: None,
                 default_status: None,
                 roles: &[],
+        i18n_key: None,
     }
         }
 
@@ -1261,6 +1270,7 @@ mod tests {
                 body_param: Some("payload"),
                 default_status: None,
                 roles: &[],
+        i18n_key: None,
     }
         }
 
@@ -1277,6 +1287,7 @@ mod tests {
             body_param: None,
             default_status: None,
             roles: &["admin"],
+            i18n_key: None,
         }
     }
 
@@ -1306,6 +1317,7 @@ mod tests {
                 body_param: None,
                 default_status: None,
                 roles: &[],
+        i18n_key: None,
     }
         }
 
@@ -1334,6 +1346,7 @@ mod tests {
                 body_param: None,
                 default_status: None,
                 roles: &[],
+        i18n_key: None,
     }
         }
 
@@ -1362,6 +1375,7 @@ mod tests {
                 body_param: None,
                 default_status: Some(201),
                 roles: &[],
+        i18n_key: None,
     }
         }
 
@@ -1389,6 +1403,7 @@ mod tests {
                 body_param: None,
                 default_status: Some(202),
                 roles: &[],
+        i18n_key: None,
     }
         }
 
@@ -1416,6 +1431,7 @@ mod tests {
                 body_param: None,
                 default_status: Some(201),
                 roles: &[],
+        i18n_key: None,
     }
         }
 
@@ -1472,6 +1488,47 @@ mod tests {
         let map = service.body_params_map();
         assert_eq!(map.get("test_echo"), Some(&None));
         assert_eq!(map.get("test_body"), Some(&Some("payload")));
+    }
+
+    /// GetInfo 服务级描述经 i18n 注册表按 locale 翻译（gRPC wire 唯一
+    /// 的描述输出点）；未注册翻译回退英文原文。
+    #[tokio::test]
+    #[serial_test::serial]
+    async fn get_info_description_translates_by_locale() {
+        sdforge::i18n::clear_translations();
+        let service = SdForgeGrpcService::default();
+
+        // 未注册翻译 → 英文回退。
+        sdforge::i18n::set_locale("zh-CN");
+        let fallback = service
+            .get_info(Request::new(InfoRequest::default()))
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(
+            fallback.description, "SdForge Multi-Protocol SDK Framework",
+            "unregistered key must fall back to English"
+        );
+
+        // 宿主注册 zh 翻译（键为服务级 "sdforge.service.description"）
+        // → GetInfo.description 随 locale 变化。
+        sdforge::i18n::register_translation(
+            "zh-CN",
+            "sdforge.service.description",
+            "SDForge 多协议 SDK 框架",
+        );
+        let translated = service
+            .get_info(Request::new(InfoRequest::default()))
+            .await
+            .unwrap()
+            .into_inner();
+        assert_eq!(
+            translated.description, "SDForge 多协议 SDK 框架",
+            "registered zh translation must appear in GetInfo.description"
+        );
+
+        sdforge::i18n::clear_translations();
+        sdforge::i18n::set_locale("en");
     }
 
     #[tokio::test]
@@ -1578,6 +1635,7 @@ mod tests {
                         body_param: None,
                         default_status: None,
                         roles: &[],
+            i18n_key: None,
         }
                 }
         let service = SdForgeGrpcService::default();
@@ -1614,6 +1672,7 @@ mod tests {
                         body_param: None,
                         default_status: None,
                         roles: &[],
+            i18n_key: None,
         }
                 }
         let service = SdForgeGrpcService::default();
@@ -2225,6 +2284,7 @@ mod tests {
                 body_param: None,
                 default_status: None,
                 roles: &[],
+                i18n_key: None,
             }
         }
 
@@ -2366,7 +2426,11 @@ mod tests {
     mod grpc_streaming {
         use super::*;
         use futures_util::StreamExt;
+        // 守卫顺序契约测试的 RateLimiter impl 以 Pin<Box<dyn Future>> 声明
+        // check（对齐 trait 签名惯例）；非全特性组合下该测试不编译。
+        #[cfg(all(feature = "security", feature = "ratelimit"))]
         use std::future::Future;
+        #[cfg(all(feature = "security", feature = "ratelimit"))]
         use std::pin::Pin;
 
         /// 三条目流式 handler：逐项产出 JSON 值（`inventory::submit!`
@@ -2396,6 +2460,7 @@ mod tests {
                 body_param: None,
                 default_status: None,
                 roles: &[],
+                i18n_key: None,
             }
         }
 
@@ -2430,6 +2495,7 @@ mod tests {
                 body_param: None,
                 default_status: None,
                 roles: &[],
+                i18n_key: None,
             }
         }
 
@@ -2459,6 +2525,7 @@ mod tests {
                 body_param: None,
                 default_status: None,
                 roles: &[],
+                i18n_key: None,
             }
         }
 
@@ -2486,6 +2553,7 @@ mod tests {
                 body_param: Some("payload"),
                 default_status: None,
                 roles: &[],
+                i18n_key: None,
             }
         }
 
@@ -2742,6 +2810,7 @@ mod tests {
                     body_param: None,
                     default_status: None,
                     roles: &[],
+                    i18n_key: None,
                 }
             }
 
@@ -2796,6 +2865,7 @@ mod tests {
                     body_param: None,
                     default_status: None,
                     roles: &[],
+                    i18n_key: None,
                 }
             }
 

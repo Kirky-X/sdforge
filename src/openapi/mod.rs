@@ -125,6 +125,11 @@ pub struct OpenApiRouteInfo {
     /// Response schema descriptor. `None` keeps the legacy
     /// schema-less response entry.
     pub response_type: Option<OpenApiTypeInfo>,
+    /// Runtime translation key for the description (`#[forge(i18n_key)]`).
+    /// `generate_openapi_spec` looks up the active locale via
+    /// `sdforge::i18n::translate_or_fallback`; `None` (or an unregistered
+    /// key) keeps the compile-time English description.
+    pub i18n_key: Option<&'static str>,
 }
 
 inventory::collect!(OpenApiRouteInfo);
@@ -200,6 +205,7 @@ inventory::submit!(OpenApiRouteInfo {
     tags: &["test"],
     path_params: &[],
     success_status: Some(201u16),
+    i18n_key: None,
     body_params: &[
         OpenApiBodyParam {
             name: "item",

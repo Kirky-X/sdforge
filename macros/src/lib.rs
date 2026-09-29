@@ -1411,6 +1411,20 @@ fn derive_body_param(params: &[ParamInfo]) -> Option<String> {
 /// argument into the gRPC layer. The gRPC success path applies the priority
 /// chain: `ServiceResponse.status_code` field > `default_status` > 200. See
 /// `extract_status_code` + `SdForgeGrpcService::call` for the consumer.
+/// Build an `Option<&'static str>` literal token stream
+/// (`quote!` renders `Option<T>` by emitting the inner value only, so the
+/// `Some`/`None` arms must be spelled out — shared by every
+/// registration-struct emission that carries an `i18n_key` field).
+fn option_str_lit(key: Option<&str>) -> TokenStream2 {
+    match key {
+        Some(key) => quote! { Some(#key) },
+        None => quote! { None },
+    }
+}
+
+// 注册面契约字段逐一显式（method/handler/body_param/status/roles/i18n_key），
+// 与目标 inventory 结构体字段一一对应——参数对象化反而制造间接层。
+#[allow(clippy::too_many_arguments)]
 fn generate_grpc_handler_registration(
     fn_name: &syn::Ident,
     grpc_method: &str,
@@ -1419,6 +1433,7 @@ fn generate_grpc_handler_registration(
     status: Option<u16>,
     auth_roles: &[String],
     validate: bool,
+    i18n_key: Option<&str>,
 ) -> TokenStream2 {
     let grpc_handler_fn_name = syn::Ident::new(
         &format!("__grpc_handler_{}", fn_name),
@@ -1447,6 +1462,7 @@ fn generate_grpc_handler_registration(
     // 切片字面量；未声明时为 `&[]`（不检查角色）。消费方：
     // `SdForgeGrpcService::call_with_context` 分发前检查。
     let role_lits: Vec<&str> = auth_roles.iter().map(|s| s.as_str()).collect();
+    let i18n_key_lit = option_str_lit(i18n_key);
 
     quote! {
         #[cfg(feature = "grpc")]
@@ -1459,6 +1475,7 @@ fn generate_grpc_handler_registration(
             body_param: #body_param,
             default_status: #default_status,
             roles: &[#(#role_lits),*],
+            i18n_key: #i18n_key_lit,
         });
     }
 }
@@ -1475,6 +1492,9 @@ fn generate_grpc_handler_registration(
 /// `streaming` feature emits a loud `compile_error!` (fail-loud：否则该
 /// grpc_method 会无声地从两个注册表同时消失，unary/stream 两条 RPC 都
 /// 不可达)。
+// 注册面契约字段逐一显式（method/handler/body_param/status/roles/i18n_key），
+// 与目标 inventory 结构体字段一一对应——参数对象化反而制造间接层。
+#[allow(clippy::too_many_arguments)]
 fn generate_grpc_stream_handler_registration(
     fn_name: &syn::Ident,
     grpc_method: &str,
@@ -1482,6 +1502,7 @@ fn generate_grpc_stream_handler_registration(
     status: Option<u16>,
     auth_roles: &[String],
     validate: bool,
+    i18n_key: Option<&str>,
 ) -> TokenStream2 {
     let grpc_handler_fn_name = syn::Ident::new(
         &format!("__grpc_stream_handler_{}", fn_name),
@@ -1498,6 +1519,7 @@ fn generate_grpc_stream_handler_registration(
         None => quote! { None },
     };
     let role_lits: Vec<&str> = auth_roles.iter().map(|s| s.as_str()).collect();
+    let i18n_key_lit = option_str_lit(i18n_key);
 
     quote! {
         #[cfg(all(feature = "grpc", feature = "streaming"))]
@@ -1510,6 +1532,7 @@ fn generate_grpc_stream_handler_registration(
             body_param: #body_param,
             default_status: #default_status,
             roles: &[#(#role_lits),*],
+            i18n_key: #i18n_key_lit,
         });
 
         // streaming handler 需要 streaming feature 才能注册：grpc 开而
@@ -2131,6 +2154,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         Some(key) => quote! { Some(#key.to_string()) },
         None => quote! { None },
     };
+    // `Option<&'static str>` literal for registration-struct fields
+    // (quote! renders Option<T> by emitting the inner value only).
+    let openapi_i18n_key_expr = option_str_lit(i18n_key.as_deref());
 
     // Build OpenAPI path parameter tokens for the `#[forge]` macro.
     //
@@ -2519,6 +2545,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 success_status: #openapi_status_expr,
                 body_params: &[#(#openapi_body_params_tokens),*],
                 response_type: #openapi_response_type_expr,
+                i18n_key: #openapi_i18n_key_expr,
             });
         }
     } else {
@@ -2779,6 +2806,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 status,
                 &extras.auth_roles,
                 extras.validate,
+                i18n_key.as_deref(),
             )
         } else {
             generate_grpc_handler_registration(
@@ -2789,6 +2817,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 status,
                 &extras.auth_roles,
                 extras.validate,
+                i18n_key.as_deref(),
             )
         };
         quote! {
@@ -3549,6 +3578,7 @@ mod macro_parsing_tests {
             None,
             &[],
             false,
+            None,
         );
         let s = normalize_ts(&tokens);
 
@@ -3599,6 +3629,7 @@ mod macro_parsing_tests {
             None,
             &[],
             false,
+            None,
         );
         let s = normalize_ts(&tokens);
 
@@ -3663,6 +3694,7 @@ mod macro_parsing_tests {
             None,
             &[],
             false,
+            None,
         );
         let s = normalize_ts(&tokens);
 
@@ -3704,6 +3736,7 @@ mod macro_parsing_tests {
             Some(201u16),
             &[],
             false,
+            None,
         );
         let s = normalize_ts(&tokens);
 
@@ -3714,6 +3747,46 @@ mod macro_parsing_tests {
         assert!(
             s.contains("default_status : Some (201u16 as u16)"),
             "default_status must be Some(201u16 as u16) when macro status=201: {s}"
+        );
+    }
+
+    /// `i18n_key` 必须透传为 registration 的 `i18n_key: Option<&str>`
+    /// 字段（CLI/MCP/OpenAPI 同名参数的 gRPC 对齐）；None 缺省。
+    #[test]
+    fn test_generate_grpc_handler_registration_emits_i18n_key() {
+        let fn_name = syn::Ident::new("localized", proc_macro2::Span::call_site());
+        let params: Vec<ParamInfo> = vec![];
+        let path_params = vec![];
+
+        let with_key = generate_grpc_handler_registration(
+            &fn_name,
+            "localized_action",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+            Some("forge.localized.description"),
+        );
+        let s = normalize_ts(&with_key);
+        assert!(
+            s.contains(r#"i18n_key : Some ("forge.localized.description")"#),
+            "i18n_key must carry the declared key: {s}"
+        );
+
+        let without_key = generate_grpc_handler_registration(
+            &fn_name,
+            "localized_action",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+            None,
+        );
+        assert!(
+            normalize_ts(&without_key).contains("i18n_key : None"),
+            "absent i18n_key must emit None"
         );
     }
 
@@ -3733,6 +3806,7 @@ mod macro_parsing_tests {
             None,
             &["admin".to_string(), "operator".to_string()],
             false,
+            None,
         );
         let s = normalize_ts(&with_roles);
         assert!(
@@ -3748,6 +3822,7 @@ mod macro_parsing_tests {
             None,
             &[],
             false,
+            None,
         );
         let s = normalize_ts(&without_roles);
         assert!(

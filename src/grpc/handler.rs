@@ -42,6 +42,12 @@ pub struct GrpcHandlerRegistration {
     /// `security` feature disabled, a non-empty declaration denies every
     /// request — fail-safe, mirroring HTTP `require_role`.
     pub roles: &'static [&'static str],
+    /// Runtime translation key for the description
+    /// (`#[forge(i18n_key = "...")]`). The gRPC wire has no per-method
+    /// description output — hosts consuming the inventory directly use this
+    /// with `sdforge::i18n::translate_or_fallback` (CLI/MCP parity);
+    /// `None` keeps the compile-time English description.
+    pub i18n_key: Option<&'static str>,
 }
 
 inventory::collect!(GrpcHandlerRegistration);
@@ -75,6 +81,9 @@ pub struct GrpcStreamHandlerRegistration {
     pub default_status: Option<u16>,
     /// Endpoint RBAC roles — same fail-safe contract as the unary path.
     pub roles: &'static [&'static str],
+    /// Runtime translation key for the description — same contract as the
+    /// unary registration's `i18n_key`.
+    pub i18n_key: Option<&'static str>,
 }
 
 #[cfg(all(feature = "grpc", feature = "streaming"))]
@@ -161,6 +170,7 @@ mod tests {
                 body_param: None,
                 default_status: None,
                 roles: &[],
+                i18n_key: None,
     }
         }
 

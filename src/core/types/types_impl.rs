@@ -32,11 +32,16 @@ impl ApiMetadata {
 
     /// Attach an i18n key for runtime translation of the description.
     ///
-    /// When set, protocol consumption points (MCP tool descriptions,
-    /// CLI `--help`; OpenAPI specs and gRPC metadata are planned) look up
-    /// a translation via `sdforge::i18n::translate_or_fallback` using the
-    /// active locale. Falls back to the English `description` when no
-    /// translation is found.
+    /// When set, protocol consumption points look up a translation via
+    /// `sdforge::i18n::translate_or_fallback` using the active locale:
+    /// MCP tool descriptions, CLI `--help`, and OpenAPI operation
+    /// descriptions (via `OpenApiRouteInfo.i18n_key`) consume **this
+    /// key**. The gRPC wire has no per-method description output — its
+    /// `GetInfo.description` translates a fixed service-level key
+    /// (`sdforge.service.description`, not this key), while the per-route
+    /// key on `GrpcHandlerRegistration.i18n_key` is exposed for hosts
+    /// iterating the inventory directly. Falls back to the English
+    /// `description` when no translation is found.
     ///
     /// Builder-pattern method so existing `new()` call sites remain
     /// backward-compatible.

@@ -89,6 +89,7 @@ impl OpenApiRouteInfo {
             success_status: None,
             body_params: &[],
             response_type: None,
+            i18n_key: None,
         }
     }
 
@@ -116,6 +117,7 @@ impl OpenApiRouteInfo {
             success_status: None,
             body_params: &[],
             response_type: None,
+            i18n_key: None,
         }
     }
 
@@ -153,6 +155,7 @@ impl OpenApiRouteInfo {
             success_status,
             body_params: &[],
             response_type: None,
+            i18n_key: None,
         }
     }
 
@@ -325,15 +328,16 @@ impl OpenApiBuilder {
 
         let mut paths = Paths::new();
         for route in inventory::iter::<OpenApiRouteInfo> {
-            // Translate description at runtime using i18n registry.
-            // OpenApiRouteInfo doesn't carry i18n_key directly; the
-            // translation is keyed by description content when the
-            // route was generated from a #[forge] macro with i18n_key.
-            // For now, the English default is used (OpenAPI specs are
-            // typically generated once at build time, not per-request).
+            // Translate the description at runtime via the i18n registry
+            // (route.i18n_key from `#[forge(i18n_key = "...")]`); falls
+            // back to the compile-time English description when no
+            // translation is registered for the active locale. The spec
+            // is typically generated once at startup, not per-request.
+            let translated_description =
+                crate::i18n::translate_or_fallback(route.description, route.i18n_key);
             let mut operation_builder = OperationBuilder::new()
                 .summary(Some(route.summary.to_string()))
-                .description(Some(route.description.to_string()))
+                .description(Some(translated_description))
                 .tags(Some(
                     route
                         .tags

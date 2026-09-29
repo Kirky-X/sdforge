@@ -355,8 +355,10 @@
 ### Added
 
 - **custom success status code support for `#[forge]` macro** — `#[forge(status = <code>)]` 静态声明（如 `status = 201` 用于 POST 创建）+ `ServiceResponse::success_with_status(data, code)` 动态控制；零破坏现有 API（默认 200）；HTTP/gRPC 协议拉通；OpenAPI response code 同步
-- **`#[forge]` 宏 `i18n_key` 参数 + `sdforge::i18n` 翻译注册表** — description 运行时翻译（MCP `build_tool_model` / CLI `build_subcommand` 已接入，OpenAPI/gRPC 计划中）；新增公共 API：`register_translation` / `set_locale` / `get_locale` / `translate_or_fallback` / `clear_translations`、`ApiMetadata::with_i18n_key()` / `i18n_key()`；`pub mod i18n` 由 `#[cfg(feature = "i18n")]` 调整为无条件编译
-  - 迁移提示：`CliCommandRegistration` 新增 `pub i18n_key: Option<&'static str>` 字段——对结构体字面量构造方是字段新增（补 `i18n_key: None` 即可），经 `new()` / builder 路径的调用方无需改动
+- **`#[forge]` 宏 `i18n_key` 参数 + `sdforge::i18n` 翻译注册表** — description 运行时翻译（MCP `build_tool_model` / CLI `build_subcommand` / OpenAPI `generate_openapi_spec` / gRPC `GetInfo` 已全部接入）；新增公共 API：`register_translation` / `set_locale` / `get_locale` / `translate_or_fallback` / `clear_translations`、`ApiMetadata::with_i18n_key()` / `i18n_key()`；`pub mod i18n` 由 `#[cfg(feature = "i18n")]` 调整为无条件编译
+  - OpenAPI：`OpenApiRouteInfo` 新增 `pub i18n_key: Option<&'static str>`，`generate_openapi_spec` 按 active locale 翻译 operation description（summary 保持英文原文，对齐 CLI/MCP 只翻 description 的范式；未注册翻译回退英文）
+  - gRPC：`GrpcHandlerRegistration` / `GrpcStreamHandlerRegistration` 新增 `pub i18n_key: Option<&'static str>`（gRPC wire 无 per-method 描述输出，该键供宿主直接遍历 inventory 时以 `translate_or_fallback` 消费）；`GetInfo.description` 以服务级键 `sdforge.service.description` 接入翻译（宿主可 `register_translation` 注册各 locale 文案，未注册回退英文）
+  - 迁移提示（破坏性字段新增，roles 先例）：`OpenApiRouteInfo` / `CliCommandRegistration` / `GrpcHandlerRegistration` / `GrpcStreamHandlerRegistration` 的结构体字面量构造方需补 `i18n_key: None`；经 `new()` / builder / `#[forge]` 宏路径的调用方无需改动
 
 ### Changed
 

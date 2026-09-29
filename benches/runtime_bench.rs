@@ -346,9 +346,52 @@ criterion_group!(
     bench_unified_handler_dispatch,
     bench_json_serialization,
     bench_tls_termination,
-    bench_grpc_streaming
+    bench_grpc_streaming,
+    bench_i18n_translation
 );
 criterion_main!(benches);
+
+/// i18n 翻译查表微基准（`i18n` 模块无条件编译，无 feature 门控）：
+/// `translate_or_fallback` 每次调用为 get_locale 快照 + 注册表查表（两次
+/// Mutex 临界区）+ 分配——被 MCP 工具列表 / CLI help / OpenAPI 每路由 /
+/// gRPC GetInfo 按描述条目调用。数据记录在 `docs/PERFORMANCE.md`。
+fn bench_i18n_translation(c: &mut Criterion) {
+    sdforge::i18n::clear_translations();
+
+    // 回退臂：未注册键 → 纯锁 + 分配（多数 OpenAPI 路由无 i18n_key 时的
+    // 实际形态）。
+    let mut group = c.benchmark_group("i18n_translation");
+    group.throughput(criterion::Throughput::Elements(1));
+
+    group.bench_function("fallback_unregistered_key", |b| {
+        b.iter(|| {
+            let s = sdforge::i18n::translate_or_fallback(
+                "Static English description",
+                Some("bench.unregistered.key"),
+            );
+            std::hint::black_box(s);
+        });
+    });
+
+    // 命中臂：注册表非空（1e4 宿主注册项，模拟大路由量）+ 命中键。
+    for i in 0..10_000u32 {
+        sdforge::i18n::register_translation("en", &format!("bench.hit.key.{i}"), "translated");
+    }
+    sdforge::i18n::register_translation("en", "bench.hit.key", "translated description");
+
+    group.bench_function("registry_hit_10k_entries", |b| {
+        b.iter(|| {
+            let s = sdforge::i18n::translate_or_fallback(
+                "Static English description",
+                Some("bench.hit.key"),
+            );
+            std::hint::black_box(s);
+        });
+    });
+
+    group.finish();
+    sdforge::i18n::clear_translations();
+}
 
 /// gRPC server-streaming 基线（`grpc` + `streaming`）：分发 + 逐项映射的
 /// 端到端耗时与每项序列化映射开销。`grpc`/`streaming` 未启用时空实现
@@ -405,6 +448,7 @@ fn bench_grpc_streaming(c: &mut Criterion) {
             body_param: None,
             default_status: None,
             roles: &[],
+            i18n_key: None,
         }
     }
 

@@ -220,7 +220,10 @@ async fn test_grpc_service_call_with_complex_parameters() {
     assert_eq!(response.data, "complex_value");
 }
 
+// locale 为进程级全局（i18n_get_info 测试会临时切换并恢复）——本测试断言
+// 英文回退文案，需与 locale 敏感测试串行。
 #[tokio::test]
+#[serial_test::serial]
 async fn test_grpc_service_get_info() {
     use tonic::Request;
 
@@ -1499,7 +1502,9 @@ async fn test_info_response_methods_count() {
     assert!(!response.methods.is_empty());
 }
 
+// 同上：description 断言依赖英文回退，须与 locale 敏感测试串行。
 #[tokio::test]
+#[serial_test::serial]
 async fn test_info_response_description_value() {
     use tonic::Request;
 

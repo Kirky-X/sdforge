@@ -33,6 +33,8 @@ cargo bench --bench runtime_bench --features grpc,streaming -- "grpc_stream"
 | `call_stream_100_items` | 同上（100 项） | ~45 µs | ~2.2 M items/s |
 | `call_stream_1000_items` | 同上（1000 项） | ~352 µs | ~2.8 M items/s |
 | `item_mapping_10k` | 每项序列化映射（stream_output_from，1e4 项） | ~1.52 ms | ~6.6 M items/s |
+| `fallback_unregistered_key` | i18n 翻译回退（未注册键，纯锁+分配） | ~45 ns | ~22 M/s |
+| `registry_hit_10k_entries` | i18n 翻译命中（1e4 注册项满表查表） | ~70 ns | ~14 M/s |
 
 ## 🔀 请求热路径（路由分发）
 
@@ -54,6 +56,10 @@ cargo bench --bench runtime_bench --features grpc,streaming -- "grpc_stream"
 - **增量线性**：10 项 ~7.3 µs → 1000 项 ~352 µs，每增量项约 ~350 ns（守卫链底价 + 每项映射）。
 - **每项映射**：`stream_output_from` 消费 1e4 项 ~1.52 ms（约 152 ns/项，`to_value` + `extract_value` 双阶段）。
 - 记录日期 2026-09-30（与 TLS 组同批）。
+
+## 🌐 i18n 翻译查表
+
+`i18n_translation/*`：`translate_or_fallback` 为控制面路径（MCP 工具列表 / CLI help / OpenAPI 每路由 / gRPC GetInfo），非请求热路径。回退 ~45 ns、满表（1e4 宿主注册项）命中 ~70 ns——锁开销线性、千级路由的 OpenAPI 生成（每路由 2 次临界区）总量微秒级，无回归风险。记录日期 2026-09-30。
 
 ## 🧩 HandlerArgs 参数装配
 

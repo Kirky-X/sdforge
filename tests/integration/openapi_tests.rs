@@ -242,3 +242,64 @@ fn forge_result_ok_type_is_unwrapped_for_response_schema() {
         ["schema"];
     assert_eq!(schema["type"], "string");
 }
+
+/// `#[forge(i18n_key)]` → `OpenApiRouteInfo.i18n_key` → description 运行时
+/// 翻译（locale 敏感；未注册翻译回退英文）。locale 为进程级状态：serial
+/// 执行并在结束时清理。
+#[test]
+#[serial_test::serial]
+fn i18n_key_translates_description_by_locale() {
+    // 独立 fixture：i18n_key 只挂在本路由上，断言不受其它路由干扰。
+    #[forge(
+        name = "openapi_i18n_probe",
+        version = "v1",
+        path = "/i18n-probe",
+        method = "GET",
+        description = "Probe route for i18n translation",
+        i18n_key = "test.openapi.i18n_probe.description"
+    )]
+    async fn i18n_probe() -> Result<String, ApiError> {
+        Ok("probe".to_string())
+    }
+
+    sdforge::i18n::clear_translations();
+    let paths_json = serde_json::to_value(&generate_openapi_spec().paths).unwrap();
+    let description = |paths: &serde_json::Value| {
+        paths["/api/v1/i18n-probe"]["get"]["description"]
+            .as_str()
+            .expect("description must be present")
+            .to_string()
+    };
+
+    // 未注册翻译 → 英文回退。
+    sdforge::i18n::set_locale("zh-CN");
+    assert_eq!(
+        description(&paths_json),
+        "Probe route for i18n translation",
+        "unregistered key must fall back to English"
+    );
+
+    // 注册 zh 翻译 → description 随 locale 翻译；summary 保持英文原文。
+    sdforge::i18n::register_translation(
+        "zh-CN",
+        "test.openapi.i18n_probe.description",
+        "i18n 探针路由",
+    );
+    let translated = serde_json::to_value(&generate_openapi_spec().paths).unwrap();
+    assert_eq!(
+        description(&translated),
+        "i18n 探针路由",
+        "registered zh translation must appear in the rendered spec"
+    );
+    let summary = translated["/api/v1/i18n-probe"]["get"]["summary"]
+        .as_str()
+        .expect("summary present");
+    assert_eq!(
+        summary, "Probe route for i18n translation",
+        "summary keeps the compile-time English source (CLI/MCP parity: only description translates)"
+    );
+
+    // 清理：locale 与宿主注册恢复，避免影响其它测试。
+    sdforge::i18n::clear_translations();
+    sdforge::i18n::set_locale("en");
+}
