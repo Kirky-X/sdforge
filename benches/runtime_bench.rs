@@ -450,15 +450,31 @@ fn bench_middleware_tiers(c: &mut Criterion) {
     use sdforge::config::ApiKeySeed;
     use sdforge::config::{AuthConfig, SdForgeConfig};
 
-    let call_ping = |router: &mut axum::Router| {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
+    // 共享 runtime 外提：每迭代不含 tokio 构建常数（各档绝对值纯度）。
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    let call_ping = |rt: &tokio::runtime::Runtime, router: &mut axum::Router| {
         rt.block_on(async {
             use tower::Service;
             let req = axum::http::Request::builder()
                 .uri("/api/v1/bench/ping")
+                .body(axum::body::Body::empty())
+                .unwrap();
+            let res = Service::call(router, req).await.unwrap();
+            assert_eq!(res.status(), 200);
+        });
+    };
+
+    // 认证档驱动：请求带合法 key（bench- 前缀）。
+    let authed_ping = |rt: &tokio::runtime::Runtime, router: &mut axum::Router| {
+        rt.block_on(async {
+            use tower::Service;
+            let req = axum::http::Request::builder()
+                .uri("/api/v1/bench/ping")
+                .header("x-api-key", "bench-bench-key")
                 .body(axum::body::Body::empty())
                 .unwrap();
             let res = Service::call(router, req).await.unwrap();
@@ -481,7 +497,7 @@ fn bench_middleware_tiers(c: &mut Criterion) {
     #[cfg_attr(not(feature = "security"), allow(unused_mut))]
     let mut base_router = sdforge::http::build_with_config(&base_config()).unwrap();
     group.bench_function("t0_base_config", |b| {
-        b.iter(|| call_ping(&mut base_router));
+        b.iter(|| call_ping(&rt, &mut base_router));
     });
 
     // T1：+ ApiKey 认证（合法 key 请求 → 200）。
@@ -490,32 +506,18 @@ fn bench_middleware_tiers(c: &mut Criterion) {
         let mut config = base_config();
         config.authentication = AuthConfig::ApiKey {
             header_name: "x-api-key".to_string(),
-            prefix: String::new(),
+            // 前缀必须非空：认证层对空前缀 fail-closed（防认证绕过的安全修复）。
+            prefix: "bench-".to_string(),
             keys: vec![ApiKeySeed {
                 key: "bench-key".to_string(),
-                permissions: vec![],
+                // 空 permissions 会被 validate_key 判为无效（None）→ 401。
+                permissions: vec!["bench".to_string()],
             }],
         };
         let mut router = sdforge::http::build_with_config(&config).unwrap();
         group.bench_function("t1_auth_api_key", |b| {
-            b.iter(|| {
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .unwrap();
-                rt.block_on(async {
-                    use tower::Service;
-                    let req = axum::http::Request::builder()
-                        .uri("/api/v1/bench/ping")
-                        .header("x-api-key", "bench-key")
-                        .body(axum::body::Body::empty())
-                        .unwrap();
-                    let res = Service::call(&mut router, req).await.unwrap();
-                    assert_eq!(res.status(), 200);
-                });
-            });
+            b.iter(|| authed_ping(&rt, &mut router));
         });
-        let _ = call_ping; // T0 之外的档位各自内联驱动，避免未用告警
     }
 
     // T2：+ ETag 条件请求中间件。
@@ -523,7 +525,7 @@ fn bench_middleware_tiers(c: &mut Criterion) {
     {
         let mut router = sdforge::http::build_with_config(&base_config()).unwrap();
         group.bench_function("t2_etag", |b| {
-            b.iter(|| call_ping(&mut router));
+            b.iter(|| call_ping(&rt, &mut router));
         });
     }
 
@@ -532,7 +534,7 @@ fn bench_middleware_tiers(c: &mut Criterion) {
     {
         let mut router = sdforge::http::build_with_config(&base_config()).unwrap();
         group.bench_function("t3_metrics", |b| {
-            b.iter(|| call_ping(&mut router));
+            b.iter(|| call_ping(&rt, &mut router));
         });
     }
 
@@ -541,7 +543,7 @@ fn bench_middleware_tiers(c: &mut Criterion) {
     {
         let mut router = sdforge::http::build_with_config(&base_config()).unwrap();
         group.bench_function("t4_context", |b| {
-            b.iter(|| call_ping(&mut router));
+            b.iter(|| call_ping(&rt, &mut router));
         });
     }
 
@@ -555,7 +557,7 @@ fn bench_middleware_tiers(c: &mut Criterion) {
         });
         let mut router = sdforge::http::build_with_config(&config).unwrap();
         group.bench_function("t5_cors", |b| {
-            b.iter(|| call_ping(&mut router));
+            b.iter(|| call_ping(&rt, &mut router));
         });
     }
 
@@ -572,10 +574,11 @@ fn bench_middleware_tiers(c: &mut Criterion) {
         let mut config = base_config();
         config.authentication = AuthConfig::ApiKey {
             header_name: "x-api-key".to_string(),
-            prefix: String::new(),
+            prefix: "bench-".to_string(),
             keys: vec![ApiKeySeed {
                 key: "bench-key".to_string(),
-                permissions: vec![],
+                // 空 permissions 会被 validate_key 判为无效（None）→ 401。
+                permissions: vec!["bench".to_string()],
             }],
         };
         config.server.cors = Some(sdforge::config::CorsConfig {
@@ -586,22 +589,7 @@ fn bench_middleware_tiers(c: &mut Criterion) {
         config.server.idempotency.enabled = true;
         let mut router = sdforge::http::build_with_config(&config).unwrap();
         group.bench_function("t6_all_layers", |b| {
-            b.iter(|| {
-                let rt = tokio::runtime::Builder::new_current_thread()
-                    .enable_all()
-                    .build()
-                    .unwrap();
-                rt.block_on(async {
-                    use tower::Service;
-                    let req = axum::http::Request::builder()
-                        .uri("/api/v1/bench/ping")
-                        .header("x-api-key", "bench-key")
-                        .body(axum::body::Body::empty())
-                        .unwrap();
-                    let res = Service::call(&mut router, req).await.unwrap();
-                    assert_eq!(res.status(), 200);
-                });
-            });
+            b.iter(|| authed_ping(&rt, &mut router));
         });
     }
 
