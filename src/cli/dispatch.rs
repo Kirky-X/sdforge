@@ -33,7 +33,8 @@ pub const CLI_API_KEY_ENV: &str = "SDFORGE_API_KEY";
 ///
 /// `SDFORGE_TOKEN` is formatted as a `Bearer <jwt>` authorization header
 /// value; `SDFORGE_API_KEY` is passed through as the raw API key. Both are
-/// offered to the same [`GrpcAuthVerifier`] port the gRPC interceptor and
+/// offered to the same [`crate::security::grpc_auth::GrpcAuthVerifier`] port
+/// the gRPC interceptor and
 /// the MCP `call_tool` gate consume; `Err` carries the rejection reason.
 ///
 /// When both variables are set, the configured verifier consumes only the
@@ -71,7 +72,7 @@ pub fn authenticate_cli(
 /// # Security boundary
 ///
 /// This is the raw dispatch funnel: it performs **no** authentication even
-/// when a verifier is wired — credentials gate [`CliBuilder::execute`],
+/// when a verifier is wired — credentials gate [`crate::cli::CliBuilder::execute`],
 /// which is the CLI process entry. Call this only from trusted in-process
 /// code.
 ///

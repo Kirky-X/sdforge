@@ -58,6 +58,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - name: Check all features
         run: cargo check --all-features --workspace
+      # examples 的 GrpcServerConfig.tls 字面量字段与 sdforge/grpc-tls 字段
+      # 存在性同源门控：单独启用该别名防止字段/字面量组合回归（E0063）。
+      - name: Check examples grpc_tls alias
+        run: cargo check -p sdforge-examples --features grpc_tls
 
   test-features:
     name: Test (${{ matrix.features }})

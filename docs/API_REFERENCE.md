@@ -119,7 +119,7 @@ TLS 终止 `sdforge::http::tls`（`serve-tls` feature，rustls aws-lc-rs；与 g
 | `tls_acceptor(&TlsConfig) -> Result<TlsAcceptor, TlsError>` | 静态证书 acceptor 便捷构建 |
 | `ReloadingTls::new(&TlsConfig) -> Result<ReloadingTls, TlsError>` | 可热重载的 TLS 服务端（acceptor 与重载器编译期绑定）；`acceptor()` 取 serve 句柄，`reload()` 原子换入（阻塞，tokio worker 用 `reload_async()`），失败保留旧证书 |
 | `serve_with_graceful_shutdown_tls(router, listener, acceptor, shutdown, TlsServeConfig)` | TLS 终止 serve：每请求注入 `ConnectInfo<SocketAddr>`（限流/审计取不可伪造 peer IP），复用 graceful 排空时序；accept 错误按 axum 语义退避重试不终止 |
-| `TlsServeConfig` | serve 配置：`handshake_timeout`（默认 10s）/ `header_read_timeout`（默认 30s）预认证护栏 + `graceful` 排空参数 |
+| `TlsServeConfig` | serve 配置：`handshake_timeout`（默认 10s）/ `header_read_timeout`（默认 30s，仅 h1）/ `http2_keepalive_interval`（默认 30s）/ `http2_keepalive_timeout`（默认 20s）预认证护栏 + `graceful` 排空参数 |
 | `TlsError` | 装配错误（文件读取 / PEM 解析 / rustls 配置 / 重载任务四类失败面） |
 
 扩展方式：自定义组件遵循三种构造模式 `new()` / `builder()` / `with_dependencies()`；协议扩展通过 `define_registration!` 宏与 `Registration` trait 接入统一注册系统。

@@ -727,6 +727,11 @@ name = "http_tls_tests"
 path = "tests/integration/http_tls_tests.rs"
 required-features = ["serve-tls"]
 
+# 测试目标清单漂移检测 — [[test]] 注册数/integration 文件数与文档基线同源。
+[[test]]
+name = "test_target_inventory_tests"
+path = "tests/integration/test_target_inventory_tests.rs"
+
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）
 # ============================================================================

@@ -489,7 +489,8 @@ fn poll_guarded(
 /// disappear: `name()` is pre-fetched under `catch_unwind` before spawn (a
 /// panicking name yields an unhealthy outcome without entering the pool),
 /// the future's construction is guarded in-task, and polls are guarded by
-/// [`CatchProbePanic`]. Cancellation propagates correctly — there is exactly
+/// the private `CatchProbePanic` guard future. Cancellation propagates
+/// correctly — there is exactly
 /// one task per check, so dropping the aggregate future aborts slow probes
 /// instead of leaving them running detached. Outcomes are returned in
 /// registration order (sync first, then async), not completion order.

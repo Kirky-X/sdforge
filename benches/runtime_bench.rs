@@ -5,12 +5,14 @@
 //! Run with:
 //! ```text
 //! cargo bench --bench runtime_bench --features http
+//! cargo bench --bench runtime_bench --features serve-tls -- "tls_termination|plaintext_baseline|tls_cert_reloader"
 //! ```
 //!
 //! Baselines are recorded in `docs/PERFORMANCE.md`. These cover the request
-//! hot path (routing + middleware stack + handler dispatch) and JSON
-//! serialization; macro-expansion compile-time cost is intentionally NOT
-//! measured here (see docs/PERFORMANCE.md).
+//! hot path (routing + middleware stack + handler dispatch), JSON
+//! serialization, and (behind `serve-tls`) TLS termination round-trips plus
+//! certificate-reloader costs; macro-expansion compile-time cost is
+//! intentionally NOT measured here (see docs/PERFORMANCE.md).
 
 use criterion::{Criterion, criterion_group, criterion_main};
 use serde_json::json;
@@ -141,10 +143,208 @@ fn bench_json_serialization(c: &mut Criterion) {
     group.finish();
 }
 
+/// TLS 终止热路径基线（`serve-tls`）：环回 https 往返 vs 明文对照、
+/// 证书重载器读路径与换盘成本。数据记录在 `docs/PERFORMANCE.md`。
+/// `serve-tls` 未启用时空实现占位——本 bench 的 `required-features` 只含
+/// `http`，文档化的 `--features http` 调用路径必须可编译。
+#[cfg(not(feature = "serve-tls"))]
+fn bench_tls_termination(_: &mut Criterion) {}
+
+#[cfg(feature = "serve-tls")]
+fn bench_tls_termination(c: &mut Criterion) {
+    use sdforge::config::TlsConfig;
+    use sdforge::http::tls::{ReloadingTls, TlsServeConfig, serve_with_graceful_shutdown_tls};
+    use sdforge::http::{GracefulShutdownConfig, serve_with_graceful_shutdown};
+    use std::time::Duration;
+
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    let certified = rcgen::generate_simple_self_signed(vec!["localhost".to_string()]).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let cert_path = dir.path().join("cert.pem");
+    let key_path = dir.path().join("key.pem");
+    std::fs::write(&cert_path, certified.cert.pem()).unwrap();
+    std::fs::write(&key_path, certified.signing_key.serialize_pem()).unwrap();
+    let tls = TlsConfig::new(
+        cert_path.to_string_lossy().into_owned(),
+        key_path.to_string_lossy().into_owned(),
+    );
+
+    let ping_router =
+        || axum::Router::new().route("/ping", axum::routing::get(|| async { "pong" }));
+
+    let wait_until_up = |rt: &tokio::runtime::Runtime, addr: std::net::SocketAddr| {
+        rt.block_on(async {
+            for _ in 0..200 {
+                if tokio::net::TcpStream::connect(addr).await.is_ok() {
+                    return;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            panic!("bench server never came up at {addr}");
+        });
+    };
+
+    let https_client = || {
+        reqwest::Client::builder()
+            .danger_accept_invalid_certs(true)
+            .build()
+            .unwrap()
+    };
+
+    // TLS serve（停机触发器在 bench 结束前保持未触发——tx 存活即不关停；
+    // runtime drop 收敛一切）。
+    let (tls_trigger_tx, tls_addr) = rt.block_on(async {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (trigger_tx, trigger_rx) = tokio::sync::oneshot::channel::<()>();
+        tokio::spawn(serve_with_graceful_shutdown_tls(
+            ping_router(),
+            listener,
+            sdforge::http::tls::tls_acceptor(&tls).unwrap(),
+            async move {
+                let _ = trigger_rx.await;
+            },
+            TlsServeConfig::default(),
+        ));
+        (trigger_tx, addr)
+    });
+    wait_until_up(&rt, tls_addr);
+
+    // 明文对照 serve（同一 router / 同一排空配置，仅传输层不同）。
+    let (plain_trigger_tx, plain_addr) = rt.block_on(async {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (trigger_tx, trigger_rx) = tokio::sync::oneshot::channel::<()>();
+        tokio::spawn(serve_with_graceful_shutdown(
+            ping_router(),
+            listener,
+            async move {
+                let _ = trigger_rx.await;
+            },
+            GracefulShutdownConfig::default(),
+        ));
+        (trigger_tx, addr)
+    });
+    wait_until_up(&rt, plain_addr);
+    // 显式保活：触发器只随 bench 作用域结束而释放。
+    let _keepalive = (tls_trigger_tx, plain_trigger_tx);
+
+    let mut group = c.benchmark_group("tls_termination");
+    group.throughput(criterion::Throughput::Elements(1));
+
+    // 复用连接池的纯请求成本（TLS 记录层加解密 + HTTP 往返）。
+    group.bench_function("https_request_pooled_conn", |b| {
+        let client = https_client();
+        b.iter(|| {
+            let status = rt.block_on(async {
+                client
+                    .get(format!("https://{tls_addr}/ping"))
+                    .send()
+                    .await
+                    .unwrap()
+                    .status()
+            });
+            assert_eq!(status, 200);
+        });
+    });
+
+    // 每 iter 新建连接：TLS 握手 + 请求往返（部署面上每新连接的进入成本）。
+    group.bench_function("https_handshake_and_request", |b| {
+        b.iter(|| {
+            let status = rt.block_on(async {
+                https_client()
+                    .get(format!("https://{tls_addr}/ping"))
+                    .send()
+                    .await
+                    .unwrap()
+                    .status()
+            });
+            assert_eq!(status, 200);
+        });
+    });
+
+    group.finish();
+
+    let mut group = c.benchmark_group("plaintext_baseline");
+    group.throughput(criterion::Throughput::Elements(1));
+
+    group.bench_function("http_request_pooled_conn", |b| {
+        let client = reqwest::Client::new();
+        b.iter(|| {
+            let status = rt.block_on(async {
+                client
+                    .get(format!("http://{plain_addr}/ping"))
+                    .send()
+                    .await
+                    .unwrap()
+                    .status()
+            });
+            assert_eq!(status, 200);
+        });
+    });
+
+    group.finish();
+
+    // 证书重载器：读路径与换盘成本。resolve 读路径以
+    // `end_entity_certificate()` 为代理（rustls `ClientHello` 无法在
+    // bench 内构造；两者同为 RwLock 读 + 终端实体 DER 访问）。
+    let reloading = ReloadingTls::new(&tls).expect("reloading tls builds");
+
+    let mut group = c.benchmark_group("tls_cert_reloader");
+    group.throughput(criterion::Throughput::Elements(1));
+
+    group.bench_function("resolve_read_path", |b| {
+        b.iter(|| {
+            let der = reloading.end_entity_certificate().unwrap();
+            std::hint::black_box(der);
+        });
+    });
+
+    group.bench_function("reload_from_disk", |b| {
+        b.iter(|| {
+            reloading.reload().unwrap();
+        });
+    });
+
+    // 换盘与并发进入交叠：4 个新连接握手 + 1 次 reload 的批次耗时。
+    group.bench_function("reload_plus_4_concurrent_handshakes", |b| {
+        b.iter(|| {
+            rt.block_on(async {
+                let handshake = || async {
+                    https_client()
+                        .get(format!("https://{tls_addr}/ping"))
+                        .send()
+                        .await
+                        .unwrap()
+                        .status()
+                };
+                let (r, s0, s1, s2, s3) = tokio::join!(
+                    async { reloading.reload() },
+                    handshake(),
+                    handshake(),
+                    handshake(),
+                    handshake()
+                );
+                r.expect("reload with matched pair");
+                for status in [s0, s1, s2, s3] {
+                    assert_eq!(status, 200);
+                }
+            });
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_route_dispatch,
     bench_unified_handler_dispatch,
-    bench_json_serialization
+    bench_json_serialization,
+    bench_tls_termination
 );
 criterion_main!(benches);

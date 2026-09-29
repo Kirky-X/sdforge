@@ -88,6 +88,8 @@ pub fn custom_server_config() -> GrpcServerConfig {
         idempotency_inflight_ttl_secs: 30,
         http2_keepalive_interval: None,
         http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc_tls")]
+        tls: None,
         #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     }

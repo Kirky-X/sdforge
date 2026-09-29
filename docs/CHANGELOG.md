@@ -45,7 +45,9 @@
   换入、tokio worker 用 `reload_async()`，失败保留旧证书）、
   `serve_with_graceful_shutdown_tls`（停机编排与 graceful 共享 `run_stop_phase`
   收尾；每请求注入 `ConnectInfo<SocketAddr>`——限流/审计取不可伪造客户端 IP；
-  `TlsServeConfig` 握手超时 10s + HTTP 头读取超时 30s 预认证护栏；TCP accept
+  `TlsServeConfig` 握手超时 10s + HTTP/1.1 头读取超时 30s + HTTP/2 keep-alive
+  探测（默认 30s 间隔 / 20s 确认超时，握手后停滞不发帧的连接超窗断连）三道
+  预认证护栏；TCP accept
   错误按 axum::serve 语义退避重试不终止 serve；TLS 握手失败日志按 60s 窗口
   聚合限速）。`ServerConfig` 新增 `tls` 字段（`Option<TlsConfig>`，`validate()`
   校验路径非空与 ALPN 合法性）。与 gRPC 侧 `grpc-tls`（tonic `ServerTlsConfig`

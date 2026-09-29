@@ -1,6 +1,6 @@
 # ⚡ Sdforge 性能基线
 
-> 基线记录日期：2026-09-11
+> 基线记录日期：2026-09-11（路由/JSON）；TLS 组：2026-09-29
 > 环境：WSL2 (linux 6.6.87) x64 · Rust 1.97.1 · release profile（`lto=fat`、`codegen-units=1`，仓库既有配置）
 > criterion 报告为中位数区间 [low, median, high]，下表均取中位数。
 
@@ -8,6 +8,7 @@
 
 ```bash
 cargo bench --bench runtime_bench --features http
+cargo bench --bench runtime_bench --features serve-tls -- "tls_termination|plaintext_baseline|tls_cert_reloader"
 ```
 
 > 本机基线数字用于回归参照（CI 阈值门禁待多机采样稳定后启用）。编译期成本（宏展开、依赖编译）单独记录于[编译期门控基准](benchmarks/vs-server-less.md)，不计入运行时基线。
@@ -21,10 +22,25 @@ cargo bench --bench runtime_bench --features http
 | `handler_args_build_5_params` | HandlerArgs 参数装配（5 参数） | ~117 ns | - |
 | `serialize_nested_object` | JSON 序列化（7 字段嵌套对象） | ~137 ns | - |
 | `deserialize_nested_object` | JSON 反序列化（同上对象） | ~383 ns | - |
+| `https_request_pooled_conn` | TLS 复用连接请求往返（环回） | ~35 µs | ~28.9 K req/s |
+| `https_handshake_and_request` | TLS 新建连接（握手+请求，环回） | ~559 µs | ~1.79 K req/s |
+| `http_request_pooled_conn` | 明文复用连接请求往返（对照） | ~45 µs | ~22.4 K req/s |
+| `resolve_read_path` | 证书重载器读路径（RwLock 读 + DER 访问） | ~48 ns | - |
+| `reload_from_disk` | 证书热重载（读盘 + PEM 解析 + 装配） | ~26 µs | - |
+| `reload_plus_4_concurrent_handshakes` | 1 次 reload 与 4 个并发新连接握手交叠 | ~3.26 ms | ~306 batch/s |
 
 ## 🔀 请求热路径（路由分发）
 
 `route_dispatch/*` 从 `http::build()` 产物直接 `Service::call`，覆盖 axum 路由匹配 + `#[forge]` 生成的提取/序列化闭包（`plain_get` / `path_param_get` 延迟与吞吐见 [基线汇总](#-基线汇总)）。路径参数提取的额外开销约 **+50 ns/请求**（约 +9%）。
+
+## 🔐 TLS 终止热路径（`serve-tls`）
+
+`tls_termination/*` / `plaintext_baseline/*` / `tls_cert_reloader/*` 走真实环回 TCP（`serve_with_graceful_shutdown_tls` vs `serve_with_graceful_shutdown`，同 router 同排空配置，仅传输层不同）：
+
+- **复用连接**：TLS 记录层加解密后请求往返 ~35 µs，与明文 ~45 µs 同数量级（环回噪声内）——keep-alive 连接上的持续开销可忽略。
+- **新建连接**：含完整 TLS 1.3 握手的进入成本 ~559 µs（约为复用路径 16 倍），主要来自握手非对称操作与往返；短连接高 churn 部署按此估算容量。
+- **证书热重载**：`resolve` 读路径 ~48 ns/次（握手路径上每次解析一次，`RwLock` 读无退化）；单次 `reload` ~26 µs（文件 IO + PEM 解析 + 密钥装配，tokio worker 上用 `reload_async`）；换盘与 4 路并发握手交叠的批次 ~3.26 ms——重载与进入流量互不阻塞。
+- `resolve_read_path` 以 `end_entity_certificate()` 为代理口径（rustls `ClientHello` 无法在 bench 内构造，两者同为锁读 + 终端实体 DER 访问）。
 
 ## 🧩 HandlerArgs 参数装配
 

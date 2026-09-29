@@ -91,7 +91,7 @@ pub fn http_status_for(e: &crate::core::ApiError) -> u16 {
     e.to_service_error().http_status()
 }
 
-/// **Single source of truth** mapping an [`ApiError`] to its
+/// **Single source of truth** mapping an [`crate::core::ApiError`] to its
 /// `(HTTP status, machine-readable code)` pair.
 ///
 /// Every protocol adapter (HTTP `IntoResponse`, gRPC status mapping, …)
@@ -123,7 +123,7 @@ impl From<&crate::core::ApiError> for UnifiedError {
     }
 }
 
-/// **Single source of truth** mapping an [`ApiError`] to its
+/// **Single source of truth** mapping an [`crate::core::ApiError`] to its
 /// [`tonic::Code`] (gRPC status code). Companion to [`mapping_for`] on the
 /// gRPC wire.
 #[cfg(feature = "grpc")]

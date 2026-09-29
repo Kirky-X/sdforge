@@ -84,6 +84,16 @@ security = ["sdforge/security", "ratelimit"]
 cache = ["sdforge/cache"]
 idempotency = ["sdforge/idempotency"]
 grpc = ["sdforge/grpc"]
+# `grpc_tls` gates the `GrpcServerConfig.tls` field in example code the same
+# way sdforge's `grpc-tls` gates the field itself — gating both sides on the
+# same alias keeps every combination closed (field present ⇔ literal sets
+# it); omitting the field hits E0063 whenever `sdforge/grpc-tls` is on
+# through workspace feature unification (e.g. `--all-features`). Bypassing
+# this alias and enabling `sdforge/grpc-tls` directly on sdforge-examples
+# (e.g. `cargo check -p sdforge-examples --features sdforge/grpc-tls`) is an
+# unsupported combination by design — the field then exists while the
+# literal omits it. The only supported gate is this crate's `grpc_tls`.
+grpc_tls = ["sdforge/grpc-tls"]
 logging = ["sdforge/logging"]
 openapi = ["sdforge/openapi"]
 cli = ["sdforge/cli"]

@@ -81,7 +81,19 @@ const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// HTTP 请求头读取默认超时（对齐 hyper-util 当前默认；覆盖建连后慢速
 /// 发送请求头的在途连接——TimeoutLayer 只覆盖已到达的请求）。
+///
+/// 该护栏仅作用于 HTTP/1.1：hyper-util 的 `header_read_timeout` 是 h1
+/// 独有旋钮，HTTP/2 连接的停滞回收由
+/// `TlsServeConfig::http2_keepalive_interval`（超时窗口内未确认的
+/// keep-alive PING 触发断连）承担。
 const DEFAULT_HEADER_READ_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// HTTP/2 keep-alive PING 默认间隔：服务端周期探测，停滞连接（握手后
+/// 不再发送任何帧的 slowloris）因不回 ACK 而在 PING 超时后被断连。
+const DEFAULT_HTTP2_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
+
+/// HTTP/2 keep-alive PING 确认默认超时（对齐 hyper-util 内建默认）。
+const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// TCP accept 非连接类错误的退避间隔（镜像 axum `handle_accept_error`）。
 const ACCEPT_RETRY_DELAY: Duration = Duration::from_secs(1);
@@ -278,16 +290,25 @@ pub fn tls_acceptor(tls: &TlsConfig) -> Result<TlsAcceptor, TlsError> {
     Ok(TlsAcceptor::from(Arc::new(load_server_config(tls)?)))
 }
 
-/// TLS serve 配置：预认证攻击面（握手 / 头读取）的超时护栏 + 复用
-/// graceful 的排空参数。
+/// TLS serve 配置：预认证攻击面（握手 / 头读取 / h2 停滞）的超时护栏 +
+/// 复用 graceful 的排空参数。
 #[derive(Debug, Clone)]
 pub struct TlsServeConfig {
     /// TLS 握手超时（默认 10s）：不完成握手的连接在窗口后关闭，握手
     /// 成本型 DoS（慢握手占任务与缓冲、未认证 CPU 开销）被限制在窗口内。
     pub handshake_timeout: Duration,
-    /// HTTP 请求头读取超时（默认 30s）：建连后慢速发送请求头的连接被
-    /// 关闭（需向 hyper 连接构建器注册 timer 才生效，本模块已注册）。
+    /// HTTP/1.1 请求头读取超时（默认 30s）：建连后慢速发送请求头的 h1
+    /// 连接被关闭（需向 hyper 连接构建器注册 timer 才生效，本模块已注册）。
+    /// 仅作用 h1——h2 连接的停滞回收见 `http2_keepalive_interval`。
     pub header_read_timeout: Duration,
+    /// HTTP/2 keep-alive PING 间隔（默认 `Some(30s)`，`None` = 关闭探测）：
+    /// 服务端周期发 PING，握手上报后停滞不发帧的 h2 连接因不回 ACK 在
+    /// `http2_keepalive_timeout` 窗口内被断连，tokio 任务与连接缓冲不
+    /// 被无限期钉住。
+    pub http2_keepalive_interval: Option<Duration>,
+    /// HTTP/2 keep-alive PING 确认超时（默认 20s，对齐 hyper-util 内建
+    /// 默认；`None` = 用 hyper-util 默认）。仅在 interval 启用时生效。
+    pub http2_keepalive_timeout: Option<Duration>,
     /// 优雅停机排空参数（与明文路径同语义）。
     pub graceful: GracefulShutdownConfig,
 }
@@ -297,6 +318,8 @@ impl Default for TlsServeConfig {
         Self {
             handshake_timeout: DEFAULT_HANDSHAKE_TIMEOUT,
             header_read_timeout: DEFAULT_HEADER_READ_TIMEOUT,
+            http2_keepalive_interval: Some(DEFAULT_HTTP2_KEEPALIVE_INTERVAL),
+            http2_keepalive_timeout: Some(DEFAULT_HTTP2_KEEPALIVE_TIMEOUT),
             graceful: GracefulShutdownConfig::default(),
         }
     }
@@ -312,6 +335,19 @@ impl TlsServeConfig {
     /// 覆盖 TLS 握手超时（builder style）。
     pub fn with_handshake_timeout(mut self, timeout: Duration) -> Self {
         self.handshake_timeout = timeout;
+        self
+    }
+
+    /// 覆盖 HTTP/2 keep-alive 探测参数（builder style）。
+    /// `interval = None` 关闭探测（停滞 h2 连接不再有回收时间界）；
+    /// `timeout = None` 沿用 hyper-util 默认。
+    pub fn with_http2_keepalive(
+        mut self,
+        interval: impl Into<Option<Duration>>,
+        timeout: impl Into<Option<Duration>>,
+    ) -> Self {
+        self.http2_keepalive_interval = interval.into();
+        self.http2_keepalive_timeout = timeout.into();
         self
     }
 }
@@ -493,6 +529,8 @@ pub async fn serve_with_graceful_shutdown_tls(
     let mut accept_trigger = trigger_rx.clone();
     let handshake_timeout = config.handshake_timeout;
     let header_read_timeout = config.header_read_timeout;
+    let http2_keepalive_interval = config.http2_keepalive_interval;
+    let http2_keepalive_timeout = config.http2_keepalive_timeout;
 
     loop {
         tokio::select! {
@@ -541,8 +579,9 @@ pub async fn serve_with_graceful_shutdown_tls(
                                 }
                             },
                         );
-                        // timer + header_read_timeout 覆盖建连后慢速发送
-                        // 请求头的在途连接（h1/h2 各自注册 timer）。
+                        // timer 支撑 h1 头读取超时与 h2 keep-alive PING 的
+                        // 调度；header_read_timeout 仅作用 h1，h2 停滞由
+                        // keep-alive PING 未确认触发断连回收。
                         let mut conn_builder = HttpConnBuilder::new(TokioExecutor::new());
                         let mut http1 = conn_builder.http1();
                         http1
@@ -550,6 +589,12 @@ pub async fn serve_with_graceful_shutdown_tls(
                             .header_read_timeout(Some(header_read_timeout));
                         let mut http2 = http1.http2();
                         http2.timer(TokioTimer::new());
+                        if let Some(interval) = http2_keepalive_interval {
+                            http2.keep_alive_interval(interval);
+                        }
+                        if let Some(timeout) = http2_keepalive_timeout {
+                            http2.keep_alive_timeout(timeout);
+                        }
                         let conn =
                             http2.serve_connection_with_upgrades(TokioIo::new(tls_stream), service);
                         tokio::pin!(conn);
@@ -899,5 +944,28 @@ mod tests {
             key_file_permissions_exposed(path.to_str().unwrap()).expect("stat 0660"),
             "group-readable key must be flagged"
         );
+    }
+
+    #[test]
+    fn serve_config_defaults_enable_h2_stall_reclaim() {
+        // 缺省配置必须启用 h2 keep-alive 探测：握手后停滞不发帧的连接
+        // 有断连时间界，而非被无限期钉住。
+        let config = TlsServeConfig::default();
+        assert_eq!(
+            config.http2_keepalive_interval,
+            Some(Duration::from_secs(30)),
+            "h2 keep-alive probing must be on by default"
+        );
+        assert_eq!(
+            config.http2_keepalive_timeout,
+            Some(Duration::from_secs(20)),
+            "h2 keep-alive timeout must default to hyper-util's 20s"
+        );
+        let explicit = TlsServeConfig::default().with_http2_keepalive(None, Some(Duration::MAX));
+        assert_eq!(
+            explicit.http2_keepalive_interval, None,
+            "None interval must disable probing"
+        );
+        assert_eq!(explicit.http2_keepalive_timeout, Some(Duration::MAX));
     }
 }

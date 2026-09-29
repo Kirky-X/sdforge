@@ -7,7 +7,7 @@
 use tower::ServiceExt;
 
 #[sdforge::forge(
-    name = "t716_kinds",
+    name = "oxcache_admin_kinds",
     version = "v1",
     path = "/kinds",
     method = "GET",

@@ -677,6 +677,76 @@ async fn connect_info_injected_on_tls_requests() {
         .expect("graceful shutdown ok");
 }
 
+/// h2 停滞回收契约：握手完成后只发 preface+SETTINGS 再不发任何帧的
+/// 连接（不回 keep-alive PING ACK），必须在 `http2_keepalive_timeout`
+/// 窗口内被服务端断连——tokio 任务与连接缓冲不被无限期钉住。
+#[tokio::test]
+#[serial_test::serial]
+async fn stalled_h2_connection_reclaimed_by_keepalive() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (cert, key) = self_signed_pem();
+    let tls = TlsConfig::new(
+        write_pem(&dir, "cert.pem", &cert),
+        write_pem(&dir, "key.pem", &key),
+    );
+
+    let listener = test_listener().await;
+    let addr = listener.local_addr().unwrap();
+    let acceptor = tls_acceptor(&tls).expect("acceptor builds");
+
+    let (trigger_tx, trigger_rx) = tokio::sync::oneshot::channel::<()>();
+    let server = tokio::spawn(serve_with_graceful_shutdown_tls(
+        ping_router().await,
+        listener,
+        acceptor,
+        async move {
+            let _ = trigger_rx.await;
+        },
+        TlsServeConfig::default()
+            .with_graceful(GracefulShutdownConfig::with_drain_timeout(
+                Duration::from_secs(5),
+            ))
+            .with_http2_keepalive(
+                Some(Duration::from_millis(100)),
+                Some(Duration::from_millis(150)),
+            ),
+    ));
+    wait_until_up(addr).await;
+
+    let mut conn = tls_connect(addr, "localhost", vec![b"h2".to_vec()]).await;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    conn.write_all(b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")
+        .await
+        .expect("write h2 preface");
+    // 空 SETTINGS 帧（type=0x4, flags=0, stream=0）：完成合法 h2 起步，
+    // 随后蓄意停滞——不读不写、不回 PING ACK。
+    conn.write_all(&[0, 0, 0, 0x04, 0x00, 0, 0, 0, 0])
+        .await
+        .expect("write empty SETTINGS");
+
+    let mut sink = Vec::new();
+    let t0 = std::time::Instant::now();
+    let read = conn.read_to_end(&mut sink).await;
+    let elapsed = t0.elapsed();
+    // 服务端发 GOAWAY 后关写半边：read_to_end 以 Ok(收到的总字节数)
+    // 收敛（EOF 语义），连接重置则为 Err——两者都是服务端主动回收。
+    assert!(
+        read.is_ok(),
+        "stalled h2 connection must be closed by the server, got: {read:?}"
+    );
+    assert!(
+        elapsed < Duration::from_secs(5),
+        "keep-alive reclaim must fire within the configured window, took {elapsed:?}"
+    );
+
+    let _ = trigger_tx.send(());
+    tokio::time::timeout(Duration::from_secs(3), server)
+        .await
+        .expect("serve resolves")
+        .unwrap()
+        .expect("graceful shutdown ok");
+}
+
 /// 安全模型契约：TLS 路径注入 ConnectInfo 后，`extract_client_ip` 取到
 /// 的是不可伪造的直连 peer IP（而非 None / 可伪造 forwarded header）。
 #[tokio::test]

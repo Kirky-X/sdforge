@@ -164,7 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### HTTP TLS 终止
 
-启用 `serve-tls` feature 后，`http::tls` 在进程内以 rustls（aws-lc-rs provider）终止 TLS：证书/密钥从 `TlsConfig` 指向的 PEM 文件加载（unix 下 group/other 可读的私钥文件会打 warn，建议 `chmod 600`），ALPN 可配置（缺省 `["h2", "http/1.1"]`），每个请求自动注入 `ConnectInfo<SocketAddr>`（TLS 直连无前置代理，限流/审计因此拿到不可伪造的客户端 IP）。停机编排复用 graceful 三阶段（停止接新 → 排空在途 → 停止钩子），`TlsServeConfig` 另提供握手超时（默认 10s）与 HTTP 头读取超时（默认 30s）两道预认证护栏：
+启用 `serve-tls` feature 后，`http::tls` 在进程内以 rustls（aws-lc-rs provider）终止 TLS：证书/密钥从 `TlsConfig` 指向的 PEM 文件加载（unix 下 group/other 可读的私钥文件会打 warn，建议 `chmod 600`），ALPN 可配置（缺省 `["h2", "http/1.1"]`），每个请求自动注入 `ConnectInfo<SocketAddr>`（TLS 直连无前置代理，限流/审计因此拿到不可伪造的客户端 IP）。停机编排复用 graceful 三阶段（停止接新 → 排空在途 → 停止钩子），`TlsServeConfig` 另提供三道预认证护栏——握手超时（默认 10s）、HTTP/1.1 头读取超时（默认 30s，仅作用 h1）与 HTTP/2 keep-alive 探测（默认 30s 间隔 / 20s 确认超时，握手后停滞不发帧的 h2 连接超窗断连，`with_http2_keepalive` 可调或关闭）：
 
 ```rust
 use sdforge::config::TlsConfig;

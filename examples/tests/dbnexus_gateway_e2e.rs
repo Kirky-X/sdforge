@@ -10,7 +10,7 @@ use tower::ServiceExt;
 static POOL: tokio::sync::OnceCell<dbnexus::DbPool> = tokio::sync::OnceCell::const_new();
 
 #[sdforge::forge(
-    name = "t716_gateway_users",
+    name = "dbnexus_gateway_users",
     version = "v1",
     path = "/gw/users",
     method = "GET",
