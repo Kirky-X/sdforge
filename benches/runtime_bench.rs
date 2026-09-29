@@ -347,9 +347,266 @@ criterion_group!(
     bench_json_serialization,
     bench_tls_termination,
     bench_grpc_streaming,
-    bench_i18n_translation
+    bench_i18n_translation,
+    bench_simd_json,
+    bench_middleware_tiers
 );
 criterion_main!(benches);
+
+/// simd-json 与 serde_json 的序列化/反序列化对比（`simd-json` feature）。
+/// 无 `simd-json` 时空存根——`--features http` 调用路径必须可编译（同
+/// TLS/grpc 组的存根约定）。`simd_from_str` 按 facade 口径测量（含输入
+/// 字节拷贝，simd-json 需要 mutable buffer）。
+#[cfg(feature = "simd-json")]
+fn bench_simd_json(c: &mut Criterion) {
+    let payload = serde_json::json!({
+        "id": 12345u64,
+        "name": "benchmark-user",
+        "email": "user@example.com",
+        "active": true,
+        "tags": ["alpha", "beta", "gamma"],
+        "profile": {
+            "level": 3,
+            "score": 98.5,
+            "joined": "2026-09-11T00:00:00Z",
+        },
+    });
+    let text = serde_json::to_string(&payload).unwrap();
+
+    let mut group = c.benchmark_group("simd_json");
+
+    group.bench_function("serialize_serde_json", |b| {
+        b.iter(|| {
+            let s = serde_json::to_string(&payload).unwrap();
+            std::hint::black_box(s)
+        });
+    });
+
+    group.bench_function("serialize_simd", |b| {
+        b.iter(|| {
+            let s = sdforge::core::json::simd_to_string(&payload).unwrap();
+            std::hint::black_box(s)
+        });
+    });
+
+    group.bench_function("deserialize_serde_json", |b| {
+        b.iter(|| {
+            let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+            std::hint::black_box(v)
+        });
+    });
+
+    group.bench_function("deserialize_simd", |b| {
+        b.iter(|| {
+            let v: serde_json::Value = sdforge::core::json::simd_from_str(&text).unwrap();
+            std::hint::black_box(v)
+        });
+    });
+
+    // 大 payload（~64 KiB，512 个 item 的数组）：simd-json 的 SIMD 解析器
+    // 主场——小 payload 下 SIMD 启动/分配成本占主导（见上方反直觉结果）。
+    let large = serde_json::json!({
+        "batch": "bench",
+        "items": (0..512)
+            .map(|i| serde_json::json!({
+                "id": i,
+                "name": format!("item-{i}"),
+                "score": i as f64 * 1.5,
+                "tags": ["a", "b", "c"],
+            }))
+            .collect::<Vec<_>>(),
+    });
+    let large_text = serde_json::to_string(&large).unwrap();
+
+    group.bench_function("deserialize_large_serde_json", |b| {
+        b.iter(|| {
+            let v: serde_json::Value = serde_json::from_str(&large_text).unwrap();
+            std::hint::black_box(v)
+        });
+    });
+
+    group.bench_function("deserialize_large_simd", |b| {
+        b.iter(|| {
+            let v: serde_json::Value = sdforge::core::json::simd_from_str(&large_text).unwrap();
+            std::hint::black_box(v)
+        });
+    });
+
+    group.finish();
+}
+
+#[cfg(not(feature = "simd-json"))]
+fn bench_simd_json(_: &mut Criterion) {}
+
+/// `build_with_config` 逐中间件累加分档（审查欠账收口）：每档一个
+/// Router，`Service::call` GET /api/v1/bench/ping 的完整请求处理耗时。
+/// 分档按 `build_with_config` 实际装配面（body-limit / compression /
+/// timeout / security-headers 恒装；auth/etag/metrics/context/cors/
+/// idempotency 按 feature + config 门控逐级叠加），feature 未启用时该
+/// 分档不编译（cfg 各自独立）。HTTP 侧限流由调用方以 `rate_limit_layer`
+/// 自装（不在 build_with_config 装配面内），故不设限流分档。
+fn bench_middleware_tiers(c: &mut Criterion) {
+    #[cfg(feature = "security")]
+    use sdforge::config::ApiKeySeed;
+    use sdforge::config::{AuthConfig, SdForgeConfig};
+
+    let call_ping = |router: &mut axum::Router| {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            use tower::Service;
+            let req = axum::http::Request::builder()
+                .uri("/api/v1/bench/ping")
+                .body(axum::body::Body::empty())
+                .unwrap();
+            let res = Service::call(router, req).await.unwrap();
+            assert_eq!(res.status(), 200);
+        });
+    };
+
+    fn base_config() -> SdForgeConfig {
+        SdForgeConfig {
+            server: sdforge::config::ServerConfig::default(),
+            authentication: AuthConfig::None,
+            timeout: None,
+            ..Default::default()
+        }
+    }
+
+    let mut group = c.benchmark_group("middleware_tiers");
+
+    // T0：恒装层（RequestBodyLimit + Compression + Timeout + 安全响应头）。
+    #[cfg_attr(not(feature = "security"), allow(unused_mut))]
+    let mut base_router = sdforge::http::build_with_config(&base_config()).unwrap();
+    group.bench_function("t0_base_config", |b| {
+        b.iter(|| call_ping(&mut base_router));
+    });
+
+    // T1：+ ApiKey 认证（合法 key 请求 → 200）。
+    #[cfg(feature = "security")]
+    {
+        let mut config = base_config();
+        config.authentication = AuthConfig::ApiKey {
+            header_name: "x-api-key".to_string(),
+            prefix: String::new(),
+            keys: vec![ApiKeySeed {
+                key: "bench-key".to_string(),
+                permissions: vec![],
+            }],
+        };
+        let mut router = sdforge::http::build_with_config(&config).unwrap();
+        group.bench_function("t1_auth_api_key", |b| {
+            b.iter(|| {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                rt.block_on(async {
+                    use tower::Service;
+                    let req = axum::http::Request::builder()
+                        .uri("/api/v1/bench/ping")
+                        .header("x-api-key", "bench-key")
+                        .body(axum::body::Body::empty())
+                        .unwrap();
+                    let res = Service::call(&mut router, req).await.unwrap();
+                    assert_eq!(res.status(), 200);
+                });
+            });
+        });
+        let _ = call_ping; // T0 之外的档位各自内联驱动，避免未用告警
+    }
+
+    // T2：+ ETag 条件请求中间件。
+    #[cfg(feature = "etag")]
+    {
+        let mut router = sdforge::http::build_with_config(&base_config()).unwrap();
+        group.bench_function("t2_etag", |b| {
+            b.iter(|| call_ping(&mut router));
+        });
+    }
+
+    // T3：+ 指标中间件。
+    #[cfg(feature = "metrics")]
+    {
+        let mut router = sdforge::http::build_with_config(&base_config()).unwrap();
+        group.bench_function("t3_metrics", |b| {
+            b.iter(|| call_ping(&mut router));
+        });
+    }
+
+    // T4：+ context 中间件（request_id + trace_id task-local）。
+    #[cfg(feature = "context")]
+    {
+        let mut router = sdforge::http::build_with_config(&base_config()).unwrap();
+        group.bench_function("t4_context", |b| {
+            b.iter(|| call_ping(&mut router));
+        });
+    }
+
+    // T5：+ CORS。
+    {
+        let mut config = base_config();
+        config.server.cors = Some(sdforge::config::CorsConfig {
+            allowed_origins: vec!["https://bench.example".to_string()],
+            allowed_methods: vec!["GET".to_string()],
+            allowed_headers: vec!["content-type".to_string()],
+        });
+        let mut router = sdforge::http::build_with_config(&config).unwrap();
+        group.bench_function("t5_cors", |b| {
+            b.iter(|| call_ping(&mut router));
+        });
+    }
+
+    // T6：全叠加（feature 齐全时 = auth + etag + metrics + context + cors
+    // + idempotency enabled 于恒装层之上）。
+    #[cfg(all(
+        feature = "security",
+        feature = "etag",
+        feature = "metrics",
+        feature = "context",
+        feature = "idempotency"
+    ))]
+    {
+        let mut config = base_config();
+        config.authentication = AuthConfig::ApiKey {
+            header_name: "x-api-key".to_string(),
+            prefix: String::new(),
+            keys: vec![ApiKeySeed {
+                key: "bench-key".to_string(),
+                permissions: vec![],
+            }],
+        };
+        config.server.cors = Some(sdforge::config::CorsConfig {
+            allowed_origins: vec!["https://bench.example".to_string()],
+            allowed_methods: vec!["GET".to_string()],
+            allowed_headers: vec!["content-type".to_string()],
+        });
+        config.server.idempotency.enabled = true;
+        let mut router = sdforge::http::build_with_config(&config).unwrap();
+        group.bench_function("t6_all_layers", |b| {
+            b.iter(|| {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                rt.block_on(async {
+                    use tower::Service;
+                    let req = axum::http::Request::builder()
+                        .uri("/api/v1/bench/ping")
+                        .header("x-api-key", "bench-key")
+                        .body(axum::body::Body::empty())
+                        .unwrap();
+                    let res = Service::call(&mut router, req).await.unwrap();
+                    assert_eq!(res.status(), 200);
+                });
+            });
+        });
+    }
+
+    group.finish();
+}
 
 /// i18n 翻译查表微基准（`i18n` 模块无条件编译，无 feature 门控）：
 /// `translate_or_fallback` 每次调用为 get_locale 快照 + 注册表查表（两次
