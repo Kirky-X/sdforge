@@ -1,0 +1,5 @@
+error: flag `args` does not take a value
+ --> tests/trybuild/fail/log_flag_with_value.rs:6:14
+  |
+6 | #[forge::log(args = true)]
+  |              ^^^^

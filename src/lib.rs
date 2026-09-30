@@ -198,9 +198,13 @@ pub mod error;
 pub mod domain;
 
 /// Integration modules connecting sdforge to external frameworks via
-/// trait-kit 0.3 `AsyncKit`. Gated by `limiteron-integration` (which `kit`
-/// implies).
-#[cfg(any(feature = "limiteron-integration", feature = "kit"))]
+/// trait-kit 0.3 `AsyncKit` and cross-crate gateways. Gated by
+/// `limiteron-integration` (which `kit` implies) and `db-integration`.
+#[cfg(any(
+    feature = "limiteron-integration",
+    feature = "kit",
+    feature = "db-integration"
+))]
 pub mod integrations;
 
 /// HTTP server and routing
@@ -376,6 +380,27 @@ pub use logging::{
 #[cfg(feature = "inklog")]
 pub mod inklog;
 
+/// `#[forge::log]` 声明日志属性宏的运行时支撑 — feature-gated by `inklog`.
+///
+/// 属性宏本体（`sdforge::forge::log` / `sdforge_macros::log`）展开为壳函数 +
+/// 隐藏内部函数，壳函数经本模块输出进入/退出/耗时/错误日志；载荷先经
+/// inklog `DataMasker` 掩码再入日志。日志走 `log` 门面——安装 inklog 为全局
+/// logger 后自动进入结构化管道。
+///
+/// 未启用 `inklog` feature 时本模块不存在，`#[forge::log]` 在展开点报
+/// E0433（找不到 `sdforge::log_attr`）——按规格显性失败而非静默 no-op。
+#[cfg(feature = "inklog")]
+pub mod log_attr;
+
+/// 宏命名空间的集中 re-export（`#[sdforge::forge::log]` 等路径形态）。
+///
+/// proc-macro re-export 驻留宏命名空间，与本模块同名不冲突；`use
+/// sdforge::forge;` 后 `#[forge(...)]` 用法不变，`use sdforge::forge::log;`
+/// 即得日志属性宏。
+pub mod forge {
+    pub use sdforge_macros::{forge, log, service_module, test_macro};
+}
+
 /// Internationalization support — translation registry + ICU4X formatting.
 ///
 /// The translation registry (`register_translation`, `set_locale`, `t`,
@@ -459,6 +484,13 @@ pub use openapi::{
 #[cfg(feature = "docs")]
 pub mod docs;
 
+/// 多协议客户端 SDK 生成（`sdk` feature：openapi + cli）。
+///
+/// `sdforge::sdk::generate_rust_client` / `generate_typescript_client` 纯
+/// 函数渲染，或经保留 CLI 子命令 `sdk --lang ... --output-dir ...` 落盘。
+#[cfg(feature = "sdk")]
+pub mod sdk;
+
 #[cfg(feature = "docs")]
 pub use docs::{DocError, DocFormat, generate_docs, write_docs};
 
@@ -526,6 +558,8 @@ pub fn init_all_plugins() -> PluginCounts {
             0
         })
     };
+    #[cfg(not(feature = "mcp"))]
+    let mcp_tools = 0;
     #[cfg(feature = "websocket")]
     let ws_routes = {
         use crate::websocket::WebSocketRoute;
@@ -538,6 +572,8 @@ pub fn init_all_plugins() -> PluginCounts {
             0
         })
     };
+    #[cfg(not(feature = "websocket"))]
+    let ws_routes = 0;
     #[cfg(feature = "grpc")]
     let grpc_routes = {
         use crate::grpc::GrpcRouteRegistration;
@@ -550,6 +586,8 @@ pub fn init_all_plugins() -> PluginCounts {
             0
         })
     };
+    #[cfg(not(feature = "grpc"))]
+    let grpc_routes = 0;
 
     // touch `GrpcHandlerRegistration` inventory so the linker keeps
     // `inventory::submit!` blocks emitted by `#[forge(grpc_method = "...")]`.
@@ -570,6 +608,8 @@ pub fn init_all_plugins() -> PluginCounts {
             0
         })
     };
+    #[cfg(not(feature = "grpc"))]
+    let grpc_handlers = 0;
 
     // touch CLI inventory so the linker keeps `inventory::submit!`
     // blocks emitted by `#[forge(cli = true)]`. Mirrors the http/mcp/
@@ -596,18 +636,15 @@ pub fn init_all_plugins() -> PluginCounts {
             0
         })
     };
+    #[cfg(not(feature = "cli"))]
+    let cli_commands = 0;
 
     PluginCounts {
         routes,
-        #[cfg(feature = "mcp")]
         mcp_tools,
-        #[cfg(feature = "websocket")]
         ws_routes,
-        #[cfg(feature = "grpc")]
         grpc_routes,
-        #[cfg(feature = "grpc")]
         grpc_handlers,
-        #[cfg(feature = "cli")]
         cli_commands,
     }
 }
@@ -639,12 +676,11 @@ pub fn init_all_plugins() -> PluginCounts {
 /// # Feature Flags
 ///
 /// Fields are conditionally compiled based on features:
-/// - `routes`: Always present when any protocol feature is enabled
-/// - `mcp_tools`: Only with `mcp` feature
-/// - `ws_routes`: Only with `websocket` feature
-/// - `grpc_routes`: Only with `grpc` feature
-/// - `grpc_handlers`: Only with `grpc` feature (emitted by `#[forge(grpc_method = "...")]`)
-/// - `cli_commands`: Only with `cli` feature
+/// - `routes`: HTTP route count (0 without `http`)
+/// - `mcp_tools` / `ws_routes` / `grpc_routes` / `grpc_handlers` /
+///   `cli_commands`: 对应协议 feature 关闭时恒 `0`——字段恒存在，结构体
+///   字面量/打印在任意 feature 组合下形态稳定（ws-R14 复核修复：此前
+///   cfg 门控字段使跨 feature 的消费代码形态漂移）。
 #[cfg(any(
     feature = "http",
     feature = "mcp",
@@ -655,20 +691,15 @@ pub fn init_all_plugins() -> PluginCounts {
 pub struct PluginCounts {
     /// Number of registered HTTP routes
     pub routes: usize,
-    /// Number of registered MCP tools
-    #[cfg(feature = "mcp")]
+    /// Number of registered MCP tools (0 without `mcp`)
     pub mcp_tools: usize,
-    /// Number of registered WebSocket routes
-    #[cfg(feature = "websocket")]
+    /// Number of registered WebSocket routes (0 without `websocket`)
     pub ws_routes: usize,
-    /// Number of registered gRPC routes
-    #[cfg(feature = "grpc")]
+    /// Number of registered gRPC routes (0 without `grpc`)
     pub grpc_routes: usize,
-    /// Number of registered gRPC handlers (emitted by `#[forge(grpc_method = "...")]`)
-    #[cfg(feature = "grpc")]
+    /// Number of registered gRPC handlers (0 without `grpc`)
     pub grpc_handlers: usize,
-    /// Number of registered CLI commands (emitted by `#[forge(cli = true)]`)
-    #[cfg(feature = "cli")]
+    /// Number of registered CLI commands (0 without `cli`)
     pub cli_commands: usize,
 }
 

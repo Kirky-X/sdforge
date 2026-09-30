@@ -6,10 +6,9 @@
 //! 与本项目 axum 0.8 不兼容。此处手动构建 axum 0.8 路由，复用
 //! `utoipa_swagger_ui::serve()` 底层 API 提供 Swagger UI 文件服务。
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use axum::Extension;
-use axum::Json;
 use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -114,8 +113,33 @@ async fn serve_fixed_openapi_json(
 }
 
 /// 返回动态生成的 OpenAPI JSON spec。
-async fn serve_openapi_json() -> impl IntoResponse {
-    Json(crate::openapi::generate_openapi_spec())
+///
+/// 进程级缓存（序列化字节）：inventory 注册面在启动期定型后 spec 不再变化，
+/// 缓存把 `/api-docs/openapi.json` 从每请求全量重建（inventory 收集 + i18n
+/// 翻译 + utoipa 组装 + JSON 序列化）降为启动后首请求一次、后续字节直出。
+/// 代价：首请求后新注册的路由与运行中切换的 locale 不再反映进文档——需要
+/// 动态文档的宿主应改用 [`swagger_ui_router_with_spec`] 指向自建端点。
+async fn serve_openapi_json() -> axum::response::Response {
+    static CACHED_SPEC_BYTES: OnceLock<Vec<u8>> = OnceLock::new();
+    let bytes: &[u8] = CACHED_SPEC_BYTES.get_or_init(|| {
+        match serde_json::to_vec(&crate::openapi::generate_openapi_spec()) {
+            Ok(bytes) => bytes,
+            // 序列化失败属服务端数据错误：显性记日志并以空缓冲哨兵，后续
+            // 请求维持 500 而不是反复重试重建。
+            Err(err) => {
+                log::error!("OpenAPI spec serialize failed: {err}");
+                Vec::new()
+            }
+        }
+    });
+    if bytes.is_empty() {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    (
+        [(axum::http::header::CONTENT_TYPE, "application/json")],
+        bytes,
+    )
+        .into_response()
 }
 
 /// 服务 Swagger UI 静态资源（index.html / swagger-ui.css / ...）。

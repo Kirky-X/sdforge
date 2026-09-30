@@ -53,6 +53,14 @@ toml = { version = "1.1", default-features = false, features = ["parse", "displa
 
 # 缓存依赖 - oxcache 0.3 用 minimal feature 提供内存后端 + 序列化 + tracing
 oxcache = { version = "0.5.0-rc.4", default-features = false, features = ["minimal"] }
+
+# 数据库网关 - dbnexus 0.6 embedded（sqlite）+ sql-parser：数据 API 网关的
+# 池化/解析面（db-integration feature）
+dbnexus = { version = "0.6.0-rc.5", default-features = false, features = ["embedded", "sql-parser"] }
+
+# async trait 实现 - limiteron DistributedLimiter trait 的 mock/适配实现用
+# （trait 本身以 async_trait 声明；依赖已在依赖树中，显式声明供实现侧使用）
+async-trait = { version = "0.1", default-features = false }
 http = { version = "1.5", default-features = false, features = ["std"] }
 postcard = { version = "1.1", default-features = false, features = ["use-std"] }
 
@@ -70,6 +78,10 @@ limiteron = { version = "0.3.0-rc.4", default-features = false }
 
 # OpenAPI 依赖
 utoipa = { version = "5.5", default-features = false, features = ["macros"] }
+
+# JSON Schema 反射依赖 - schemars 1.2 提供 JsonSchema derive 与 schema 生成
+# （返回类型 Schema 反射：derive JsonSchema 的返回类型产出精确 response schema）
+schemars = { version = "1.2", default-features = false, features = ["derive"] }
 
 # CLI 依赖 - clap 4.6 提供命令行解析（derive feature 用于过程宏派生）
 # string feature 启用 Str: From<String>，支持运行时配置程序名
@@ -205,6 +217,9 @@ hyper-util = { workspace = true, optional = true }
 # OpenAPI dependencies
 utoipa = { workspace = true, optional = true }
 
+# JSON Schema reflection dependencies（返回类型 Schema 反射，schemars feature）
+schemars = { workspace = true, optional = true }
+
 # CLI dependencies - clap 用于命令行参数解析
 clap = { workspace = true, optional = true }
 
@@ -235,6 +250,12 @@ toml = { workspace = true, optional = true }
 # Cache dependencies - oxcache 0.3 用 memory feature 提供缓存后端
 oxcache = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
+
+# dbnexus 数据 API 网关（db-integration feature）
+dbnexus = { workspace = true, optional = true }
+
+# limiteron DistributedLimiter trait 的 mock/适配实现用
+async-trait = { workspace = true }
 
 # Serialization for SyncCache storage values
 postcard = { workspace = true, optional = true }
@@ -273,6 +294,8 @@ unic-langid = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+# 反射两态集成测试的 derive 依赖（dev-only，不影响发布面）
+schemars = { workspace = true }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
 sdforge-macros = { version = "0.5.0-rc.6", path = "./macros", default-features = false }
@@ -383,6 +406,25 @@ serve-tls = [
 # 独立于 http：openapi 模块只用 utoipa + inventory + serde_json
 openapi = ["dep:utoipa", "dep:inventory"]
 
+# 分布式限流 - limiteron distributed 计数后端（InMemoryDistributedLimiter 为
+# 单实例/mock 参考实现；lua-script 带 RedisDistributedLimiter 的 Lua 原子窗口
+# 脚本面——limiteron/lua-script 蕴含 oxcache/lua/redis，多副本共享后端即全局
+# 一致配额）
+ratelimit-dist = ["ratelimit", "limiteron/distributed", "limiteron/lua-script"]
+
+# oxcache Redis L2 - RedisBackend 同步面接入 SyncCache（跨副本共享缓存层，
+# 蕴含 cache；故障固有 fail-open：读 miss/写跳过 + 窗口限速告警）
+cache-l2 = ["cache", "oxcache/redis"]
+
+# dbnexus 数据 API 网关 - 白名单只读数据面（DbGateway，衔接 dbnexus DbPool
+# 的池化/权限/RLS 语义；独立于 http，端点暴露按需组合）
+db-integration = ["dep:dbnexus"]
+
+# 返回类型 Schema 反射特性 - schemars 1.2 驱动：宏为 derive JsonSchema 的
+# 返回类型发射精确 response schema 提供器，未派生类型静默降级到粗粒度映射。
+# 蕴含 openapi：精确 schema 只在 OpenAPI 输出中消费。
+schemars = ["openapi", "dep:schemars"]
+
 # CLI 特性 - clap 集成，与 HTTP/MCP 并列的第三种服务入口
 # 独立于 http：cli 模块只用 clap + inventory + crate::core::ApiError
 cli = ["dep:clap", "dep:inventory"]
@@ -390,6 +432,10 @@ cli = ["dep:clap", "dep:inventory"]
 # Docs 特性 - 统一文档输出（Swagger UI + CLI/MCP Markdown）
 # 依赖 openapi（复用 OpenAPI 生成）+ utoipa-swagger-ui + clap-markdown + cli（docs 子命令需要 CLI 框架）
 docs = ["openapi", "dep:utoipa-swagger-ui", "dep:clap-markdown", "cli"]
+
+# 客户端 SDK 生成 - 从 openapi/grpc 注册表生成 Rust/TypeScript 客户端，
+# 经保留 CLI 子命令 `sdk` 输出（蕴含 openapi 注册面 + cli 子命令分发）
+sdk = ["openapi", "cli"]
 
 # Cache 特性 - oxcache 0.3 用 minimal feature 提供缓存后端
 # cache 模块不依赖 http（已验证 src/cache/ 无 http/axum 使用）
@@ -638,6 +684,26 @@ required-features = ["http", "openapi"]
 
 # forge-success-status-code: e2e tests for `#[forge(status = <code>)]` and
 # `ServiceResponse::success_with_status` across the HTTP protocol.
+[[test]]
+name = "log_attr_tests"
+required-features = ["inklog"]
+path = "tests/integration/log_attr_tests.rs"
+
+[[test]]
+name = "dist_backends_tests"
+required-features = ["ratelimit-dist", "cache-l2"]
+path = "tests/integration/dist_backends_tests.rs"
+
+[[test]]
+name = "dbnexus_gateway_tests"
+required-features = ["db-integration", "http"]
+path = "tests/integration/dbnexus_gateway_tests.rs"
+
+[[test]]
+name = "sdk_snapshots"
+required-features = ["sdk"]
+path = "tests/sdk_snapshots.rs"
+
 [[test]]
 name = "status_code_tests"
 path = "tests/integration/status_code_tests.rs"

@@ -4,29 +4,23 @@
 //!
 //! This module provides gRPC protocol support using tonic.
 
-#[cfg(feature = "grpc")]
 /// gRPC protocol buffer module（生成物位于 OUT_DIR，见 build.rs）
 pub mod sdforge_v1 {
     include!(concat!(env!("OUT_DIR"), "/sdforge.v1.rs"));
 }
 
-#[cfg(feature = "grpc")]
 use crate::core::ApiMetadata;
-#[cfg(feature = "grpc")]
 use crate::define_registration;
 
 mod grpc_impl;
 #[cfg(all(feature = "grpc", feature = "security"))]
 #[cfg(test)]
 pub(crate) use grpc_impl::make_auth_interceptor;
-#[cfg(feature = "grpc")]
 #[allow(deprecated)]
 pub use grpc_impl::{SdForgeGrpcService, build_server, build_server_with_config};
 
-#[cfg(feature = "grpc")]
 /// gRPC handler registration (links `CallRequest.method` → forge handler).
 pub mod handler;
-#[cfg(feature = "grpc")]
 pub use handler::GrpcHandlerRegistration;
 #[cfg(all(feature = "grpc", feature = "streaming"))]
 pub use handler::{
@@ -34,7 +28,6 @@ pub use handler::{
     GrpcStreamOutput, stream_output_from,
 };
 
-#[cfg(feature = "grpc")]
 /// gRPC route registration
 #[derive(Debug, Clone)]
 #[cfg_attr(
@@ -48,10 +41,8 @@ pub struct GrpcRoute {
     pub(crate) metadata: ApiMetadata,
 }
 
-#[cfg(feature = "grpc")]
 define_registration!(GrpcRouteRegistration, GrpcRoute, ApiMetadata);
 
-#[cfg(feature = "grpc")]
 /// gRPC server configuration with optional JWT authentication.
 #[derive(Clone)]
 pub struct GrpcServerConfig {
@@ -92,17 +83,24 @@ pub struct GrpcServerConfig {
     /// in the `authorization` metadata header.
     #[cfg(feature = "security")]
     pub auth: Option<crate::security::BearerAuth>,
+    /// `security` 关闭时的空壳（恒 `None`）——字段恒存在，结构体字面量
+    /// 跨 feature 形态稳定（ws-R14 复核修复）。
+    #[cfg(not(feature = "security"))]
+    pub auth: Option<()>,
     /// Optional application state injected into `SdForgeGrpcService`.
     ///
     /// Mirrors `CliBuilder::with_dependencies`. Handlers with a `State`
     /// parameter downcast this `Arc<dyn Any>` to their concrete type at
     /// call time. Available without the `security` feature (design D5).
     pub state: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
-    /// 生产 RBAC 接线（T001，feature = security）：装配 per-call verifier，
+    /// 生产 RBAC 接线（feature = security）：装配 per-call verifier，
     /// 使 `#[forge(auth(role))]` 声明在 build_server_with_config 路径生效
     /// （此前只有手动 `with_auth_interceptor` 可达，生产形态是全拒绝死开关）。
     #[cfg(feature = "security")]
     pub auth_verifier: Option<std::sync::Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
+    /// `security` 关闭时的空壳（恒 `None`）。
+    #[cfg(not(feature = "security"))]
+    pub auth_verifier: Option<()>,
     /// Optional rate limiter for gRPC requests (vuln-0006).
     ///
     /// When `Some`, each incoming gRPC `call`/`get_info` request is checked
@@ -119,6 +117,9 @@ pub struct GrpcServerConfig {
     /// so gRPC-only builds can still use rate limiting.
     #[cfg(feature = "ratelimit")]
     pub rate_limiter: Option<std::sync::Arc<dyn crate::security::ratelimit::RateLimiter>>,
+    /// `ratelimit` 关闭时的空壳（恒 `None`）。
+    #[cfg(not(feature = "ratelimit"))]
+    pub rate_limiter: Option<()>,
 }
 
 /// gRPC authentication interceptor
@@ -129,5 +130,4 @@ pub(crate) struct AuthGrpcInterceptor {
 }
 
 #[cfg(test)]
-#[cfg(feature = "grpc")]
 mod tests;

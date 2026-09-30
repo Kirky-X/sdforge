@@ -39,7 +39,6 @@
 //! ```
 
 use crate::core::{ApiMetadata, Registration};
-#[cfg(feature = "mcp")]
 use rmcp::model::ErrorData;
 use serde_json::Value;
 use std::sync::Arc;
@@ -50,7 +49,6 @@ use std::sync::Arc;
 /// In rmcp 0.16, the error type is `ErrorData` (not `McpError`). We re-export
 /// it under the `McpError` name so existing code referencing `McpError` continues
 /// to work without changes.
-#[cfg(feature = "mcp")]
 pub type McpError = ErrorData;
 
 // ============================================================================
@@ -58,47 +56,32 @@ pub type McpError = ErrorData;
 // ============================================================================
 
 // Sub-modules for MCP 2026-07-28 protocol adaptation.
-#[cfg(feature = "mcp")]
 pub mod cache_semantics;
-#[cfg(feature = "mcp")]
 pub mod headers;
-#[cfg(feature = "mcp")]
 pub mod mrtr;
-#[cfg(feature = "mcp")]
 pub mod protocol;
-#[cfg(feature = "mcp")]
 pub mod stateless;
 
 // Sub-modules for server and handler (extracted for maintainability).
-#[cfg(feature = "mcp")]
 mod handler;
-#[cfg(feature = "mcp")]
 mod schema_validation;
-#[cfg(feature = "mcp")]
 mod server;
 
 // Test module (only compiled in test builds).
 #[cfg(test)]
-#[cfg(feature = "mcp")]
 mod tests;
 
 // ============================================================================
 // Re-exports of public types
 // ============================================================================
 
-#[cfg(feature = "mcp")]
 pub use handler::McpToolInstance;
-#[cfg(feature = "mcp")]
 pub(crate) use handler::value_to_json_object_arc;
-#[cfg(feature = "mcp")]
 pub use headers::McpHeaderInfo;
-#[cfg(feature = "mcp")]
 pub use mrtr::{InputRequiredResult, MrtrSession};
-#[cfg(feature = "mcp")]
 pub use server::SdForgeMcpServer;
 #[cfg(all(feature = "mcp", feature = "security"))]
 pub use server::{MCP_UNAUTHENTICATED, McpCredentials};
-#[cfg(feature = "mcp")]
 pub use stateless::StatelessServerHandler;
 
 // ============================================================================
@@ -110,7 +93,6 @@ pub use stateless::StatelessServerHandler;
 /// Each tool provides its name, description, JSON Schema for inputs, and a
 /// `call` handler that returns a `CallToolResult`. This trait replaces the
 /// old `mcp_sdk::tools::Tool` trait from the unmaintained 0.0.3 crate.
-#[cfg(feature = "mcp")]
 pub trait SdForgeTool: Send + Sync + 'static {
     /// The tool name (must be unique across all registered tools).
     fn name(&self) -> &str;
@@ -138,7 +120,6 @@ pub trait SdForgeTool: Send + Sync + 'static {
 /// [`McpToolRegistration::with_roles`]) — mirroring
 /// `GrpcHandlerRegistration.roles`. The instance type is `Arc<dyn SdForgeTool>`
 /// so tools can be shared across threads without copying.
-#[cfg(feature = "mcp")]
 #[derive(Debug, Clone, Copy)]
 pub struct McpToolRegistration {
     /// API name
@@ -157,7 +138,6 @@ pub struct McpToolRegistration {
     pub roles: &'static [&'static str],
 }
 
-#[cfg(feature = "mcp")]
 impl McpToolRegistration {
     /// Create a new registration instance without a role requirement.
     #[must_use]
@@ -185,7 +165,6 @@ impl McpToolRegistration {
     }
 }
 
-#[cfg(feature = "mcp")]
 impl crate::core::Registration for McpToolRegistration {
     type Instance = Arc<dyn SdForgeTool>;
     type Metadata = ApiMetadata;
@@ -204,7 +183,6 @@ impl crate::core::Registration for McpToolRegistration {
     }
 }
 
-#[cfg(feature = "mcp")]
 inventory::collect!(McpToolRegistration);
 
 // ============================================================================
@@ -212,5 +190,4 @@ inventory::collect!(McpToolRegistration);
 // ============================================================================
 
 mod mcp_impl;
-#[cfg(feature = "mcp")]
 pub use mcp_impl::{build, get_mcp_tools, serve_stdio};

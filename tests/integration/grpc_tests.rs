@@ -596,11 +596,8 @@ mod grpc_integration_tests {
             max_connections: 500,
             timeout_seconds: 60,
             require_auth: false,
-            #[cfg(feature = "security")]
             auth: None,
-            #[cfg(feature = "security")]
             auth_verifier: None,
-            #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             state: None,
             #[cfg(feature = "idempotency")]
@@ -1073,9 +1070,7 @@ mod grpc_integration_tests {
             timeout_seconds: 60,
             require_auth: true,
             auth: Some(auth),
-            #[cfg(feature = "security")]
             auth_verifier: None,
-            #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             state: None,
             #[cfg(feature = "idempotency")]
@@ -1264,11 +1259,8 @@ mod grpc_integration_tests {
             max_connections: 200,
             timeout_seconds: 45,
             require_auth: false,
-            #[cfg(feature = "security")]
             auth: None,
-            #[cfg(feature = "security")]
             auth_verifier: None,
-            #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             state: None,
             #[cfg(feature = "idempotency")]

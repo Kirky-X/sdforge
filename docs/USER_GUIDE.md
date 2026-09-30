@@ -251,7 +251,63 @@ serve_with_graceful_shutdown_tls(
 ### 国际化与日志
 
 - **i18n**：翻译注册表（`register_translation` / `set_locale` / `translate_or_fallback`）始终可用；`i18n` feature 额外提供 ICU4X 的 `HttpI18nFormatter`（本地化数字/日期/复数格式化与 Accept-Language 解析）
-- **日志**：`logging` feature 提供 `StructuredLogger` / `init_global_logger`；`inklog` feature 将裸 `log` 调用桥接到 inklog `LoggerManager` 结构化管道（`init_inklog_logger()`）
+- **日志**：`logging` feature 提供 `StructuredLogger` / `init_global_logger`；`inklog` feature 将裸 `log` 调用桥接到 inklog `LoggerManager` 结构化管道（`init_inklog_logger()`），并启用 `#[forge::log]` 声明日志属性宏（进入/退出/耗时/错误 + DataMasker 脱敏；feature 关闭时使用该宏在编译期显性报错）
+- **`#[forge::log]` 边界与语义**：`unsafe fn` 的 `unsafe` 限定原样传播到壳函数（调用方仍需 unsafe 块履行安全契约，宏不会把 unsafe fn 包装成安全函数）；壳函数不捕获 panic/任务取消——函数体 panic 或 async 任务被取消时不会产生 `fn_exit` 记录（需要失败可见性的调用方应在函数体内显式捕获，或在调用方监测 JoinHandle）；**不支持 trait impl 内的方法**（宏会在同一 impl 块内追加隐藏内部函数，trait impl 不允许额外成员）；`const`/变参在宏展开点 fail-loud 拒绝。载荷惰性渲染：目标日志级别被全局 max_level 过滤时，参数捕获与掩码渲染不执行（info 生产配置下 debug 进入日志零额外分配成本）；超过 64 KiB 的载荷在掩码前截断（inklog DataMasker 对 >1 MiB 输入会整体跳过掩码，壳层截断保证敏感值永不以明文入日志）；凭证键值对规则覆盖引号键形态（`"password":"hunter2"` 与 `password=hunter2` 同样被掩码）
+
+### 客户端 SDK 生成
+
+`sdk` feature 启用后，经保留 CLI 子命令从已注册路由生成客户端产物：
+
+```bash
+myapp sdk --lang all --output-dir ./sdks --reqwest
+# → sdks/sdforge_client.rs   （零外部依赖 Rust client；--reqwest 追加 reqwest 传输）
+# → sdks/sdforge_client.ts   （fetch + 内嵌类型定义）
+```
+
+Rust 产物以 `Transport` trait 抽象传输（实现一次即可接入任意 HTTP 栈），
+返回原始 JSON 字符串，反序列化由使用方按自身模型做；`base_url` 由客户端
+`call` 拼进完整 URL 后交给 `Transport::execute`（尾斜杠自动剥离，传输实现
+收到的是完整 URL，不再需要自行拼接基址）；`--reqwest` 段经生成
+文件内的 `#[cfg(feature = "reqwest")]` 门控，使用方需自行声明 `reqwest`
+依赖。方法名在渲染前按 `(method, path)` 排序派生，产物与路由注册顺序无关
+（确定性快照锁定）。库内亦可直接调用 `sdforge::sdk::generate_rust_client /
+generate_typescript_client` 做定制化生成。
+
+### 分布式限流与 Redis L2 缓存（多副本部署）
+
+多副本部署时启用 `ratelimit-dist`（分布式限流）与 `cache-l2`（跨副本 L2 缓存）：
+
+```rust,ignore
+// 分布式限流：多副本共享 RedisDistributedLimiter 计数后端（Lua 原子窗口），
+// 配额跨副本全局一致；单实例/测试用 InMemoryDistributedLimiter。
+let backend = Arc::new(limiteron::limiters::RedisDistributedLimiter::new(cache, 100, 60_000));
+let limiter = DistributedRateLimiter::new(backend, DistributedRateLimitConfig::new(100, Duration::from_secs(60)));
+
+// L2 缓存：跨副本共享缓存层（L1 进程内缓存在前）
+let l2 = RedisL2Cache::connect(&RedisL2CacheConfig::new(redis_url).with_default_ttl(Duration::from_secs(300))).await?;
+```
+
+**Redis 生产配置指引（AUTH + TLS）**：
+
+- **认证（AUTH/ACL）**：连接串携带凭据 `redis://default:<AUTH>@host:6379/0`；
+  凭据只经环境变量或 secret 管理注入，禁止写入代码/配置仓库。建议启用
+  Redis 6+ ACL 限定应用账号权限（仅目标 db 的 get/set/del/eval）。
+- **TLS**：跨网段/公网部署必须 `rediss://host:6379`（TLS 传输加密）；内网
+  高信任环境可用 `redis://` 并以网络隔离（VPC/安全组）补偿，须在部署评审
+  记录补偿措施。
+- **键前缀**：多应用共享实例时必须配置互异的 `key_prefix`（限流
+  `with_key_prefix` / L2 `with_key_prefix`），防键冲突与跨应用越权枚举。
+
+**后端不可达行为（显式可配）**：
+
+| 组件 | 策略 | 默认 | 理由 |
+|------|------|------|------|
+| 分布式限流 | fail-open（放行 + 60s 窗口限速告警）+ 适配层熔断（连续 5 次后端错误打开，打开期请求不经后端直接裁决，30s 后半开探测恢复；`with_circuit_failure_threshold` / `with_circuit_open_duration` 可调） | fail-open | 限流是保护性机制而非正确性机制：计数存储故障时 fail-close 会把存储故障放大为全服务不可用，违背可用性优先。熔断补足黑洞形态——后端不回错只熬满超时期间，请求不再每请求付满超时。需要硬安全语义（防爆破/防撞库）的部署显式切换 `BackendFailurePolicy::FailClose`（熔断打开期以 `CircuitBreakerError` 拒绝，不偷换成放行） |
+| Redis L2 缓存 | 固有 fail-open（读故障 = miss 回源，写故障 = 跳过）；同步面（`SyncCache`）经 `block_in_place` 桥接仅多线程 runtime 可用，current-thread runtime 上恒 miss——异步中间件热路径必须用 `get_async`/`set_async`/`delete_async`/`contains_async`（无桥接） | fail-open（无开关） | 缓存丢失只影响命中率不影响正确性；缓存层不存在有意义的 fail-close 语义（拒绝服务不是缓存的职责）。装配期连接失败仍显性报错（启动即暴露配置错误） |
+
+真实 Redis 集成测试门控：设置 `SDFORGE_TEST_REDIS_URL` 后运行
+`cargo test --features "ratelimit-dist,cache-l2" --test dist_backends_tests`；
+未设置时用例显式跳过（沙箱/CI 无 Redis 属环境限制）。
 
 ## 💡 最佳实践
 

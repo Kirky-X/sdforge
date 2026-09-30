@@ -181,20 +181,24 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 | `grpc` | `sdforge::grpc` | `SdForgeGrpcService`（`Call` / `CallStream` / `GetInfo`；`CallStream` 需另启 `streaming`）、`GrpcServerConfig`（`state: Option<Arc<dyn Any + Send + Sync>>`、`require_auth`、`rate_limiter`）、`build_server(_with_config)`、`GrpcRoute`、`CallRequest` / `CallResponse` / `InfoRequest` / `InfoResponse`、`SdForgeServiceServer`、`GrpcHandlerRegistration` / `GrpcStreamHandlerRegistration`（`streaming`）；`tonic` / `prost` re-export |
 | `websocket` | `sdforge::websocket` | `WebSocketRoute` / `WebSocketHandler`、`websocket_upgrade` / `ValidatedWebSocketUpgrade`、`ConnectionManager`、`WebSocketConfig` / `WebSocketConnection` / `WebSocketMessage`、`parse_websocket_message` |
 | `streaming` | `sdforge::streaming` | `StreamEvent`、`StreamResponse`、`stream_to_sse`、`create_stream_channel`（`grpc_method` + `stream = true` 组合映射到 gRPC `CallStream`，见 `grpc` 行）；`tokio_stream` re-export |
+| `ratelimit-dist` | `sdforge::security::ratelimit::dist` | `DistributedRateLimiter`（泛型 limiteron `DistributedLimiter` 后端：`InMemoryDistributedLimiter` 单实例/`RedisDistributedLimiter` 多副本）、`DistributedRateLimitConfig`（含适配层熔断 `with_circuit_failure_threshold`/`with_circuit_open_duration`：连续后端错误打开、打开期不经后端直接按策略裁决、半开探测恢复）、`BackendFailurePolicy`（fail-open 默认/fail-close） |
+| `cache-l2` | `sdforge::cache::l2` | `RedisL2Cache`（oxcache `RedisBackend` 同步面 → `SyncCache`，仅多线程 runtime；异步面 `get_async`/`set_async`/`delete_async`/`contains_async` 供异步中间件热路径）、`RedisL2CacheConfig`（AUTH/TLS 连接串——Debug 输出掩码凭据、键前缀、默认 TTL）、`CacheL2Error` |
 | `security` / `ratelimit` / `ratelimit-http` | `sdforge::security` | 认证：`ApiKeyAuth`、`BearerAuth(+Builder)`、`SdForgeApiKeyAuth(+Builder)`、`AuthContext`、`AuthExtractor`、`auth_middleware`；审计：`AuditLogger` / `SdForgeAuditLogger(+Builder)`、`AuditLog` / `AuditResult`、`AuditSink`；限流：`RateLimiter` trait、`LimiteronAdapter`、`RateLimitLayer`（`ratelimit-http`） |
 | `cache` | `sdforge::cache` | `Cache` / `CacheKey`、`SyncCache` / `SharedCache`、`DashMapCache`（`OxcacheSyncCache` 别名）、`ResponseCacheLayer` / `ResponseCacheMiddleware`（另需 `http`）；`oxcache` re-export |
 | `openapi` | `sdforge::openapi` | `generate_openapi_spec()`、`OpenApiBuilder`（`title` / `version` / `description` / `build`）、`OpenApiRouteInfo` / `OpenApiPathParam`；`utoipa` re-export |
+| `schemars` | `sdforge::openapi`（反射 API） | `SchemaProbe::probe`、`PreciseSchema` / `FallbackSchema`（派生 `JsonSchema` 的返回类型产出字段级精确 response schema，未派生静默降级；蕴含 `openapi`） |
 | `cli` | `sdforge::cli` | `CliBuilder`（`new`、`with_dependencies`、`with_name`、`with_global_arg`、`build -> clap::Command`、`execute -> !`）、`dispatch`、`GlobalArg`、`CliCommandRegistration` / `CliHandlerRegistration`；`clap` re-export |
 | `docs` | `sdforge::docs` | `generate_docs` / `write_docs`、`DocFormat` / `DocError`；`swagger_ui_router`（另需 `http`） |
+| `sdk` | `sdforge::sdk` | `generate_rust_client` / `generate_typescript_client`（纯函数渲染，`(method, path)` 确定性排序；Rust `Transport` 收完整 URL——`base_url` 由客户端拼接）、`ClientRoute` / `GrpcMethodInfo` / `collect_routes` / `collect_grpc_methods`；CLI 保留子命令 `sdk --lang ... --output-dir ... [--reqwest]` |
 | `health` | `sdforge::health` | `CheckOutcome`（`healthy` / `unhealthy`）、`ReadinessCheck` / `HealthDataSource` trait、`register_readiness_check(_fn)` |
 | `metrics` | `sdforge::metrics` | `MetricsRegistry`（`record` / `render`）、`global_registry()`、`record_request()`（Prometheus 文本格式 `/metrics`） |
 | `context` | `sdforge::context` | `RequestContext`、`generate_id`、`scope`（request_id/trace_id 跨协议注入） |
 | `lifecycle` | `sdforge::lifecycle` | `LifecycleHookRegistration`、`run_on_start` / `run_on_stop`（配合 `#[forge(on_start / on_stop)]`） |
 | `hooks` | `sdforge::hooks` | `RequestHooks` trait、`install_hooks`、`hooks_middleware`（处理器前后钩子管道） |
 | `otel` | `sdforge::otel` | `start_span` / `with_attr` / `finish_span` / `take_spans`、`OtelConfig`（OTLP/HTTP JSON 导出） |
-| `inklog` | `sdforge::inklog` | `init_inklog_logger()`：将 `log` 调用桥接到 inklog 结构化管道 |
+| `inklog` | `sdforge::inklog` / `sdforge::forge::log` | `init_inklog_logger()`：将 `log` 调用桥接到 inklog 结构化管道；`#[forge::log]` 声明日志属性宏（`args`/`result`/`err_detail`/`level` 参数，DataMasker 脱敏 + 64 KiB 截断、级别守卫惰性渲染、`unsafe` 限定传播、`log_attr::mask`/`render_enter`/`render_exit` 可独立复用） |
 | `i18n` | `sdforge::i18n` | `HttpI18nFormatter`（ICU4X 本地化格式化）、`I18nError` |
-| `limiteron-integration` / `kit` | `sdforge::integrations` | trait-kit AsyncKit 集成（`SdforgeModule`）、`LimiteronForgeAdapter` |
+| `limiteron-integration` / `kit` / `db-integration` | `sdforge::integrations` | trait-kit AsyncKit 集成（`SdforgeModule`）、`LimiteronForgeAdapter`、dbnexus 数据 API 网关（`DbGateway`：`allow_table` + `query(GatewayQuery)` 白名单只读面、`GatewayQuery::all/filter/paging`） |
 
 > 无独立模块的能力：`validate`（`#[forge(validate)]` + `#[param(...)]`）、`paginate`（`#[forge(paginate)]`）、`etag`（GET 强 ETag + 304）、`graceful`（优雅停机）、`timestamp`（响应时间戳）、`simd-json`（SIMD JSON 路径）经宏旗标或构建配置生效。
 >

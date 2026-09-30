@@ -28,7 +28,6 @@ fn test_grpc_server_config_with_auth() {
         timeout_seconds: 60,
         require_auth: true,
         auth: Some(auth),
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -41,7 +40,6 @@ fn test_grpc_server_config_with_auth() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
     assert!(config.auth.is_some());
@@ -388,9 +386,7 @@ fn test_grpc_config_zero_timeout() {
         max_connections: 100,
         timeout_seconds: 0,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -403,7 +399,6 @@ fn test_grpc_config_zero_timeout() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
 
@@ -417,9 +412,7 @@ fn test_grpc_config_large_max_connections() {
         max_connections: 100000,
         timeout_seconds: 30,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -432,7 +425,6 @@ fn test_grpc_config_large_max_connections() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
 
@@ -445,9 +437,7 @@ fn test_grpc_config_boundary_values() {
         max_connections: 1,
         timeout_seconds: 1,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -460,7 +450,6 @@ fn test_grpc_config_boundary_values() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
 
@@ -468,9 +457,7 @@ fn test_grpc_config_boundary_values() {
         max_connections: usize::MAX,
         timeout_seconds: u64::MAX,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -483,7 +470,6 @@ fn test_grpc_config_boundary_values() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
 
@@ -935,9 +921,7 @@ fn test_grpc_server_config_clone() {
         max_connections: 500,
         timeout_seconds: 45,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -950,7 +934,6 @@ fn test_grpc_server_config_clone() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
 
@@ -966,9 +949,7 @@ fn test_grpc_server_config_equality() {
         max_connections: 100,
         timeout_seconds: 30,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -981,7 +962,6 @@ fn test_grpc_server_config_equality() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
 
@@ -989,9 +969,7 @@ fn test_grpc_server_config_equality() {
         max_connections: 100,
         timeout_seconds: 30,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -1004,7 +982,6 @@ fn test_grpc_server_config_equality() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
 
@@ -1018,9 +995,7 @@ fn test_grpc_server_config_with_minimal_connections() {
         max_connections: 1,
         timeout_seconds: 30,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -1033,7 +1008,6 @@ fn test_grpc_server_config_with_minimal_connections() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
 
@@ -1046,9 +1020,7 @@ fn test_grpc_server_config_with_zero_timeout() {
         max_connections: 100,
         timeout_seconds: 0,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -1061,7 +1033,6 @@ fn test_grpc_server_config_with_zero_timeout() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
 
@@ -1074,9 +1045,7 @@ fn test_grpc_server_config_timeout_edge_cases() {
         max_connections: 100,
         timeout_seconds: 1,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -1089,7 +1058,6 @@ fn test_grpc_server_config_timeout_edge_cases() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
 
@@ -1097,9 +1065,7 @@ fn test_grpc_server_config_timeout_edge_cases() {
         max_connections: 100,
         timeout_seconds: 86400,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -1112,7 +1078,6 @@ fn test_grpc_server_config_timeout_edge_cases() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
 
@@ -1128,7 +1093,6 @@ fn test_grpc_server_config_auth_none() {
         timeout_seconds: 30,
         require_auth: false,
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -1141,7 +1105,6 @@ fn test_grpc_server_config_auth_none() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
 
@@ -1698,9 +1661,7 @@ async fn test_build_server_with_config_zero_values_starts_serving() {
         max_connections: 0,
         timeout_seconds: 0,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -1713,7 +1674,6 @@ async fn test_build_server_with_config_zero_values_starts_serving() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
     let result = tokio::time::timeout(
@@ -1740,9 +1700,7 @@ async fn test_build_server_with_config_large_values_starts_serving() {
         max_connections: 10000,
         timeout_seconds: 300,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -1755,7 +1713,6 @@ async fn test_build_server_with_config_large_values_starts_serving() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
     let result = tokio::time::timeout(
@@ -1783,9 +1740,7 @@ async fn test_build_server_with_config_minimal_positive_values() {
         max_connections: 1,
         timeout_seconds: 1,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
-        #[cfg(feature = "security")]
         auth_verifier: None,
         state: None,
         #[cfg(feature = "idempotency")]
@@ -1798,7 +1753,6 @@ async fn test_build_server_with_config_minimal_positive_values() {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc-tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     };
     let result = tokio::time::timeout(

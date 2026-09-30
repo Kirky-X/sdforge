@@ -1,0 +1,5 @@
+error: attribute value must be quoted when it spans multiple tokens (unquoted values are single-token literals/identifiers)
+ --> tests/trybuild/fail/forge_multi_token_value.rs:7:29
+  |
+7 | #[forge(description = hello world)]
+  |                             ^^^^^

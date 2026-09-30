@@ -4,7 +4,7 @@
 //!
 //! This crate provides procedural macros for the SDForge framework.
 
-#![doc(html_root_url = "https://docs.rs/sdforge-macros/0.5.0-rc.2")]
+#![doc(html_root_url = "https://docs.rs/sdforge-macros/0.5.0-rc.6")]
 
 use proc_macro::TokenStream;
 use proc_macro2::{Delimiter, TokenStream as TokenStream2, TokenTree};
@@ -50,95 +50,109 @@ type ServiceApiArgs = Result<
     syn::Error,
 >;
 
-/// Parse key=value pairs from token stream
-/// Preserves original string-based parsing for compatibility
+/// 解析 `key = value` 键值对（syn 迁移：token-tree 走查器）。
+///
+/// 输入已由 [`extract_forge_extras`](fn.extract_forge_extras) 消化结构化键
+/// （`auth(...)`/裸旗标族），此处只面对简单键值对与裸布尔键。与旧字符扫描
+/// 器（`to_string()` 后逐字符）相比的语义增量：
+///
+/// - 字符串字面量经 `syn::Lit` 解析——转义序列与原始字符串（`r"..."`）
+///   正确展开（旧扫描器按源文本截取，转义原样残留、`r` 前缀混入值）；
+/// - 错误 Span 指向 offending token（旧实现一律 call_site）；
+/// - 引号内逗号由 token 字面量语义天然不切断（旧实现靠引号字符探测）。
+///
+/// 与旧实现对齐的既有语义（零回归面）：裸键（无 `=`）→ `"true"`；`key =`
+/// 缺值（流尾或紧随逗号）→ `"true"`（历史怪癖，保留避免下游行为漂移）；
+/// 引号内逗号不切断值；键值同缺（尾部杂散逗号）静默跳过。
 fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Error> {
-    let args_str = args.to_string();
+    use proc_macro2::TokenTree;
+    use std::iter::Peekable;
+
     let mut pairs = Vec::new();
-
-    let mut chars = args_str.chars().peekable();
-    while let Some(&c) = chars.peek() {
-        if c.is_whitespace() || c == ',' {
-            chars.next();
-            continue;
-        }
-
-        let mut key = String::new();
-        while let Some(&c) = chars.peek() {
-            // `,` 必须断键：真实 proc-macro 的 to_string 把逗号贴在
-            // 前一 token 后（`deprecated,`），不断键则逗号混入键名。
-            if c == '=' || c == ',' || c.is_whitespace() {
-                break;
-            }
-            key.push(c);
-            chars.next();
-        }
-
-        while let Some(&c) = chars.peek() {
-            if c == '=' {
-                chars.next();
-                break;
-            }
-            // 裸布尔键（`deprecated, sunset = "..."`）：`=` 前先遇 `,`
-            // 即视为无值键，交还外层循环解析后续键值对——否则 `,` 与
-            // 下一键名会被吞作本键的定界。
-            if c == ',' {
-                break;
-            }
-            chars.next();
-        }
-
-        while let Some(&c) = chars.peek() {
-            if c.is_whitespace() {
-                chars.next();
-            } else {
-                break;
-            }
-        }
-
-        let mut value = String::new();
-        if let Some(&'"') = chars.peek() {
-            // Quoted string value
-            chars.next();
-            let mut terminated = false;
-            for c in chars.by_ref() {
-                if c == '"' {
-                    terminated = true;
-                    break;
-                }
-                value.push(c);
-            }
-            if !terminated {
+    let mut iter: Peekable<_> = args.into_iter().peekable();
+    while let Some(tree) = iter.next() {
+        let key = match tree {
+            TokenTree::Ident(ident) => ident,
+            // 顶层逗号（含键值对之间的连续逗号）静默跳过。
+            TokenTree::Punct(p) if p.as_char() == ',' => continue,
+            other => {
                 return Err(syn::Error::new(
-                    proc_macro2::Span::call_site(),
-                    "unterminated string literal in forge attribute (missing closing `\"`)",
+                    other.span(),
+                    "expected `key = value` pair (got a token that cannot start a key)",
                 ));
             }
-        } else {
-            // Unquoted value (boolean, number, etc.)
-            while let Some(&c) = chars.peek() {
-                if c == ',' || c.is_whitespace() {
-                    break;
+        };
+
+        let has_eq = matches!(iter.peek(), Some(TokenTree::Punct(p)) if p.as_char() == '=');
+        if !has_eq {
+            // 裸键按布尔真值处理（`#[forge(deprecated)]`）。
+            pairs.push((key.to_string(), "true".to_string()));
+            continue;
+        }
+        iter.next();
+        match iter.peek() {
+            // `key =` 缺值（流尾或紧随逗号）：历史怪癖按裸键处理。
+            None => pairs.push((key.to_string(), "true".to_string())),
+            Some(TokenTree::Punct(p)) if p.as_char() == ',' => {
+                pairs.push((key.to_string(), "true".to_string()));
+            }
+            Some(_) => {
+                let value_tree = iter.next().expect("peeked");
+                // 负数字面量（`-1`）：Punct('-') + 整型字面量拼回，对齐旧
+                // 字符扫描器的拼接语义。
+                let value = match &value_tree {
+                    TokenTree::Punct(p) if p.as_char() == '-' => {
+                        let magnitude = iter.next().ok_or_else(|| {
+                            syn::Error::new(p.span(), "dangling `-` in attribute value")
+                        })?;
+                        format!("-{}", token_tree_value(&magnitude)?)
+                    }
+                    other => token_tree_value(other)?,
+                };
+                // 严格性收紧：非引号值只允许单 token——值后紧跟非逗号 token
+                // 说明值是多 token 形态（如 `path = /a/b` 或漏写引号的带空格
+                // 文本），旧实现会静默截断首 token、把余下 token 当键解析。
+                // fail-loud 指向 offending token，而不是产出截断值。
+                if let Some(extra) = iter.peek()
+                    && !matches!(extra, TokenTree::Punct(p) if p.as_char() == ',')
+                {
+                    return Err(syn::Error::new(
+                        extra.span(),
+                        "attribute value must be quoted when it spans multiple tokens (unquoted values are single-token literals/identifiers)",
+                    ));
                 }
-                value.push(c);
-                chars.next();
+                pairs.push((key.to_string(), value));
             }
         }
-
-        // 裸键（无 `=`）按布尔真值处理（`#[forge(deprecated)]`）；键值
-        // 同缺（尾部杂散逗号）仍静默跳过。
-        if !key.is_empty() && !value.is_empty() {
-            pairs.push((key, value));
-        } else if !key.is_empty() {
-            pairs.push((key, "true".to_string()));
-        }
-
-        if chars.peek().is_none() {
-            break;
-        }
     }
-
     Ok(pairs)
+}
+
+/// 单 token 值 → 字符串（字面量经 `syn::Lit::new` 从 proc-macro2 字面量
+/// 直解，免去 quote!+parse2 的 token 流重建）。
+fn token_tree_value(tree: &proc_macro2::TokenTree) -> Result<String, syn::Error> {
+    use proc_macro2::TokenTree;
+    match tree {
+        TokenTree::Literal(lit) => {
+            let lit: syn::Lit = syn::Lit::new(lit.clone());
+            match lit {
+                syn::Lit::Str(s) => Ok(s.value()),
+                syn::Lit::Int(i) => Ok(i.to_string()),
+                syn::Lit::Float(f) => Ok(f.to_string()),
+                syn::Lit::Bool(b) => Ok(b.value().to_string()),
+                syn::Lit::Char(c) => Ok(c.value().to_string()),
+                other => Err(syn::Error::new(
+                    other.span(),
+                    "unsupported literal kind in attribute value",
+                )),
+            }
+        }
+        TokenTree::Ident(ident) => Ok(ident.to_string()),
+        other => Err(syn::Error::new(
+            other.span(),
+            "expected a literal or identifier value (groups/paths are not simple values)",
+        )),
+    }
 }
 
 /// Generate ApiMetadata TokenStream for service API
@@ -1069,6 +1083,27 @@ fn response_type_to_openapi_info_tokens(return_type: &syn::ReturnType) -> TokenS
             is_array: #is_array,
         })
     }
+}
+
+/// 返回类型 Schema 反射的注册字段 token：有返回类型时发射内联具名函数
+/// （`Result<T, E>` 先解包 Ok 型，精确 schema 描述成功载荷），函数体在
+/// 具体返回类型上解析 `SchemaProbe::probe`——泛型入口会让方法解析退化
+/// 为恒兜底，故必须内联发射；`allow(unused_imports)` 消解派生类型端点
+/// 上兜底 trait 候选导入的告警。无返回类型发射 `None`。未派生
+/// `JsonSchema` 的类型由运行时静默降级。
+fn response_schema_field_tokens(return_type: &syn::ReturnType) -> TokenStream2 {
+    let target_ty = match return_type {
+        syn::ReturnType::Type(_, ty) => extract_result_ok_type(ty).unwrap_or(ty),
+        syn::ReturnType::Default => return quote! { None },
+    };
+    quote! { Some({
+        #[allow(unused_imports)]
+        fn sdforge_reflected_response_schema() -> Option<String> {
+            use sdforge::openapi::{FallbackSchema, PreciseSchema, SchemaProbe};
+            SchemaProbe::<#target_ty>::new().probe()
+        }
+        sdforge_reflected_response_schema
+    }) }
 }
 
 /// Extract path parameters from path string
@@ -2203,6 +2238,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // response schema descriptor from the handler return type.
     let openapi_response_type_expr = response_type_to_openapi_info_tokens(return_type);
+    // 返回类型 Schema 反射：为有返回类型的端点发射精确 schema 提供器
+    // （derive JsonSchema 生效，未派生运行时静默降级）。
+    let openapi_response_schema_expr = response_schema_field_tokens(return_type);
 
     // Build description expression
     let description_literal = description.as_deref().unwrap_or(&name);
@@ -2658,6 +2696,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 success_status: #openapi_status_expr,
                 body_params: &[#(#openapi_body_params_tokens),*],
                 response_type: #openapi_response_type_expr,
+                response_schema: #openapi_response_schema_expr,
                 i18n_key: #openapi_i18n_key_expr,
                 deprecated: #openapi_deprecated_expr,
                 sunset: #openapi_sunset_expr,
@@ -3113,6 +3152,474 @@ pub fn test_macro(input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+// ============================================================================
+// #[forge::log] — 声明日志属性宏（inklog 结构化日志 + DataMasker 脱敏）
+// ============================================================================
+
+/// `#[forge::log]` 的参数面。
+#[derive(Default, Debug)]
+struct LogMacroArgs {
+    /// 记录入参值（要求参数 `Debug`；`self` 接收器不取值）。
+    args: bool,
+    /// 记录成功载荷（非 `Result` 返回要求返回类型 `Debug`；`Result` 返回要求
+    /// Ok 型 `Debug`）。
+    result: bool,
+    /// `Result` 返回时记录 Err 载荷（要求错误型 `Debug`）。
+    err_detail: bool,
+    /// 成功退出的日志级别（默认 info；失败退出恒 error）。值为
+    /// `Level` 变体名，供 quote 直接拼 `::sdforge::log_attr::Level::#level`。
+    level: Option<&'static str>,
+}
+
+/// 解析 `#[forge::log(...)]` 参数（syn::meta 嵌套元信息）。
+///
+/// 支持：`args` / `result` / `err_detail` 裸旗标与 `level = "trace|debug|
+/// info|warn|error"`；未知名与旗标携带值均报错（Span 指向 offending 项）。
+fn parse_log_args(tokens: TokenStream2) -> syn::Result<LogMacroArgs> {
+    let mut parsed = LogMacroArgs::default();
+    if tokens.is_empty() {
+        return Ok(parsed);
+    }
+    use syn::parse::Parser as _;
+    let attrs = syn::Attribute::parse_outer.parse2(quote! { #[__forge_log(#tokens)] })?;
+    attrs[0].parse_nested_meta(|meta| {
+        if meta.path.is_ident("args") {
+            reject_flag_value(&meta, "args")?;
+            parsed.args = true;
+            Ok(())
+        } else if meta.path.is_ident("result") {
+            reject_flag_value(&meta, "result")?;
+            parsed.result = true;
+            Ok(())
+        } else if meta.path.is_ident("err_detail") {
+            reject_flag_value(&meta, "err_detail")?;
+            parsed.err_detail = true;
+            Ok(())
+        } else if meta.path.is_ident("level") {
+            let lit: syn::LitStr = meta.value()?.parse()?;
+            parsed.level = Some(match lit.value().as_str() {
+                "trace" => "Trace",
+                "debug" => "Debug",
+                "info" => "Info",
+                "warn" => "Warn",
+                "error" => "Error",
+                other => {
+                    return Err(meta.error(format!(
+                        "unknown level `{other}` (supported: trace, debug, info, warn, error)"
+                    )));
+                }
+            });
+            Ok(())
+        } else {
+            Err(meta.error("unknown option (supported: args, result, err_detail, level = \"...\")"))
+        }
+    })?;
+    Ok(parsed)
+}
+
+/// 裸旗标后携带 `= value` 时报错（旗标语义为纯开关）。
+fn reject_flag_value(meta: &syn::meta::ParseNestedMeta<'_>, name: &str) -> syn::Result<()> {
+    if meta.input.peek(syn::Token![=]) {
+        Err(meta.error(format!("flag `{name}` does not take a value")))
+    } else {
+        Ok(())
+    }
+}
+
+/// `#[forge::log]` 展开：原函数体重命名为隐藏内部函数，外壳函数承载
+/// 进入/退出/耗时/错误日志。
+///
+/// - 进入：debug 级 `fn_enter`（`args` 旗标开启时携带经 DataMasker 掩码的
+///   参数值）；
+/// - 退出：`fn_exit` 携带耗时与成败；成功用配置级别（默认 info），`Result`
+///   的 Err 恒 error 级；`result`/`err_detail` 旗标开启时载荷先掩码再入日志；
+/// - 失败语义只识别语法形态的 `Result` 返回（路径尾段 `Result`），别名包装
+///   按普通返回处理。
+///
+/// 运行时支撑位于 `sdforge::log_attr`（sdforge 的 `inklog` feature）——feature
+/// 关闭时发射代码解析失败（E0433 指向 `sdforge::log_attr`），按规格要求
+/// 显性报错而非静默 no-op。
+#[proc_macro_attribute]
+pub fn log(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as TokenStream2);
+    let input = parse_macro_input!(input as ItemFn);
+    match parse_log_args(args).and_then(|parsed| expand_log_attr(&parsed, input)) {
+        Ok(expanded) => expanded.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+fn expand_log_attr(parsed: &LogMacroArgs, input: ItemFn) -> syn::Result<TokenStream2> {
+    let sig = &input.sig;
+    if let Some(constness) = &sig.constness {
+        return Err(syn::Error::new(
+            constness.span,
+            "#[forge::log] does not support const fn (logging requires runtime Instant)",
+        ));
+    }
+    if sig.variadic.is_some() {
+        return Err(syn::Error::new(
+            sig.ident.span(),
+            "#[forge::log] does not support variadic functions",
+        ));
+    }
+
+    let vis = &input.vis;
+    let attrs = &input.attrs;
+    let ident = &sig.ident;
+    let inner_ident = quote::format_ident!("__forge_log_inner_{}", ident);
+    let generics = &sig.generics;
+    let where_clause = &sig.generics.where_clause;
+    let asyncness = &sig.asyncness;
+    // safety 原样传播到外壳与内部两个函数：丢弃 `unsafe` 会把 unsafe fn
+    // 包装成安全函数（安全代码可达 UB），也会让内部函数体里的 unsafe 操作
+    // 失去合法性。外壳体内对内部函数的调用是显式 unsafe 行为（edition 2024
+    // 的 unsafe_op_in_unsafe_fn 要求显式块）。
+    let safety = &sig.safety;
+    let is_unsafe = matches!(sig.safety, syn::Safety::Unsafe(_));
+    let unsafe_call: TokenStream2 = if is_unsafe {
+        quote! { unsafe }
+    } else {
+        quote! {}
+    };
+    let output = &sig.output;
+    let is_async = asyncness.is_some();
+    let awaits: Option<TokenStream2> = is_async.then(|| quote! { .await });
+    let fn_name = ident.to_string();
+
+    // 拆解参数：接收器原样保留；具名参数转发内部函数；复杂模式参数改绑
+    // 合成标识符、在内部函数体前补回解构 let（语义等价原签名）。
+    let mut outer_inputs: TokenStream2 = quote! {};
+    let mut forward_idents: Vec<TokenStream2> = Vec::new();
+    // args 旗标开启时的逐参数捕获表达式（`name={:?}` 形态；掩码在运行时
+    // 支撑层做）。
+    let mut entry_parts: Vec<TokenStream2> = Vec::new();
+    let mut rebind_lets: Vec<TokenStream2> = Vec::new();
+    let mut has_receiver = false;
+    for (index, fn_arg) in sig.inputs.iter().enumerate() {
+        match fn_arg {
+            FnArg::Receiver(receiver) => {
+                has_receiver = true;
+                outer_inputs.extend(quote! { #receiver, });
+            }
+            FnArg::Typed(pat_type) => {
+                let ty = &pat_type.ty;
+                if let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
+                    let id = &pat_ident.ident;
+                    outer_inputs.extend(quote! { #pat_type, });
+                    forward_idents.push(quote! { #id });
+                    if parsed.args {
+                        entry_parts.push(quote! {
+                            ::std::format!("{}={:?}", ::core::stringify!(#id), #id)
+                        });
+                    }
+                } else {
+                    let synthetic =
+                        quote::format_ident!("__forge_log_arg_{}", syn::Index::from(index));
+                    let pat = &pat_type.pat;
+                    outer_inputs.extend(quote! { #synthetic: #ty, });
+                    forward_idents.push(quote! { #synthetic });
+                    rebind_lets.push(quote! { let #pat = #synthetic; });
+                    if parsed.args {
+                        // 解构参数以原模式文本为键（值经合成绑定借用，同样
+                        // 要求 `Debug`）。
+                        entry_parts.push(quote! {
+                            ::std::format!(
+                                "{}={:?}",
+                                ::core::stringify!(#pat),
+                                #synthetic
+                            )
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 进入日志：args 旗标开启且存在可捕获参数时携带 args 段。载荷一律以
+    // 闭包惰性提供——运行时支撑层（sdforge::log_attr）的级别守卫判定丢弃
+    // 时，参数捕获与掩码渲染的分配成本分文不付（info 生产配置下 debug 进入
+    // 日志不再为每次调用白付 N 次 format!）。
+    let entry_args_expr: TokenStream2 = if entry_parts.is_empty() {
+        quote! { || ::core::option::Option::None }
+    } else {
+        quote! { || ::core::option::Option::Some(::std::vec![#(#entry_parts),*].join(", ")) }
+    };
+
+    let receiver_call: TokenStream2 = if has_receiver {
+        quote! { self.#inner_ident(#(#forward_idents),*) }
+    } else {
+        quote! { #inner_ident(#(#forward_idents),*) }
+    };
+
+    // Result 形态（语法判定）失败退出走 error 级，成功退出走配置级别。
+    let result_shaped = matches!(
+        output,
+        syn::ReturnType::Type(_, ty) if extract_result_ok_type(ty).is_some()
+    );
+    let level_ident = quote::format_ident!(
+        "{}",
+        parsed.level.unwrap_or("Info"),
+        span = proc_macro2::Span::call_site()
+    );
+    // 退出载荷同样惰性（闭包捕获成败绑定，级别守卫通过才渲染）。
+    let ok_detail_expr: TokenStream2 = if parsed.result {
+        quote! { || ::core::option::Option::Some(::std::format!("{:?}", __forge_log_v)) }
+    } else {
+        quote! { || ::core::option::Option::None }
+    };
+    let plain_detail_expr: TokenStream2 = if parsed.result {
+        quote! { || ::core::option::Option::Some(::std::format!("{:?}", __forge_log_out)) }
+    } else {
+        quote! { || ::core::option::Option::None }
+    };
+    let err_detail_expr: TokenStream2 = if parsed.err_detail {
+        quote! { || ::core::option::Option::Some(::std::format!("{:?}", __forge_log_e)) }
+    } else {
+        quote! { || ::core::option::Option::None }
+    };
+
+    let exit_stmt: TokenStream2 = if result_shaped {
+        quote! {
+            match &__forge_log_out {
+                ::core::result::Result::Ok(__forge_log_v) => {
+                    ::sdforge::log_attr::exit(
+                        #fn_name,
+                        __forge_log_start.elapsed(),
+                        ::sdforge::log_attr::Level::#level_ident,
+                        #ok_detail_expr,
+                    );
+                }
+                ::core::result::Result::Err(__forge_log_e) => {
+                    ::sdforge::log_attr::exit_error(
+                        #fn_name,
+                        __forge_log_start.elapsed(),
+                        #err_detail_expr,
+                    );
+                }
+            }
+        }
+    } else {
+        quote! {
+            ::sdforge::log_attr::exit(
+                #fn_name,
+                __forge_log_start.elapsed(),
+                ::sdforge::log_attr::Level::#level_ident,
+                #plain_detail_expr,
+            );
+        }
+    };
+
+    let body = &input.block;
+    let rebind_stmts = &rebind_lets;
+
+    Ok(quote! {
+        #(#attrs)*
+        #vis #safety #asyncness fn #ident #generics(#outer_inputs) #output #where_clause {
+            ::sdforge::log_attr::entry(
+                #fn_name,
+                ::core::module_path!(),
+                #entry_args_expr,
+            );
+            let __forge_log_start = ::std::time::Instant::now();
+            let __forge_log_out = #unsafe_call { #receiver_call #awaits };
+            #exit_stmt
+            __forge_log_out
+        }
+
+        #[doc(hidden)]
+        #[allow(unused_variables, missing_docs, clippy::all)]
+        #vis #safety #asyncness fn #inner_ident #generics(#outer_inputs) #output #where_clause {
+            #(#rebind_stmts)*
+            #body
+        }
+    })
+}
+
+/// `#[forge::log]` 参数解析与展开形态测试。
+#[cfg(test)]
+mod log_attr_macro_tests {
+    use super::*;
+
+    #[test]
+    fn empty_args_yield_defaults() {
+        let parsed = parse_log_args(quote! {}).unwrap();
+        assert!(!parsed.args);
+        assert!(!parsed.result);
+        assert!(!parsed.err_detail);
+        assert_eq!(parsed.level, None);
+    }
+
+    #[test]
+    fn bare_flags_and_level_parse() {
+        let parsed = parse_log_args(quote! { args, result, err_detail, level = "warn" }).unwrap();
+        assert!(parsed.args);
+        assert!(parsed.result);
+        assert!(parsed.err_detail);
+        assert_eq!(parsed.level, Some("Warn"));
+
+        let debug = parse_log_args(quote! { level = "debug" }).unwrap();
+        assert_eq!(debug.level, Some("Debug"));
+        let trace = parse_log_args(quote! { level = "trace" }).unwrap();
+        assert_eq!(trace.level, Some("Trace"));
+        let error = parse_log_args(quote! { level = "error" }).unwrap();
+        assert_eq!(error.level, Some("Error"));
+    }
+
+    #[test]
+    fn unknown_option_is_rejected_at_its_token() {
+        let err = parse_log_args(quote! { wat, args })
+            .expect_err("unknown option must fail")
+            .to_string();
+        assert!(err.contains("unknown option"), "{err}");
+        assert!(err.contains("args, result, err_detail, level"), "{err}");
+    }
+
+    #[test]
+    fn invalid_level_is_rejected_with_supported_list() {
+        let err = parse_log_args(quote! { level = "loud" })
+            .expect_err("invalid level must fail")
+            .to_string();
+        assert!(err.contains("unknown level `loud`"), "{err}");
+    }
+
+    #[test]
+    fn flags_reject_values() {
+        for flag in ["args", "result", "err_detail"] {
+            let tokens: TokenStream2 = match flag {
+                "args" => quote! { args = true },
+                "result" => quote! { result = false },
+                _ => quote! { err_detail = 1 },
+            };
+            let err = parse_log_args(tokens)
+                .expect_err("flags must not take values")
+                .to_string();
+            assert!(err.contains("does not take a value"), "{flag}: {err}");
+        }
+    }
+
+    #[test]
+    fn expansion_carries_shell_inner_and_log_calls() {
+        let input: ItemFn = syn::parse2(quote! {
+            fn demo(x: u64) -> u64 { x + 1 }
+        })
+        .unwrap();
+        let parsed = parse_log_args(quote! { args }).unwrap();
+        let expanded = expand_log_attr(&parsed, input).unwrap().to_string();
+
+        assert!(
+            expanded.contains("fn demo"),
+            "shell fn keeps the name: {expanded}"
+        );
+        assert!(
+            expanded.contains("__forge_log_inner_demo"),
+            "body moves to the hidden inner fn: {expanded}"
+        );
+        assert!(
+            expanded.contains("log_attr :: entry"),
+            "entry hook: {expanded}"
+        );
+        assert!(
+            expanded.contains("Instant :: now"),
+            "duration capture: {expanded}"
+        );
+        assert!(
+            expanded.contains("log_attr :: exit"),
+            "exit hook: {expanded}"
+        );
+        assert!(
+            expanded.contains("stringify ! (x)") && expanded.contains("format !"),
+            "args flag captures parameter values: {expanded}"
+        );
+    }
+
+    #[test]
+    fn result_return_splits_ok_and_error_arms() {
+        let input: ItemFn = syn::parse2(quote! {
+            fn demo() -> Result<u64, String> { Ok(1) }
+        })
+        .unwrap();
+        let parsed = parse_log_args(quote! { result, err_detail }).unwrap();
+        let expanded = expand_log_attr(&parsed, input).unwrap().to_string();
+
+        assert!(expanded.contains("Result :: Ok"), "ok arm: {expanded}");
+        assert!(expanded.contains("Result :: Err"), "err arm: {expanded}");
+        assert!(
+            expanded.contains("log_attr :: exit_error"),
+            "error-level exit: {expanded}"
+        );
+        assert!(
+            expanded.contains("Level :: Info"),
+            "default success level: {expanded}"
+        );
+    }
+
+    #[test]
+    fn async_and_pattern_params_are_forwarded() {
+        let input: ItemFn = syn::parse2(quote! {
+            async fn demo(Point { x, y }: Point, n: u64) -> u64 { x + y + n }
+        })
+        .unwrap();
+        let parsed = parse_log_args(quote! { args }).unwrap();
+        let expanded = expand_log_attr(&parsed, input).unwrap().to_string();
+
+        assert!(
+            expanded.contains("async fn demo"),
+            "asyncness preserved: {expanded}"
+        );
+        assert!(
+            expanded.contains(". await"),
+            "inner call awaited: {expanded}"
+        );
+        assert!(
+            expanded.contains("__forge_log_arg_0"),
+            "pattern param re-bound to a synthetic ident: {expanded}"
+        );
+        assert!(
+            expanded.contains("let Point { x , y } = __forge_log_arg_0"),
+            "inner fn restores the destructuring: {expanded}"
+        );
+    }
+
+    #[test]
+    fn const_fn_is_rejected() {
+        let input: ItemFn = syn::parse2(quote! {
+            const fn demo(x: u64) -> u64 { x }
+        })
+        .unwrap();
+        let parsed = parse_log_args(quote! {}).unwrap();
+        let err = expand_log_attr(&parsed, input)
+            .expect_err("const fn must fail")
+            .to_string();
+        assert!(err.contains("const fn"), "{err}");
+    }
+
+    /// unsafety 传播：unsafe fn 的外壳与内部两个函数都必须保留 `unsafe`——
+    /// 丢弃它会把 unsafe fn 包装成安全函数（安全代码可达 UB），且内部函数
+    /// 体里的 unsafe 操作也会失去合法性。
+    #[test]
+    fn unsafe_fn_propagates_unsafety_to_both_fns() {
+        let input: ItemFn = syn::parse2(quote! {
+            unsafe fn demo(ptr: *const u64) -> u64 { *ptr }
+        })
+        .unwrap();
+        let parsed = parse_log_args(quote! { result }).unwrap();
+        let expanded = expand_log_attr(&parsed, input).unwrap().to_string();
+
+        let unsafe_fn_count = expanded.matches("unsafe fn").count();
+        assert_eq!(
+            unsafe_fn_count, 2,
+            "shell and inner fns must both stay unsafe: {expanded}"
+        );
+        // 外壳体内对内部 unsafe 函数的调用是显式 unsafe 行为（edition 2024
+        // unsafe_op_in_unsafe_fn 要求显式块）。
+        assert!(
+            expanded.contains("unsafe { __forge_log_inner_demo"),
+            "inner call must be an explicit unsafe block: {expanded}"
+        );
+    }
+}
+
 #[cfg(test)]
 mod macro_parsing_tests {
     use super::*;
@@ -3134,6 +3641,82 @@ mod macro_parsing_tests {
                 ("name".to_string(), "test".to_string()),
                 ("version".to_string(), "v1".to_string())
             ]
+        );
+    }
+
+    /// syn 迁移后的语义增量：字符串字面量经 `syn::Lit` 展开——转义序列
+    /// 正确还原（旧字符扫描器把 `\"` 源文本原样留在值里）。
+    #[test]
+    fn test_parse_kv_pairs_unescapes_string_literals() {
+        let input: TokenStream2 = quote! { description = "say \"hi\" now" };
+        let pairs = parse_kv_pairs(input).unwrap();
+        assert_eq!(
+            pairs,
+            vec![("description".to_string(), "say \"hi\" now".to_string())]
+        );
+    }
+
+    /// `key =` 缺值（流尾/紧随逗号）：历史怪癖按裸键 `"true"` 处理（零回归）。
+    #[test]
+    fn test_parse_kv_pairs_missing_value_is_bare_true() {
+        let trailing: TokenStream2 = quote! { name = "x", status = , version = "v1" };
+        let pairs = parse_kv_pairs(trailing).unwrap();
+        assert_eq!(
+            pairs,
+            vec![
+                ("name".to_string(), "x".to_string()),
+                ("status".to_string(), "true".to_string()),
+                ("version".to_string(), "v1".to_string()),
+            ]
+        );
+        let at_end: TokenStream2 = quote! { name = };
+        assert_eq!(
+            parse_kv_pairs(at_end).unwrap(),
+            vec![("name".to_string(), "true".to_string())]
+        );
+    }
+
+    /// 非字符串值族：整数 / 裸 bool / 负整数按旧扫描器同形输出。
+    #[test]
+    fn test_parse_kv_pairs_non_string_values() {
+        let input: TokenStream2 = quote! { status = 201, deprecated = true, ttl = -1 };
+        let pairs = parse_kv_pairs(input).unwrap();
+        assert_eq!(
+            pairs,
+            vec![
+                ("status".to_string(), "201".to_string()),
+                ("deprecated".to_string(), "true".to_string()),
+                ("ttl".to_string(), "-1".to_string()),
+            ]
+        );
+    }
+
+    /// Span 精确化：不可作键的 token 报错指向该 token（旧实现一律
+    /// call_site）。
+    #[test]
+    fn test_parse_kv_pairs_reports_offending_token_span() {
+        let input: TokenStream2 = quote! { "a-string-as-key" };
+        let err = parse_kv_pairs(input).expect_err("non-ident key must fail");
+        assert!(err.to_string().contains("expected `key = value` pair"));
+    }
+
+    /// 严格性收紧：非引号值只允许单 token——值后紧跟非逗号 token（多 token
+    /// 非引号值）必须报错，而不是静默截断首 token、把余下 token 当键解析。
+    #[test]
+    fn test_parse_kv_pairs_rejects_multi_token_unquoted_value() {
+        let input: TokenStream2 = quote! { route = get fallback };
+        let err = parse_kv_pairs(input).expect_err("multi-token unquoted value must fail");
+        let message = err.to_string();
+        assert!(
+            message.contains("must be quoted when it spans multiple tokens"),
+            "{message}"
+        );
+
+        // 引号值天然单 token（引号内空格/斜杠合法），不回归。
+        let quoted: TokenStream2 = quote! { path = "/api/v1/users with space" };
+        assert_eq!(
+            parse_kv_pairs(quoted).unwrap(),
+            vec![("path".to_string(), "/api/v1/users with space".to_string())]
         );
     }
 
@@ -4222,6 +4805,43 @@ mod macro_parsing_tests {
     fn test_detect_service_response_no_generic_param() {
         let rt = parse_return_type("-> ServiceResponse");
         assert!(detect_service_response(&rt));
+    }
+
+    /// 返回类型 Schema 反射：有返回类型时发射 `reflect_response_schema`
+    /// 提供器；`Result<T, E>` 先解包 Ok 型；单元（Default）返回发射 `None`。
+    #[test]
+    fn test_response_schema_field_tokens() {
+        let typed = parse_return_type("-> UserProfile");
+        let tokens = response_schema_field_tokens(&typed).to_string();
+        assert!(
+            tokens.contains("SchemaProbe :: < UserProfile >"),
+            "must probe the concrete return type inline: {tokens}"
+        );
+        assert!(
+            tokens.contains("fn sdforge_reflected_response_schema"),
+            "must emit a named fn item (coercible to fn pointer): {tokens}"
+        );
+        assert!(
+            tokens.contains("allow (unused_imports)"),
+            "derived-type endpoints would warn on the fallback trait import: {tokens}"
+        );
+
+        let result_wrapped = parse_return_type("-> Result<UserProfile, ApiError>");
+        let tokens = response_schema_field_tokens(&result_wrapped).to_string();
+        assert!(
+            tokens.contains("UserProfile"),
+            "Result wrapper must unwrap to the Ok type: {tokens}"
+        );
+        assert!(
+            !tokens.contains("ApiError"),
+            "error type must not enter the success-payload schema: {tokens}"
+        );
+
+        assert_eq!(
+            response_schema_field_tokens(&syn::ReturnType::Default).to_string(),
+            "None",
+            "unit-return endpoints must not register a provider"
+        );
     }
 }
 

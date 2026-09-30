@@ -7,7 +7,7 @@
 | 层级 | 承载 | 数量基线 |
 |------|------|----------|
 | L1 lib 单元测试 | `src/**` 内 `#[cfg(test)]`：sdforge 2113 / sdforge-macros 56 / sdforge-examples 44 | 2213 passed |
-| L2 集成测试 | 主 crate `tests/` 40 目标（integration/ 33 + unit/ 5 + 顶层 integration_http_mcp 1 + macros/macro_tests 1）+ sdforge-macros crate `tests/` 2 目标（macro_compile/trybuild）+ sdforge-examples crate `tests/` 3 目标（comprehensive_features、dbnexus_gateway_e2e、oxcache_admin_e2e） | 625 passed |
+| L2 集成测试 | 主 crate `tests/` 45 目标（integration/ 36 + unit/ 5 + 顶层 2：integration_http_mcp、sdk_snapshots + tests/e2e 1 + macros/macro_tests 1）+ sdforge-macros crate `tests/` 2 目标（macro_compile/trybuild）+ sdforge-examples crate `tests/` 3 目标（comprehensive_features、dbnexus_gateway_e2e、oxcache_admin_e2e） | 625 passed |
 | L3 E2E 场景 | `tests/e2e/`（e2e_advanced 单目标，12 域） | 178 passed |
 | L4 Doc-tests | sdforge 22 + sdforge-examples 5 | 27 passed + 40 ignored |
 
@@ -15,7 +15,7 @@
 
 ## 🎯 测试目标落点
 
-- 主 crate：41 个测试目标全部 `[[test]]` 显式注册（tests/e2e、tests/integration、tests/unit、tests/macros 子目录均脱离 Cargo 自动发现范围，不注册即静默消失；顶层 integration_http_mcp 亦注册；`test_target_inventory_tests` 持续断言本行与 integration/ 文件数的漂移）
+- 主 crate：45 个测试目标全部 `[[test]]` 显式注册（tests/e2e、tests/integration、tests/unit、tests/macros 子目录均脱离 Cargo 自动发现范围，不注册即静默消失；顶层 integration_http_mcp 亦注册；`test_target_inventory_tests` 持续断言本行与 integration/ 文件数的漂移）
 - sdforge-macros / sdforge-examples crate：`tests/` 顶层自动发现（macro_compile_tests、trybuild_tests、comprehensive_features、dbnexus_gateway_e2e、oxcache_admin_e2e）
 - e2e_advanced：由 `tests/e2e/` 目录承载（e2e_* 不裸放顶层）；子目录脱离自动发现范围，经 `[[test]]` 显式注册，178 测试完整保留
 - 特性门控：e2e_advanced 内 12 mod 独立 `#[cfg(feature)]`，任意 feature 子集可编译（无需 required-features）；全量口径 `--all-features` 无静默跳过风险
@@ -43,11 +43,11 @@ tests/e2e/e2e_advanced.rs（场景要点取自各 mod 声明的公共 API）：
 
 | 组合 | 覆盖 | 结果 |
 |------|------|------|
-| `--all-features --workspace`（全量口径） | 全部 51 个有产出目标 | 3043 passed / 0 failed / 68 ignored |
+| `--all-features --workspace`（全量口径） | 全部 55 个有产出目标 | 3130 passed / 0 failed / 68+ ignored |
 | 七特性子集 `http,security,cache,logging,i18n,ratelimit,openapi` | e2e_advanced 12 域 | 178 passed / 0 failed |
 | trybuild | 宏编译失败诊断用例 | 2 passed |
 
-51 个有产出目标 = 主 crate 41 + sdforge-macros tests 2 + sdforge-examples tests 3 + unittests 3（sdforge/macros/examples）+ Doc-tests 2（sdforge/sdforge-examples；sdforge-macros Doc-tests 空产出不计入）。
+55 个有产出目标 = 主 crate 45 + sdforge-macros tests 2 + sdforge-examples tests 3 + unittests 3（sdforge/macros/examples）+ Doc-tests 2（sdforge/sdforge-examples；sdforge-macros Doc-tests 空产出不计入）。
 
 ## 🚦 静态门槛
 

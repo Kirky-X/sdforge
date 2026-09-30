@@ -89,6 +89,7 @@ impl OpenApiRouteInfo {
             success_status: None,
             body_params: &[],
             response_type: None,
+            response_schema: None,
             i18n_key: None,
             deprecated: false,
             sunset: None,
@@ -120,6 +121,7 @@ impl OpenApiRouteInfo {
             success_status: None,
             body_params: &[],
             response_type: None,
+            response_schema: None,
             i18n_key: None,
             deprecated: false,
             sunset: None,
@@ -161,6 +163,7 @@ impl OpenApiRouteInfo {
             success_status,
             body_params: &[],
             response_type: None,
+            response_schema: None,
             i18n_key: None,
             deprecated: false,
             sunset: None,
@@ -277,6 +280,192 @@ fn schema_from_type(info: &OpenApiTypeInfo) -> Schema {
     }
 }
 
+/// schemars 根级 `$defs` 提升进 OpenAPI components 后，子 schema 引用的
+/// 统一指针前缀（schemars 原生指针 `#/$defs/Name` 经
+/// [`rewrite_schema_refs`] 改写到此命名空间）。
+const SCHEMAS_REF_PREFIX: &str = "#/components/schemas/";
+
+/// 递归改写 JSON Schema 中的 `$ref` 指针。
+///
+/// schemars 1.x 默认 `inline_subschemas = false`：嵌套具名类型不内联，而是
+/// 产出 `{"$ref": "#/$defs/Name"}` 并把定义集中在根级 `$defs`。`$defs` 被
+/// 提升进 OpenAPI components.schemas 后，指针必须同步改指
+/// `#/components/schemas/Name`，否则最终文档中的 `$ref` 悬空（不可解析）。
+fn rewrite_schema_refs(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, child) in map.iter_mut() {
+                if key == "$ref" {
+                    if let Some(name) = child.as_str().and_then(|r| r.strip_prefix("#/$defs/")) {
+                        *child = serde_json::Value::String(format!("{SCHEMAS_REF_PREFIX}{name}"));
+                    }
+                } else {
+                    rewrite_schema_refs(child);
+                }
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                rewrite_schema_refs(item);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// 将 schemars 生成的 JSON Schema（serde_json 值）映射为 utoipa
+/// [`RefOr`] schema。
+///
+/// 覆盖 JSON Schema 核心关键词：`$ref`、组合（`allOf`/`oneOf`/`anyOf`）、
+/// `enum`、数组（`type: "array"` + `items`）、对象（`properties`/
+/// `required`/`additionalProperties`）、原语 `type` + `format` 与
+/// `description`。未知关键词组合退化为空 object schema——spec 保持
+/// 有效，仅结构信息缺失。`$ref` 指针必须已经 [`rewrite_schema_refs`]
+/// 改写为 `#/components/schemas/...` 形态，转换原样保留。
+fn ref_or_schema_from_json(value: &serde_json::Value) -> RefOr<Schema> {
+    use utoipa::openapi::schema::{AllOfBuilder, AnyOfBuilder, OneOfBuilder, Ref};
+
+    let map = match value.as_object() {
+        Some(m) => m,
+        None => return RefOr::T(Schema::Object(ObjectBuilder::new().build())),
+    };
+
+    if let Some(reference) = map.get("$ref").and_then(serde_json::Value::as_str) {
+        return RefOr::Ref(Ref::new(reference));
+    }
+
+    for (key, variant) in [
+        ("allOf", Composite::All),
+        ("oneOf", Composite::One),
+        ("anyOf", Composite::Any),
+    ] {
+        if let Some(items) = map.get(key).and_then(serde_json::Value::as_array) {
+            let mut subschemas = items.iter().map(ref_or_schema_from_json);
+            let first = subschemas
+                .next()
+                .unwrap_or_else(|| RefOr::T(Schema::Object(ObjectBuilder::new().build())));
+            return RefOr::T(match variant {
+                Composite::All => {
+                    let mut builder = AllOfBuilder::new().item(first);
+                    for sub in subschemas {
+                        builder = builder.item(sub);
+                    }
+                    Schema::AllOf(builder.build())
+                }
+                Composite::One => {
+                    let mut builder = OneOfBuilder::new().item(first);
+                    for sub in subschemas {
+                        builder = builder.item(sub);
+                    }
+                    Schema::OneOf(builder.build())
+                }
+                Composite::Any => {
+                    let mut builder = AnyOfBuilder::new().item(first);
+                    for sub in subschemas {
+                        builder = builder.item(sub);
+                    }
+                    Schema::AnyOf(builder.build())
+                }
+            });
+        }
+    }
+
+    if let Some(enum_values) = map.get("enum").and_then(serde_json::Value::as_array) {
+        let builder = ObjectBuilder::new().enum_values(Some(enum_values.iter().cloned()));
+        return RefOr::T(Schema::Object(builder.build()));
+    }
+
+    if map.get("type").and_then(serde_json::Value::as_str) == Some("array")
+        || map.contains_key("items")
+    {
+        let mut builder = ArrayBuilder::new();
+        if let Some(items) = map.get("items") {
+            builder = builder.items(ref_or_schema_from_json(items));
+        }
+        return RefOr::T(Schema::Array(builder.build()));
+    }
+
+    let mut builder = ObjectBuilder::new().schema_type(
+        match map.get("type").and_then(serde_json::Value::as_str) {
+            Some("integer") => Type::Integer,
+            Some("number") => Type::Number,
+            Some("boolean") => Type::Boolean,
+            Some("string") => Type::String,
+            _ => Type::Object,
+        },
+    );
+    if let Some(format) = map.get("format").and_then(serde_json::Value::as_str) {
+        builder = builder.format(Some(SchemaFormat::Custom(format.to_string())));
+    }
+    if let Some(properties) = map.get("properties").and_then(serde_json::Value::as_object) {
+        for (name, property) in properties {
+            builder = builder.property(name.clone(), ref_or_schema_from_json(property));
+        }
+    }
+    if let Some(required) = map.get("required").and_then(serde_json::Value::as_array) {
+        for name in required.iter().filter_map(serde_json::Value::as_str) {
+            builder = builder.required(name);
+        }
+    }
+    match map.get("additionalProperties") {
+        Some(serde_json::Value::Bool(true)) => {
+            builder = builder.additional_properties(Some(
+                utoipa::openapi::schema::AdditionalProperties::FreeForm(true),
+            ));
+        }
+        Some(inner @ serde_json::Value::Object(_)) => {
+            builder = builder.additional_properties(Some(
+                utoipa::openapi::schema::AdditionalProperties::RefOr(ref_or_schema_from_json(
+                    inner,
+                )),
+            ));
+        }
+        _ => {}
+    }
+    if let Some(description) = map.get("description").and_then(serde_json::Value::as_str) {
+        builder = builder.description(Some(description.to_string()));
+    }
+    RefOr::T(Schema::Object(builder.build()))
+}
+
+/// JSON Schema 组合关键词的归并目标（`for` 遍历中携带，避免字符串重复匹配）。
+#[derive(Clone, Copy)]
+enum Composite {
+    All,
+    One,
+    Any,
+}
+
+/// 反射产物：根 schema（可为 `$ref`）+ 根级 `$defs` 提升条目（组件名 →
+/// 组件 schema）。
+type ReflectedSchema = (RefOr<Schema>, Vec<(String, RefOr<Schema>)>);
+
+/// 返回类型 Schema 反射的响应内容构造：提供器产出精确 JSON Schema 时
+/// 转换为 utoipa schema，并把根级 `$defs`（schemars 命名子 schema——嵌套
+/// 具名类型的承载处）一并返回，由调用方提升进 OpenAPI components，
+/// 文档内 `$ref` 因此可解析。根自身为 `$ref`（schemars 对纯具名返回类型
+/// 的形态）时按引用返回，不再降级。`None`（未派生/未启用 schemars）由
+/// 调用方降级到粗粒度映射。
+fn reflected_response_schema_with_defs(route: &OpenApiRouteInfo) -> Option<ReflectedSchema> {
+    let json = (route.response_schema?)()?;
+    let mut value = serde_json::from_str::<serde_json::Value>(&json).ok()?;
+    rewrite_schema_refs(&mut value);
+    let defs = value
+        .as_object()
+        .and_then(|map| map.get("$defs"))
+        .and_then(serde_json::Value::as_object)
+        .map(|defs| {
+            defs.iter()
+                .map(|(name, def)| (name.clone(), ref_or_schema_from_json(def)))
+                .collect()
+        })
+        .unwrap_or_default();
+    if let Some(map) = value.as_object_mut() {
+        map.remove("$defs");
+    }
+    Some((ref_or_schema_from_json(&value), defs))
+}
+
 impl OpenApiBuilder {
     /// Create a new builder with empty fields.
     pub fn new() -> Self {
@@ -336,6 +525,10 @@ impl OpenApiBuilder {
         let info: Info = info_builder.build();
 
         let mut paths = Paths::new();
+        // 反射响应 schema 的根级 `$defs`（schemars 命名子 schema）。跨路由
+        // 汇总后一次性提升进 components——同名的后到者覆盖先到者，与
+        // components 合并语义一致。
+        let mut reflected_defs: Vec<(String, RefOr<Schema>)> = Vec::new();
         for route in inventory::iter::<OpenApiRouteInfo> {
             // Translate the description at runtime via the i18n registry
             // (route.i18n_key from `#[forge(i18n_key = "...")]`); falls
@@ -431,7 +624,17 @@ impl OpenApiBuilder {
 
             let status_code = route.success_status.unwrap_or(200);
             let mut response = ResponseBuilder::new().description("Successful response");
-            if let Some(response_type) = route.response_type {
+            // 返回类型 Schema 反射优先：派生 JsonSchema 的返回类型携带
+            // schemars 精确 schema（嵌套具名类型以 `$ref` 引用 components 中
+            // 的提升条目）；未派生（提供器 None）或未启用 schemars（桩恒
+            // None）时降级到 response_type 粗粒度映射，两者皆缺则保持
+            // legacy schema-less 响应。
+            if let Some((schema, defs)) = reflected_response_schema_with_defs(route) {
+                reflected_defs.extend(defs);
+                let mut content = ContentBuilder::new();
+                content = content.schema(Some(schema));
+                response = response.content("application/json", content.build());
+            } else if let Some(response_type) = route.response_type {
                 let mut content = ContentBuilder::new();
                 content = content.schema(Some(schema_from_type(&response_type)));
                 response = response.content("application/json", content.build());
@@ -442,8 +645,16 @@ impl OpenApiBuilder {
             paths.add_path_operation(route.path, vec![route.http_method()], operation);
         }
 
-        // inventory 收集先行；extra 依序合并，同 path+method 外部优先。
+        // inventory 收集先行；反射 `$defs` 提升进 components（在 extra 合并
+        // 前——同 path/schema 名外部 spec 优先的合并语义不变）；extra 依序
+        // 合并，同 path+method 外部优先。
         let mut spec = OpenApi::new(info, paths);
+        if !reflected_defs.is_empty() {
+            let components = spec.components.get_or_insert_with(Default::default);
+            for (name, schema) in reflected_defs {
+                components.schemas.insert(name, schema);
+            }
+        }
         for extra in &self.extra {
             merge_extra_into(&mut spec, extra);
         }

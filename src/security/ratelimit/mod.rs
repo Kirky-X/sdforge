@@ -20,6 +20,12 @@ use std::pin::Pin;
 mod adapter;
 pub use adapter::{LimiteronAdapter, LimiteronAdapterBuilder};
 
+// 分布式限流（limiteron DistributedLimiter 计数后端；ratelimit-dist）。
+#[cfg(feature = "ratelimit-dist")]
+pub mod dist;
+#[cfg(feature = "ratelimit-dist")]
+pub use dist::{BackendFailurePolicy, DistributedRateLimitConfig, DistributedRateLimiter};
+
 // Tower middleware for HTTP rate limiting (only with `ratelimit-http`).
 #[cfg(feature = "ratelimit-http")]
 mod middleware;

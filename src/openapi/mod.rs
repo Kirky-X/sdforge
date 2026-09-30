@@ -125,6 +125,15 @@ pub struct OpenApiRouteInfo {
     /// Response schema descriptor. `None` keeps the legacy
     /// schema-less response entry.
     pub response_type: Option<OpenApiTypeInfo>,
+    /// 精确 response schema 提供器（返回类型 Schema 反射）。
+    ///
+    /// `#[forge]` 宏为每个有返回类型的端点发射一个内联具名函数，函数体
+    /// 在具体返回类型上解析 `SchemaProbe::probe`：`T` 派生 `JsonSchema`
+    /// 时运行时产出其完整 JSON Schema 文本（取代 `response_type` 粗粒度
+    /// 映射），未派生时返回 `None`（静默降级到 `response_type`）。函数
+    /// 指针保持 `inventory::submit!` 的 const 语义。手动提交注册项时可
+    /// 复用同一内联形态（见本模块测试路由）。
+    pub response_schema: Option<fn() -> Option<String>>,
     /// Runtime translation key for the description (`#[forge(i18n_key)]`).
     /// `generate_openapi_spec` looks up the active locale via
     /// `sdforge::i18n::translate_or_fallback`; `None` (or an unregistered
@@ -145,6 +154,9 @@ pub struct OpenApiRouteInfo {
 }
 
 inventory::collect!(OpenApiRouteInfo);
+
+mod reflection;
+pub use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
 
 /// Builder for constructing an `OpenApi` specification with custom metadata.
 ///
@@ -242,6 +254,7 @@ inventory::submit!(OpenApiRouteInfo {
         schema_format: "",
         is_array: true,
     }),
+    response_schema: None,
 });
 
 // 端点生命周期（`#[forge(deprecated)]`）：test-only deprecated 路由，
@@ -262,6 +275,7 @@ inventory::submit!(OpenApiRouteInfo {
     successor: None,
     body_params: &[],
     response_type: None,
+    response_schema: None,
 });
 
 // 端点生命周期（`#[forge(deprecated, sunset, successor)]`）：test-only
@@ -283,6 +297,86 @@ inventory::submit!(OpenApiRouteInfo {
     successor: Some("/api/v2/thing"),
     body_params: &[],
     response_type: None,
+    response_schema: None,
+});
+
+// 返回类型 Schema 反射：test-only 载荷与路由。派生 `JsonSchema` 的载荷在
+// `schemars` feature 态产出精确字段 schema；未派生载荷的提供器返回 `None`，
+// 降级到 `response_type` 粗粒度映射（schemars 开关两态行为一致）。
+#[cfg(test)]
+#[derive(Debug)]
+#[allow(dead_code)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+struct TestReflectedPayload {
+    id: u64,
+    email: String,
+}
+
+#[cfg(test)]
+inventory::submit!(OpenApiRouteInfo {
+    path: "/__openapi_reflection_test__",
+    method: "GET",
+    summary: "Reflected schema test marker",
+    description: "Route whose response_schema provider reflects a derived JsonSchema payload.",
+    version: "test",
+    tags: &["test"],
+    path_params: &[],
+    success_status: None,
+    i18n_key: None,
+    deprecated: false,
+    sunset: None,
+    successor: None,
+    body_params: &[],
+    response_type: Some(OpenApiTypeInfo {
+        schema_type: "object",
+        schema_format: "",
+        is_array: false,
+    }),
+    response_schema: Some({
+        fn __test_reflected_schema() -> Option<String> {
+            #[allow(unused_imports)]
+            use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+            SchemaProbe::<TestReflectedPayload>::new().probe()
+        }
+        __test_reflected_schema
+    }),
+});
+
+#[cfg(test)]
+#[derive(Debug)]
+#[allow(dead_code)]
+struct TestOpaquePayload {
+    blob: Vec<u8>,
+}
+
+#[cfg(test)]
+inventory::submit!(OpenApiRouteInfo {
+    path: "/__openapi_reflection_fallback_test__",
+    method: "GET",
+    summary: "Reflection fallback test marker",
+    description: "Route whose payload does not derive JsonSchema; response degrades to the coarse mapping.",
+    version: "test",
+    tags: &["test"],
+    path_params: &[],
+    success_status: None,
+    i18n_key: None,
+    deprecated: false,
+    sunset: None,
+    successor: None,
+    body_params: &[],
+    response_type: Some(OpenApiTypeInfo {
+        schema_type: "string",
+        schema_format: "",
+        is_array: false,
+    }),
+    response_schema: Some({
+        fn __test_opaque_schema() -> Option<String> {
+            #[allow(unused_imports)]
+            use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+            SchemaProbe::<TestOpaquePayload>::new().probe()
+        }
+        __test_opaque_schema
+    }),
 });
 
 #[cfg(test)]
@@ -938,6 +1032,84 @@ mod tests {
         assert_eq!(info.schema_type, "string");
         let info = super::schema_for_type_name("CustomStruct");
         assert_eq!(info.schema_type, "object");
+    }
+
+    // ========================================================================
+    // 返回类型 Schema 反射（reflect_response_schema 两态）
+    // ========================================================================
+
+    /// 派生 `JsonSchema` 的类型：探针命中精确分支，产出含字段属性的
+    /// schema 文本；原语等内建 `JsonSchema` 类型同走精确分支。
+    #[cfg(feature = "schemars")]
+    #[test]
+    fn schema_probe_reflects_derived_type() {
+        #[allow(unused_imports)]
+        use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+        #[derive(schemars::JsonSchema)]
+        #[allow(dead_code)]
+        struct ReflectedPoint {
+            x: u64,
+            y: String,
+        }
+        let json = SchemaProbe::<ReflectedPoint>::new()
+            .probe()
+            .expect("derived type must reflect");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("schema is JSON");
+        assert_eq!(value["properties"]["x"]["type"], "integer");
+        assert_eq!(value["properties"]["y"]["type"], "string");
+        assert!(SchemaProbe::<u64>::new().probe().is_some());
+    }
+
+    /// 未派生类型：方法解析经 autoref 落入兜底分支，静默降级 `None`。
+    #[cfg(feature = "schemars")]
+    #[test]
+    fn schema_probe_degrades_for_plain_type() {
+        #[allow(unused_imports)]
+        use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+        #[allow(dead_code)]
+        struct Plain {
+            inner: u8,
+        }
+        assert!(SchemaProbe::<Plain>::new().probe().is_none());
+    }
+
+    /// 无 `schemars` feature：`PreciseSchema` 无任何实现，探针恒走兜底
+    /// 分支返回 `None` —— 宏发射点与注册项两态同构、无需条件编译。
+    #[cfg(not(feature = "schemars"))]
+    #[test]
+    fn schema_probe_without_schemars_always_none() {
+        use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+        assert!(SchemaProbe::<String>::new().probe().is_none());
+    }
+
+    /// 反射路由：schemars 态响应携带精确字段 schema（优先于粗粒度映射）。
+    #[cfg(feature = "schemars")]
+    #[test]
+    fn generated_spec_prefers_reflected_schema() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+        let schema = &paths_json["/__openapi_reflection_test__"]["get"]["responses"]["200"]["content"]
+            ["application/json"]["schema"];
+        assert_eq!(
+            schema["properties"]["id"]["type"], "integer",
+            "reflected schema must carry field-level properties: {schema}"
+        );
+        assert_eq!(schema["properties"]["email"]["type"], "string");
+    }
+
+    /// 未派生路由：提供器返回 `None`（schemars 开关两态一致），响应降级到
+    /// `response_type` 粗粒度映射。
+    #[test]
+    fn generated_spec_falls_back_when_reflection_unavailable() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+        let schema = &paths_json["/__openapi_reflection_fallback_test__"]["get"]["responses"]["200"]
+            ["content"]["application/json"]["schema"];
+        assert_eq!(schema["type"], "string");
+        assert!(
+            schema.get("properties").is_none(),
+            "degraded response must not gain reflected properties: {schema}"
+        );
     }
 
     /// `generate_openapi_spec()` should emit a `parameters` array on the

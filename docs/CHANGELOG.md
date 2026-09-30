@@ -75,6 +75,176 @@
   握手生效、排空与强制停机。`serve-tls` 不并入 `full`（与 `grpc-tls` 同口径的
   部署面选项）。
 
+- **返回类型 Schema 反射**（`schemars` feature，新增，蕴含 `openapi`）：
+  `#[forge]` 宏为每个有返回类型的端点在 `OpenApiRouteInfo` 新增的
+  `response_schema: Option<fn() -> Option<String>>` 字段发射内联具名提供器，
+  函数体在具体返回类型（`Result<T, E>` 先解包 Ok 型）上解析
+  `sdforge::openapi::SchemaProbe::probe`——`T` 派生 `JsonSchema` 时 spec 响应
+  携带字段级精确 JSON Schema（`$ref`/`allOf`/`oneOf`/`anyOf`/`enum`/数组/
+  `properties`/`required`/`additionalProperties`/`format`/`description` 映射为
+  utoipa schema），未派生时静默降级到既有 `response_type` 粗粒度映射，两者皆
+  缺保持 legacy schema-less 响应。方法解析探针驻留两 trait 于不同解析步骤
+  （按值 `PreciseSchema` 先于 autoref `FallbackSchema`），机制上排除多候选歧
+  义；泛型入口不可行（泛型函数体方法解析只用形参约束求解，会退化为恒兜底），
+  故必须内联发射。`schemars` 关闭时探针恒兜底——发射点两态同构无需条件编译；
+  不并入 `full`（opt-in 精确度）。schemars 钉 1.2（`default-features = false`，
+  derive feature；测试态经 dev-dependencies 提供派生宏）。手动
+  `inventory::submit!` 的下游补 `response_schema: None` 即可保持旧行为
+  （结构体新增字段，字面量构造方破坏性变更）。两态单测/集成测试覆盖派生精
+  确、未派生降级与 feature 关闭恒兜底。
+
+- **声明日志属性宏 `#[forge::log]`**（`inklog` feature，新增）：函数级
+  进入/退出/耗时/错误结构化日志——宏将原函数体重命名为隐藏内部函数，壳函数
+  输出 `fn_enter`（debug 级）/`fn_exit`（`ok` + `duration_ms`；成功用配置级
+  别默认 info，`Result` 的 Err 恒 error 级）后透传返回值，同步/异步（含内部
+  await 点）、`&self`/`&mut self` 方法、解构模式参数（合成绑定 + 内部函数补
+  回解构，语义等价）均支持；`const`/变参 fail-loud 拒绝。参数：`args`（记录
+  入参值，要求 `Debug`）、`result`（成功载荷，要求 `Debug`）、`err_detail`
+  （Err 载荷，要求 `Debug`）、`level = "trace|debug|info|warn|error"`。全部
+  载荷经 inklog `DataMasker` 掩码后入日志（内置 PII 内容规则 + 凭证键值对补
+  充规则：`api_key=`/`password:`/`Bearer` 等键值形态的裸文本不在内置规则覆
+  盖内，显式规则兜底）；日志走 `log` 门面，`init_inklog_logger()` 安装后自动
+  进入 inklog 结构化管道，未安装 logger 时 no-op 不致命。`inklog` feature 关
+  闭时使用该宏在展开点报 E0433（找不到 `sdforge::log_attr`）——规格要求的
+  显性失败，禁止静默 no-op。宏使用 `#[forge::log]` 字面形态（`use
+  sdforge_macros as forge`），或经 `sdforge::forge::log`（新增宏命名空间
+  re-export 模块 `sdforge::forge`，proc-macro re-export 与同名模块不冲突）。
+  syn::meta 嵌套元信息解析（Span 指向 offending token），trybuild compile_fail
+  覆盖未知名参数/非法 level/旗标携带值/feature 缺失四类（macros dev-dep 引入
+  sdforge 无默认 feature 锁定门控契约）。宏展开单测 + 行为集成测试（脱敏断
+  言、级别断言、返回值语义保持）。
+
+- **分布式限流与 Redis L2 缓存**（`ratelimit-dist` / `cache-l2` feature，新
+  增）：`ratelimit-dist` 经 limiteron `DistributedLimiter` 计数后端驱动固定
+  窗口限流（`incr_with_ttl` 首递增起算不续期），`DistributedRateLimiter` 泛
+  型适配任意计数后端——单实例/测试用 `InMemoryDistributedLimiter`，多副本用
+  `RedisDistributedLimiter`（Lua 原子窗口，`limiteron/lua-script` 蕴含
+  oxcache/lua/redis），共享后端即跨副本全局一致配额（单测锁定）。后端不可
+  达裁决显式可配（`BackendFailurePolicy`）：默认 fail-open（放行 + 60s 窗口
+  限速告警）——限流是保护性机制，fail-close 会把存储故障放大为全服务不可用；
+  硬安全场景显式切换 fail-close（错误透传 `RateLimitError::Limiteron`）。
+  `cache-l2` 将 oxcache `RedisBackend` 同步面接入 `SyncCache`
+  （`RedisL2Cache`）：跨副本共享缓存层，键前缀域隔离（`len`/模式枚举按前缀
+  报告），故障固有 fail-open（读 miss/写跳过 + 限速告警；缓存丢失只影响命
+  中率，不存在有意义的 fail-close），装配期连接失败显性报错。部署文档
+  （USER_GUIDE）含 Redis AUTH/ACL + TLS（`rediss://`）生产指引与策略默认值
+  理由表；真实 Redis 集成测试按 `SDFORGE_TEST_REDIS_URL` 门控跳过。新增
+  `async-trait` 直接依赖（limiteron trait 为 async_trait 声明，已在依赖树）。
+
+- **dbnexus 数据 API 网关转正**（`db-integration` feature，新增）：示例能力
+  提升为正式库面——`sdforge::integrations::DbGateway` 在 dbnexus `DbPool`
+  （0.6.0-rc.5 钉版，`embedded`/`sql-parser` feature）之上提供白名单只读数
+  据 API：表/列白名单先于 SQL 构建（未列出即 404/422）、标识符字符集双保险、
+  过滤值集中转义（单引号翻倍恒为字面量；含 DDL 关键字的载荷由 dbnexus 权限
+  层直接拒绝——端到端测试锁定两条注入路径均不可达且表完好）、分页在服务端
+  夹紧（page≥1、size 1..=100）。会话角色可配（默认 `admin`——dbnexus 无权限
+  文件时的安全默认；生产建议最小权限角色）。独立于 `http`，可经 `#[forge]`
+  端点暴露到任意协议；端到端测试（sqlite 文件库 + oneshot 全链路）覆盖白名
+  单放行/拒绝、分页夹紧与注入面。dbnexus_gateway 示例保留为参考实现。
+
+- **多协议客户端 SDK 生成**（`sdk` feature，新增，蕴含 `openapi` + `cli`）：
+  从 inventory 注册表（openapi `OpenApiRouteInfo` HTTP 面 + `grpc` feature
+  下 `GrpcHandlerRegistration` 方法清单）生成客户端产物。Rust 产物**零外部
+  依赖**单文件（`Transport` trait + 每路由 async 方法，返回原始 JSON 字符
+ 串；`--reqwest` 追加 `#[cfg(feature = "reqwest")]` 的 `ReqwestTransport`，
+  由使用方 Cargo 门控）；TypeScript 产物 fetch 单文件 + 内嵌 interface 类型
+  定义（无需独立 dts 构建链）。方法名从 `HTTP 方法 + 路径段`确定性派生
+  （模板参数 → `by_x`，同形路由序号消歧），快照测试锁定渲染；Rust 产物以
+  `rustc --emit=metadata` 做真实编译冒烟。CLI 保留子命令
+  `sdk --lang rust|typescript|all --output-dir <dir> [--reqwest]`
+  （`docs` 同款拦截范式）。纯渲染函数与全局收集分离，可直接库内使用
+  （`sdforge::sdk::generate_*`）。
+
+- **宏解析迁移 syn（第一步：kv 核心路径）**：`#[forge]` 键值对解析器从
+  `to_string()` 后逐字符扫描重写为 token-tree 走查器——字符串字面量经
+  `syn::Lit` 语义层展开（修复旧扫描器转义序列原样残留、`r"..."` 前缀混入
+  值两个潜在缺陷），错误 Span 指向 offending token（旧实现一律 call_site，
+  trybuild `forge_kv_bad_key` 锁定精确化契约），引号内逗号由 token 字面量
+  语义天然不切断（`forge_comma_inside_string_value` pass 样例）。零回归面
+  显式对齐并测试锁定：裸键 → `"true"`、`key =` 缺值（流尾/紧随逗号）→
+  `"true"`（历史怪癖保留）、负数字面量拼接、非字符串值族同形输出。宏单测
+  76 项 + trybuild 全套 + 下游 845 项全绿兜底。剩余面登记：
+  `extract_forge_extras`/`parse_auth_group` 为 token 级手写遍历（本就非字符
+  扫描，迁 `syn::meta::parse_nested_meta` 是无行为增益的等价重构），登记为
+  后续可选项。
+
+- **feature 门控卫生（ws-R14 复核修复，`docs/FEATURE_AUDIT_REVIEW.md` 逐条
+  留证）**：`GrpcServerConfig` 的 `auth`/`auth_verifier`/`rate_limiter` 改为
+  字段恒存在 + 类型按 feature 切换（开启态 `Option<T>`、关闭态空壳
+  `Option<()>` 恒 `None`），`PluginCounts` 字段恒存在（关闭协议计数恒
+  `0`）——两类公开结构体的字面量构造跨 feature 形态稳定，构造点 `#[cfg]`
+  字段属性全部移除；模块内 66 处同名单一 feature 冗余行内门控删除
+  （mcp/mod.rs −23、grpc_impl.rs −22、grpc/mod.rs −10、websocket/
+  connection.rs −11，父模块 `lib.rs` 声明处单点门控）；README `full` 项数
+  与 Cargo 对齐（25 项，补 `idempotency`）并登记新增 feature 不入 `full`
+  的口径；README 补下游镜像 feature 的 `check-cfg` 官方片段；`sdforge-macros`
+  `html_root_url` rc.2 → rc.6。复核记录含 §6.2 八项逐条裁决（过时项附证据：
+  build.rs proto 门控、死回退清除、security 冗余使能与 hex 并入均已在先前
+  提交解决）。
+
+### 🛠 修复 (Fixed)
+
+三路审查（H/M/LOW）修复批次：
+
+- **OpenAPI 嵌套具名类型引用悬空（HIGH）**：返回类型 Schema 反射中，
+  schemars 1.x（默认 `inline_subschemas = false`）把嵌套具名类型放入根级
+  `$defs` 并以 `#/$defs/Name` 引用，而映射器只转换根 schema、丢弃
+  `$defs`——文档中的 `$ref` 全部悬空不可解析。现把根级 `$defs` 提升进
+  OpenAPI `components.schemas`、`$ref` 指针同步改写为
+  `#/components/schemas/Name`；嵌套具名类型载荷夹具 + 全文档引用可解析性
+  断言锁定（既有夹具全扁平是漏网根因）。
+- **`/api-docs/openapi.json` 每请求全量重建（MEDIUM）**：动态 spec 端点改
+  为 OnceLock 序列化字节缓存（首请求构建一次，后续直出）；缓存冻结首请求
+  后的路由/locale 变化的代价已在处理函数文档显性登记，需要动态文档的宿主
+  改用 `swagger_ui_router_with_spec`。
+- **`#[forge::log]` 丢弃 `unsafe` 限定（HIGH）**：unsafe fn 被包装成安全
+  函数（安全代码可达 UB 通道）。现把 `safety` 原样传播到壳与内部两个函数，
+  外壳对内部函数的调用走显式 unsafe 块（edition 2024
+  `unsafe_op_in_unsafe_fn` 口径）；unsafe fn 形态宏单测 + 端到端集成测试
+  锁定。
+- **`#[forge::log]` 载荷先渲染后判级（HIGH 性能）**：debug 进入日志与
+  `result` 载荷在级别关闭时仍白付 N 次 `format!` + 正则掩码。现宏发射点改
+  传惰性闭包，`sdforge::log_attr` 的 `entry`/`exit`/`exit_error` 以
+  `log::log_enabled!` 级别守卫后渲染——info 生产配置下 debug 级日志零分配
+  成本；守卫测试以副作用闭包证明闭包未执行（进程级 max_level 全局态用例
+  串行）。
+- **DataMasker 凭证规则漏引号键 + 大载荷旁路（MEDIUM 安全）**：凭证 KV 规
+  则不匹配 `"password":"hunter2"` 等引号键形态——pattern 允许键被 `"?`
+  包裹；inklog DataMasker 对 >1 MiB 输入整体跳过掩码（原文直出）——壳层
+  在掩码前截断至 64 KiB（截断点外内容整体丢弃，不以明文出现），掩码面单
+  测锁定引号形态与截断行为。
+- **生成的 Rust client `base_url` 死字段（HIGH）**：`ReqwestTransport` 直
+  接 `get(path)` 相对 URL 必失败（TS 侧正确拼 `${baseUrl}${path}` 不对
+  称）。现客户端 `call` 内把 `base_url` 拼成完整 URL 交给 `Transport`
+  （尾斜杠剥离），并新增执行面测试：产物 + 录制传输 harness 经 rustc 编
+  译为可执行文件真实运行，断言录制到的 URL/方法/体。
+- **SDK 方法名寄于 inventory 迭代序（MEDIUM）**：渲染前按 `(method, path)`
+  稳定排序（gRPC 方法清单按 method 排序），同一路由集合任意注册顺序产出
+  逐字节相同产物；顺序无关性测试锁定。
+- **`RedisL2Cache` 同步桥接泊停 worker（HIGH 性能）**：oxcache `RedisBackend`
+  同步 trait 经 `block_in_place`+`block_on` 桥接，异步中间件内每请求泊停
+  worker、current-thread runtime 上恒 miss。新增异步消费面
+  `get_async`/`set_async`/`delete_async`/`contains_async`（直连 oxcache 异
+  步 trait，无桥接），模块文档显性「运行时约束」一节；真实 Redis 集成测试
+  在 current-thread runtime 下全链路锁定异步面。
+- **`RedisL2CacheConfig` derive(Debug) 泄漏连接串凭据（MEDIUM 安全）**：
+  改手写 Debug，userinfo 段掩码为 `:***`（host/scheme 保留可诊断），单测
+  锁定凭据不出现在 Debug 输出。
+- **分布式限流黑洞故障无熔断（MEDIUM 性能）**：fail-open 只在计数返回错误
+  后生效，后端黑洞（只熬超时不回错）期间每请求付满超时。内置适配层轻量熔
+  断：连续 `with_circuit_failure_threshold`（默认 5）次后端错误即打开，打
+  开期请求不经后端直接按策略裁决（FailClose 以 `CircuitBreakerError` 拒
+  绝，不偷换成放行），`with_circuit_open_duration`（默认 30s）后半开探测
+  恢复；开/短路/半开恢复/探测失败重开/FailClose 短路五组单测锁定。
+- **`DbGateway::escape_literal` 不处理反斜杠（MEDIUM 安全）**：把 `\` 当转
+  义字符的后端（MySQL）上 `\'` 会让单引号翻倍失效；字面量语义后端上盲补
+  `\` 又会改写值。现含 `\` 的过滤值显式拒绝（422 fail-loud，不做跨方言猜
+  测），单测锁定；`query` 文档补「分页稳定性依赖首列唯一性」提示。
+- **宏 kv 解析器严格性收紧（LOW）**：非引号值只允许单 token——值后紧跟非
+  逗号 token（多 token 非引号值，如 `description = hello world`）从静默截
+  断首 token 改为报错指向 offending token（宏单测 + trybuild
+  `forge_multi_token_value` 锁定）。
+
 ## [0.5.0-rc.6] - 2026-09-28
 
 ### ⚠️ 破坏性变更 (Breaking Changes)

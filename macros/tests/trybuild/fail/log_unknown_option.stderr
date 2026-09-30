@@ -1,0 +1,5 @@
+error: unknown option (supported: args, result, err_detail, level = "...")
+ --> tests/trybuild/fail/log_unknown_option.rs:6:14
+  |
+6 | #[forge::log(wat)]
+  |              ^^^

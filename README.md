@@ -176,11 +176,15 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>streaming</code></td><td>SSE 流式传输（独立于 http；与 <code>grpc</code> 组合时 <code>grpc_method</code> + <code>stream = true</code> 映射到 gRPC <code>CallStream</code>）</td><td>❌</td></tr>
   <tr><td><code>cli</code></td><td>CLI 集成（clap，独立于 http）</td><td>❌</td></tr>
   <tr><td><code>openapi</code></td><td>OpenAPI 3.1 规范生成（utoipa，独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>schemars</code></td><td>返回类型 Schema 反射（蕴含 openapi：<code>#[forge]</code> 为派生 <code>JsonSchema</code> 的返回类型生成字段级精确 response schema，未派生静默降级粗粒度映射）</td><td>❌</td></tr>
   <tr><td><code>docs</code></td><td>统一文档输出（Swagger UI + CLI/MCP Markdown，依赖 openapi + cli）</td><td>❌</td></tr>
+  <tr><td><code>sdk</code></td><td>多协议客户端 SDK 生成（Rust 零依赖 / reqwest 可选 + TypeScript fetch+类型定义；保留 CLI 子命令 <code>sdk</code>，依赖 openapi + cli）</td><td>❌</td></tr>
   <tr><td><code>security</code></td><td>认证（API Key / JWT Bearer）、审计、安全头、限流与缓存（含 http + ratelimit-http + cache）</td><td>❌</td></tr>
   <tr><td><code>ratelimit</code></td><td>限流核心（limiteron，不依赖 http）</td><td>❌</td></tr>
   <tr><td><code>ratelimit-http</code></td><td>HTTP 限流中间件（Tower Layer，依赖 http + ratelimit）</td><td>❌</td></tr>
+  <tr><td><code>ratelimit-dist</code></td><td>分布式限流（limiteron distributed 计数后端，多副本共享配额；后端不可达 fail-open/fail-close 显式可配，默认 fail-open）</td><td>❌</td></tr>
   <tr><td><code>cache</code></td><td>oxcache 内存缓存（独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>cache-l2</code></td><td>oxcache Redis L2 缓存（跨副本共享缓存层，蕴含 cache；故障固有 fail-open：读 miss/写跳过）</td><td>❌</td></tr>
   <tr><td><code>health</code></td><td><code>/healthz</code> <code>/readyz</code> 健康探针（<code>build_with_config</code> 自动挂载，bypass 认证）</td><td>❌</td></tr>
   <tr><td><code>metrics</code></td><td>Prometheus 文本格式 <code>/metrics</code> 端点（请求计数、延迟直方图、状态码分布；自研轻量渲染）</td><td>❌</td></tr>
   <tr><td><code>graceful</code></td><td>优雅停机（SIGTERM/SIGINT：停止接新、排空在途、三阶段关闭）</td><td>❌</td></tr>
@@ -194,19 +198,26 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>otel</code></td><td>OTLP/HTTP JSON 导出请求 span 与指标快照（零额外依赖）</td><td>❌</td></tr>
   <tr><td><code>logging</code></td><td>结构化请求日志</td><td>❌</td></tr>
   <tr><td><code>timestamp</code></td><td>响应时间戳</td><td>❌</td></tr>
-  <tr><td><code>inklog</code></td><td>inklog 结构化日志桥接</td><td>❌</td></tr>
+  <tr><td><code>inklog</code></td><td>inklog 结构化日志桥接（<code>init_inklog_logger()</code>）+ <code>#[forge::log]</code> 声明日志属性宏（进入/退出/耗时/错误 + DataMasker 脱敏，feature 关闭时显性报错）</td><td>❌</td></tr>
   <tr><td><code>i18n</code></td><td>ICU4X 国际化（本地化格式化 + Accept-Language 解析）</td><td>❌</td></tr>
   <tr><td><code>simd-json</code></td><td>SIMD 加速 JSON 序列化/反序列化</td><td>❌</td></tr>
   <tr><td><code>limiteron-integration</code></td><td>引入 limiteron 依赖（kit 集成基座）</td><td>❌</td></tr>
+  <tr><td><code>db-integration</code></td><td>dbnexus 数据 API 网关（<code>DbGateway</code> 白名单只读数据面：表/列白名单 + 过滤值转义 + 服务端分页夹紧，独立于 http）</td><td>❌</td></tr>
   <tr><td><code>kit</code></td><td>trait-kit AsyncKit 集成（SdforgeModule 模块图）</td><td>❌</td></tr>
   <tr><td><code>tokio</code></td><td>内部特性：启用 tokio 依赖（随其他特性自动引入）</td><td>❌</td></tr>
-  <tr><td><code>full</code></td><td>全部运行时特性（24 项：http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/logging/timestamp/openapi/cli/docs/inklog/i18n；不含 <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code> 可选重依赖）</td><td>❌</td></tr>
+  <tr><td><code>full</code></td><td>全部运行时特性（25 项：http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/logging/timestamp/openapi/cli/docs/inklog/i18n/idempotency；不含 <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code>/<code>schemars</code>/<code>ratelimit-dist</code>/<code>cache-l2</code>/<code>db-integration</code>/<code>sdk</code> 可选重依赖与 opt-in 面）</td><td>❌</td></tr>
 </table>
 
 <details>
 <summary>🔗 特性依赖关系</summary>
 
-- 独立于 `http`：`mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `logging` / `inklog` / `i18n` / `simd-json` / `limiteron-integration`
+- 独立于 `http`：`mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `logging` / `inklog` / `i18n` / `simd-json` / `limiteron-integration` / `db-integration` / `schemars` / `ratelimit-dist`
+- **下游镜像 feature 的 check-cfg 片段**（宏发射代码按下游 crate 的同名
+  feature 门控，见 examples 的 `[lints]` 白名单范式）：下游 `Cargo.toml`
+  加 `[lints.rust] unexpected_cfgs = { level = "allow", check-cfg =
+  ['cfg(feature, values("http", "mcp", "grpc", "cli", "websocket",
+  "openapi", "security", "lifecycle"))'] }`（按实际启用的镜像 feature
+  裁剪），避免未知 cfg 告警
 - 派生自 `http`：`security`（含 `ratelimit-http` → `ratelimit` 与 `cache`）、`ratelimit-http`、`websocket`（含 `streaming`）、`health` / `metrics` / `graceful` / `serve-tls`（含 `graceful`）/ `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
 - `docs` = `openapi` + `cli`（Swagger UI 挂载需另启用 `http`）
 - `kit` = `trait-kit`（health + lifecycle）+ `limiteron-integration` + `limiteron/kit` + `oxcache/kit`

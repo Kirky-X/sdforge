@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-#[cfg(feature = "docs")]
+#[cfg(any(feature = "docs", feature = "sdk"))]
 use serde_json::Value;
 
 use crate::cli::{CliArgType, CliCommandRegistration, CliHandlerRegistration};
@@ -104,6 +104,14 @@ pub async fn dispatch(
     #[cfg(feature = "docs")]
     if name == "docs" {
         crate::cli::docs_subcommand::docs_subcommand(sub)?;
+        return Ok((name.to_string(), Value::Null));
+    }
+
+    // sdk 子命令自行落盘产物（生成文件到 --output-dir），不走 HandlerFn
+    // 分发；保留子命令名（先于用户注册查找），同 docs 拦截范式。
+    #[cfg(feature = "sdk")]
+    if name == "sdk" {
+        crate::sdk::sdk_subcommand(sub)?;
         return Ok((name.to_string(), Value::Null));
     }
 

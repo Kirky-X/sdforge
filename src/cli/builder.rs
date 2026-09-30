@@ -195,6 +195,12 @@ impl CliBuilder {
             root = root.subcommand(crate::cli::docs_subcommand_definition());
         }
 
+        // sdk feature 启用时自动注入 sdk 生成子命令（保留名，同 docs 范式）。
+        #[cfg(feature = "sdk")]
+        {
+            root = root.subcommand(crate::sdk::sdk_subcommand_definition());
+        }
+
         // Built-in machine-readable output contract (mounted before the
         // downstream global args so an id collision fails loudly instead of
         // silently shadowing).

@@ -25,3 +25,6 @@ proc-macro = true
 [dev-dependencies]
 trybuild = { workspace = true }
 pretty_assertions = { workspace = true }
+# `log_missing_inklog_feature` compile_fail 用例需 sdforge 运行时（无默认
+# feature，即无 inklog）锁定"feature 关闭显性报错"契约。dev 依赖允许成环。
+sdforge = { path = "..", default-features = false }

@@ -3,18 +3,13 @@
 
 use super::*;
 use crate::core::{HandlerArgs, HandlerFn, HandlerState, extract_value};
-#[cfg(feature = "grpc")]
 use crate::grpc::handler::{GrpcHandlerRegistration, attach_lifecycle_metadata};
 
-#[cfg(feature = "grpc")]
 use std::collections::HashMap;
-#[cfg(feature = "grpc")]
 use std::sync::OnceLock;
 
-#[cfg(feature = "grpc")]
 use tonic::{Request, Response, Status, transport::Server};
 
-#[cfg(feature = "grpc")]
 use sdforge_v1::{
     CallRequest, CallResponse, InfoRequest, InfoResponse,
     sd_forge_service_server::{SdForgeService, SdForgeServiceServer},
@@ -30,7 +25,6 @@ use futures_util::StreamExt;
 /// vuln-0002 补强：gRPC `call` 路径此前跳过 MCP 的 schema/大小校验，
 /// 攻击者可通过 `parameters`/`data` 推送超大载荷触发 DoS。
 /// 此处施加与 MCP 一致的大小上限作为纵深防御。
-#[cfg(feature = "grpc")]
 const MAX_GRPC_ARGUMENTS_SIZE_BYTES: usize = 0x10_0000;
 
 /// 幂等防护的绑定参数（store + 重放窗口），feature = `idempotency`。
@@ -43,7 +37,6 @@ struct IdempotencyGuard {
 
 /// 端点生命周期声明的缓存形态（与 `GrpcHandlerRegistration` 的
 /// `deprecated` / `sunset` / `successor` 字段同形，全 `Copy` 无分配）。
-#[cfg(feature = "grpc")]
 type GrpcLifecycle = (bool, Option<&'static str>, Option<&'static str>);
 
 /// gRPC service implementation.
@@ -53,7 +46,6 @@ type GrpcLifecycle = (bool, Option<&'static str>, Option<&'static str>);
 /// `inventory::iter::<GrpcHandlerRegistration>`. The cache is built once on the
 /// first `call` (OnceLock semantics) and reused across all subsequent calls —
 /// O(1) lookup with no repeated inventory iteration.
-#[cfg(feature = "grpc")]
 #[derive(Clone)]
 pub struct SdForgeGrpcService {
     /// Optional application state injected via `GrpcServerConfig.state`.
@@ -112,7 +104,6 @@ pub struct SdForgeGrpcService {
     idempotency: Option<IdempotencyGuard>,
 }
 
-#[cfg(feature = "grpc")]
 impl Default for SdForgeGrpcService {
     fn default() -> Self {
         Self {
@@ -142,7 +133,6 @@ impl Default for SdForgeGrpcService {
     }
 }
 
-#[cfg(feature = "grpc")]
 impl SdForgeGrpcService {
     /// Construct a service with injected application state (used by
     /// `build_server_with_config` to pass `GrpcServerConfig.state` through).
@@ -331,7 +321,6 @@ impl SdForgeGrpcService {
     /// Build (or reuse) the `method -> endpoint lifecycle` cache from
     /// inventory（`#[forge(deprecated, sunset, successor)]` → 成功响应
     /// metadata 注入的查找表）。
-    #[cfg(feature = "grpc")]
     #[must_use]
     fn lifecycles(&self) -> &HashMap<&'static str, GrpcLifecycle> {
         self.lifecycles.get_or_init(|| {
@@ -355,7 +344,6 @@ impl SdForgeGrpcService {
     }
 }
 
-#[cfg(feature = "grpc")]
 impl SdForgeGrpcService {
     /// 凭据验证（`call` 与 `call_stream` 共用）：配置了拦截器时验证
     /// Bearer/API-key 凭据，成功后保留身份供 RBAC 检查（此前
@@ -430,7 +418,6 @@ impl SdForgeGrpcService {
 
     /// 载荷上限校验（`call` 与 `call_stream` 共用；vuln-0002 补强）：
     /// parameters + data 总大小超限即拒绝，防止超大载荷 DoS。
-    #[cfg(feature = "grpc")]
     fn ensure_payload_size(req: &CallRequest) -> Result<(), Status> {
         let payload_size = req.parameters.values().map(|v| v.len()).sum::<usize>() + req.data.len();
         if payload_size > MAX_GRPC_ARGUMENTS_SIZE_BYTES {
@@ -445,7 +432,6 @@ impl SdForgeGrpcService {
 
     /// 参数装配（`call` 与 `call_stream` 共用）：parameters → args，
     /// data → body_param 键（body_param 缺失而 data 非空 → 拒绝）。
-    #[cfg(feature = "grpc")]
     fn build_handler_args(
         req: CallRequest,
         method: &str,
@@ -512,7 +498,6 @@ impl SdForgeGrpcService {
     }
 }
 
-#[cfg(feature = "grpc")]
 impl SdForgeGrpcService {
     /// 限流 guard（`call` 与 `get_info` 共用）。两个入口都始终传 Some
     /// identifier（缺 remote_addr 时 "unknown" 兜底），None 分支保留为
@@ -746,7 +731,6 @@ impl SdForgeGrpcService {
     }
 }
 
-#[cfg(feature = "grpc")]
 #[tonic::async_trait]
 impl SdForgeService for SdForgeGrpcService {
     async fn call(&self, request: Request<CallRequest>) -> Result<Response<CallResponse>, Status> {
@@ -1024,7 +1008,6 @@ struct CachedCallResponse {
 ///   truncation from out-of-range inputs).
 /// - `None` otherwise — the caller applies the `default_status` fallback
 ///   (macro `status` argument) and finally 200.
-#[cfg(feature = "grpc")]
 fn extract_status_code(value: &serde_json::Value) -> Option<i32> {
     value
         .as_object()
@@ -1039,7 +1022,6 @@ fn extract_status_code(value: &serde_json::Value) -> Option<i32> {
 // ApiError → HTTP/gRPC 映射已收敛到 `crate::error::unified`
 // （`mapping_for` / `grpc_code_for`）单一事实来源。
 
-#[cfg(feature = "grpc")]
 impl GrpcRoute {
     #[allow(missing_docs)]
     pub fn new(service_name: String, metadata: ApiMetadata) -> Self {
@@ -1067,7 +1049,6 @@ impl GrpcRoute {
 /// `build_server` starts an **unauthenticated** gRPC server with no way to
 /// configure authentication. Use [`build_server_with_config`] with a
 /// [`GrpcServerConfig`] that has `auth` configured instead.
-#[cfg(feature = "grpc")]
 #[deprecated(
     note = "use build_server_with_config with auth configured; build_server starts an unauthenticated server"
 )]
@@ -1104,7 +1085,6 @@ pub async fn build_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> 
 /// this function refuses to start, preventing accidental deployment of an
 /// unauthenticated gRPC server. Set `require_auth = false` only for
 /// development/test environments.
-#[cfg(feature = "grpc")]
 pub async fn build_server_with_config(
     addr: &str,
     config: GrpcServerConfig,
@@ -1188,19 +1168,15 @@ pub async fn build_server_with_config(
     Ok(())
 }
 
-#[cfg(feature = "grpc")]
 impl Default for GrpcServerConfig {
     fn default() -> Self {
         Self {
             max_connections: 1000,
             timeout_seconds: 30,
             require_auth: true, // vuln-0006: secure default
-            #[cfg(feature = "security")]
             auth: None,
-            #[cfg(feature = "security")]
             auth_verifier: None,
             state: None,
-            #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             #[cfg(feature = "idempotency")]
             idempotency_store: None,
@@ -1251,7 +1227,6 @@ impl tonic::service::Interceptor for AuthGrpcInterceptor {
     }
 }
 
-#[cfg(feature = "grpc")]
 impl SdForgeGrpcService {
     /// Test-only accessor: borrow the body_param map.
     #[cfg(test)]

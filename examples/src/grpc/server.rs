@@ -90,7 +90,6 @@ pub fn custom_server_config() -> GrpcServerConfig {
         http2_keepalive_timeout: None,
         #[cfg(feature = "grpc_tls")]
         tls: None,
-        #[cfg(feature = "ratelimit")]
         rate_limiter: None,
     }
 }

@@ -48,6 +48,12 @@ pub mod idempotency;
 #[cfg(feature = "idempotency")]
 pub use idempotency::{IdempotencyOutcome, IdempotencyStore};
 
+// oxcache Redis L2 缓存（cache-l2）：跨副本共享缓存层，故障固有 fail-open。
+#[cfg(feature = "cache-l2")]
+pub mod l2;
+#[cfg(feature = "cache-l2")]
+pub use l2::{CacheL2Error, RedisL2Cache, RedisL2CacheConfig};
+
 // Re-export matches_pattern for test access.
 #[cfg(test)]
 pub(crate) use cache_impl::matches_pattern;
