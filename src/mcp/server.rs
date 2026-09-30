@@ -233,7 +233,17 @@ impl SdForgeMcpServer {
         // translation is registered for the active locale.
         let translated_desc =
             crate::i18n::translate_or_fallback(tool.description(), instance.metadata().i18n_key());
-        model.description = Some(translated_desc.into());
+        // MCP 无响应头通道：端点生命周期（`#[forge(deprecated, sunset,
+        // successor)]`）以括注形式追加到描述尾部（格式由
+        // `LifecycleMeta::annotation` 提供，与 OpenAPI 描述尾注共用），
+        // 客户端（LLM）直接可读；未注解端点描述逐字不变。
+        let description = match instance.metadata().lifecycle() {
+            Some(lifecycle) if lifecycle.is_present() => {
+                format!("{translated_desc} ({})", lifecycle.annotation())
+            }
+            _ => translated_desc,
+        };
+        model.description = Some(description.into());
         model.input_schema = input_schema;
         model
     }

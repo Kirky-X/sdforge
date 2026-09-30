@@ -90,6 +90,9 @@ impl OpenApiRouteInfo {
             body_params: &[],
             response_type: None,
             i18n_key: None,
+            deprecated: false,
+            sunset: None,
+            successor: None,
         }
     }
 
@@ -118,6 +121,9 @@ impl OpenApiRouteInfo {
             body_params: &[],
             response_type: None,
             i18n_key: None,
+            deprecated: false,
+            sunset: None,
+            successor: None,
         }
     }
 
@@ -156,6 +162,9 @@ impl OpenApiRouteInfo {
             body_params: &[],
             response_type: None,
             i18n_key: None,
+            deprecated: false,
+            sunset: None,
+            successor: None,
         }
     }
 
@@ -335,9 +344,28 @@ impl OpenApiBuilder {
             // is typically generated once at startup, not per-request.
             let translated_description =
                 crate::i18n::translate_or_fallback(route.description, route.i18n_key);
+            // OpenAPI 原生字段只承载布尔弃用标记，无 sunset/successor 通道：
+            // 端点级生命周期以描述尾注保留（格式与 MCP 描述尾注共用
+            // `LifecycleMeta::annotation`，四协议契约对称）；未注解路由
+            // 描述逐字不变。
+            let lifecycle = crate::core::LifecycleMeta {
+                deprecated: route.deprecated,
+                sunset: route.sunset.map(str::to_string),
+                successor: route.successor.map(str::to_string),
+            };
+            let operation_description = if lifecycle.is_present() {
+                format!("{translated_description} ({})", lifecycle.annotation())
+            } else {
+                translated_description
+            };
             let mut operation_builder = OperationBuilder::new()
                 .summary(Some(route.summary.to_string()))
-                .description(Some(translated_description))
+                .description(Some(operation_description))
+                .deprecated(Some(if route.deprecated {
+                    utoipa::openapi::Deprecated::True
+                } else {
+                    utoipa::openapi::Deprecated::False
+                }))
                 .tags(Some(
                     route
                         .tags

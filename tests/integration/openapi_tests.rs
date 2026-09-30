@@ -64,6 +64,24 @@ async fn list_users() -> Result<Vec<String>, ApiError> {
     Ok(vec!["alice".to_string(), "bob".to_string()])
 }
 
+/// Lifecycle-annotated fixture: the macro must thread `deprecated` /
+/// `sunset` / `successor` into `OpenApiRouteInfo` so the operation carries
+/// the `deprecated` marker plus the description footnote (MCP tail-note
+/// symmetry).
+#[forge(
+    name = "openapi_test_lifecycle_users",
+    version = "v1",
+    path = "/lifecycle-users",
+    method = "GET",
+    description = "List users (legacy)",
+    deprecated,
+    sunset = "2026-12-31",
+    successor = "/api/v2/users"
+)]
+async fn lifecycle_users() -> Result<Vec<String>, ApiError> {
+    Ok(vec!["alice".to_string()])
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -241,6 +259,29 @@ fn forge_result_ok_type_is_unwrapped_for_response_schema() {
     let schema = &paths["/api/v1/users/{id}"]["get"]["responses"]["200"]["content"]["application/json"]
         ["schema"];
     assert_eq!(schema["type"], "string");
+}
+
+/// `#[forge(deprecated, sunset, successor)]` → `OpenApiRouteInfo` 生命周期
+/// 字段（真实宏路径）：操作携带 `deprecated: true` 标记，sunset/successor
+/// 以描述尾注保留（与 MCP 描述尾注同格式，四协议契约对称）。
+#[test]
+fn forge_lifecycle_args_reach_spec_marker_and_footnote() {
+    let spec = generate_openapi_spec();
+    let paths_json = serde_json::to_value(&spec.paths).unwrap();
+    let op = &paths_json["/api/v1/lifecycle-users"]["get"];
+
+    assert_eq!(
+        op["deprecated"],
+        serde_json::json!(true),
+        "macro-declared deprecated must render the OpenAPI marker"
+    );
+    assert_eq!(
+        op["description"],
+        serde_json::json!(
+            "List users (legacy) (deprecated; sunset: 2026-12-31; successor: /api/v2/users)"
+        ),
+        "sunset/successor must survive as the description footnote (MCP tail-note format)"
+    );
 }
 
 /// `#[forge(i18n_key)]` → `OpenApiRouteInfo.i18n_key` → description 运行时

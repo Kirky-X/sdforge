@@ -43,6 +43,9 @@ type ServiceApiArgs = Result<
         Option<bool>,   // cli option — emit CliCommandRegistration + CliHandlerRegistration
         Option<u16>,    // status option — explicit success status code (e.g. 201 for POST create)
         Option<String>, // i18n_key — runtime translation key for description
+        Option<bool>,   // deprecated — endpoint-level lifecycle flag
+        Option<String>, // sunset — endpoint-level sunset date/value
+        Option<String>, // successor — endpoint-level successor endpoint hint
     ),
     syn::Error,
 >;
@@ -62,7 +65,9 @@ fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Erro
 
         let mut key = String::new();
         while let Some(&c) = chars.peek() {
-            if c == '=' || c.is_whitespace() {
+            // `,` 必须断键：真实 proc-macro 的 to_string 把逗号贴在
+            // 前一 token 后（`deprecated,`），不断键则逗号混入键名。
+            if c == '=' || c == ',' || c.is_whitespace() {
                 break;
             }
             key.push(c);
@@ -72,6 +77,12 @@ fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Erro
         while let Some(&c) = chars.peek() {
             if c == '=' {
                 chars.next();
+                break;
+            }
+            // 裸布尔键（`deprecated, sunset = "..."`）：`=` 前先遇 `,`
+            // 即视为无值键，交还外层循环解析后续键值对——否则 `,` 与
+            // 下一键名会被吞作本键的定界。
+            if c == ',' {
                 break;
             }
             chars.next();
@@ -114,8 +125,12 @@ fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Erro
             }
         }
 
+        // 裸键（无 `=`）按布尔真值处理（`#[forge(deprecated)]`）；键值
+        // 同缺（尾部杂散逗号）仍静默跳过。
         if !key.is_empty() && !value.is_empty() {
             pairs.push((key, value));
+        } else if !key.is_empty() {
+            pairs.push((key, "true".to_string()));
         }
 
         if chars.peek().is_none() {
@@ -136,6 +151,7 @@ fn api_metadata_tokens(
     cache_ttl: TokenStream2,
     is_streaming: TokenStream2,
     i18n_key: TokenStream2,
+    lifecycle: TokenStream2,
 ) -> Result<TokenStream2, syn::Error> {
     // Validate and sanitize inputs at compile time to prevent code injection
     // These validations will cause compilation to fail if inputs are invalid
@@ -149,7 +165,7 @@ fn api_metadata_tokens(
             #description.to_string(),
             #cache_ttl,
             #is_streaming,
-        ).with_i18n_key(#i18n_key)
+        ).with_i18n_key(#i18n_key).with_lifecycle(#lifecycle)
     })
 }
 
@@ -442,6 +458,9 @@ const KNOWN_FORGE_KEYS: &[&str] = &[
     "ws_path",
     "grpc_method",
     "i18n_key",
+    "deprecated",
+    "sunset",
+    "successor",
     "no_prefix",
     "cli",
     "status",
@@ -475,6 +494,21 @@ fn validate_known_keys(args: &TokenStream2) -> Result<(), syn::Error> {
     Ok(())
 }
 
+/// sunset/successor 值最终渲染为 HTTP 响应头 / gRPC metadata 值：控制字符
+/// （含 CRLF）与非可见 ASCII 会在注入点被静默丢弃——声明失效且难以排查，
+/// 宏展开期 fail-loud 让调用方在编译期修正。
+fn validate_header_value(key: &str, value: &str) -> Result<(), syn::Error> {
+    if !value.chars().all(|c| ('\u{20}'..='\u{7E}').contains(&c)) {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!(
+                "Invalid value for '{key}' (must be visible ASCII, no control characters): {value}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// Parse forge attributes. `lifecycle_only` relaxes the required
 /// `name`/`version` attributes for pure lifecycle hooks
 /// (`#[forge(on_start)]` with no endpoint declaration).
@@ -495,6 +529,9 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
     let mut cli = None;
     let mut status = None;
     let mut i18n_key = None;
+    let mut deprecated = None;
+    let mut sunset = None;
+    let mut successor = None;
 
     for (key, value) in pairs {
         match key.as_str() {
@@ -531,6 +568,22 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
             "ws_path" => ws_path = Some(value),
             "grpc_method" => grpc_method = Some(value),
             "i18n_key" => i18n_key = Some(value),
+            "deprecated" => {
+                deprecated = Some(value.parse::<bool>().map_err(|_| {
+                    syn::Error::new(
+                        proc_macro2::Span::call_site(),
+                        format!("Invalid boolean value for 'deprecated': {}", value),
+                    )
+                })?)
+            }
+            "sunset" => {
+                validate_header_value("sunset", &value)?;
+                sunset = Some(value);
+            }
+            "successor" => {
+                validate_header_value("successor", &value)?;
+                successor = Some(value);
+            }
             "no_prefix" => {
                 no_prefix = Some(value.parse::<bool>().map_err(|_| {
                     syn::Error::new(
@@ -615,6 +668,9 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
         cli,
         status,
         i18n_key,
+        deprecated,
+        sunset,
+        successor,
     ))
 }
 
@@ -1434,6 +1490,9 @@ fn generate_grpc_handler_registration(
     auth_roles: &[String],
     validate: bool,
     i18n_key: Option<&str>,
+    deprecated: bool,
+    sunset: Option<&str>,
+    successor: Option<&str>,
 ) -> TokenStream2 {
     let grpc_handler_fn_name = syn::Ident::new(
         &format!("__grpc_handler_{}", fn_name),
@@ -1463,6 +1522,8 @@ fn generate_grpc_handler_registration(
     // `SdForgeGrpcService::call_with_context` 分发前检查。
     let role_lits: Vec<&str> = auth_roles.iter().map(|s| s.as_str()).collect();
     let i18n_key_lit = option_str_lit(i18n_key);
+    let sunset_lit = option_str_lit(sunset);
+    let successor_lit = option_str_lit(successor);
 
     quote! {
         #[cfg(feature = "grpc")]
@@ -1476,6 +1537,9 @@ fn generate_grpc_handler_registration(
             default_status: #default_status,
             roles: &[#(#role_lits),*],
             i18n_key: #i18n_key_lit,
+            deprecated: #deprecated,
+            sunset: #sunset_lit,
+            successor: #successor_lit,
         });
     }
 }
@@ -1503,6 +1567,9 @@ fn generate_grpc_stream_handler_registration(
     auth_roles: &[String],
     validate: bool,
     i18n_key: Option<&str>,
+    deprecated: bool,
+    sunset: Option<&str>,
+    successor: Option<&str>,
 ) -> TokenStream2 {
     let grpc_handler_fn_name = syn::Ident::new(
         &format!("__grpc_stream_handler_{}", fn_name),
@@ -1520,6 +1587,8 @@ fn generate_grpc_stream_handler_registration(
     };
     let role_lits: Vec<&str> = auth_roles.iter().map(|s| s.as_str()).collect();
     let i18n_key_lit = option_str_lit(i18n_key);
+    let sunset_lit = option_str_lit(sunset);
+    let successor_lit = option_str_lit(successor);
 
     quote! {
         #[cfg(all(feature = "grpc", feature = "streaming"))]
@@ -1533,6 +1602,9 @@ fn generate_grpc_stream_handler_registration(
             default_status: #default_status,
             roles: &[#(#role_lits),*],
             i18n_key: #i18n_key_lit,
+            deprecated: #deprecated,
+            sunset: #sunset_lit,
+            successor: #successor_lit,
         });
 
         // streaming handler 需要 streaming feature 才能注册：grpc 开而
@@ -1700,6 +1772,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         cli,
         status,
         i18n_key,
+        deprecated,
+        sunset,
+        successor,
     ) = args;
     let fn_name = &input.sig.ident;
     let _fn_vis = &input.vis; // Currently unused but kept for future use
@@ -2154,9 +2229,45 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         Some(key) => quote! { Some(#key.to_string()) },
         None => quote! { None },
     };
+
+    // Endpoint lifecycle expression: `Some(LifecycleMeta)` when any of
+    // deprecated/sunset/successor is declared, else `None` (metadata stays
+    // lifecycle-free and every protocol skips header injection).
+    let has_lifecycle = deprecated.unwrap_or(false) || sunset.is_some() || successor.is_some();
+    let lifecycle_expr = if has_lifecycle {
+        let sunset_lit = sunset.as_deref().unwrap_or("");
+        let successor_lit = successor.as_deref().unwrap_or("");
+        // deprecated 在 quote! 外先求值为 bool 字面量（对齐下方
+        // openapi_deprecated_expr 先例）：裸 `deprecated` 是 Option<bool>，
+        // None 时 quote 渲染零 token，产出 `deprecated: ,` 语法错误，
+        // sunset-only / successor-only 合法组合会被宏整体拒绝。
+        let lifecycle_deprecated_expr = deprecated.unwrap_or(false);
+        quote! {
+            Some(sdforge::core::LifecycleMeta {
+                deprecated: #lifecycle_deprecated_expr,
+                sunset: if #sunset_lit.is_empty() { None } else { Some(#sunset_lit.to_string()) },
+                successor: if #successor_lit.is_empty() { None } else { Some(#successor_lit.to_string()) },
+            })
+        }
+    } else {
+        quote! { None }
+    };
     // `Option<&'static str>` literal for registration-struct fields
     // (quote! renders Option<T> by emitting the inner value only).
     let openapi_i18n_key_expr = option_str_lit(i18n_key.as_deref());
+    // OpenAPI 弃用标记在 quote! 外先求值为 bool 字面量——裸 `deprecated`
+    // 路径写进 quote! 会在用户 crate 里解析到内建属性名（E0423）。
+    let openapi_deprecated_expr = deprecated.unwrap_or(false);
+    // OpenAPI 注册项的 sunset/successor（`Option<&'static str>`，None =
+    // 未声明），随 `deprecated` 一并透传给描述尾注渲染。
+    let openapi_sunset_expr = match sunset.as_deref() {
+        Some(v) => quote! { Some(#v) },
+        None => quote! { None },
+    };
+    let openapi_successor_expr = match successor.as_deref() {
+        Some(v) => quote! { Some(#v) },
+        None => quote! { None },
+    };
 
     // Build OpenAPI path parameter tokens for the `#[forge]` macro.
     //
@@ -2229,6 +2340,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { None },
             quote! { true },
             i18n_key_expr.clone(),
+            lifecycle_expr.clone(),
         ) {
             Ok(tokens) => tokens,
             Err(e) => return e.into_compile_error().into(),
@@ -2241,6 +2353,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { #cache_ttl_expr },
             quote! { false },
             i18n_key_expr.clone(),
+            lifecycle_expr.clone(),
         ) {
             Ok(tokens) => tokens,
             Err(e) => return e.into_compile_error().into(),
@@ -2298,7 +2411,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                                 _ => router = router.get(#handler_closure),
                             }
                             #role_wrap_stmt
-                            router
+                            sdforge::http::lifecycle_layer_maybe(router, #lifecycle_expr)
                         },
                         #streaming_metadata,
                         None,
@@ -2473,7 +2586,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                                 _ => router = router.get(#handler_closure),
                             }
                             #role_wrap_stmt
-                            router
+                            sdforge::http::lifecycle_layer_maybe(router, #lifecycle_expr)
                         },
                         #non_streaming_metadata,
                         None,
@@ -2546,6 +2659,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 body_params: &[#(#openapi_body_params_tokens),*],
                 response_type: #openapi_response_type_expr,
                 i18n_key: #openapi_i18n_key_expr,
+                deprecated: #openapi_deprecated_expr,
+                sunset: #openapi_sunset_expr,
+                successor: #openapi_successor_expr,
             });
         }
     } else {
@@ -2560,6 +2676,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! { #cache_ttl_expr },
         quote! { false },
         i18n_key_expr.clone(),
+        lifecycle_expr.clone(),
     ) {
         Ok(tokens) => tokens,
         Err(e) => return e.into_compile_error().into(),
@@ -2763,6 +2880,11 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let ws_code = if ws_path.is_some() {
+        // 端点生命周期注解（deprecated/sunset/successor）随 #grpc_metadata
+        // 进入 ws 路由的 ApiMetadata，但 WebSocket 协议层无响应头/metadata
+        // 注入点（upgrade 后为双向消息流）——生命周期在 ws 维度是显式
+        // no-op：元数据仅被携带，不产生任何响应副作用（四协议中唯一不
+        // 消费生命周期声明的协议）。
         quote! {
             #[cfg(feature = "websocket")]
             fn #ws_create_fn_name() -> std::sync::Arc<dyn sdforge::websocket::WebSocketHandler> {
@@ -2807,6 +2929,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 &extras.auth_roles,
                 extras.validate,
                 i18n_key.as_deref(),
+                deprecated.unwrap_or(false),
+                sunset.as_deref(),
+                successor.as_deref(),
             )
         } else {
             generate_grpc_handler_registration(
@@ -2818,6 +2943,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 &extras.auth_roles,
                 extras.validate,
                 i18n_key.as_deref(),
+                deprecated.unwrap_or(false),
+                sunset.as_deref(),
+                successor.as_deref(),
             )
         };
         quote! {
@@ -3009,12 +3137,121 @@ mod macro_parsing_tests {
         );
     }
 
+    /// 裸布尔键按 `("key", "true")` 入对：居中裸键不得吞并后续键值对，
+    /// 尾部裸键不得被静默丢弃（`#[forge(deprecated)]` 契约）。
+    #[test]
+    fn test_parse_kv_pairs_bare_bool_flag() {
+        let mid_list: TokenStream2 = quote! { deprecated, sunset = "2026-12-31" };
+        assert_eq!(
+            parse_kv_pairs(mid_list).unwrap(),
+            vec![
+                ("deprecated".to_string(), "true".to_string()),
+                ("sunset".to_string(), "2026-12-31".to_string())
+            ]
+        );
+
+        let trailing: TokenStream2 = quote! { name = "old", deprecated };
+        assert_eq!(
+            parse_kv_pairs(trailing).unwrap(),
+            vec![
+                ("name".to_string(), "old".to_string()),
+                ("deprecated".to_string(), "true".to_string())
+            ]
+        );
+    }
+
     #[test]
     fn test_parse_service_api_args_required() {
         let input: TokenStream2 = quote! { name = "test", version = "v1" };
         let result = parse_service_api_args(input, false).unwrap();
         assert_eq!(result.0, "test");
         assert_eq!(result.1, "v1");
+    }
+
+    /// 端点级生命周期注解（`deprecated` / `sunset` / `successor`）的解析：
+    /// 布尔裸值与带引号字符串各归其位，未声明时全为 None。
+    #[test]
+    fn test_parse_service_api_args_lifecycle_keys() {
+        let input: TokenStream2 = quote! {
+            name = "old", version = "v1", deprecated, sunset = "2026-12-31",
+            successor = "/api/v2/old"
+        };
+        let result = parse_service_api_args(input, false).unwrap();
+        assert_eq!(result.14, Some(true));
+        assert_eq!(result.15.as_deref(), Some("2026-12-31"));
+        assert_eq!(result.16.as_deref(), Some("/api/v2/old"));
+
+        let bare: TokenStream2 = quote! { name = "fresh", version = "v1" };
+        let result = parse_service_api_args(bare, false).unwrap();
+        assert_eq!(result.14, None);
+        assert_eq!(result.15, None);
+        assert_eq!(result.16, None);
+    }
+
+    /// `deprecated = <非布尔值>` 必须在宏展开期报错（fail-loud），
+    /// 而不是静默当作 false。
+    #[test]
+    fn test_parse_service_api_args_rejects_non_bool_deprecated() {
+        let input: TokenStream2 = quote! { name = "old", version = "v1", deprecated = "yes" };
+        let err = match parse_service_api_args(input, false) {
+            Err(e) => e,
+            Ok(_) => panic!("non-bool deprecated must be a compile error"),
+        };
+        assert!(
+            err.to_string()
+                .contains("Invalid boolean value for 'deprecated'"),
+            "error must name the offending key: {err}"
+        );
+    }
+
+    /// sunset/successor 头值含非可见 ASCII（CJK 等）必须在宏展开期报错
+    /// （fail-loud）——这类值会原样抵达运行期（token 流字符串化不转义
+    /// 非 ASCII），却在响应头注入点被静默丢弃。
+    #[test]
+    fn test_parse_service_api_args_rejects_non_ascii_header_value() {
+        let sunset: TokenStream2 =
+            quote! { name = "old", version = "v1", sunset = "2026-12-31（无效）" };
+        let err = match parse_service_api_args(sunset, false) {
+            Err(e) => e,
+            Ok(_) => panic!("non-ASCII sunset must be a compile error"),
+        };
+        assert!(
+            err.to_string()
+                .contains("Invalid value for 'sunset' (must be visible ASCII"),
+            "error must name the offending key: {err}"
+        );
+
+        let successor: TokenStream2 =
+            quote! { name = "old", version = "v1", successor = "/api/v2／old" };
+        let err = match parse_service_api_args(successor, false) {
+            Err(e) => e,
+            Ok(_) => panic!("non-ASCII successor must be a compile error"),
+        };
+        assert!(
+            err.to_string()
+                .contains("Invalid value for 'successor' (must be visible ASCII"),
+            "error must name the offending key: {err}"
+        );
+
+        // 合法值（可见 ASCII）不受影响。
+        let valid: TokenStream2 = quote! { name = "old", version = "v1", sunset = "2026-12-31", successor = "/api/v2/old" };
+        let result = parse_service_api_args(valid, false).unwrap();
+        assert_eq!(result.15.as_deref(), Some("2026-12-31"));
+        assert_eq!(result.16.as_deref(), Some("/api/v2/old"));
+    }
+
+    /// `validate_header_value` 直接拒绝 CRLF 与控制字符（词法层面字符串
+    /// 字面量的 `\r`/`\n` 转义不会以控制字符形态抵达解析器，此校验是
+    /// 纵深防御；真实可达路径是非 ASCII 字符，见上方解析级测试）。
+    #[test]
+    fn test_validate_header_value_rejects_crlf_and_control_chars() {
+        assert!(validate_header_value("sunset", "2026\r\nX").is_err());
+        assert!(validate_header_value("sunset", "a\u{7}b").is_err());
+        assert!(validate_header_value("sunset", "无效").is_err());
+        assert!(validate_header_value("successor", "/api\u{0B}2").is_err());
+        assert!(validate_header_value("sunset", "2026-12-31").is_ok());
+        assert!(validate_header_value("successor", "/api/v2/old").is_ok());
+        assert!(validate_header_value("sunset", "").is_ok());
     }
 
     /// Build a `#[param(...)] <ident>: <ty>` PatType with the given attribute
@@ -3579,6 +3816,9 @@ mod macro_parsing_tests {
             &[],
             false,
             None,
+            false,
+            None,
+            None,
         );
         let s = normalize_ts(&tokens);
 
@@ -3629,6 +3869,9 @@ mod macro_parsing_tests {
             None,
             &[],
             false,
+            None,
+            false,
+            None,
             None,
         );
         let s = normalize_ts(&tokens);
@@ -3695,6 +3938,9 @@ mod macro_parsing_tests {
             &[],
             false,
             None,
+            false,
+            None,
+            None,
         );
         let s = normalize_ts(&tokens);
 
@@ -3737,6 +3983,9 @@ mod macro_parsing_tests {
             &[],
             false,
             None,
+            false,
+            None,
+            None,
         );
         let s = normalize_ts(&tokens);
 
@@ -3767,6 +4016,9 @@ mod macro_parsing_tests {
             &[],
             false,
             Some("forge.localized.description"),
+            false,
+            None,
+            None,
         );
         let s = normalize_ts(&with_key);
         assert!(
@@ -3783,10 +4035,90 @@ mod macro_parsing_tests {
             &[],
             false,
             None,
+            false,
+            None,
+            None,
         );
         assert!(
             normalize_ts(&without_key).contains("i18n_key : None"),
             "absent i18n_key must emit None"
+        );
+    }
+
+    /// `deprecated` / `sunset` / `successor` 必须透传为 registration 的
+    /// 生命周期字段（unary 与 streaming 两条注册路径同契约）；未声明时
+    /// 全部缺省（`false` / `None`），消费方据此跳过响应元数据注入。
+    #[test]
+    fn test_generate_grpc_handler_registration_emits_lifecycle() {
+        let fn_name = syn::Ident::new("sunsetting", proc_macro2::Span::call_site());
+        let params: Vec<ParamInfo> = vec![];
+        let path_params = vec![];
+
+        let with_lifecycle = generate_grpc_handler_registration(
+            &fn_name,
+            "sunsetting_action",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+            None,
+            true,
+            Some("2026-12-31"),
+            Some("/api/v2/sunsetting"),
+        );
+        let s = normalize_ts(&with_lifecycle);
+        assert!(
+            s.contains("deprecated : true"),
+            "deprecated must carry the declared flag: {s}"
+        );
+        assert!(
+            s.contains(r#"sunset : Some ("2026-12-31")"#),
+            "sunset must carry the declared date: {s}"
+        );
+        assert!(
+            s.contains(r#"successor : Some ("/api/v2/sunsetting")"#),
+            "successor must carry the declared hint: {s}"
+        );
+
+        let bare = generate_grpc_handler_registration(
+            &fn_name,
+            "sunsetting_action",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+            None,
+            false,
+            None,
+            None,
+        );
+        let s = normalize_ts(&bare);
+        assert!(
+            s.contains("deprecated : false")
+                && s.contains("sunset : None")
+                && s.contains("successor : None"),
+            "absent lifecycle args must emit the all-empty defaults: {s}"
+        );
+
+        let stream_lifecycle = generate_grpc_stream_handler_registration(
+            &fn_name,
+            "sunsetting_stream",
+            &params,
+            None,
+            &[],
+            false,
+            None,
+            true,
+            None,
+            Some("/api/v2/sunsetting"),
+        );
+        let s = normalize_ts(&stream_lifecycle);
+        assert!(
+            s.contains("deprecated : true")
+                && s.contains(r#"successor : Some ("/api/v2/sunsetting")"#),
+            "streaming registration must mirror the same lifecycle contract: {s}"
         );
     }
 
@@ -3807,6 +4139,9 @@ mod macro_parsing_tests {
             &["admin".to_string(), "operator".to_string()],
             false,
             None,
+            false,
+            None,
+            None,
         );
         let s = normalize_ts(&with_roles);
         assert!(
@@ -3822,6 +4157,9 @@ mod macro_parsing_tests {
             None,
             &[],
             false,
+            None,
+            false,
+            None,
             None,
         );
         let s = normalize_ts(&without_roles);

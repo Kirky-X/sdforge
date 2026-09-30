@@ -3,7 +3,8 @@
 
 use super::*;
 use crate::core::{HandlerArgs, HandlerFn, HandlerState, extract_value};
-use crate::grpc::handler::GrpcHandlerRegistration;
+#[cfg(feature = "grpc")]
+use crate::grpc::handler::{GrpcHandlerRegistration, attach_lifecycle_metadata};
 
 #[cfg(feature = "grpc")]
 use std::collections::HashMap;
@@ -40,6 +41,11 @@ struct IdempotencyGuard {
     ttl_secs: i64,
 }
 
+/// 端点生命周期声明的缓存形态（与 `GrpcHandlerRegistration` 的
+/// `deprecated` / `sunset` / `successor` 字段同形，全 `Copy` 无分配）。
+#[cfg(feature = "grpc")]
+type GrpcLifecycle = (bool, Option<&'static str>, Option<&'static str>);
+
 /// gRPC service implementation.
 ///
 /// Holds an optional application state (mirrors `CliBuilder::with_dependencies`)
@@ -65,6 +71,10 @@ pub struct SdForgeGrpcService {
     /// so `call`'s success path can apply the priority chain:
     /// `ServiceResponse.status_code` > `default_status` > 200.
     default_statuses: OnceLock<HashMap<&'static str, Option<u16>>>,
+    /// Lazy-built `method -> endpoint lifecycle` lookup table
+    /// (`#[forge(deprecated, sunset, successor)]` → 成功响应 metadata 注入).
+    /// Copy-expansion 与注册结构体同形（`bool` + `Option<&str>`×2）。
+    lifecycles: OnceLock<HashMap<&'static str, GrpcLifecycle>>,
     /// Lazy-built `method -> streaming handler fn` lookup table
     /// (feature = `streaming`). Streaming methods live apart from unary
     /// ones so each RPC reaches exactly its own registry.
@@ -82,6 +92,11 @@ pub struct SdForgeGrpcService {
     /// methods (feature = `streaming`); applied per stream item.
     #[cfg(feature = "streaming")]
     stream_default_statuses: OnceLock<HashMap<&'static str, Option<u16>>>,
+    /// Lazy-built `method -> endpoint lifecycle` lookup table for streaming
+    /// methods（与 unary 的 [`SdForgeGrpcService::lifecycles`] 同契约，
+    /// feature = `streaming`）。
+    #[cfg(feature = "streaming")]
+    stream_lifecycles: OnceLock<HashMap<&'static str, GrpcLifecycle>>,
     /// Optional rate limiter (vuln-0006). When `Some`, each `call` request
     /// is checked against the limiter using the client's remote address.
     #[cfg(feature = "ratelimit")]
@@ -106,6 +121,7 @@ impl Default for SdForgeGrpcService {
             body_params: OnceLock::new(),
             roles: OnceLock::new(),
             default_statuses: OnceLock::new(),
+            lifecycles: OnceLock::new(),
             #[cfg(feature = "streaming")]
             stream_handlers: OnceLock::new(),
             #[cfg(feature = "streaming")]
@@ -114,6 +130,8 @@ impl Default for SdForgeGrpcService {
             stream_roles: OnceLock::new(),
             #[cfg(feature = "streaming")]
             stream_default_statuses: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_lifecycles: OnceLock::new(),
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             #[cfg(feature = "security")]
@@ -136,6 +154,7 @@ impl SdForgeGrpcService {
             body_params: OnceLock::new(),
             roles: OnceLock::new(),
             default_statuses: OnceLock::new(),
+            lifecycles: OnceLock::new(),
             #[cfg(feature = "streaming")]
             stream_handlers: OnceLock::new(),
             #[cfg(feature = "streaming")]
@@ -144,6 +163,8 @@ impl SdForgeGrpcService {
             stream_roles: OnceLock::new(),
             #[cfg(feature = "streaming")]
             stream_default_statuses: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_lifecycles: OnceLock::new(),
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
             #[cfg(feature = "security")]
@@ -183,6 +204,7 @@ impl SdForgeGrpcService {
             body_params: OnceLock::new(),
             roles: OnceLock::new(),
             default_statuses: OnceLock::new(),
+            lifecycles: OnceLock::new(),
             #[cfg(feature = "streaming")]
             stream_handlers: OnceLock::new(),
             #[cfg(feature = "streaming")]
@@ -191,6 +213,8 @@ impl SdForgeGrpcService {
             stream_roles: OnceLock::new(),
             #[cfg(feature = "streaming")]
             stream_default_statuses: OnceLock::new(),
+            #[cfg(feature = "streaming")]
+            stream_lifecycles: OnceLock::new(),
             rate_limiter,
             #[cfg(feature = "security")]
             auth_interceptor: None,
@@ -300,6 +324,32 @@ impl SdForgeGrpcService {
         self.stream_default_statuses.get_or_init(|| {
             inventory::iter::<GrpcStreamHandlerRegistration>()
                 .map(|r| (r.method, r.default_status))
+                .collect()
+        })
+    }
+
+    /// Build (or reuse) the `method -> endpoint lifecycle` cache from
+    /// inventory（`#[forge(deprecated, sunset, successor)]` → 成功响应
+    /// metadata 注入的查找表）。
+    #[cfg(feature = "grpc")]
+    #[must_use]
+    fn lifecycles(&self) -> &HashMap<&'static str, GrpcLifecycle> {
+        self.lifecycles.get_or_init(|| {
+            inventory::iter::<GrpcHandlerRegistration>()
+                .map(|r| (r.method, (r.deprecated, r.sunset, r.successor)))
+                .collect()
+        })
+    }
+
+    /// Build (or reuse) the `method -> endpoint lifecycle` cache for
+    /// streaming methods（与 unary 的 [`SdForgeGrpcService::lifecycles`]
+    /// 同契约，feature = `streaming`）。
+    #[cfg(feature = "streaming")]
+    #[must_use]
+    fn stream_lifecycles(&self) -> &HashMap<&'static str, GrpcLifecycle> {
+        self.stream_lifecycles.get_or_init(|| {
+            inventory::iter::<GrpcStreamHandlerRegistration>()
+                .map(|r| (r.method, (r.deprecated, r.sunset, r.successor)))
                 .collect()
         })
     }
@@ -571,12 +621,20 @@ impl SdForgeGrpcService {
                 }
                 crate::cache::IdempotencyOutcome::Replay { body, .. } => {
                     if let Ok(cached) = serde_json::from_slice::<CachedCallResponse>(&body) {
-                        return Ok(Response::new(CallResponse {
+                        // 生命周期是端点属性而非执行属性：重放响应与首次
+                        // 执行同样携带 deprecation 元数据。
+                        let mut replay = Response::new(CallResponse {
                             success: cached.success,
                             data: cached.data,
                             error: cached.error,
                             status_code: cached.status_code,
-                        }));
+                        });
+                        if let Some(&(deprecated, sunset, successor)) =
+                            self.lifecycles().get(method.as_str())
+                        {
+                            attach_lifecycle_metadata(&mut replay, deprecated, sunset, successor);
+                        }
+                        return Ok(replay);
                     }
                     // 缓存损坏 → abort 让调用方重试
                     guard.store.abort(scope, key);
@@ -642,7 +700,19 @@ impl SdForgeGrpcService {
                         guard.store.abort(scope, key);
                     }
                 }
-                Ok(Response::new(response))
+                // 端点生命周期（`#[forge(deprecated, sunset, successor)]`）
+                // 镜像为成功响应 metadata（deprecation / sunset /
+                // successor-version），未注解端点无注入开销。
+                let mut grpc_response = Response::new(response);
+                // is_empty() 短路：全仓库未声明生命周期时免去逐请求的
+                // 哈希查找（与 HTTP 侧 unannotated-no-layer 契约对齐）。
+                let lifecycles = self.lifecycles();
+                if !lifecycles.is_empty()
+                    && let Some(&(deprecated, sunset, successor)) = lifecycles.get(method.as_str())
+                {
+                    attach_lifecycle_metadata(&mut grpc_response, deprecated, sunset, successor);
+                }
+                Ok(grpc_response)
             }
             Ok(Err(e)) => {
                 // business error → 真实 gRPC Status（vuln-SIMPL-002 修复）：
@@ -822,7 +892,18 @@ impl SdForgeService for SdForgeGrpcService {
                             status_code: 500,
                         }),
                     });
-                    Ok(Response::new(Box::pin(stream) as Self::CallStreamStream))
+                    // 端点生命周期镜像为流式响应的（外层）metadata，
+                    // 客户端在首个流项前即可读取——与 unary 同契约。
+                    let mut response = Response::new(Box::pin(stream) as Self::CallStreamStream);
+                    // is_empty() 短路：与 unary 路径同理由。
+                    let lifecycles = self.stream_lifecycles();
+                    if !lifecycles.is_empty()
+                        && let Some(&(deprecated, sunset, successor)) =
+                            lifecycles.get(method.as_str())
+                    {
+                        attach_lifecycle_metadata(&mut response, deprecated, sunset, successor);
+                    }
+                    Ok(response)
                 }
                 Err(e) => {
                     // handler 启动失败（参数/校验等业务错误）→ 真实 gRPC
@@ -1212,6 +1293,9 @@ mod tests {
                 default_status: None,
                 roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     }
         }
 
@@ -1234,6 +1318,9 @@ mod tests {
                 default_status: None,
                 roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     }
         }
 
@@ -1253,6 +1340,9 @@ mod tests {
                 default_status: None,
                 roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     }
         }
 
@@ -1271,6 +1361,9 @@ mod tests {
                 default_status: None,
                 roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     }
         }
 
@@ -1288,6 +1381,9 @@ mod tests {
             default_status: None,
             roles: &["admin"],
             i18n_key: None,
+            deprecated: false,
+            sunset: None,
+            successor: None,
         }
     }
 
@@ -1318,6 +1414,9 @@ mod tests {
                 default_status: None,
                 roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     }
         }
 
@@ -1347,6 +1446,9 @@ mod tests {
                 default_status: None,
                 roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     }
         }
 
@@ -1376,6 +1478,9 @@ mod tests {
                 default_status: Some(201),
                 roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     }
         }
 
@@ -1404,6 +1509,9 @@ mod tests {
                 default_status: Some(202),
                 roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     }
         }
 
@@ -1432,6 +1540,9 @@ mod tests {
                 default_status: Some(201),
                 roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     }
         }
 
@@ -1636,6 +1747,9 @@ mod tests {
                         default_status: None,
                         roles: &[],
             i18n_key: None,
+            deprecated: false,
+            sunset: None,
+            successor: None,
         }
                 }
         let service = SdForgeGrpcService::default();
@@ -1673,6 +1787,9 @@ mod tests {
                         default_status: None,
                         roles: &[],
             i18n_key: None,
+            deprecated: false,
+            sunset: None,
+            successor: None,
         }
                 }
         let service = SdForgeGrpcService::default();
@@ -2285,6 +2402,9 @@ mod tests {
                 default_status: None,
                 roles: &[],
                 i18n_key: None,
+                deprecated: false,
+                sunset: None,
+                successor: None,
             }
         }
 
@@ -2461,6 +2581,9 @@ mod tests {
                 default_status: None,
                 roles: &[],
                 i18n_key: None,
+                deprecated: false,
+                sunset: None,
+                successor: None,
             }
         }
 
@@ -2496,6 +2619,9 @@ mod tests {
                 default_status: None,
                 roles: &[],
                 i18n_key: None,
+                deprecated: false,
+                sunset: None,
+                successor: None,
             }
         }
 
@@ -2526,6 +2652,9 @@ mod tests {
                 default_status: None,
                 roles: &[],
                 i18n_key: None,
+                deprecated: false,
+                sunset: None,
+                successor: None,
             }
         }
 
@@ -2554,6 +2683,9 @@ mod tests {
                 default_status: None,
                 roles: &[],
                 i18n_key: None,
+                deprecated: false,
+                sunset: None,
+                successor: None,
             }
         }
 
@@ -2811,6 +2943,9 @@ mod tests {
                     default_status: None,
                     roles: &[],
                     i18n_key: None,
+                    deprecated: false,
+                    sunset: None,
+                    successor: None,
                 }
             }
 
@@ -2866,6 +3001,9 @@ mod tests {
                     default_status: None,
                     roles: &[],
                     i18n_key: None,
+                    deprecated: false,
+                    sunset: None,
+                    successor: None,
                 }
             }
 
@@ -2950,6 +3088,135 @@ mod tests {
                 tonic::Code::ResourceExhausted,
                 "rate limit must fire before auth on the streaming path: {err}"
             );
+        }
+
+        // ====================================================================
+        // 端点生命周期（`#[forge(deprecated, sunset, successor)]`）→ 响应
+        // metadata 注入（unary `Call` 与 streaming `CallStream` 同契约）
+        // ====================================================================
+
+        fn lifecycle_echo_handler(
+            args: HandlerArgs,
+            _state: HandlerState,
+        ) -> crate::core::HandlerFuture {
+            let msg = args.get("msg").cloned().unwrap_or_default();
+            Box::pin(async move { Ok(Value::String(msg)) })
+        }
+
+        inventory::submit! {
+            GrpcHandlerRegistration {
+                method: "test_lifecycle_deprecated",
+                handler: lifecycle_echo_handler,
+                body_param: None,
+                default_status: None,
+                roles: &[],
+                i18n_key: None,
+                deprecated: true,
+                sunset: Some("2026-12-31"),
+                successor: Some("/api/v2/thing"),
+            }
+        }
+
+        /// unary 成功响应必须携带端点生命周期 metadata（与 HTTP 的
+        /// `Deprecation` / `Sunset` / `Link` 头镜像同名键）。
+        #[tokio::test]
+        async fn call_attaches_lifecycle_metadata() {
+            let service = SdForgeGrpcService::default();
+            let resp = service
+                .call(stream_call_request("test_lifecycle_deprecated", ""))
+                .await
+                .expect("lifecycle-annotated method dispatches");
+            let metadata = resp.metadata();
+            assert_eq!(
+                metadata.get("deprecation").and_then(|v| v.to_str().ok()),
+                Some("true"),
+                "deprecation key must mirror the HTTP header: {metadata:?}"
+            );
+            assert_eq!(
+                metadata.get("sunset").and_then(|v| v.to_str().ok()),
+                Some("2026-12-31")
+            );
+            assert_eq!(
+                metadata
+                    .get("successor-version")
+                    .and_then(|v| v.to_str().ok()),
+                Some("/api/v2/thing")
+            );
+        }
+
+        /// 未注解端点不得携带生命周期 metadata 键（无注入开销契约）。
+        #[tokio::test]
+        async fn call_without_lifecycle_has_no_lifecycle_metadata() {
+            let service = SdForgeGrpcService::default();
+            let resp = service
+                .call(stream_call_request("test_echo", ""))
+                .await
+                .expect("plain method dispatches");
+            let metadata = resp.metadata();
+            assert!(metadata.get("deprecation").is_none());
+            assert!(metadata.get("sunset").is_none());
+            assert!(metadata.get("successor-version").is_none());
+        }
+
+        /// streaming 成功响应在外层 Response metadata 携带生命周期键
+        /// （客户端在首个流项之前即可读取）。
+        #[cfg(feature = "streaming")]
+        fn lifecycle_stream_handler(
+            _args: HandlerArgs,
+            _state: HandlerState,
+        ) -> crate::grpc::GrpcStreamHandlerFuture {
+            let (tx, rx) = tokio::sync::mpsc::channel::<crate::grpc::GrpcStreamItem>(2);
+            tokio::spawn(async move {
+                let _ = tx.send(Ok(Value::String("legacy-item".to_string()))).await;
+            });
+            Box::pin(async move {
+                Ok(crate::grpc::GrpcStreamOutput {
+                    stream: Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)),
+                })
+            })
+        }
+
+        #[cfg(feature = "streaming")]
+        inventory::submit! {
+            GrpcStreamHandlerRegistration {
+                method: "test_stream_lifecycle",
+                handler: lifecycle_stream_handler,
+                body_param: None,
+                default_status: None,
+                roles: &[],
+                i18n_key: None,
+                deprecated: true,
+                sunset: None,
+                successor: Some("/api/v2/thing"),
+            }
+        }
+
+        #[cfg(feature = "streaming")]
+        #[tokio::test]
+        async fn call_stream_attaches_lifecycle_metadata() {
+            let service = SdForgeGrpcService::default();
+            let response = service
+                .call_stream(stream_call_request("test_stream_lifecycle", ""))
+                .await
+                .expect("streaming lifecycle method dispatches");
+            let metadata = response.metadata();
+            assert_eq!(
+                metadata.get("deprecation").and_then(|v| v.to_str().ok()),
+                Some("true")
+            );
+            assert!(
+                metadata.get("sunset").is_none(),
+                "undeclared sunset must stay absent"
+            );
+            assert_eq!(
+                metadata
+                    .get("successor-version")
+                    .and_then(|v| v.to_str().ok()),
+                Some("/api/v2/thing")
+            );
+            // 流项照常送达：metadata 注入不影响项产出。
+            let items = collect_stream(response.into_inner()).await;
+            assert_eq!(items.len(), 1);
         }
     }
 }

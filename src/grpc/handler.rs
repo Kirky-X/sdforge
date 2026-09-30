@@ -48,6 +48,17 @@ pub struct GrpcHandlerRegistration {
     /// with `sdforge::i18n::translate_or_fallback` (CLI/MCP parity);
     /// `None` keeps the compile-time English description.
     pub i18n_key: Option<&'static str>,
+    /// Endpoint lifecycle flags (`#[forge(deprecated, sunset, successor)]`),
+    /// mirrored onto the response metadata as `deprecation` / `sunset` /
+    /// `successor-version` keys. Copy-expansion (not `LifecycleMeta`) keeps
+    /// the inventory entry const-constructible.
+    pub deprecated: bool,
+    /// Sunset date/value surfaced verbatim on the `sunset` metadata key
+    /// (e.g. `"2026-12-31"`); `None` when not declared.
+    pub sunset: Option<&'static str>,
+    /// Successor endpoint hint surfaced on the `successor-version` metadata
+    /// key; `None` when not declared.
+    pub successor: Option<&'static str>,
 }
 
 inventory::collect!(GrpcHandlerRegistration);
@@ -84,10 +95,58 @@ pub struct GrpcStreamHandlerRegistration {
     /// Runtime translation key for the description — same contract as the
     /// unary registration's `i18n_key`.
     pub i18n_key: Option<&'static str>,
+    /// Endpoint lifecycle flags — same response-metadata contract as the
+    /// unary registration.
+    pub deprecated: bool,
+    /// Sunset date/value surfaced verbatim on the `sunset` metadata key;
+    /// `None` when not declared.
+    pub sunset: Option<&'static str>,
+    /// Successor endpoint hint surfaced on the `successor-version` metadata
+    /// key; `None` when not declared.
+    pub successor: Option<&'static str>,
 }
 
 #[cfg(all(feature = "grpc", feature = "streaming"))]
 inventory::collect!(GrpcStreamHandlerRegistration);
+
+/// 把端点生命周期声明附加到成功响应的 metadata 上（unary `Call` 与
+/// streaming `CallStream` 共用）。
+///
+/// 与 HTTP 的 `Deprecation` / `Sunset` / `Link: successor-version` 响应头
+/// 镜像同名小写键（`deprecation` / `sunset` / `successor-version`）。
+/// 非法（非可见 ASCII）值优雅跳过——声明了不可编码的值不得使 RPC 失败；
+/// 三项皆未声明时整体 no-op，未注解端点无注入开销。
+#[cfg(feature = "grpc")]
+pub(crate) fn attach_lifecycle_metadata<T>(
+    response: &mut tonic::Response<T>,
+    deprecated: bool,
+    sunset: Option<&str>,
+    successor: Option<&str>,
+) {
+    if !deprecated && sunset.is_none() && successor.is_none() {
+        return;
+    }
+    let metadata = response.metadata_mut();
+    if deprecated {
+        metadata.insert(
+            tonic::metadata::MetadataKey::from_static("deprecation"),
+            tonic::metadata::MetadataValue::from_static("true"),
+        );
+    }
+    if let Some(sunset) = sunset
+        && let Ok(value) = tonic::metadata::MetadataValue::try_from(sunset)
+    {
+        metadata.insert(tonic::metadata::MetadataKey::from_static("sunset"), value);
+    }
+    if let Some(successor) = successor
+        && let Ok(value) = tonic::metadata::MetadataValue::try_from(successor)
+    {
+        metadata.insert(
+            tonic::metadata::MetadataKey::from_static("successor-version"),
+            value,
+        );
+    }
+}
 
 /// 单条流式项：`Ok` = handler 产出的一个 JSON 值（每项映射为一条
 /// `success: true` 的 `CallResponse`），`Err` = 项级业务错误消息（映射为
@@ -171,6 +230,9 @@ mod tests {
                 default_status: None,
                 roles: &[],
                 i18n_key: None,
+                deprecated: false,
+                sunset: None,
+                successor: None,
     }
         }
 
@@ -186,5 +248,22 @@ mod tests {
             names.contains(&"test_probe"),
             "test_probe missing in {names:?}"
         );
+    }
+
+    /// 非法（非可见 ASCII）生命周期值必须优雅跳过而非使 RPC 失败；
+    /// 未声明时整体 no-op。
+    #[cfg(feature = "grpc")]
+    #[test]
+    fn attach_lifecycle_metadata_skips_invalid_values_and_no_ops_when_absent() {
+        let mut response = tonic::Response::new(());
+        attach_lifecycle_metadata(&mut response, true, Some("无效\n值"), None);
+        let metadata = response.metadata();
+        assert_eq!(metadata.get("deprecation").unwrap(), "true");
+        assert!(metadata.get("sunset").is_none());
+        assert!(metadata.get("successor-version").is_none());
+
+        let mut bare = tonic::Response::new(());
+        attach_lifecycle_metadata(&mut bare, false, None, None);
+        assert!(bare.metadata().is_empty());
     }
 }

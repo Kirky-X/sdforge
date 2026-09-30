@@ -49,6 +49,70 @@ fn test_build_tool_model() {
     assert!(tool_model.description.is_some());
 }
 
+/// 端点生命周期（`#[forge(deprecated, sunset, successor)]`）以括注形式
+/// 追加到 MCP 工具描述尾部（MCP 无响应头通道，描述是唯一载体）。
+#[test]
+fn test_build_tool_model_annotates_lifecycle_in_description() {
+    let metadata = crate::core::ApiMetadata {
+        name: "test".to_string(),
+        version: "v1".to_string(),
+        description: "legacy tool".to_string(),
+        cache_ttl: None,
+        is_streaming: false,
+        i18n_key: None,
+        lifecycle: Some(crate::core::LifecycleMeta {
+            deprecated: true,
+            sunset: Some("2026-12-31".to_string()),
+            successor: Some("/api/v2/thing".to_string()),
+        }),
+    };
+    let instance = McpToolInstance::new(create_test_tool(), metadata);
+    let server = SdForgeMcpServer::with_tools(vec![instance]);
+    let tool_model = server.build_tool_model(server.find_tool("test").unwrap());
+    assert_eq!(
+        tool_model.description.as_deref().unwrap(),
+        "Test tool (deprecated; sunset: 2026-12-31; successor: /api/v2/thing)",
+        "lifecycle annotation must carry only the declared parts"
+    );
+}
+
+/// 未注解端点的描述必须逐字保留（无尾注、零开销）。
+#[test]
+fn test_build_tool_model_keeps_description_verbatim_without_lifecycle() {
+    let metadata = create_test_metadata();
+    let instance = McpToolInstance::new(create_test_tool(), metadata);
+    let server = SdForgeMcpServer::with_tools(vec![instance]);
+    let tool_model = server.build_tool_model(server.find_tool("test").unwrap());
+    let desc = tool_model.description.as_deref().unwrap();
+    assert!(
+        !desc.contains("deprecated"),
+        "unannotated tool description must stay free of lifecycle notes: {desc}"
+    );
+}
+
+/// 全空 `LifecycleMeta`（`is_present() == false`）等同未注解：描述逐字
+/// 保留，不产出空括注。
+#[test]
+fn test_build_tool_model_ignores_empty_lifecycle() {
+    let metadata = crate::core::ApiMetadata {
+        name: "test".to_string(),
+        version: "v1".to_string(),
+        description: "plain tool".to_string(),
+        cache_ttl: None,
+        is_streaming: false,
+        i18n_key: None,
+        lifecycle: Some(crate::core::LifecycleMeta::default()),
+    };
+    let instance = McpToolInstance::new(create_test_tool(), metadata);
+    let server = SdForgeMcpServer::with_tools(vec![instance]);
+    let tool_model = server.build_tool_model(server.find_tool("test").unwrap());
+    assert_eq!(
+        tool_model.description.as_deref().unwrap(),
+        "Test tool",
+        "empty lifecycle must not append an empty annotation"
+    );
+}
+
 #[tokio::test]
 async fn test_server_handler_list_tools() {
     // Use get_all_tools() instead of list_tools() to avoid constructing
@@ -213,6 +277,7 @@ mod vuln_0002_schema_validation_tests {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         };
         let instance = McpToolInstance::new(tool, metadata);
         SdForgeMcpServer::with_tools(vec![instance])

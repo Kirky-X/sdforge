@@ -64,6 +64,7 @@ pub(super) fn create_test_metadata() -> ApiMetadata {
         cache_ttl: None,
         is_streaming: false,
         i18n_key: None,
+        lifecycle: None,
     }
 }
 
@@ -99,6 +100,7 @@ fn create_coverage_test_metadata() -> ApiMetadata {
         cache_ttl: None,
         is_streaming: false,
         i18n_key: None,
+        lifecycle: None,
     }
 }
 

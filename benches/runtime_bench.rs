@@ -41,6 +41,23 @@ async fn bench_user(id: u64) -> serde_json::Value {
     json!({"id": id})
 }
 
+/// A lifecycle-annotated endpoint (exercises the per-route lifecycle header
+/// layer on the dispatch hot path — annotated vs `plain_get` shows the
+/// layer's marginal cost).
+#[sdforge::forge(
+    name = "bench_ping_lifecycle",
+    version = "v1",
+    path = "/bench/ping_lifecycle",
+    method = "GET",
+    description = "Bench ping with lifecycle annotation",
+    deprecated,
+    sunset = "2026-12-31",
+    successor = "/api/v2/bench/ping"
+)]
+async fn bench_ping_lifecycle() -> serde_json::Value {
+    json!({"ok": true})
+}
+
 fn bench_route_dispatch(c: &mut Criterion) {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -80,6 +97,30 @@ fn bench_route_dispatch(c: &mut Criterion) {
                         .unwrap();
                     let res = Service::call(&mut r, req).await.unwrap();
                     assert_eq!(res.status(), 200);
+                }
+            })
+        });
+    });
+
+    // 生命周期注解端点：与 plain_get 对比得出 per-route lifecycle 层的
+    // 边际成本（三个响应头的注入）。
+    group.bench_function("lifecycle_annotated_get", |b| {
+        b.iter(|| {
+            rt.block_on({
+                let mut r = router.clone();
+                async move {
+                    use tower::Service;
+                    let req = axum::http::Request::builder()
+                        .uri("/api/v1/bench/ping_lifecycle")
+                        .body(axum::body::Body::empty())
+                        .unwrap();
+                    let res = Service::call(&mut r, req).await.unwrap();
+                    assert_eq!(res.status(), 200);
+                    assert_eq!(
+                        res.headers().get("deprecation").unwrap(),
+                        "true",
+                        "annotated endpoint must stamp lifecycle headers"
+                    );
                 }
             })
         });
@@ -694,6 +735,9 @@ fn bench_grpc_streaming(c: &mut Criterion) {
             default_status: None,
             roles: &[],
             i18n_key: None,
+            deprecated: false,
+            sunset: None,
+            successor: None,
         }
     }
 

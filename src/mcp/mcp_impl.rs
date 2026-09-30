@@ -14,18 +14,10 @@ pub fn get_mcp_tools() -> Vec<McpToolInstance> {
         .into_iter()
         .map(|reg| {
             let tool = (reg.create_fn)();
-            let reg_metadata = reg.metadata();
-            McpToolInstance::new(
-                tool,
-                ApiMetadata::new(
-                    reg.name().to_string(),
-                    reg.version().to_string(),
-                    reg.metadata().description().to_string(),
-                    reg_metadata.cache_ttl(),
-                    reg_metadata.is_streaming(),
-                ),
-            )
-            .with_roles(reg.roles)
+            // metadata_fn 产出的完整元数据直通实例：重建会丢弃 i18n_key
+            // 与 endpoint lifecycle（`#[forge(deprecated, sunset,
+            // successor)]`），导致 MCP 消费点拿不到声明。
+            McpToolInstance::new(tool, reg.metadata()).with_roles(reg.roles)
         })
         .collect()
 }

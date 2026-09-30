@@ -27,7 +27,25 @@ impl ApiMetadata {
             cache_ttl,
             is_streaming,
             i18n_key: None,
+            lifecycle: None,
         }
+    }
+
+    /// Attach an endpoint lifecycle declaration (deprecated/sunset/successor).
+    ///
+    /// Consumption is protocol-specific: HTTP injects `Deprecation` /
+    /// `Sunset` / `Link: successor-version` response headers (endpoint-level
+    /// wins over the global version-routing fallback), gRPC mirrors the same
+    /// keys as response metadata, MCP annotates the tool description, and
+    /// OpenAPI marks the operation `deprecated`.
+    pub fn with_lifecycle(mut self, lifecycle: Option<crate::core::LifecycleMeta>) -> Self {
+        self.lifecycle = lifecycle;
+        self
+    }
+
+    /// Endpoint lifecycle declaration, if any.
+    pub fn lifecycle(&self) -> Option<&crate::core::LifecycleMeta> {
+        self.lifecycle.as_ref()
     }
 
     /// Attach an i18n key for runtime translation of the description.

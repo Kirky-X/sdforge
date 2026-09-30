@@ -385,6 +385,7 @@ fn create_rbac_guarded_metadata() -> crate::core::ApiMetadata {
         cache_ttl: None,
         is_streaming: false,
         i18n_key: None,
+        lifecycle: None,
     }
 }
 

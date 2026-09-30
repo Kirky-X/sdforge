@@ -42,6 +42,7 @@ fn create_test_mcp_metadata_for_docs() -> ApiMetadata {
         cache_ttl: None,
         is_streaming: false,
         i18n_key: None,
+        lifecycle: None,
     }
 }
 

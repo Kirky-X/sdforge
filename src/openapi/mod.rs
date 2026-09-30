@@ -130,6 +130,18 @@ pub struct OpenApiRouteInfo {
     /// `sdforge::i18n::translate_or_fallback`; `None` (or an unregistered
     /// key) keeps the compile-time English description.
     pub i18n_key: Option<&'static str>,
+    /// Endpoint-level deprecation flag (`#[forge(deprecated)]`). Rendered
+    /// as the OpenAPI operation `deprecated` marker.
+    pub deprecated: bool,
+    /// Endpoint-level sunset value (`#[forge(sunset = "...")]`); `None`
+    /// when undeclared. OpenAPI has no native sunset channel, so it is
+    /// surfaced in the operation description footnote (same annotation
+    /// format as the MCP description tail).
+    pub sunset: Option<&'static str>,
+    /// Endpoint-level successor hint (`#[forge(successor = "...")]`);
+    /// `None` when undeclared. Surfaced in the operation description
+    /// footnote (same annotation format as the MCP description tail).
+    pub successor: Option<&'static str>,
 }
 
 inventory::collect!(OpenApiRouteInfo);
@@ -206,6 +218,9 @@ inventory::submit!(OpenApiRouteInfo {
     path_params: &[],
     success_status: Some(201u16),
     i18n_key: None,
+    deprecated: false,
+    sunset: None,
+    successor: None,
     body_params: &[
         OpenApiBodyParam {
             name: "item",
@@ -227,6 +242,47 @@ inventory::submit!(OpenApiRouteInfo {
         schema_format: "",
         is_array: true,
     }),
+});
+
+// 端点生命周期（`#[forge(deprecated)]`）：test-only deprecated 路由，
+// 验证 OpenAPI 操作渲染 `"deprecated": true` 标记。
+#[cfg(test)]
+inventory::submit!(OpenApiRouteInfo {
+    path: "/__openapi_deprecated_test__",
+    method: "GET",
+    summary: "Deprecated route test marker",
+    description: "Route with deprecated=true registered by src/openapi/mod.rs tests.",
+    version: "test",
+    tags: &["test"],
+    path_params: &[],
+    success_status: None,
+    i18n_key: None,
+    deprecated: true,
+    sunset: None,
+    successor: None,
+    body_params: &[],
+    response_type: None,
+});
+
+// 端点生命周期（`#[forge(deprecated, sunset, successor)]`）：test-only
+// 全注解路由，验证 sunset/successor 以描述尾注保留（对齐 MCP 描述尾注
+// 做法，四协议契约对称）。
+#[cfg(test)]
+inventory::submit!(OpenApiRouteInfo {
+    path: "/__openapi_lifecycle_test__",
+    method: "GET",
+    summary: "Lifecycle route test marker",
+    description: "Route with full lifecycle registered by src/openapi/mod.rs tests.",
+    version: "test",
+    tags: &["test"],
+    path_params: &[],
+    success_status: None,
+    i18n_key: None,
+    deprecated: true,
+    sunset: Some("2026-12-31"),
+    successor: Some("/api/v2/thing"),
+    body_params: &[],
+    response_type: None,
 });
 
 #[cfg(test)]
@@ -348,6 +404,52 @@ mod tests {
             paths_obj.iter().any(|p| p == "/__openapi_test_marker__"),
             "expected /__openapi_test_marker__ in paths, got {:?}",
             paths_obj
+        );
+    }
+
+    /// 端点生命周期（`#[forge(deprecated)]`）必须渲染为 OpenAPI 操作的
+    /// `"deprecated": true` 标记；未注解路由显式为 `false`。
+    #[test]
+    fn generated_spec_marks_deprecated_route() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+
+        let deprecated_op = &paths_json["/__openapi_deprecated_test__"]["get"];
+        assert_eq!(
+            deprecated_op["deprecated"],
+            serde_json::json!(true),
+            "route with deprecated=true must render the OpenAPI deprecated marker"
+        );
+
+        let current_op = &paths_json["/__openapi_test_marker__"]["get"];
+        assert_eq!(
+            current_op["deprecated"],
+            serde_json::json!(false),
+            "unannotated route must render deprecated=false (not omitted)"
+        );
+    }
+
+    /// sunset/successor 在 OpenAPI 无原生通道，必须以描述尾注保留（格式
+    /// 与 MCP 描述尾注一致）；未注解路由描述逐字不变。
+    #[test]
+    fn generated_spec_keeps_sunset_successor_as_description_footnote() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+
+        let lifecycle_op = &paths_json["/__openapi_lifecycle_test__"]["get"];
+        let description = lifecycle_op["description"].as_str().expect("description");
+        assert_eq!(
+            description,
+            "Route with full lifecycle registered by src/openapi/mod.rs tests. \
+             (deprecated; sunset: 2026-12-31; successor: /api/v2/thing)",
+            "lifecycle footnote must mirror the MCP annotation format"
+        );
+
+        let plain_op = &paths_json["/__openapi_test_marker__"]["get"];
+        let plain_desc = plain_op["description"].as_str().expect("description");
+        assert!(
+            !plain_desc.contains("sunset") && !plain_desc.contains("successor"),
+            "unannotated route description must stay free of lifecycle notes: {plain_desc}"
         );
     }
 

@@ -42,9 +42,11 @@ pub mod graceful;
 mod http_impl;
 #[cfg(feature = "idempotency")]
 pub mod idempotency;
+pub mod lifecycle;
 #[cfg(feature = "ratelimit-http")]
 pub use http_impl::rate_limit_layer;
 pub use http_impl::{build, build_with_config, build_with_redirect};
+pub use lifecycle::{inject_lifecycle_headers, lifecycle_layer_maybe};
 
 #[cfg(feature = "serve-tls")]
 pub mod tls;

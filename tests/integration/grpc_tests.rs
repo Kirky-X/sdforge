@@ -62,6 +62,9 @@ mod grpc_integration_tests {
         default_status: None,
         roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     });
 
     // Handler that accepts body data (for data_call tests)
@@ -83,6 +86,9 @@ mod grpc_integration_tests {
                 default_status: None,
                 roles: &[],
                 i18n_key: None,
+                deprecated: false,
+                sunset: None,
+                successor: None,
             });
         };
     }
@@ -134,6 +140,9 @@ mod grpc_integration_tests {
         default_status: None,
         roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     });
 
     // ============================================================================
@@ -1322,6 +1331,9 @@ mod grpc_status_code_tests {
         default_status: None,
         roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     });
 
     /// Handler that returns a `ServiceResponse` without `status_code` (None).
@@ -1346,6 +1358,9 @@ mod grpc_status_code_tests {
         default_status: None,
         roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     });
 
     /// Handler that returns a bare type (no ServiceResponse wrapper).
@@ -1366,6 +1381,9 @@ mod grpc_status_code_tests {
         default_status: None,
         roles: &[],
         i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     });
 
     /// Helper: call a method on the gRPC service directly (no server needed).

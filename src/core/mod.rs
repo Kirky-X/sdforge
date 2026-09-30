@@ -48,7 +48,7 @@ pub use str::{
     format_empty_error, format_env_key, format_invalid_error, format_not_found, format_range_error,
     format_validation_error, sanitize_for_identifier, truncate_with_ellipsis,
 };
-pub use types::ApiMetadata;
+pub use types::{ApiMetadata, LifecycleMeta};
 #[cfg(feature = "http")]
 pub use validation::validators::{validate_email, validate_length};
 pub use validation::{

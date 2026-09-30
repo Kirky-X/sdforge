@@ -117,6 +117,7 @@ fn test_grpc_route_structure() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     };
 
@@ -138,6 +139,7 @@ fn test_grpc_route_metadata_accessors() {
             cache_ttl: Some(300),
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     };
 
@@ -325,6 +327,7 @@ fn test_grpc_route_with_streaming_metadata() {
             cache_ttl: None,
             is_streaming: true,
             i18n_key: None,
+            lifecycle: None,
         },
     };
 
@@ -345,6 +348,7 @@ fn test_grpc_route_with_cache_ttl() {
             cache_ttl: Some(600),
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     };
 
@@ -365,6 +369,7 @@ fn test_grpc_route_metadata_cloning() {
             cache_ttl: Some(300),
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     };
 
@@ -807,6 +812,7 @@ fn test_grpc_route_registration_new() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         });
 
     assert_eq!(registration.name(), "test_route");
@@ -847,6 +853,7 @@ fn test_grpc_route_registration_create() {
             cache_ttl: Some(300),
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         });
     let route = registration.create();
 
