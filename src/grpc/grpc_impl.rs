@@ -98,7 +98,7 @@ pub struct SdForgeGrpcService {
     /// request is rejected with `Status::unauthenticated`.
     #[cfg(feature = "security")]
     auth_interceptor: Option<std::sync::Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
-    /// 幂等重放防护（T022，feature = `idempotency`）：携带 `idempotency-key`
+    /// 幂等重放防护（feature = `idempotency`）：携带 `idempotency-key`
     /// metadata 的请求经 store 三态防护，其余零开销。
     #[cfg(feature = "idempotency")]
     idempotency: Option<IdempotencyGuard>,
@@ -213,7 +213,7 @@ impl SdForgeGrpcService {
         }
     }
 
-    /// attach an idempotency store (T022)。携带 `idempotency-key` metadata
+    /// attach an idempotency store。携带 `idempotency-key` metadata
     /// 的请求进入三态防护（Execute / InFlight → already_exists / Replay）。
     #[cfg(all(feature = "grpc", feature = "idempotency"))]
     #[must_use]
@@ -549,10 +549,10 @@ impl SdForgeGrpcService {
     ) -> Result<Response<CallResponse>, Status> {
         // 限流已上移至 call_with_context 最外层（与 CallStream 同序）。
 
-        // T022: 幂等 key 提取（仅当配置了 store 且请求携带 idempotency-key
+        // 幂等 key 提取（仅当配置了 store 且请求携带 idempotency-key
         // metadata 时参与）。metadata 须在 into_inner 消费前读取；scope 绑定
         // gRPC method 名防跨端点键冲突。
-        // T003（复查修复）：claim 后移到全部前置校验之后 —— 此前 begin 早于
+        // claim 后移到全部前置校验之后 —— 此前 begin 早于
         // payload/handler/body_param 校验，early-return 会把 InFlight claim
         // 泄漏 30s，卡死同 key 的合法重试。
         #[cfg(all(feature = "grpc", feature = "idempotency"))]
@@ -594,7 +594,7 @@ impl SdForgeGrpcService {
         let body_param = self.body_params().get(method.as_str()).copied().flatten();
         let args = Self::build_handler_args(req, &method, body_param)?;
 
-        // T003: 前置校验全部通过 —— 此刻才 claim（InFlight → already_exists；
+        // 前置校验全部通过 —— 此刻才 claim（InFlight → already_exists；
         // Replay → 返回缓存；Execute → 继续）。
         #[cfg(all(feature = "grpc", feature = "idempotency"))]
         if let Some((guard, scope, key)) = &idem_key {
@@ -663,10 +663,10 @@ impl SdForgeGrpcService {
                     error: String::new(),
                     status_code,
                 };
-                // T022: 成功响应入缓存供重放。
+                // 成功响应入缓存供重放。
                 #[cfg(all(feature = "grpc", feature = "idempotency"))]
                 if let Some((guard, scope, key)) = &idem_key {
-                    // T007：缓存体积上限（1 MiB 对齐协议 payload cap）——
+                    // 缓存体积上限（1 MiB 对齐协议 payload cap）——
                     // 超限 abort 不缓存，避免无界内存增长。
                     let serialized = serde_json::to_vec(&CachedCallResponse {
                         success: response.success,
@@ -929,7 +929,7 @@ impl SdForgeService for SdForgeGrpcService {
         &self,
         request: Request<InfoRequest>,
     ) -> Result<Response<InfoResponse>, Status> {
-        // 限流覆盖 get_info（T018）：与 call 统一以 "unknown" 兜底
+        // 限流覆盖 get_info：与 call 统一以 "unknown" 兜底
         // （tonic 无 remote_addr 注入口，生产环境 TCP 连接恒有地址）。
         #[cfg(feature = "ratelimit")]
         {
@@ -1122,13 +1122,13 @@ pub async fn build_server_with_config(
         SdForgeGrpcService::with_state_and_rate_limiter(config.state, config.rate_limiter);
     #[cfg(not(feature = "ratelimit"))]
     let service = SdForgeGrpcService::with_state(config.state);
-    // T001: RBAC 生产接线 —— per-call verifier 装配，auth(role) 声明生效。
+    // RBAC 生产接线 —— per-call verifier 装配，auth(role) 声明生效。
     #[cfg(feature = "security")]
     let service = match config.auth_verifier {
         Some(ref verifier) => service.with_auth_interceptor(std::sync::Arc::clone(verifier)),
         None => service,
     };
-    // T022: 幂等 store 配置传递（None = 关闭，默认）。
+    // 幂等 store 配置传递（None = 关闭，默认）。
     #[cfg(feature = "idempotency")]
     let service = match config.idempotency_store {
         Some(ref store) => service
@@ -1151,11 +1151,11 @@ pub async fn build_server_with_config(
     if config.timeout_seconds > 0 {
         builder = builder.timeout(std::time::Duration::from_secs(config.timeout_seconds));
     }
-    // T024: HTTP/2 keepalive 配置暴露（None = tonic 默认）。
+    // HTTP/2 keepalive 配置暴露（None = tonic 默认）。
     builder = builder
         .http2_keepalive_interval(config.http2_keepalive_interval)
         .http2_keepalive_timeout(config.http2_keepalive_timeout);
-    // T025: 可选 TLS 接线（feature = grpc-tls；证书加载由调用方负责）。
+    // 可选 TLS 接线（feature = grpc-tls；证书加载由调用方负责）。
     #[cfg(feature = "grpc-tls")]
     if let Some(tls) = config.tls.clone() {
         builder = builder
@@ -1987,14 +1987,14 @@ mod tests {
         assert_eq!((status, code), (404, "NOT_FOUND"));
     }
 
-    /// T001: auth_verifier 默认 None。
+    /// auth_verifier 默认 None。
     #[cfg(feature = "security")]
     #[test]
     fn grpc_server_config_auth_verifier_defaults_none() {
         assert!(GrpcServerConfig::default().auth_verifier.is_none());
     }
 
-    /// T024: keepalive 配置默认 None（tonic 默认行为）。
+    /// keepalive 配置默认 None（tonic 默认行为）。
     #[test]
     fn grpc_server_config_keepalive_defaults_none() {
         let config = GrpcServerConfig::default();
@@ -2002,7 +2002,7 @@ mod tests {
         assert!(config.http2_keepalive_timeout.is_none());
     }
 
-    /// T025: TLS 默认 None（grpc-tls feature 下也保持关闭默认）。
+    /// TLS 默认 None（grpc-tls feature 下也保持关闭默认）。
     #[cfg(feature = "grpc-tls")]
     #[test]
     fn grpc_server_config_tls_defaults_none() {
@@ -2215,7 +2215,7 @@ mod tests {
             );
         }
 
-        /// T018: 拒绝型限流器下 get_info → resource_exhausted，不泄漏方法清单。
+        /// 拒绝型限流器下 get_info → resource_exhausted，不泄漏方法清单。
         #[tokio::test]
         async fn get_info_rate_limited_returns_resource_exhausted() {
             let limiter: Arc<dyn RateLimiter> = Arc::new(AlwaysRejectLimiter);
@@ -2229,7 +2229,7 @@ mod tests {
             assert_eq!(err.code(), tonic::Code::ResourceExhausted);
         }
 
-        /// T018: 计数型限流器下 call 与 get_info 各恰好触发一次 check。
+        /// 计数型限流器下 call 与 get_info 各恰好触发一次 check。
         #[tokio::test]
         async fn rate_limit_guard_covers_call_and_get_info_once() {
             let limiter = Arc::new(CountingLimiter {
@@ -2259,10 +2259,10 @@ mod tests {
     }
 
     // ========================================================================
-    // T011: gRPC endpoint RBAC（协议对等）— fail-safe / 放行 / 低权限拒绝
+    // gRPC endpoint RBAC（协议对等）— fail-safe / 放行 / 低权限拒绝
     // ========================================================================
 
-    /// T017: get_info 版本号取 CARGO_PKG_VERSION（不再硬编码 0.1.0）。
+    /// get_info 版本号取 CARGO_PKG_VERSION（不再硬编码 0.1.0）。
     #[tokio::test]
     async fn get_info_returns_crate_version() {
         let service = SdForgeGrpcService::default();
@@ -2357,7 +2357,7 @@ mod tests {
         assert_eq!(err.code(), tonic::Code::PermissionDenied);
     }
     // ========================================================================
-    // T022: gRPC idempotency-key metadata 幂等防护
+    // gRPC idempotency-key metadata 幂等防护
     // ========================================================================
     #[cfg(all(feature = "grpc", feature = "idempotency"))]
     mod idempotency_tests {
@@ -2448,7 +2448,7 @@ mod tests {
             assert_eq!(err.code(), tonic::Code::AlreadyExists);
         }
 
-        /// T003（复查修复）：early-return（未知 method）不泄漏 InFlight claim
+        /// early-return（未知 method）不泄漏 InFlight claim
         /// —— 立即同 key 重试不受 already_exists 卡 30s。
         #[tokio::test]
         async fn early_return_does_not_leak_inflight_claim() {
@@ -2475,7 +2475,7 @@ mod tests {
             );
         }
 
-        /// T003（复查修复）：data 无 body_param 的 early-return 后同 key 立即可重试。
+        /// data 无 body_param 的 early-return 后同 key 立即可重试。
         #[tokio::test]
         async fn body_param_rejection_does_not_leak_claim() {
             let (service, store) = service_with_store();

@@ -69,7 +69,7 @@ pub async fn idempotency_middleware(
         } => {
             let status =
                 axum::http::StatusCode::from_u16(status).unwrap_or(axum::http::StatusCode::OK);
-            // T008：重放还原首次响应的 media type（缺省回退 JSON）。
+            // 重放还原首次响应的 media type（缺省回退 JSON）。
             let ct = content_type.unwrap_or_else(|| "application/json".to_string());
             let mut resp = Response::builder()
                 .status(status)
@@ -108,7 +108,7 @@ pub async fn idempotency_middleware(
             match axum::body::to_bytes(body, IDEMPOTENCY_HARD_CAP).await {
                 Ok(bytes) => {
                     if bytes.len() > max_response_bytes {
-                        // 复查 H-2 修复：handler 副作用已提交，响应必须原样
+                        // 复查：handler 副作用已提交，响应必须原样
                         // 返回（spec："超限不缓存但正常返回"）。返回 413 会
                         // 诱导客户端按幂等语义重试 → 重复副作用。
                         store.abort(&scope, &key);

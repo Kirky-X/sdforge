@@ -44,7 +44,7 @@ pub struct IdempotencyConfig {
     /// 完成响应的重放窗口（秒，默认 86400 = 24h）。
     pub ttl_secs: i64,
     /// 在途 claim 的阻塞上限（秒，默认 30）——handler 崩溃后同 key 重试
-    /// 需等待该窗口；此前硬编码 30（复查 L-7 配置化）。
+    /// 需等待该窗口；此前硬编码 30（复查 配置化）。
     #[serde(default)]
     pub inflight_ttl_secs: i64,
     /// 超过该大小的响应不缓存（默认 1 MiB）。

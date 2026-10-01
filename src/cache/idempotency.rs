@@ -174,7 +174,7 @@ impl IdempotencyStore {
             content_type: content_type.map(str::to_string),
             expires_at_secs: now_unix_secs() + ttl_secs,
         };
-        // 序列化在 claim_lock 之外：大 body 的 JSON 分配不占全局锁（复查 L-6）。
+        // 序列化在 claim_lock 之外：大 body 的 JSON 分配不占全局锁（复查）。
         let Ok(bytes) = serde_json::to_vec(&record) else {
             return;
         };

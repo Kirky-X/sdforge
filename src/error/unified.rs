@@ -83,7 +83,7 @@ pub fn code_for_http_status(status: u16) -> &'static str {
     }
 }
 
-/// HTTP 状态的直读入口（T004 热路径去重）：单次 `to_service_error` 构造。
+/// HTTP 状态的直读入口（热路径去重）：单次 `to_service_error` 构造。
 ///
 /// 状态真值仍是 `to_service_error().http_status()` —— 本函数只是避免调用方
 /// 为拿一个 u16 而完整构造（含 details JSON 分配）。
@@ -190,7 +190,7 @@ mod tests {
     use super::*;
     use crate::core::ApiError;
 
-    /// T004: http_status_for / mapping_for / to_service_error 三方一致。
+    /// http_status_for / mapping_for / to_service_error 三方一致。
     #[test]
     fn http_status_for_consistent_with_service_error() {
         let variants = vec![

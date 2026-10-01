@@ -140,7 +140,7 @@ mod core_tests {
         let elapsed = start.elapsed();
         // 10000 次含脱敏管道的错误构造 —— 只防量级回归（如意外引入 IO/锁），
         // 不做精确定时：debug 构建 + 并行测试负载下 100ms 断言会假红
-        // （复查 M-1：两次满负载复现失败，单跑 0.04s）。
+        // （复查：两次满负载复现失败，单跑 0.04s）。
         assert!(elapsed < std::time::Duration::from_millis(5_000));
     }
 

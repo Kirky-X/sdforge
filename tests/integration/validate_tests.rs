@@ -168,7 +168,7 @@ async fn rules_without_validate_flag_are_not_enforced() {
 }
 
 // ============================================================================
-// T013/T014: gRPC 对等 —— validate 规则贯通非 HTTP 路径
+// gRPC 对等 —— validate 规则贯通非 HTTP 路径
 // ============================================================================
 
 #[forge(
@@ -224,7 +224,7 @@ mod grpc_parity {
         assert!(resp.data.contains("50"));
     }
 
-    // ---- T031: 其余五种规则各一个 gRPC 侧用例（le 见上） ----
+    // ---- 其余五种规则各一个 gRPC 侧用例（le 见上） ----
 
     /// ge 规则：低于下限被拒。
     #[tokio::test]

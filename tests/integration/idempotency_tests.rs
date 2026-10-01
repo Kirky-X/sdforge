@@ -3,7 +3,7 @@
 //! e2e: `Idempotency-Key` replay protection (feature = `idempotency`).
 //!
 //! 同 key 两次 POST：第二次重放缓存响应（`Idempotency-Replayed: true`）且
-//! handler 只执行一次；并发在途 409；无 key 请求零影响（T021）。
+//! handler 只执行一次；并发在途 409；无 key 请求零影响。
 
 #![cfg(all(feature = "http", feature = "idempotency"))]
 
@@ -133,7 +133,7 @@ async fn blob() -> Result<serde_json::Value, sdforge::core::ApiError> {
 #[tokio::test]
 #[serial_test::serial]
 async fn oversized_response_passes_through_intact() {
-    // T002: 超过 max_response_bytes 的成功响应必须原样透传（不缓存、不 413），
+    // 超过 max_response_bytes 的成功响应必须原样透传（不缓存、不 413），
     // handler 副作用已提交 —— 413 会诱导客户端重试造成重复副作用。
     let mut cfg = idem_config();
     cfg.server.idempotency.enabled = true;
@@ -167,7 +167,7 @@ async fn oversized_response_passes_through_intact() {
 #[tokio::test]
 #[serial_test::serial]
 async fn http_in_flight_returns_409_with_header() {
-    // T032: HTTP 层在途并发 —— 注入 store 并预占 InFlight claim，
+    // HTTP 层在途并发 —— 注入 store 并预占 InFlight claim，
     // 同 key POST 得到 409 + Idempotency-Replayed: in-flight。
     let store = Arc::new(sdforge::cache::IdempotencyStore::new());
     assert_eq!(
