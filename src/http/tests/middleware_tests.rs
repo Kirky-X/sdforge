@@ -8,6 +8,10 @@
 use axum::Router;
 use axum::body::Body;
 
+#[cfg(feature = "cache")]
+use crate::config::CacheConfig;
+#[cfg(feature = "security")]
+use crate::config::SecurityConfig;
 #[cfg(feature = "security")]
 use crate::config::{ApiKeySeed, AuthConfig, SdForgeConfig, ServerConfig};
 #[cfg(not(feature = "security"))]
@@ -33,7 +37,10 @@ async fn test_request_id_middleware_generates_uuid_when_absent() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
     let router = build_with_config(&config).unwrap();
     let response = tower::ServiceExt::oneshot(
@@ -67,7 +74,10 @@ async fn test_request_id_middleware_preserves_custom_id() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
     let router = build_with_config(&config).unwrap();
     let response = tower::ServiceExt::oneshot(
@@ -99,7 +109,10 @@ async fn test_request_id_middleware_non_utf8_header_generates_uuid() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
     let router = build_with_config(&config).unwrap();
     let response = tower::ServiceExt::oneshot(

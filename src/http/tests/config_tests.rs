@@ -140,7 +140,10 @@ fn test_build_with_config_request_id_middleware() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
 
     let result = build_with_config(&config);
@@ -160,7 +163,10 @@ fn test_build_with_config_body_limit() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
 
     let result = build_with_config(&config);
@@ -180,7 +186,10 @@ fn test_build_with_config_compression_layer() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
 
     let result = build_with_config(&config);
@@ -200,7 +209,10 @@ fn test_build_with_config_timeout_layer() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
 
     let result = build_with_config(&config);
@@ -222,7 +234,10 @@ fn test_build_with_config_zero_timeout() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
 
     let result = build_with_config(&config);
@@ -271,7 +286,10 @@ fn test_build_with_config_large_timeout() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
 
     let result = build_with_config(&config);
@@ -299,7 +317,10 @@ fn test_build_with_config_cors_various_origins() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
 
     let result = build_with_config(&config);
@@ -326,7 +347,10 @@ fn test_build_with_config_cors_all_methods() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
 
     let result = build_with_config(&config);
@@ -614,7 +638,10 @@ fn test_build_with_config_no_auth() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
 
     let result = build_with_config(&config);
@@ -640,7 +667,10 @@ fn test_build_with_config_minimal_config() {
         },
         authentication: AuthConfig::None,
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
 
     let result = build_with_config(&config);
@@ -673,7 +703,10 @@ fn test_build_with_config_auth_without_security_feature_rejected() {
             secret: "ThisIsAVeryLongSecretKeyWithUppercase123!@#ForTesting".to_string(),
         },
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
     let api_key = SdForgeConfig {
         server: ServerConfig {
@@ -692,7 +725,10 @@ fn test_build_with_config_auth_without_security_feature_rejected() {
             }],
         },
         timeout: None,
-        ..Default::default()
+        #[cfg(feature = "cache")]
+        cache: CacheConfig::default(),
+        #[cfg(feature = "security")]
+        security: SecurityConfig::default(),
     };
 
     for config in [jwt, api_key] {

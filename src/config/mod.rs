@@ -149,7 +149,10 @@ mod tests {
                 secret: "test".to_string(),
             },
             timeout: None,
-            ..Default::default()
+            #[cfg(feature = "cache")]
+            cache: crate::config::CacheConfig::default(),
+            #[cfg(feature = "security")]
+            security: crate::config::SecurityConfig::default(),
         };
         // Just verify we can create the config
         match &config.authentication {
@@ -256,7 +259,10 @@ mod tests {
                 secret: "test-secret".to_string(),
             },
             timeout: Some(TimeoutConfig::default()),
-            ..Default::default()
+            #[cfg(feature = "cache")]
+            cache: crate::config::CacheConfig::default(),
+            #[cfg(feature = "security")]
+            security: crate::config::SecurityConfig::default(),
         };
         let json = serde_json::to_string(&original).unwrap();
         let deserialized: SdForgeConfig = serde_json::from_str(&json).unwrap();
@@ -338,7 +344,10 @@ mod tests {
             },
             authentication: AuthConfig::None,
             timeout: None,
-            ..Default::default()
+            #[cfg(feature = "cache")]
+            cache: crate::config::CacheConfig::default(),
+            #[cfg(feature = "security")]
+            security: crate::config::SecurityConfig::default(),
         };
         assert!(config.validate().is_err());
     }
@@ -362,7 +371,10 @@ mod tests {
                 }],
             },
             timeout: None,
-            ..Default::default()
+            #[cfg(feature = "cache")]
+            cache: crate::config::CacheConfig::default(),
+            #[cfg(feature = "security")]
+            security: crate::config::SecurityConfig::default(),
         };
         assert!(config.validate().is_err());
     }

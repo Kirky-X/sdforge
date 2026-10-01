@@ -403,7 +403,10 @@ mod config_advanced {
             },
             authentication: AuthConfig::None,
             timeout: None,
-            ..Default::default()
+            #[cfg(feature = "cache")]
+            cache: sdforge::config::CacheConfig::default(),
+            #[cfg(feature = "security")]
+            security: sdforge::config::SecurityConfig::default(),
         };
         assert!(config.validate().is_err());
     }

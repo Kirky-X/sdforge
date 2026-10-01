@@ -509,7 +509,9 @@ fn bench_middleware_tiers(c: &mut Criterion) {
         });
     };
 
-    // 认证档驱动：请求带合法 key（bench- 前缀）。
+    // 认证档驱动：请求带合法 key（bench- 前缀）。仅在 security 特性下被
+    // t1/t6 档位消费，无 security 时允许空置。
+    #[cfg_attr(not(feature = "security"), allow(unused_variables))]
     let authed_ping = |rt: &tokio::runtime::Runtime, router: &mut axum::Router| {
         rt.block_on(async {
             use tower::Service;
@@ -528,7 +530,10 @@ fn bench_middleware_tiers(c: &mut Criterion) {
             server: sdforge::config::ServerConfig::default(),
             authentication: AuthConfig::None,
             timeout: None,
-            ..Default::default()
+            #[cfg(feature = "cache")]
+            cache: sdforge::config::CacheConfig::default(),
+            #[cfg(feature = "security")]
+            security: sdforge::config::SecurityConfig::default(),
         }
     }
 
