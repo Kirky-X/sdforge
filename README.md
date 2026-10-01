@@ -190,7 +190,7 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>graceful</code></td><td>优雅停机（SIGTERM/SIGINT：停止接新、排空在途、三阶段关闭）</td><td>❌</td></tr>
   <tr><td><code>serve-tls</code></td><td>HTTP TLS 终止（rustls aws-lc-rs：证书/密钥 PEM 加载、ALPN 可配置、<code>ReloadingTls</code> 热重载；每请求注入 <code>ConnectInfo</code>，握手/头读取超时护栏，停机编排与 graceful 共享收尾。与 gRPC 侧 <code>grpc-tls</code> 文档互链、实现独立）</td><td>❌</td></tr>
   <tr><td><code>context</code></td><td>请求上下文（request_id/trace_id 生成与跨协议 HTTP/MCP/gRPC/WS 注入）</td><td>❌</td></tr>
-  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> + <code>#[param(ge/le/...)]</code> 参数校验，400 返回字段级错误</td><td>❌</td></tr>
+  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> + <code>#[param(ge/le/...)]</code> 参数校验，422 返回字段级错误</td><td>❌</td></tr>
   <tr><td><code>paginate</code></td><td><code>#[forge(paginate)]</code> 声明式分页（自动 page/size 与 <code>{items,total,next}</code> 包装）</td><td>❌</td></tr>
   <tr><td><code>etag</code></td><td>ETag 条件请求（GET 响应自动附加 SHA-256 强 ETag，If-None-Match 返回 304）</td><td>❌</td></tr>
   <tr><td><code>lifecycle</code></td><td><code>#[forge(on_start/on_stop)]</code> 生命周期钩子（与优雅停机顺序协同）</td><td>❌</td></tr>
@@ -391,8 +391,8 @@ CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `
   <tr><td>🚧</td><td><b>v0.5.0 发布</b></td><td>当前处于 <code>0.5.0-rc.6</code>，推进依赖链（trait-kit / oxcache / inklog / limiteron）协同发布与终验</td></tr>
   <tr><td>✅</td><td>自定义成功状态码</td><td><code>#[forge(status = &lt;code&gt;)]</code> 静态声明 + <code>ServiceResponse::success_with_status</code> 动态控制，已于 0.5.0-rc.2 发布</td></tr>
   <tr><td>✅</td><td>MSRV 声明收敛</td><td>工作区统一为 1.97.1（2026-09-06），覆盖 <code>--all-features</code> 有效要求</td></tr>
-  <tr><td>📋</td><td>错误码行为契约统一</td><td>评估同一校验错误在 HTTP（400）与 gRPC（422）间的状态码对齐（记录在案的行为契约）</td></tr>
-  <tr><td>📋</td><td>依赖治理</td><td>中期评估将 <code>bincode</code>（RUSTSEC-2025-0141 unmaintained）迁移至 <code>postcard</code> / <code>bitcode</code> / <code>rkyv</code></td></tr>
+  <tr><td>✅</td><td>错误码行为契约统一</td><td>行为契约记录在案（<code>docs/API_REFERENCE.md</code> 错误码行为契约表 + <code>error::unified</code> 单一事实来源）：HTTP 400（语法畸形/<code>InvalidInput</code>）与 422（语义违规/<code>ValidationError</code>）区分保留；gRPC 侧无 422 对应原生码，统一 <code>invalid_argument</code>、语义码经 <code>Status::details</code> 载荷 <code>code</code> 承载；<code>grpc_code_for_http_status</code> 契约表 + 跨协议一致性测试（全集 JOIN 不变量 + wire 级 e2e）钉死</td></tr>
+  <tr><td>✅</td><td>依赖治理</td><td><code>bincode</code>（RUSTSEC-2025-0141 unmaintained）已整体迁移至 <code>postcard</code>（API Key 元数据/权限位序列化等价替换），<code>deny.toml</code> 失效豁免清除，<code>cargo deny</code> / <code>cargo audit</code> 复验为净</td></tr>
 </table>
 
 ---

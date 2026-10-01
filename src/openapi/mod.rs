@@ -1078,7 +1078,7 @@ mod tests {
     #[cfg(not(feature = "schemars"))]
     #[test]
     fn schema_probe_without_schemars_always_none() {
-        use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+        use reflection::SchemaProbe;
         assert!(SchemaProbe::<String>::new().probe().is_none());
     }
 

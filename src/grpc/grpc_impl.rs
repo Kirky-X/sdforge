@@ -600,7 +600,10 @@ impl SdForgeGrpcService {
         if let Some((guard, scope, key)) = &idem_key {
             match guard.store.begin(scope, key, 30) {
                 crate::cache::IdempotencyOutcome::InFlight => {
-                    return Err(Status::already_exists(
+                    // wire 码经契约表 409 行派生（unified::grpc_code_for_http_status
+                    // => AlreadyExists），幂等在途与跨协议契约单点对齐。
+                    return Err(Status::new(
+                        crate::error::unified::grpc_code_for_http_status(409),
                         "request with this idempotency-key is already in flight",
                     ));
                 }

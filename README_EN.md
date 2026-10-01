@@ -174,7 +174,7 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>graceful</code></td><td>Graceful shutdown (SIGTERM/SIGINT: stop accepting, drain in-flight, phased teardown)</td><td>❌</td></tr>
   <tr><td><code>serve-tls</code></td><td>HTTP TLS termination (rustls aws-lc-rs: PEM cert/key loading, configurable ALPN, <code>ReloadingTls</code> hot reload; per-request <code>ConnectInfo</code> injection, handshake/header-read timeout guards, shutdown choreography sharing graceful's stop phase. Doc-cross-linked with the gRPC-side <code>grpc-tls</code> but implemented independently)</td><td>❌</td></tr>
   <tr><td><code>context</code></td><td>Request context (request_id/trace_id generation and cross-protocol HTTP/MCP/gRPC/WS injection)</td><td>❌</td></tr>
-  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> + <code>#[param(ge/le/...)]</code> parameter validation; 400 with field-level errors</td><td>❌</td></tr>
+  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> + <code>#[param(ge/le/...)]</code> parameter validation; 422 with field-level errors</td><td>❌</td></tr>
   <tr><td><code>paginate</code></td><td><code>#[forge(paginate)]</code> declarative pagination (auto page/size and the <code>{items,total,next}</code> wrapper)</td><td>❌</td></tr>
   <tr><td><code>etag</code></td><td>ETag conditional requests (automatic SHA-256 strong ETag on GET; If-None-Match returns 304)</td><td>❌</td></tr>
   <tr><td><code>lifecycle</code></td><td><code>#[forge(on_start/on_stop)]</code> lifecycle hooks (ordered with graceful shutdown)</td><td>❌</td></tr>
@@ -368,8 +368,8 @@ CI security gates are always on: `cargo deny check` ([deny.toml](deny.toml) poli
   <tr><td>🚧</td><td><b>v0.5.0 release</b></td><td>Currently at <code>0.5.0-rc.6</code>; completing coordinated releases of the dependency chain (trait-kit / oxcache / inklog / limiteron) and final verification</td></tr>
   <tr><td>✅</td><td>Custom success status codes</td><td><code>#[forge(status = &lt;code&gt;)]</code> static declaration + <code>ServiceResponse::success_with_status</code> dynamic control, released in 0.5.0-rc.2</td></tr>
   <tr><td>✅</td><td>MSRV alignment</td><td>Workspace unified to 1.97.1 (2026-09-06), covering the effective requirement under <code>--all-features</code></td></tr>
-  <tr><td>📋</td><td>Unified error-code behavior contract</td><td>Evaluate aligning the status code for the same validation error between HTTP (400) and gRPC (422) (recorded behavior contract)</td></tr>
-  <tr><td>📋</td><td>Dependency hygiene</td><td>Mid-term evaluation of migrating <code>bincode</code> (RUSTSEC-2025-0141 unmaintained) to <code>postcard</code> / <code>bitcode</code> / <code>rkyv</code></td></tr>
+  <tr><td>✅</td><td>Unified error-code behavior contract</td><td>Contract recorded (<code>docs/API_REFERENCE.md</code> error-code contract table + <code>error::unified</code> single source of truth): HTTP 400 (malformed syntax/<code>InvalidInput</code>) vs 422 (semantic violation/<code>ValidationError</code>) distinction retained; gRPC has no native 422 counterpart, so both map to <code>invalid_argument</code> with the semantic code carried in the <code>Status::details</code> payload <code>code</code> field; pinned by the <code>grpc_code_for_http_status</code> contract table + cross-protocol consistency tests (full-universe JOIN invariant + wire-level e2e)</td></tr>
+  <tr><td>✅</td><td>Dependency hygiene</td><td><code>bincode</code> (RUSTSEC-2025-0141 unmaintained) fully migrated to <code>postcard</code> (equivalent replacement for API-key metadata/permission serialization); stale <code>deny.toml</code> exemption removed; <code>cargo deny</code> / <code>cargo audit</code> re-verified clean</td></tr>
 </table>
 
 ---

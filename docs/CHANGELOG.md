@@ -36,6 +36,21 @@
 
 ### ✨ 新增 (Added)
 
+- **跨协议错误码行为契约钉死**（`error::unified`，补全）：新增
+  `grpc_code_for_http_status(u16) -> tonic::Code`（feature = `grpc`）——HTTP
+  状态 → gRPC 状态码的对齐轴，与 `code_for_http_status` 同行集，是
+  `mapping_for`（HTTP 侧）与 `grpc_code_for`（gRPC 侧）的公共契约表；
+  400/422 在 gRPC 侧统一落 `invalid_argument`（gRPC 无 422 对应原生码），
+  语义区分由 HTTP 状态码与 `UnifiedError` 载荷 `code` 字段（HTTP body 与
+  gRPC `Status::details` 共享）承载，409 对齐幂等在途既有 wire 行为
+  （`already_exists`），未登记状态落 `unknown` 兜底。三重一致性测试钉死：
+  契约表逐行断言、错误码全集 JOIN 不变量（`grpc_code_for(e)` 恒等于
+  `grpc_code_for_http_status(mapping_for(e).0)`，任一协议侧单独漂移即红灯）、
+  wire 级 e2e（`error_code_contract_tests`：同一错误同时打 HTTP 与 gRPC
+  通道，断言状态码与载荷 `code` 两侧一致）。`docs/API_REFERENCE.md` 补
+  「错误码行为契约表」逐变体总表（README 路线图「错误码行为契约统一」
+  登记项就此翻转）。
+
 - **gRPC server-streaming**（`streaming` × `grpc` 组合，新增）：`#[forge(grpc_method =
   "...", stream = true)]` 声明流式端点（handler 返回 `StreamResponse<T>`，复用
   `create_stream_channel`），宏生成 `GrpcStreamHandlerRegistration`（与 unary 注册表
@@ -244,6 +259,20 @@
   逗号 token（多 token 非引号值，如 `description = hello world`）从静默截
   断首 token 改为报错指向 offending token（宏单测 + trybuild
   `forge_multi_token_value` 锁定）。
+
+### ♻️ 变更 (Changed)
+
+- **bincode RUSTSEC-2025-0141 依赖治理收口（迁移路径落地，豁免清除）**：
+  `bincode` 已在此前批次（i18n 整改）中自依赖树整体迁出——API Key 元数据
+  与权限位的二进制序列化改用 `postcard 1.1`（`serde` 兼容、无 unmaintained
+  公告，`cargo tree --all-features -i bincode` 报 "did not match any
+  packages"，`Cargo.lock` 593 项中无 bincode）。`deny.toml` 中为之保留的
+  `RUSTSEC-2025-0141` ignore 豁免随之失效（`cargo deny check advisories`
+  报 `advisory-not-detected` 警告：advisory was not encountered）——本次
+  删除该豁免条目，`cargo deny check` 与 `cargo audit` 复验均为净（0 告警）。
+  裁决留档：**迁移**（而非升级/豁免）——bincode 2.x 官方标注 unmaintained
+  且 "No safe upgrade available"，postcard 迁移代价仅限序列化调用点等价
+  替换，无后续复核负担；README 路线图「依赖治理」登记项就此翻转。
 
 ## [0.5.0-rc.6] - 2026-09-28
 

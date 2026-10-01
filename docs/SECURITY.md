@@ -111,4 +111,4 @@
 5. **为 API Key 制定轮换策略** — 安全模块支持 API Key 版本管理与带审计日志的密钥轮换；通过 `AuthConfig::ApiKey.keys` 显式播种
 6. **为审计日志启用签名** — 参考 `examples/src/security/comprehensive.rs` 的 HMAC-SHA256 防篡改签名实践
 7. **参考示例配置** — `examples/config/api-key-auth.toml`（API Key 认证）与 `examples/config/production.toml`（生产配置）
-8. **关注依赖公告** — 项目通过 `cargo deny check` 持续监控公告；已知例外（如 bincode RUSTSEC-2025-0141 unmaintained 的 ignore 决策）会在 CHANGELOG 中透明披露
+8. **关注依赖公告** — 项目通过 `cargo deny check` 持续监控公告；豁免决策（如有）会在 CHANGELOG 中透明披露——历史例外 bincode RUSTSEC-2025-0141 已随 bincode → postcard 迁移终结，豁免清除

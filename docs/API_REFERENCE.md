@@ -152,11 +152,34 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 ### 统一错误契约（`sdforge::error::unified`，跨协议单一事实来源）
 
 - `mapping_for(&ApiError) -> (u16, &'static str)`：`ApiError` → HTTP 状态码 + 机器错误码的唯一映射表（HTTP 适配器消费）
-- `grpc_code_for(&ApiError) -> tonic::Code`（feature = `grpc`）：同一 `ApiError` → gRPC 状态码（NotFound/InvalidArgument/Unauthenticated/PermissionDenied/ResourceExhausted/Unavailable/Internal）
-- `UnifiedError`：跨协议错误载荷 `{code, message, trace_id?, field?}`，HTTP 与 gRPC `Status::details` 共享同一形状
+- `grpc_code_for(&ApiError) -> tonic::Code`（feature = `grpc`）：同一 `ApiError` → gRPC 状态码
+- `grpc_code_for_http_status(u16) -> tonic::Code`（feature = `grpc`）：**跨协议行为契约表**，HTTP 状态 → gRPC 状态码的对齐轴（与 `code_for_http_status` 同行集）
+- `code_for_http_status(u16) -> &'static str`：HTTP 状态 → 机器错误码
+- `UnifiedError`：跨协议错误载荷 `{code, message, trace_id?, field?}`，HTTP body 与 gRPC `Status::details` 共享同一形状
+
+**错误码行为契约表**（同一 `ApiError` 在两条协议 wire 上的取值；由
+`error_code_contract_tests` wire 级测试与 `unified` 单元测试全集 JOIN
+不变量钉死，任一侧漂移即编译期后红灯）：
+
+| `ApiError` 变体 | HTTP 状态 | 载荷 `code`（两协议共享） | gRPC 状态码 |
+|-----------------|-----------|--------------------------|-------------|
+| `InvalidInput` | 400 | `BAD_REQUEST` | `invalid_argument` |
+| `ValidationError` | 422 | `UNPROCESSABLE_ENTITY` | `invalid_argument` |
+| `NotFound` | 404 | `NOT_FOUND` | `not_found` |
+| `AuthenticationFailed` | 401 | `UNAUTHORIZED` | `unauthenticated` |
+| `AccessDenied` | 403 | `FORBIDDEN` | `permission_denied` |
+| `RateLimitExceeded` | 429 | `TOO_MANY_REQUESTS` | `resource_exhausted` |
+| `QuotaExhausted` | 429 | `TOO_MANY_REQUESTS` | `resource_exhausted` |
+| `ServiceUnavailable` | 503 | `UNAVAILABLE` | `unavailable` |
+| `Internal` | 500 | `INTERNAL` | `internal` |
 
 语义约定：400 = 语法畸形/缺参/解析失败（`InvalidInput`）；422 = 语义约束违反
 （`ValidationError` 及 `#[forge(validate)]` 违规，错误体含 `errors` 数组）。
+
+跨协议口径：gRPC 无与 HTTP 422 对应的原生状态码，400/422 在 gRPC 侧统一落
+`invalid_argument`，语义区分由 HTTP 状态码与载荷 `code` 字段（gRPC 侧经
+`Status::details` 携带）承载；幂等在途 409 → `already_exists`；契约表未登记
+的状态 → `unknown` 兜底。
 
 ### 幂等防护（feature = `idempotency`）
 

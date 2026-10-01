@@ -7,12 +7,9 @@
 db-urls = ["https://github.com/RustSec/advisory-db"]
 yanked = "warn"
 # 按仓库填:传递依赖 RUSTSEC 豁免(每项须注释原因)
-# RUSTSEC-2025-0141 — bincode 直接依赖,upstream 未认领,见 CHANGELOG
-ignore = [
-    # bincode unmaintained (RUSTSEC-2025-0141) — 直接依赖(bincode 2.0.1 → sdforge)
-    # 团队永久停维,advisory 明确 "No safe upgrade available";短期保留(功能稳定+监控公告),中期评估迁移 postcard
-    { id = "RUSTSEC-2025-0141", reason = "直接依赖 bincode 2.0.1,upstream 未认领,见 CHANGELOG" },
-]
+# 历史豁免 RUSTSEC-2025-0141(bincode unmaintained)已随 bincode → postcard
+# 迁移完成而清除,裁决留档见 docs/CHANGELOG.md Unreleased「依赖治理收口」。
+ignore = []
 
 [licenses]
 # 允许的宽松许可证;新增非宽松许可证需在此放行
