@@ -610,6 +610,7 @@ mod grpc_integration_tests {
             tls: None,
             http2_keepalive_interval: None,
             http2_keepalive_timeout: None,
+            extra_services: Vec::new(),
         };
 
         assert_eq!(
@@ -1083,6 +1084,7 @@ mod grpc_integration_tests {
             tls: None,
             http2_keepalive_interval: None,
             http2_keepalive_timeout: None,
+            extra_services: Vec::new(),
         };
 
         assert!(config.auth.is_some(), "Config should have auth when set");
@@ -1273,6 +1275,7 @@ mod grpc_integration_tests {
             tls: None,
             http2_keepalive_interval: None,
             http2_keepalive_timeout: None,
+            extra_services: Vec::new(),
         };
 
         assert_eq!(config.max_connections, 200);

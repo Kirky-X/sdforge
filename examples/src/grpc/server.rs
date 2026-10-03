@@ -91,6 +91,7 @@ pub fn custom_server_config() -> GrpcServerConfig {
         #[cfg(feature = "grpc_tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     }
 }
 

@@ -43,6 +43,14 @@ pub struct GrpcRoute {
 
 define_registration!(GrpcRouteRegistration, GrpcRoute, ApiMetadata);
 
+/// 自定义 tonic service 挂载回调：装配期收到 tonic
+/// [`RoutesBuilder`](tonic::service::RoutesBuilder)，调用方在其上
+/// `add_service(...)` 注册应用自有 proto service（消费方自建 proto 生成的
+/// `XxxServer<T>` 等）。以 `Arc` 包装的 `Fn`：`GrpcServerConfig` 的 `Clone`
+/// 共享同一回调列表，装配只消费每个回调一次。
+pub type ExtraServiceMount =
+    std::sync::Arc<dyn Fn(&mut tonic::service::RoutesBuilder) + Send + Sync>;
+
 /// gRPC server configuration with optional JWT authentication.
 #[derive(Clone)]
 pub struct GrpcServerConfig {
@@ -120,6 +128,27 @@ pub struct GrpcServerConfig {
     /// `ratelimit` 关闭时的空壳（恒 `None`）。
     #[cfg(not(feature = "ratelimit"))]
     pub rate_limiter: Option<()>,
+    /// 自定义 tonic service 挂载回调：应用自有 proto service（如消费方
+    /// 自建 proto 生成的 `XxxServer<T>`）与 `SdForgeService`
+    /// （`SdForgeGrpcService`，经 [`build_server_with_config`] 装配）同
+    /// 端口共存，无需另起进程/端口。
+    ///
+    /// 每个回调在装配期收到 [`tonic::service::RoutesBuilder`]，调用方在其上
+    /// `add_service(...)` 注册任意实现了 `NamedService` 的 tonic service；
+    /// [`build_server_with_config`] 按回调声明顺序收集后一次性挂上（
+    /// `SdForgeService` 最后注册）。挂载的服务共享 server 级配置（连接
+    /// 上限、超时、keepalive、TLS）与 `security` feature 下的全局 JWT
+    /// 认证拦截器；`auth_verifier`（`GrpcAuthVerifier`）是
+    /// `SdForgeService` 的 per-call 校验，**不**作用于自定义 service
+    /// ——需要等效认证的应用应在自己的 service 内自行实现。
+    ///
+    /// 回调以 `Arc` 包装的 `Fn`（见 [`ExtraServiceMount`]；
+    /// `GrpcServerConfig` 保留 `Clone`，克隆的配置共享同一回调列表；装配
+    /// 只消费每个回调一次——闭包内以 `Arc` 捕获 service 并克隆构造即可）。
+    /// 路由形态为 `/{S::NAME}/*rest`（tonic 0.14 axum 路由）：自定义
+    /// service 的 NAME 不得与 `sdforge.v1.SdForgeService` 冲突，冲突在
+    /// 装配期 panic（fail-loud），不做静默改名。
+    pub extra_services: Vec<ExtraServiceMount>,
 }
 
 /// gRPC authentication interceptor

@@ -193,6 +193,24 @@ async fn count_stream(count: Option<u64>) -> Result<sdforge::streaming::StreamRe
 
 `grpc` 开而 `streaming` 关时，`stream = true` 的声明在编译期报错（fail-loud，方法不会无声消失）；`CallStream` 在 `streaming` 关闭的服务器上返回 `unimplemented`。
 
+#### 自定义 tonic service 挂载（`extra_services`）
+
+应用自有 proto service（如消费方自建 proto 生成的 `XxxServer<T>`）可与 `SdForgeService` 同端口共存，无需另起进程：`GrpcServerConfig.extra_services` 接受一组 `Arc<dyn Fn(&mut tonic::service::RoutesBuilder) + Send + Sync>` 回调，装配期在每个回调上 `add_service(...)` 注册任意实现了 `NamedService` 的 tonic service，然后统一挂上 server（`SdForgeService` 最后注册）：
+
+```rust
+use sdforge::grpc::{GrpcServerConfig, build_server_with_config};
+
+let nexusflow_svc = /* NexusFlow 自建 proto 的 service 实现 */;
+let mut config = GrpcServerConfig::default();
+config.require_auth = false; // 或配置 auth（见下）
+config.extra_services.push(std::sync::Arc::new(move |routes| {
+    routes.add_service(nexusflow_v1::NexusFlowServer::new(nexusflow_svc.clone()));
+}));
+build_server_with_config("0.0.0.0:50051", config).await?;
+```
+
+语义边界：挂载的服务共享 server 级配置（连接上限、超时、keepalive、TLS）与 `security` feature 下的全局 JWT 认证拦截器（无凭证请求在触达自定义 service 之前即被拒绝）；`auth_verifier`（`GrpcAuthVerifier`）是 `SdForgeService` 的 per-call 校验，**不**作用于自定义 service——需要等效认证的应用应在自己的 service 内自行实现。路由形态为 `/{S::NAME}/*rest`（tonic axum 路由）：自定义 service 的 NAME 不得与 `sdforge.v1.SdForgeService` 冲突，冲突在装配期 panic（fail-loud），不做静默改名。克隆 `GrpcServerConfig` 共享同一回调列表（`Fn` 而非 `FnOnce`，闭包内以 `Arc` 捕获 service 并克隆构造）。
+
 ### HTTP TLS 终止
 
 启用 `serve-tls` feature 后，`http::tls` 在进程内以 rustls（aws-lc-rs provider）终止 TLS：证书/密钥从 `TlsConfig` 指向的 PEM 文件加载（unix 下 group/other 可读的私钥文件会打 warn，建议 `chmod 600`），ALPN 可配置（缺省 `["h2", "http/1.1"]`），每个请求自动注入 `ConnectInfo<SocketAddr>`（TLS 直连无前置代理，限流/审计因此拿到不可伪造的客户端 IP）。停机编排复用 graceful 三阶段（停止接新 → 排空在途 → 停止钩子），`TlsServeConfig` 另提供三道预认证护栏——握手超时（默认 10s）、HTTP/1.1 头读取超时（默认 30s，仅作用 h1）与 HTTP/2 keep-alive 探测（默认 30s 间隔 / 20s 确认超时，握手后停滞不发帧的 h2 连接超窗断连，`with_http2_keepalive` 可调或关闭）：

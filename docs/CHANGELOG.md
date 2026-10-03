@@ -36,6 +36,17 @@
 
 ### ✨ 新增 (Added)
 
+- **gRPC 自定义 tonic service 挂载点**（`grpc` feature，新增）：
+  `GrpcServerConfig.extra_services` 接受一组 `Arc<dyn Fn(&mut tonic::service::RoutesBuilder)
+  + Send + Sync>` 回调，`build_server_with_config` 装配期按声明序收集后一次性挂上
+  （`SdForgeService` 最后注册）——应用自有 proto service（消费方自建 proto 生成的
+  `XxxServer<T>`）与 `SdForgeService` 同端口共存，无需另起进程/端口。挂载的服务共享
+  server 级配置（连接上限、超时、keepalive、TLS）与 `security` 下的全局 JWT 认证拦截
+  器；`auth_verifier` 为 `SdForgeService` per-call 校验，不作用于自定义 service。路由
+  形态 `/{S::NAME}/*rest`，NAME 与 `sdforge.v1.SdForgeService` 冲突在装配期 panic
+  （fail-loud）。克隆 `GrpcServerConfig` 共享同一回调列表。集成测试
+  `grpc_extra_services_tests` 走真实 tonic 链路（共存、路由可达、认证覆盖）。
+
 - **跨协议错误码行为契约钉死**（`error::unified`，补全）：新增
   `grpc_code_for_http_status(u16) -> tonic::Code`（feature = `grpc`）——HTTP
   状态 → gRPC 状态码的对齐轴，与 `code_for_http_status` 同行集，是

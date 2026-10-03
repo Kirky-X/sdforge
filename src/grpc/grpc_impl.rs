@@ -1163,8 +1163,19 @@ pub async fn build_server_with_config(
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?;
     }
 
+    // 挂载自定义 services：回调先执行（RoutesBuilder 按声明序收集），
+    // SdForgeService 最后注册；两条路由前缀（/{NAME}/*rest）互不重叠，
+    // NAME 冲突（自定义 service 冒用 sdforge.v1.SdForgeService）由 axum
+    // 路由注册 fail-loud（panic），不做静默改名。
+    let mut routes_builder = tonic::service::RoutesBuilder::default();
+    for mount in config.extra_services {
+        mount(&mut routes_builder);
+    }
+    routes_builder
+        .add_service(SdForgeServiceServer::new(service).max_decoding_message_size(4 * 1024 * 1024));
+
     builder
-        .add_service(SdForgeServiceServer::new(service).max_decoding_message_size(4 * 1024 * 1024))
+        .add_routes(routes_builder.routes())
         .serve(addr)
         .await?;
 
@@ -1191,6 +1202,7 @@ impl Default for GrpcServerConfig {
             http2_keepalive_timeout: None,
             #[cfg(feature = "grpc-tls")]
             tls: None,
+            extra_services: Vec::new(),
         }
     }
 }

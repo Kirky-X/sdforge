@@ -41,6 +41,7 @@ fn test_grpc_server_config_with_auth() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
     assert!(config.auth.is_some());
 }
@@ -400,6 +401,7 @@ fn test_grpc_config_zero_timeout() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(config.timeout_seconds, 0);
@@ -426,6 +428,7 @@ fn test_grpc_config_large_max_connections() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(config.max_connections, 100000);
@@ -451,6 +454,7 @@ fn test_grpc_config_boundary_values() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     let config2 = GrpcServerConfig {
@@ -471,6 +475,7 @@ fn test_grpc_config_boundary_values() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(config1.max_connections, 1);
@@ -935,6 +940,7 @@ fn test_grpc_server_config_clone() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     let cloned = config.clone();
@@ -963,6 +969,7 @@ fn test_grpc_server_config_equality() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     let config2 = GrpcServerConfig {
@@ -983,6 +990,7 @@ fn test_grpc_server_config_equality() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(config1.max_connections, config2.max_connections);
@@ -1009,6 +1017,7 @@ fn test_grpc_server_config_with_minimal_connections() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(config.max_connections, 1);
@@ -1034,6 +1043,7 @@ fn test_grpc_server_config_with_zero_timeout() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(config.timeout_seconds, 0);
@@ -1059,6 +1069,7 @@ fn test_grpc_server_config_timeout_edge_cases() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     let long_timeout = GrpcServerConfig {
@@ -1079,6 +1090,7 @@ fn test_grpc_server_config_timeout_edge_cases() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(short_timeout.timeout_seconds, 1);
@@ -1106,6 +1118,7 @@ fn test_grpc_server_config_auth_none() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert!(config.auth.is_none());
@@ -1675,6 +1688,7 @@ async fn test_build_server_with_config_zero_values_starts_serving() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
     let result = tokio::time::timeout(
         Duration::from_millis(200),
@@ -1714,6 +1728,7 @@ async fn test_build_server_with_config_large_values_starts_serving() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
     let result = tokio::time::timeout(
         Duration::from_millis(200),
@@ -1754,6 +1769,7 @@ async fn test_build_server_with_config_minimal_positive_values() {
         #[cfg(feature = "grpc-tls")]
         tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
     let result = tokio::time::timeout(
         Duration::from_millis(200),

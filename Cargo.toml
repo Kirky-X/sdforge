@@ -600,6 +600,13 @@ path = "tests/integration/grpc_tests.rs"
 name = "grpc_streaming_tests"
 path = "tests/integration/grpc_streaming_tests.rs"
 
+# gRPC 自定义 service 挂载点（extra_services）— 应用自有 tonic service
+# 与 SdForgeService 同端口共存；security 用例由文件内 cfg 门控。
+[[test]]
+name = "grpc_extra_services_tests"
+path = "tests/integration/grpc_extra_services_tests.rs"
+required-features = ["grpc"]
+
 [[test]]
 name = "http_integration"
 path = "tests/integration/http_integration.rs"
