@@ -17,7 +17,9 @@ mod grpc_impl;
 #[cfg(test)]
 pub(crate) use grpc_impl::make_auth_interceptor;
 #[allow(deprecated)]
-pub use grpc_impl::{SdForgeGrpcService, build_server, build_server_with_config};
+pub use grpc_impl::{
+    SdForgeGrpcService, build_server, build_server_with_config, build_server_with_graceful_shutdown,
+};
 
 /// gRPC handler registration (links `CallRequest.method` → forge handler).
 pub mod handler;

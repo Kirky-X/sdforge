@@ -607,6 +607,13 @@ name = "grpc_extra_services_tests"
 path = "tests/integration/grpc_extra_services_tests.rs"
 required-features = ["grpc"]
 
+# gRPC 优雅停机 — build_server_with_graceful_shutdown 的 signal 语义
+# （对齐 HTTP 侧 serve_with_graceful_shutdown）经真实网络链路验证。
+[[test]]
+name = "grpc_graceful_shutdown_tests"
+path = "tests/integration/grpc_graceful_shutdown_tests.rs"
+required-features = ["grpc"]
+
 [[test]]
 name = "http_integration"
 path = "tests/integration/http_integration.rs"

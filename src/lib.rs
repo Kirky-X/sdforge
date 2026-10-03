@@ -353,6 +353,7 @@ pub mod grpc;
 #[allow(deprecated)]
 pub use grpc::{
     GrpcRoute, GrpcServerConfig, SdForgeGrpcService, build_server, build_server_with_config,
+    build_server_with_graceful_shutdown,
 };
 
 #[cfg(feature = "grpc")]

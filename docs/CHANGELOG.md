@@ -36,6 +36,14 @@
 
 ### ✨ 新增 (Added)
 
+- **gRPC 优雅停机**（`grpc` feature，新增）：`build_server_with_graceful_shutdown(addr, config, signal)`
+  —— 装配链与 `build_server_with_config` 完全一致（认证拦截器、并发/超时/keepalive、TLS、
+  `extra_services`），末尾走 tonic `serve_with_shutdown`：signal future 完成后停止接受新连接、
+  等待 in-flight 请求完成后返回 `Ok(())`，语义对齐 HTTP 侧 axum `with_graceful_shutdown`
+  （以 future 完成为准，永不完成的 future 即永驻）。`build_server_with_config` 主体抽为
+  共用装配函数，行为不变。集成测试 `grpc_graceful_shutdown_tests` 经真实 tonic 链路验证
+  （停机释放监听、空闲即时返回、无 signal 持续可用）。
+
 - **gRPC 自定义 tonic service 挂载点**（`grpc` feature，新增）：
   `GrpcServerConfig.extra_services` 接受一组 `Arc<dyn Fn(&mut tonic::service::RoutesBuilder)
   + Send + Sync>` 回调，`build_server_with_config` 装配期按声明序收集后一次性挂上

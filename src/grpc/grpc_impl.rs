@@ -1092,6 +1092,44 @@ pub async fn build_server_with_config(
     addr: &str,
     config: GrpcServerConfig,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    build_server_inner(addr, config, Option::<std::future::Ready<()>>::None).await
+}
+
+/// Build gRPC server with graceful shutdown.
+///
+/// Semantics mirror the HTTP side (`axum` `with_graceful_shutdown`): when
+/// `signal` completes, the server stops accepting new connections and waits
+/// for in-flight requests to finish before returning `Ok(())`. Passing a
+/// future that never completes keeps the server running indefinitely.
+///
+/// The assembly chain (auth interceptor, concurrency/timeout/keepalive,
+/// TLS, `extra_services`) is identical to [`build_server_with_config`].
+///
+/// # Security (vuln-0006)
+///
+/// Same fail-fast rule as [`build_server_with_config`]: refuses to start
+/// when `require_auth` is `true` and no `auth` is configured.
+pub async fn build_server_with_graceful_shutdown<F>(
+    addr: &str,
+    config: GrpcServerConfig,
+    signal: F,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: std::future::Future<Output = ()>,
+{
+    build_server_inner(addr, config, Some(signal)).await
+}
+
+/// [`build_server_with_config`] / [`build_server_with_graceful_shutdown`]
+/// 共用的装配主体；`signal` 为 `Some` 时走 tonic 优雅停机路径。
+async fn build_server_inner<F>(
+    addr: &str,
+    config: GrpcServerConfig,
+    signal: Option<F>,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    F: std::future::Future<Output = ()>,
+{
     // Security fix: Validate address format before parsing to prevent information disclosure
     let addr = match addr.parse::<std::net::SocketAddr>() {
         Ok(addr) => addr,
@@ -1173,11 +1211,18 @@ pub async fn build_server_with_config(
     }
     routes_builder
         .add_service(SdForgeServiceServer::new(service).max_decoding_message_size(4 * 1024 * 1024));
+    let routes = routes_builder.routes();
 
-    builder
-        .add_routes(routes_builder.routes())
-        .serve(addr)
-        .await?;
+    match signal {
+        // 优雅停机：signal 完成后停止接受新连接，等待 in-flight 完成后返回。
+        Some(signal) => {
+            builder
+                .add_routes(routes)
+                .serve_with_shutdown(addr, signal)
+                .await?
+        }
+        None => builder.add_routes(routes).serve(addr).await?,
+    }
 
     Ok(())
 }
