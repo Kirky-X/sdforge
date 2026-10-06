@@ -326,3 +326,126 @@ mod grpc_parity {
         assert!(resp.success);
     }
 }
+
+// ============================================================================
+// `#[param(kind = "query", flatten)]` —— struct 查询参数扁平直提
+//
+// serde_urlencoded 只支持扁平 key=value：struct 类型 query 参数默认经
+// 信封 `Query<__ForgeQueryParams>`（字段嵌套 struct）提取必然 400。
+// `flatten` 显式 opt-in 后该参数改由独立的 `Query<ParamTy>` 直提
+// （struct 自身扁平），与信封提取的标量 query 参数互不冲突。
+// ============================================================================
+
+#[derive(Debug, serde::Deserialize)]
+struct SearchFilters {
+    budget: u64,
+    keyword: String,
+}
+
+/// 未加 flatten 的 struct query 参数：信封嵌套反序列化失败 → 400（行为基线守卫）。
+#[forge(
+    name = "query_flatten_unopted",
+    version = "v1",
+    path = "/flat-unopted",
+    method = "GET"
+)]
+async fn query_flatten_unopted(
+    #[param(kind = "query")] filters: SearchFilters,
+) -> serde_json::Value {
+    serde_json::json!({ "budget": filters.budget, "keyword": filters.keyword })
+}
+
+/// flatten 直提：struct 自身字段从 query string 扁平反序列化。
+#[forge(
+    name = "query_flatten_opted",
+    version = "v1",
+    path = "/flat-opted",
+    method = "GET"
+)]
+async fn query_flatten_opted(
+    #[param(kind = "query", flatten)] filters: SearchFilters,
+) -> serde_json::Value {
+    serde_json::json!({ "budget": filters.budget, "keyword": filters.keyword })
+}
+
+/// flatten 与标量 query 参数（信封提取）共存。
+#[forge(
+    name = "query_flatten_mixed",
+    version = "v1",
+    path = "/flat-mixed",
+    method = "GET"
+)]
+async fn query_flatten_mixed(
+    #[param(kind = "query", ge = 1)] page: u64,
+    #[param(kind = "query", flatten)] filters: SearchFilters,
+) -> serde_json::Value {
+    serde_json::json!({
+        "page": page,
+        "budget": filters.budget,
+        "keyword": filters.keyword,
+    })
+}
+
+/// 多个 flatten 参数各自独立提取槽。
+#[derive(Debug, serde::Deserialize)]
+struct PageFilter {
+    page: u64,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct TextFilter {
+    keyword: String,
+}
+
+#[forge(
+    name = "query_flatten_two",
+    version = "v1",
+    path = "/flat-two",
+    method = "GET"
+)]
+async fn query_flatten_two(
+    #[param(kind = "query", flatten)] page: PageFilter,
+    #[param(kind = "query", flatten)] text: TextFilter,
+) -> serde_json::Value {
+    serde_json::json!({ "page": page.page, "keyword": text.keyword })
+}
+
+#[tokio::test]
+async fn struct_query_param_without_flatten_returns_400() {
+    // 信封嵌套 struct 无法被 serde_urlencoded 反序列化——flatten 前的
+    // 固有缺陷在此钉住：不带 flatten 时保持 400（fail-closed）。
+    let (status, _) = get("/api/v1/flat-unopted?budget=50&keyword=hello").await;
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn flatten_query_param_extracts_flat_fields() {
+    let (status, json) = get("/api/v1/flat-opted?budget=50&keyword=hello").await;
+    assert_eq!(status, axum::http::StatusCode::OK, "body: {json}");
+    assert_eq!(json["budget"], 50);
+    assert_eq!(json["keyword"], "hello");
+}
+
+#[tokio::test]
+async fn flatten_query_param_missing_required_field_returns_400() {
+    // flatten 直提保留 serde 语义：缺必填字段仍 400（不得 fail-open）。
+    let (status, _) = get("/api/v1/flat-opted?budget=50").await;
+    assert_eq!(status, axum::http::StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn flatten_coexists_with_scalar_query_params() {
+    let (status, json) = get("/api/v1/flat-mixed?page=2&budget=50&keyword=hello").await;
+    assert_eq!(status, axum::http::StatusCode::OK, "body: {json}");
+    assert_eq!(json["page"], 2);
+    assert_eq!(json["budget"], 50);
+    assert_eq!(json["keyword"], "hello");
+}
+
+#[tokio::test]
+async fn multiple_flatten_query_params_extract_independently() {
+    let (status, json) = get("/api/v1/flat-two?page=3&keyword=hello").await;
+    assert_eq!(status, axum::http::StatusCode::OK, "body: {json}");
+    assert_eq!(json["page"], 3);
+    assert_eq!(json["keyword"], "hello");
+}

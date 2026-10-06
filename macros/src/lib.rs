@@ -833,6 +833,10 @@ struct ParamInfo {
     /// Validation rules declared via `#[param(...)]` (enforced by
     /// `#[forge(validate)]`).
     validations: Vec<ValidationSpec>,
+    /// Whether this parameter is marked `#[param(kind = "query", flatten)]`：
+    /// struct 查询参数不经信封，由独立 `Query<ParamTy>` 提取槽直提。
+    /// 仅对 `ParamKind::Query` 有意义。
+    query_flatten: bool,
 }
 
 impl ParamInfo {
@@ -858,7 +862,8 @@ impl ParamInfo {
             let ty_str_trimmed = ty_str.trim().to_string();
 
             // Check for explicit #[param(kind = "...")] attribute
-            let (explicit_annotation, validations) = Self::parse_param_attributes(pat_type)?;
+            let (explicit_annotation, validations, query_flatten) =
+                Self::parse_param_attributes(pat_type)?;
             // quote! 的 ToTokens 输出在 token 之间带空格；类型前缀判断
             // （Option< / Vec< / HeaderMap）统一基于归一化字符串。
             let ty_str_normalized = ty_str.replace(' ', "");
@@ -910,6 +915,7 @@ impl ParamInfo {
                 inner_type,
                 skip_mcp_schema,
                 validations,
+                query_flatten,
             }))
         } else {
             Ok(None)
@@ -918,15 +924,18 @@ impl ParamInfo {
 
     /// Parse `#[param(...)]` / `#[state]` attributes from a function argument.
     ///
-    /// Returns the extraction kind (behaviour unchanged) plus any
+    /// Returns the extraction kind (behaviour unchanged), any
     /// validation rules declared alongside `kind`:
     /// `#[param(kind = "query", ge = 1, le = 100, min_length = 2,
-    ///          max_length = 10, not_blank, email)]`.
+    ///          max_length = 10, not_blank, email)]`, and the `flatten`
+    /// flag (`#[param(kind = "query", flatten)]` — struct query parameter
+    /// extracted via `Query<ParamTy>` directly, bypassing the envelope).
     fn parse_param_attributes(
         pat_type: &syn::PatType,
-    ) -> syn::Result<(Option<ParamKind>, Vec<ValidationSpec>)> {
+    ) -> syn::Result<(Option<ParamKind>, Vec<ValidationSpec>, bool)> {
         let mut kind = None;
         let mut validations = Vec::new();
+        let mut flatten = false;
         for attr in &pat_type.attrs {
             // Check for #[state] attribute (Extension state injection)
             if attr.path().is_ident("state") {
@@ -1005,6 +1014,19 @@ impl ParamInfo {
                                             }
                                         }
                                     }
+                                    "flatten" => match &name_value.value {
+                                        syn::Expr::Lit(syn::ExprLit {
+                                            lit: syn::Lit::Bool(lit_bool),
+                                            ..
+                                        }) => flatten = lit_bool.value(),
+                                        other => {
+                                            return Err(syn::Error::new_spanned(
+                                                other,
+                                                "`flatten` requires a boolean literal \
+                                                     (`flatten` or `flatten = true`)",
+                                            ));
+                                        }
+                                    },
                                     _ => {}
                                 }
                             }
@@ -1014,6 +1036,7 @@ impl ParamInfo {
                                 match key.as_str() {
                                     "not_blank" => validations.push(ValidationSpec::NotBlank),
                                     "email" => validations.push(ValidationSpec::Email),
+                                    "flatten" => flatten = true,
                                     _ => {}
                                 }
                             }
@@ -1023,7 +1046,27 @@ impl ParamInfo {
                 }
             }
         }
-        Ok((kind, validations))
+
+        // flatten 与校验属性互斥：flatten 参数的校验属于 ParamTy 自身字段
+        // （直提后信封内无该字段可校验，宏层面重复生成既双重约束也无从落地）。
+        if flatten && !validations.is_empty() {
+            return Err(syn::Error::new_spanned(
+                pat_type,
+                "`flatten` must not be combined with validation rules \
+                 (ge/le/min_length/max_length/not_blank/email): validations \
+                 belong to the flattened struct's own fields",
+            ));
+        }
+        // flatten 语义只对 Query 直提成立；其他 kind（含未声明 kind）静默
+        // 忽略即 fail-open —— 必须显性报错。
+        if flatten && !matches!(kind, Some(ParamKind::Query)) {
+            return Err(syn::Error::new_spanned(
+                pat_type,
+                "`flatten` is only supported with kind = \"query\" (struct query \
+                 parameter extracted via Query<T> directly)",
+            ));
+        }
+        Ok((kind, validations, flatten))
     }
 
     /// Convert parameter to JSON schema property
@@ -1914,13 +1957,27 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         .iter()
         .filter(|p| matches!(p.param_kind, ParamKind::Query))
         .collect();
-    let has_query = !query_params.is_empty();
+    // flatten 参数（`#[param(kind = "query", flatten)]`）不入信封：独立
+    // `Query<ParamTy>` 直提槽 `_forge_query_flat_N`（N 取参数序号，区分多个
+    // flatten 参数），handler 调用时直接 `.0` 传值。axum 允许多个
+    // FromRequestParts 提取器各自解析同一 query string，互不冲突。
+    let flatten_query_params: Vec<(usize, &ParamInfo)> = params
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| matches!(p.param_kind, ParamKind::Query) && p.query_flatten)
+        .collect();
+    let envelope_query_params: Vec<&ParamInfo> = query_params
+        .iter()
+        .copied()
+        .filter(|p| !p.query_flatten)
+        .collect();
+    let has_query = !envelope_query_params.is_empty();
     let query_struct_ident = syn::Ident::new("__ForgeQueryParams", proc_macro2::Span::call_site());
-    let q_field_idents: Vec<_> = query_params
+    let q_field_idents: Vec<_> = envelope_query_params
         .iter()
         .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
         .collect();
-    let q_field_tys: Vec<_> = query_params.iter().map(|p| &p.ty).collect();
+    let q_field_tys: Vec<_> = envelope_query_params.iter().map(|p| &p.ty).collect();
 
     // 生成的查询结构体定义（无 Query 参数时为空）。`::serde::` 要求用户 crate 直接依赖
     // serde —— 与 Json body 参数类型需要 derive(Deserialize) 的既有要求一致。
@@ -1953,7 +2010,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let mut closure_params = Vec::new();
-    if multi_path || has_query {
+    // flatten query 参数也要求自定义组装（独立 `Query<ParamTy>` 直提槽）：
+    // 纯 flatten handler（无标量 query）has_query=false，但仍需生成槽
+    if multi_path || has_query || !flatten_query_params.is_empty() {
         let tuple_pat = if multi_path {
             let p_tys = params
                 .iter()
@@ -1976,6 +2035,15 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                     closure_params.push(tuple_pat.clone().unwrap());
                     path_inserted = true;
                 }
+            } else if matches!(p.param_kind, ParamKind::Query) && p.query_flatten {
+                // flatten 参数：独立 `Query<ParamTy>` 直提槽（不入信封，
+                // 每个参数一个槽，无"只插一次"语义）。
+                let slot = syn::Ident::new(
+                    &format!("_forge_query_flat_{idx}"),
+                    proc_macro2::Span::call_site(),
+                );
+                let ty = &p.ty;
+                closure_params.push(quote! { #slot: sdforge::axum::extract::Query<#ty> });
             } else if has_query && matches!(p.param_kind, ParamKind::Query) {
                 if !query_inserted {
                     closure_params.push(query_pat.clone().unwrap());
@@ -2047,10 +2115,22 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         // Target expression: Body params are Json<T> extractors (value at
         // `.0`); Path/State/Extension in single-extractor form are
         // newtype-wrapped too; Query params and multi-path destructured
-        // locals are plain values.
+        // locals are plain values. Flatten query params live at their
+        // dedicated `Query<ParamTy>` slot (`.0` unwraps to ParamTy itself).
         let target_of = |p: &ParamInfo| {
             let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
             match p.param_kind {
+                ParamKind::Query if p.query_flatten => {
+                    let idx = params
+                        .iter()
+                        .position(|q| q.name == p.name)
+                        .unwrap_or_default();
+                    let slot = syn::Ident::new(
+                        &format!("_forge_query_flat_{idx}"),
+                        proc_macro2::Span::call_site(),
+                    );
+                    quote! { #slot.0 }
+                }
                 ParamKind::Query => quote! { #name_ident },
                 ParamKind::Path if multi_path => quote! { #name_ident },
                 ParamKind::Extension => quote! { #name_ident },
@@ -2401,7 +2481,8 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         let route_creation = if is_streaming {
             let param_call_args: Vec<_> = params
                 .iter()
-                .map(|p| {
+                .enumerate()
+                .map(|(idx, p)| {
                     let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
                     match p.param_kind {
                         // Body uses Json<T> extractor, extract .0 for inner type
@@ -2410,6 +2491,14 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                         ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
                         // 多路径参数：使用闭包体内解构出的局部变量（不再取 .0）
                         ParamKind::Path if multi_path => quote! { #name_ident },
+                        // flatten query 参数：从独立直提槽取值（`.0` 即 ParamTy）
+                        ParamKind::Query if p.query_flatten => {
+                            let slot = syn::Ident::new(
+                                &format!("_forge_query_flat_{idx}"),
+                                proc_macro2::Span::call_site(),
+                            );
+                            quote! { #slot.0 }
+                        }
                         // Query 参数经生成的结构体解构，同样使用局部变量
                         ParamKind::Query if has_query => quote! { #name_ident },
                         // Path, Query, Form, Header need .0 extraction
@@ -2479,7 +2568,8 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             // Build parameter call arguments with proper extraction
             let param_call_args: Vec<_> = params
                 .iter()
-                .map(|p| {
+                .enumerate()
+                .map(|(idx, p)| {
                     let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
                     match p.param_kind {
                         // Body uses Json<T> extractor, extract .0 for inner type
@@ -2488,6 +2578,14 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                         ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
                         // 多路径参数：使用闭包体内解构出的局部变量（不再取 .0）
                         ParamKind::Path if multi_path => quote! { #name_ident },
+                        // flatten query 参数：从独立直提槽取值（`.0` 即 ParamTy）
+                        ParamKind::Query if p.query_flatten => {
+                            let slot = syn::Ident::new(
+                                &format!("_forge_query_flat_{idx}"),
+                                proc_macro2::Span::call_site(),
+                            );
+                            quote! { #slot.0 }
+                        }
                         // Query 参数经生成的结构体解构，同样使用局部变量
                         ParamKind::Query if has_query => quote! { #name_ident },
                         // Path, Query, Form, Header need .0 extraction
@@ -3874,8 +3972,75 @@ mod macro_parsing_tests {
     #[test]
     fn test_parse_param_attributes_accepts_valid_min_length() {
         let pat_type = pat_type_with_param_attr("param(min_length = 2)");
-        let (_, validations) = ParamInfo::parse_param_attributes(&pat_type).unwrap();
+        let (_, validations, _) = ParamInfo::parse_param_attributes(&pat_type).unwrap();
         assert_eq!(validations.len(), 1);
+    }
+
+    /// `flatten` 裸标识符 → true：struct 查询参数扁平直提（`Query<ParamTy>`）
+    /// 的显式 opt-in 形态，与 `kind = "query"` 组合使用。
+    #[test]
+    fn test_parse_param_attributes_flatten_bare_flag() {
+        let pat_type = pat_type_with_param_attr("param(kind = \"query\", flatten)");
+        let (kind, validations, flatten) = ParamInfo::parse_param_attributes(&pat_type).unwrap();
+        assert!(matches!(kind, Some(ParamKind::Query)));
+        assert!(flatten);
+        assert!(validations.is_empty());
+    }
+
+    /// `flatten = true` 与裸标识符等价；`flatten = false` 显式关闭。
+    #[test]
+    fn test_parse_param_attributes_flatten_bool_value() {
+        let pat_type = pat_type_with_param_attr("param(kind = \"query\", flatten = true)");
+        let (_, _, flatten) = ParamInfo::parse_param_attributes(&pat_type).unwrap();
+        assert!(flatten);
+
+        let pat_type = pat_type_with_param_attr("param(kind = \"query\", flatten = false)");
+        let (_, _, flatten) = ParamInfo::parse_param_attributes(&pat_type).unwrap();
+        assert!(!flatten);
+    }
+
+    /// 非 bool 字面量必须编译报错，禁止静默当作 true（fail-open）。
+    #[test]
+    fn test_parse_param_attributes_flatten_rejects_non_bool_value() {
+        let pat_type = pat_type_with_param_attr("param(kind = \"query\", flatten = \"yes\")");
+        assert!(ParamInfo::parse_param_attributes(&pat_type).is_err());
+    }
+
+    /// flatten 参数的校验属于 ParamTy 自身字段，宏层面重复生成会双重约束：
+    /// 与任一校验属性同现即编译错误。
+    #[test]
+    fn test_parse_param_attributes_flatten_conflicts_with_validations() {
+        for meta in [
+            "param(kind = \"query\", flatten, ge = 1)",
+            "param(kind = \"query\", flatten, le = 10)",
+            "param(kind = \"query\", flatten, min_length = 2)",
+            "param(kind = \"query\", flatten, max_length = 8)",
+            "param(kind = \"query\", flatten, not_blank)",
+            "param(kind = \"query\", flatten, email)",
+        ] {
+            let pat_type = pat_type_with_param_attr(meta);
+            assert!(
+                ParamInfo::parse_param_attributes(&pat_type).is_err(),
+                "flatten + `{meta}` must be a compile error"
+            );
+        }
+    }
+
+    /// flatten 语义只对 Query 提取成立：其他 kind（含未声明 kind）一律编译
+    /// 报错，防止标志被静默忽略（fail-open）。
+    #[test]
+    fn test_parse_param_attributes_flatten_requires_query_kind() {
+        for meta in [
+            "param(kind = \"path\", flatten)",
+            "param(kind = \"body\", flatten)",
+            "param(flatten)",
+        ] {
+            let pat_type = pat_type_with_param_attr(meta);
+            assert!(
+                ParamInfo::parse_param_attributes(&pat_type).is_err(),
+                "flatten with `{meta}` must be a compile error"
+            );
+        }
     }
 
     #[test]
@@ -4233,6 +4398,7 @@ mod macro_parsing_tests {
                 "u64".to_string()
             },
             skip_mcp_schema,
+            query_flatten: false,
         }
     }
 
