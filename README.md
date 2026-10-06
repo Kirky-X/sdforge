@@ -62,7 +62,7 @@
 <td width="50%" style="vertical-align:top; padding: 12px">⚡ <b>零协议税</b><br><span style="color:#64748B">协议选择发生在编译期，运行期无协议探测或动态加载</span></td>
 </tr>
 <tr>
-<td width="50%" style="vertical-align:top; padding: 12px">🌐 <b>多协议支持</b><br><span style="color:#64748B">Axum 0.8、rmcp 3.2（MCP 2026-07-28 规范）、tonic、WebSocket、SSE、clap</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🌐 <b>多协议支持</b><br><span style="color:#64748B">Axum 0.8、rmcp 3.4（MCP 2026-07-28 规范）、tonic、WebSocket、SSE、clap</span></td>
 <td width="50%" style="vertical-align:top; padding: 12px">🔒 <b>类型安全</b><br><span style="color:#64748B">接口定义编译期验证，trybuild 覆盖编译失败用例</span></td>
 </tr>
 <tr>
@@ -157,7 +157,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 | 仅 HTTP | `["http"]` | 传统 REST API |
 | 仅 MCP | `["mcp"]` | AI 工具集成 |
 | HTTP + MCP 双协议 | `["http", "mcp"]` | 同一份代码双入口 |
-| 全量运行时特性 | `["full"]` | 全部协议与能力（24 项；不含 `simd-json`/`kit`/`limiteron-integration` 可选重依赖） |
+| 全量运行时特性 | `["full"]` | 全部协议与能力（25 项，含 `idempotency`；不含 `simd-json`/`kit`/`limiteron-integration` 可选重依赖） |
 
 `grpc`、`websocket`、`streaming`、`openapi`、`cli`、`cache` 均可独立于 `http` 启用，任意组合。
 
@@ -170,7 +170,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 <table>
   <tr><th>标志</th><th>说明</th><th>默认</th></tr>
   <tr><td><code>http</code></td><td>HTTP 服务器（Axum 0.8 路由、Tower 中间件、版本路由）</td><td>❌</td></tr>
-  <tr><td><code>mcp</code></td><td>MCP 协议（rmcp 3.2，2026-07-28 规范：无状态 HTTP 头、MRTR、缓存语义）</td><td>❌</td></tr>
+  <tr><td><code>mcp</code></td><td>MCP 协议（rmcp 3.4，2026-07-28 规范：无状态 HTTP 头、MRTR、缓存语义）</td><td>❌</td></tr>
   <tr><td><code>grpc</code></td><td>gRPC（tonic + prost，独立于 http，proto 经 build.rs 生成；unary <code>Call</code> + server-streaming <code>CallStream</code>——后者需另启 <code>streaming</code>；<code>extra_services</code> 支持应用自有 tonic service 同端口挂载）</td><td>❌</td></tr>
   <tr><td><code>websocket</code></td><td>WebSocket（依赖 http + streaming）</td><td>❌</td></tr>
   <tr><td><code>streaming</code></td><td>SSE 流式传输（独立于 http；与 <code>grpc</code> 组合时 <code>grpc_method</code> + <code>stream = true</code> 映射到 gRPC <code>CallStream</code>）</td><td>❌</td></tr>
@@ -221,7 +221,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 - 派生自 `http`：`security`（含 `ratelimit-http` → `ratelimit` 与 `cache`）、`ratelimit-http`、`websocket`（含 `streaming`）、`health` / `metrics` / `graceful` / `serve-tls`（含 `graceful`）/ `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
 - `docs` = `openapi` + `cli`（Swagger UI 挂载需另启用 `http`）
 - `kit` = `trait-kit`（health + lifecycle）+ `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
-- `full` 覆盖 24 项运行时特性，不含 `simd-json` / `kit` / `limiteron-integration`——三者是可选重依赖（SIMD JSON、trait-kit 模块图、限流集成基座），按需单独启用
+- `full` 覆盖 25 项运行时特性（含 `idempotency`），不含 `simd-json` / `kit` / `limiteron-integration`——三者是可选重依赖（SIMD JSON、trait-kit 模块图、限流集成基座），按需单独启用
 
 </details>
 
@@ -352,7 +352,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ### 测试规模
 
-约 **3,035** 个测试函数（`src/` 2,120 + `tests/` 729 + `macros/` 60 + `examples/` 126，`grep -rEc '#\[(tokio::)?test\b' --include='*.rs'` 统计，截至 v0.5.0-rc.6）。
+约 **3,219** 个测试函数（`src/` 2,222 + `tests/` 786 + `macros/` 85 + `examples/` 126，`grep -rEc '#\[(tokio::)?test\b' --include='*.rs'` 统计，2026-10-06 工作树实测）。
 
 ---
 

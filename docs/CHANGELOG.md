@@ -11,7 +11,7 @@
 <summary>📑 目录</summary>
 
 - [Unreleased](#unreleased)
-- [0.5.0-rc.6](#050-rc6---2026-09-28)
+- [0.5.0-rc.6](#050-rc6---2026-10-06)
 - [0.5.0-rc.5](#050-rc5---2026-09-21)
 - [0.5.0-rc.4](#050-rc4---2026-09-14)
 - [0.5.0-rc.2](#050-rc2---2026-09-07)
@@ -33,6 +33,265 @@
 </details>
 
 ## [Unreleased]
+
+## [0.5.0-rc.6] - 2026-10-06
+
+### ⚠️ 破坏性变更 (Breaking Changes)
+
+- **gRPC 业务错误改返回真实 Status**（`fix-multiprotocol-contract-parity`）：
+  此前业务错误走 `Status::ok` + body `success:false`，标准 gRPC 客户端/监控/重试
+  策略对该批错误失明。现在按统一映射表落到 `tonic::Code`（NotFound→`NOT_FOUND`、
+  ValidationError→`INVALID_ARGUMENT`、RateLimitExceeded→`RESOURCE_EXHAUSTED` 等），
+  `Status::details` 携带 `UnifiedError` JSON（code/message/field/trace_id）。
+  依赖旧 body 错误形态的调用方需改读 Status。
+- **`GrpcAuthVerifier::verify` 返回类型改为 `Result<AuthContext, String>`**：
+  此前返回 `Result<(), String>` 丢弃身份导致 gRPC 路径无法做 RBAC。自定义实现需
+  适配新签名。
+- **`#[forge(validate)]` 违规状态码 400 → 422**：与 `ApiError::ValidationError`
+  及 gRPC 映射统一（RFC 9110：400=语法畸形，422=语义约束违反）；错误体 `code`
+  改为 `"UNPROCESSABLE_ENTITY"`，`errors` 数组结构保留。400 仍用于缺参/解析失败
+  （`InvalidInput`）。
+- **`ApiError` 的 HTTP 错误体改渲染 `UnifiedError` 载荷**：
+  `{"code","message","trace_id"(可选),"field"(可选)}`，跨协议共享同一形状。
+- **`GrpcHandlerRegistration` 新增 `roles: &'static [&'static str]` 字段**：
+  宏生成方无感知；手写 `inventory::submit!` 的下游需补该字段（未声明角色传 `&[]`）。
+
+- **`security::api_key::SdForgeApiKeyAuth::add_key_version` 签名变更**：返回类型从 `()` 改为
+  `Result<(), String>`。当已存在的 key 元数据损坏/不可反序列化时，本方法现在返回 `Err`
+  且**不注册任何凭据**（安全不变量：绝不产生"可认证但无法 revoke/rotate"的孤儿 key）。
+  此前它会静默注册 key hash 后跳过元数据更新。调用方需追加 `?` / `.unwrap()`。
+- **`error::api_error::ApiError` 新增 `QuotaExhausted { used, total }` 变体**：
+  `RateLimitError::QuotaExhausted` 现在映射到该变体（HTTP 429），不再映射到
+  `RateLimitExceeded` 并把 `used` 塞进 `window_seconds`（design.md D8 tech debt 已清偿）。
+  对 `ApiError` 做穷尽 `match` 的下游代码需补充分支。
+- **`config::server::ServerConfig` 新增 `max_body_size: usize` 字段**（默认 10 MiB，
+  `#[serde(default)]` 兼容旧配置文件）。以结构体字面量构造 `ServerConfig` 的代码需补充
+  该字段或使用 `..Default::default()`。
+- **`security::bearer::BearerAuth`**：新增手动 `Drop`（销毁时 volatile 擦除 secret）与
+  手动 `Debug`（secret 恒输出 `[REDACTED]`）。builder 现拒绝空 `audience`/`issuer`
+  （返回 `AuthConfigError::InvalidSecret`）。
+- **错误脱敏统一（行为变更）**：`ApiError::internal_*` 构造器现在强制对 message 执行
+  敏感信息脱敏（JWT/密钥/信用卡/SSN/文件路径 + 500 字符截断）；`SdForgeError::Internal`
+  的 `sanitized_message()` 与 `to_service_error()`、`ApiError::Internal` 的 `to_mcp_json()`
+  现在统一输出通用文案 `"An internal error occurred. Please try again later."`，原始
+  消息只保留在 `Display`/`Debug`（日志）中。断言原始消息会出现在外部输出的测试需更新。
+- **基准目标更名**：Cargo.toml `[[bench]]` 目标 `axiom_bench` 更名为 `sdforge_bench`
+  （原 `src/benches/axiom_bench.rs` 为空壳孤儿文件，已删除）。
+
+### 新增 (Added)
+
+- **MCP 与 CLI 认证对等**：认证覆盖延伸到 MCP 与 CLI 入口
+  （复用 gRPC 拦截器的 `GrpcAuthVerifier` 端口——推荐别名 `ProtocolAuthVerifier`
+  ——与 Bearer/API-key 凭据库）。MCP：`SdForgeMcpServer::with_auth_verifier`
+  配置后 `call_tool` **与 `list_tools`** 先校验凭据，拒绝返回 JSON-RPC
+  server-error 码 `-32001`（`get_info`/`initialize` 是先于认证的协议握手，不门控）；
+  stateless 适配层委托调用自动继承；校验经 `grpc_auth::verify_async` 在
+  blocking pool 执行（API key 恒定时间防御不阻塞 tokio worker，gRPC 拦截器
+  同批迁移）。CLI：`CliBuilder::with_auth_verifier` 配置后 `execute` 先校验
+  `SDFORGE_TOKEN`/`SDFORGE_API_KEY` 环境凭据再派发（环境变量可被同用户子进程
+  读取并易泄漏进 CI 日志/`set -x`，建议短期凭据 + CI 掩码）。未启用 `security`
+  feature 或未配置 verifier 时行为完全不变。
+- **MCP RBAC 对等**：`#[forge(auth(role = "..."))]`/`McpToolRegistration::
+  with_roles` 角色声明贯通 MCP 路径——`call_tool`/`call_tool_with_credentials`
+  按已验证身份的 permission 校验（无匹配 → JSON-RPC `-32003`，新增
+  `mcp::MCP_FORBIDDEN`；`security` feature 关闭时 fail-safe 全拒，
+  对齐 gRPC `roles` 语义）。`McpToolRegistration` 为承载 roles 改为手写
+  结构（`new` 四参签名不变，新增 const `with_roles`，手写
+  `inventory::submit!` 的下游零改动）。跨协议权限差收敛：同一低权限
+  API key 在 gRPC 被 roles 拒绝的方法，MCP 侧同样拒绝。
+- **`grpc_auth::make_verifier(&AuthConfig)`**：从 `AuthConfig`（Jwt/ApiKey 种子键）
+  构建统一 verifier 的单一构造点——各协议入口的 verifier 接线均为手动，无配置级
+  自动贯通。
+- **`grpc_auth::verify_async`**：`GrpcAuthVerifier` 的异步验证包装
+  （`spawn_blocking`），恒定时间防御与 async 调度兼容。
+- **MCP 凭据注入契约（重要）**：sdforge 不自带终结 HTTP 的 MCP 传输，凭据注入是
+  **传输适配层的显式义务**——适配层从原始 `Authorization`/`x-api-key` 头经
+  `McpCredentials::from_headers` 构建凭据并插入 JSON-RPC 消息 extensions（示例见
+  `src/mcp/tests/auth_tests.rs`）。未注入时所有受门控调用一律 `-32001` 拒绝
+  （fail-closed）；内建 stdio 传输无法携带头，`serve_stdio` 在挂载 verifier 时
+  输出启动警告。
+- **覆盖边界声明**：授权（`#[forge(auth(role = ...))]`/roles）当前覆盖 HTTP、
+  gRPC 与 MCP；**CLI/WS 维度不生效**——CLI 属本地信任边界（进程入口即操作者），
+  WS 握手后无逐请求身份通道，引入网络触发形态前必须先补授权或部署层补偿
+  （SECURITY.md 协议覆盖矩阵已登记，发布前核对）。纵深防御配套：`call_tool_internal`
+  在挂载 verifier 时 fail-closed 拒绝（同步路径无凭据通道，杜绝进程内公开旁路），
+  进程内带外认证后的程序化调用走 `SdForgeMcpServer::call_tool_with_credentials`
+  （与协议路径共用同一认证 + RBAC 防线）；`cli::dispatch::dispatch` 仍是无认证的
+  进程内分发口（文档标注）。
+- **CLI 机器可读输出契约与 Agent 知识包**：`CliBuilder::build()` 内建挂载全局
+  `--format text|json` 开关（`text` 默认，向后兼容）。`json` 模式：成功结果为
+  handler `Value` 紧凑 JSON、错误为 `UnifiedError` JSON（`{"code","message",
+  "trace_id"?,"field"?}`，与 HTTP/gRPC 同一形状）——**两者都走 stdout**；退出码
+  契约不变（成功 0 / 错误 1）；认证失败同样按 `--format` 渲染。`docs` 子命令
+  `--format` 新增 `agent` 取值：输出 Agent 知识包（schema
+  `sdforge.agent-knowledge/v1`）——程序标识、输出契约（`--format` 取值/退出码/
+  流约定）、全部注册 CLI 子命令（含参数元数据）与 MCP 工具（含 input_schema，
+  `mcp` feature 启用时），能力清单直接读 inventory 注册表，注册即入包。
+  知识包 `output_contract` 数值派生自 `cli::output` 公开常量（FORMAT_VALUES/
+  FORMAT_DEFAULT/退出码），并以一致性测试锁定与 clap 白名单/OutputFormat::default
+  的同源关系；`exceptions` 段显式声明 `docs` 子命令的独立 `--format` 语义与
+  自输出行为（全局 `--format json` 不包装其输出），`null_return` 段登记
+  handler 返回 null 时不产生 stdout 输出的哨兵行为；`docs` 为**保留子命令名**
+  （dispatch 先于用户注册拦截），`program` 段的 `name_semantics` 字段声明
+  名字来源，宿主可用 `generate_agent_knowledge_for_host` 传入 `with_name`
+  的二进制名。
+  附带修复：`docs` 子命令此前只有 clap 定义、`execute` 分发路径未接通
+  （`prog docs` 会落 NotFound）——现于 dispatch 接通，docs 自行完成输出
+  （返回 `Value::Null` 哨兵，execute 跳过渲染）；全局 `--format` 穿透到 docs
+  子命令 matches 的 `text`/`json` 值按 docs 默认（All）处理（clap 白名单外的
+  非法值仍 loud-fail），两开关语义独立。CLI text 模式认证失败文案保持历史
+  小写形态 `error: authentication failed: …`（与 HTTP 共用的 Display 隔离）。
+- **幂等重放防护**：新增 `idempotency` feature（已入 `full`）。HTTP 中间件支持
+  `Idempotency-Key` 头（POST/PUT/PATCH）：重放缓存响应（附 `Idempotency-Replayed: true`）、
+  并发在途 409；gRPC 支持 `idempotency-key` metadata（在途 `ALREADY_EXISTS`）。
+  核心为 `cache::IdempotencyStore` 三态状态机，`ServerConfig.idempotency` 配置节
+  （`enabled` 默认 false / `ttl_secs` / `max_response_bytes`）。
+- **gRPC RBAC 对等**：`#[forge(auth(role = "..."))]` 角色声明贯通 gRPC 路径
+  （无匹配 permission → `PERMISSION_DENIED`；security feature 关闭时 fail-safe 拒绝）。
+- **gRPC 参数校验对等**：`#[forge(validate)]` + `#[param(ge/le/min_length/max_length/
+  not_blank/email)]` 规则在 gRPC 闭包执行（首违规短路 `ValidationError`），
+  与 HTTP 共享同一规则生成单源。
+- **gRPC 服务配置**：`GrpcServerConfig` 暴露 `http2_keepalive_interval/timeout`；
+  新增 `grpc-tls` feature（`ServerTlsConfig` 接线暴露，证书加载由调用方负责）。
+- **`GrpcServerConfig` 新增 `idempotency_store`/`idempotency_ttl_secs` 字段**
+  （feature = `idempotency`）。
+- `http::VersionRedirectLayer` / `VersionRedirectService`：可注入 `VersionRouterConfig`
+  的版本重定向层。此前 `version_redirect_middleware` 硬编码默认配置，导致
+  `redirect_unknown` / `sunset_header` / `deprecated_versions` 三个配置字段全部无效。
+- `core::RegexCache::common::is_strong_password()`：完整密码强度检查
+  （≥8 位 + 小写/大写/数字/特殊字符各至少一个）。
+- `ServerConfig::max_body_size`：请求体上限可配置化（此前硬编码 10 MB）。
+- 回归测试：广播可达性、超大消息连接清理、深度嵌套空容器拒绝、孤儿 key 拒绝、
+  rotate 后旧 key 失效、终态会话驱逐、审计并发不丢日志、超时丢弃计数等。
+
+### 变更 (Changed)
+
+- **错误码映射单一事实来源**：`error::unified::mapping_for`/`grpc_code_for` 统一
+  `ApiError` → HTTP 状态/错误码/gRPC Code；修正 `InvalidInput` HTTP 400 与 gRPC 侧
+  422 的两张皮分歧（gRPC 业务错误不再自报 422）。
+- **性能**：OpenAPI spec 端点改借用序列化（免去每请求整树深拷贝）；健康探针
+  poll 正常路径去除 name 克隆分配。
+- **`GetInfo` 版本号取 `CARGO_PKG_VERSION`**（此前硬编码 "0.1.0"）。
+- **限流覆盖 gRPC `get_info`**（与 `call` 共用 guard，缺 remote_addr 时 "unknown" 兜底）。
+
+- **发布链依赖刷新**（与 `origin/main` 对比的权威值）：`dbnexus 0.6.0-rc.5→rc.6`、
+  `oxcache 0.5.0-rc.4→rc.6`、`inklog 0.3.0-rc.5→rc.7`（跳过 rc.6：其在非 unix 且零压缩
+  特性组合下 E0433，见 inklog 0.3.0-rc.7 修复记录）、`limiteron 0.3.0-rc.4→rc.6`、
+  `trait-kit 0.5.0-rc.6→rc.7`；三方依赖执行 `cargo update --workspace` 取最新兼容版
+  （lock 净减 65 行，含 `thiserror 2.0.21`/`syn 3.0.6`/`uuid 1.26.1`/`rand 0.10.3`/`clap 4.6.7` 等）。
+
+### 移除 (Removed)
+
+- workspace tower 依赖移除未使用的 `retry` feature（全仓无 RetryLayer 使用）。
+
+### 修复 (Fixed)
+
+- **WebSocket**（`src/websocket/handler.rs`）：
+  - 修复广播/推送整体失效：`handle_socket` 此前丢弃 `WebSocketConnection::new`
+    返回的 receiver，manager 注册的所有连接均为死通道，`broadcast` 必然失败并误删
+    连接。现在所有出站消息统一经通道由 forwarder 任务写回 socket。
+  - 修复连接泄漏 DoS：超大消息早退路径跳过 `remove_connection` 且无 RAII 兜底，
+    连接条目永久泄漏。现在以 Drop guard 保证所有退出路径清理。
+  - 修复 JSON 深度检查绕过：`calculate_value_depth` 不计容器自身层级，
+    17~128 层纯空容器嵌套（如 `[[[...]]]`）深度算成 0，绕过 `MAX_JSON_DEPTH=16`。
+  - `MAX_STRING_LENGTH`（64KB）从 `cfg(test)` 文档性常量变为 `parse_websocket_message`
+    强制校验（`id`/`method`/`error`/`event`）。
+- **CORS**（`src/config/cors.rs`）：`build_cors_layer` 硬编码
+  `.allow_methods(Any).allow_headers(Any)`，`allowed_methods` / `allowed_headers`
+  配置完全无效。现在配置精确生效（空列表/`*` 保持 Any 兼容；非法头部名报错）。
+- **API Key**（`src/security/api_key.rs`、`api_key_manager.rs`）：
+  - 孤儿 key（见破坏性变更）；
+  - `rotate_key` 无 `rotation_config` 时旧 key 永久有效（现在轮换即替换）；
+  - 元数据反序列化 `i64 as u64` 回绕导致 `Instant` 运算 panic / 永不过期
+    （现在钳制，fail-closed）；
+  - `cleanup_versions` retain 路径不重算 `active_version_index` 导致活动版本丢失。
+- **审计日志**（`src/security/audit/`）：
+  - `log()` 对同用户日志列表的 get→push→set 无互斥，并发写互相覆盖丢审计记录
+    （新增 `merge_lock`，log() 与 worker 合并共用）；
+  - trait 路径 `total_log_count` 被新建 0 值计数器顶替，监控指标失真；
+  - 信号量超时丢弃不递增 `dropped_log_count`；
+  - builder 零值（`queue_size(0)` panic、`max_concurrent_ops(0)` 全超时、
+    `max_logs_per_user(0)` 全丢弃）统一钳制为最小 1。
+- **缓存**（`src/cache/cache_impl.rs`）：`SyncCache::delete` 在 backend 删除失败时
+  仍返回 `existed=true`，违反 trait 契约；现在返回 `false`。
+- **国际化**（`src/i18n/mod.rs`）：`translate_or_fallback` 两次独立加锁之间存在
+  TOCTOU，`set_locale` 并发时用过期 locale 查表（现在单锁完成快照+查表）。
+- **MRTR**（`src/mcp/mrtr.rs`）：`get_session` 静默吞掉毒化锁（现记录告警）；
+  Completed/Cancelled 终态会话永不驱逐，积累至 `MAX_MRTR_SESSIONS` 后
+  `create_session` 永久失败（现按超时窗口老化）。
+- **HTTP 路由**（`src/http/version_routing.rs`）：重定向丢弃 query string
+  （`/api/test?foo=bar` → `/api/v1/test`，现保留）；`sunset_header` 配置头名生效。
+- **HTTP 中间件**（`src/http/http_impl.rs`）：`resolve_route_path` 的 `base_path[1..]`
+  防御性切片（空串/多字节首字符 panic、无前导斜杠静默丢首字符）。
+- **正则**（`src/core/regex_cache.rs`）：`password_strong` 注释宣称强制复杂度而实际
+  仅查长度（现在文档诚实，完整检查请用 `is_strong_password`）。
+- **错误**（`src/error/context.rs`）：`ErrorContext::current()` 的 `file`/`line`
+  恒指向 context.rs 自身、`function` 恒为 `"()"`（现 `#[track_caller]` 捕获真实
+  调用方，`function` 诚实为 `None`）。
+- **JWT/Bearer**（`src/security/bearer/bearer_impl.rs`）：base64url 解码器查找表以
+  0 初始化，任何非法字节被静默当作 `'A'` 解码（现以 0xFF 哨兵严格拒绝）。
+- **基准正确性**（`src/benches/sdforge_bench.rs`）：cache_clear 首迭代后度量空缓存、
+  失效基准把 O(n) 重填充计入度量（改 `iter_batched`）、eviction 吞吐声明 150 与
+  实际 50 次操作不符、denied 路径 `let _ =` 掩盖回归（改断言）、
+  `jwt_secret_validation` 重复度量生成成本（现仅度量校验）。
+
+- **rustdoc 断链 10 处**（`cargo doc` 在 `RUSTDOCFLAGS=-D warnings` 下即失败）：
+  `src/log_attr.rs` 顶部 `//!` 模块文档块以相对链接引用本模块条目（同文件 fn 级文档的
+  相对链接可解析，模块文档块内解析不到），改绝对路径 `crate::log_attr::*`；
+  `src/security/ratelimit/dist.rs` 引用全仓不存在的构造器 `Self::in_memory`（实际只有
+  `Self::new`），属陈旧文档描述；`src/sdk/generator.rs`(2 处) 与 `src/log_attr.rs` 的
+  公开文档链接私有项（`sorted_routes`/`MAX_MASKED_PAYLOAD_BYTES`）降为 code span——两者是
+  内部辅助，放开可见性会扩大公共 API 面；`src/integrations/dbnexus_gateway.rs` 冗余显式
+  目标 `[`DbPool`](dbnexus::DbPool)` 合并为单一链接。
+- **测试基线漂移**（`docs/TEST_SCENARIOS.md`）：`test_target_inventory_tests` 的三项自洽
+  断言在 main 上即为失败——清单注册 48 个 `[[test]]`、`tests/integration/` 实际 39 个文件，
+  而文档基线仍写 47/38（新增测试目标时未同步）。本轮按实测刷新为 48 目标 / integration 39 /
+  58 个有产出目标 / 2301 L1 单测 / 3165 passed。注：sdforge 的 CI 仅在 `pull_request` 与
+  `schedule` 触发，直推 main 的改动不会跑该门禁，故漂移得以留存（已在本报告列为流程改进项）。
+- **`docs/USER_GUIDE.md` 的 `[security.rate_limit]` 示例不可反序列化**：示例写作
+  `rate`/`window_seconds` 单阈值形状，而实际类型是 limiteron `FlowControlConfig`
+  （`version` + `global{storage,cache,metrics}` + `rules`，matcher/limiter 为内部标签）。
+  按真实结构重写示例，并在 `src/config/security.rs` 新增 `doc_examples_tests` 以测试钉死
+  文档形状（正向可反序列化 + 反向拒绝旧写法），防止再次漂移。
+- **`release.yml` registry 校验硬编码版本**（假通过）：两处 curl 校验写死
+  `crates/<name>/0.5.0-rc.5`，与触发 tag 的版本无关——即使新版本未发布也会返回 200 通过。
+  改为从 tag 解析版本（解析失败即 `::error::` 退出）并补 crates.io 要求的 `User-Agent`。
+- **`deny.toml` bans 由 `deny` 降为 `warn`**（策略软化，显式披露）：`sdforge-macros` 以
+  path-only 形式作为 dev-dependency 出现在锁定树中，无 crates.io 版本可匹配 bans 通配，
+  `cargo deny check bans` 直接 FAILED；与 dbnexus 既有处置一致改为 `warn` 并就地注释原因。
+  代价：真正命中的 bans 通配项不再阻断 CI，需人工审阅 `cargo deny` 输出。
+
+### 安全加固 (Security Hardening)
+
+- CI workflows（ci.yml / codeql.yml / release.yml / tag-deleted.yml）的所有第三方
+  action 引用从可变 tag 固定为 40 位 commit SHA（附版本注释）——消除供应链
+  tag 劫持风险（tiangang SAST 扫描 Medium 发现）。
+- `ApiError::internal_*` 构造器强制脱敏改为 feature 感知：`security` feature
+  关闭时退化为原样存储，保证裸默认构建与 ratelimit-only 构建可编译。
+- `to_service_error` 的 `Internal` 分支与 `sanitized_message` / `to_mcp_json`
+  三轨完全统一：HTTP 500 响应体现在不可能携带原始内部消息。
+
+### 已知依赖健康信号 (Known Dependency Signals)
+
+- `rustls 0.23.44 → 0.23.45`：RUSTSEC-2026-0285 安全公告驱动的依赖修复
+  （`cargo update -p rustls`），本轮已收敛。
+- `bincode 2.0.1`：RUSTSEC-2025-0141 标记为 unmaintained（informational，非漏洞，
+  trivy + cargo-audit 双通道均 0 CVE）。可留意 postcard/rkyv 等替代方案，无需
+  紧急行动。
+
+### 文档 (Documentation)
+
+- `hash_key`：补充无盐 SHA256 存储的威胁模型说明（确定性查找前提 + 依赖 key 高熵，
+  禁止低熵口令直入 `add_key`）。
+- `key_id`：说明 64-bit 截断是有意的审计隐私取舍，不参与认证决策。
+- `validate_key`：明确 `client_ip` 参数当前未使用（保持 API 兼容）。
+- `build_with_redirect`：明确警示其不挂载安全中间件，生产用 `build_with_config`。
+- `canonicalize_cache_key`：明确其为调用方工具函数，缓存内部不会自动调用。
+- `VersionRouterConfig::supported_versions`：明确版本合法性门控委托给路由注册。
+- `examples/src/security/api_key.rs`、`examples/src/websocket/chat.rs`：显著标注
+  认证/WS 端点为演示桩，禁止复制到生产。
+
+---
 
 ### ✨ 新增 (Added)
 
@@ -292,236 +551,6 @@
   裁决留档：**迁移**（而非升级/豁免）——bincode 2.x 官方标注 unmaintained
   且 "No safe upgrade available"，postcard 迁移代价仅限序列化调用点等价
   替换，无后续复核负担；README 路线图「依赖治理」登记项就此翻转。
-
-## [0.5.0-rc.6] - 2026-09-28
-
-### ⚠️ 破坏性变更 (Breaking Changes)
-
-- **gRPC 业务错误改返回真实 Status**（`fix-multiprotocol-contract-parity`）：
-  此前业务错误走 `Status::ok` + body `success:false`，标准 gRPC 客户端/监控/重试
-  策略对该批错误失明。现在按统一映射表落到 `tonic::Code`（NotFound→`NOT_FOUND`、
-  ValidationError→`INVALID_ARGUMENT`、RateLimitExceeded→`RESOURCE_EXHAUSTED` 等），
-  `Status::details` 携带 `UnifiedError` JSON（code/message/field/trace_id）。
-  依赖旧 body 错误形态的调用方需改读 Status。
-- **`GrpcAuthVerifier::verify` 返回类型改为 `Result<AuthContext, String>`**：
-  此前返回 `Result<(), String>` 丢弃身份导致 gRPC 路径无法做 RBAC。自定义实现需
-  适配新签名。
-- **`#[forge(validate)]` 违规状态码 400 → 422**：与 `ApiError::ValidationError`
-  及 gRPC 映射统一（RFC 9110：400=语法畸形，422=语义约束违反）；错误体 `code`
-  改为 `"UNPROCESSABLE_ENTITY"`，`errors` 数组结构保留。400 仍用于缺参/解析失败
-  （`InvalidInput`）。
-- **`ApiError` 的 HTTP 错误体改渲染 `UnifiedError` 载荷**：
-  `{"code","message","trace_id"(可选),"field"(可选)}`，跨协议共享同一形状。
-- **`GrpcHandlerRegistration` 新增 `roles: &'static [&'static str]` 字段**：
-  宏生成方无感知；手写 `inventory::submit!` 的下游需补该字段（未声明角色传 `&[]`）。
-
-- **`security::api_key::SdForgeApiKeyAuth::add_key_version` 签名变更**：返回类型从 `()` 改为
-  `Result<(), String>`。当已存在的 key 元数据损坏/不可反序列化时，本方法现在返回 `Err`
-  且**不注册任何凭据**（安全不变量：绝不产生"可认证但无法 revoke/rotate"的孤儿 key）。
-  此前它会静默注册 key hash 后跳过元数据更新。调用方需追加 `?` / `.unwrap()`。
-- **`error::api_error::ApiError` 新增 `QuotaExhausted { used, total }` 变体**：
-  `RateLimitError::QuotaExhausted` 现在映射到该变体（HTTP 429），不再映射到
-  `RateLimitExceeded` 并把 `used` 塞进 `window_seconds`（design.md D8 tech debt 已清偿）。
-  对 `ApiError` 做穷尽 `match` 的下游代码需补充分支。
-- **`config::server::ServerConfig` 新增 `max_body_size: usize` 字段**（默认 10 MiB，
-  `#[serde(default)]` 兼容旧配置文件）。以结构体字面量构造 `ServerConfig` 的代码需补充
-  该字段或使用 `..Default::default()`。
-- **`security::bearer::BearerAuth`**：新增手动 `Drop`（销毁时 volatile 擦除 secret）与
-  手动 `Debug`（secret 恒输出 `[REDACTED]`）。builder 现拒绝空 `audience`/`issuer`
-  （返回 `AuthConfigError::InvalidSecret`）。
-- **错误脱敏统一（行为变更）**：`ApiError::internal_*` 构造器现在强制对 message 执行
-  敏感信息脱敏（JWT/密钥/信用卡/SSN/文件路径 + 500 字符截断）；`SdForgeError::Internal`
-  的 `sanitized_message()` 与 `to_service_error()`、`ApiError::Internal` 的 `to_mcp_json()`
-  现在统一输出通用文案 `"An internal error occurred. Please try again later."`，原始
-  消息只保留在 `Display`/`Debug`（日志）中。断言原始消息会出现在外部输出的测试需更新。
-- **基准目标更名**：Cargo.toml `[[bench]]` 目标 `axiom_bench` 更名为 `sdforge_bench`
-  （原 `src/benches/axiom_bench.rs` 为空壳孤儿文件，已删除）。
-
-### 新增 (Added)
-- **MCP 与 CLI 认证对等**：认证覆盖延伸到 MCP 与 CLI 入口
-  （复用 gRPC 拦截器的 `GrpcAuthVerifier` 端口——推荐别名 `ProtocolAuthVerifier`
-  ——与 Bearer/API-key 凭据库）。MCP：`SdForgeMcpServer::with_auth_verifier`
-  配置后 `call_tool` **与 `list_tools`** 先校验凭据，拒绝返回 JSON-RPC
-  server-error 码 `-32001`（`get_info`/`initialize` 是先于认证的协议握手，不门控）；
-  stateless 适配层委托调用自动继承；校验经 `grpc_auth::verify_async` 在
-  blocking pool 执行（API key 恒定时间防御不阻塞 tokio worker，gRPC 拦截器
-  同批迁移）。CLI：`CliBuilder::with_auth_verifier` 配置后 `execute` 先校验
-  `SDFORGE_TOKEN`/`SDFORGE_API_KEY` 环境凭据再派发（环境变量可被同用户子进程
-  读取并易泄漏进 CI 日志/`set -x`，建议短期凭据 + CI 掩码）。未启用 `security`
-  feature 或未配置 verifier 时行为完全不变。
-- **MCP RBAC 对等**：`#[forge(auth(role = "..."))]`/`McpToolRegistration::
-  with_roles` 角色声明贯通 MCP 路径——`call_tool`/`call_tool_with_credentials`
-  按已验证身份的 permission 校验（无匹配 → JSON-RPC `-32003`，新增
-  `mcp::MCP_FORBIDDEN`；`security` feature 关闭时 fail-safe 全拒，
-  对齐 gRPC `roles` 语义）。`McpToolRegistration` 为承载 roles 改为手写
-  结构（`new` 四参签名不变，新增 const `with_roles`，手写
-  `inventory::submit!` 的下游零改动）。跨协议权限差收敛：同一低权限
-  API key 在 gRPC 被 roles 拒绝的方法，MCP 侧同样拒绝。
-- **`grpc_auth::make_verifier(&AuthConfig)`**：从 `AuthConfig`（Jwt/ApiKey 种子键）
-  构建统一 verifier 的单一构造点——各协议入口的 verifier 接线均为手动，无配置级
-  自动贯通。
-- **`grpc_auth::verify_async`**：`GrpcAuthVerifier` 的异步验证包装
-  （`spawn_blocking`），恒定时间防御与 async 调度兼容。
-- **MCP 凭据注入契约（重要）**：sdforge 不自带终结 HTTP 的 MCP 传输，凭据注入是
-  **传输适配层的显式义务**——适配层从原始 `Authorization`/`x-api-key` 头经
-  `McpCredentials::from_headers` 构建凭据并插入 JSON-RPC 消息 extensions（示例见
-  `src/mcp/tests/auth_tests.rs`）。未注入时所有受门控调用一律 `-32001` 拒绝
-  （fail-closed）；内建 stdio 传输无法携带头，`serve_stdio` 在挂载 verifier 时
-  输出启动警告。
-- **覆盖边界声明**：授权（`#[forge(auth(role = ...))]`/roles）当前覆盖 HTTP、
-  gRPC 与 MCP；**CLI/WS 维度不生效**——CLI 属本地信任边界（进程入口即操作者），
-  WS 握手后无逐请求身份通道，引入网络触发形态前必须先补授权或部署层补偿
-  （SECURITY.md 协议覆盖矩阵已登记，发布前核对）。纵深防御配套：`call_tool_internal`
-  在挂载 verifier 时 fail-closed 拒绝（同步路径无凭据通道，杜绝进程内公开旁路），
-  进程内带外认证后的程序化调用走 `SdForgeMcpServer::call_tool_with_credentials`
-  （与协议路径共用同一认证 + RBAC 防线）；`cli::dispatch::dispatch` 仍是无认证的
-  进程内分发口（文档标注）。
-- **CLI 机器可读输出契约与 Agent 知识包**：`CliBuilder::build()` 内建挂载全局
-  `--format text|json` 开关（`text` 默认，向后兼容）。`json` 模式：成功结果为
-  handler `Value` 紧凑 JSON、错误为 `UnifiedError` JSON（`{"code","message",
-  "trace_id"?,"field"?}`，与 HTTP/gRPC 同一形状）——**两者都走 stdout**；退出码
-  契约不变（成功 0 / 错误 1）；认证失败同样按 `--format` 渲染。`docs` 子命令
-  `--format` 新增 `agent` 取值：输出 Agent 知识包（schema
-  `sdforge.agent-knowledge/v1`）——程序标识、输出契约（`--format` 取值/退出码/
-  流约定）、全部注册 CLI 子命令（含参数元数据）与 MCP 工具（含 input_schema，
-  `mcp` feature 启用时），能力清单直接读 inventory 注册表，注册即入包。
-  知识包 `output_contract` 数值派生自 `cli::output` 公开常量（FORMAT_VALUES/
-  FORMAT_DEFAULT/退出码），并以一致性测试锁定与 clap 白名单/OutputFormat::default
-  的同源关系；`exceptions` 段显式声明 `docs` 子命令的独立 `--format` 语义与
-  自输出行为（全局 `--format json` 不包装其输出），`null_return` 段登记
-  handler 返回 null 时不产生 stdout 输出的哨兵行为；`docs` 为**保留子命令名**
-  （dispatch 先于用户注册拦截），`program` 段的 `name_semantics` 字段声明
-  名字来源，宿主可用 `generate_agent_knowledge_for_host` 传入 `with_name`
-  的二进制名。
-  附带修复：`docs` 子命令此前只有 clap 定义、`execute` 分发路径未接通
-  （`prog docs` 会落 NotFound）——现于 dispatch 接通，docs 自行完成输出
-  （返回 `Value::Null` 哨兵，execute 跳过渲染）；全局 `--format` 穿透到 docs
-  子命令 matches 的 `text`/`json` 值按 docs 默认（All）处理（clap 白名单外的
-  非法值仍 loud-fail），两开关语义独立。CLI text 模式认证失败文案保持历史
-  小写形态 `error: authentication failed: …`（与 HTTP 共用的 Display 隔离）。
-- **幂等重放防护**：新增 `idempotency` feature（已入 `full`）。HTTP 中间件支持
-  `Idempotency-Key` 头（POST/PUT/PATCH）：重放缓存响应（附 `Idempotency-Replayed: true`）、
-  并发在途 409；gRPC 支持 `idempotency-key` metadata（在途 `ALREADY_EXISTS`）。
-  核心为 `cache::IdempotencyStore` 三态状态机，`ServerConfig.idempotency` 配置节
-  （`enabled` 默认 false / `ttl_secs` / `max_response_bytes`）。
-- **gRPC RBAC 对等**：`#[forge(auth(role = "..."))]` 角色声明贯通 gRPC 路径
-  （无匹配 permission → `PERMISSION_DENIED`；security feature 关闭时 fail-safe 拒绝）。
-- **gRPC 参数校验对等**：`#[forge(validate)]` + `#[param(ge/le/min_length/max_length/
-  not_blank/email)]` 规则在 gRPC 闭包执行（首违规短路 `ValidationError`），
-  与 HTTP 共享同一规则生成单源。
-- **gRPC 服务配置**：`GrpcServerConfig` 暴露 `http2_keepalive_interval/timeout`；
-  新增 `grpc-tls` feature（`ServerTlsConfig` 接线暴露，证书加载由调用方负责）。
-- **`GrpcServerConfig` 新增 `idempotency_store`/`idempotency_ttl_secs` 字段**
-  （feature = `idempotency`）。
-
-
-### 变更 (Changed)
-
-- **错误码映射单一事实来源**：`error::unified::mapping_for`/`grpc_code_for` 统一
-  `ApiError` → HTTP 状态/错误码/gRPC Code；修正 `InvalidInput` HTTP 400 与 gRPC 侧
-  422 的两张皮分歧（gRPC 业务错误不再自报 422）。
-- **性能**：OpenAPI spec 端点改借用序列化（免去每请求整树深拷贝）；健康探针
-  poll 正常路径去除 name 克隆分配。
-- **`GetInfo` 版本号取 `CARGO_PKG_VERSION`**（此前硬编码 "0.1.0"）。
-- **限流覆盖 gRPC `get_info`**（与 `call` 共用 guard，缺 remote_addr 时 "unknown" 兜底）。
-
-### 移除 (Removed)
-
-- workspace tower 依赖移除未使用的 `retry` feature（全仓无 RetryLayer 使用）。
-
-### 新增 (Added)
-
-- `http::VersionRedirectLayer` / `VersionRedirectService`：可注入 `VersionRouterConfig`
-  的版本重定向层。此前 `version_redirect_middleware` 硬编码默认配置，导致
-  `redirect_unknown` / `sunset_header` / `deprecated_versions` 三个配置字段全部无效。
-- `core::RegexCache::common::is_strong_password()`：完整密码强度检查
-  （≥8 位 + 小写/大写/数字/特殊字符各至少一个）。
-- `ServerConfig::max_body_size`：请求体上限可配置化（此前硬编码 10 MB）。
-- 回归测试：广播可达性、超大消息连接清理、深度嵌套空容器拒绝、孤儿 key 拒绝、
-  rotate 后旧 key 失效、终态会话驱逐、审计并发不丢日志、超时丢弃计数等。
-
-### 修复 (Fixed)
-
-- **WebSocket**（`src/websocket/handler.rs`）：
-  - 修复广播/推送整体失效：`handle_socket` 此前丢弃 `WebSocketConnection::new`
-    返回的 receiver，manager 注册的所有连接均为死通道，`broadcast` 必然失败并误删
-    连接。现在所有出站消息统一经通道由 forwarder 任务写回 socket。
-  - 修复连接泄漏 DoS：超大消息早退路径跳过 `remove_connection` 且无 RAII 兜底，
-    连接条目永久泄漏。现在以 Drop guard 保证所有退出路径清理。
-  - 修复 JSON 深度检查绕过：`calculate_value_depth` 不计容器自身层级，
-    17~128 层纯空容器嵌套（如 `[[[...]]]`）深度算成 0，绕过 `MAX_JSON_DEPTH=16`。
-  - `MAX_STRING_LENGTH`（64KB）从 `cfg(test)` 文档性常量变为 `parse_websocket_message`
-    强制校验（`id`/`method`/`error`/`event`）。
-- **CORS**（`src/config/cors.rs`）：`build_cors_layer` 硬编码
-  `.allow_methods(Any).allow_headers(Any)`，`allowed_methods` / `allowed_headers`
-  配置完全无效。现在配置精确生效（空列表/`*` 保持 Any 兼容；非法头部名报错）。
-- **API Key**（`src/security/api_key.rs`、`api_key_manager.rs`）：
-  - 孤儿 key（见破坏性变更）；
-  - `rotate_key` 无 `rotation_config` 时旧 key 永久有效（现在轮换即替换）；
-  - 元数据反序列化 `i64 as u64` 回绕导致 `Instant` 运算 panic / 永不过期
-    （现在钳制，fail-closed）；
-  - `cleanup_versions` retain 路径不重算 `active_version_index` 导致活动版本丢失。
-- **审计日志**（`src/security/audit/`）：
-  - `log()` 对同用户日志列表的 get→push→set 无互斥，并发写互相覆盖丢审计记录
-    （新增 `merge_lock`，log() 与 worker 合并共用）；
-  - trait 路径 `total_log_count` 被新建 0 值计数器顶替，监控指标失真；
-  - 信号量超时丢弃不递增 `dropped_log_count`；
-  - builder 零值（`queue_size(0)` panic、`max_concurrent_ops(0)` 全超时、
-    `max_logs_per_user(0)` 全丢弃）统一钳制为最小 1。
-- **缓存**（`src/cache/cache_impl.rs`）：`SyncCache::delete` 在 backend 删除失败时
-  仍返回 `existed=true`，违反 trait 契约；现在返回 `false`。
-- **国际化**（`src/i18n/mod.rs`）：`translate_or_fallback` 两次独立加锁之间存在
-  TOCTOU，`set_locale` 并发时用过期 locale 查表（现在单锁完成快照+查表）。
-- **MRTR**（`src/mcp/mrtr.rs`）：`get_session` 静默吞掉毒化锁（现记录告警）；
-  Completed/Cancelled 终态会话永不驱逐，积累至 `MAX_MRTR_SESSIONS` 后
-  `create_session` 永久失败（现按超时窗口老化）。
-- **HTTP 路由**（`src/http/version_routing.rs`）：重定向丢弃 query string
-  （`/api/test?foo=bar` → `/api/v1/test`，现保留）；`sunset_header` 配置头名生效。
-- **HTTP 中间件**（`src/http/http_impl.rs`）：`resolve_route_path` 的 `base_path[1..]`
-  防御性切片（空串/多字节首字符 panic、无前导斜杠静默丢首字符）。
-- **正则**（`src/core/regex_cache.rs`）：`password_strong` 注释宣称强制复杂度而实际
-  仅查长度（现在文档诚实，完整检查请用 `is_strong_password`）。
-- **错误**（`src/error/context.rs`）：`ErrorContext::current()` 的 `file`/`line`
-  恒指向 context.rs 自身、`function` 恒为 `"()"`（现 `#[track_caller]` 捕获真实
-  调用方，`function` 诚实为 `None`）。
-- **JWT/Bearer**（`src/security/bearer/bearer_impl.rs`）：base64url 解码器查找表以
-  0 初始化，任何非法字节被静默当作 `'A'` 解码（现以 0xFF 哨兵严格拒绝）。
-- **基准正确性**（`src/benches/sdforge_bench.rs`）：cache_clear 首迭代后度量空缓存、
-  失效基准把 O(n) 重填充计入度量（改 `iter_batched`）、eviction 吞吐声明 150 与
-  实际 50 次操作不符、denied 路径 `let _ =` 掩盖回归（改断言）、
-  `jwt_secret_validation` 重复度量生成成本（现仅度量校验）。
-
-### 安全加固 (Security Hardening)
-
-- CI workflows（ci.yml / codeql.yml / release.yml / tag-deleted.yml）的所有第三方
-  action 引用从可变 tag 固定为 40 位 commit SHA（附版本注释）——消除供应链
-  tag 劫持风险（tiangang SAST 扫描 Medium 发现）。
-- `ApiError::internal_*` 构造器强制脱敏改为 feature 感知：`security` feature
-  关闭时退化为原样存储，保证裸默认构建与 ratelimit-only 构建可编译。
-- `to_service_error` 的 `Internal` 分支与 `sanitized_message` / `to_mcp_json`
-  三轨完全统一：HTTP 500 响应体现在不可能携带原始内部消息。
-
-### 已知依赖健康信号 (Known Dependency Signals)
-
-- `rustls 0.23.44 → 0.23.45`：RUSTSEC-2026-0285 安全公告驱动的依赖修复
-  （`cargo update -p rustls`），本轮已收敛。
-- `bincode 2.0.1`：RUSTSEC-2025-0141 标记为 unmaintained（informational，非漏洞，
-  trivy + cargo-audit 双通道均 0 CVE）。可留意 postcard/rkyv 等替代方案，无需
-  紧急行动。
-
-### 文档 (Documentation)
-
-- `hash_key`：补充无盐 SHA256 存储的威胁模型说明（确定性查找前提 + 依赖 key 高熵，
-  禁止低熵口令直入 `add_key`）。
-- `key_id`：说明 64-bit 截断是有意的审计隐私取舍，不参与认证决策。
-- `validate_key`：明确 `client_ip` 参数当前未使用（保持 API 兼容）。
-- `build_with_redirect`：明确警示其不挂载安全中间件，生产用 `build_with_config`。
-- `canonicalize_cache_key`：明确其为调用方工具函数，缓存内部不会自动调用。
-- `VersionRouterConfig::supported_versions`：明确版本合法性门控委托给路由注册。
-- `examples/src/security/api_key.rs`、`examples/src/websocket/chat.rs`：显著标注
-  认证/WS 端点为演示桩，禁止复制到生产。
-
----
 
 ## [0.5.0-rc.4] - 2026-09-14
 
