@@ -116,10 +116,32 @@ SDForge 使用自包含的 TOML 配置（无需外部配置中心）。示例配
 
 ```toml
 # config.toml
-[rate_limit]
+# 值为 limiteron 的 FlowControlConfig（版本 + 规则列表），不是单个阈值字段
+[security.rate_limit]
+version = "1.0"
+
+[security.rate_limit.global]
+storage = "memory"   # memory | postgresql | redis
+cache = "memory"     # memory | redis | none
+metrics = "prometheus"  # prometheus | statsd | none
+
+[[security.rate_limit.rules]]
+id = "http_default"
+name = "HTTP 默认限流"
+priority = 100
 enabled = true
-requests_per_minute = 60
-burst_size = 10
+
+[[security.rate_limit.rules.matchers]]
+type = "User"
+user_ids = ["*"]
+
+[[security.rate_limit.rules.limiters]]
+type = "TokenBucket"
+capacity = 60        # 桶容量（突发上限）
+refill_rate = 1      # 每秒补充量
+
+[security.rate_limit.rules.action]
+on_exceed = "reject"
 
 [cache]
 enabled = true
@@ -132,7 +154,7 @@ track_stats = true
 
 ### gRPC 服务
 
-启用 `grpc` feature 后，`#[forge(grpc_method = "...")]` 通过 inventory 注册 handler，由 `SdForgeGrpcService` 按 `grpc_method` 路由（实现 `Call` / `GetInfo` 两个 RPC）。服务器经 `build_server_with_config` 启动：
+启用 `grpc` feature 后，`#[forge(grpc_method = "...")]` 通过 inventory 注册 handler，由 `SdForgeGrpcService` 按 `grpc_method` 路由（实现 `Call` / `GetInfo`，及 server-streaming `CallStream`——需启用 `streaming`，未启用时返回 unimplemented）。服务器经 `build_server_with_config` 启动：
 
 ```rust
 use sdforge::grpc::{GrpcServerConfig, build_server_with_config};

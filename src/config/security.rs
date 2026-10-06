@@ -275,3 +275,59 @@ mod tests {
         assert!(config.rate_limit.is_some());
     }
 }
+
+#[cfg(all(test, feature = "http", feature = "ratelimit"))]
+mod doc_examples_tests {
+    //! 钉死 docs/USER_GUIDE.md 里 `[security.rate_limit]` 示例的可反序列化性：
+    //! 该段值是 `limiteron::config::FlowControlConfig`（version + rules），
+    //! 文档若写成单个阈值字段（如 rate/window_seconds）用户照抄会直接解析失败。
+    use super::SecurityConfig;
+
+    const DOCUMENTED_TOML: &str = r#"
+[rate_limit]
+version = "1.0"
+
+[rate_limit.global]
+storage = "memory"
+cache = "memory"
+metrics = "prometheus"
+
+[[rate_limit.rules]]
+id = "http_default"
+name = "HTTP 默认限流"
+priority = 100
+enabled = true
+
+[[rate_limit.rules.matchers]]
+type = "User"
+user_ids = ["*"]
+
+[[rate_limit.rules.limiters]]
+type = "TokenBucket"
+capacity = 60
+refill_rate = 1
+
+[rate_limit.rules.action]
+on_exceed = "reject"
+"#;
+
+    #[test]
+    fn security_rate_limit_documented_shape_deserializes() {
+        let cfg: SecurityConfig = toml::from_str(DOCUMENTED_TOML)
+            .expect("USER_GUIDE 的 [security.rate_limit] 示例必须可解析");
+        let rl = cfg.rate_limit.expect("rate_limit 应存在");
+        assert_eq!(rl.version, "1.0");
+        assert_eq!(rl.rules.len(), 1);
+        assert_eq!(rl.rules[0].id, "http_default");
+    }
+
+    #[test]
+    fn single_threshold_shape_is_rejected_as_documented_wrong() {
+        // 反向保护：旧文档写法（单个 rate/window_seconds）不是 FlowControlConfig 形状
+        let bad = "[rate_limit]\nrate = 60\nwindow_seconds = 1\n";
+        assert!(
+            toml::from_str::<SecurityConfig>(bad).is_err(),
+            "单个阈值字段不应被误当作合法配置"
+        );
+    }
+}
