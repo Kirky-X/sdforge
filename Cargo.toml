@@ -51,12 +51,12 @@ base64 = { version = "0.23", default-features = false, features = ["std", "alloc
 # 配置依赖
 toml = { version = "1.1", default-features = false, features = ["parse", "display"] }
 
-# 缓存依赖 - oxcache 0.3 用 minimal feature 提供内存后端 + 序列化 + tracing
-oxcache = { version = "0.5.0-rc.4", default-features = false, features = ["minimal"] }
+# 缓存依赖 - oxcache 0.5 用 minimal feature 提供内存后端 + 序列化 + tracing
+oxcache = { version = "0.5.0-rc.6", default-features = false, features = ["minimal"] }
 
 # 数据库网关 - dbnexus 0.6 embedded（sqlite）+ sql-parser：数据 API 网关的
 # 池化/解析面（db-integration feature）
-dbnexus = { version = "0.6.0-rc.5", default-features = false, features = ["embedded", "sql-parser"] }
+dbnexus = { version = "0.6.0-rc.6", default-features = false, features = ["embedded", "sql-parser"] }
 
 # async trait 实现 - limiteron DistributedLimiter trait 的 mock/适配实现用
 # （trait 本身以 async_trait 声明；依赖已在依赖树中，显式声明供实现侧使用）
@@ -74,7 +74,7 @@ tonic-prost = { version = "0.14", default-features = false }
 
 # 流控依赖 - limiteron 0.2.1 提供统一限流/封禁/配额/熔断
 # 纯 crates.io 版本依赖（rc.2 已发布；本地跨仓联调可用 .cargo/config.toml [patch]）。
-limiteron = { version = "0.3.0-rc.4", default-features = false }
+limiteron = { version = "0.3.0-rc.6", default-features = false }
 
 # OpenAPI 依赖
 utoipa = { version = "5.5", default-features = false, features = ["macros"] }
@@ -267,15 +267,15 @@ simd-json = { workspace = true, optional = true }
 limiteron = { workspace = true, optional = true }
 
 # trait-kit integration (optional, feature-gated via `kit`).
-# trait-kit 0.3 is published to crates.io.
+# trait-kit 0.5 is published to crates.io.
 # Mirrors dbnexus's pattern.
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
-trait-kit = { version = "0.5.0-rc.6", default-features = false, features = ["async"], optional = true }
+trait-kit = { version = "0.5.0-rc.7", default-features = false, features = ["async"], optional = true }
 
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # 纯 crates.io 版本依赖（rc.2 已发布）。
 # default-features = false (Rule 6) — only core logging is pulled in.
-inklog = { version = "0.3.0-rc.5", default-features = false, optional = true }
+inklog = { version = "0.3.0-rc.7", default-features = false, optional = true }
 
 # ICU4X internationalization (optional, feature-gated via `i18n`).
 # icu 2.2 provides locale-aware number/date/plural/collation formatting +
