@@ -167,7 +167,7 @@ fn snake_case(input: &str) -> String {
 
 /// 渲染 Rust client 文件（零外部依赖；`reqwest` 为真时追加 cfg 门控的
 /// `ReqwestTransport`）。路由与方法清单渲染前按确定性排序（见
-/// [`sorted_routes`]），同一路由集合恒产出同一文本。
+/// `sorted_routes`（内部辅助）），同一路由集合恒产出同一文本。
 #[must_use]
 pub fn generate_rust_client(
     routes: &[ClientRoute],
@@ -337,7 +337,7 @@ pub fn generate_rust_client(
 }
 
 /// 渲染 TypeScript client 文件（`fetch` + 内嵌类型定义）。渲染前按
-/// [`sorted_routes`] 确定性排序（与 Rust 产物同一顺序保证）。
+/// `sorted_routes`（内部辅助） 确定性排序（与 Rust 产物同一顺序保证）。
 #[must_use]
 pub fn generate_typescript_client(
     routes: &[ClientRoute],

@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: MIT
 //! `#[forge::log]` 的运行时支撑（inklog 结构化日志 + DataMasker 脱敏）。
 //!
-//! 宏展开的壳函数调用本模块的 [`entry`] / [`exit`] / [`exit_error`]；消息
-//! 渲染（[`render_enter`] / [`render_exit`]）对载荷先做 DataMasker 掩码再
+//! 宏展开的壳函数调用本模块的 [`crate::log_attr::entry`] / [`crate::log_attr::exit`]
+//! / [`crate::log_attr::exit_error`]；消息渲染（[`crate::log_attr::render_enter`]
+//! / [`crate::log_attr::render_exit`]）对载荷先做 DataMasker 掩码再
 //! 入日志，避免参数/返回值中的邮箱、卡号、密钥等敏感片段泄漏进日志管道。
 //!
 //! 日志输出经 `log` crate 门面——启用 `inklog` feature 并调用
@@ -64,7 +65,7 @@ fn masker() -> &'static ::inklog::DataMasker {
 const MAX_MASKED_PAYLOAD_BYTES: usize = 64 * 1024;
 
 /// 对待入日志的文本做 DataMasker 掩码（超限载荷先截断，见
-/// [`MAX_MASKED_PAYLOAD_BYTES`]）。
+/// `MAX_MASKED_PAYLOAD_BYTES` 内部常量）。
 #[must_use]
 pub fn mask(text: &str) -> String {
     let truncated = if text.len() > MAX_MASKED_PAYLOAD_BYTES {

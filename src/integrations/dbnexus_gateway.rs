@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! dbnexus 数据 API 网关（`db-integration` feature）。
 //!
-//! 在 dbnexus [`DbPool`](dbnexus::DbPool) 之上提供**白名单只读数据 API**
+//! 在 dbnexus [`dbnexus::DbPool`] 之上提供**白名单只读数据 API**
 //! 的最小复用层：表/列白名单校验先于 SQL 构建（标识符注入面被白名单关
 //! 死），等值过滤值经集中转义（单引号翻倍）作为字面量进入 SQL，LIMIT/
 //! OFFSET 分页参数在服务端夹紧。典型用法是经 `#[forge]` 端点把

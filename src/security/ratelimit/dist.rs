@@ -147,7 +147,7 @@ enum CircuitState {
 /// 固定窗口分布式限流器（实现 [`RateLimiter`]）。
 ///
 /// 泛型 `B` 为 limiteron `DistributedLimiter` 计数后端：测试/单实例用
-/// `InMemoryDistributedLimiter`（[`Self::in_memory`]），跨副本生产部署用
+/// `InMemoryDistributedLimiter`（经 [`Self::new`] 传入），跨副本生产部署用
 /// limiteron `RedisDistributedLimiter`（`limiteron/distributed` +
 /// `lua-script` feature，Lua 原子窗口脚本）。
 pub struct DistributedRateLimiter<B: DistributedLimiter + Send + Sync> {
