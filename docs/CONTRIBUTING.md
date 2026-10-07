@@ -77,6 +77,13 @@ git checkout -b feat/<功能名>   # 或 chore/<任务名>
 - 单元测试内嵌在源文件 `#[cfg(test)] mod tests` 中；集成测试放 `tests/integration/`
 - 确保所有特性组合可编译：`cargo test --features "<feature>"`
 - 覆盖率目标：核心逻辑 90%+（CI 门禁同口径），工具代码 70%+
+- **覆盖率口径（唯一强制项）**：CI 的 coverage job 跑
+  `cargo llvm-cov --features full --lib --fail-under-lines 90`（本地同口径见
+  `lefthook.yml` pre-push）。Codecov 上传的也是这一份 `--lib` lcov；
+  `codecov/patch` 为**咨询性**状态（`fail_ci_if_error: false`，不影响 CI 结果），
+  其目标由 Codecov 默认策略（auto ≈ 项目当前覆盖率）决定——大 PR 的 patch
+  覆盖率低于项目均值时会显示红色，属信号而非门禁。若要显式控制该状态，
+  需新增 `codecov.yml` 声明 project/patch 目标或将其标为 informational。
 - 测试金字塔基线与 E2E 场景定义见[测试场景](TEST_SCENARIOS.md)
 
 ### 4. 特性组合校验
