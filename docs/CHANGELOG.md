@@ -246,7 +246,7 @@
 - **测试基线漂移**（`docs/TEST_SCENARIOS.md`）：`test_target_inventory_tests` 的三项自洽
   断言在 main 上即为失败——清单注册 48 个 `[[test]]`、`tests/integration/` 实际 39 个文件，
   而文档基线仍写 47/38（新增测试目标时未同步）。本轮按实测刷新为 48 目标 / integration 39 /
-  58 个有产出目标 / 2301 L1 单测 / 3165 passed。注：sdforge 的 CI 仅在 `pull_request` 与
+  58 个有产出目标 / 2334 L1 单测 / 3198 passed。注：sdforge 的 CI 仅在 `pull_request` 与
   `schedule` 触发，直推 main 的改动不会跑该门禁，故漂移得以留存（已在本报告列为流程改进项）。
 - **`docs/USER_GUIDE.md` 的 `[security.rate_limit]` 示例不可反序列化**：示例写作
   `rate`/`window_seconds` 单阈值形状，而实际类型是 limiteron `FlowControlConfig`
@@ -260,6 +260,41 @@
   path-only 形式作为 dev-dependency 出现在锁定树中，无 crates.io 版本可匹配 bans 通配，
   `cargo deny check bans` 直接 FAILED；与 dbnexus 既有处置一致改为 `warn` 并就地注释原因。
   代价：真正命中的 bans 通配项不再阻断 CI，需人工审阅 `cargo deny` 输出。
+
+- **响应缓存把回源首次写回标成 `x-cache: HIT`**（`src/cache/response_cache.rs`）：
+  写回路径复用了命中分支的 `deserialize_response`，冷启动首个请求也会对客户端谎报
+  命中，令任何基于该头的命中率统计与客户端判断失真。`deserialize_response` 改为接收
+  缓存状态标签（命中传 `HIT`、回源写回转 `MISS`）。全仓（tests/examples/docs）经确认
+  无任何对 `x-cache` 的既有断言，故该纠正不破坏现有契约。
+- **幂等 scope 的兜底值加固**（`src/http/idempotency.rs`）：原兜底为常量 `"unmatched"`，
+  会把所有未匹配请求（以及任何使 `MatchedPath` 缺失的上游行为变化）并入同一 scope，
+  使同一 `Idempotency-Key` 跨端点互相重放。改以请求 URI 路径兜底。经判别测试确认：
+  本仓生产接线（`Router::layer`）下 `MatchedPath` 在中间件内已可用（不同参数化 id 共享
+  scope），故该分支属纵深防御而非现存故障——发布过程中一度把它判为"跨端点重放缺陷"，
+  已由探针测试证伪并在注释中记录实测结论。
+
+#### 本轮补充的单元级回归覆盖（门禁期间）
+
+- **`src/http/idempotency.rs` 12 项**：外层 `layer` 与 `route_layer` 两种接线的 scope 语义、
+  非 POST/无 key 直通、执行后重放（还原状态码与 media type）、InFlight 409 + UnifiedError、
+  失败响应不缓存可立即重试、超限响应原样透传并标 `oversized`、超 32 MiB 硬上限以
+  `RESPONSE_TOO_LARGE` 显式失败并释放 claim、非法缓存状态码回退 200。
+- **`src/http/graceful.rs` 6 项**：自然排空、在途请求排空不被掉断、drain 超时强制中止且
+  不等待慢 handler、`after_drain` 钩子在两条收尾路径均被 await、`ConnectInfo` 变体交出
+  真实 TCP 对端端口、无 kit/无钩子时收尾为 no-op。
+- **`src/cache/response_cache.rs` 6 项**：首次 MISS→二次 HIT、MISS 标签正确性、query 参与
+  key 与大小写归一、非 GET 直通且不写缓存、非 2xx 不缓存、脏条目（长度不足/状态码非法）
+  回源而不 panic。
+- **`src/docs/swagger.rs` 5 项**（该模块此前无任何单元测试）：动态 spec 端点合法 JSON 且
+  进程级缓存令响应字节一致、Swagger UI 首页与缺失资源 404、路径遍历（含百分号编码）被拒
+  且不回显文件内容、`with_spec` 变体不占用 `/api-docs/openapi.json`、`with_openapi` 变体
+  返回调用方 spec。
+- **`src/log_attr.rs` 4 项 + `src/lifecycle.rs` 1 项**：超限载荷尾部不得以明文进入日志、
+  截断点回退到字符边界不 panic、`render_enter`/`render_exit` 的掩码与键名形态；生命周期
+  钩子按 phase 分流且单个钩子 future panic 不短路其余钩子。
+- **覆盖率**：`--lib` 口径 93.68% → 94.16% → **95.13%**（`--fail-under-lines 95` 通过）。
+  同时记录：同一代码在"全目标口径"（含集成/E2E 测试执行、`tests/` 不计分母）下为
+  95.36%——CI 现口径 `--lib` 结构上看不到集成测试的贡献，故本轮以补齐单元测试达标。
 
 ### 安全加固 (Security Hardening)
 
