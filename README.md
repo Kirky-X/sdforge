@@ -340,8 +340,8 @@ cargo test --features full --workspace
 # lib 测试（CI 覆盖率口径）
 cargo test --features full --lib
 
-# 覆盖率（CI 门禁 ≥80% 行覆盖，lefthook pre-push 同口径）
-cargo llvm-cov --features full --lib --lcov --fail-under-lines 80
+# 覆盖率（CI 门禁 ≥90% 行覆盖，lefthook pre-push 同口径）
+cargo llvm-cov --features full --lib --lcov --fail-under-lines 90
 
 # 格式化与零告警 Lint
 cargo fmt --all -- --check

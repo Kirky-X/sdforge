@@ -76,7 +76,7 @@ git checkout -b feat/<功能名>   # 或 chore/<任务名>
 - 为所有新功能编写测试
 - 单元测试内嵌在源文件 `#[cfg(test)] mod tests` 中；集成测试放 `tests/integration/`
 - 确保所有特性组合可编译：`cargo test --features "<feature>"`
-- 覆盖率目标：核心逻辑 80%+，工具代码 70%+
+- 覆盖率目标：核心逻辑 90%+（CI 门禁同口径），工具代码 70%+
 - 测试金字塔基线与 E2E 场景定义见[测试场景](TEST_SCENARIOS.md)
 
 ### 4. 特性组合校验

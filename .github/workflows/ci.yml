@@ -161,14 +161,14 @@ jobs:
           tool: cargo-llvm-cov
       - name: Install protoc
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
-      - name: Generate coverage (gate ≥80% lines)
+      - name: Generate coverage (gate ≥90% lines)
         run: |
           cargo llvm-cov \
             --features full \
             --lib \
             --lcov \
             --output-path lcov.info \
-            --fail-under-lines 80 \
+            --fail-under-lines 90 \
             --ignore-filename-regex "(examples/|temp/|macros/|src/grpc/pb/|src/benches/)"
       - name: Upload coverage
         if: always()
