@@ -8,13 +8,13 @@
 //! ## 运行
 //!
 //! ```sh
-//! cargo run --example swagger_demo --features docs
+//! cargo run --example swagger_demo --features docgen,http
 //! # 然后访问：
 //! #  - http://127.0.0.1:8080/swagger-ui/        (Swagger UI)
 //! #  - http://127.0.0.1:8080/api-docs/openapi.json  (OpenAPI JSON)
 //! ```
 
-#![cfg(feature = "docs")]
+#![cfg(feature = "docgen")]
 
 use sdforge::core::ApiError;
 use sdforge::forge;

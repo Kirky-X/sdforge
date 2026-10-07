@@ -152,19 +152,19 @@ fn test_builder_with_dependencies_injects_state() {
 }
 
 // ============================================================================
-// CliBuilder 自动注入 docs 子命令（docs feature）
+// CliBuilder 自动注入 docs 子命令（docgen feature）
 // ============================================================================
 
-/// 当 `docs` feature 启用时，`CliBuilder::build()` 必须自动 append
+/// 当 `docgen` feature 启用时，`CliBuilder::build()` 必须自动 append
 /// 名为 `docs` 的 SubCommand（来自 [`crate::cli::docs_subcommand`]
 /// 模块），用户无需手动注册。
-#[cfg(feature = "docs")]
+#[cfg(feature = "docgen")]
 #[test]
 fn test_builder_includes_docs_subcommand() {
     let cmd = CliBuilder::new().build();
     let docs_sub = cmd
         .find_subcommand("docs")
-        .expect("docs feature 启用时 build() 必须包含 docs 子命令");
+        .expect("docgen feature 启用时 build() 必须包含 docs 子命令");
     // 验证子命令名称与 about 描述
     let about_str = docs_sub
         .get_about()
@@ -191,15 +191,15 @@ fn test_builder_includes_docs_subcommand() {
     );
 }
 
-/// 当 `docs` feature 未启用时（仅 `cli` feature），`CliBuilder::build()`
+/// 当 `docgen` feature 未启用时（仅 `cli` feature），`CliBuilder::build()`
 /// **不得**包含 `docs` 子命令——验证特性门控正确性，避免误注入。
-#[cfg(not(feature = "docs"))]
+#[cfg(not(feature = "docgen"))]
 #[test]
 fn test_builder_excludes_docs_subcommand_when_docs_disabled() {
     let cmd = CliBuilder::new().build();
     assert!(
         cmd.find_subcommand("docs").is_none(),
-        "docs feature 未启用时不应注入 docs 子命令"
+        "docgen feature 未启用时不应注入 docs 子命令"
     );
 }
 

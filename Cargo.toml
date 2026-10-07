@@ -175,7 +175,7 @@ required-features = ["cli"]
 # Swagger UI 示例 — 演示 swagger_ui_router() + axum serve
 [[example]]
 name = "swagger_demo"
-required-features = ["docs"]
+required-features = ["docgen", "http"]
 
 [dependencies]
 # Core dependencies (always required)
@@ -429,9 +429,11 @@ schemars = ["openapi", "dep:schemars"]
 # 独立于 http：cli 模块只用 clap + inventory + crate::core::ApiError
 cli = ["dep:clap", "dep:inventory"]
 
-# Docs 特性 - 统一文档输出（Swagger UI + CLI/MCP Markdown）
+# Docgen 特性 - 统一文档输出（Swagger UI + CLI/MCP Markdown）
 # 依赖 openapi（复用 OpenAPI 生成）+ utoipa-swagger-ui + clap-markdown + cli（docs 子命令需要 CLI 框架）
-docs = ["openapi", "dep:utoipa-swagger-ui", "dep:clap-markdown", "cli"]
+docgen = ["openapi", "dep:utoipa-swagger-ui", "dep:clap-markdown", "cli"]
+# 兼容别名：旧 feature 名 docs 转发到 docgen（正名迁移，避免与 docs.rs 文档构建歧义）
+docs = ["docgen"]
 
 # 客户端 SDK 生成 - 从 openapi/grpc 注册表生成 Rust/TypeScript 客户端，
 # 经保留 CLI 子命令 `sdk` 输出（蕴含 openapi 注册面 + cli 子命令分发）
@@ -553,7 +555,7 @@ full = [
     "logging",
     "openapi",
     "cli",
-    "docs",
+    "docgen",
     "inklog",
     "i18n",
     "idempotency",
@@ -739,7 +741,7 @@ required-features = ["cli"]
 [[test]]
 name = "docs_tests"
 path = "tests/integration/docs_tests.rs"
-required-features = ["docs"]
+required-features = ["docgen"]
 
 [[test]]
 name = "macro_tests"

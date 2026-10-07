@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! `docs` 子命令处理。
 //!
-//! 仅当 `docs` feature 启用时编译（`docs` 隐式包含 `cli`）。
+//! 仅当 `docgen` feature 启用时编译（`docgen` 隐式包含 `cli`）。
 //! **`docs` 是保留子命令名**：dispatch 在查找用户注册前优先拦截该名字
 //! 执行文档生成，下游经 `#[forge(cli = true)]` 注册同名命令将不可达。
 //! 提供 [`docs_subcommand_definition`] 用于在 [`crate::cli::CliBuilder`]

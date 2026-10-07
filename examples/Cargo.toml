@@ -20,7 +20,7 @@ publish = false
 # `lints.workspace = true`（cargo 不允许两者共存）；workspace lints
 # 未来新增条目时需同步至此。
 [lints.rust]
-unexpected_cfgs = { level = "allow", check-cfg = ['cfg(feature, values("http", "mcp", "grpc", "cli", "websocket", "openapi", "security", "lifecycle"))'] }
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(feature, values("http", "mcp", "grpc", "cli", "websocket", "openapi", "security", "lifecycle", "docgen"))'] }
 
 [dependencies]
 sdforge = { version = "0.5.0-rc.6", path = ".." }
@@ -58,7 +58,7 @@ grpc_examples = ["grpc"]
 logging_examples = ["logging"]
 openapi_examples = ["openapi", "http_examples"]
 cli_examples = ["cli"]
-docs_examples = ["docs"]
+docs_examples = ["docgen"]
 combined_examples = ["http_examples", "mcp_examples", "websocket_examples",
                      "streaming_examples", "security_examples", "cache_examples",
                      "grpc_examples", "logging_examples", "openapi_examples",
@@ -97,7 +97,9 @@ grpc_tls = ["sdforge/grpc-tls"]
 logging = ["sdforge/logging"]
 openapi = ["sdforge/openapi"]
 cli = ["sdforge/cli"]
-docs = ["sdforge/docs"]
+docgen = ["sdforge/docgen"]
+# 兼容别名：旧 feature 名 docs 转发到 docgen（随主仓正名迁移）
+docs = ["docgen"]
 # ratelimit alias — enables sdforge's pure rate-limit core (no http dep).
 # Required so that `#[cfg(feature = "ratelimit")]` in example code matches
 # sdforge's `GrpcServerConfig.rate_limiter` field gate.
@@ -106,7 +108,7 @@ ratelimit = ["sdforge/ratelimit"]
 [[example]]
 name = "swagger_demo"
 path = "swagger_demo.rs"
-required-features = ["docs", "http"]
+required-features = ["docgen", "http"]
 
 # oxcache 管理端点示例（经 BackendRegistry）。
 [[example]]

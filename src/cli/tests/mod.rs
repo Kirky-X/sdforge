@@ -12,7 +12,7 @@
 #[cfg(feature = "security")]
 mod auth_tests;
 mod builder_tests;
-#[cfg(feature = "docs")]
+#[cfg(feature = "docgen")]
 mod docs_subcommand_tests;
 mod handler_tests;
 mod integration_tests;

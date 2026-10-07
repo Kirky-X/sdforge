@@ -481,8 +481,8 @@ pub use openapi::{
 
 /// 统一文档输出模块 — Swagger UI + CLI/MCP Markdown。
 ///
-/// 仅当 `docs` feature 启用时可用。
-#[cfg(feature = "docs")]
+/// 仅当 `docgen` feature 启用时可用。
+#[cfg(feature = "docgen")]
 pub mod docs;
 
 /// 多协议客户端 SDK 生成（`sdk` feature：openapi + cli）。
@@ -492,13 +492,13 @@ pub mod docs;
 #[cfg(feature = "sdk")]
 pub mod sdk;
 
-#[cfg(feature = "docs")]
+#[cfg(feature = "docgen")]
 pub use docs::{DocError, DocFormat, generate_docs, write_docs};
 
-#[cfg(all(feature = "docs", feature = "http"))]
+#[cfg(all(feature = "docgen", feature = "http"))]
 pub use docs::swagger_ui_router;
 
-#[cfg(all(feature = "docs", feature = "http"))]
+#[cfg(all(feature = "docgen", feature = "http"))]
 pub use docs::swagger_ui_router_with_openapi;
 
 /// 初始化所有已注册的插件，确保它们不会被链接器优化掉。

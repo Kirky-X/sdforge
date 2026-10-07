@@ -83,7 +83,7 @@ fn output_contract() -> Value {
 }
 
 /// 全部注册的 CLI 子命令（`State` 参数不外露——它们由宿主注入）。
-/// `docs` feature 启用时追加内建 `docs` 子命令的静态条目（它不经
+/// `docgen` feature 启用时追加内建 `docs` 子命令的静态条目（它不经
 /// inventory 注册，但属于实际 CLI 面，Agent 必须可见）。
 fn cli_commands() -> Value {
     let mut commands: Vec<Value> = inventory::iter::<crate::cli::CliCommandRegistration>()
@@ -115,7 +115,7 @@ fn cli_commands() -> Value {
         })
         .collect();
 
-    #[cfg(feature = "docs")]
+    #[cfg(feature = "docgen")]
     commands.push(json!({
         "name": "docs",
         "version": env!("CARGO_PKG_VERSION"),

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! 统一文档输出模块 — Swagger UI + CLI/MCP Markdown。
 //!
-//! 仅当 `docs` feature 启用时可用。依赖 `openapi`（复用 `generate_openapi_spec`）、
+//! 仅当 `docgen` feature 启用时可用。依赖 `openapi`（复用 `generate_openapi_spec`）、
 //! `cli`（复用 `CliBuilder`）和 `clap-markdown`/`utoipa-swagger-ui`。
 //!
 //! # 示例

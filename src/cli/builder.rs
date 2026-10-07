@@ -169,7 +169,7 @@ impl CliBuilder {
     /// crate name). Each registration becomes a SubCommand; argument
     /// metadata is translated per the rules in the module-level docs.
     ///
-    /// When the `docs` feature is enabled, the `docs` SubCommand (from
+    /// When the `docgen` feature is enabled, the `docs` SubCommand (from
     /// [`mod@crate::cli::docs_subcommand`]) is automatically appended — users
     /// do not need to register it manually.
     ///
@@ -188,9 +188,9 @@ impl CliBuilder {
             root = root.subcommand(build_subcommand(reg));
         }
 
-        // docs feature 启用时自动注入 docs 子命令。
+        // docgen feature 启用时自动注入 docs 子命令。
         // 用 cfg 门控确保 cli-only 编译时不引入 docs_subcommand 模块依赖。
-        #[cfg(feature = "docs")]
+        #[cfg(feature = "docgen")]
         {
             root = root.subcommand(crate::cli::docs_subcommand_definition());
         }

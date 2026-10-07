@@ -14,7 +14,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-#[cfg(any(feature = "docs", feature = "sdk"))]
+#[cfg(any(feature = "docgen", feature = "sdk"))]
 use serde_json::Value;
 
 use crate::cli::{CliArgType, CliCommandRegistration, CliHandlerRegistration};
@@ -101,7 +101,7 @@ pub async fn dispatch(
     // CliBuilder::execute doc 声明）。未接通时 `docs --format …` 会落
     // NotFound，文档生成对 CLI 使用者不可达。注意 `docs` 是保留子命令
     // 名（本分支先于用户注册查找），下游注册同名命令不可达。
-    #[cfg(feature = "docs")]
+    #[cfg(feature = "docgen")]
     if name == "docs" {
         crate::cli::docs_subcommand::docs_subcommand(sub)?;
         return Ok((name.to_string(), Value::Null));

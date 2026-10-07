@@ -74,7 +74,7 @@ fn test_init_all_plugins_cli_count_is_idempotent() {
     );
 }
 
-/// Verify `init_all_plugins()` keeps working when `docs` feature is
+/// Verify `init_all_plugins()` keeps working when `docgen` feature is
 /// enabled alongside `cli`, and that `CliBuilder::build()` then surfaces both
 /// the inventory-registered commands and the auto-injected `docs` subcommand.
 ///
@@ -83,17 +83,17 @@ fn test_init_all_plugins_cli_count_is_idempotent() {
 /// that the CLI inventory must remain linked so that
 /// `CliBuilder::build()` can iterate it. This test guards against accidental
 /// regressions where enabling `docs` could shadow the CLI inventory.
-#[cfg(feature = "docs")]
+#[cfg(feature = "docgen")]
 #[test]
 #[serial_test::serial]
 fn test_init_all_plugins_with_docs_feature_keeps_cli_inventory() {
     // init_all_plugins must still return a non-zero cli_commands count when
-    // docs feature is enabled (the `t010_init_cmd` fixture is in this
+    // docgen feature is enabled (the `t010_init_cmd` fixture is in this
     // test binary).
     let counts = init_all_plugins();
     assert!(
         counts.cli_commands >= 1,
-        "init_all_plugins must still link CLI inventory under docs feature, got {}",
+        "init_all_plugins must still link CLI inventory under docgen feature, got {}",
         counts.cli_commands
     );
 
@@ -103,6 +103,6 @@ fn test_init_all_plugins_with_docs_feature_keeps_cli_inventory() {
     let cmd = CliBuilder::new().build();
     assert!(
         cmd.find_subcommand("docs").is_some(),
-        "CliBuilder::build() must include `docs` subcommand when docs feature is enabled"
+        "CliBuilder::build() must include `docs` subcommand when docgen feature is enabled"
     );
 }

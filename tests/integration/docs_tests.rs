@@ -8,7 +8,7 @@
 //! Feature requirement: run with
 //! `cargo test --features docs --no-default-features --test docs_tests`.
 
-#![cfg(feature = "docs")]
+#![cfg(feature = "docgen")]
 
 use sdforge::core::ApiError;
 use sdforge::forge;

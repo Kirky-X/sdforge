@@ -24,7 +24,7 @@
 | 文件 | 所需特性 | 说明 |
 |------|----------|------|
 | `basic_cli.rs` | `cli` | `#[forge(cli = true)]` + `CliBuilder::execute()` 一站式 CLI（构建 / 解析 / 分发 / 输出 / 退出） |
-| `swagger_demo.rs` | `docs` + `http` | 注册 HTTP 路由并挂载 Swagger UI（`/swagger-ui/`）与 OpenAPI JSON（`/api-docs/openapi.json`） |
+| `swagger_demo.rs` | `docgen` + `http` | 注册 HTTP 路由并挂载 Swagger UI（`/swagger-ui/`）与 OpenAPI JSON（`/api-docs/openapi.json`） |
 | `perf_regex_cache.rs` | `cache` | 正则缓存性能验证 |
 | `perf_lru_eviction.rs` | `cache` | LRU 驱逐性能验证 |
 | `perf_prefix_index.rs` | `cache` | 前缀索引性能验证 |
@@ -104,7 +104,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 
 # Swagger UI 示例（启动后访问 http://127.0.0.1:8080/swagger-ui/，
 # 端口可用 SDFORGE_HTTP_PORT 覆盖）
-cargo run --example swagger_demo --features "docs http"
+cargo run --example swagger_demo --features "docgen http"
 
 # 缓存性能验证（默认 features 已包含 cache，此处显式指定以便按需启用）
 cargo run --example perf_regex_cache --features cache
@@ -131,13 +131,13 @@ cargo run --example perf_batch_ops --features cache
 | `logging_examples` | `logging` | `logging/` | ✓ |
 | `openapi_examples` | `openapi`（隐含启用 `http_examples`） | `openapi/` | ✓ |
 | `cli_examples` | `cli` | `basic_cli.rs` | ✓ |
-| `docs_examples` | `docs` | `swagger_demo.rs`（另需 `http`，运行命令见上文） | ✓ |
+| `docs_examples` | `docgen` | `swagger_demo.rs`（另需 `http`，运行命令见上文） | ✓ |
 | `combined_examples` | 以上全部 | `combined/` | ✓ |
 
 补充说明：
 
 - 顶层 `perf_*.rs` 依赖 `cache` 特性（默认已启用）。
-- `swagger_demo` 的 `[[example]]` 声明了 `required-features = ["docs", "http"]`。
+- `swagger_demo` 的 `[[example]]` 声明了 `required-features = ["docgen", "http"]`。
 - 精简构建示例：`cargo build --no-default-features --features "http_examples"` 只编译基础与 HTTP 相关示例。
 - `grpc_tls` 是 sdforge 特性别名（映射 `sdforge/grpc-tls`），无独立 `*_examples` 开关：它只门控 `src/grpc/server.rs` 配置示例中的 `GrpcServerConfig.tls` 字段，与 sdforge 侧字段存在性同源，保证 workspace 级特性统一（如 `--all-features`）下任意组合可编译。
 

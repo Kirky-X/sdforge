@@ -205,12 +205,12 @@ pub use dispatch::dispatch;
 pub use output::OutputFormat;
 
 // ============================================================================
-// docs subcommand — definition + handler (docs feature only)
+// docs subcommand — definition + handler (docgen feature only)
 // ============================================================================
-#[cfg(feature = "docs")]
+#[cfg(feature = "docgen")]
 pub mod docs_subcommand;
 
-#[cfg(feature = "docs")]
+#[cfg(feature = "docgen")]
 pub use docs_subcommand::{docs_subcommand, docs_subcommand_definition};
 
 // ============================================================================

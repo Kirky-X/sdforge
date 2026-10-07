@@ -196,7 +196,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 
 - Independent of `http`: `mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `logging` / `inklog` / `i18n` / `simd-json` / `limiteron-integration`
 - Derived from `http`: `security` (includes `ratelimit-http` → `ratelimit` and `cache`), `ratelimit-http`, `websocket` (includes `streaming`), `health` / `metrics` / `graceful` / `serve-tls` (includes `graceful`) / `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
-- `docs` = `openapi` + `cli` (mounting the Swagger UI additionally requires `http`)
+- `docgen` = `openapi` + `cli` (mounting the Swagger UI additionally requires `http`; legacy name `docs` remains as a compat alias)
 - `kit` = `trait-kit` (health + lifecycle) + `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
 - `full` covers 25 runtime features (incl. `idempotency`) and excludes `simd-json` / `kit` / `limiteron-integration` — optional heavy deps (SIMD JSON, trait-kit module graph, rate-limit integration foundation) to be enabled individually as needed
 
@@ -228,7 +228,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 | Example | Required features | Description |
 |---------|-------------------|-------------|
 | `basic_cli` | `cli` | `#[forge(cli = true)]` + one-shot `CliBuilder::execute()` CLI |
-| `swagger_demo` | `docs` + `http` | Swagger UI route + OpenAPI JSON + axum serve |
+| `swagger_demo` | `docgen` + `http` | Swagger UI route + OpenAPI JSON + axum serve |
 | `perf_regex_cache` | `cache` | Regex cache performance verification |
 | `perf_lru_eviction` | `cache` | LRU eviction performance verification |
 | `perf_prefix_index` | `cache` | Prefix index performance verification |
@@ -236,7 +236,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 
 ```bash
 cargo run --example basic_cli --features cli -- echo --name world
-cargo run --example swagger_demo --features "docs http"
+cargo run --example swagger_demo --features "docgen http"
 cargo run --example perf_regex_cache --features cache
 ```
 

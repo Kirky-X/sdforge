@@ -213,10 +213,10 @@ fn output_contract_declares_docs_exceptions() {
     assert_eq!(docs_exc["self_emitted_output"], serde_json::json!(true));
 }
 
-/// docs feature 下内建 docs 子命令进入 commands 清单（built_in 标记 +
+/// docgen feature 下内建 docs 子命令进入 commands 清单（built_in 标记 +
 /// 独立 format 参数取值），Agent 可见实际 CLI 面。
 #[test]
-#[cfg(feature = "docs")]
+#[cfg(feature = "docgen")]
 fn commands_include_builtin_docs_entry() {
     let raw = generate_docs(DocFormat::Agent).expect("agent knowledge must generate");
     let v: serde_json::Value = serde_json::from_str(&raw).unwrap();

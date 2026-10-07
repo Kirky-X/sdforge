@@ -219,7 +219,7 @@ cargo run --example basic_cli --features cli -- echo --name world
   "openapi", "security", "lifecycle"))'] }`（按实际启用的镜像 feature
   裁剪），避免未知 cfg 告警
 - 派生自 `http`：`security`（含 `ratelimit-http` → `ratelimit` 与 `cache`）、`ratelimit-http`、`websocket`（含 `streaming`）、`health` / `metrics` / `graceful` / `serve-tls`（含 `graceful`）/ `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
-- `docs` = `openapi` + `cli`（Swagger UI 挂载需另启用 `http`）
+- `docgen` = `openapi` + `cli`（Swagger UI 挂载需另启用 `http`；旧名 `docs` 为兼容别名）
 - `kit` = `trait-kit`（health + lifecycle）+ `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
 - `full` 覆盖 25 项运行时特性（含 `idempotency`），不含 `simd-json` / `kit` / `limiteron-integration`——三者是可选重依赖（SIMD JSON、trait-kit 模块图、限流集成基座），按需单独启用
 
@@ -251,7 +251,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 | 示例 | 所需特性 | 说明 |
 |------|----------|------|
 | `basic_cli` | `cli` | `#[forge(cli = true)]` + `CliBuilder::execute()` 一站式 CLI |
-| `swagger_demo` | `docs` + `http` | Swagger UI 路由 + OpenAPI JSON + axum serve |
+| `swagger_demo` | `docgen` + `http` | Swagger UI 路由 + OpenAPI JSON + axum serve |
 | `perf_regex_cache` | `cache` | 正则缓存性能验证 |
 | `perf_lru_eviction` | `cache` | LRU 驱逐性能验证 |
 | `perf_prefix_index` | `cache` | 前缀索引性能验证 |
@@ -259,7 +259,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 
 ```bash
 cargo run --example basic_cli --features cli -- echo --name world
-cargo run --example swagger_demo --features "docs http"
+cargo run --example swagger_demo --features "docgen http"
 cargo run --example perf_regex_cache --features cache
 ```
 
