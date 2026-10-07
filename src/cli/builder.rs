@@ -18,6 +18,8 @@ use std::any::Any;
 use std::sync::Arc;
 
 use crate::cli::{CliArgType, CliCommandRegistration, GlobalArg};
+#[cfg(feature = "security")]
+use crate::core::ApiError;
 
 /// Builder that materializes a `clap::Command` from the global
 /// `CliCommandRegistration` registry.
@@ -39,6 +41,12 @@ pub struct CliBuilder {
     /// Global args applied to the top-level command (inherited by
     /// subcommands when `GlobalArg::global` is `true`, the default).
     global_args: Vec<GlobalArg>,
+    /// Optional auth verifier (feature = `security`). When `Some`,
+    /// `execute` verifies `SDFORGE_TOKEN` / `SDFORGE_API_KEY` environment
+    /// credentials before any dispatch. Mirrors the MCP/gRPC verifier
+    /// wiring for the CLI dimension.
+    #[cfg(feature = "security")]
+    auth_verifier: Option<Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
 }
 
 impl Default for CliBuilder {
@@ -47,6 +55,8 @@ impl Default for CliBuilder {
             state: None,
             name: env!("CARGO_PKG_NAME").to_string(),
             global_args: Vec::new(),
+            #[cfg(feature = "security")]
+            auth_verifier: None,
         }
     }
 }
@@ -72,6 +82,8 @@ impl CliBuilder {
             state: Some(state),
             name: env!("CARGO_PKG_NAME").to_string(),
             global_args: Vec::new(),
+            #[cfg(feature = "security")]
+            auth_verifier: None,
         }
     }
 
@@ -98,6 +110,49 @@ impl CliBuilder {
         self
     }
 
+    /// Require authentication in [`Self::execute`] (feature = `security`).
+    ///
+    /// Credentials are read from the `SDFORGE_TOKEN` (bearer JWT) /
+    /// `SDFORGE_API_KEY` environment variables and checked against the same
+    /// [`crate::security::grpc_auth::GrpcAuthVerifier`] port used by the
+    /// gRPC interceptor and the MCP `call_tool` gate. On failure the run is
+    /// rejected through the standard `error: …` + exit(1) channel before
+    /// any dispatch.
+    ///
+    /// # Exposure notes
+    ///
+    /// - Process environment variables are readable by same-user child
+    ///   processes (`/proc/<pid>/environ`) and leak easily into CI logs,
+    ///   `set -x` traces and crash reports — prefer short-lived credentials
+    ///   and secret masking in CI.
+    /// - Authentication only guards [`Self::execute`]; dispatching directly
+    ///   through `cli::dispatch::dispatch` performs **no** authentication
+    ///   (in-process library path).
+    /// - Wiring is manual per protocol entry; [`crate::security::
+    ///   grpc_auth::make_verifier`] builds a verifier from an `AuthConfig`.
+    #[cfg(feature = "security")]
+    #[must_use]
+    pub fn with_auth_verifier(
+        mut self,
+        verifier: Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>,
+    ) -> Self {
+        self.auth_verifier = Some(verifier);
+        self
+    }
+
+    /// Evaluate the authentication gate without running the CLI (feature =
+    /// `security`).
+    ///
+    /// `Some(reason)` reproduces exactly when [`Self::execute`] would reject
+    /// with `error: authentication failed: …` + exit(1); `None` proceeds to
+    /// dispatch. Kept as a pure function so the gate's wiring is testable
+    /// without spawning the process (`execute` is `-> !`).
+    #[cfg(feature = "security")]
+    pub(crate) fn authentication_failure(&self) -> Option<String> {
+        let verifier = self.auth_verifier.as_ref()?;
+        crate::cli::dispatch::authenticate_cli(verifier.as_ref()).err()
+    }
+
     /// Borrow the injected application state, if any.
     ///
     /// Returns `None` for builders constructed via \[`new`\] / \[`default`\].
@@ -117,6 +172,13 @@ impl CliBuilder {
     /// When the `docs` feature is enabled, the `docs` SubCommand (from
     /// [`mod@crate::cli::docs_subcommand`]) is automatically appended — users
     /// do not need to register it manually.
+    ///
+    /// A built-in global `--format text|json` flag is mounted here as well
+    /// (see [`crate::cli::output`]): `text` is the backward-compatible
+    /// default, `json` renders successes and errors as machine-readable
+    /// JSON. A downstream `--format` arg registered via
+    /// [`Self::with_global_arg`] with the same id would collide — use the
+    /// built-in one.
     pub fn build(&self) -> clap::Command {
         let mut root = clap::Command::new(self.name.clone())
             .version(env!("CARGO_PKG_VERSION"))
@@ -133,6 +195,17 @@ impl CliBuilder {
             root = root.subcommand(crate::cli::docs_subcommand_definition());
         }
 
+        // sdk feature 启用时自动注入 sdk 生成子命令（保留名，同 docs 范式）。
+        #[cfg(feature = "sdk")]
+        {
+            root = root.subcommand(crate::sdk::sdk_subcommand_definition());
+        }
+
+        // Built-in machine-readable output contract (mounted before the
+        // downstream global args so an id collision fails loudly instead of
+        // silently shadowing).
+        root = root.arg(crate::cli::output::format_arg());
+
         // Apply global args (added via with_global_arg) to the root command.
         for arg in &self.global_args {
             root = root.arg(arg.to_clap_arg());
@@ -144,10 +217,16 @@ impl CliBuilder {
     /// One-shot async runner: parse args, dispatch to handler, print result, exit.
     ///
     /// Consumes `self`, builds the `clap::Command`, dispatches the selected
-    /// subcommand to its handler, and prints the result. On success, the
-    /// handler's `Value` output is smart-extracted via `extract_value`:
-    /// `Value::String` → raw string to stdout (no quotes); other → JSON to
-    /// stdout. On error, `error: <e>` is printed to stderr.
+    /// subcommand to its handler, and prints the result. The output follows
+    /// the `--format` contract (see [`crate::cli::output`]):
+    ///
+    /// - `text`（默认）：`Value::String` → raw string to stdout (no quotes);
+    ///   other → JSON to stdout. On error, `error: <e>` is printed to stderr.
+    /// - `json`：successes as compact JSON and errors as `UnifiedError` JSON,
+    ///   both on stdout.
+    /// - handler 返回 `Value::Null` 时不产生任何输出（`Null` 亦被 dispatch
+    ///   用作「子命令已自行输出」哨兵，见 `cli::dispatch::dispatch`）——
+    ///   需要区分业务空结果的调用方应返回 `Value::Object` 等具体形状。
     ///
     /// Exits with code 0 on success, 1 on error. The `-> !` return type
     /// guarantees the function never returns normally.
@@ -159,14 +238,35 @@ impl CliBuilder {
     pub async fn execute(self) -> ! {
         let cmd = self.build();
         let matches = cmd.get_matches();
+        let format = crate::cli::output::OutputFormat::from_matches(&matches);
+        // verify credentials before any dispatch (feature = `security`);
+        // reuses the standard error channel so failures exit(1) without
+        // reaching a registered handler.
+        #[cfg(feature = "security")]
+        if let Some(reason) = self.authentication_failure() {
+            // text 保持历史小写文案（兼容按字符串匹配的脚本）；
+            // json 走 UnifiedError 形状（AuthenticationFailed → UNAUTHORIZED）。
+            match format {
+                crate::cli::output::OutputFormat::Text => {
+                    eprintln!("{}", crate::cli::output::auth_failure_text(&reason));
+                }
+                crate::cli::output::OutputFormat::Json => {
+                    format.emit_error(&ApiError::AuthenticationFailed { reason });
+                }
+            }
+            std::process::exit(1);
+        }
         match crate::cli::dispatch::dispatch(&matches, self.state).await {
             Ok((_name, value)) => {
-                let out = crate::core::extract_value(&value);
-                println!("{out}");
+                // `Value::Null` 是「子命令已自行输出」哨兵（docs 子命令
+                // 直接产出文档），execute 不再渲染，避免打印多余的 null。
+                if !value.is_null() {
+                    println!("{}", format.render_success(&value));
+                }
                 std::process::exit(0);
             }
             Err(e) => {
-                eprintln!("error: {e}");
+                format.emit_error(&e);
                 std::process::exit(1);
             }
         }

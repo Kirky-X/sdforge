@@ -11,6 +11,7 @@
 //!   plus hot-reload integration
 
 mod config_tests;
+mod lifecycle_annotation_tests;
 mod middleware_tests;
 #[cfg(feature = "ratelimit-http")]
 mod ratelimit_tests;
@@ -40,6 +41,7 @@ fn coverage_test_route_create() -> HttpRoute {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
         None,
     )
@@ -53,6 +55,7 @@ fn coverage_test_route_metadata() -> ApiMetadata {
         cache_ttl: None,
         is_streaming: false,
         i18n_key: None,
+        lifecycle: None,
     }
 }
 

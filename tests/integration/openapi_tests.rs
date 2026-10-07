@@ -64,6 +64,24 @@ async fn list_users() -> Result<Vec<String>, ApiError> {
     Ok(vec!["alice".to_string(), "bob".to_string()])
 }
 
+/// Lifecycle-annotated fixture: the macro must thread `deprecated` /
+/// `sunset` / `successor` into `OpenApiRouteInfo` so the operation carries
+/// the `deprecated` marker plus the description footnote (MCP tail-note
+/// symmetry).
+#[forge(
+    name = "openapi_test_lifecycle_users",
+    version = "v1",
+    path = "/lifecycle-users",
+    method = "GET",
+    description = "List users (legacy)",
+    deprecated,
+    sunset = "2026-12-31",
+    successor = "/api/v2/users"
+)]
+async fn lifecycle_users() -> Result<Vec<String>, ApiError> {
+    Ok(vec!["alice".to_string()])
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -241,4 +259,289 @@ fn forge_result_ok_type_is_unwrapped_for_response_schema() {
     let schema = &paths["/api/v1/users/{id}"]["get"]["responses"]["200"]["content"]["application/json"]
         ["schema"];
     assert_eq!(schema["type"], "string");
+}
+
+/// `#[forge(deprecated, sunset, successor)]` → `OpenApiRouteInfo` 生命周期
+/// 字段（真实宏路径）：操作携带 `deprecated: true` 标记，sunset/successor
+/// 以描述尾注保留（与 MCP 描述尾注同格式，四协议契约对称）。
+#[test]
+fn forge_lifecycle_args_reach_spec_marker_and_footnote() {
+    let spec = generate_openapi_spec();
+    let paths_json = serde_json::to_value(&spec.paths).unwrap();
+    let op = &paths_json["/api/v1/lifecycle-users"]["get"];
+
+    assert_eq!(
+        op["deprecated"],
+        serde_json::json!(true),
+        "macro-declared deprecated must render the OpenAPI marker"
+    );
+    assert_eq!(
+        op["description"],
+        serde_json::json!(
+            "List users (legacy) (deprecated; sunset: 2026-12-31; successor: /api/v2/users)"
+        ),
+        "sunset/successor must survive as the description footnote (MCP tail-note format)"
+    );
+}
+
+/// `#[forge(i18n_key)]` → `OpenApiRouteInfo.i18n_key` → description 运行时
+/// 翻译（locale 敏感；未注册翻译回退英文）。locale 为进程级状态：serial
+/// 执行并在结束时清理。
+#[test]
+#[serial_test::serial]
+fn i18n_key_translates_description_by_locale() {
+    // 独立 fixture：i18n_key 只挂在本路由上，断言不受其它路由干扰。
+    #[forge(
+        name = "openapi_i18n_probe",
+        version = "v1",
+        path = "/i18n-probe",
+        method = "GET",
+        description = "Probe route for i18n translation",
+        i18n_key = "test.openapi.i18n_probe.description"
+    )]
+    async fn i18n_probe() -> Result<String, ApiError> {
+        Ok("probe".to_string())
+    }
+
+    sdforge::i18n::clear_translations();
+    let paths_json = serde_json::to_value(&generate_openapi_spec().paths).unwrap();
+    let description = |paths: &serde_json::Value| {
+        paths["/api/v1/i18n-probe"]["get"]["description"]
+            .as_str()
+            .expect("description must be present")
+            .to_string()
+    };
+
+    // 未注册翻译 → 英文回退。
+    sdforge::i18n::set_locale("zh-CN");
+    assert_eq!(
+        description(&paths_json),
+        "Probe route for i18n translation",
+        "unregistered key must fall back to English"
+    );
+
+    // 注册 zh 翻译 → description 随 locale 翻译；summary 保持英文原文。
+    sdforge::i18n::register_translation(
+        "zh-CN",
+        "test.openapi.i18n_probe.description",
+        "i18n 探针路由",
+    );
+    let translated = serde_json::to_value(&generate_openapi_spec().paths).unwrap();
+    assert_eq!(
+        description(&translated),
+        "i18n 探针路由",
+        "registered zh translation must appear in the rendered spec"
+    );
+    let summary = translated["/api/v1/i18n-probe"]["get"]["summary"]
+        .as_str()
+        .expect("summary present");
+    assert_eq!(
+        summary, "Probe route for i18n translation",
+        "summary keeps the compile-time English source (CLI/MCP parity: only description translates)"
+    );
+
+    // 清理：locale 与宿主注册恢复，避免影响其它测试。
+    sdforge::i18n::clear_translations();
+    sdforge::i18n::set_locale("en");
+}
+
+// ============================================================================
+// 返回类型 Schema 反射（schemars optional，R6）
+// ============================================================================
+
+/// 夹具：派生 `JsonSchema` 的响应类型（schemars 由 dev-dependencies 提供，
+/// 宏发射点两态同构——反射是否生效取决于 sdforge 的 `schemars` feature）。
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct ReflectionUserProfile {
+    pub id: u64,
+    pub email: String,
+}
+
+/// 夹具：未派生 `JsonSchema` 的响应类型（提供器静默降级）。
+#[derive(Debug, serde::Serialize)]
+pub struct ReflectionOpaque {
+    pub blob: Vec<u8>,
+}
+
+/// 夹具端点：返回派生类型，宏发射 reflect_response_schema 提供器。
+#[forge(
+    name = "openapi_reflection_profile",
+    version = "v1",
+    path = "/reflection/profile",
+    method = "GET",
+    description = "Fetch a reflected user profile"
+)]
+async fn reflection_profile() -> ReflectionUserProfile {
+    ReflectionUserProfile {
+        id: 1,
+        email: "u@example.com".to_string(),
+    }
+}
+
+/// 夹具端点：返回未派生类型。
+#[forge(
+    name = "openapi_reflection_opaque",
+    version = "v1",
+    path = "/reflection/opaque",
+    method = "GET",
+    description = "Fetch an opaque payload"
+)]
+async fn reflection_opaque() -> ReflectionOpaque {
+    ReflectionOpaque {
+        blob: vec![1, 2, 3],
+    }
+}
+
+/// 夹具：嵌套具名类型的响应载荷（schemars 1.x 默认不内联命名子 schema，
+/// 产出 `#/$defs/...` 引用 + 根级 `$defs`——悬空 `$ref` 修复锁定的形态）。
+#[cfg(feature = "schemars")]
+#[derive(Debug, serde::Serialize, schemars::JsonSchema)]
+pub struct ReflectionNestedPayload {
+    pub id: u64,
+    pub profile: ReflectionUserProfile,
+}
+
+/// 夹具端点：返回嵌套具名类型的派生载荷。
+#[cfg(feature = "schemars")]
+#[forge(
+    name = "openapi_reflection_nested",
+    version = "v1",
+    path = "/reflection/nested",
+    method = "GET",
+    description = "Fetch a payload referencing a named nested type"
+)]
+async fn reflection_nested() -> ReflectionNestedPayload {
+    ReflectionNestedPayload {
+        id: 7,
+        profile: ReflectionUserProfile {
+            id: 1,
+            email: "u@example.com".to_string(),
+        },
+    }
+}
+
+/// schemars feature 开启：派生类型在 spec 中携带字段级精确 schema，
+/// 优先于宏侧粗粒度映射。
+#[cfg(feature = "schemars")]
+#[test]
+fn reflected_response_schema_in_spec() {
+    let paths_json = serde_json::to_value(&generate_openapi_spec().paths).unwrap();
+    let schema = &paths_json["/api/v1/reflection/profile"]["get"]["responses"]["200"]["content"]["application/json"]
+        ["schema"];
+    assert_eq!(
+        schema["properties"]["id"]["type"], "integer",
+        "reflected schema must carry field-level properties, got: {schema}"
+    );
+    assert_eq!(schema["properties"]["email"]["type"], "string");
+}
+
+/// schemars feature 关闭：反射桩恒 None，响应降级到宏侧粗粒度映射
+/// （未知类型 → string schema）。
+#[cfg(not(feature = "schemars"))]
+#[test]
+fn response_schema_reflection_disabled_yields_coarse_schema() {
+    let paths_json = serde_json::to_value(&generate_openapi_spec().paths).unwrap();
+    let schema = &paths_json["/api/v1/reflection/profile"]["get"]["responses"]["200"]["content"]["application/json"]
+        ["schema"];
+    assert_eq!(
+        schema["type"], "string",
+        "without schemars the coarse mapping must survive unchanged, got: {schema}"
+    );
+    assert!(
+        schema.get("properties").is_none(),
+        "coarse mapping must not fabricate field-level properties: {schema}"
+    );
+}
+
+/// 未派生 `JsonSchema` 的返回类型：提供器静默降级（schemars 开关两态一致），
+/// 响应回落到粗粒度映射而非报错。
+#[test]
+fn unreflected_return_type_degrades_to_coarse_schema() {
+    let paths_json = serde_json::to_value(&generate_openapi_spec().paths).unwrap();
+    let schema = &paths_json["/api/v1/reflection/opaque"]["get"]["responses"]["200"]["content"]["application/json"]
+        ["schema"];
+    assert_eq!(schema["type"], "string");
+    assert!(
+        schema.get("properties").is_none(),
+        "degraded response must not gain reflected properties: {schema}"
+    );
+}
+
+/// schemars feature 开启 + 嵌套具名类型载荷：schemars 1.x 默认
+/// `inline_subschemas = false`，嵌套具名字段产出 `$ref` 且定义集中在根级
+/// `$defs`（根类型本身内联）。修复契约：`$defs` 提升进 components.schemas、
+/// `$ref` 指针改写为 `#/components/schemas/...`，文档内引用可解析（不再
+/// 悬空）。
+#[cfg(feature = "schemars")]
+#[test]
+fn nested_named_type_refs_resolve_through_components() {
+    let spec = generate_openapi_spec();
+    let spec_json = serde_json::to_value(&spec).unwrap();
+
+    let response_schema = &spec_json["paths"]["/api/v1/reflection/nested"]["get"]["responses"]["200"]
+        ["content"]["application/json"]["schema"];
+    assert_eq!(
+        response_schema["properties"]["profile"]["$ref"],
+        "#/components/schemas/ReflectionUserProfile",
+        "nested named field must ref into components, got: {response_schema}"
+    );
+
+    let components = spec_json["components"]["schemas"]
+        .as_object()
+        .unwrap_or_else(|| panic!("$defs must be lifted into components.schemas"));
+    assert!(
+        components.contains_key("ReflectionUserProfile"),
+        "nested named type def must be lifted: {:?}",
+        components.keys().collect::<Vec<_>>()
+    );
+    let profile = &components["ReflectionUserProfile"];
+    assert!(
+        profile.is_object() && profile.get("properties").is_some(),
+        "nested named type def must be lifted with its properties: {profile}"
+    );
+
+    // 引用可解析：文档中所有 $ref 都能命中 components.schemas 同名条目。
+    let names = components
+        .keys()
+        .map(String::as_str)
+        .collect::<std::collections::HashSet<_>>();
+    let mut dangling = Vec::new();
+    collect_refs(&spec_json, &mut dangling);
+    assert!(
+        !dangling.is_empty(),
+        "fixture must actually exercise $refs: {dangling:?}"
+    );
+    for r in dangling {
+        let name = r.strip_prefix("#/components/schemas/").unwrap_or_else(|| {
+            panic!("every emitted $ref must use the components namespace, got: {r}")
+        });
+        assert!(
+            names.contains(name),
+            "dangling $ref `{r}` — component `{name}` not lifted"
+        );
+    }
+}
+
+/// 递归收集 JSON 文档中的全部 `$ref` 字符串（引用可解析性断言的助手）。
+#[cfg(feature = "schemars")]
+fn collect_refs(value: &serde_json::Value, out: &mut Vec<String>) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, child) in map {
+                if key == "$ref" {
+                    if let Some(r) = child.as_str() {
+                        out.push(r.to_string());
+                    }
+                } else {
+                    collect_refs(child, out);
+                }
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                collect_refs(item, out);
+            }
+        }
+        _ => {}
+    }
 }

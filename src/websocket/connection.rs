@@ -8,20 +8,15 @@
 //!
 //! Broadcast logic lives in [`crate::websocket::broadcast`].
 
-#[cfg(feature = "websocket")]
 use std::collections::HashMap;
-#[cfg(feature = "websocket")]
 use std::sync::atomic::{AtomicUsize, Ordering};
-#[cfg(feature = "websocket")]
 use std::sync::{Arc, RwLock};
 
 #[cfg(feature = "ratelimit")]
 use limiteron::config::FlowControlConfig;
 
-#[cfg(feature = "websocket")]
 use crate::websocket::WebSocketMessage;
 
-#[cfg(feature = "websocket")]
 /// WebSocket connection
 #[derive(Clone)]
 pub struct WebSocketConnection {
@@ -29,7 +24,6 @@ pub struct WebSocketConnection {
     sender: tokio::sync::mpsc::UnboundedSender<WebSocketMessage>,
 }
 
-#[cfg(feature = "websocket")]
 impl WebSocketConnection {
     /// Create a new WebSocket connection
     pub fn new(id: String) -> (Self, tokio::sync::mpsc::UnboundedReceiver<WebSocketMessage>) {
@@ -48,7 +42,6 @@ impl WebSocketConnection {
     }
 }
 
-#[cfg(feature = "websocket")]
 /// Connection manager for WebSocket connections.
 ///
 /// Connection-level rate limiting (message counting, window-based throttling)
@@ -153,7 +146,6 @@ impl Default for WebSocketConfig {
     }
 }
 
-#[cfg(feature = "websocket")]
 #[derive(Clone)]
 /// Application state for the WebSocket router.
 ///
@@ -165,7 +157,6 @@ pub struct SdForgeState {
     pub manager: Arc<ConnectionManager>,
 }
 
-#[cfg(feature = "websocket")]
 impl SdForgeState {
     /// Create a new SdForgeState with default WebSocketConfig.
     pub fn new(manager: Arc<ConnectionManager>) -> Self {
@@ -184,7 +175,6 @@ impl SdForgeState {
     }
 }
 
-#[cfg(feature = "websocket")]
 impl ConnectionManager {
     /// Create a new connection manager.
     pub fn new() -> Self {
@@ -246,7 +236,6 @@ impl ConnectionManager {
     }
 }
 
-#[cfg(feature = "websocket")]
 impl Default for ConnectionManager {
     fn default() -> Self {
         Self::new()

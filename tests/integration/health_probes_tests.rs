@@ -6,6 +6,9 @@
 //! auth middleware, so probes bypass authentication while normal routes
 //! still require credentials. Readiness folds in registered readiness
 //! checks and (with the `kit` feature) the trait-kit health aggregate.
+//!
+//! The auth middleware itself is compiled in only with the `security`
+//! feature; the auth-contrast assertions below are gated the same way.
 
 #![cfg(feature = "health")]
 
@@ -104,8 +107,18 @@ async fn healthz_bypasses_auth() {
     assert_eq!(json["status"], "healthy");
 
     // Contrast: the ordinary route is blocked by global auth (401).
-    let resp = get(router, "/api/v1/protected").await;
-    assert_eq!(resp.status(), axum::http::StatusCode::UNAUTHORIZED);
+    // 全局认证中间件随 `security` 特性编译；仅 health 构建下不存在认证层，
+    // 该对比断言只在两者同启时才有意义。
+    #[cfg(feature = "security")]
+    {
+        let resp = get(router, "/api/v1/protected").await;
+        assert_eq!(resp.status(), axum::http::StatusCode::UNAUTHORIZED);
+    }
+    #[cfg(not(feature = "security"))]
+    {
+        // 无认证层构建下所有路由（含普通路由）均无凭证要求，探针 200 即全貌。
+        let _ = router;
+    }
 }
 
 #[tokio::test]
@@ -149,6 +162,118 @@ async fn readyz_passes_when_all_checks_healthy() {
     let resp = get(router, "/readyz").await;
     assert_eq!(resp.status(), axum::http::StatusCode::OK);
     sdforge::health::clear_readiness_checks();
+}
+
+// =============================================================================
+// 手动挂载公开面：`mount_probes` / `run_readiness_checks` / `route_path_taken`
+// 对库外消费方可见——手动构建 Router 的调用方自担路径冲突检查。
+// =============================================================================
+#[tokio::test]
+#[serial_test::serial]
+async fn manual_mount_helpers_are_externally_callable() {
+    sdforge::health::clear_readiness_checks();
+    sdforge::health::clear_health_source();
+
+    // 本文件顶部的 inventory 路由占用 /api/v1/protected，/healthz 未被占用。
+    assert!(!sdforge::http::route_path_taken("/healthz"));
+    assert!(sdforge::http::route_path_taken("/api/v1/protected"));
+
+    // mount_probes 在空 Router 上手动挂载后探针可达。
+    let router = sdforge::health::mount_probes(axum::Router::new());
+    let resp = get(router, "/healthz").await;
+    assert_eq!(resp.status(), axum::http::StatusCode::OK);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn run_readiness_checks_is_externally_callable() {
+    sdforge::health::clear_readiness_checks();
+    sdforge::health::clear_health_source();
+
+    // 无注册检查时默认 ready。
+    let (healthy, checks) = sdforge::health::run_readiness_checks();
+    assert!(healthy);
+    assert!(checks.is_empty());
+
+    // 注册的失败检查折叠进聚合结果。
+    sdforge::health::register_readiness_check_fn("cache", || {
+        sdforge::health::CheckOutcome::unhealthy("cache", "connection refused")
+    });
+    let (healthy, checks) = sdforge::health::run_readiness_checks();
+    assert!(!healthy);
+    assert_eq!(checks.len(), 1);
+    assert_eq!(checks[0].name, "cache");
+    assert!(!checks[0].healthy);
+    sdforge::health::clear_readiness_checks();
+}
+
+// =============================================================================
+// 自定义 ReadinessRenderer：库外消费方接管 /readyz 的状态码与包络
+// （默认注册位为空时行为与快照一致，见库内逐字节快照测试）。
+// =============================================================================
+#[tokio::test]
+#[serial_test::serial]
+async fn custom_readiness_renderer_controls_status_and_envelope() {
+    use axum::response::IntoResponse;
+
+    struct AlwaysReady;
+
+    impl sdforge::health::ReadinessRenderer for AlwaysReady {
+        fn render(
+            &self,
+            _all_healthy: bool,
+            _checks: Vec<sdforge::health::CheckOutcome>,
+        ) -> axum::response::Response {
+            (
+                axum::http::StatusCode::OK,
+                axum::Json(serde_json::json!({"status": "ready"})),
+            )
+                .into_response()
+        }
+    }
+
+    sdforge::health::clear_readiness_checks();
+    sdforge::health::clear_health_source();
+    sdforge::health::clear_readiness_renderer();
+
+    // 注册失败检查：默认 renderer 会 503，自定义 renderer 恒 200。
+    sdforge::health::register_readiness_check_fn("cache", || {
+        sdforge::health::CheckOutcome::unhealthy("cache", "connection refused")
+    });
+    sdforge::health::register_readiness_renderer(std::sync::Arc::new(AlwaysReady));
+
+    let router = build_with_config(&jwt_config()).unwrap();
+    let resp = get(router, "/readyz").await;
+    assert_eq!(resp.status(), axum::http::StatusCode::OK);
+    let json = body_json(resp).await;
+    assert_eq!(json["status"], "ready");
+
+    sdforge::health::clear_readiness_renderer();
+    sdforge::health::clear_readiness_checks();
+}
+
+// =============================================================================
+// AsyncReadinessCheck：库外注册异步检查，/readyz 自动切聚合路径并翻 503。
+// =============================================================================
+#[tokio::test]
+#[serial_test::serial]
+async fn async_readiness_check_flips_readyz_to_503() {
+    sdforge::health::clear_readiness_checks();
+    sdforge::health::clear_health_source();
+    sdforge::health::clear_async_readiness_checks();
+    sdforge::health::register_async_readiness_check_fn("cache-async", || async {
+        sdforge::health::CheckOutcome::unhealthy("cache-async", "connection refused")
+    });
+
+    let router = build_with_config(&jwt_config()).unwrap();
+    let resp = get(router, "/readyz").await;
+    assert_eq!(resp.status(), axum::http::StatusCode::SERVICE_UNAVAILABLE);
+    let json = body_json(resp).await;
+    assert_eq!(json["status"], "unavailable");
+    assert_eq!(json["checks"][0]["name"], "cache-async");
+    assert_eq!(json["checks"][0]["details"]["error"], "connection refused");
+
+    sdforge::health::clear_async_readiness_checks();
 }
 
 // =============================================================================

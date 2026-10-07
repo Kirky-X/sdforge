@@ -42,6 +42,7 @@ fn test_http_route_creation() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
         None,
     );
@@ -87,6 +88,7 @@ fn test_route_registration() {
                     cache_ttl: None,
                     is_streaming: false,
                     i18n_key: None,
+                    lifecycle: None,
                 },
                 None,
             )
@@ -98,6 +100,7 @@ fn test_route_registration() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     );
 
@@ -164,6 +167,7 @@ fn test_http_route_with_module_prefix() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
         Some("v1".to_string()),
     );
@@ -188,6 +192,7 @@ fn test_http_route_handler_accessor() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
         None,
     );
@@ -209,6 +214,7 @@ fn test_http_route_clone() {
             cache_ttl: Some(60),
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
         Some("api".to_string()),
     );
@@ -231,6 +237,7 @@ fn test_http_route_debug() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
         None,
     );
@@ -260,6 +267,7 @@ fn test_route_registration_name_accessor() {
                     cache_ttl: None,
                     is_streaming: false,
                     i18n_key: None,
+                    lifecycle: None,
                 },
                 None,
             )
@@ -271,6 +279,7 @@ fn test_route_registration_name_accessor() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     );
 
@@ -294,6 +303,7 @@ fn test_route_registration_create() {
                     cache_ttl: None,
                     is_streaming: false,
                     i18n_key: None,
+                    lifecycle: None,
                 },
                 None,
             )
@@ -305,6 +315,7 @@ fn test_route_registration_create() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     );
 
@@ -429,6 +440,7 @@ fn test_route_registration_metadata() {
                     cache_ttl: Some(300),
                     is_streaming: true,
                     i18n_key: None,
+                    lifecycle: None,
                 },
                 None,
             )
@@ -440,6 +452,7 @@ fn test_route_registration_metadata() {
             cache_ttl: Some(300),
             is_streaming: true,
             i18n_key: None,
+            lifecycle: None,
         },
     );
 
@@ -466,6 +479,7 @@ fn test_route_registration_debug() {
                     cache_ttl: None,
                     is_streaming: false,
                     i18n_key: None,
+                    lifecycle: None,
                 },
                 None,
             )
@@ -477,6 +491,7 @@ fn test_route_registration_debug() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     );
 
@@ -502,6 +517,7 @@ fn test_route_registration_clone() {
                     cache_ttl: None,
                     is_streaming: false,
                     i18n_key: None,
+                    lifecycle: None,
                 },
                 None,
             )
@@ -513,6 +529,7 @@ fn test_route_registration_clone() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     );
 
@@ -538,6 +555,7 @@ fn test_route_registration_copy() {
                     cache_ttl: None,
                     is_streaming: false,
                     i18n_key: None,
+                    lifecycle: None,
                 },
                 None,
             )
@@ -549,6 +567,7 @@ fn test_route_registration_copy() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     );
 
@@ -573,6 +592,7 @@ fn test_http_route_with_root_path() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
         None,
     );
@@ -593,6 +613,7 @@ fn test_http_route_with_nested_path() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
         Some("api".to_string()),
     );
@@ -614,6 +635,7 @@ fn test_http_route_with_regex_path() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
         None,
     );
@@ -634,6 +656,7 @@ fn test_http_route_metadata_accessors() {
             cache_ttl: Some(600),
             is_streaming: true,
             i18n_key: None,
+            lifecycle: None,
         },
         Some("v2".to_string()),
     );

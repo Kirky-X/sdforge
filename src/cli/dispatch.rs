@@ -14,8 +14,53 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+#[cfg(any(feature = "docs", feature = "sdk"))]
+use serde_json::Value;
+
 use crate::cli::{CliArgType, CliCommandRegistration, CliHandlerRegistration};
 use crate::core::{ApiError, HandlerArgs, HandlerOutput, HandlerState};
+
+/// Environment variable carrying the raw bearer JWT for CLI authentication
+/// (feature = `security`).
+pub const CLI_TOKEN_ENV: &str = "SDFORGE_TOKEN";
+
+/// Environment variable carrying the raw API key for CLI authentication
+/// (feature = `security`).
+pub const CLI_API_KEY_ENV: &str = "SDFORGE_API_KEY";
+
+/// Verify CLI credentials from the environment against `verifier`
+/// (feature = `security`).
+///
+/// `SDFORGE_TOKEN` is formatted as a `Bearer <jwt>` authorization header
+/// value; `SDFORGE_API_KEY` is passed through as the raw API key. Both are
+/// offered to the same [`crate::security::grpc_auth::GrpcAuthVerifier`] port
+/// the gRPC interceptor and
+/// the MCP `call_tool` gate consume; `Err` carries the rejection reason.
+///
+/// When both variables are set, the configured verifier consumes only the
+/// channel it understands (`BearerVerifier` reads the bearer token and
+/// ignores the API key, `ApiKeyVerifier` the reverse) — the ignored
+/// variable is silently unused, mirroring gRPC metadata semantics.
+///
+/// Environment variables are readable by same-user child processes
+/// (`/proc/<pid>/environ`) and leak into CI logs / `set -x` traces —
+/// prefer short-lived credentials and CI secret masking.
+///
+/// # Errors
+///
+/// Returns the verifier's rejection reason when no credential is present or
+/// verification fails.
+#[cfg(feature = "security")]
+pub fn authenticate_cli(
+    verifier: &dyn crate::security::grpc_auth::GrpcAuthVerifier,
+) -> Result<crate::security::AuthContext, String> {
+    let token = std::env::var(CLI_TOKEN_ENV).ok().filter(|t| !t.is_empty());
+    let api_key = std::env::var(CLI_API_KEY_ENV)
+        .ok()
+        .filter(|k| !k.is_empty());
+    let authorization = token.map(|t| format!("Bearer {t}"));
+    verifier.verify(authorization.as_deref(), api_key.as_deref())
+}
 
 /// Dispatch the selected subcommand to its registered forge handler.
 ///
@@ -23,6 +68,13 @@ use crate::core::{ApiError, HandlerArgs, HandlerOutput, HandlerState};
 /// `HandlerArgs` map from the subcommand matches (Path/Body args only;
 /// State args are skipped and resolved by the handler via `downcast_state`),
 /// and invokes the handler with the supplied `state`.
+///
+/// # Security boundary
+///
+/// This is the raw dispatch funnel: it performs **no** authentication even
+/// when a verifier is wired — credentials gate [`crate::cli::CliBuilder::execute`],
+/// which is the CLI process entry. Call this only from trusted in-process
+/// code.
 ///
 /// Returns `(command_name, Value)` on success — the caller decides how to
 /// format the value (typically via `extract_value`).
@@ -42,6 +94,26 @@ pub async fn dispatch(
             "cli.dispatch.no_subcommand",
         )
     })?;
+
+    // docs 子命令自行完成输出（文档写文件 / 打印 stdout），不走
+    // HandlerFn 分发；返回 `Value::Null` 作为「无返回值」哨兵——execute
+    // 据此跳过结果渲染（副作用：handler 返回 null 同样无输出，已在
+    // CliBuilder::execute doc 声明）。未接通时 `docs --format …` 会落
+    // NotFound，文档生成对 CLI 使用者不可达。注意 `docs` 是保留子命令
+    // 名（本分支先于用户注册查找），下游注册同名命令不可达。
+    #[cfg(feature = "docs")]
+    if name == "docs" {
+        crate::cli::docs_subcommand::docs_subcommand(sub)?;
+        return Ok((name.to_string(), Value::Null));
+    }
+
+    // sdk 子命令自行落盘产物（生成文件到 --output-dir），不走 HandlerFn
+    // 分发；保留子命令名（先于用户注册查找），同 docs 拦截范式。
+    #[cfg(feature = "sdk")]
+    if name == "sdk" {
+        crate::sdk::sdk_subcommand(sub)?;
+        return Ok((name.to_string(), Value::Null));
+    }
 
     let handler_reg = find_handler(name)?;
     let cmd_reg = find_command(name)?;

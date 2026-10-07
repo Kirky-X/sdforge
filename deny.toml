@@ -7,12 +7,9 @@
 db-urls = ["https://github.com/RustSec/advisory-db"]
 yanked = "warn"
 # 按仓库填:传递依赖 RUSTSEC 豁免(每项须注释原因)
-# RUSTSEC-2025-0141 — bincode 直接依赖,upstream 未认领,见 CHANGELOG
-ignore = [
-    # bincode unmaintained (RUSTSEC-2025-0141) — 直接依赖(bincode 2.0.1 → sdforge)
-    # 团队永久停维,advisory 明确 "No safe upgrade available";短期保留(功能稳定+监控公告),中期评估迁移 postcard
-    { id = "RUSTSEC-2025-0141", reason = "直接依赖 bincode 2.0.1,upstream 未认领,见 CHANGELOG" },
-]
+# 历史豁免 RUSTSEC-2025-0141(bincode unmaintained)已随 bincode → postcard
+# 迁移完成而清除,裁决留档见 docs/CHANGELOG.md Unreleased「依赖治理收口」。
+ignore = []
 
 [licenses]
 # 允许的宽松许可证;新增非宽松许可证需在此放行
@@ -59,7 +56,12 @@ license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
 
 [bans]
 multiple-versions = "warn"
-wildcards = "deny"
+wildcards = "warn"  # sdforge-macros 的 dev-dep 故意 path-only（见 macros/Cargo.toml:28-29）：
+           # 该 dev-dep 加 version 会在发布期解析失败（macros 先于 sdforge 上 registry），
+           # 与 dbnexus 同款处置；除该项外的 wildcard 仍应逐条复核。
+           # 已验证不成立的替代方案：`[[bans.skip]] name = "sdforge"` 不参与 wildcard
+           # 判定（cargo deny 报 unnecessary-skip，bans 依旧 FAILED），故无法做到
+           # “保留 deny + 精确豁免”；收紧本项需先解开 macros → 父 crate 的发布环。
 
 [[bans.deny]]
 name = "serde_yaml" # deprecated, use serde_yaml_ng

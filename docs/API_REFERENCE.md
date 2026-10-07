@@ -90,7 +90,7 @@
 | 类型/函数 | 说明 |
 |-----------|------|
 | `SdForgeConfig` / `SdForgeConfigBuilder` | 应用配置聚合根与 Builder（含 `security` / `cache` 字段与 `build_rate_limiter()` 自动装配） |
-| `ServerConfig` / `TlsConfig` / `TimeoutConfig` | 监听（默认 `127.0.0.1:8080`、30s 超时）、TLS、超时 |
+| `ServerConfig` / `TlsConfig` / `TimeoutConfig` | 监听（默认 `127.0.0.1:8080`、30s 超时）、TLS（`cert_path`/`key_path`/`alpn_protocols`，ALPN 缺省 `["h2", "http/1.1"]`）、超时 |
 | `ApiConfig` / `TracingConfig` / `EnvHelper` | API 行为（路由前缀、默认版本）、追踪配置、运行环境名称辅助（`environment` 字段） |
 | `AuthConfig` / `ApiKeySeed` | 认证配置与 API Key 播种 |
 | `CacheConfig` | 缓存配置（`enabled`、`default_ttl_secs`、`max_items`、`track_stats`） |
@@ -110,6 +110,17 @@ HTTP 构建入口 `sdforge::http`（`http` feature）：
 | `VersionRouterConfig` / `VersionedRoute` / `build_version_router` | 版本路由 |
 | `SecurityHeaders` | 安全响应头配置 |
 | `rate_limit_layer`（`ratelimit-http`） | HTTP 限流层 |
+
+TLS 终止 `sdforge::http::tls`（`serve-tls` feature，rustls aws-lc-rs；与 gRPC 侧 `grpc-tls` 的 `ServerTlsConfig` 接线实现独立）：
+
+| 函数/类型 | 说明 |
+|-----------|------|
+| `load_server_config(&TlsConfig) -> Result<rustls::ServerConfig, TlsError>` | 加载 PEM 证书/密钥（装配期校验密钥匹配）并应用 ALPN |
+| `tls_acceptor(&TlsConfig) -> Result<TlsAcceptor, TlsError>` | 静态证书 acceptor 便捷构建 |
+| `ReloadingTls::new(&TlsConfig) -> Result<ReloadingTls, TlsError>` | 可热重载的 TLS 服务端（acceptor 与重载器编译期绑定）；`acceptor()` 取 serve 句柄，`reload()` 原子换入（阻塞，tokio worker 用 `reload_async()`），失败保留旧证书 |
+| `serve_with_graceful_shutdown_tls(router, listener, acceptor, shutdown, TlsServeConfig)` | TLS 终止 serve：每请求注入 `ConnectInfo<SocketAddr>`（限流/审计取不可伪造 peer IP），复用 graceful 排空时序；accept 错误按 axum 语义退避重试不终止 |
+| `TlsServeConfig` | serve 配置：`handshake_timeout`（默认 10s）/ `header_read_timeout`（默认 30s，仅 h1）/ `http2_keepalive_interval`（默认 30s）/ `http2_keepalive_timeout`（默认 20s）预认证护栏 + `graceful` 排空参数 |
+| `TlsError` | 装配错误（文件读取 / PEM 解析 / rustls 配置 / 重载任务四类失败面） |
 
 扩展方式：自定义组件遵循三种构造模式 `new()` / `builder()` / `with_dependencies()`；协议扩展通过 `define_registration!` 宏与 `Registration` trait 接入统一注册系统。
 
@@ -138,6 +149,48 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 - `ServiceError::new(code, message, status)` / `ServiceError::with_details(code, message, details, status)`：业务错误统一载体，支持 `From<MyError>` 转换
 - `ServiceResponse::success_with_status(data, code)`：动态指定成功状态码（与 `#[forge(status = ...)]` 对应）
 
+### 统一错误契约（`sdforge::error::unified`，跨协议单一事实来源）
+
+- `mapping_for(&ApiError) -> (u16, &'static str)`：`ApiError` → HTTP 状态码 + 机器错误码的唯一映射表（HTTP 适配器消费）
+- `grpc_code_for(&ApiError) -> tonic::Code`（feature = `grpc`）：同一 `ApiError` → gRPC 状态码
+- `grpc_code_for_http_status(u16) -> tonic::Code`（feature = `grpc`）：**跨协议行为契约表**，HTTP 状态 → gRPC 状态码的对齐轴（与 `code_for_http_status` 同行集）
+- `code_for_http_status(u16) -> &'static str`：HTTP 状态 → 机器错误码
+- `UnifiedError`：跨协议错误载荷 `{code, message, trace_id?, field?}`，HTTP body 与 gRPC `Status::details` 共享同一形状
+
+**错误码行为契约表**（同一 `ApiError` 在两条协议 wire 上的取值；由
+`error_code_contract_tests` wire 级测试与 `unified` 单元测试全集 JOIN
+不变量钉死，任一侧漂移即编译期后红灯）：
+
+| `ApiError` 变体 | HTTP 状态 | 载荷 `code`（两协议共享） | gRPC 状态码 |
+|-----------------|-----------|--------------------------|-------------|
+| `InvalidInput` | 400 | `BAD_REQUEST` | `invalid_argument` |
+| `ValidationError` | 422 | `UNPROCESSABLE_ENTITY` | `invalid_argument` |
+| `NotFound` | 404 | `NOT_FOUND` | `not_found` |
+| `AuthenticationFailed` | 401 | `UNAUTHORIZED` | `unauthenticated` |
+| `AccessDenied` | 403 | `FORBIDDEN` | `permission_denied` |
+| `RateLimitExceeded` | 429 | `TOO_MANY_REQUESTS` | `resource_exhausted` |
+| `QuotaExhausted` | 429 | `TOO_MANY_REQUESTS` | `resource_exhausted` |
+| `ServiceUnavailable` | 503 | `UNAVAILABLE` | `unavailable` |
+| `Internal` | 500 | `INTERNAL` | `internal` |
+
+语义约定：400 = 语法畸形/缺参/解析失败（`InvalidInput`）；422 = 语义约束违反
+（`ValidationError` 及 `#[forge(validate)]` 违规，错误体含 `errors` 数组）。
+
+跨协议口径：gRPC 无与 HTTP 422 对应的原生状态码，400/422 在 gRPC 侧统一落
+`invalid_argument`，语义区分由 HTTP 状态码与载荷 `code` 字段（gRPC 侧经
+`Status::details` 携带）承载；幂等在途 409 → `already_exists`；契约表未登记
+的状态 → `unknown` 兜底。
+
+### 幂等防护（feature = `idempotency`）
+
+- `cache::IdempotencyStore`：协议无关三态状态机（`Execute` / `InFlight` / `Replay(body, status)`），
+  键前缀 `sdforge:idempotency:`，scope 绑定路由/gRPC method
+- `http::idempotency::idempotency_middleware`：`Idempotency-Key` 头（POST/PUT/PATCH），
+  重放响应附 `Idempotency-Replayed: true`，并发在途 409；`ServerConfig.idempotency`
+  配置节（`enabled` 默认 false / `ttl_secs` / `max_response_bytes`）
+- gRPC：`idempotency-key` metadata，在途返回 `ALREADY_EXISTS`；经
+  `GrpcServerConfig::idempotency_store` 注入
+
 ### `SdForgeError`（框架统一错误）
 
 `Api(ApiError)`、`Auth(AuthError)`、`Jwt(JwtError)`、`AuthConfig(AuthConfigError)`、`Config(ConfigError)`、`Internal(String)`；配套 `SdForgeResult<T>` 别名。
@@ -148,23 +201,27 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 |---------|------|----------|
 | `http` | `sdforge::http` / `config` / `axum`（facade）/ `rbac` | `build`、`build_with_config`、`build_with_redirect`、`RouteRegistration`、`validate_email` / `validate_length`、`require_role`（配合 `#[forge(auth(role = "..."))]`）；axum/tower/tower-http re-export |
 | `mcp` | `sdforge::mcp` | `SdForgeMcpServer`、`StatelessServerHandler`、`McpToolInstance` / `McpToolRegistration`、`build()`、`get_mcp_tools()`、`serve_stdio()`、`parse_mcp_headers` / `McpHeaderInfo`、`InputRequiredResult`、`MrtrSession` / `MrtrSessionManager`、`cache_semantics`；`rmcp` / `anyhow` re-export |
-| `grpc` | `sdforge::grpc` | `SdForgeGrpcService`（`Call` / `GetInfo`）、`GrpcServerConfig`（`state: Option<Arc<dyn Any + Send + Sync>>`、`require_auth`、`rate_limiter`）、`build_server(_with_config)`、`GrpcRoute`、`CallRequest` / `CallResponse` / `InfoRequest` / `InfoResponse`、`SdForgeServiceServer`；`tonic` / `prost` re-export |
+| `grpc` | `sdforge::grpc` | `SdForgeGrpcService`（`Call` / `CallStream` / `GetInfo`；`CallStream` 需另启 `streaming`）、`GrpcServerConfig`（`state: Option<Arc<dyn Any + Send + Sync>>`、`require_auth`、`rate_limiter`、`extra_services`：自定义 tonic service 同端口挂载回调）、`build_server(_with_config)`、`GrpcRoute`、`CallRequest` / `CallResponse` / `InfoRequest` / `InfoResponse`、`SdForgeServiceServer`、`GrpcHandlerRegistration` / `GrpcStreamHandlerRegistration`（`streaming`）；`tonic` / `prost` re-export |
 | `websocket` | `sdforge::websocket` | `WebSocketRoute` / `WebSocketHandler`、`websocket_upgrade` / `ValidatedWebSocketUpgrade`、`ConnectionManager`、`WebSocketConfig` / `WebSocketConnection` / `WebSocketMessage`、`parse_websocket_message` |
-| `streaming` | `sdforge::streaming` | `StreamEvent`、`StreamResponse`、`stream_to_sse`、`create_stream_channel`；`tokio_stream` re-export |
+| `streaming` | `sdforge::streaming` | `StreamEvent`、`StreamResponse`、`stream_to_sse`、`create_stream_channel`（`grpc_method` + `stream = true` 组合映射到 gRPC `CallStream`，见 `grpc` 行）；`tokio_stream` re-export |
+| `ratelimit-dist` | `sdforge::security::ratelimit::dist` | `DistributedRateLimiter`（泛型 limiteron `DistributedLimiter` 后端：`InMemoryDistributedLimiter` 单实例/`RedisDistributedLimiter` 多副本）、`DistributedRateLimitConfig`（含适配层熔断 `with_circuit_failure_threshold`/`with_circuit_open_duration`：连续后端错误打开、打开期不经后端直接按策略裁决、半开探测恢复）、`BackendFailurePolicy`（fail-open 默认/fail-close） |
+| `cache-l2` | `sdforge::cache::l2` | `RedisL2Cache`（oxcache `RedisBackend` 同步面 → `SyncCache`，仅多线程 runtime；异步面 `get_async`/`set_async`/`delete_async`/`contains_async` 供异步中间件热路径）、`RedisL2CacheConfig`（AUTH/TLS 连接串——Debug 输出掩码凭据、键前缀、默认 TTL）、`CacheL2Error` |
 | `security` / `ratelimit` / `ratelimit-http` | `sdforge::security` | 认证：`ApiKeyAuth`、`BearerAuth(+Builder)`、`SdForgeApiKeyAuth(+Builder)`、`AuthContext`、`AuthExtractor`、`auth_middleware`；审计：`AuditLogger` / `SdForgeAuditLogger(+Builder)`、`AuditLog` / `AuditResult`、`AuditSink`；限流：`RateLimiter` trait、`LimiteronAdapter`、`RateLimitLayer`（`ratelimit-http`） |
 | `cache` | `sdforge::cache` | `Cache` / `CacheKey`、`SyncCache` / `SharedCache`、`DashMapCache`（`OxcacheSyncCache` 别名）、`ResponseCacheLayer` / `ResponseCacheMiddleware`（另需 `http`）；`oxcache` re-export |
 | `openapi` | `sdforge::openapi` | `generate_openapi_spec()`、`OpenApiBuilder`（`title` / `version` / `description` / `build`）、`OpenApiRouteInfo` / `OpenApiPathParam`；`utoipa` re-export |
+| `schemars` | `sdforge::openapi`（反射 API） | `SchemaProbe::probe`、`PreciseSchema` / `FallbackSchema`（派生 `JsonSchema` 的返回类型产出字段级精确 response schema，未派生静默降级；蕴含 `openapi`） |
 | `cli` | `sdforge::cli` | `CliBuilder`（`new`、`with_dependencies`、`with_name`、`with_global_arg`、`build -> clap::Command`、`execute -> !`）、`dispatch`、`GlobalArg`、`CliCommandRegistration` / `CliHandlerRegistration`；`clap` re-export |
 | `docs` | `sdforge::docs` | `generate_docs` / `write_docs`、`DocFormat` / `DocError`；`swagger_ui_router`（另需 `http`） |
+| `sdk` | `sdforge::sdk` | `generate_rust_client` / `generate_typescript_client`（纯函数渲染，`(method, path)` 确定性排序；Rust `Transport` 收完整 URL——`base_url` 由客户端拼接）、`ClientRoute` / `GrpcMethodInfo` / `collect_routes` / `collect_grpc_methods`；CLI 保留子命令 `sdk --lang ... --output-dir ... [--reqwest]` |
 | `health` | `sdforge::health` | `CheckOutcome`（`healthy` / `unhealthy`）、`ReadinessCheck` / `HealthDataSource` trait、`register_readiness_check(_fn)` |
 | `metrics` | `sdforge::metrics` | `MetricsRegistry`（`record` / `render`）、`global_registry()`、`record_request()`（Prometheus 文本格式 `/metrics`） |
 | `context` | `sdforge::context` | `RequestContext`、`generate_id`、`scope`（request_id/trace_id 跨协议注入） |
 | `lifecycle` | `sdforge::lifecycle` | `LifecycleHookRegistration`、`run_on_start` / `run_on_stop`（配合 `#[forge(on_start / on_stop)]`） |
 | `hooks` | `sdforge::hooks` | `RequestHooks` trait、`install_hooks`、`hooks_middleware`（处理器前后钩子管道） |
 | `otel` | `sdforge::otel` | `start_span` / `with_attr` / `finish_span` / `take_spans`、`OtelConfig`（OTLP/HTTP JSON 导出） |
-| `inklog` | `sdforge::inklog` | `init_inklog_logger()`：将 `log` 调用桥接到 inklog 结构化管道 |
+| `inklog` | `sdforge::inklog` / `sdforge::forge::log` | `init_inklog_logger()`：将 `log` 调用桥接到 inklog 结构化管道；`#[forge::log]` 声明日志属性宏（`args`/`result`/`err_detail`/`level` 参数，DataMasker 脱敏 + 64 KiB 截断、级别守卫惰性渲染、`unsafe` 限定传播、`log_attr::mask`/`render_enter`/`render_exit` 可独立复用） |
 | `i18n` | `sdforge::i18n` | `HttpI18nFormatter`（ICU4X 本地化格式化）、`I18nError` |
-| `limiteron-integration` / `kit` | `sdforge::integrations` | trait-kit AsyncKit 集成（`SdforgeModule`）、`LimiteronForgeAdapter` |
+| `limiteron-integration` / `kit` / `db-integration` | `sdforge::integrations` | trait-kit AsyncKit 集成（`SdforgeModule`）、`LimiteronForgeAdapter`、dbnexus 数据 API 网关（`DbGateway`：`allow_table` + `query(GatewayQuery)` 白名单只读面、`GatewayQuery::all/filter/paging`） |
 
 > 无独立模块的能力：`validate`（`#[forge(validate)]` + `#[param(...)]`）、`paginate`（`#[forge(paginate)]`）、`etag`（GET 强 ETag + 304）、`graceful`（优雅停机）、`timestamp`（响应时间戳）、`simd-json`（SIMD JSON 路径）经宏旗标或构建配置生效。
 >

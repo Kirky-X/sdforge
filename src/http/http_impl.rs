@@ -104,7 +104,7 @@ pub(crate) fn apply_security_headers(router: Router) -> Router {
 // 消费方：health 探针挂载、metrics 挂载、health 门控测试——
 // 两 feature 皆关时无消费方，不参与编译。
 #[cfg(any(feature = "health", feature = "metrics"))]
-pub(crate) fn route_path_taken(path: &str) -> bool {
+pub fn route_path_taken(path: &str) -> bool {
     use crate::core::Registration;
     let mut taken = false;
     for registration in inventory::iter::<RouteRegistration>() {
@@ -280,6 +280,12 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
     // request) instead of wiring middleware that bricks the app.
     config.server.validate()?;
 
+    // Fail closed on auth configs the build cannot honor: without the
+    // `security` feature no auth middleware exists, so an AuthConfig
+    // requesting ApiKey/Jwt would silently produce an unauthenticated router.
+    #[cfg(not(feature = "security"))]
+    config.authentication.require_security_feature()?;
+
     let mut router = build();
 
     // request metrics middleware (count / latency / status per route
@@ -348,6 +354,32 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
     router = router.layer(tower_http::limit::RequestBodyLimitLayer::new(
         config.server.max_body_size,
     ));
+
+    // Idempotency replay protection（feature = idempotency，enabled 默认 false；
+    // 仅携带 Idempotency-Key 的 POST/PUT/PATCH 参与，其余零开销透行）
+    #[cfg(feature = "idempotency")]
+    if config.server.idempotency.enabled {
+        use std::sync::Arc as _idempotency_arc;
+        let store = config
+            .server
+            .idempotency
+            .store
+            .clone()
+            .unwrap_or_else(|| _idempotency_arc::new(crate::cache::IdempotencyStore::new()));
+        let ttl = config.server.idempotency.ttl_secs;
+        let inflight_ttl = config.server.idempotency.inflight_ttl_secs;
+        let max_bytes = config.server.idempotency.max_response_bytes;
+        router = router.layer(axum::middleware::from_fn(move |req, next| {
+            crate::http::idempotency::idempotency_middleware(
+                _idempotency_arc::clone(&store),
+                ttl,
+                inflight_ttl,
+                max_bytes,
+                req,
+                next,
+            )
+        }));
+    }
 
     // Apply response compression
     router = router.layer(tower_http::compression::CompressionLayer::new());

@@ -55,17 +55,31 @@
 
 | 能力 | 说明 |
 |------|------|
-| 认证 | API Key 与 JWT Bearer Token 认证（`ApiKeyAuth` / `BearerAuth`，含 `auth_middleware` 中间件） |
+| 认证 | API Key 与 JWT Bearer Token 认证（`ApiKeyAuth` / `BearerAuth`，含 `auth_middleware` 中间件）。非 HTTP 入口复用同一凭据库：gRPC 拦截器与 MCP `call_tool`/`list_tools`、CLI `execute` 经 `GrpcAuthVerifier` 端口（推荐别名 `ProtocolAuthVerifier`，`make_verifier(&AuthConfig)` 提供统一构建点，各入口**手动接线**）；WS 握手走 `WebSocketConfig` 内嵌 `auth`/`api_key_auth` 直接校验（同一凭据库、独立路径，不经该端口）。MCP 凭据由传输适配层经 `McpCredentials::from_headers` 注入 JSON-RPC extensions——未注入时受门控调用全部拒绝（内建 stdio 传输无法携带凭据）。**覆盖边界：MCP/CLI 仅认证不授权**，`#[forge(auth(role = ...))]` 仅 HTTP/gRPC 生效 |
 | 限流 | 基于 limiteron 的按连接 / 按 IP 限流（`ratelimit` 核心与 `ratelimit-http` Tower 中间件） |
 | 安全头 | 标准安全响应头（CORS、CSP 等，`SecurityHeaders`） |
 | 审计日志 | 安全事件审计追踪（`AuditLogger`，支持 HMAC-SHA256 签名防篡改） |
 | 输入校验 | 完善的输入校验（邮箱、长度等） |
+
+### 协议安全能力覆盖矩阵
+
+| 能力 | HTTP | gRPC | MCP | CLI | WS |
+|------|------|------|-----|-----|-----|
+| 认证（凭据校验） | ✅ 中间件 | ✅ 拦截器 | ✅ `call_tool`/`list_tools` | ✅ `execute` | ✅ 握手 |
+| 授权（RBAC roles） | ✅ `require_role` | ✅ per-method roles | ✅ per-tool roles（`call_tool`/`call_tool_with_credentials`，无角色 permission → `-32003`；`security` 关闭时 fail-safe 全拒） | ❌ | ❌ |
+| 参数校验 | ✅ `#[forge(validate)]` | ✅ 对等 | ✅ input schema | — | — |
+
+> **覆盖边界是安全债登记，不是终态**：授权（`#[forge(auth(role = ...))]`/roles）
+> 在 CLI/WS 维度尚未实现——CLI 属本地信任边界（进程入口即操作者），WS 握手后无
+> 逐请求身份通道；引入网络触发形态前必须先补授权或在部署层（网络隔离/凭据最小
+> 权限）补偿。发布前检查需核对本矩阵与实现的一致性。
 
 ### 安全默认值（v0.3.0+ 收紧）
 
 - **JWT 密钥最小长度**：`MIN_SECRET_LENGTH=32`，短于 32 字符的密钥被拒绝
 - **ServerConfig 默认 host**：`DEFAULT_HOST` 从 `"0.0.0.0"`（fail-open）改为 `"127.0.0.1"`（fail-safe 回环），未显式配置时不会暴露到所有网卡
 - **CORS 校验收紧**：`"http://"`（仅 scheme 无 host）在 `validate()` 与 `build_cors_layer()` 中均被拒绝
+- **AuthConfig fail-closed**：配置了 `AuthConfig::ApiKey`/`Jwt` 但未启用 `security` 特性时，`SdForgeConfig::validate()` 与 `build_with_config()` 在构建期显式报错（认证中间件整体由 `security` 特性提供，此前该组合会被静默忽略、产出无认证 router）；`AuthConfig::None` + 无 `security` 特性仍是合法组合
 
 ### 关键安全修复（历史披露）
 
@@ -97,4 +111,4 @@
 5. **为 API Key 制定轮换策略** — 安全模块支持 API Key 版本管理与带审计日志的密钥轮换；通过 `AuthConfig::ApiKey.keys` 显式播种
 6. **为审计日志启用签名** — 参考 `examples/src/security/comprehensive.rs` 的 HMAC-SHA256 防篡改签名实践
 7. **参考示例配置** — `examples/config/api-key-auth.toml`（API Key 认证）与 `examples/config/production.toml`（生产配置）
-8. **关注依赖公告** — 项目通过 `cargo deny check` 持续监控公告；已知例外（如 bincode RUSTSEC-2025-0141 unmaintained 的 ignore 决策）会在 CHANGELOG 中透明披露
+8. **关注依赖公告** — 项目通过 `cargo deny check` 持续监控公告；豁免决策（如有）会在 CHANGELOG 中透明披露——历史例外 bincode RUSTSEC-2025-0141 已随 bincode → postcard 迁移终结，豁免清除

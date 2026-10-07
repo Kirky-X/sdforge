@@ -8,6 +8,8 @@
 //! - `protocol_tests`: `CallToolResult`, `Content`, `ErrorData` (McpError) protocol types
 //! - `migration_tests`: `McpToolRegistration`, `get_mcp_tools`, inventory collection
 
+#[cfg(feature = "security")]
+mod auth_tests;
 mod handler_tests;
 mod migration_tests;
 mod protocol_tests;
@@ -62,6 +64,7 @@ pub(super) fn create_test_metadata() -> ApiMetadata {
         cache_ttl: None,
         is_streaming: false,
         i18n_key: None,
+        lifecycle: None,
     }
 }
 
@@ -97,6 +100,7 @@ fn create_coverage_test_metadata() -> ApiMetadata {
         cache_ttl: None,
         is_streaming: false,
         i18n_key: None,
+        lifecycle: None,
     }
 }
 

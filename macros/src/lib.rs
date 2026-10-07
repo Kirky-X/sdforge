@@ -4,7 +4,7 @@
 //!
 //! This crate provides procedural macros for the SDForge framework.
 
-#![doc(html_root_url = "https://docs.rs/sdforge-macros/0.5.0-rc.2")]
+#![doc(html_root_url = "https://docs.rs/sdforge-macros/0.5.0-rc.6")]
 
 use proc_macro::TokenStream;
 use proc_macro2::{Delimiter, TokenStream as TokenStream2, TokenTree};
@@ -43,87 +43,116 @@ type ServiceApiArgs = Result<
         Option<bool>,   // cli option — emit CliCommandRegistration + CliHandlerRegistration
         Option<u16>,    // status option — explicit success status code (e.g. 201 for POST create)
         Option<String>, // i18n_key — runtime translation key for description
+        Option<bool>,   // deprecated — endpoint-level lifecycle flag
+        Option<String>, // sunset — endpoint-level sunset date/value
+        Option<String>, // successor — endpoint-level successor endpoint hint
     ),
     syn::Error,
 >;
 
-/// Parse key=value pairs from token stream
-/// Preserves original string-based parsing for compatibility
+/// 解析 `key = value` 键值对（syn 迁移：token-tree 走查器）。
+///
+/// 输入已由 [`extract_forge_extras`](fn.extract_forge_extras) 消化结构化键
+/// （`auth(...)`/裸旗标族），此处只面对简单键值对与裸布尔键。与旧字符扫描
+/// 器（`to_string()` 后逐字符）相比的语义增量：
+///
+/// - 字符串字面量经 `syn::Lit` 解析——转义序列与原始字符串（`r"..."`）
+///   正确展开（旧扫描器按源文本截取，转义原样残留、`r` 前缀混入值）；
+/// - 错误 Span 指向 offending token（旧实现一律 call_site）；
+/// - 引号内逗号由 token 字面量语义天然不切断（旧实现靠引号字符探测）。
+///
+/// 与旧实现对齐的既有语义（零回归面）：裸键（无 `=`）→ `"true"`；`key =`
+/// 缺值（流尾或紧随逗号）→ `"true"`（历史怪癖，保留避免下游行为漂移）；
+/// 引号内逗号不切断值；键值同缺（尾部杂散逗号）静默跳过。
 fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Error> {
-    let args_str = args.to_string();
+    use proc_macro2::TokenTree;
+    use std::iter::Peekable;
+
     let mut pairs = Vec::new();
-
-    let mut chars = args_str.chars().peekable();
-    while let Some(&c) = chars.peek() {
-        if c.is_whitespace() || c == ',' {
-            chars.next();
-            continue;
-        }
-
-        let mut key = String::new();
-        while let Some(&c) = chars.peek() {
-            if c == '=' || c.is_whitespace() {
-                break;
-            }
-            key.push(c);
-            chars.next();
-        }
-
-        while let Some(&c) = chars.peek() {
-            if c == '=' {
-                chars.next();
-                break;
-            }
-            chars.next();
-        }
-
-        while let Some(&c) = chars.peek() {
-            if c.is_whitespace() {
-                chars.next();
-            } else {
-                break;
-            }
-        }
-
-        let mut value = String::new();
-        if let Some(&'"') = chars.peek() {
-            // Quoted string value
-            chars.next();
-            let mut terminated = false;
-            for c in chars.by_ref() {
-                if c == '"' {
-                    terminated = true;
-                    break;
-                }
-                value.push(c);
-            }
-            if !terminated {
+    let mut iter: Peekable<_> = args.into_iter().peekable();
+    while let Some(tree) = iter.next() {
+        let key = match tree {
+            TokenTree::Ident(ident) => ident,
+            // 顶层逗号（含键值对之间的连续逗号）静默跳过。
+            TokenTree::Punct(p) if p.as_char() == ',' => continue,
+            other => {
                 return Err(syn::Error::new(
-                    proc_macro2::Span::call_site(),
-                    "unterminated string literal in forge attribute (missing closing `\"`)",
+                    other.span(),
+                    "expected `key = value` pair (got a token that cannot start a key)",
                 ));
             }
-        } else {
-            // Unquoted value (boolean, number, etc.)
-            while let Some(&c) = chars.peek() {
-                if c == ',' || c.is_whitespace() {
-                    break;
+        };
+
+        let has_eq = matches!(iter.peek(), Some(TokenTree::Punct(p)) if p.as_char() == '=');
+        if !has_eq {
+            // 裸键按布尔真值处理（`#[forge(deprecated)]`）。
+            pairs.push((key.to_string(), "true".to_string()));
+            continue;
+        }
+        iter.next();
+        match iter.peek() {
+            // `key =` 缺值（流尾或紧随逗号）：历史怪癖按裸键处理。
+            None => pairs.push((key.to_string(), "true".to_string())),
+            Some(TokenTree::Punct(p)) if p.as_char() == ',' => {
+                pairs.push((key.to_string(), "true".to_string()));
+            }
+            Some(_) => {
+                let value_tree = iter.next().expect("peeked");
+                // 负数字面量（`-1`）：Punct('-') + 整型字面量拼回，对齐旧
+                // 字符扫描器的拼接语义。
+                let value = match &value_tree {
+                    TokenTree::Punct(p) if p.as_char() == '-' => {
+                        let magnitude = iter.next().ok_or_else(|| {
+                            syn::Error::new(p.span(), "dangling `-` in attribute value")
+                        })?;
+                        format!("-{}", token_tree_value(&magnitude)?)
+                    }
+                    other => token_tree_value(other)?,
+                };
+                // 严格性收紧：非引号值只允许单 token——值后紧跟非逗号 token
+                // 说明值是多 token 形态（如 `path = /a/b` 或漏写引号的带空格
+                // 文本），旧实现会静默截断首 token、把余下 token 当键解析。
+                // fail-loud 指向 offending token，而不是产出截断值。
+                if let Some(extra) = iter.peek()
+                    && !matches!(extra, TokenTree::Punct(p) if p.as_char() == ',')
+                {
+                    return Err(syn::Error::new(
+                        extra.span(),
+                        "attribute value must be quoted when it spans multiple tokens (unquoted values are single-token literals/identifiers)",
+                    ));
                 }
-                value.push(c);
-                chars.next();
+                pairs.push((key.to_string(), value));
             }
         }
-
-        if !key.is_empty() && !value.is_empty() {
-            pairs.push((key, value));
-        }
-
-        if chars.peek().is_none() {
-            break;
-        }
     }
-
     Ok(pairs)
+}
+
+/// 单 token 值 → 字符串（字面量经 `syn::Lit::new` 从 proc-macro2 字面量
+/// 直解，免去 quote!+parse2 的 token 流重建）。
+fn token_tree_value(tree: &proc_macro2::TokenTree) -> Result<String, syn::Error> {
+    use proc_macro2::TokenTree;
+    match tree {
+        TokenTree::Literal(lit) => {
+            let lit: syn::Lit = syn::Lit::new(lit.clone());
+            match lit {
+                syn::Lit::Str(s) => Ok(s.value()),
+                syn::Lit::Int(i) => Ok(i.to_string()),
+                syn::Lit::Float(f) => Ok(f.to_string()),
+                syn::Lit::Bool(b) => Ok(b.value().to_string()),
+                syn::Lit::Char(c) => Ok(c.value().to_string()),
+                other => Err(syn::Error::new(
+                    other.span(),
+                    "unsupported literal kind in attribute value",
+                )),
+            }
+        }
+        TokenTree::Ident(ident) => Ok(ident.to_string()),
+        other => Err(syn::Error::new(
+            other.span(),
+            "expected a literal or identifier value (groups/paths are not simple values)",
+        )),
+    }
 }
 
 /// Generate ApiMetadata TokenStream for service API
@@ -136,6 +165,7 @@ fn api_metadata_tokens(
     cache_ttl: TokenStream2,
     is_streaming: TokenStream2,
     i18n_key: TokenStream2,
+    lifecycle: TokenStream2,
 ) -> Result<TokenStream2, syn::Error> {
     // Validate and sanitize inputs at compile time to prevent code injection
     // These validations will cause compilation to fail if inputs are invalid
@@ -149,7 +179,7 @@ fn api_metadata_tokens(
             #description.to_string(),
             #cache_ttl,
             #is_streaming,
-        ).with_i18n_key(#i18n_key)
+        ).with_i18n_key(#i18n_key).with_lifecycle(#lifecycle)
     })
 }
 
@@ -442,6 +472,9 @@ const KNOWN_FORGE_KEYS: &[&str] = &[
     "ws_path",
     "grpc_method",
     "i18n_key",
+    "deprecated",
+    "sunset",
+    "successor",
     "no_prefix",
     "cli",
     "status",
@@ -475,6 +508,21 @@ fn validate_known_keys(args: &TokenStream2) -> Result<(), syn::Error> {
     Ok(())
 }
 
+/// sunset/successor 值最终渲染为 HTTP 响应头 / gRPC metadata 值：控制字符
+/// （含 CRLF）与非可见 ASCII 会在注入点被静默丢弃——声明失效且难以排查，
+/// 宏展开期 fail-loud 让调用方在编译期修正。
+fn validate_header_value(key: &str, value: &str) -> Result<(), syn::Error> {
+    if !value.chars().all(|c| ('\u{20}'..='\u{7E}').contains(&c)) {
+        return Err(syn::Error::new(
+            proc_macro2::Span::call_site(),
+            format!(
+                "Invalid value for '{key}' (must be visible ASCII, no control characters): {value}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// Parse forge attributes. `lifecycle_only` relaxes the required
 /// `name`/`version` attributes for pure lifecycle hooks
 /// (`#[forge(on_start)]` with no endpoint declaration).
@@ -495,6 +543,9 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
     let mut cli = None;
     let mut status = None;
     let mut i18n_key = None;
+    let mut deprecated = None;
+    let mut sunset = None;
+    let mut successor = None;
 
     for (key, value) in pairs {
         match key.as_str() {
@@ -531,6 +582,22 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
             "ws_path" => ws_path = Some(value),
             "grpc_method" => grpc_method = Some(value),
             "i18n_key" => i18n_key = Some(value),
+            "deprecated" => {
+                deprecated = Some(value.parse::<bool>().map_err(|_| {
+                    syn::Error::new(
+                        proc_macro2::Span::call_site(),
+                        format!("Invalid boolean value for 'deprecated': {}", value),
+                    )
+                })?)
+            }
+            "sunset" => {
+                validate_header_value("sunset", &value)?;
+                sunset = Some(value);
+            }
+            "successor" => {
+                validate_header_value("successor", &value)?;
+                successor = Some(value);
+            }
             "no_prefix" => {
                 no_prefix = Some(value.parse::<bool>().map_err(|_| {
                     syn::Error::new(
@@ -615,6 +682,9 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
         cli,
         status,
         i18n_key,
+        deprecated,
+        sunset,
+        successor,
     ))
 }
 
@@ -763,6 +833,10 @@ struct ParamInfo {
     /// Validation rules declared via `#[param(...)]` (enforced by
     /// `#[forge(validate)]`).
     validations: Vec<ValidationSpec>,
+    /// Whether this parameter is marked `#[param(kind = "query", flatten)]`：
+    /// struct 查询参数不经信封，由独立 `Query<ParamTy>` 提取槽直提。
+    /// 仅对 `ParamKind::Query` 有意义。
+    query_flatten: bool,
 }
 
 impl ParamInfo {
@@ -788,16 +862,22 @@ impl ParamInfo {
             let ty_str_trimmed = ty_str.trim().to_string();
 
             // Check for explicit #[param(kind = "...")] attribute
-            let (explicit_annotation, validations) = Self::parse_param_attributes(pat_type)?;
+            let (explicit_annotation, validations, query_flatten) =
+                Self::parse_param_attributes(pat_type)?;
+            // quote! 的 ToTokens 输出在 token 之间带空格；类型前缀判断
+            // （Option< / Vec< / HeaderMap）统一基于归一化字符串。
+            let ty_str_normalized = ty_str.replace(' ', "");
 
             // Determine extraction kind based on explicit annotation first, then path parameters, then type inference
             let param_kind = if let Some(ref kind) = explicit_annotation {
                 kind.clone()
             } else if path_params.contains(&name) {
                 ParamKind::Path
-            } else if ty_str_trimmed.starts_with("Option<") {
-                // Check if it's Option<HeaderMap<...>> or similar
-                let inner = &ty_str_trimmed[7..ty_str_trimmed.len() - 1];
+            } else if ty_str_normalized.starts_with("Option<") {
+                // Check if it's Option<HeaderMap<...>> or similar. quote! 的
+                // ToTokens 输出在 token 之间带空格（Option < u64 >），必须
+                // 归一化后再前缀匹配，否则 Option 参数全部漏判为非 Option。
+                let inner = &ty_str_normalized[7..ty_str_normalized.len() - 1];
                 if inner.starts_with("HeaderMap") || inner.starts_with("HeaderValue") {
                     ParamKind::Header
                 } else {
@@ -813,11 +893,11 @@ impl ParamInfo {
                 ParamKind::Body
             };
 
-            let (is_option, is_vec, inner_type) = if ty_str_trimmed.starts_with("Option<") {
-                let inner = &ty_str_trimmed[7..ty_str_trimmed.len() - 1];
+            let (is_option, is_vec, inner_type) = if ty_str_normalized.starts_with("Option<") {
+                let inner = &ty_str_normalized[7..ty_str_normalized.len() - 1];
                 (true, false, inner.to_string())
-            } else if ty_str_trimmed.starts_with("Vec<") {
-                let inner = &ty_str_trimmed[4..ty_str_trimmed.len() - 1];
+            } else if ty_str_normalized.starts_with("Vec<") {
+                let inner = &ty_str_normalized[4..ty_str_normalized.len() - 1];
                 (false, true, inner.to_string())
             } else {
                 (false, false, ty_str_trimmed.clone())
@@ -835,6 +915,7 @@ impl ParamInfo {
                 inner_type,
                 skip_mcp_schema,
                 validations,
+                query_flatten,
             }))
         } else {
             Ok(None)
@@ -843,15 +924,18 @@ impl ParamInfo {
 
     /// Parse `#[param(...)]` / `#[state]` attributes from a function argument.
     ///
-    /// Returns the extraction kind (behaviour unchanged) plus any
+    /// Returns the extraction kind (behaviour unchanged), any
     /// validation rules declared alongside `kind`:
     /// `#[param(kind = "query", ge = 1, le = 100, min_length = 2,
-    ///          max_length = 10, not_blank, email)]`.
+    ///          max_length = 10, not_blank, email)]`, and the `flatten`
+    /// flag (`#[param(kind = "query", flatten)]` — struct query parameter
+    /// extracted via `Query<ParamTy>` directly, bypassing the envelope).
     fn parse_param_attributes(
         pat_type: &syn::PatType,
-    ) -> syn::Result<(Option<ParamKind>, Vec<ValidationSpec>)> {
+    ) -> syn::Result<(Option<ParamKind>, Vec<ValidationSpec>, bool)> {
         let mut kind = None;
         let mut validations = Vec::new();
+        let mut flatten = false;
         for attr in &pat_type.attrs {
             // Check for #[state] attribute (Extension state injection)
             if attr.path().is_ident("state") {
@@ -930,6 +1014,19 @@ impl ParamInfo {
                                             }
                                         }
                                     }
+                                    "flatten" => match &name_value.value {
+                                        syn::Expr::Lit(syn::ExprLit {
+                                            lit: syn::Lit::Bool(lit_bool),
+                                            ..
+                                        }) => flatten = lit_bool.value(),
+                                        other => {
+                                            return Err(syn::Error::new_spanned(
+                                                other,
+                                                "`flatten` requires a boolean literal \
+                                                     (`flatten` or `flatten = true`)",
+                                            ));
+                                        }
+                                    },
                                     _ => {}
                                 }
                             }
@@ -939,6 +1036,7 @@ impl ParamInfo {
                                 match key.as_str() {
                                     "not_blank" => validations.push(ValidationSpec::NotBlank),
                                     "email" => validations.push(ValidationSpec::Email),
+                                    "flatten" => flatten = true,
                                     _ => {}
                                 }
                             }
@@ -948,7 +1046,27 @@ impl ParamInfo {
                 }
             }
         }
-        Ok((kind, validations))
+
+        // flatten 与校验属性互斥：flatten 参数的校验属于 ParamTy 自身字段
+        // （直提后信封内无该字段可校验，宏层面重复生成既双重约束也无从落地）。
+        if flatten && !validations.is_empty() {
+            return Err(syn::Error::new_spanned(
+                pat_type,
+                "`flatten` must not be combined with validation rules \
+                 (ge/le/min_length/max_length/not_blank/email): validations \
+                 belong to the flattened struct's own fields",
+            ));
+        }
+        // flatten 语义只对 Query 直提成立；其他 kind（含未声明 kind）静默
+        // 忽略即 fail-open —— 必须显性报错。
+        if flatten && !matches!(kind, Some(ParamKind::Query)) {
+            return Err(syn::Error::new_spanned(
+                pat_type,
+                "`flatten` is only supported with kind = \"query\" (struct query \
+                 parameter extracted via Query<T> directly)",
+            ));
+        }
+        Ok((kind, validations, flatten))
     }
 
     /// Convert parameter to JSON schema property
@@ -1008,6 +1126,27 @@ fn response_type_to_openapi_info_tokens(return_type: &syn::ReturnType) -> TokenS
             is_array: #is_array,
         })
     }
+}
+
+/// 返回类型 Schema 反射的注册字段 token：有返回类型时发射内联具名函数
+/// （`Result<T, E>` 先解包 Ok 型，精确 schema 描述成功载荷），函数体在
+/// 具体返回类型上解析 `SchemaProbe::probe`——泛型入口会让方法解析退化
+/// 为恒兜底，故必须内联发射；`allow(unused_imports)` 消解派生类型端点
+/// 上兜底 trait 候选导入的告警。无返回类型发射 `None`。未派生
+/// `JsonSchema` 的类型由运行时静默降级。
+fn response_schema_field_tokens(return_type: &syn::ReturnType) -> TokenStream2 {
+    let target_ty = match return_type {
+        syn::ReturnType::Type(_, ty) => extract_result_ok_type(ty).unwrap_or(ty),
+        syn::ReturnType::Default => return quote! { None },
+    };
+    quote! { Some({
+        #[allow(unused_imports)]
+        fn sdforge_reflected_response_schema() -> Option<String> {
+            use sdforge::openapi::{FallbackSchema, PreciseSchema, SchemaProbe};
+            SchemaProbe::<#target_ty>::new().probe()
+        }
+        sdforge_reflected_response_schema
+    }) }
 }
 
 /// Extract path parameters from path string
@@ -1098,11 +1237,89 @@ fn extract_arc_inner_type(ty: &syn::Type) -> Option<&syn::Type> {
 /// on the CLI (filtered out of `CliArgInfo` by `generate_cli_registration`),
 /// but ARE resolved here via `downcast_state` so the handler receives the
 /// concrete `Arc<T>` directly.
-fn generate_handler_closure(
-    fn_name: &syn::Ident,
-    handler_fn_name: &syn::Ident,
+/// 生成 `#[param(...)]` 校验规则的检查语句（单一事实来源）。
+///
+/// HTTP 与 gRPC 闭包共用本函数 —— 规则字面量只存在这一份，两协议仅在
+/// "违规收集后的处理" 上不同：HTTP 聚合 errors 数组 + 422 富载荷 early
+/// return；gRPC 首违规短路为 `Err(ApiError::ValidationError)`。
+/// `target_of` 由各协议提供：HTTP 的 Json/newtype 参数取 `.0`，gRPC 为
+/// 类型化局部变量裸标识。
+fn validation_rule_stmts(
     params: &[ParamInfo],
-    _path_params: &[String],
+    target_of: &dyn Fn(&ParamInfo) -> TokenStream2,
+) -> Vec<TokenStream2> {
+    let mut stmts: Vec<TokenStream2> = Vec::new();
+    for p in params {
+        if p.validations.is_empty() {
+            continue;
+        }
+        let field_lit = proc_macro2::Literal::string(&p.name);
+        for rule in &p.validations {
+            let target = target_of(p);
+            match rule {
+                ValidationSpec::Ge(min) => stmts.push(quote! {
+                    if !(#target >= #min) {
+                        sdforge::core::field_validation::push_error(
+                            &mut __forge_validation_errors, #field_lit, "ge",
+                            format!("must be >= {}", #min));
+                    }
+                }),
+                ValidationSpec::Le(max) => stmts.push(quote! {
+                    if !(#target <= #max) {
+                        sdforge::core::field_validation::push_error(
+                            &mut __forge_validation_errors, #field_lit, "le",
+                            format!("must be <= {}", #max));
+                    }
+                }),
+                ValidationSpec::MinLength(n) => stmts.push(quote! {
+                    if sdforge::core::field_validation::str_len(
+                        &sdforge::core::field_validation::as_str_ref(&#target)) < #n {
+                        sdforge::core::field_validation::push_error(
+                            &mut __forge_validation_errors, #field_lit, "min_length",
+                            format!("must be at least {} characters", #n));
+                    }
+                }),
+                ValidationSpec::MaxLength(n) => stmts.push(quote! {
+                    if sdforge::core::field_validation::str_len(
+                        &sdforge::core::field_validation::as_str_ref(&#target)) > #n {
+                        sdforge::core::field_validation::push_error(
+                            &mut __forge_validation_errors, #field_lit, "max_length",
+                            format!("must be at most {} characters", #n));
+                    }
+                }),
+                ValidationSpec::NotBlank => stmts.push(quote! {
+                    if sdforge::core::field_validation::is_blank(
+                        sdforge::core::field_validation::as_str_ref(&#target)) {
+                        sdforge::core::field_validation::push_error(
+                            &mut __forge_validation_errors, #field_lit, "not_blank",
+                            "must not be blank");
+                    }
+                }),
+                ValidationSpec::Email => stmts.push(quote! {
+                    if !sdforge::core::field_validation::is_email(
+                        sdforge::core::field_validation::as_str_ref(&#target)) {
+                        sdforge::core::field_validation::push_error(
+                            &mut __forge_validation_errors, #field_lit, "email",
+                            "must be a valid email address");
+                    }
+                }),
+            }
+        }
+    }
+    stmts
+}
+
+/// Generate the shared pre-call body of a unified handler closure: State
+/// downcasts, Path/Body/Query extractions, validation-rule evaluation, and
+/// the awaited call. Ends with `let result = #fn_name(...).await;`; the
+/// protocol-specific tails consume `result`:
+/// - unary（HTTP/gRPC/CLI）→ serialize the value (`Result<Value, ApiError>`)
+/// - gRPC server-streaming → map a `StreamResponse` into a per-item stream
+///   (`Result<GrpcStreamOutput, ApiError>`)
+fn handler_closure_pre_call(
+    fn_name: &syn::Ident,
+    params: &[ParamInfo],
+    validate: bool,
 ) -> TokenStream2 {
     // Validate State params are Arc<T> — emit compile_error if not.
     for p in params
@@ -1134,10 +1351,16 @@ fn generate_handler_closure(
         }
     });
 
-    // Path/Body params participate in value extraction from HandlerArgs.
+    // Path/Body/Query params participate in value extraction from HandlerArgs.
+    // Query 此前不参与 gRPC 提取 —— validate 规则因此无法在 gRPC 路径生效。
     let handler_params: Vec<&ParamInfo> = params
         .iter()
-        .filter(|p| matches!(p.param_kind, ParamKind::Path | ParamKind::Body))
+        .filter(|p| {
+            matches!(
+                p.param_kind,
+                ParamKind::Path | ParamKind::Body | ParamKind::Query
+            )
+        })
         .collect();
 
     let param_extractions = handler_params.iter().map(|p| {
@@ -1166,10 +1389,16 @@ fn generate_handler_closure(
                     })?;
             }
         } else {
-            // Option<T> — absent key yields None; present key must parse.
+            // Option<T> — absent key yields None; present key parses the
+            // inner type (Option<T> itself has no FromStr). inner_type is
+            // the macro-parsed `<…>` payload (e.g. "u64" for Option<u64>).
+            let inner: proc_macro2::TokenStream = p
+                .inner_type
+                .parse()
+                .expect("inner_type is a valid type string");
             quote! {
                 let #pname: #pty = args.get(#pname_str)
-                    .map(|s| s.parse())
+                    .map(|s| s.parse::<#inner>())
                     .transpose()
                     .map_err(|e| sdforge::prelude::ApiError::InvalidInput {
                         message: format!("invalid argument {}: {}", #pname_str, e),
@@ -1188,11 +1417,58 @@ fn generate_handler_closure(
         .filter(|p| {
             matches!(
                 p.param_kind,
-                ParamKind::Path | ParamKind::Body | ParamKind::State
+                ParamKind::Path | ParamKind::Body | ParamKind::Query | ParamKind::State
             )
         })
         .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
         .collect();
+
+    // `#[forge(validate)]` 规则在类型化局部变量上求值（parse 成功后、用户 fn
+    // 调用前）；任一违规 → Err(ApiError::ValidationError)（首违规短路）。
+    // 与 HTTP 侧共用 validation_rule_stmts —— 规则字面量单源。
+    let validation_stmts = if validate {
+        let plain_target = |p: &ParamInfo| {
+            let n = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+            quote! { #n }
+        };
+        let stmts = validation_rule_stmts(params, &plain_target);
+        if stmts.is_empty() {
+            quote! {}
+        } else {
+            quote! {
+                let mut __forge_validation_errors: std::vec::Vec<
+                    sdforge::core::field_validation::FieldError,
+                > = std::vec::Vec::new();
+                #(#stmts)*
+                if !__forge_validation_errors.is_empty() {
+                    let __first = &__forge_validation_errors[0];
+                    return Err(sdforge::prelude::ApiError::ValidationError {
+                        field: __first.field.clone(),
+                        constraint: __first.rule.to_string(),
+                    });
+                }
+            }
+        }
+    } else {
+        quote! {}
+    };
+
+    quote! {
+        #(#state_extractions)*
+        #(#param_extractions)*
+        #validation_stmts
+        let result = #fn_name(#(#call_idents),*).await;
+    }
+}
+
+fn generate_handler_closure(
+    fn_name: &syn::Ident,
+    handler_fn_name: &syn::Ident,
+    params: &[ParamInfo],
+    _path_params: &[String],
+    validate: bool,
+) -> TokenStream2 {
+    let pre_call = handler_closure_pre_call(fn_name, params, validate);
 
     quote! {
         fn #handler_fn_name(
@@ -1200,15 +1476,38 @@ fn generate_handler_closure(
             state: sdforge::core::HandlerState,
         ) -> sdforge::core::HandlerFuture {
             Box::pin(async move {
-                #(#state_extractions)*
-                #(#param_extractions)*
-                let result = #fn_name(#(#call_idents),*).await;
+                #pre_call
                 result.and_then(|v| serde_json::to_value(&v).map_err(|e| {
                     sdforge::prelude::ApiError::internal_error(
                         format!("failed to serialize handler return value: {e}"),
                         "forge.serialize_return_value",
                     )
                 }))
+            })
+        }
+    }
+}
+
+/// Generate the gRPC server-streaming handler closure: identical State/
+/// param/validation prefix to the unary closure, but the tail maps the
+/// handler's `Result<StreamResponse<T>, ApiError>` into a per-item stream
+/// (`GrpcStreamOutput`) instead of a single serialized value.
+fn generate_grpc_stream_handler_closure(
+    fn_name: &syn::Ident,
+    handler_fn_name: &syn::Ident,
+    params: &[ParamInfo],
+    validate: bool,
+) -> TokenStream2 {
+    let pre_call = handler_closure_pre_call(fn_name, params, validate);
+
+    quote! {
+        fn #handler_fn_name(
+            args: sdforge::core::HandlerArgs,
+            state: sdforge::core::HandlerState,
+        ) -> sdforge::grpc::GrpcStreamHandlerFuture {
+            Box::pin(async move {
+                #pre_call
+                result.map(|stream_response| sdforge::grpc::stream_output_from(stream_response))
             })
         }
     }
@@ -1246,19 +1545,44 @@ fn derive_body_param(params: &[ParamInfo]) -> Option<String> {
 /// argument into the gRPC layer. The gRPC success path applies the priority
 /// chain: `ServiceResponse.status_code` field > `default_status` > 200. See
 /// `extract_status_code` + `SdForgeGrpcService::call` for the consumer.
+/// Build an `Option<&'static str>` literal token stream
+/// (`quote!` renders `Option<T>` by emitting the inner value only, so the
+/// `Some`/`None` arms must be spelled out — shared by every
+/// registration-struct emission that carries an `i18n_key` field).
+fn option_str_lit(key: Option<&str>) -> TokenStream2 {
+    match key {
+        Some(key) => quote! { Some(#key) },
+        None => quote! { None },
+    }
+}
+
+// 注册面契约字段逐一显式（method/handler/body_param/status/roles/i18n_key），
+// 与目标 inventory 结构体字段一一对应——参数对象化反而制造间接层。
+#[allow(clippy::too_many_arguments)]
 fn generate_grpc_handler_registration(
     fn_name: &syn::Ident,
     grpc_method: &str,
     params: &[ParamInfo],
     path_params: &[String],
     status: Option<u16>,
+    auth_roles: &[String],
+    validate: bool,
+    i18n_key: Option<&str>,
+    deprecated: bool,
+    sunset: Option<&str>,
+    successor: Option<&str>,
 ) -> TokenStream2 {
     let grpc_handler_fn_name = syn::Ident::new(
         &format!("__grpc_handler_{}", fn_name),
         proc_macro2::Span::call_site(),
     );
-    let handler_fn_def =
-        generate_handler_closure(fn_name, &grpc_handler_fn_name, params, path_params);
+    let handler_fn_def = generate_handler_closure(
+        fn_name,
+        &grpc_handler_fn_name,
+        params,
+        path_params,
+        validate,
+    );
     // quote! does NOT render `None` for Option<T>, so build the field value
     // explicitly to satisfy `body_param: Option<&'static str>`.
     let body_param: TokenStream2 = match derive_body_param(params) {
@@ -1271,6 +1595,13 @@ fn generate_grpc_handler_registration(
         Some(code) => quote! { Some(#code as u16) },
         None => quote! { None },
     };
+    // RBAC 角色声明（`#[forge(auth(role = "..."))]`）→ `&'static [&'static str]`
+    // 切片字面量；未声明时为 `&[]`（不检查角色）。消费方：
+    // `SdForgeGrpcService::call_with_context` 分发前检查。
+    let role_lits: Vec<&str> = auth_roles.iter().map(|s| s.as_str()).collect();
+    let i18n_key_lit = option_str_lit(i18n_key);
+    let sunset_lit = option_str_lit(sunset);
+    let successor_lit = option_str_lit(successor);
 
     quote! {
         #[cfg(feature = "grpc")]
@@ -1282,7 +1613,85 @@ fn generate_grpc_handler_registration(
             handler: #grpc_handler_fn_name,
             body_param: #body_param,
             default_status: #default_status,
+            roles: &[#(#role_lits),*],
+            i18n_key: #i18n_key_lit,
+            deprecated: #deprecated,
+            sunset: #sunset_lit,
+            successor: #successor_lit,
         });
+    }
+}
+
+/// Generate gRPC server-streaming handler registration tokens for a
+/// `#[forge(grpc_method, stream = true)]` function.
+///
+/// Mirrors [`generate_grpc_handler_registration`] but links into the
+/// `GrpcStreamHandlerRegistration` inventory (consumed by
+/// `SdForgeGrpcService::call_stream`) instead of the unary one — a method
+/// lands in exactly one of the two registries. All emitted items are gated
+/// `#[cfg(all(feature = "grpc", feature = "streaming"))]`; a
+/// `stream = true` + `grpc_method` declaration compiled without the
+/// `streaming` feature emits a loud `compile_error!` (fail-loud：否则该
+/// grpc_method 会无声地从两个注册表同时消失，unary/stream 两条 RPC 都
+/// 不可达)。
+// 注册面契约字段逐一显式（method/handler/body_param/status/roles/i18n_key），
+// 与目标 inventory 结构体字段一一对应——参数对象化反而制造间接层。
+#[allow(clippy::too_many_arguments)]
+fn generate_grpc_stream_handler_registration(
+    fn_name: &syn::Ident,
+    grpc_method: &str,
+    params: &[ParamInfo],
+    status: Option<u16>,
+    auth_roles: &[String],
+    validate: bool,
+    i18n_key: Option<&str>,
+    deprecated: bool,
+    sunset: Option<&str>,
+    successor: Option<&str>,
+) -> TokenStream2 {
+    let grpc_handler_fn_name = syn::Ident::new(
+        &format!("__grpc_stream_handler_{}", fn_name),
+        proc_macro2::Span::call_site(),
+    );
+    let handler_fn_def =
+        generate_grpc_stream_handler_closure(fn_name, &grpc_handler_fn_name, params, validate);
+    let body_param: TokenStream2 = match derive_body_param(params) {
+        Some(name) => quote! { Some(#name) },
+        None => quote! { None },
+    };
+    let default_status: TokenStream2 = match status {
+        Some(code) => quote! { Some(#code as u16) },
+        None => quote! { None },
+    };
+    let role_lits: Vec<&str> = auth_roles.iter().map(|s| s.as_str()).collect();
+    let i18n_key_lit = option_str_lit(i18n_key);
+    let sunset_lit = option_str_lit(sunset);
+    let successor_lit = option_str_lit(successor);
+
+    quote! {
+        #[cfg(all(feature = "grpc", feature = "streaming"))]
+        #handler_fn_def
+
+        #[cfg(all(feature = "grpc", feature = "streaming"))]
+        sdforge::inventory::submit!(sdforge::grpc::GrpcStreamHandlerRegistration {
+            method: #grpc_method,
+            handler: #grpc_handler_fn_name,
+            body_param: #body_param,
+            default_status: #default_status,
+            roles: &[#(#role_lits),*],
+            i18n_key: #i18n_key_lit,
+            deprecated: #deprecated,
+            sunset: #sunset_lit,
+            successor: #successor_lit,
+        });
+
+        // streaming handler 需要 streaming feature 才能注册：grpc 开而
+        // streaming 关时该 grpc_method 无任何可达入口，fail-loud。
+        #[cfg(all(feature = "grpc", not(feature = "streaming")))]
+        compile_error! {
+            "grpc_method with `stream = true` requires the `streaming` feature \
+             (server-streaming dispatch lives behind grpc + streaming)"
+        }
     }
 }
 
@@ -1372,7 +1781,8 @@ fn generate_cli_registration(
     // signature (HandlerArgs, HandlerState) -> HandlerFuture, extracts
     // Path/Body params, awaits the forge fn, and serializes its return value
     // via serde_json::to_value (requires T: Serialize).
-    let handler_fn_def = generate_handler_closure(fn_name, &handler_fn_name, params, _path_params);
+    let handler_fn_def =
+        generate_handler_closure(fn_name, &handler_fn_name, params, _path_params, false);
 
     let fn_name_str = fn_name.to_string();
     let description_str = description.unwrap_or(name);
@@ -1440,6 +1850,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         cli,
         status,
         i18n_key,
+        deprecated,
+        sunset,
+        successor,
     ) = args;
     let fn_name = &input.sig.ident;
     let _fn_vis = &input.vis; // Currently unused but kept for future use
@@ -1544,13 +1957,27 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         .iter()
         .filter(|p| matches!(p.param_kind, ParamKind::Query))
         .collect();
-    let has_query = !query_params.is_empty();
+    // flatten 参数（`#[param(kind = "query", flatten)]`）不入信封：独立
+    // `Query<ParamTy>` 直提槽 `_forge_query_flat_N`（N 取参数序号，区分多个
+    // flatten 参数），handler 调用时直接 `.0` 传值。axum 允许多个
+    // FromRequestParts 提取器各自解析同一 query string，互不冲突。
+    let flatten_query_params: Vec<(usize, &ParamInfo)> = params
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| matches!(p.param_kind, ParamKind::Query) && p.query_flatten)
+        .collect();
+    let envelope_query_params: Vec<&ParamInfo> = query_params
+        .iter()
+        .copied()
+        .filter(|p| !p.query_flatten)
+        .collect();
+    let has_query = !envelope_query_params.is_empty();
     let query_struct_ident = syn::Ident::new("__ForgeQueryParams", proc_macro2::Span::call_site());
-    let q_field_idents: Vec<_> = query_params
+    let q_field_idents: Vec<_> = envelope_query_params
         .iter()
         .map(|p| syn::Ident::new(&p.name, proc_macro2::Span::call_site()))
         .collect();
-    let q_field_tys: Vec<_> = query_params.iter().map(|p| &p.ty).collect();
+    let q_field_tys: Vec<_> = envelope_query_params.iter().map(|p| &p.ty).collect();
 
     // 生成的查询结构体定义（无 Query 参数时为空）。`::serde::` 要求用户 crate 直接依赖
     // serde —— 与 Json body 参数类型需要 derive(Deserialize) 的既有要求一致。
@@ -1583,7 +2010,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let mut closure_params = Vec::new();
-    if multi_path || has_query {
+    // flatten query 参数也要求自定义组装（独立 `Query<ParamTy>` 直提槽）：
+    // 纯 flatten handler（无标量 query）has_query=false，但仍需生成槽
+    if multi_path || has_query || !flatten_query_params.is_empty() {
         let tuple_pat = if multi_path {
             let p_tys = params
                 .iter()
@@ -1606,6 +2035,15 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                     closure_params.push(tuple_pat.clone().unwrap());
                     path_inserted = true;
                 }
+            } else if matches!(p.param_kind, ParamKind::Query) && p.query_flatten {
+                // flatten 参数：独立 `Query<ParamTy>` 直提槽（不入信封，
+                // 每个参数一个槽，无"只插一次"语义）。
+                let slot = syn::Ident::new(
+                    &format!("_forge_query_flat_{idx}"),
+                    proc_macro2::Span::call_site(),
+                );
+                let ty = &p.ty;
+                closure_params.push(quote! { #slot: sdforge::axum::extract::Query<#ty> });
             } else if has_query && matches!(p.param_kind, ParamKind::Query) {
                 if !query_inserted {
                     closure_params.push(query_pat.clone().unwrap());
@@ -1672,76 +2110,34 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // when `#[forge(validate)]` is set, emit field-level validation
     // checks into every HTTP handler closure (before the user fn runs).
-    // Violations short-circuit with 400 + {"errors":[{field,rule,message}]}.
+    // Violations short-circuit with 422 + {"errors":[{field,rule,message}]}.
     if extras.validate {
-        let mut rule_stmts: Vec<TokenStream2> = Vec::new();
-        for p in &params {
-            if p.validations.is_empty() {
-                continue;
-            }
+        // Target expression: Body params are Json<T> extractors (value at
+        // `.0`); Path/State/Extension in single-extractor form are
+        // newtype-wrapped too; Query params and multi-path destructured
+        // locals are plain values. Flatten query params live at their
+        // dedicated `Query<ParamTy>` slot (`.0` unwraps to ParamTy itself).
+        let target_of = |p: &ParamInfo| {
             let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
-            // Target expression: Body params are Json<T> extractors (value at
-            // `.0`); Path/State/Extension in single-extractor form are
-            // newtype-wrapped too; Query params and multi-path destructured
-            // locals are plain values.
-            let target = match p.param_kind {
+            match p.param_kind {
+                ParamKind::Query if p.query_flatten => {
+                    let idx = params
+                        .iter()
+                        .position(|q| q.name == p.name)
+                        .unwrap_or_default();
+                    let slot = syn::Ident::new(
+                        &format!("_forge_query_flat_{idx}"),
+                        proc_macro2::Span::call_site(),
+                    );
+                    quote! { #slot.0 }
+                }
                 ParamKind::Query => quote! { #name_ident },
                 ParamKind::Path if multi_path => quote! { #name_ident },
                 ParamKind::Extension => quote! { #name_ident },
                 _ => quote! { #name_ident.0 },
-            };
-            let field_lit = proc_macro2::Literal::string(&p.name);
-            for rule in &p.validations {
-                match rule {
-                    ValidationSpec::Ge(min) => rule_stmts.push(quote! {
-                        if !(#target >= #min) {
-                            sdforge::core::field_validation::push_error(
-                                &mut __forge_validation_errors, #field_lit, "ge",
-                                format!("must be >= {}", #min));
-                        }
-                    }),
-                    ValidationSpec::Le(max) => rule_stmts.push(quote! {
-                        if !(#target <= #max) {
-                            sdforge::core::field_validation::push_error(
-                                &mut __forge_validation_errors, #field_lit, "le",
-                                format!("must be <= {}", #max));
-                        }
-                    }),
-                    ValidationSpec::MinLength(n) => rule_stmts.push(quote! {
-                        if sdforge::core::field_validation::str_len(
-                            &sdforge::core::field_validation::as_str_ref(&#target)) < #n {
-                            sdforge::core::field_validation::push_error(
-                                &mut __forge_validation_errors, #field_lit, "min_length",
-                                format!("must be at least {} characters", #n));
-                        }
-                    }),
-                    ValidationSpec::MaxLength(n) => rule_stmts.push(quote! {
-                        if sdforge::core::field_validation::str_len(
-                            &sdforge::core::field_validation::as_str_ref(&#target)) > #n {
-                            sdforge::core::field_validation::push_error(
-                                &mut __forge_validation_errors, #field_lit, "max_length",
-                                format!("must be at most {} characters", #n));
-                        }
-                    }),
-                    ValidationSpec::NotBlank => rule_stmts.push(quote! {
-                        if sdforge::core::field_validation::is_blank(
-                            sdforge::core::field_validation::as_str_ref(&#target)) {
-                            sdforge::core::field_validation::push_error(
-                                &mut __forge_validation_errors, #field_lit, "not_blank",
-                                "must not be blank");
-                        }
-                    }),
-                    ValidationSpec::Email => rule_stmts.push(quote! {
-                        if !sdforge::core::field_validation::is_email(
-                            sdforge::core::field_validation::as_str_ref(&#target)) {
-                            sdforge::core::field_validation::push_error(
-                                &mut __forge_validation_errors, #field_lit, "email",
-                                "must be a valid email address");
-                        }
-                    }),
-                }
             }
-        }
+        };
+        let rule_stmts = validation_rule_stmts(&params, &target_of);
 
         if !rule_stmts.is_empty() {
             prelude_stmts.push(quote! {
@@ -1750,10 +2146,12 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 > = std::vec::Vec::new();
                 #(#rule_stmts)*
                 if !__forge_validation_errors.is_empty() {
+                    // 422（语义约束违反）—— 与 ApiError::ValidationError 及
+                    // gRPC 映射统一；400 保留给缺参/解析失败（InvalidInput）。
                     return (
-                        sdforge::axum::http::status::StatusCode::BAD_REQUEST,
+                        sdforge::axum::http::status::StatusCode::UNPROCESSABLE_ENTITY,
                         sdforge::axum::extract::Json(sdforge::serde_json::json!({
-                            "code": "BAD_REQUEST",
+                            "code": "UNPROCESSABLE_ENTITY",
                             "message": "validation failed",
                             "errors": __forge_validation_errors,
                         })),
@@ -1920,6 +2318,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // response schema descriptor from the handler return type.
     let openapi_response_type_expr = response_type_to_openapi_info_tokens(return_type);
+    // 返回类型 Schema 反射：为有返回类型的端点发射精确 schema 提供器
+    // （derive JsonSchema 生效，未派生运行时静默降级）。
+    let openapi_response_schema_expr = response_schema_field_tokens(return_type);
 
     // Build description expression
     let description_literal = description.as_deref().unwrap_or(&name);
@@ -1944,6 +2345,45 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     // Build i18n_key expression for runtime translation lookup
     let i18n_key_expr = match &i18n_key {
         Some(key) => quote! { Some(#key.to_string()) },
+        None => quote! { None },
+    };
+
+    // Endpoint lifecycle expression: `Some(LifecycleMeta)` when any of
+    // deprecated/sunset/successor is declared, else `None` (metadata stays
+    // lifecycle-free and every protocol skips header injection).
+    let has_lifecycle = deprecated.unwrap_or(false) || sunset.is_some() || successor.is_some();
+    let lifecycle_expr = if has_lifecycle {
+        let sunset_lit = sunset.as_deref().unwrap_or("");
+        let successor_lit = successor.as_deref().unwrap_or("");
+        // deprecated 在 quote! 外先求值为 bool 字面量（对齐下方
+        // openapi_deprecated_expr 先例）：裸 `deprecated` 是 Option<bool>，
+        // None 时 quote 渲染零 token，产出 `deprecated: ,` 语法错误，
+        // sunset-only / successor-only 合法组合会被宏整体拒绝。
+        let lifecycle_deprecated_expr = deprecated.unwrap_or(false);
+        quote! {
+            Some(sdforge::core::LifecycleMeta {
+                deprecated: #lifecycle_deprecated_expr,
+                sunset: if #sunset_lit.is_empty() { None } else { Some(#sunset_lit.to_string()) },
+                successor: if #successor_lit.is_empty() { None } else { Some(#successor_lit.to_string()) },
+            })
+        }
+    } else {
+        quote! { None }
+    };
+    // `Option<&'static str>` literal for registration-struct fields
+    // (quote! renders Option<T> by emitting the inner value only).
+    let openapi_i18n_key_expr = option_str_lit(i18n_key.as_deref());
+    // OpenAPI 弃用标记在 quote! 外先求值为 bool 字面量——裸 `deprecated`
+    // 路径写进 quote! 会在用户 crate 里解析到内建属性名（E0423）。
+    let openapi_deprecated_expr = deprecated.unwrap_or(false);
+    // OpenAPI 注册项的 sunset/successor（`Option<&'static str>`，None =
+    // 未声明），随 `deprecated` 一并透传给描述尾注渲染。
+    let openapi_sunset_expr = match sunset.as_deref() {
+        Some(v) => quote! { Some(#v) },
+        None => quote! { None },
+    };
+    let openapi_successor_expr = match successor.as_deref() {
+        Some(v) => quote! { Some(#v) },
         None => quote! { None },
     };
 
@@ -2018,6 +2458,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { None },
             quote! { true },
             i18n_key_expr.clone(),
+            lifecycle_expr.clone(),
         ) {
             Ok(tokens) => tokens,
             Err(e) => return e.into_compile_error().into(),
@@ -2030,6 +2471,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             quote! { #cache_ttl_expr },
             quote! { false },
             i18n_key_expr.clone(),
+            lifecycle_expr.clone(),
         ) {
             Ok(tokens) => tokens,
             Err(e) => return e.into_compile_error().into(),
@@ -2039,7 +2481,8 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         let route_creation = if is_streaming {
             let param_call_args: Vec<_> = params
                 .iter()
-                .map(|p| {
+                .enumerate()
+                .map(|(idx, p)| {
                     let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
                     match p.param_kind {
                         // Body uses Json<T> extractor, extract .0 for inner type
@@ -2048,6 +2491,14 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                         ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
                         // 多路径参数：使用闭包体内解构出的局部变量（不再取 .0）
                         ParamKind::Path if multi_path => quote! { #name_ident },
+                        // flatten query 参数：从独立直提槽取值（`.0` 即 ParamTy）
+                        ParamKind::Query if p.query_flatten => {
+                            let slot = syn::Ident::new(
+                                &format!("_forge_query_flat_{idx}"),
+                                proc_macro2::Span::call_site(),
+                            );
+                            quote! { #slot.0 }
+                        }
                         // Query 参数经生成的结构体解构，同样使用局部变量
                         ParamKind::Query if has_query => quote! { #name_ident },
                         // Path, Query, Form, Header need .0 extraction
@@ -2087,7 +2538,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                                 _ => router = router.get(#handler_closure),
                             }
                             #role_wrap_stmt
-                            router
+                            sdforge::http::lifecycle_layer_maybe(router, #lifecycle_expr)
                         },
                         #streaming_metadata,
                         None,
@@ -2117,7 +2568,8 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             // Build parameter call arguments with proper extraction
             let param_call_args: Vec<_> = params
                 .iter()
-                .map(|p| {
+                .enumerate()
+                .map(|(idx, p)| {
                     let name_ident = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
                     match p.param_kind {
                         // Body uses Json<T> extractor, extract .0 for inner type
@@ -2126,6 +2578,14 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                         ParamKind::State | ParamKind::Extension => quote! { #name_ident.0 },
                         // 多路径参数：使用闭包体内解构出的局部变量（不再取 .0）
                         ParamKind::Path if multi_path => quote! { #name_ident },
+                        // flatten query 参数：从独立直提槽取值（`.0` 即 ParamTy）
+                        ParamKind::Query if p.query_flatten => {
+                            let slot = syn::Ident::new(
+                                &format!("_forge_query_flat_{idx}"),
+                                proc_macro2::Span::call_site(),
+                            );
+                            quote! { #slot.0 }
+                        }
                         // Query 参数经生成的结构体解构，同样使用局部变量
                         ParamKind::Query if has_query => quote! { #name_ident },
                         // Path, Query, Form, Header need .0 extraction
@@ -2262,7 +2722,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                                 _ => router = router.get(#handler_closure),
                             }
                             #role_wrap_stmt
-                            router
+                            sdforge::http::lifecycle_layer_maybe(router, #lifecycle_expr)
                         },
                         #non_streaming_metadata,
                         None,
@@ -2334,6 +2794,11 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 success_status: #openapi_status_expr,
                 body_params: &[#(#openapi_body_params_tokens),*],
                 response_type: #openapi_response_type_expr,
+                response_schema: #openapi_response_schema_expr,
+                i18n_key: #openapi_i18n_key_expr,
+                deprecated: #openapi_deprecated_expr,
+                sunset: #openapi_sunset_expr,
+                successor: #openapi_successor_expr,
             });
         }
     } else {
@@ -2348,6 +2813,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! { #cache_ttl_expr },
         quote! { false },
         i18n_key_expr.clone(),
+        lifecycle_expr.clone(),
     ) {
         Ok(tokens) => tokens,
         Err(e) => return e.into_compile_error().into(),
@@ -2355,6 +2821,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let mcp_code = if let Some(ref tool_name) = tool_name {
         // Check if any parameter is State or Extension type - MCP tools cannot use state injection
+        let mcp_role_lits: Vec<&str> = extras.auth_roles.iter().map(String::as_str).collect();
         let has_state_param = params
             .iter()
             .any(|p| matches!(p.param_kind, ParamKind::State | ParamKind::Extension));
@@ -2533,18 +3000,28 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             }
 
             #[cfg(feature = "mcp")]
-            sdforge::inventory::submit!(sdforge::mcp::McpToolRegistration::new(
-                #mcp_tool_name,
-                #version,
-                #mcp_create_fn_name,
-                #mcp_metadata_fn_name,
-            ));
+            sdforge::inventory::submit!(
+                sdforge::mcp::McpToolRegistration::new(
+                    #mcp_tool_name,
+                    #version,
+                    #mcp_create_fn_name,
+                    #mcp_metadata_fn_name,
+                )
+                // auth(role = ...) 贯通 MCP 维度（对齐 gRPC roles 注册）：
+                // SdForgeMcpServer::call_tool 按已验证身份的 permission 校验。
+                .with_roles(&[#(#mcp_role_lits),*])
+            );
         }
     } else {
         quote! {}
     };
 
     let ws_code = if ws_path.is_some() {
+        // 端点生命周期注解（deprecated/sunset/successor）随 #grpc_metadata
+        // 进入 ws 路由的 ApiMetadata，但 WebSocket 协议层无响应头/metadata
+        // 注入点（upgrade 后为双向消息流）——生命周期在 ws 维度是显式
+        // no-op：元数据仅被携带，不产生任何响应副作用（四协议中唯一不
+        // 消费生命周期声明的协议）。
         quote! {
             #[cfg(feature = "websocket")]
             fn #ws_create_fn_name() -> std::sync::Arc<dyn sdforge::websocket::WebSocketHandler> {
@@ -2572,19 +3049,42 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let grpc_code = if let Some(grpc_method_name) = grpc_method.as_deref() {
-        // emit the GrpcHandlerRegistration (method → handler link) so
-        // SdForgeGrpcService::call can route CallRequest to the forge
-        // fn instead of the legacy stub. The GrpcRouteRegistration below
-        // carries only metadata; this adds the invocable handler pointer.
+        // emit the handler registration (method → handler link) so
+        // SdForgeGrpcService can route CallRequest/CallStream to the forge
+        // fn. The GrpcRouteRegistration below carries only metadata; this
+        // adds the invocable handler pointer. `stream = true` routes to the
+        // server-streaming registry (consumed by CallStream) instead of the
+        // unary one — a method is reachable via exactly one of the two RPCs.
         // pass the macro-level `status` argument so the gRPC layer can
         // mirror the HTTP success code (priority chain: field > macro > 200).
-        let grpc_handler_reg = generate_grpc_handler_registration(
-            fn_name,
-            grpc_method_name,
-            &params,
-            &path_params,
-            status,
-        );
+        let grpc_handler_reg = if stream.unwrap_or(false) {
+            generate_grpc_stream_handler_registration(
+                fn_name,
+                grpc_method_name,
+                &params,
+                status,
+                &extras.auth_roles,
+                extras.validate,
+                i18n_key.as_deref(),
+                deprecated.unwrap_or(false),
+                sunset.as_deref(),
+                successor.as_deref(),
+            )
+        } else {
+            generate_grpc_handler_registration(
+                fn_name,
+                grpc_method_name,
+                &params,
+                &path_params,
+                status,
+                &extras.auth_roles,
+                extras.validate,
+                i18n_key.as_deref(),
+                deprecated.unwrap_or(false),
+                sunset.as_deref(),
+                successor.as_deref(),
+            )
+        };
         quote! {
             #[cfg(feature = "grpc")]
             fn #grpc_create_fn_name() -> sdforge::grpc::GrpcRoute {
@@ -2750,6 +3250,474 @@ pub fn test_macro(input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+// ============================================================================
+// #[forge::log] — 声明日志属性宏（inklog 结构化日志 + DataMasker 脱敏）
+// ============================================================================
+
+/// `#[forge::log]` 的参数面。
+#[derive(Default, Debug)]
+struct LogMacroArgs {
+    /// 记录入参值（要求参数 `Debug`；`self` 接收器不取值）。
+    args: bool,
+    /// 记录成功载荷（非 `Result` 返回要求返回类型 `Debug`；`Result` 返回要求
+    /// Ok 型 `Debug`）。
+    result: bool,
+    /// `Result` 返回时记录 Err 载荷（要求错误型 `Debug`）。
+    err_detail: bool,
+    /// 成功退出的日志级别（默认 info；失败退出恒 error）。值为
+    /// `Level` 变体名，供 quote 直接拼 `::sdforge::log_attr::Level::#level`。
+    level: Option<&'static str>,
+}
+
+/// 解析 `#[forge::log(...)]` 参数（syn::meta 嵌套元信息）。
+///
+/// 支持：`args` / `result` / `err_detail` 裸旗标与 `level = "trace|debug|
+/// info|warn|error"`；未知名与旗标携带值均报错（Span 指向 offending 项）。
+fn parse_log_args(tokens: TokenStream2) -> syn::Result<LogMacroArgs> {
+    let mut parsed = LogMacroArgs::default();
+    if tokens.is_empty() {
+        return Ok(parsed);
+    }
+    use syn::parse::Parser as _;
+    let attrs = syn::Attribute::parse_outer.parse2(quote! { #[__forge_log(#tokens)] })?;
+    attrs[0].parse_nested_meta(|meta| {
+        if meta.path.is_ident("args") {
+            reject_flag_value(&meta, "args")?;
+            parsed.args = true;
+            Ok(())
+        } else if meta.path.is_ident("result") {
+            reject_flag_value(&meta, "result")?;
+            parsed.result = true;
+            Ok(())
+        } else if meta.path.is_ident("err_detail") {
+            reject_flag_value(&meta, "err_detail")?;
+            parsed.err_detail = true;
+            Ok(())
+        } else if meta.path.is_ident("level") {
+            let lit: syn::LitStr = meta.value()?.parse()?;
+            parsed.level = Some(match lit.value().as_str() {
+                "trace" => "Trace",
+                "debug" => "Debug",
+                "info" => "Info",
+                "warn" => "Warn",
+                "error" => "Error",
+                other => {
+                    return Err(meta.error(format!(
+                        "unknown level `{other}` (supported: trace, debug, info, warn, error)"
+                    )));
+                }
+            });
+            Ok(())
+        } else {
+            Err(meta.error("unknown option (supported: args, result, err_detail, level = \"...\")"))
+        }
+    })?;
+    Ok(parsed)
+}
+
+/// 裸旗标后携带 `= value` 时报错（旗标语义为纯开关）。
+fn reject_flag_value(meta: &syn::meta::ParseNestedMeta<'_>, name: &str) -> syn::Result<()> {
+    if meta.input.peek(syn::Token![=]) {
+        Err(meta.error(format!("flag `{name}` does not take a value")))
+    } else {
+        Ok(())
+    }
+}
+
+/// `#[forge::log]` 展开：原函数体重命名为隐藏内部函数，外壳函数承载
+/// 进入/退出/耗时/错误日志。
+///
+/// - 进入：debug 级 `fn_enter`（`args` 旗标开启时携带经 DataMasker 掩码的
+///   参数值）；
+/// - 退出：`fn_exit` 携带耗时与成败；成功用配置级别（默认 info），`Result`
+///   的 Err 恒 error 级；`result`/`err_detail` 旗标开启时载荷先掩码再入日志；
+/// - 失败语义只识别语法形态的 `Result` 返回（路径尾段 `Result`），别名包装
+///   按普通返回处理。
+///
+/// 运行时支撑位于 `sdforge::log_attr`（sdforge 的 `inklog` feature）——feature
+/// 关闭时发射代码解析失败（E0433 指向 `sdforge::log_attr`），按规格要求
+/// 显性报错而非静默 no-op。
+#[proc_macro_attribute]
+pub fn log(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as TokenStream2);
+    let input = parse_macro_input!(input as ItemFn);
+    match parse_log_args(args).and_then(|parsed| expand_log_attr(&parsed, input)) {
+        Ok(expanded) => expanded.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+fn expand_log_attr(parsed: &LogMacroArgs, input: ItemFn) -> syn::Result<TokenStream2> {
+    let sig = &input.sig;
+    if let Some(constness) = &sig.constness {
+        return Err(syn::Error::new(
+            constness.span,
+            "#[forge::log] does not support const fn (logging requires runtime Instant)",
+        ));
+    }
+    if sig.variadic.is_some() {
+        return Err(syn::Error::new(
+            sig.ident.span(),
+            "#[forge::log] does not support variadic functions",
+        ));
+    }
+
+    let vis = &input.vis;
+    let attrs = &input.attrs;
+    let ident = &sig.ident;
+    let inner_ident = quote::format_ident!("__forge_log_inner_{}", ident);
+    let generics = &sig.generics;
+    let where_clause = &sig.generics.where_clause;
+    let asyncness = &sig.asyncness;
+    // safety 原样传播到外壳与内部两个函数：丢弃 `unsafe` 会把 unsafe fn
+    // 包装成安全函数（安全代码可达 UB），也会让内部函数体里的 unsafe 操作
+    // 失去合法性。外壳体内对内部函数的调用是显式 unsafe 行为（edition 2024
+    // 的 unsafe_op_in_unsafe_fn 要求显式块）。
+    let safety = &sig.safety;
+    let is_unsafe = matches!(sig.safety, syn::Safety::Unsafe(_));
+    let unsafe_call: TokenStream2 = if is_unsafe {
+        quote! { unsafe }
+    } else {
+        quote! {}
+    };
+    let output = &sig.output;
+    let is_async = asyncness.is_some();
+    let awaits: Option<TokenStream2> = is_async.then(|| quote! { .await });
+    let fn_name = ident.to_string();
+
+    // 拆解参数：接收器原样保留；具名参数转发内部函数；复杂模式参数改绑
+    // 合成标识符、在内部函数体前补回解构 let（语义等价原签名）。
+    let mut outer_inputs: TokenStream2 = quote! {};
+    let mut forward_idents: Vec<TokenStream2> = Vec::new();
+    // args 旗标开启时的逐参数捕获表达式（`name={:?}` 形态；掩码在运行时
+    // 支撑层做）。
+    let mut entry_parts: Vec<TokenStream2> = Vec::new();
+    let mut rebind_lets: Vec<TokenStream2> = Vec::new();
+    let mut has_receiver = false;
+    for (index, fn_arg) in sig.inputs.iter().enumerate() {
+        match fn_arg {
+            FnArg::Receiver(receiver) => {
+                has_receiver = true;
+                outer_inputs.extend(quote! { #receiver, });
+            }
+            FnArg::Typed(pat_type) => {
+                let ty = &pat_type.ty;
+                if let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
+                    let id = &pat_ident.ident;
+                    outer_inputs.extend(quote! { #pat_type, });
+                    forward_idents.push(quote! { #id });
+                    if parsed.args {
+                        entry_parts.push(quote! {
+                            ::std::format!("{}={:?}", ::core::stringify!(#id), #id)
+                        });
+                    }
+                } else {
+                    let synthetic =
+                        quote::format_ident!("__forge_log_arg_{}", syn::Index::from(index));
+                    let pat = &pat_type.pat;
+                    outer_inputs.extend(quote! { #synthetic: #ty, });
+                    forward_idents.push(quote! { #synthetic });
+                    rebind_lets.push(quote! { let #pat = #synthetic; });
+                    if parsed.args {
+                        // 解构参数以原模式文本为键（值经合成绑定借用，同样
+                        // 要求 `Debug`）。
+                        entry_parts.push(quote! {
+                            ::std::format!(
+                                "{}={:?}",
+                                ::core::stringify!(#pat),
+                                #synthetic
+                            )
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // 进入日志：args 旗标开启且存在可捕获参数时携带 args 段。载荷一律以
+    // 闭包惰性提供——运行时支撑层（sdforge::log_attr）的级别守卫判定丢弃
+    // 时，参数捕获与掩码渲染的分配成本分文不付（info 生产配置下 debug 进入
+    // 日志不再为每次调用白付 N 次 format!）。
+    let entry_args_expr: TokenStream2 = if entry_parts.is_empty() {
+        quote! { || ::core::option::Option::None }
+    } else {
+        quote! { || ::core::option::Option::Some(::std::vec![#(#entry_parts),*].join(", ")) }
+    };
+
+    let receiver_call: TokenStream2 = if has_receiver {
+        quote! { self.#inner_ident(#(#forward_idents),*) }
+    } else {
+        quote! { #inner_ident(#(#forward_idents),*) }
+    };
+
+    // Result 形态（语法判定）失败退出走 error 级，成功退出走配置级别。
+    let result_shaped = matches!(
+        output,
+        syn::ReturnType::Type(_, ty) if extract_result_ok_type(ty).is_some()
+    );
+    let level_ident = quote::format_ident!(
+        "{}",
+        parsed.level.unwrap_or("Info"),
+        span = proc_macro2::Span::call_site()
+    );
+    // 退出载荷同样惰性（闭包捕获成败绑定，级别守卫通过才渲染）。
+    let ok_detail_expr: TokenStream2 = if parsed.result {
+        quote! { || ::core::option::Option::Some(::std::format!("{:?}", __forge_log_v)) }
+    } else {
+        quote! { || ::core::option::Option::None }
+    };
+    let plain_detail_expr: TokenStream2 = if parsed.result {
+        quote! { || ::core::option::Option::Some(::std::format!("{:?}", __forge_log_out)) }
+    } else {
+        quote! { || ::core::option::Option::None }
+    };
+    let err_detail_expr: TokenStream2 = if parsed.err_detail {
+        quote! { || ::core::option::Option::Some(::std::format!("{:?}", __forge_log_e)) }
+    } else {
+        quote! { || ::core::option::Option::None }
+    };
+
+    let exit_stmt: TokenStream2 = if result_shaped {
+        quote! {
+            match &__forge_log_out {
+                ::core::result::Result::Ok(__forge_log_v) => {
+                    ::sdforge::log_attr::exit(
+                        #fn_name,
+                        __forge_log_start.elapsed(),
+                        ::sdforge::log_attr::Level::#level_ident,
+                        #ok_detail_expr,
+                    );
+                }
+                ::core::result::Result::Err(__forge_log_e) => {
+                    ::sdforge::log_attr::exit_error(
+                        #fn_name,
+                        __forge_log_start.elapsed(),
+                        #err_detail_expr,
+                    );
+                }
+            }
+        }
+    } else {
+        quote! {
+            ::sdforge::log_attr::exit(
+                #fn_name,
+                __forge_log_start.elapsed(),
+                ::sdforge::log_attr::Level::#level_ident,
+                #plain_detail_expr,
+            );
+        }
+    };
+
+    let body = &input.block;
+    let rebind_stmts = &rebind_lets;
+
+    Ok(quote! {
+        #(#attrs)*
+        #vis #safety #asyncness fn #ident #generics(#outer_inputs) #output #where_clause {
+            ::sdforge::log_attr::entry(
+                #fn_name,
+                ::core::module_path!(),
+                #entry_args_expr,
+            );
+            let __forge_log_start = ::std::time::Instant::now();
+            let __forge_log_out = #unsafe_call { #receiver_call #awaits };
+            #exit_stmt
+            __forge_log_out
+        }
+
+        #[doc(hidden)]
+        #[allow(unused_variables, missing_docs, clippy::all)]
+        #vis #safety #asyncness fn #inner_ident #generics(#outer_inputs) #output #where_clause {
+            #(#rebind_stmts)*
+            #body
+        }
+    })
+}
+
+/// `#[forge::log]` 参数解析与展开形态测试。
+#[cfg(test)]
+mod log_attr_macro_tests {
+    use super::*;
+
+    #[test]
+    fn empty_args_yield_defaults() {
+        let parsed = parse_log_args(quote! {}).unwrap();
+        assert!(!parsed.args);
+        assert!(!parsed.result);
+        assert!(!parsed.err_detail);
+        assert_eq!(parsed.level, None);
+    }
+
+    #[test]
+    fn bare_flags_and_level_parse() {
+        let parsed = parse_log_args(quote! { args, result, err_detail, level = "warn" }).unwrap();
+        assert!(parsed.args);
+        assert!(parsed.result);
+        assert!(parsed.err_detail);
+        assert_eq!(parsed.level, Some("Warn"));
+
+        let debug = parse_log_args(quote! { level = "debug" }).unwrap();
+        assert_eq!(debug.level, Some("Debug"));
+        let trace = parse_log_args(quote! { level = "trace" }).unwrap();
+        assert_eq!(trace.level, Some("Trace"));
+        let error = parse_log_args(quote! { level = "error" }).unwrap();
+        assert_eq!(error.level, Some("Error"));
+    }
+
+    #[test]
+    fn unknown_option_is_rejected_at_its_token() {
+        let err = parse_log_args(quote! { wat, args })
+            .expect_err("unknown option must fail")
+            .to_string();
+        assert!(err.contains("unknown option"), "{err}");
+        assert!(err.contains("args, result, err_detail, level"), "{err}");
+    }
+
+    #[test]
+    fn invalid_level_is_rejected_with_supported_list() {
+        let err = parse_log_args(quote! { level = "loud" })
+            .expect_err("invalid level must fail")
+            .to_string();
+        assert!(err.contains("unknown level `loud`"), "{err}");
+    }
+
+    #[test]
+    fn flags_reject_values() {
+        for flag in ["args", "result", "err_detail"] {
+            let tokens: TokenStream2 = match flag {
+                "args" => quote! { args = true },
+                "result" => quote! { result = false },
+                _ => quote! { err_detail = 1 },
+            };
+            let err = parse_log_args(tokens)
+                .expect_err("flags must not take values")
+                .to_string();
+            assert!(err.contains("does not take a value"), "{flag}: {err}");
+        }
+    }
+
+    #[test]
+    fn expansion_carries_shell_inner_and_log_calls() {
+        let input: ItemFn = syn::parse2(quote! {
+            fn demo(x: u64) -> u64 { x + 1 }
+        })
+        .unwrap();
+        let parsed = parse_log_args(quote! { args }).unwrap();
+        let expanded = expand_log_attr(&parsed, input).unwrap().to_string();
+
+        assert!(
+            expanded.contains("fn demo"),
+            "shell fn keeps the name: {expanded}"
+        );
+        assert!(
+            expanded.contains("__forge_log_inner_demo"),
+            "body moves to the hidden inner fn: {expanded}"
+        );
+        assert!(
+            expanded.contains("log_attr :: entry"),
+            "entry hook: {expanded}"
+        );
+        assert!(
+            expanded.contains("Instant :: now"),
+            "duration capture: {expanded}"
+        );
+        assert!(
+            expanded.contains("log_attr :: exit"),
+            "exit hook: {expanded}"
+        );
+        assert!(
+            expanded.contains("stringify ! (x)") && expanded.contains("format !"),
+            "args flag captures parameter values: {expanded}"
+        );
+    }
+
+    #[test]
+    fn result_return_splits_ok_and_error_arms() {
+        let input: ItemFn = syn::parse2(quote! {
+            fn demo() -> Result<u64, String> { Ok(1) }
+        })
+        .unwrap();
+        let parsed = parse_log_args(quote! { result, err_detail }).unwrap();
+        let expanded = expand_log_attr(&parsed, input).unwrap().to_string();
+
+        assert!(expanded.contains("Result :: Ok"), "ok arm: {expanded}");
+        assert!(expanded.contains("Result :: Err"), "err arm: {expanded}");
+        assert!(
+            expanded.contains("log_attr :: exit_error"),
+            "error-level exit: {expanded}"
+        );
+        assert!(
+            expanded.contains("Level :: Info"),
+            "default success level: {expanded}"
+        );
+    }
+
+    #[test]
+    fn async_and_pattern_params_are_forwarded() {
+        let input: ItemFn = syn::parse2(quote! {
+            async fn demo(Point { x, y }: Point, n: u64) -> u64 { x + y + n }
+        })
+        .unwrap();
+        let parsed = parse_log_args(quote! { args }).unwrap();
+        let expanded = expand_log_attr(&parsed, input).unwrap().to_string();
+
+        assert!(
+            expanded.contains("async fn demo"),
+            "asyncness preserved: {expanded}"
+        );
+        assert!(
+            expanded.contains(". await"),
+            "inner call awaited: {expanded}"
+        );
+        assert!(
+            expanded.contains("__forge_log_arg_0"),
+            "pattern param re-bound to a synthetic ident: {expanded}"
+        );
+        assert!(
+            expanded.contains("let Point { x , y } = __forge_log_arg_0"),
+            "inner fn restores the destructuring: {expanded}"
+        );
+    }
+
+    #[test]
+    fn const_fn_is_rejected() {
+        let input: ItemFn = syn::parse2(quote! {
+            const fn demo(x: u64) -> u64 { x }
+        })
+        .unwrap();
+        let parsed = parse_log_args(quote! {}).unwrap();
+        let err = expand_log_attr(&parsed, input)
+            .expect_err("const fn must fail")
+            .to_string();
+        assert!(err.contains("const fn"), "{err}");
+    }
+
+    /// unsafety 传播：unsafe fn 的外壳与内部两个函数都必须保留 `unsafe`——
+    /// 丢弃它会把 unsafe fn 包装成安全函数（安全代码可达 UB），且内部函数
+    /// 体里的 unsafe 操作也会失去合法性。
+    #[test]
+    fn unsafe_fn_propagates_unsafety_to_both_fns() {
+        let input: ItemFn = syn::parse2(quote! {
+            unsafe fn demo(ptr: *const u64) -> u64 { *ptr }
+        })
+        .unwrap();
+        let parsed = parse_log_args(quote! { result }).unwrap();
+        let expanded = expand_log_attr(&parsed, input).unwrap().to_string();
+
+        let unsafe_fn_count = expanded.matches("unsafe fn").count();
+        assert_eq!(
+            unsafe_fn_count, 2,
+            "shell and inner fns must both stay unsafe: {expanded}"
+        );
+        // 外壳体内对内部 unsafe 函数的调用是显式 unsafe 行为（edition 2024
+        // unsafe_op_in_unsafe_fn 要求显式块）。
+        assert!(
+            expanded.contains("unsafe { __forge_log_inner_demo"),
+            "inner call must be an explicit unsafe block: {expanded}"
+        );
+    }
+}
+
 #[cfg(test)]
 mod macro_parsing_tests {
     use super::*;
@@ -2774,12 +3742,197 @@ mod macro_parsing_tests {
         );
     }
 
+    /// syn 迁移后的语义增量：字符串字面量经 `syn::Lit` 展开——转义序列
+    /// 正确还原（旧字符扫描器把 `\"` 源文本原样留在值里）。
+    #[test]
+    fn test_parse_kv_pairs_unescapes_string_literals() {
+        let input: TokenStream2 = quote! { description = "say \"hi\" now" };
+        let pairs = parse_kv_pairs(input).unwrap();
+        assert_eq!(
+            pairs,
+            vec![("description".to_string(), "say \"hi\" now".to_string())]
+        );
+    }
+
+    /// `key =` 缺值（流尾/紧随逗号）：历史怪癖按裸键 `"true"` 处理（零回归）。
+    #[test]
+    fn test_parse_kv_pairs_missing_value_is_bare_true() {
+        let trailing: TokenStream2 = quote! { name = "x", status = , version = "v1" };
+        let pairs = parse_kv_pairs(trailing).unwrap();
+        assert_eq!(
+            pairs,
+            vec![
+                ("name".to_string(), "x".to_string()),
+                ("status".to_string(), "true".to_string()),
+                ("version".to_string(), "v1".to_string()),
+            ]
+        );
+        let at_end: TokenStream2 = quote! { name = };
+        assert_eq!(
+            parse_kv_pairs(at_end).unwrap(),
+            vec![("name".to_string(), "true".to_string())]
+        );
+    }
+
+    /// 非字符串值族：整数 / 裸 bool / 负整数按旧扫描器同形输出。
+    #[test]
+    fn test_parse_kv_pairs_non_string_values() {
+        let input: TokenStream2 = quote! { status = 201, deprecated = true, ttl = -1 };
+        let pairs = parse_kv_pairs(input).unwrap();
+        assert_eq!(
+            pairs,
+            vec![
+                ("status".to_string(), "201".to_string()),
+                ("deprecated".to_string(), "true".to_string()),
+                ("ttl".to_string(), "-1".to_string()),
+            ]
+        );
+    }
+
+    /// Span 精确化：不可作键的 token 报错指向该 token（旧实现一律
+    /// call_site）。
+    #[test]
+    fn test_parse_kv_pairs_reports_offending_token_span() {
+        let input: TokenStream2 = quote! { "a-string-as-key" };
+        let err = parse_kv_pairs(input).expect_err("non-ident key must fail");
+        assert!(err.to_string().contains("expected `key = value` pair"));
+    }
+
+    /// 严格性收紧：非引号值只允许单 token——值后紧跟非逗号 token（多 token
+    /// 非引号值）必须报错，而不是静默截断首 token、把余下 token 当键解析。
+    #[test]
+    fn test_parse_kv_pairs_rejects_multi_token_unquoted_value() {
+        let input: TokenStream2 = quote! { route = get fallback };
+        let err = parse_kv_pairs(input).expect_err("multi-token unquoted value must fail");
+        let message = err.to_string();
+        assert!(
+            message.contains("must be quoted when it spans multiple tokens"),
+            "{message}"
+        );
+
+        // 引号值天然单 token（引号内空格/斜杠合法），不回归。
+        let quoted: TokenStream2 = quote! { path = "/api/v1/users with space" };
+        assert_eq!(
+            parse_kv_pairs(quoted).unwrap(),
+            vec![("path".to_string(), "/api/v1/users with space".to_string())]
+        );
+    }
+
+    /// 裸布尔键按 `("key", "true")` 入对：居中裸键不得吞并后续键值对，
+    /// 尾部裸键不得被静默丢弃（`#[forge(deprecated)]` 契约）。
+    #[test]
+    fn test_parse_kv_pairs_bare_bool_flag() {
+        let mid_list: TokenStream2 = quote! { deprecated, sunset = "2026-12-31" };
+        assert_eq!(
+            parse_kv_pairs(mid_list).unwrap(),
+            vec![
+                ("deprecated".to_string(), "true".to_string()),
+                ("sunset".to_string(), "2026-12-31".to_string())
+            ]
+        );
+
+        let trailing: TokenStream2 = quote! { name = "old", deprecated };
+        assert_eq!(
+            parse_kv_pairs(trailing).unwrap(),
+            vec![
+                ("name".to_string(), "old".to_string()),
+                ("deprecated".to_string(), "true".to_string())
+            ]
+        );
+    }
+
     #[test]
     fn test_parse_service_api_args_required() {
         let input: TokenStream2 = quote! { name = "test", version = "v1" };
         let result = parse_service_api_args(input, false).unwrap();
         assert_eq!(result.0, "test");
         assert_eq!(result.1, "v1");
+    }
+
+    /// 端点级生命周期注解（`deprecated` / `sunset` / `successor`）的解析：
+    /// 布尔裸值与带引号字符串各归其位，未声明时全为 None。
+    #[test]
+    fn test_parse_service_api_args_lifecycle_keys() {
+        let input: TokenStream2 = quote! {
+            name = "old", version = "v1", deprecated, sunset = "2026-12-31",
+            successor = "/api/v2/old"
+        };
+        let result = parse_service_api_args(input, false).unwrap();
+        assert_eq!(result.14, Some(true));
+        assert_eq!(result.15.as_deref(), Some("2026-12-31"));
+        assert_eq!(result.16.as_deref(), Some("/api/v2/old"));
+
+        let bare: TokenStream2 = quote! { name = "fresh", version = "v1" };
+        let result = parse_service_api_args(bare, false).unwrap();
+        assert_eq!(result.14, None);
+        assert_eq!(result.15, None);
+        assert_eq!(result.16, None);
+    }
+
+    /// `deprecated = <非布尔值>` 必须在宏展开期报错（fail-loud），
+    /// 而不是静默当作 false。
+    #[test]
+    fn test_parse_service_api_args_rejects_non_bool_deprecated() {
+        let input: TokenStream2 = quote! { name = "old", version = "v1", deprecated = "yes" };
+        let err = match parse_service_api_args(input, false) {
+            Err(e) => e,
+            Ok(_) => panic!("non-bool deprecated must be a compile error"),
+        };
+        assert!(
+            err.to_string()
+                .contains("Invalid boolean value for 'deprecated'"),
+            "error must name the offending key: {err}"
+        );
+    }
+
+    /// sunset/successor 头值含非可见 ASCII（CJK 等）必须在宏展开期报错
+    /// （fail-loud）——这类值会原样抵达运行期（token 流字符串化不转义
+    /// 非 ASCII），却在响应头注入点被静默丢弃。
+    #[test]
+    fn test_parse_service_api_args_rejects_non_ascii_header_value() {
+        let sunset: TokenStream2 =
+            quote! { name = "old", version = "v1", sunset = "2026-12-31（无效）" };
+        let err = match parse_service_api_args(sunset, false) {
+            Err(e) => e,
+            Ok(_) => panic!("non-ASCII sunset must be a compile error"),
+        };
+        assert!(
+            err.to_string()
+                .contains("Invalid value for 'sunset' (must be visible ASCII"),
+            "error must name the offending key: {err}"
+        );
+
+        let successor: TokenStream2 =
+            quote! { name = "old", version = "v1", successor = "/api/v2／old" };
+        let err = match parse_service_api_args(successor, false) {
+            Err(e) => e,
+            Ok(_) => panic!("non-ASCII successor must be a compile error"),
+        };
+        assert!(
+            err.to_string()
+                .contains("Invalid value for 'successor' (must be visible ASCII"),
+            "error must name the offending key: {err}"
+        );
+
+        // 合法值（可见 ASCII）不受影响。
+        let valid: TokenStream2 = quote! { name = "old", version = "v1", sunset = "2026-12-31", successor = "/api/v2/old" };
+        let result = parse_service_api_args(valid, false).unwrap();
+        assert_eq!(result.15.as_deref(), Some("2026-12-31"));
+        assert_eq!(result.16.as_deref(), Some("/api/v2/old"));
+    }
+
+    /// `validate_header_value` 直接拒绝 CRLF 与控制字符（词法层面字符串
+    /// 字面量的 `\r`/`\n` 转义不会以控制字符形态抵达解析器，此校验是
+    /// 纵深防御；真实可达路径是非 ASCII 字符，见上方解析级测试）。
+    #[test]
+    fn test_validate_header_value_rejects_crlf_and_control_chars() {
+        assert!(validate_header_value("sunset", "2026\r\nX").is_err());
+        assert!(validate_header_value("sunset", "a\u{7}b").is_err());
+        assert!(validate_header_value("sunset", "无效").is_err());
+        assert!(validate_header_value("successor", "/api\u{0B}2").is_err());
+        assert!(validate_header_value("sunset", "2026-12-31").is_ok());
+        assert!(validate_header_value("successor", "/api/v2/old").is_ok());
+        assert!(validate_header_value("sunset", "").is_ok());
     }
 
     /// Build a `#[param(...)] <ident>: <ty>` PatType with the given attribute
@@ -2819,8 +3972,75 @@ mod macro_parsing_tests {
     #[test]
     fn test_parse_param_attributes_accepts_valid_min_length() {
         let pat_type = pat_type_with_param_attr("param(min_length = 2)");
-        let (_, validations) = ParamInfo::parse_param_attributes(&pat_type).unwrap();
+        let (_, validations, _) = ParamInfo::parse_param_attributes(&pat_type).unwrap();
         assert_eq!(validations.len(), 1);
+    }
+
+    /// `flatten` 裸标识符 → true：struct 查询参数扁平直提（`Query<ParamTy>`）
+    /// 的显式 opt-in 形态，与 `kind = "query"` 组合使用。
+    #[test]
+    fn test_parse_param_attributes_flatten_bare_flag() {
+        let pat_type = pat_type_with_param_attr("param(kind = \"query\", flatten)");
+        let (kind, validations, flatten) = ParamInfo::parse_param_attributes(&pat_type).unwrap();
+        assert!(matches!(kind, Some(ParamKind::Query)));
+        assert!(flatten);
+        assert!(validations.is_empty());
+    }
+
+    /// `flatten = true` 与裸标识符等价；`flatten = false` 显式关闭。
+    #[test]
+    fn test_parse_param_attributes_flatten_bool_value() {
+        let pat_type = pat_type_with_param_attr("param(kind = \"query\", flatten = true)");
+        let (_, _, flatten) = ParamInfo::parse_param_attributes(&pat_type).unwrap();
+        assert!(flatten);
+
+        let pat_type = pat_type_with_param_attr("param(kind = \"query\", flatten = false)");
+        let (_, _, flatten) = ParamInfo::parse_param_attributes(&pat_type).unwrap();
+        assert!(!flatten);
+    }
+
+    /// 非 bool 字面量必须编译报错，禁止静默当作 true（fail-open）。
+    #[test]
+    fn test_parse_param_attributes_flatten_rejects_non_bool_value() {
+        let pat_type = pat_type_with_param_attr("param(kind = \"query\", flatten = \"yes\")");
+        assert!(ParamInfo::parse_param_attributes(&pat_type).is_err());
+    }
+
+    /// flatten 参数的校验属于 ParamTy 自身字段，宏层面重复生成会双重约束：
+    /// 与任一校验属性同现即编译错误。
+    #[test]
+    fn test_parse_param_attributes_flatten_conflicts_with_validations() {
+        for meta in [
+            "param(kind = \"query\", flatten, ge = 1)",
+            "param(kind = \"query\", flatten, le = 10)",
+            "param(kind = \"query\", flatten, min_length = 2)",
+            "param(kind = \"query\", flatten, max_length = 8)",
+            "param(kind = \"query\", flatten, not_blank)",
+            "param(kind = \"query\", flatten, email)",
+        ] {
+            let pat_type = pat_type_with_param_attr(meta);
+            assert!(
+                ParamInfo::parse_param_attributes(&pat_type).is_err(),
+                "flatten + `{meta}` must be a compile error"
+            );
+        }
+    }
+
+    /// flatten 语义只对 Query 提取成立：其他 kind（含未声明 kind）一律编译
+    /// 报错，防止标志被静默忽略（fail-open）。
+    #[test]
+    fn test_parse_param_attributes_flatten_requires_query_kind() {
+        for meta in [
+            "param(kind = \"path\", flatten)",
+            "param(kind = \"body\", flatten)",
+            "param(flatten)",
+        ] {
+            let pat_type = pat_type_with_param_attr(meta);
+            assert!(
+                ParamInfo::parse_param_attributes(&pat_type).is_err(),
+                "flatten with `{meta}` must be a compile error"
+            );
+        }
     }
 
     #[test]
@@ -3178,6 +4398,7 @@ mod macro_parsing_tests {
                 "u64".to_string()
             },
             skip_mcp_schema,
+            query_flatten: false,
         }
     }
 
@@ -3335,8 +4556,19 @@ mod macro_parsing_tests {
         let params = vec![make_cli_param("payload", ParamKind::Body, false)];
         let path_params = vec!["payload".to_string()];
 
-        let tokens =
-            generate_grpc_handler_registration(&fn_name, "embed", &params, &path_params, None);
+        let tokens = generate_grpc_handler_registration(
+            &fn_name,
+            "embed",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+            None,
+            false,
+            None,
+            None,
+        );
         let s = normalize_ts(&tokens);
 
         assert!(
@@ -3378,8 +4610,19 @@ mod macro_parsing_tests {
         let params: Vec<ParamInfo> = vec![];
         let path_params = vec![];
 
-        let tokens =
-            generate_grpc_handler_registration(&fn_name, "ping", &params, &path_params, None);
+        let tokens = generate_grpc_handler_registration(
+            &fn_name,
+            "ping",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+            None,
+            false,
+            None,
+            None,
+        );
         let s = normalize_ts(&tokens);
 
         assert!(
@@ -3397,6 +4640,81 @@ mod macro_parsing_tests {
         );
     }
 
+    /// `Option<T>` 参数（quote! 输出的类型字符串带空格：`Option < u64 >`）
+    /// 必须被判为 is_option —— 归一化缺失曾使 Option 参数全部走 required
+    /// 提取臂（`Option<u64>: FromStr` 编译失败）。
+    #[test]
+    fn test_param_info_option_detection_survives_token_spacing() {
+        let arg: syn::FnArg = syn::parse_quote!(count: Option<u64>);
+        let info = ParamInfo::from_arg(&arg, &[], Some("GET"), &[])
+            .expect("param parses")
+            .expect("non-receiver param is classified");
+        assert!(info.is_option, "Option<u64> must be detected as Option");
+        assert!(matches!(info.param_kind, ParamKind::Query));
+        assert_eq!(info.inner_type, "u64");
+
+        let closure = generate_handler_closure(
+            &syn::Ident::new("probe", proc_macro2::Span::call_site()),
+            &syn::Ident::new("__probe_handler", proc_macro2::Span::call_site()),
+            &[info],
+            &[],
+            false,
+        );
+        let s = normalize_ts(&closure);
+        assert!(
+            s.contains("parse :: < u64 >"),
+            "Option extraction must parse the inner type, not Option<u64>: {s}"
+        );
+        assert!(
+            !s.contains("let count : Option < u64 > = args . get (\"count\") . ok_or_else"),
+            "absent key must yield None, not a missing-argument error: {s}"
+        );
+    }
+
+    /// `stream = true` 的 grpc_method 必须落进流式注册表
+    /// （`GrpcStreamHandlerRegistration` + `stream_output_from` 尾部），
+    /// 而非 unary 的 `GrpcHandlerRegistration`。
+    #[test]
+    fn test_generate_grpc_stream_handler_registration_routes_to_stream_inventory() {
+        let fn_name = syn::Ident::new("streamer", proc_macro2::Span::call_site());
+        let params = vec![make_cli_param("count", ParamKind::Query, true)];
+
+        let tokens = generate_grpc_stream_handler_registration(
+            &fn_name,
+            "streamer",
+            &params,
+            None,
+            &[],
+            false,
+            None,
+            false,
+            None,
+            None,
+        );
+        let s = normalize_ts(&tokens);
+
+        assert!(
+            s.contains("GrpcStreamHandlerRegistration"),
+            "must submit the streaming registration: {s}"
+        );
+        assert!(
+            !s.contains("GrpcHandlerRegistration {"),
+            "must not touch the unary registration struct: {s}"
+        );
+        assert!(
+            s.contains("__grpc_stream_handler_streamer"),
+            "handler fn must carry the stream prefix: {s}"
+        );
+        assert!(
+            s.contains("stream_output_from"),
+            "closure tail must map StreamResponse via stream_output_from: {s}"
+        );
+        assert!(
+            s.contains("requires the `streaming` feature"),
+            "grpc-without-streaming arm must carry the fail-loud compile_error: {s}"
+        );
+    }
+
     /// when `status = Some(code)` is passed, the generated
     /// `GrpcHandlerRegistration` must carry `default_status: Some(<code>)`.
     #[test]
@@ -3411,6 +4729,12 @@ mod macro_parsing_tests {
             &params,
             &path_params,
             Some(201u16),
+            &[],
+            false,
+            None,
+            false,
+            None,
+            None,
         );
         let s = normalize_ts(&tokens);
 
@@ -3421,6 +4745,176 @@ mod macro_parsing_tests {
         assert!(
             s.contains("default_status : Some (201u16 as u16)"),
             "default_status must be Some(201u16 as u16) when macro status=201: {s}"
+        );
+    }
+
+    /// `i18n_key` 必须透传为 registration 的 `i18n_key: Option<&str>`
+    /// 字段（CLI/MCP/OpenAPI 同名参数的 gRPC 对齐）；None 缺省。
+    #[test]
+    fn test_generate_grpc_handler_registration_emits_i18n_key() {
+        let fn_name = syn::Ident::new("localized", proc_macro2::Span::call_site());
+        let params: Vec<ParamInfo> = vec![];
+        let path_params = vec![];
+
+        let with_key = generate_grpc_handler_registration(
+            &fn_name,
+            "localized_action",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+            Some("forge.localized.description"),
+            false,
+            None,
+            None,
+        );
+        let s = normalize_ts(&with_key);
+        assert!(
+            s.contains(r#"i18n_key : Some ("forge.localized.description")"#),
+            "i18n_key must carry the declared key: {s}"
+        );
+
+        let without_key = generate_grpc_handler_registration(
+            &fn_name,
+            "localized_action",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+            None,
+            false,
+            None,
+            None,
+        );
+        assert!(
+            normalize_ts(&without_key).contains("i18n_key : None"),
+            "absent i18n_key must emit None"
+        );
+    }
+
+    /// `deprecated` / `sunset` / `successor` 必须透传为 registration 的
+    /// 生命周期字段（unary 与 streaming 两条注册路径同契约）；未声明时
+    /// 全部缺省（`false` / `None`），消费方据此跳过响应元数据注入。
+    #[test]
+    fn test_generate_grpc_handler_registration_emits_lifecycle() {
+        let fn_name = syn::Ident::new("sunsetting", proc_macro2::Span::call_site());
+        let params: Vec<ParamInfo> = vec![];
+        let path_params = vec![];
+
+        let with_lifecycle = generate_grpc_handler_registration(
+            &fn_name,
+            "sunsetting_action",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+            None,
+            true,
+            Some("2026-12-31"),
+            Some("/api/v2/sunsetting"),
+        );
+        let s = normalize_ts(&with_lifecycle);
+        assert!(
+            s.contains("deprecated : true"),
+            "deprecated must carry the declared flag: {s}"
+        );
+        assert!(
+            s.contains(r#"sunset : Some ("2026-12-31")"#),
+            "sunset must carry the declared date: {s}"
+        );
+        assert!(
+            s.contains(r#"successor : Some ("/api/v2/sunsetting")"#),
+            "successor must carry the declared hint: {s}"
+        );
+
+        let bare = generate_grpc_handler_registration(
+            &fn_name,
+            "sunsetting_action",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+            None,
+            false,
+            None,
+            None,
+        );
+        let s = normalize_ts(&bare);
+        assert!(
+            s.contains("deprecated : false")
+                && s.contains("sunset : None")
+                && s.contains("successor : None"),
+            "absent lifecycle args must emit the all-empty defaults: {s}"
+        );
+
+        let stream_lifecycle = generate_grpc_stream_handler_registration(
+            &fn_name,
+            "sunsetting_stream",
+            &params,
+            None,
+            &[],
+            false,
+            None,
+            true,
+            None,
+            Some("/api/v2/sunsetting"),
+        );
+        let s = normalize_ts(&stream_lifecycle);
+        assert!(
+            s.contains("deprecated : true")
+                && s.contains(r#"successor : Some ("/api/v2/sunsetting")"#),
+            "streaming registration must mirror the same lifecycle contract: {s}"
+        );
+    }
+
+    /// `auth(role = ...)` 声明必须透传为 registration 的 `roles` 切片；
+    /// 未声明时为 `&[]`。
+    #[test]
+    fn test_generate_grpc_handler_registration_emits_roles() {
+        let fn_name = syn::Ident::new("admin_only", proc_macro2::Span::call_site());
+        let params: Vec<ParamInfo> = vec![];
+        let path_params = vec![];
+
+        let with_roles = generate_grpc_handler_registration(
+            &fn_name,
+            "admin_action",
+            &params,
+            &path_params,
+            None,
+            &["admin".to_string(), "operator".to_string()],
+            false,
+            None,
+            false,
+            None,
+            None,
+        );
+        let s = normalize_ts(&with_roles);
+        assert!(
+            s.contains("roles : & [\"admin\" , \"operator\"]"),
+            "roles must carry auth declarations: {s}"
+        );
+
+        let without_roles = generate_grpc_handler_registration(
+            &fn_name,
+            "open_action",
+            &params,
+            &path_params,
+            None,
+            &[],
+            false,
+            None,
+            false,
+            None,
+            None,
+        );
+        let s = normalize_ts(&without_roles);
+        assert!(
+            s.contains("roles : & []"),
+            "roles must default to empty slice: {s}"
         );
     }
 
@@ -3478,6 +4972,43 @@ mod macro_parsing_tests {
         let rt = parse_return_type("-> ServiceResponse");
         assert!(detect_service_response(&rt));
     }
+
+    /// 返回类型 Schema 反射：有返回类型时发射 `reflect_response_schema`
+    /// 提供器；`Result<T, E>` 先解包 Ok 型；单元（Default）返回发射 `None`。
+    #[test]
+    fn test_response_schema_field_tokens() {
+        let typed = parse_return_type("-> UserProfile");
+        let tokens = response_schema_field_tokens(&typed).to_string();
+        assert!(
+            tokens.contains("SchemaProbe :: < UserProfile >"),
+            "must probe the concrete return type inline: {tokens}"
+        );
+        assert!(
+            tokens.contains("fn sdforge_reflected_response_schema"),
+            "must emit a named fn item (coercible to fn pointer): {tokens}"
+        );
+        assert!(
+            tokens.contains("allow (unused_imports)"),
+            "derived-type endpoints would warn on the fallback trait import: {tokens}"
+        );
+
+        let result_wrapped = parse_return_type("-> Result<UserProfile, ApiError>");
+        let tokens = response_schema_field_tokens(&result_wrapped).to_string();
+        assert!(
+            tokens.contains("UserProfile"),
+            "Result wrapper must unwrap to the Ok type: {tokens}"
+        );
+        assert!(
+            !tokens.contains("ApiError"),
+            "error type must not enter the success-payload schema: {tokens}"
+        );
+
+        assert_eq!(
+            response_schema_field_tokens(&syn::ReturnType::Default).to_string(),
+            "None",
+            "unit-return endpoints must not register a provider"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -3491,7 +5022,7 @@ mod handler_closure_tests {
         let fn_name = syn::Ident::new("echo", proc_macro2::Span::call_site());
         let handler_fn_name = syn::Ident::new("__cli_handler_echo", proc_macro2::Span::call_site());
         let params: Vec<ParamInfo> = vec![];
-        let tokens = generate_handler_closure(&fn_name, &handler_fn_name, &params, &[]);
+        let tokens = generate_handler_closure(&fn_name, &handler_fn_name, &params, &[], false);
         let s = tokens.to_string();
 
         // D3.2: return value serialized via serde_json::to_value (T: Serialize).
@@ -3515,7 +5046,7 @@ mod handler_closure_tests {
         let fn_name = syn::Ident::new("ping", proc_macro2::Span::call_site());
         let handler_fn_name = syn::Ident::new("__cli_handler_ping", proc_macro2::Span::call_site());
         let params: Vec<ParamInfo> = vec![];
-        let tokens = generate_handler_closure(&fn_name, &handler_fn_name, &params, &[]);
+        let tokens = generate_handler_closure(&fn_name, &handler_fn_name, &params, &[], false);
         let s = tokens.to_string();
 
         // D3.1: signature upgraded to unified (HandlerArgs, HandlerState) -> HandlerFuture.

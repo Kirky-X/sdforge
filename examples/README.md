@@ -139,6 +139,7 @@ cargo run --example perf_batch_ops --features cache
 - 顶层 `perf_*.rs` 依赖 `cache` 特性（默认已启用）。
 - `swagger_demo` 的 `[[example]]` 声明了 `required-features = ["docs", "http"]`。
 - 精简构建示例：`cargo build --no-default-features --features "http_examples"` 只编译基础与 HTTP 相关示例。
+- `grpc_tls` 是 sdforge 特性别名（映射 `sdforge/grpc-tls`），无独立 `*_examples` 开关：它只门控 `src/grpc/server.rs` 配置示例中的 `GrpcServerConfig.tls` 字段，与 sdforge 侧字段存在性同源，保证 workspace 级特性统一（如 `--all-features`）下任意组合可编译。
 
 ## 外部依赖
 

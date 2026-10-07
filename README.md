@@ -62,7 +62,7 @@
 <td width="50%" style="vertical-align:top; padding: 12px">⚡ <b>零协议税</b><br><span style="color:#64748B">协议选择发生在编译期，运行期无协议探测或动态加载</span></td>
 </tr>
 <tr>
-<td width="50%" style="vertical-align:top; padding: 12px">🌐 <b>多协议支持</b><br><span style="color:#64748B">Axum 0.8、rmcp 3.2（MCP 2026-07-28 规范）、tonic、WebSocket、SSE、clap</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🌐 <b>多协议支持</b><br><span style="color:#64748B">Axum 0.8、rmcp 3.4（MCP 2026-07-28 规范）、tonic、WebSocket、SSE、clap</span></td>
 <td width="50%" style="vertical-align:top; padding: 12px">🔒 <b>类型安全</b><br><span style="color:#64748B">接口定义编译期验证，trybuild 覆盖编译失败用例</span></td>
 </tr>
 <tr>
@@ -86,7 +86,7 @@
 <details>
 <summary>🔧 按需启用的进阶能力</summary>
 
-参数校验、声明式分页、ETag 条件请求、生命周期钩子、钩子管道、优雅停机、健康探针、Prometheus 指标、OTel 导出、请求上下文、响应时间戳、结构化日志、inklog 桥接、trait-kit 集成、SIMD JSON 等能力均以独立 feature 按需启用，逐项说明与默认值见 [特性标志](#-特性标志) 一节。
+参数校验、声明式分页、ETag 条件请求、生命周期钩子、钩子管道、优雅停机、HTTP TLS 终止、健康探针、Prometheus 指标、OTel 导出、请求上下文、响应时间戳、结构化日志、inklog 桥接、trait-kit 集成、SIMD JSON 等能力均以独立 feature 按需启用，逐项说明与默认值见 [特性标志](#-特性标志) 一节。
 
 </details>
 
@@ -100,11 +100,11 @@
 cargo add sdforge
 ```
 
-或手动添加到 `Cargo.toml`（当前版本 `0.5.0-rc.3`）：
+或手动添加到 `Cargo.toml`（当前版本 `0.5.0-rc.6`）：
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5.0-rc.3", features = ["http"] }
+sdforge = { version = "0.5.0-rc.6", features = ["http"] }
 ```
 
 最低要求：
@@ -157,7 +157,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 | 仅 HTTP | `["http"]` | 传统 REST API |
 | 仅 MCP | `["mcp"]` | AI 工具集成 |
 | HTTP + MCP 双协议 | `["http", "mcp"]` | 同一份代码双入口 |
-| 全量运行时特性 | `["full"]` | 全部协议与能力（24 项；不含 `simd-json`/`kit`/`limiteron-integration` 可选重依赖） |
+| 全量运行时特性 | `["full"]` | 全部协议与能力（25 项，含 `idempotency`；不含 `simd-json`/`kit`/`limiteron-integration` 可选重依赖） |
 
 `grpc`、`websocket`、`streaming`、`openapi`、`cli`、`cache` 均可独立于 `http` 启用，任意组合。
 
@@ -170,22 +170,27 @@ cargo run --example basic_cli --features cli -- echo --name world
 <table>
   <tr><th>标志</th><th>说明</th><th>默认</th></tr>
   <tr><td><code>http</code></td><td>HTTP 服务器（Axum 0.8 路由、Tower 中间件、版本路由）</td><td>❌</td></tr>
-  <tr><td><code>mcp</code></td><td>MCP 协议（rmcp 3.2，2026-07-28 规范：无状态 HTTP 头、MRTR、缓存语义）</td><td>❌</td></tr>
-  <tr><td><code>grpc</code></td><td>gRPC（tonic + prost，独立于 http，proto 经 build.rs 生成）</td><td>❌</td></tr>
+  <tr><td><code>mcp</code></td><td>MCP 协议（rmcp 3.4，2026-07-28 规范：无状态 HTTP 头、MRTR、缓存语义）</td><td>❌</td></tr>
+  <tr><td><code>grpc</code></td><td>gRPC（tonic + prost，独立于 http，proto 经 build.rs 生成；unary <code>Call</code> + server-streaming <code>CallStream</code>——后者需另启 <code>streaming</code>；<code>extra_services</code> 支持应用自有 tonic service 同端口挂载）</td><td>❌</td></tr>
   <tr><td><code>websocket</code></td><td>WebSocket（依赖 http + streaming）</td><td>❌</td></tr>
-  <tr><td><code>streaming</code></td><td>SSE 流式传输（独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>streaming</code></td><td>SSE 流式传输（独立于 http；与 <code>grpc</code> 组合时 <code>grpc_method</code> + <code>stream = true</code> 映射到 gRPC <code>CallStream</code>）</td><td>❌</td></tr>
   <tr><td><code>cli</code></td><td>CLI 集成（clap，独立于 http）</td><td>❌</td></tr>
   <tr><td><code>openapi</code></td><td>OpenAPI 3.1 规范生成（utoipa，独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>schemars</code></td><td>返回类型 Schema 反射（蕴含 openapi：<code>#[forge]</code> 为派生 <code>JsonSchema</code> 的返回类型生成字段级精确 response schema，未派生静默降级粗粒度映射）</td><td>❌</td></tr>
   <tr><td><code>docs</code></td><td>统一文档输出（Swagger UI + CLI/MCP Markdown，依赖 openapi + cli）</td><td>❌</td></tr>
+  <tr><td><code>sdk</code></td><td>多协议客户端 SDK 生成（Rust 零依赖 / reqwest 可选 + TypeScript fetch+类型定义；保留 CLI 子命令 <code>sdk</code>，依赖 openapi + cli）</td><td>❌</td></tr>
   <tr><td><code>security</code></td><td>认证（API Key / JWT Bearer）、审计、安全头、限流与缓存（含 http + ratelimit-http + cache）</td><td>❌</td></tr>
   <tr><td><code>ratelimit</code></td><td>限流核心（limiteron，不依赖 http）</td><td>❌</td></tr>
   <tr><td><code>ratelimit-http</code></td><td>HTTP 限流中间件（Tower Layer，依赖 http + ratelimit）</td><td>❌</td></tr>
+  <tr><td><code>ratelimit-dist</code></td><td>分布式限流（limiteron distributed 计数后端，多副本共享配额；后端不可达 fail-open/fail-close 显式可配，默认 fail-open）</td><td>❌</td></tr>
   <tr><td><code>cache</code></td><td>oxcache 内存缓存（独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>cache-l2</code></td><td>oxcache Redis L2 缓存（跨副本共享缓存层，蕴含 cache；故障固有 fail-open：读 miss/写跳过）</td><td>❌</td></tr>
   <tr><td><code>health</code></td><td><code>/healthz</code> <code>/readyz</code> 健康探针（<code>build_with_config</code> 自动挂载，bypass 认证）</td><td>❌</td></tr>
   <tr><td><code>metrics</code></td><td>Prometheus 文本格式 <code>/metrics</code> 端点（请求计数、延迟直方图、状态码分布；自研轻量渲染）</td><td>❌</td></tr>
   <tr><td><code>graceful</code></td><td>优雅停机（SIGTERM/SIGINT：停止接新、排空在途、三阶段关闭）</td><td>❌</td></tr>
+  <tr><td><code>serve-tls</code></td><td>HTTP TLS 终止（rustls aws-lc-rs：证书/密钥 PEM 加载、ALPN 可配置、<code>ReloadingTls</code> 热重载；每请求注入 <code>ConnectInfo</code>，握手/头读取超时护栏，停机编排与 graceful 共享收尾。与 gRPC 侧 <code>grpc-tls</code> 文档互链、实现独立）</td><td>❌</td></tr>
   <tr><td><code>context</code></td><td>请求上下文（request_id/trace_id 生成与跨协议 HTTP/MCP/gRPC/WS 注入）</td><td>❌</td></tr>
-  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> + <code>#[param(ge/le/...)]</code> 参数校验，400 返回字段级错误</td><td>❌</td></tr>
+  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> + <code>#[param(ge/le/...)]</code> 参数校验，422 返回字段级错误</td><td>❌</td></tr>
   <tr><td><code>paginate</code></td><td><code>#[forge(paginate)]</code> 声明式分页（自动 page/size 与 <code>{items,total,next}</code> 包装）</td><td>❌</td></tr>
   <tr><td><code>etag</code></td><td>ETag 条件请求（GET 响应自动附加 SHA-256 强 ETag，If-None-Match 返回 304）</td><td>❌</td></tr>
   <tr><td><code>lifecycle</code></td><td><code>#[forge(on_start/on_stop)]</code> 生命周期钩子（与优雅停机顺序协同）</td><td>❌</td></tr>
@@ -193,23 +198,30 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>otel</code></td><td>OTLP/HTTP JSON 导出请求 span 与指标快照（零额外依赖）</td><td>❌</td></tr>
   <tr><td><code>logging</code></td><td>结构化请求日志</td><td>❌</td></tr>
   <tr><td><code>timestamp</code></td><td>响应时间戳</td><td>❌</td></tr>
-  <tr><td><code>inklog</code></td><td>inklog 结构化日志桥接</td><td>❌</td></tr>
+  <tr><td><code>inklog</code></td><td>inklog 结构化日志桥接（<code>init_inklog_logger()</code>）+ <code>#[forge::log]</code> 声明日志属性宏（进入/退出/耗时/错误 + DataMasker 脱敏，feature 关闭时显性报错）</td><td>❌</td></tr>
   <tr><td><code>i18n</code></td><td>ICU4X 国际化（本地化格式化 + Accept-Language 解析）</td><td>❌</td></tr>
   <tr><td><code>simd-json</code></td><td>SIMD 加速 JSON 序列化/反序列化</td><td>❌</td></tr>
   <tr><td><code>limiteron-integration</code></td><td>引入 limiteron 依赖（kit 集成基座）</td><td>❌</td></tr>
+  <tr><td><code>db-integration</code></td><td>dbnexus 数据 API 网关（<code>DbGateway</code> 白名单只读数据面：表/列白名单 + 过滤值转义 + 服务端分页夹紧，独立于 http）</td><td>❌</td></tr>
   <tr><td><code>kit</code></td><td>trait-kit AsyncKit 集成（SdforgeModule 模块图）</td><td>❌</td></tr>
   <tr><td><code>tokio</code></td><td>内部特性：启用 tokio 依赖（随其他特性自动引入）</td><td>❌</td></tr>
-  <tr><td><code>full</code></td><td>全部运行时特性（24 项：http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/logging/timestamp/openapi/cli/docs/inklog/i18n；不含 <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code> 可选重依赖）</td><td>❌</td></tr>
+  <tr><td><code>full</code></td><td>全部运行时特性（25 项：http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/logging/timestamp/openapi/cli/docs/inklog/i18n/idempotency；不含 <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code>/<code>schemars</code>/<code>ratelimit-dist</code>/<code>cache-l2</code>/<code>db-integration</code>/<code>sdk</code> 可选重依赖与 opt-in 面）</td><td>❌</td></tr>
 </table>
 
 <details>
 <summary>🔗 特性依赖关系</summary>
 
-- 独立于 `http`：`mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `logging` / `inklog` / `i18n` / `simd-json` / `limiteron-integration`
-- 派生自 `http`：`security`（含 `ratelimit-http` → `ratelimit` 与 `cache`）、`ratelimit-http`、`websocket`（含 `streaming`）、`health` / `metrics` / `graceful` / `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
+- 独立于 `http`：`mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `logging` / `inklog` / `i18n` / `simd-json` / `limiteron-integration` / `db-integration` / `schemars` / `ratelimit-dist`
+- **下游镜像 feature 的 check-cfg 片段**（宏发射代码按下游 crate 的同名
+  feature 门控，见 examples 的 `[lints]` 白名单范式）：下游 `Cargo.toml`
+  加 `[lints.rust] unexpected_cfgs = { level = "allow", check-cfg =
+  ['cfg(feature, values("http", "mcp", "grpc", "cli", "websocket",
+  "openapi", "security", "lifecycle"))'] }`（按实际启用的镜像 feature
+  裁剪），避免未知 cfg 告警
+- 派生自 `http`：`security`（含 `ratelimit-http` → `ratelimit` 与 `cache`）、`ratelimit-http`、`websocket`（含 `streaming`）、`health` / `metrics` / `graceful` / `serve-tls`（含 `graceful`）/ `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
 - `docs` = `openapi` + `cli`（Swagger UI 挂载需另启用 `http`）
 - `kit` = `trait-kit`（health + lifecycle）+ `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
-- `full` 覆盖 24 项运行时特性，不含 `simd-json` / `kit` / `limiteron-integration`——三者是可选重依赖（SIMD JSON、trait-kit 模块图、限流集成基座），按需单独启用
+- `full` 覆盖 25 项运行时特性（含 `idempotency`），不含 `simd-json` / `kit` / `limiteron-integration`——三者是可选重依赖（SIMD JSON、trait-kit 模块图、限流集成基座），按需单独启用
 
 </details>
 
@@ -310,7 +322,7 @@ SDForge 由两个 crate 组成：`macros/sdforge-macros` 负责解析 `#[forge]`
 | 层级 | 位置 | 说明 |
 |------|------|------|
 | 单元测试 | `src/` 内嵌 `#[cfg(test)]`、`tests/unit/` | 模块级测试，含 proptest 属性测试（`src/tests/property_tests.rs`） |
-| 集成测试 | `tests/integration/` | 覆盖 http / mcp / grpc / websocket / security / cache / streaming / openapi / cli / docs / health_probes / graceful_shutdown / validate / paginate / etag / lifecycle / otel_export / status_code / rbac 等协议与特性组合 |
+| 集成测试 | `tests/integration/` | 覆盖 http / mcp / grpc / websocket / security / cache / streaming / openapi / cli / docs / health_probes / graceful_shutdown / http_tls / validate / paginate / etag / lifecycle / otel_export / status_code / rbac 等协议与特性组合 |
 | 宏测试 | `tests/macros/`、`macros/tests/` | trybuild 编译失败用例与宏展开验证 |
 | E2E | `tests/e2e/` | `e2e_advanced` 多域 E2E 场景（12 域规模基线见 [测试场景](docs/TEST_SCENARIOS.md)） |
 | 示例综合测试 | `examples/tests/` | 全 feature re-export 与跨协议 dispatch（77 个测试）及网关 E2E |
@@ -340,7 +352,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ### 测试规模
 
-约 **2,900** 个测试函数（`src/` 2,015 + `tests/` 704 + `macros/` 59 + `examples/` 126，grep 统计，截至 v0.5.0-rc.3）。
+约 **3,266** 个测试函数（`src/` 2,259 + `tests/` 791 + `macros/` 90 + `examples/` 126，`grep -rEc '#\[(tokio::)?test\b' --include='*.rs'` 统计，2026-10-06 工作树实测）。
 
 ---
 
@@ -376,11 +388,11 @@ CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `
 
 <table>
   <tr><th>状态</th><th>条目</th><th>说明</th></tr>
-  <tr><td>🚧</td><td><b>v0.5.0 发布</b></td><td>当前处于 <code>0.5.0-rc.3</code>，推进依赖链（trait-kit / oxcache / inklog / limiteron）协同发布与终验</td></tr>
+  <tr><td>🚧</td><td><b>v0.5.0 发布</b></td><td>当前处于 <code>0.5.0-rc.6</code>，推进依赖链（trait-kit / oxcache / inklog / limiteron）协同发布与终验</td></tr>
   <tr><td>✅</td><td>自定义成功状态码</td><td><code>#[forge(status = &lt;code&gt;)]</code> 静态声明 + <code>ServiceResponse::success_with_status</code> 动态控制，已于 0.5.0-rc.2 发布</td></tr>
   <tr><td>✅</td><td>MSRV 声明收敛</td><td>工作区统一为 1.97.1（2026-09-06），覆盖 <code>--all-features</code> 有效要求</td></tr>
-  <tr><td>📋</td><td>错误码行为契约统一</td><td>评估同一校验错误在 HTTP（400）与 gRPC（422）间的状态码对齐（记录在案的行为契约）</td></tr>
-  <tr><td>📋</td><td>依赖治理</td><td>中期评估将 <code>bincode</code>（RUSTSEC-2025-0141 unmaintained）迁移至 <code>postcard</code> / <code>bitcode</code> / <code>rkyv</code></td></tr>
+  <tr><td>✅</td><td>错误码行为契约统一</td><td>行为契约记录在案（<code>docs/API_REFERENCE.md</code> 错误码行为契约表 + <code>error::unified</code> 单一事实来源）：HTTP 400（语法畸形/<code>InvalidInput</code>）与 422（语义违规/<code>ValidationError</code>）区分保留；gRPC 侧无 422 对应原生码，统一 <code>invalid_argument</code>、语义码经 <code>Status::details</code> 载荷 <code>code</code> 承载；<code>grpc_code_for_http_status</code> 契约表 + 跨协议一致性测试（全集 JOIN 不变量 + wire 级 e2e）钉死</td></tr>
+  <tr><td>✅</td><td>依赖治理</td><td><code>bincode</code>（RUSTSEC-2025-0141 unmaintained）已整体迁移至 <code>postcard</code>（API Key 元数据/权限位序列化等价替换），<code>deny.toml</code> 失效豁免清除，<code>cargo deny</code> / <code>cargo audit</code> 复验为净</td></tr>
 </table>
 
 ---
@@ -395,7 +407,9 @@ CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `
 
 详见 [CHANGELOG.md](docs/CHANGELOG.md)。最近版本要点：
 
-- **[0.5.0-rc.3]** (2026-09-10)：`ResponseCacheLayer` 响应缓存中间件、`SdForgeConfig` security/cache 字段、`AuditSink` 审计存储抽象与 `InklogAuditSink`
+- **[0.5.0-rc.6]** (2026-09-28)：MCP 认证贯通 call_tool 与 CLI 入口、`AuthConfig` 无 security 特性时 fail-closed；多协议契约对齐——Idempotency-Key 重放防护、RBAC/认证贯通 gRPC、统一错误映射、参数校验统一 422；异步健康检查与 `ReadinessRenderer` 渲染端口；OpenAPI 外部 spec 合并与 Swagger UI vendored 化（构建期零网络）；知识包 CLI（`--format json`/`docs --format agent`）；graceful 排空后钩子；三轮安全审查修复
+- **[0.5.0-rc.5]** (2026-09-21)：维护性发布——`forge` status=204/304 无 body 响应、validator crate re-export、Swagger UI 自定义 spec 地址、i18n 整改、命名统一 `SdForge` 前缀、跨仓 path 依赖改走 crates.io 与工程加固
+- **[0.5.0-rc.4]** (2026-09-14，含原 rc.3 批次)：`ResponseCacheLayer` 响应缓存中间件、`SdForgeConfig` security/cache 字段、`AuditSink` 审计存储抽象与 `InklogAuditSink`（0.5.0-rc.3 版本号跳过未发布，内容随本版发布）
 - **[0.5.0-rc.2]** (2026-09-07)：`#[forge(status = <code>)]` 自定义成功状态码、`i18n_key` 参数与翻译注册表、rmcp 2.2 → 3.2
 - **[0.4.7]** (2026-07-23)：依赖版本约束移除波浪号；补公开 `bincode` RUSTSEC-2025-0141 ignore 决策
 

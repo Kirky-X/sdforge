@@ -27,16 +27,39 @@ impl ApiMetadata {
             cache_ttl,
             is_streaming,
             i18n_key: None,
+            lifecycle: None,
         }
+    }
+
+    /// Attach an endpoint lifecycle declaration (deprecated/sunset/successor).
+    ///
+    /// Consumption is protocol-specific: HTTP injects `Deprecation` /
+    /// `Sunset` / `Link: successor-version` response headers (endpoint-level
+    /// wins over the global version-routing fallback), gRPC mirrors the same
+    /// keys as response metadata, MCP annotates the tool description, and
+    /// OpenAPI marks the operation `deprecated`.
+    pub fn with_lifecycle(mut self, lifecycle: Option<crate::core::LifecycleMeta>) -> Self {
+        self.lifecycle = lifecycle;
+        self
+    }
+
+    /// Endpoint lifecycle declaration, if any.
+    pub fn lifecycle(&self) -> Option<&crate::core::LifecycleMeta> {
+        self.lifecycle.as_ref()
     }
 
     /// Attach an i18n key for runtime translation of the description.
     ///
-    /// When set, protocol consumption points (MCP tool descriptions,
-    /// CLI `--help`; OpenAPI specs and gRPC metadata are planned) look up
-    /// a translation via `sdforge::i18n::translate_or_fallback` using the
-    /// active locale. Falls back to the English `description` when no
-    /// translation is found.
+    /// When set, protocol consumption points look up a translation via
+    /// `sdforge::i18n::translate_or_fallback` using the active locale:
+    /// MCP tool descriptions, CLI `--help`, and OpenAPI operation
+    /// descriptions (via `OpenApiRouteInfo.i18n_key`) consume **this
+    /// key**. The gRPC wire has no per-method description output — its
+    /// `GetInfo.description` translates a fixed service-level key
+    /// (`sdforge.service.description`, not this key), while the per-route
+    /// key on `GrpcHandlerRegistration.i18n_key` is exposed for hosts
+    /// iterating the inventory directly. Falls back to the English
+    /// `description` when no translation is found.
     ///
     /// Builder-pattern method so existing `new()` call sites remain
     /// backward-compatible.

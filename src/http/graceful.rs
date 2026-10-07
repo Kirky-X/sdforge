@@ -27,6 +27,7 @@
 //! ).await?;
 //! ```
 
+use std::pin::Pin;
 use std::time::Duration;
 
 /// Configuration for the graceful shutdown sequence.
@@ -90,7 +91,7 @@ pub async fn default_shutdown_signal() {
 /// dedicated current-thread runtime + OS thread, keeping the serve future
 /// spawn-safe (Send). `#[forge(on_stop)]` lifecycle hooks hook in
 /// here once the `lifecycle` feature lands.
-fn run_stop_hooks() {
+pub(crate) fn run_stop_hooks() {
     #[cfg(feature = "kit")]
     if let Some(kit) = crate::integrations::kit::take_ready_kit() {
         let _ = std::thread::spawn(move || {
@@ -106,13 +107,13 @@ fn run_stop_hooks() {
 }
 
 /// Async stop hooks: `#[forge(on_stop)]` lifecycle hooks.
-async fn run_lifecycle_stop_hooks() {
+pub(crate) async fn run_lifecycle_stop_hooks() {
     #[cfg(feature = "lifecycle")]
     crate::lifecycle::run_on_stop().await;
 }
 
 /// Pre-serve start hooks: `#[forge(on_start)]` lifecycle hooks.
-async fn run_lifecycle_start_hooks() {
+pub(crate) async fn run_lifecycle_start_hooks() {
     #[cfg(feature = "lifecycle")]
     crate::lifecycle::run_on_start().await;
 }
@@ -131,7 +132,7 @@ pub async fn serve_with_graceful_shutdown(
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
     config: GracefulShutdownConfig,
 ) -> std::io::Result<()> {
-    serve_graceful(router.into_make_service(), listener, shutdown, config).await
+    serve_graceful(router.into_make_service(), listener, shutdown, config, None).await
 }
 
 /// Serve `router` on `listener` with the graceful shutdown sequence, exposing
@@ -154,8 +155,54 @@ pub async fn serve_with_graceful_shutdown_connect_info(
         listener,
         shutdown,
         config,
+        None,
     )
     .await
+}
+
+/// Serve `router` on `listener` with the graceful shutdown sequence, running
+/// a caller-supplied hook after the drain/stop phase.
+///
+/// Identical to [`serve_with_graceful_shutdown`], plus `after_drain`: an
+/// async hook awaited in both shutdown paths (natural drain and
+/// forced-abort) after the built-in stop hooks — kit phased shutdown, then
+/// `#[forge(on_stop)]` lifecycle hooks — and before the serve future
+/// resolves. Use it for last-mile teardown that must observe a fully
+/// drained server (health probes flipped, registry deregistration acked…).
+///
+/// # Unbounded hook
+///
+/// The hook is awaited **without any timeout**: if it never resolves, the
+/// process never exits. Callers that need a bounded shutdown must wrap the
+/// hook themselves, e.g.
+/// `Box::pin(tokio::time::timeout(Duration::from_secs(5), hook))` — the
+/// library cannot know a sensible deadline for arbitrary teardown work.
+pub async fn serve_with_graceful_shutdown_with_hooks(
+    router: axum::Router,
+    listener: tokio::net::TcpListener,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+    config: GracefulShutdownConfig,
+    after_drain: Option<Pin<Box<dyn std::future::Future<Output = ()> + Send>>>,
+) -> std::io::Result<()> {
+    serve_graceful(
+        router.into_make_service(),
+        listener,
+        shutdown,
+        config,
+        after_drain,
+    )
+    .await
+}
+
+/// 排空后的统一收尾：kit 三阶段关闭 → `#[forge(on_stop)]` 生命周期钩子
+/// → 调用方 `after_drain` 钩子。graceful 与 tls 两条 serve 路径共用，
+/// 收尾顺序保持单一事实源。
+pub(crate) async fn run_stop_phase(after_drain: Option<Pin<Box<dyn Future<Output = ()> + Send>>>) {
+    run_stop_hooks();
+    run_lifecycle_stop_hooks().await;
+    if let Some(hook) = after_drain {
+        hook.await;
+    }
 }
 
 /// Shared graceful-shutdown choreography for both serve variants.
@@ -168,6 +215,7 @@ async fn serve_graceful<M, S>(
     listener: tokio::net::TcpListener,
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
     config: GracefulShutdownConfig,
+    after_drain: Option<Pin<Box<dyn std::future::Future<Output = ()> + Send>>>,
 ) -> std::io::Result<()>
 where
     // Bounds mirror `axum::serve` (which uses `tower_service::Service`,
@@ -222,15 +270,13 @@ where
 
     tokio::select! {
         result = server => {
-            run_stop_hooks();
-            run_lifecycle_stop_hooks().await;
+            run_stop_phase(after_drain).await;
             result
         }
         _ = deadline => {
             // Dropping `server` here aborts the accept loop and any
             // in-flight connection — the forced path of phase 2.
-            run_stop_hooks();
-            run_lifecycle_stop_hooks().await;
+            run_stop_phase(after_drain).await;
             Ok(())
         }
     }
@@ -248,5 +294,244 @@ mod tests {
         );
         let custom = GracefulShutdownConfig::with_drain_timeout(Duration::from_millis(250));
         assert_eq!(custom.drain_timeout, Duration::from_millis(250));
+    }
+}
+
+/// 停机时序的单元级钉住：自然排空 / 在途请求排空 / 超时强制中止 三条路径
+/// 及 `after_drain` 钩子在两条路径都被 await。与集成测试（lifecycle_tests、
+/// graceful_shutdown_tests）口径一致，但不起真实客户端集群，仅本机回环。
+#[cfg(all(test, feature = "http", feature = "tokio"))]
+mod shutdown_sequence_tests {
+    use super::*;
+    use axum::http::StatusCode;
+    use axum::routing::get;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    type AfterDrainHook = Arc<
+        dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> + Send + Sync,
+    >;
+
+    /// 返回 (服务地址, server 任务, 停机扳机发送端)。handler 按 sleep_ms 延时并计数。
+    async fn spawn_server(
+        sleep_ms: u64,
+        drain: Duration,
+        hits: Arc<AtomicUsize>,
+        after_drain: Option<AfterDrainHook>,
+    ) -> (
+        std::net::SocketAddr,
+        tokio::task::JoinHandle<std::io::Result<()>>,
+        tokio::sync::oneshot::Sender<()>,
+    ) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let counter = Arc::clone(&hits);
+        let handler = move || {
+            let c = Arc::clone(&counter);
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                if sleep_ms > 0 {
+                    tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
+                }
+                (StatusCode::OK, "served")
+            }
+        };
+        let router = axum::Router::new().route("/", get(handler));
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        let shutdown = async move {
+            let _ = rx.await;
+        };
+        let server = match after_drain {
+            Some(hook) => tokio::spawn(serve_with_graceful_shutdown_with_hooks(
+                router,
+                listener,
+                shutdown,
+                GracefulShutdownConfig::with_drain_timeout(drain),
+                Some(hook()),
+            )),
+            None => tokio::spawn(serve_with_graceful_shutdown(
+                router,
+                listener,
+                shutdown,
+                GracefulShutdownConfig::with_drain_timeout(drain),
+            )),
+        };
+        (addr, server, tx)
+    }
+
+    /// 发送一个 HTTP/1.1 请求并读完整个响应（连接关闭为界）。
+    async fn http_get(addr: std::net::SocketAddr) -> Result<String, std::io::Error> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut stream = tokio::net::TcpStream::connect(addr).await?;
+        stream
+            .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            .await?;
+        let mut buf = Vec::new();
+        stream.read_to_end(&mut buf).await?;
+        Ok(String::from_utf8_lossy(&buf).into_owned())
+    }
+
+    #[tokio::test]
+    async fn natural_drain_returns_ok_and_awaits_after_drain_hook() {
+        let ran = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&ran);
+        let hook: AfterDrainHook = Arc::new(move || {
+            let f = Arc::clone(&flag);
+            Box::pin(async move {
+                f.store(true, Ordering::SeqCst);
+            })
+        });
+        let hits = Arc::new(AtomicUsize::new(0));
+        let (addr, server, tx) =
+            spawn_server(0, Duration::from_secs(5), Arc::clone(&hits), Some(hook)).await;
+
+        let body = http_get(addr).await.unwrap();
+        assert!(
+            body.contains("200 OK") && body.contains("served"),
+            "响应: {body}"
+        );
+        assert_eq!(hits.load(Ordering::SeqCst), 1, "请求应真实到达 handler");
+
+        tx.send(()).unwrap();
+        server.await.unwrap().unwrap();
+        assert!(
+            ran.load(Ordering::SeqCst),
+            "自然排空路径必须 await 调用方的 after_drain 钩子"
+        );
+    }
+
+    /// 排空窗口内的在途请求负完成：停机不得掉断已开始的响应。
+    #[tokio::test]
+    async fn in_flight_request_completes_during_drain() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let (addr, server, tx) =
+            spawn_server(200, Duration::from_secs(5), Arc::clone(&hits), None).await;
+        let client = tokio::spawn(async move { http_get(addr).await });
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        tx.send(()).unwrap();
+        let body = client.await.unwrap().unwrap();
+        assert!(
+            body.contains("200 OK") && body.contains("served"),
+            "在途请求应被排空而非掉断: {body}"
+        );
+        server.await.unwrap().unwrap();
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+    }
+
+    /// 超过 drain_timeout：强制中止（drop server），serve 仍返 Ok 且不得等完 handler。
+    #[tokio::test]
+    async fn drain_timeout_forces_abort_and_returns_ok() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let (addr, server, tx) =
+            spawn_server(3_000, Duration::from_millis(100), Arc::clone(&hits), None).await;
+        let client = tokio::spawn(async move { http_get(addr).await });
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        tx.send(()).unwrap();
+
+        // server 必须在远小于 handler 延时的时间内返回（否则为未强制中止）
+        let done = tokio::time::timeout(Duration::from_secs(2), server)
+            .await
+            .expect("drain 超时后应强制中止，而非等完 3s handler");
+        done.unwrap().unwrap();
+
+        let res = tokio::time::timeout(Duration::from_millis(500), client)
+            .await
+            .map(|joined| joined.unwrap());
+        match res {
+            Err(_) => {} // 连接被掉：客户端永不读完
+            Ok(Ok(body)) => assert!(
+                !body.contains("served"),
+                "强制中止不得将完整 handler 响应交付客户端: {body}"
+            ),
+            Ok(Err(_)) => {} // 读失败亦属中止可观测结果
+        }
+    }
+
+    /// 强制中止路径同样必须 await after_drain 钩子（两条收尾路径一致）。
+    #[tokio::test]
+    async fn after_drain_hook_runs_on_forced_abort_too() {
+        let ran = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&ran);
+        let hits = Arc::new(AtomicUsize::new(0));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let counter = Arc::clone(&hits);
+        let slow = move || {
+            let c = Arc::clone(&counter);
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                tokio::time::sleep(Duration::from_millis(3_000)).await;
+                (StatusCode::OK, "served")
+            }
+        };
+        let router = axum::Router::new().route("/", get(slow));
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        let server = tokio::spawn(serve_with_graceful_shutdown_with_hooks(
+            router,
+            listener,
+            async move {
+                let _ = rx.await;
+            },
+            GracefulShutdownConfig::with_drain_timeout(Duration::from_millis(100)),
+            Some(Box::pin(async move {
+                flag.store(true, Ordering::SeqCst);
+            })),
+        ));
+        let client = tokio::spawn(async move { http_get(addr).await });
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        tx.send(()).unwrap();
+        let _ = tokio::time::timeout(Duration::from_secs(2), client).await;
+        tokio::time::timeout(Duration::from_secs(2), server)
+            .await
+            .expect("强制中止路径应按时完成收尾")
+            .unwrap()
+            .unwrap();
+        assert!(
+            ran.load(Ordering::SeqCst),
+            "强制中止路径也必须 await after_drain 钩子"
+        );
+    }
+
+    /// `ConnectInfo` 变体必须交出真实 TCP 对端地址（限流/鉴权依此取 IP）。
+    #[tokio::test]
+    async fn connect_info_variant_exposes_real_peer_addr() {
+        use axum::extract::ConnectInfo;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let router = axum::Router::new().route(
+            "/",
+            get(
+                |ConnectInfo(peer): ConnectInfo<std::net::SocketAddr>| async move {
+                    format!("{}", peer.port())
+                },
+            ),
+        );
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        let server = tokio::spawn(serve_with_graceful_shutdown_connect_info(
+            router,
+            listener,
+            async move {
+                let _ = rx.await;
+            },
+            GracefulShutdownConfig::with_drain_timeout(Duration::from_secs(5)),
+        ));
+
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let client_port = stream.local_addr().unwrap().port();
+        let mut stream = stream;
+        stream
+            .write_all(b"GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+        let mut buf = Vec::new();
+        stream.read_to_end(&mut buf).await.unwrap();
+        let body = String::from_utf8_lossy(&buf).into_owned();
+        assert!(
+            body.contains(&client_port.to_string()),
+            "处理器应看到客户端真实临时端口（期望 {client_port}，响应: {body}）"
+        );
+        tx.send(()).unwrap();
+        server.await.unwrap().unwrap();
     }
 }

@@ -21,9 +21,9 @@ pub mod mcp_markdown;
 pub mod swagger;
 
 #[cfg(feature = "http")]
-pub use swagger::{swagger_ui_router, swagger_ui_router_with_spec};
+pub use swagger::{swagger_ui_router, swagger_ui_router_with_openapi, swagger_ui_router_with_spec};
 
-pub use cli_markdown::generate_cli_docs;
+pub use cli_markdown::{generate_cli_docs, generate_cli_docs_from_command};
 #[cfg(feature = "mcp")]
 pub use mcp_markdown::generate_mcp_docs;
 
@@ -53,6 +53,9 @@ pub enum DocFormat {
     McpMarkdown,
     /// 全部格式拼接输出。
     All,
+    /// Agent 知识包：CLI 能力清单 + MCP 工具 + `--format` 输出契约，
+    /// 单个 JSON 文档（供 Agent/CI 机器消费）。
+    Agent,
 }
 
 /// 文档生成 / 写入过程中可能发生的错误。
@@ -66,7 +69,9 @@ pub enum DocError {
     Io(#[from] std::io::Error),
 }
 
+mod agent_knowledge;
 mod docs_impl;
+pub use agent_knowledge::{generate_agent_knowledge, generate_agent_knowledge_for_host};
 pub use docs_impl::{generate_docs, write_docs};
 
 #[cfg(test)]

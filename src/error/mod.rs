@@ -26,3 +26,6 @@ pub use context::{ErrorCategory, ErrorContext};
 pub use i18n::{Locale, LocalizedError, TranslationStore};
 pub use sdforge_error::{SdForgeError, SdForgeResult};
 pub use unified::{UnifiedError, code_for_http_status, current_trace_id};
+
+#[cfg(feature = "grpc")]
+pub use unified::{grpc_code_for, grpc_code_for_http_status};

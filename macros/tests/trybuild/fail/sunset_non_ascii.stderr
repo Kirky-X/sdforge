@@ -1,0 +1,7 @@
+error: Invalid value for 'sunset' (must be visible ASCII, no control characters): 无效值
+ --> tests/trybuild/fail/sunset_non_ascii.rs:8:1
+  |
+8 | #[forge(name = "sunset_non_ascii", version = "v1", sunset = "无效值")]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this error originates in the attribute macro `forge` (in Nightly builds, run with -Z macro-backtrace for more info)

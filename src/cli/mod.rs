@@ -199,8 +199,10 @@ pub use builder::CliBuilder;
 // CLI dispatch — route ArgMatches to the registered forge handler
 // ============================================================================
 pub mod dispatch;
+pub mod output;
 
 pub use dispatch::dispatch;
+pub use output::OutputFormat;
 
 // ============================================================================
 // docs subcommand — definition + handler (docs feature only)

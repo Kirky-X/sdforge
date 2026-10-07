@@ -28,9 +28,20 @@ fn test_grpc_server_config_with_auth() {
         timeout_seconds: 60,
         require_auth: true,
         auth: Some(auth),
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
     assert!(config.auth.is_some());
 }
@@ -105,6 +116,7 @@ fn test_grpc_route_structure() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     };
 
@@ -126,6 +138,7 @@ fn test_grpc_route_metadata_accessors() {
             cache_ttl: Some(300),
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     };
 
@@ -208,7 +221,10 @@ async fn test_grpc_service_call_with_complex_parameters() {
     assert_eq!(response.data, "complex_value");
 }
 
+// locale 为进程级全局（i18n_get_info 测试会临时切换并恢复）——本测试断言
+// 英文回退文案，需与 locale 敏感测试串行。
 #[tokio::test]
+#[serial_test::serial]
 async fn test_grpc_service_get_info() {
     use tonic::Request;
 
@@ -222,7 +238,7 @@ async fn test_grpc_service_get_info() {
 
     let response = result.unwrap().into_inner();
     assert_eq!(response.name, "SdForge Service");
-    assert_eq!(response.version, "0.1.0");
+    assert_eq!(response.version, env!("CARGO_PKG_VERSION"));
     assert!(!response.methods.is_empty());
     assert_eq!(response.description, "SdForge Multi-Protocol SDK Framework");
 }
@@ -234,7 +250,7 @@ async fn test_grpc_service_get_info_methods_list() {
     let service = SdForgeGrpcService::default();
 
     let request = InfoRequest {
-        version: "0.1.0".to_string(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
     };
     let result = service.get_info(Request::new(request)).await;
     assert!(result.is_ok());
@@ -310,6 +326,7 @@ fn test_grpc_route_with_streaming_metadata() {
             cache_ttl: None,
             is_streaming: true,
             i18n_key: None,
+            lifecycle: None,
         },
     };
 
@@ -330,6 +347,7 @@ fn test_grpc_route_with_cache_ttl() {
             cache_ttl: Some(600),
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     };
 
@@ -350,6 +368,7 @@ fn test_grpc_route_metadata_cloning() {
             cache_ttl: Some(300),
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         },
     };
 
@@ -368,11 +387,21 @@ fn test_grpc_config_zero_timeout() {
         max_connections: 100,
         timeout_seconds: 0,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(config.timeout_seconds, 0);
@@ -385,11 +414,21 @@ fn test_grpc_config_large_max_connections() {
         max_connections: 100000,
         timeout_seconds: 30,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(config.max_connections, 100000);
@@ -401,22 +440,42 @@ fn test_grpc_config_boundary_values() {
         max_connections: 1,
         timeout_seconds: 1,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     let config2 = GrpcServerConfig {
         max_connections: usize::MAX,
         timeout_seconds: u64::MAX,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(config1.max_connections, 1);
@@ -744,6 +803,7 @@ fn test_grpc_route_registration_new() {
             cache_ttl: None,
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         });
 
     assert_eq!(registration.name(), "test_route");
@@ -784,6 +844,7 @@ fn test_grpc_route_registration_create() {
             cache_ttl: Some(300),
             is_streaming: false,
             i18n_key: None,
+            lifecycle: None,
         });
     let route = registration.create();
 
@@ -865,11 +926,21 @@ fn test_grpc_server_config_clone() {
         max_connections: 500,
         timeout_seconds: 45,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     let cloned = config.clone();
@@ -884,22 +955,42 @@ fn test_grpc_server_config_equality() {
         max_connections: 100,
         timeout_seconds: 30,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     let config2 = GrpcServerConfig {
         max_connections: 100,
         timeout_seconds: 30,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(config1.max_connections, config2.max_connections);
@@ -912,11 +1003,21 @@ fn test_grpc_server_config_with_minimal_connections() {
         max_connections: 1,
         timeout_seconds: 30,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(config.max_connections, 1);
@@ -928,11 +1029,21 @@ fn test_grpc_server_config_with_zero_timeout() {
         max_connections: 100,
         timeout_seconds: 0,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(config.timeout_seconds, 0);
@@ -944,22 +1055,42 @@ fn test_grpc_server_config_timeout_edge_cases() {
         max_connections: 100,
         timeout_seconds: 1,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     let long_timeout = GrpcServerConfig {
         max_connections: 100,
         timeout_seconds: 86400,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert_eq!(short_timeout.timeout_seconds, 1);
@@ -974,9 +1105,20 @@ fn test_grpc_server_config_auth_none() {
         timeout_seconds: 30,
         require_auth: false,
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
 
     assert!(config.auth.is_none());
@@ -1108,7 +1250,7 @@ async fn test_grpc_service_get_info_with_version_parameter() {
     assert!(result.is_ok());
 
     let response = result.unwrap().into_inner();
-    assert_eq!(response.version, "0.1.0");
+    assert_eq!(response.version, env!("CARGO_PKG_VERSION"));
 }
 
 #[tokio::test]
@@ -1324,7 +1466,7 @@ async fn test_info_response_version_value() {
     let result = service.get_info(Request::new(request)).await.unwrap();
     let response = result.into_inner();
 
-    assert_eq!(response.version, "0.1.0");
+    assert_eq!(response.version, env!("CARGO_PKG_VERSION"));
 }
 
 #[tokio::test]
@@ -1343,7 +1485,9 @@ async fn test_info_response_methods_count() {
     assert!(!response.methods.is_empty());
 }
 
+// 同上：description 断言依赖英文回退，须与 locale 敏感测试串行。
 #[tokio::test]
+#[serial_test::serial]
 async fn test_info_response_description_value() {
     use tonic::Request;
 
@@ -1530,11 +1674,21 @@ async fn test_build_server_with_config_zero_values_starts_serving() {
         max_connections: 0,
         timeout_seconds: 0,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
     let result = tokio::time::timeout(
         Duration::from_millis(200),
@@ -1560,11 +1714,21 @@ async fn test_build_server_with_config_large_values_starts_serving() {
         max_connections: 10000,
         timeout_seconds: 300,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
     let result = tokio::time::timeout(
         Duration::from_millis(200),
@@ -1591,11 +1755,21 @@ async fn test_build_server_with_config_minimal_positive_values() {
         max_connections: 1,
         timeout_seconds: 1,
         require_auth: false,
-        #[cfg(feature = "security")]
         auth: None,
+        auth_verifier: None,
         state: None,
-        #[cfg(feature = "ratelimit")]
+        #[cfg(feature = "idempotency")]
+        idempotency_store: None,
+        #[cfg(feature = "idempotency")]
+        idempotency_ttl_secs: 86_400,
+        #[cfg(feature = "idempotency")]
+        idempotency_inflight_ttl_secs: 30,
+        http2_keepalive_interval: None,
+        http2_keepalive_timeout: None,
+        #[cfg(feature = "grpc-tls")]
+        tls: None,
         rate_limiter: None,
+        extra_services: Vec::new(),
     };
     let result = tokio::time::timeout(
         Duration::from_millis(200),

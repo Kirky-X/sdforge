@@ -275,3 +275,110 @@ mod tests {
         assert!(config.rate_limit.is_some());
     }
 }
+
+#[cfg(all(test, feature = "http", feature = "ratelimit"))]
+mod doc_examples_tests {
+    //! 钉死 docs/USER_GUIDE.md 里 `[security.rate_limit]` 示例的可反序列化性：
+    //! 该段值是 `limiteron::config::FlowControlConfig`（version + rules），
+    //! 文档若写成单个阈值字段（如 rate/window_seconds）用户照抄会直接解析失败。
+    use super::SecurityConfig;
+
+    const DOCUMENTED_TOML: &str = r#"
+[rate_limit]
+version = "1.0"
+
+[rate_limit.global]
+storage = "memory"
+cache = "memory"
+metrics = "prometheus"
+
+[[rate_limit.rules]]
+id = "http_default"
+name = "HTTP 默认限流"
+priority = 100
+enabled = true
+
+[[rate_limit.rules.matchers]]
+type = "User"
+user_ids = ["*"]
+
+[[rate_limit.rules.limiters]]
+type = "TokenBucket"
+capacity = 60
+refill_rate = 1
+
+[rate_limit.rules.action]
+on_exceed = "reject"
+"#;
+
+    #[test]
+    fn security_rate_limit_documented_shape_deserializes() {
+        let cfg: SecurityConfig = toml::from_str(DOCUMENTED_TOML)
+            .expect("USER_GUIDE 的 [security.rate_limit] 示例必须可解析");
+        let rl = cfg.rate_limit.expect("rate_limit 应存在");
+        assert_eq!(rl.version, "1.0");
+        assert_eq!(rl.rules.len(), 1);
+        assert_eq!(rl.rules[0].id, "http_default");
+    }
+
+    #[test]
+    fn single_threshold_shape_is_rejected_as_documented_wrong() {
+        // 反向保护：旧文档写法（单个 rate/window_seconds）不是 FlowControlConfig 形状
+        let bad = "[rate_limit]\nrate = 60\nwindow_seconds = 1\n";
+        assert!(
+            toml::from_str::<SecurityConfig>(bad).is_err(),
+            "单个阈值字段不应被误当作合法配置"
+        );
+    }
+
+    /// 抽出文档里含指定标记的 ```toml 代码块（逐行扫描围栏）。
+    fn extract_toml_block(doc: &str, marker: &str) -> Option<String> {
+        let mut in_fence = false;
+        let mut cur = String::new();
+        for line in doc.lines() {
+            let t = line.trim();
+            if t.starts_with("```toml") {
+                in_fence = true;
+                cur.clear();
+                continue;
+            }
+            if in_fence {
+                if t == "```" {
+                    if cur.contains(marker) {
+                        return Some(cur);
+                    }
+                    in_fence = false;
+                } else {
+                    cur.push_str(line);
+                    cur.push('\n');
+                }
+            }
+        }
+        None
+    }
+
+    /// 直接以文档为被测对象：抽 USER_GUIDE 里的 `[security.rate_limit]` 代码块反序
+    /// 列化。上面的 DOCUMENTED_TOML 是手抄副本，只能证明“该形状可解析”，不能发现
+    /// 文档与副本分叉；本例则保证“文档当前写的内容”确实可解析，改坏文档立即红。
+    #[test]
+    fn user_guide_toml_block_is_parseable_as_security_config() {
+        #[derive(::serde::Deserialize)]
+        struct DocRoot {
+            security: SecurityConfig,
+        }
+
+        const DOC: &str = include_str!("../../docs/USER_GUIDE.md");
+        let block = extract_toml_block(DOC, "[security.rate_limit]")
+            .expect("USER_GUIDE 应保留 [security.rate_limit] 的 toml 代码块");
+        let root: DocRoot =
+            toml::from_str(&block).expect("USER_GUIDE 的限流示例必须可反序列化为 SecurityConfig");
+        let rl = root.security.rate_limit.expect("rate_limit 字段应存在");
+        assert_eq!(rl.version, "1.0");
+        assert_eq!(rl.rules.len(), 1, "文档示例应含一条规则");
+        assert_eq!(rl.rules[0].id, "http_default");
+        assert!(
+            !block.contains("window_seconds"),
+            "文档不得回退到单个阈值旧写法"
+        );
+    }
+}

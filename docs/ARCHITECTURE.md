@@ -79,7 +79,7 @@ sdforge/
 | `error/` | 无 | 框架错误：`ApiError`、`SdForgeError` / `SdForgeResult`、`ErrorContext`、错误 i18n |
 | `domain/` | 无 | 领域抽象（如 `ForgeRateLimiter`），供集成层消费 |
 | `i18n/` | `i18n`（格式化部分） | 翻译注册表（始终可用）+ ICU4X `HttpI18nFormatter` |
-| `http/` | `http` | Axum 协议实现：`build()` / `build_with_config()`、版本路由、安全头、响应构造、路由注册 |
+| `http/` | `http` | Axum 协议实现：`build()` / `build_with_config()`、版本路由、安全头、响应构造、路由注册；`tls.rs`（`serve-tls`）rustls TLS 终止：PEM 证书/密钥加载、ALPN、`ReloadingTls` 热重载、与 graceful 共享停机收尾 |
 | `mcp/` | `mcp` | rmcp 集成：`StatelessServerHandler`、HTTP 头协议（`headers.rs`）、MRTR 会话（`mrtr.rs`）、缓存语义（`cache_semantics.rs`）、schema 校验 |
 | `grpc/` | `grpc` | tonic 服务：`SdForgeGrpcService`、`GrpcServerConfig`、protobuf（`proto/sdforge.v1.proto`，`build.rs` 经 tonic-prost 生成到 `OUT_DIR`）、handler 注册与拦截器 |
 | `websocket/` | `websocket` | 连接管理（`connection.rs`）、handler 分发（`handler.rs`）、广播（`broadcast.rs`）、消息解析（`message.rs`） |

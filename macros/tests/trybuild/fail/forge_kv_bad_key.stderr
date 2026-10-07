@@ -1,0 +1,5 @@
+error: expected `key = value` pair (got a token that cannot start a key)
+ --> tests/trybuild/fail/forge_kv_bad_key.rs:7:9
+  |
+7 | #[forge("bad" = "x")]
+  |         ^^^^^

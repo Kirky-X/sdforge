@@ -40,14 +40,26 @@ pub mod etag;
 #[cfg(feature = "graceful")]
 pub mod graceful;
 mod http_impl;
+#[cfg(feature = "idempotency")]
+pub mod idempotency;
+pub mod lifecycle;
 #[cfg(feature = "ratelimit-http")]
 pub use http_impl::rate_limit_layer;
 pub use http_impl::{build, build_with_config, build_with_redirect};
+pub use lifecycle::{inject_lifecycle_headers, lifecycle_layer_maybe};
+
+#[cfg(feature = "serve-tls")]
+pub mod tls;
+#[cfg(feature = "serve-tls")]
+pub use tls::{
+    ReloadingTls, TlsAcceptor, TlsError, TlsServeConfig, load_server_config,
+    serve_with_graceful_shutdown_tls, tls_acceptor,
+};
 
 #[cfg(feature = "graceful")]
 pub use graceful::{
     GracefulShutdownConfig, default_shutdown_signal, serve_with_graceful_shutdown,
-    serve_with_graceful_shutdown_connect_info,
+    serve_with_graceful_shutdown_connect_info, serve_with_graceful_shutdown_with_hooks,
 };
 
 // Re-export internal helpers for test access.
@@ -64,7 +76,7 @@ pub(crate) use http_impl::{apply_security_headers, get_or_generate_request_id};
 #[cfg(test)]
 pub(crate) use http_impl::resolve_route_path;
 #[cfg(any(feature = "health", feature = "metrics"))]
-pub(crate) use http_impl::route_path_taken;
+pub use http_impl::route_path_taken;
 
 /// Request ID header name
 #[cfg_attr(feature = "context", allow(dead_code))]

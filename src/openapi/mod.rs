@@ -125,20 +125,54 @@ pub struct OpenApiRouteInfo {
     /// Response schema descriptor. `None` keeps the legacy
     /// schema-less response entry.
     pub response_type: Option<OpenApiTypeInfo>,
+    /// 精确 response schema 提供器（返回类型 Schema 反射）。
+    ///
+    /// `#[forge]` 宏为每个有返回类型的端点发射一个内联具名函数，函数体
+    /// 在具体返回类型上解析 `SchemaProbe::probe`：`T` 派生 `JsonSchema`
+    /// 时运行时产出其完整 JSON Schema 文本（取代 `response_type` 粗粒度
+    /// 映射），未派生时返回 `None`（静默降级到 `response_type`）。函数
+    /// 指针保持 `inventory::submit!` 的 const 语义。手动提交注册项时可
+    /// 复用同一内联形态（见本模块测试路由）。
+    pub response_schema: Option<fn() -> Option<String>>,
+    /// Runtime translation key for the description (`#[forge(i18n_key)]`).
+    /// `generate_openapi_spec` looks up the active locale via
+    /// `sdforge::i18n::translate_or_fallback`; `None` (or an unregistered
+    /// key) keeps the compile-time English description.
+    pub i18n_key: Option<&'static str>,
+    /// Endpoint-level deprecation flag (`#[forge(deprecated)]`). Rendered
+    /// as the OpenAPI operation `deprecated` marker.
+    pub deprecated: bool,
+    /// Endpoint-level sunset value (`#[forge(sunset = "...")]`); `None`
+    /// when undeclared. OpenAPI has no native sunset channel, so it is
+    /// surfaced in the operation description footnote (same annotation
+    /// format as the MCP description tail).
+    pub sunset: Option<&'static str>,
+    /// Endpoint-level successor hint (`#[forge(successor = "...")]`);
+    /// `None` when undeclared. Surfaced in the operation description
+    /// footnote (same annotation format as the MCP description tail).
+    pub successor: Option<&'static str>,
 }
 
 inventory::collect!(OpenApiRouteInfo);
 
+mod reflection;
+pub use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+
 /// Builder for constructing an `OpenApi` specification with custom metadata.
 ///
-/// Routes are always collected from the global `inventory` registry; the
-/// builder only controls the top-level `info` section (title, version,
-/// description).
-#[derive(Debug, Clone, Default)]
+/// Routes are always collected from the global `inventory` registry first;
+/// the builder controls the top-level `info` section (title, version,
+/// description) and merges externally built specs/paths **after** the
+/// inventory collection, in chain order. On the same path+method the
+/// external (chained) operation wins over the inventory-generated one.
+#[derive(Clone, Default)]
 pub struct OpenApiBuilder {
     title: String,
     version: String,
     description: Option<String>,
+    /// Externally built specs merged in chain order after the inventory
+    /// collection (via `merge_openapi` / `paths` chain methods).
+    extra: Vec<utoipa::openapi::OpenApi>,
 }
 
 // Register a test-only route so inventory-driven tests have a known entry to
@@ -195,6 +229,10 @@ inventory::submit!(OpenApiRouteInfo {
     tags: &["test"],
     path_params: &[],
     success_status: Some(201u16),
+    i18n_key: None,
+    deprecated: false,
+    sunset: None,
+    successor: None,
     body_params: &[
         OpenApiBodyParam {
             name: "item",
@@ -215,6 +253,129 @@ inventory::submit!(OpenApiRouteInfo {
         schema_type: "string",
         schema_format: "",
         is_array: true,
+    }),
+    response_schema: None,
+});
+
+// 端点生命周期（`#[forge(deprecated)]`）：test-only deprecated 路由，
+// 验证 OpenAPI 操作渲染 `"deprecated": true` 标记。
+#[cfg(test)]
+inventory::submit!(OpenApiRouteInfo {
+    path: "/__openapi_deprecated_test__",
+    method: "GET",
+    summary: "Deprecated route test marker",
+    description: "Route with deprecated=true registered by src/openapi/mod.rs tests.",
+    version: "test",
+    tags: &["test"],
+    path_params: &[],
+    success_status: None,
+    i18n_key: None,
+    deprecated: true,
+    sunset: None,
+    successor: None,
+    body_params: &[],
+    response_type: None,
+    response_schema: None,
+});
+
+// 端点生命周期（`#[forge(deprecated, sunset, successor)]`）：test-only
+// 全注解路由，验证 sunset/successor 以描述尾注保留（对齐 MCP 描述尾注
+// 做法，四协议契约对称）。
+#[cfg(test)]
+inventory::submit!(OpenApiRouteInfo {
+    path: "/__openapi_lifecycle_test__",
+    method: "GET",
+    summary: "Lifecycle route test marker",
+    description: "Route with full lifecycle registered by src/openapi/mod.rs tests.",
+    version: "test",
+    tags: &["test"],
+    path_params: &[],
+    success_status: None,
+    i18n_key: None,
+    deprecated: true,
+    sunset: Some("2026-12-31"),
+    successor: Some("/api/v2/thing"),
+    body_params: &[],
+    response_type: None,
+    response_schema: None,
+});
+
+// 返回类型 Schema 反射：test-only 载荷与路由。派生 `JsonSchema` 的载荷在
+// `schemars` feature 态产出精确字段 schema；未派生载荷的提供器返回 `None`，
+// 降级到 `response_type` 粗粒度映射（schemars 开关两态行为一致）。
+#[cfg(test)]
+#[derive(Debug)]
+#[allow(dead_code)]
+#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+struct TestReflectedPayload {
+    id: u64,
+    email: String,
+}
+
+#[cfg(test)]
+inventory::submit!(OpenApiRouteInfo {
+    path: "/__openapi_reflection_test__",
+    method: "GET",
+    summary: "Reflected schema test marker",
+    description: "Route whose response_schema provider reflects a derived JsonSchema payload.",
+    version: "test",
+    tags: &["test"],
+    path_params: &[],
+    success_status: None,
+    i18n_key: None,
+    deprecated: false,
+    sunset: None,
+    successor: None,
+    body_params: &[],
+    response_type: Some(OpenApiTypeInfo {
+        schema_type: "object",
+        schema_format: "",
+        is_array: false,
+    }),
+    response_schema: Some({
+        fn __test_reflected_schema() -> Option<String> {
+            #[allow(unused_imports)]
+            use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+            SchemaProbe::<TestReflectedPayload>::new().probe()
+        }
+        __test_reflected_schema
+    }),
+});
+
+#[cfg(test)]
+#[derive(Debug)]
+#[allow(dead_code)]
+struct TestOpaquePayload {
+    blob: Vec<u8>,
+}
+
+#[cfg(test)]
+inventory::submit!(OpenApiRouteInfo {
+    path: "/__openapi_reflection_fallback_test__",
+    method: "GET",
+    summary: "Reflection fallback test marker",
+    description: "Route whose payload does not derive JsonSchema; response degrades to the coarse mapping.",
+    version: "test",
+    tags: &["test"],
+    path_params: &[],
+    success_status: None,
+    i18n_key: None,
+    deprecated: false,
+    sunset: None,
+    successor: None,
+    body_params: &[],
+    response_type: Some(OpenApiTypeInfo {
+        schema_type: "string",
+        schema_format: "",
+        is_array: false,
+    }),
+    response_schema: Some({
+        fn __test_opaque_schema() -> Option<String> {
+            #[allow(unused_imports)]
+            use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+            SchemaProbe::<TestOpaquePayload>::new().probe()
+        }
+        __test_opaque_schema
     }),
 });
 
@@ -340,6 +501,52 @@ mod tests {
         );
     }
 
+    /// 端点生命周期（`#[forge(deprecated)]`）必须渲染为 OpenAPI 操作的
+    /// `"deprecated": true` 标记；未注解路由显式为 `false`。
+    #[test]
+    fn generated_spec_marks_deprecated_route() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+
+        let deprecated_op = &paths_json["/__openapi_deprecated_test__"]["get"];
+        assert_eq!(
+            deprecated_op["deprecated"],
+            serde_json::json!(true),
+            "route with deprecated=true must render the OpenAPI deprecated marker"
+        );
+
+        let current_op = &paths_json["/__openapi_test_marker__"]["get"];
+        assert_eq!(
+            current_op["deprecated"],
+            serde_json::json!(false),
+            "unannotated route must render deprecated=false (not omitted)"
+        );
+    }
+
+    /// sunset/successor 在 OpenAPI 无原生通道，必须以描述尾注保留（格式
+    /// 与 MCP 描述尾注一致）；未注解路由描述逐字不变。
+    #[test]
+    fn generated_spec_keeps_sunset_successor_as_description_footnote() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+
+        let lifecycle_op = &paths_json["/__openapi_lifecycle_test__"]["get"];
+        let description = lifecycle_op["description"].as_str().expect("description");
+        assert_eq!(
+            description,
+            "Route with full lifecycle registered by src/openapi/mod.rs tests. \
+             (deprecated; sunset: 2026-12-31; successor: /api/v2/thing)",
+            "lifecycle footnote must mirror the MCP annotation format"
+        );
+
+        let plain_op = &paths_json["/__openapi_test_marker__"]["get"];
+        let plain_desc = plain_op["description"].as_str().expect("description");
+        assert!(
+            !plain_desc.contains("sunset") && !plain_desc.contains("successor"),
+            "unannotated route description must stay free of lifecycle notes: {plain_desc}"
+        );
+    }
+
     /// `OpenApiRouteInfo::http_method()` should map every supported method
     /// string to the correct `HttpMethod` variant.
     #[test]
@@ -427,6 +634,267 @@ mod tests {
         assert_eq!(b.title, cloned.title);
         let debug = format!("{:?}", b);
         assert!(debug.contains("OpenApiBuilder"));
+    }
+
+    /// 同 path+method 冲突：build() 中 extra 依序合并，外部操作覆盖
+    /// inventory 生成的操作（外部优先）。
+    #[test]
+    fn merge_openapi_external_wins_same_path_method() {
+        use utoipa::openapi::path::OperationBuilder;
+        use utoipa::openapi::path::{HttpMethod, PathItem, Paths};
+        use utoipa::openapi::{Info, OpenApi};
+
+        let mut paths = Paths::new();
+        let item = PathItem::new(
+            HttpMethod::Get,
+            OperationBuilder::new().summary(Some("EXTERNAL WINS".to_string())),
+        );
+        paths
+            .paths
+            .insert("/__openapi_test_marker__".to_string(), item);
+        let extra = OpenApi::new(Info::new("external", "1.0.0"), paths);
+
+        let spec = OpenApiBuilder::new()
+            .title("t")
+            .version("1")
+            .merge_openapi(extra)
+            .build();
+
+        let op = spec
+            .paths
+            .get_path_operation("/__openapi_test_marker__", HttpMethod::Get)
+            .expect("merged operation must exist");
+        assert_eq!(op.summary.as_deref(), Some("EXTERNAL WINS"));
+    }
+
+    /// 外部只覆盖同 method：inventory 独有的 method 保留，外部新增的
+    /// method 并入。
+    #[test]
+    fn merge_keeps_inventory_methods_and_adds_external_ones() {
+        use utoipa::openapi::path::OperationBuilder;
+        use utoipa::openapi::path::{HttpMethod, PathItem, Paths};
+        use utoipa::openapi::{Info, OpenApi};
+
+        let mut paths = Paths::new();
+        let item = PathItem::new(
+            HttpMethod::Post,
+            OperationBuilder::new().summary(Some("EXTERNAL POST".to_string())),
+        );
+        paths
+            .paths
+            .insert("/__openapi_test_marker__".to_string(), item);
+        let extra = OpenApi::new(Info::new("external", "1.0.0"), paths);
+
+        let spec = OpenApiBuilder::new()
+            .title("t")
+            .version("1")
+            .merge_openapi(extra)
+            .build();
+
+        let inventory_get = spec
+            .paths
+            .get_path_operation("/__openapi_test_marker__", HttpMethod::Get)
+            .expect("inventory GET must survive");
+        assert_eq!(
+            inventory_get.summary.as_deref(),
+            Some("OpenAPI module test marker")
+        );
+        let external_post = spec
+            .paths
+            .get_path_operation("/__openapi_test_marker__", HttpMethod::Post)
+            .expect("external POST must be merged");
+        assert_eq!(external_post.summary.as_deref(), Some("EXTERNAL POST"));
+    }
+
+    /// extra 依序合并：多个 extra 冲突时后一个覆盖前一个；`paths` 链式
+    /// 方法与 `merge_openapi` 同样按序生效。
+    #[test]
+    fn merge_applies_extras_in_chain_order() {
+        use utoipa::openapi::path::OperationBuilder;
+        use utoipa::openapi::path::{HttpMethod, PathItem, Paths};
+        use utoipa::openapi::{Info, OpenApi};
+
+        let make_extra = |summary: &str| {
+            let mut paths = Paths::new();
+            let item = PathItem::new(
+                HttpMethod::Get,
+                OperationBuilder::new().summary(Some(summary.to_string())),
+            );
+            paths.paths.insert("/__external_only__".to_string(), item);
+            OpenApi::new(Info::new("external", "1.0.0"), paths)
+        };
+
+        let spec = OpenApiBuilder::new()
+            .title("t")
+            .version("1")
+            .merge_openapi(make_extra("FIRST"))
+            .merge_openapi(make_extra("SECOND"))
+            .build();
+
+        let op = spec
+            .paths
+            .get_path_operation("/__external_only__", HttpMethod::Get)
+            .expect("external-only path must exist");
+        assert_eq!(op.summary.as_deref(), Some("SECOND"));
+    }
+
+    /// components 合并按名称去重：两个 extra 各自定义同名 schema "Shared"
+    /// 时，结果只保留一个条目，且操作的 $ref 指针保持可解析。
+    #[test]
+    fn merge_dedupes_component_schema_refs() {
+        use utoipa::openapi::path::{HttpMethod, OperationBuilder, PathItem, Paths};
+        use utoipa::openapi::schema::{Object, ObjectBuilder, Ref};
+        use utoipa::openapi::{Components, Info, OpenApi};
+
+        let make_extra = |detail: &str| {
+            let mut paths = Paths::new();
+            let item = PathItem::new(
+                HttpMethod::Get,
+                OperationBuilder::new()
+                    .response(
+                        "200",
+                        utoipa::openapi::response::ResponseBuilder::new()
+                            .content(
+                                "application/json",
+                                utoipa::openapi::content::ContentBuilder::new()
+                                    .schema(Some(utoipa::openapi::RefOr::Ref(Ref::new(
+                                        "#/components/schemas/Shared",
+                                    ))))
+                                    .build(),
+                            )
+                            .build(),
+                    )
+                    .build(),
+            );
+            paths.paths.insert("/__ref_user__".to_string(), item);
+
+            let mut components = Components::default();
+            let schema = utoipa::openapi::schema::Schema::Object(
+                ObjectBuilder::new()
+                    .property(
+                        "detail",
+                        utoipa::openapi::RefOr::T(utoipa::openapi::schema::Schema::Object(
+                            Object::builder()
+                                .schema_type(utoipa::openapi::schema::Type::String)
+                                .build(),
+                        )),
+                    )
+                    .build(),
+            );
+            let _ = detail;
+            components
+                .schemas
+                .insert("Shared".to_string(), utoipa::openapi::RefOr::T(schema));
+            let mut extra = OpenApi::new(Info::new("external", "1.0.0"), paths);
+            extra.components = Some(components);
+            extra
+        };
+
+        let spec = OpenApiBuilder::new()
+            .title("t")
+            .version("1")
+            .merge_openapi(make_extra("first"))
+            .merge_openapi(make_extra("second"))
+            .build();
+
+        let components = spec.components.as_ref().expect("components merged");
+        assert!(
+            components.schemas.contains_key("Shared"),
+            "Shared schema must be present exactly once (map key dedup)"
+        );
+        assert_eq!(
+            components
+                .schemas
+                .keys()
+                .filter(|k| k.as_str() == "Shared")
+                .count(),
+            1
+        );
+        let json = serde_json::to_value(&spec.paths).expect("paths serialize");
+        let json = serde_json::to_string(&json).expect("paths to string");
+        assert!(
+            json.contains("#/components/schemas/Shared"),
+            "$ref pointers must survive the merge"
+        );
+    }
+
+    /// x- 扩展与顶层字段参与合并：PathItem 扩展按键保留、顶层 tags 按
+    /// name 去重追加、security 外部整体覆盖——承载安全元数据的扩展不得
+    /// 因合并静默丢失。
+    #[test]
+    fn merge_preserves_extensions_and_merges_top_level() {
+        use utoipa::openapi::extensions::Extensions;
+        use utoipa::openapi::path::OperationBuilder;
+        use utoipa::openapi::path::{HttpMethod, PathItem, Paths};
+        use utoipa::openapi::{Info, OpenApi};
+
+        let mut paths = Paths::new();
+        let mut item = PathItem::new(
+            HttpMethod::Get,
+            OperationBuilder::new().summary(Some("WITH EXT".to_string())),
+        );
+        item.extensions = Some(Extensions::from_iter([
+            ("x-required-scope", serde_json::json!("admin")),
+            ("x-rate-limit", serde_json::json!(100)),
+        ]));
+        paths.paths.insert("/__external_ext__".to_string(), item);
+
+        let mut extra = OpenApi::new(Info::new("external", "1.0.0"), paths);
+        extra.tags = Some(vec![utoipa::openapi::Tag::new("external-tag")]);
+        extra.security = Some(vec![utoipa::openapi::security::SecurityRequirement::new(
+            "oauth",
+            ["read"],
+        )]);
+
+        let spec = OpenApiBuilder::new()
+            .title("t")
+            .version("1")
+            .merge_openapi(extra)
+            .build();
+
+        let item = spec
+            .paths
+            .paths
+            .get("/__external_ext__")
+            .expect("path merged");
+        let ext = item.extensions.as_ref().expect("extensions preserved");
+        assert_eq!(
+            ext.get("x-required-scope"),
+            Some(&serde_json::json!("admin"))
+        );
+        assert_eq!(ext.get("x-rate-limit"), Some(&serde_json::json!(100)));
+
+        let tags = spec.tags.as_ref().expect("tags merged");
+        assert!(tags.iter().any(|t| t.name == "external-tag"));
+        assert!(spec.security.is_some(), "top-level security overridden");
+    }
+
+    /// `paths` 链式方法：直接合并外部 Paths，同 path+method 外部优先。
+    #[test]
+    fn paths_chain_method_merges_external_paths() {
+        use utoipa::openapi::path::OperationBuilder;
+        use utoipa::openapi::path::{HttpMethod, PathItem, Paths};
+
+        let mut paths = Paths::new();
+        let item = PathItem::new(
+            HttpMethod::Get,
+            OperationBuilder::new().summary(Some("VIA PATHS".to_string())),
+        );
+        paths
+            .paths
+            .insert("/__openapi_test_marker__".to_string(), item);
+
+        let spec = OpenApiBuilder::new()
+            .title("t")
+            .version("1")
+            .paths(paths)
+            .build();
+
+        let op = spec
+            .paths
+            .get_path_operation("/__openapi_test_marker__", HttpMethod::Get)
+            .expect("operation exists");
+        assert_eq!(op.summary.as_deref(), Some("VIA PATHS"));
     }
 
     /// `OpenApiPathParam::new()` should populate every field verbatim.
@@ -564,6 +1032,84 @@ mod tests {
         assert_eq!(info.schema_type, "string");
         let info = super::schema_for_type_name("CustomStruct");
         assert_eq!(info.schema_type, "object");
+    }
+
+    // ========================================================================
+    // 返回类型 Schema 反射（reflect_response_schema 两态）
+    // ========================================================================
+
+    /// 派生 `JsonSchema` 的类型：探针命中精确分支，产出含字段属性的
+    /// schema 文本；原语等内建 `JsonSchema` 类型同走精确分支。
+    #[cfg(feature = "schemars")]
+    #[test]
+    fn schema_probe_reflects_derived_type() {
+        #[allow(unused_imports)]
+        use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+        #[derive(schemars::JsonSchema)]
+        #[allow(dead_code)]
+        struct ReflectedPoint {
+            x: u64,
+            y: String,
+        }
+        let json = SchemaProbe::<ReflectedPoint>::new()
+            .probe()
+            .expect("derived type must reflect");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("schema is JSON");
+        assert_eq!(value["properties"]["x"]["type"], "integer");
+        assert_eq!(value["properties"]["y"]["type"], "string");
+        assert!(SchemaProbe::<u64>::new().probe().is_some());
+    }
+
+    /// 未派生类型：方法解析经 autoref 落入兜底分支，静默降级 `None`。
+    #[cfg(feature = "schemars")]
+    #[test]
+    fn schema_probe_degrades_for_plain_type() {
+        #[allow(unused_imports)]
+        use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+        #[allow(dead_code)]
+        struct Plain {
+            inner: u8,
+        }
+        assert!(SchemaProbe::<Plain>::new().probe().is_none());
+    }
+
+    /// 无 `schemars` feature：`PreciseSchema` 无任何实现，探针恒走兜底
+    /// 分支返回 `None` —— 宏发射点与注册项两态同构、无需条件编译。
+    #[cfg(not(feature = "schemars"))]
+    #[test]
+    fn schema_probe_without_schemars_always_none() {
+        use reflection::SchemaProbe;
+        assert!(SchemaProbe::<String>::new().probe().is_none());
+    }
+
+    /// 反射路由：schemars 态响应携带精确字段 schema（优先于粗粒度映射）。
+    #[cfg(feature = "schemars")]
+    #[test]
+    fn generated_spec_prefers_reflected_schema() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+        let schema = &paths_json["/__openapi_reflection_test__"]["get"]["responses"]["200"]["content"]
+            ["application/json"]["schema"];
+        assert_eq!(
+            schema["properties"]["id"]["type"], "integer",
+            "reflected schema must carry field-level properties: {schema}"
+        );
+        assert_eq!(schema["properties"]["email"]["type"], "string");
+    }
+
+    /// 未派生路由：提供器返回 `None`（schemars 开关两态一致），响应降级到
+    /// `response_type` 粗粒度映射。
+    #[test]
+    fn generated_spec_falls_back_when_reflection_unavailable() {
+        let spec = generate_openapi_spec();
+        let paths_json = serde_json::to_value(&spec.paths).expect("paths serialize");
+        let schema = &paths_json["/__openapi_reflection_fallback_test__"]["get"]["responses"]["200"]
+            ["content"]["application/json"]["schema"];
+        assert_eq!(schema["type"], "string");
+        assert!(
+            schema.get("properties").is_none(),
+            "degraded response must not gain reflected properties: {schema}"
+        );
     }
 
     /// `generate_openapi_spec()` should emit a `parameters` array on the

@@ -1,0 +1,14 @@
+error[E0433]: cannot find `log_attr` in `sdforge`
+ --> tests/trybuild/fail/log_missing_inklog_feature.rs:8:1
+  |
+8 | #[log]
+  | ^^^^^^ could not find `log_attr` in `sdforge`
+  |
+note: found an item that was configured out
+ --> $WORKSPACE/src/lib.rs
+  |
+  | #[cfg(feature = "inklog")]
+  |       ------------------ the item is gated behind the `inklog` feature
+  | pub mod log_attr;
+  |         ^^^^^^^^
+  = note: this error originates in the attribute macro `log` (in Nightly builds, run with -Z macro-backtrace for more info)

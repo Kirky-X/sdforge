@@ -179,8 +179,23 @@ where
                 // Valid version, proceed with request and add deprecation headers if needed
                 let mut response = next(req).await;
 
-                // Check if version is deprecated
-                if let Some(sunset_date) = config.deprecated_versions.get(version_part) {
+                // Check if version is deprecated. Endpoint-level lifecycle
+                // annotations (`#[forge(deprecated, sunset, successor)]`)
+                // take precedence: once the inner per-route layer stamped any
+                // lifecycle header (`Deprecation`, `Sunset`, `Link:
+                // successor-version`) the global fallback stays silent — a
+                // sunset-only / successor-only endpoint must not be relabeled
+                // deprecated, nor lose its endpoint-declared values to the
+                // version-level fallback overwrite.
+                let has_lifecycle_header = {
+                    let headers = response.headers();
+                    headers.contains_key(axum::http::HeaderName::from_static("deprecation"))
+                        || headers.contains_key(axum::http::HeaderName::from_static("sunset"))
+                        || headers.contains_key(axum::http::header::LINK)
+                };
+                if !has_lifecycle_header
+                    && let Some(sunset_date) = config.deprecated_versions.get(version_part)
+                {
                     // Add Deprecation header
                     response.headers_mut().insert(
                         axum::http::header::HeaderName::from_static("deprecation"),
@@ -408,6 +423,186 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    /// 配置级 deprecated_versions 兜底：无端点级注解时，全局配置给
+    /// v1 注入 `Deprecation` / `Sunset` / `Link: successor-version`。
+    #[tokio::test]
+    async fn test_deprecated_version_gets_global_fallback_headers() {
+        let config = VersionRouterConfig {
+            supported_versions: vec!["v1".to_string(), "v2".to_string()],
+            deprecated_versions: std::collections::HashMap::from([(
+                "v1".to_string(),
+                "2026-12-31".to_string(),
+            )]),
+            ..Default::default()
+        };
+
+        let router = Router::new()
+            .route("/api/v1/test", get(test_handler))
+            .layer(VersionRedirectLayer::new(config));
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            response.headers().get("deprecation").unwrap(),
+            "true",
+            "global fallback must stamp Deprecation for a configured version"
+        );
+        assert_eq!(response.headers().get("sunset").unwrap(), "2026-12-31");
+        assert_eq!(
+            response.headers().get(axum::http::header::LINK).unwrap(),
+            "</api/v2>; rel=\"successor-version\""
+        );
+    }
+
+    /// 端点级生命周期注解优先于全局兜底：内层已盖 `Deprecation` 章
+    /// （per-route layer 在 version 中间件内侧运行），全局配置保持
+    /// 沉默——sunset 用端点声明的值，且不追加全局 Link。
+    #[tokio::test]
+    async fn test_endpoint_lifecycle_precedes_global_fallback() {
+        let config = VersionRouterConfig {
+            supported_versions: vec!["v1".to_string(), "v2".to_string()],
+            deprecated_versions: std::collections::HashMap::from([(
+                "v1".to_string(),
+                "2026-12-31".to_string(),
+            )]),
+            ..Default::default()
+        };
+
+        let endpoint = crate::core::LifecycleMeta {
+            deprecated: true,
+            sunset: Some("2030-01-01".to_string()),
+            successor: None,
+        };
+        let inner = Router::new().route(
+            "/api/v1/test",
+            crate::http::lifecycle_layer_maybe(get(test_handler), Some(endpoint)),
+        );
+        let router = inner.layer(VersionRedirectLayer::new(config));
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.headers().get("deprecation").unwrap(), "true");
+        assert_eq!(
+            response.headers().get("sunset").unwrap(),
+            "2030-01-01",
+            "endpoint-declared sunset must win over the global fallback value"
+        );
+        assert!(
+            response.headers().get(axum::http::header::LINK).is_none(),
+            "global fallback must stay silent (no successor link) once the endpoint stamped Deprecation"
+        );
+    }
+
+    /// sunset-only 端点（未声明 deprecated）落在全局 deprecated 版本上：
+    /// 内层只盖 `Sunset` 章，此前兜底 guard 仅探测 `Deprecation`，全局
+    /// 兜底会误标 `Deprecation: true` 并用全局日期覆盖端点 sunset。
+    /// guard 扩展后任一生命周期头存在即全局兜底沉默。
+    #[tokio::test]
+    async fn test_sunset_only_endpoint_silences_global_fallback() {
+        let config = VersionRouterConfig {
+            supported_versions: vec!["v1".to_string(), "v2".to_string()],
+            deprecated_versions: std::collections::HashMap::from([(
+                "v1".to_string(),
+                "2026-12-31".to_string(),
+            )]),
+            ..Default::default()
+        };
+
+        let endpoint = crate::core::LifecycleMeta {
+            deprecated: false,
+            sunset: Some("2030-01-01".to_string()),
+            successor: None,
+        };
+        let inner = Router::new().route(
+            "/api/v1/test",
+            crate::http::lifecycle_layer_maybe(get(test_handler), Some(endpoint)),
+        );
+        let router = inner.layer(VersionRedirectLayer::new(config));
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(
+            response.headers().get("deprecation").is_none(),
+            "sunset-only endpoint must not be relabeled deprecated by the global fallback"
+        );
+        assert_eq!(
+            response.headers().get("sunset").unwrap(),
+            "2030-01-01",
+            "endpoint-declared sunset must not be overwritten by the global fallback date"
+        );
+        assert!(
+            response.headers().get(axum::http::header::LINK).is_none(),
+            "global fallback must stay silent once the endpoint stamped Sunset"
+        );
+    }
+
+    /// successor-only 端点同理：内层只盖 `Link` 章，全局兜底不得误标
+    /// deprecated / 追加全局 sunset 与全局 successor link。
+    #[tokio::test]
+    async fn test_successor_only_endpoint_silences_global_fallback() {
+        let config = VersionRouterConfig {
+            supported_versions: vec!["v1".to_string(), "v2".to_string()],
+            deprecated_versions: std::collections::HashMap::from([(
+                "v1".to_string(),
+                "2026-12-31".to_string(),
+            )]),
+            ..Default::default()
+        };
+
+        let endpoint = crate::core::LifecycleMeta {
+            deprecated: false,
+            sunset: None,
+            successor: Some("/api/v2/test".to_string()),
+        };
+        let inner = Router::new().route(
+            "/api/v1/test",
+            crate::http::lifecycle_layer_maybe(get(test_handler), Some(endpoint)),
+        );
+        let router = inner.layer(VersionRedirectLayer::new(config));
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/test")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert!(response.headers().get("deprecation").is_none());
+        assert!(response.headers().get("sunset").is_none());
+        assert_eq!(
+            response.headers().get(axum::http::header::LINK).unwrap(),
+            "</api/v2/test>; rel=\"successor-version\"",
+            "endpoint-declared successor link must not be replaced by the global one"
+        );
     }
 
     // ============================================================================

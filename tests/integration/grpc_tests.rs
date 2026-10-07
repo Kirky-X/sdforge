@@ -60,6 +60,11 @@ mod grpc_integration_tests {
         handler: integration_test_echo_handler,
         body_param: None,
         default_status: None,
+        roles: &[],
+        i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     });
 
     // Handler that accepts body data (for data_call tests)
@@ -79,6 +84,11 @@ mod grpc_integration_tests {
                 handler: integration_test_echo_handler,
                 body_param: None,
                 default_status: None,
+                roles: &[],
+                i18n_key: None,
+                deprecated: false,
+                sunset: None,
+                successor: None,
             });
         };
     }
@@ -128,6 +138,11 @@ mod grpc_integration_tests {
         handler: integration_test_body_handler,
         body_param: Some("body"),
         default_status: None,
+        roles: &[],
+        i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     });
 
     // ============================================================================
@@ -581,11 +596,21 @@ mod grpc_integration_tests {
             max_connections: 500,
             timeout_seconds: 60,
             require_auth: false,
-            #[cfg(feature = "security")]
             auth: None,
-            #[cfg(feature = "ratelimit")]
+            auth_verifier: None,
             rate_limiter: None,
             state: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_store: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_ttl_secs: 86_400,
+            #[cfg(feature = "idempotency")]
+            idempotency_inflight_ttl_secs: 30,
+            #[cfg(feature = "grpc-tls")]
+            tls: None,
+            http2_keepalive_interval: None,
+            http2_keepalive_timeout: None,
+            extra_services: Vec::new(),
         };
 
         assert_eq!(
@@ -811,7 +836,11 @@ mod grpc_integration_tests {
             response.name, "SdForge Service",
             "Service name should match"
         );
-        assert_eq!(response.version, "0.1.0", "Service version should match");
+        assert_eq!(
+            response.version,
+            env!("CARGO_PKG_VERSION"),
+            "Service version should match"
+        );
         assert!(
             !response.methods.is_empty(),
             "Service should have available methods"
@@ -1042,9 +1071,20 @@ mod grpc_integration_tests {
             timeout_seconds: 60,
             require_auth: true,
             auth: Some(auth),
-            #[cfg(feature = "ratelimit")]
+            auth_verifier: None,
             rate_limiter: None,
             state: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_store: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_ttl_secs: 86_400,
+            #[cfg(feature = "idempotency")]
+            idempotency_inflight_ttl_secs: 30,
+            #[cfg(feature = "grpc-tls")]
+            tls: None,
+            http2_keepalive_interval: None,
+            http2_keepalive_timeout: None,
+            extra_services: Vec::new(),
         };
 
         assert!(config.auth.is_some(), "Config should have auth when set");
@@ -1221,11 +1261,21 @@ mod grpc_integration_tests {
             max_connections: 200,
             timeout_seconds: 45,
             require_auth: false,
-            #[cfg(feature = "security")]
             auth: None,
-            #[cfg(feature = "ratelimit")]
+            auth_verifier: None,
             rate_limiter: None,
             state: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_store: None,
+            #[cfg(feature = "idempotency")]
+            idempotency_ttl_secs: 86_400,
+            #[cfg(feature = "idempotency")]
+            idempotency_inflight_ttl_secs: 30,
+            #[cfg(feature = "grpc-tls")]
+            tls: None,
+            http2_keepalive_interval: None,
+            http2_keepalive_timeout: None,
+            extra_services: Vec::new(),
         };
 
         assert_eq!(config.max_connections, 200);
@@ -1274,6 +1324,11 @@ mod grpc_status_code_tests {
         handler: status_code_handler,
         body_param: None,
         default_status: None,
+        roles: &[],
+        i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     });
 
     /// Handler that returns a `ServiceResponse` without `status_code` (None).
@@ -1296,6 +1351,11 @@ mod grpc_status_code_tests {
         handler: service_response_no_status_handler,
         body_param: None,
         default_status: None,
+        roles: &[],
+        i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     });
 
     /// Handler that returns a bare type (no ServiceResponse wrapper).
@@ -1314,6 +1374,11 @@ mod grpc_status_code_tests {
         handler: bare_type_handler,
         body_param: None,
         default_status: None,
+        roles: &[],
+        i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
     });
 
     /// Helper: call a method on the gRPC service directly (no server needed).

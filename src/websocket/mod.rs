@@ -33,6 +33,15 @@
 //! - `broadcast`: [`ConnectionManager::broadcast`] fan-out implementation
 //! - `handler`: [`WebSocketHandler`] trait, `DefaultWebSocketHandler`,
 //!   [`ValidatedWebSocketUpgrade`], [`websocket_upgrade`], `handle_socket`, [`build`]
+//!
+//! # Endpoint Lifecycle
+//!
+//! `#[forge(deprecated, sunset, successor)]` annotations travel on the
+//! route's `ApiMetadata`, but the WebSocket protocol has no response-header
+//! or metadata injection point (post-upgrade traffic is a bidirectional
+//! message stream) — lifecycle declarations are an explicit no-op on ws
+//! routes: the metadata is carried, nothing is stamped on responses. HTTP,
+//! gRPC, MCP and OpenAPI consume the same declaration on their own channels.
 
 #[cfg(feature = "websocket")]
 mod broadcast;

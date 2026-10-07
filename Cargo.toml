@@ -3,7 +3,7 @@ members = [".", "examples", "macros"]
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0-rc.5"
+version = "0.5.0-rc.6"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kirky-X <Kirky-X@outlook.com>"]
@@ -24,7 +24,7 @@ quote = { version = "1.0", default-features = false, features = ["proc-macro"] }
 
 # HTTP 依赖
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "form", "matched-path", "original-uri", "query", "tokio", "tower-log", "tracing", "ws"] }
-tower = { version = "0.5", default-features = false, features = ["log", "util", "timeout", "limit", "load-shed", "retry"] }
+tower = { version = "0.5", default-features = false, features = ["log", "util", "timeout", "limit", "load-shed"] }
 tower-http = { version = "0.7", default-features = false, features = ["cors", "limit", "timeout", "set-header", "compression-gzip", "compression-deflate"] }
 inventory = { version = "0.3", default-features = false }
 
@@ -51,8 +51,16 @@ base64 = { version = "0.23", default-features = false, features = ["std", "alloc
 # 配置依赖
 toml = { version = "1.1", default-features = false, features = ["parse", "display"] }
 
-# 缓存依赖 - oxcache 0.3 用 minimal feature 提供内存后端 + 序列化 + tracing
-oxcache = { version = "0.5.0-rc.4", default-features = false, features = ["minimal"] }
+# 缓存依赖 - oxcache 0.5 用 minimal feature 提供内存后端 + 序列化 + tracing
+oxcache = { version = "0.5.0-rc.6", default-features = false, features = ["minimal"] }
+
+# 数据库网关 - dbnexus 0.6 embedded（sqlite）+ sql-parser：数据 API 网关的
+# 池化/解析面（db-integration feature）
+dbnexus = { version = "0.6.0-rc.6", default-features = false, features = ["embedded", "sql-parser"] }
+
+# async trait 实现 - limiteron DistributedLimiter trait 的 mock/适配实现用
+# （trait 本身以 async_trait 声明；依赖已在依赖树中，显式声明供实现侧使用）
+async-trait = { version = "0.1", default-features = false }
 http = { version = "1.5", default-features = false, features = ["std"] }
 postcard = { version = "1.1", default-features = false, features = ["use-std"] }
 
@@ -66,20 +74,33 @@ tonic-prost = { version = "0.14", default-features = false }
 
 # 流控依赖 - limiteron 0.2.1 提供统一限流/封禁/配额/熔断
 # 纯 crates.io 版本依赖（rc.2 已发布；本地跨仓联调可用 .cargo/config.toml [patch]）。
-limiteron = { version = "0.3.0-rc.4", default-features = false }
+limiteron = { version = "0.3.0-rc.6", default-features = false }
 
 # OpenAPI 依赖
 utoipa = { version = "5.5", default-features = false, features = ["macros"] }
+
+# JSON Schema 反射依赖 - schemars 1.2 提供 JsonSchema derive 与 schema 生成
+# （返回类型 Schema 反射：derive JsonSchema 的返回类型产出精确 response schema）
+schemars = { version = "1.2", default-features = false, features = ["derive"] }
 
 # CLI 依赖 - clap 4.6 提供命令行解析（derive feature 用于过程宏派生）
 # string feature 启用 Str: From<String>，支持运行时配置程序名
 clap = { version = "4.6", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "suggestions", "string"] }
 
 # Swagger UI 依赖 - utoipa-swagger-ui 8.0 配合 utoipa 5.5 提供交互式 API 文档
-utoipa-swagger-ui = { version = "9.0", default-features = false, features = ["axum"] }
+# vendored：zip 随 crate 分发（v5.17.14，与 build.rs 默认下载 URL 同版本），
+# 构建期无需访问 github.com——密封构建，离线/受限网络环境不再被构建脚本卡死
+utoipa-swagger-ui = { version = "9.0", default-features = false, features = ["axum", "vendored"] }
 
 # CLI Markdown 文档依赖 - clap-markdown 0.1 从 clap::Command 生成 Markdown 命令手册
 clap-markdown = { version = "0.1", default-features = false }
+
+# TLS 依赖 - rustls 0.23 aws-lc-rs provider（与 grpc-tls 的 tonic/tls-aws-lc 同一密码学栈）
+rustls = { version = "0.23", default-features = false, features = ["std", "logging", "tls12", "aws-lc-rs"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["aws-lc-rs", "tls12"] }
+rustls-pki-types = { version = "1.15", default-features = false, features = ["std"] }
+hyper = { version = "1.11", default-features = false, features = ["http1", "http2", "server"] }
+hyper-util = { version = "0.1", default-features = false, features = ["server-auto", "tokio"] }
 
 # 其他依赖
 url = { version = "2.5", default-features = false }
@@ -162,7 +183,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.5", path = "./macros" }
+sdforge-macros = { version = "0.5.0-rc.6", path = "./macros" }
 
 # HTTP dependencies
 axum = { workspace = true, optional = true }
@@ -186,8 +207,18 @@ tonic = { workspace = true, optional = true }
 prost = { workspace = true, optional = true }
 tonic-prost = { workspace = true, optional = true }
 
+# TLS dependencies (serve-tls feature)
+rustls = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
+rustls-pki-types = { workspace = true, optional = true }
+hyper = { workspace = true, optional = true }
+hyper-util = { workspace = true, optional = true }
+
 # OpenAPI dependencies
 utoipa = { workspace = true, optional = true }
+
+# JSON Schema reflection dependencies（返回类型 Schema 反射，schemars feature）
+schemars = { workspace = true, optional = true }
 
 # CLI dependencies - clap 用于命令行参数解析
 clap = { workspace = true, optional = true }
@@ -220,6 +251,12 @@ toml = { workspace = true, optional = true }
 oxcache = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 
+# dbnexus 数据 API 网关（db-integration feature）
+dbnexus = { workspace = true, optional = true }
+
+# limiteron DistributedLimiter trait 的 mock/适配实现用
+async-trait = { workspace = true }
+
 # Serialization for SyncCache storage values
 postcard = { workspace = true, optional = true }
 
@@ -230,15 +267,15 @@ simd-json = { workspace = true, optional = true }
 limiteron = { workspace = true, optional = true }
 
 # trait-kit integration (optional, feature-gated via `kit`).
-# trait-kit 0.3 is published to crates.io.
+# trait-kit 0.5 is published to crates.io.
 # Mirrors dbnexus's pattern.
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
-trait-kit = { version = "0.5.0-rc.6", default-features = false, features = ["async"], optional = true }
+trait-kit = { version = "0.5.0-rc.7", default-features = false, features = ["async"], optional = true }
 
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # 纯 crates.io 版本依赖（rc.2 已发布）。
 # default-features = false (Rule 6) — only core logging is pulled in.
-inklog = { version = "0.3.0-rc.5", default-features = false, optional = true }
+inklog = { version = "0.3.0-rc.7", default-features = false, optional = true }
 
 # ICU4X internationalization (optional, feature-gated via `i18n`).
 # icu 2.2 provides locale-aware number/date/plural/collation formatting +
@@ -257,13 +294,16 @@ unic-langid = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+# 反射两态集成测试的 derive 依赖（dev-only，不影响发布面）
+schemars = { workspace = true }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.4", path = "./macros", default-features = false }
+sdforge-macros = { version = "0.5.0-rc.6", path = "./macros", default-features = false }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["rustls", "http2"] }
+rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }
 criterion = { workspace = true }
 trybuild = { workspace = true }
 proptest = { workspace = true }
@@ -343,9 +383,47 @@ websocket = ["http", "streaming", "dep:axum-extra", "dep:chrono"]
 # 独立于 http：grpc 模块只用 tonic + prost + serde_json + futures-util (catch_unwind)
 grpc = ["dep:tonic", "dep:prost", "dep:tonic-prost", "dep:inventory", "dep:futures-util"]
 
+# gRPC TLS 特性 - 只做 ServerTlsConfig 接线暴露，证书加载由调用方负责
+grpc-tls = ["grpc", "tonic/tls-aws-lc", "tonic/transport"]
+
+# HTTP TLS 终止特性 - rustls（aws-lc-rs provider，与 grpc-tls 同栈）在进程内
+# 终止 TLS：证书/密钥 PEM 加载 + ALPN + 可选 ReloadingTls 热重载；停机编排
+# 与 graceful 收尾共享（run_stop_phase）。与 grpc-tls（tonic ServerTlsConfig
+# 接线）实现独立。h2 能力由 hyper(http2) + hyper-util server-auto 提供，
+# 不经 axum/http2——明文 axum::serve 路径的行为面不受本特性影响。
+# 不并入 `full`：TLS 终止为部署面选项，与 grpc-tls 同口径按需启用。
+serve-tls = [
+    "http",
+    "graceful",
+    "dep:rustls",
+    "dep:tokio-rustls",
+    "dep:rustls-pki-types",
+    "dep:hyper",
+    "dep:hyper-util",
+]
+
 # OpenAPI 特性 - 自动生成 OpenAPI 3.1 规范
 # 独立于 http：openapi 模块只用 utoipa + inventory + serde_json
 openapi = ["dep:utoipa", "dep:inventory"]
+
+# 分布式限流 - limiteron distributed 计数后端（InMemoryDistributedLimiter 为
+# 单实例/mock 参考实现；lua-script 带 RedisDistributedLimiter 的 Lua 原子窗口
+# 脚本面——limiteron/lua-script 蕴含 oxcache/lua/redis，多副本共享后端即全局
+# 一致配额）
+ratelimit-dist = ["ratelimit", "limiteron/distributed", "limiteron/lua-script"]
+
+# oxcache Redis L2 - RedisBackend 同步面接入 SyncCache（跨副本共享缓存层，
+# 蕴含 cache；故障固有 fail-open：读 miss/写跳过 + 窗口限速告警）
+cache-l2 = ["cache", "oxcache/redis"]
+
+# dbnexus 数据 API 网关 - 白名单只读数据面（DbGateway，衔接 dbnexus DbPool
+# 的池化/权限/RLS 语义；独立于 http，端点暴露按需组合）
+db-integration = ["dep:dbnexus"]
+
+# 返回类型 Schema 反射特性 - schemars 1.2 驱动：宏为 derive JsonSchema 的
+# 返回类型发射精确 response schema 提供器，未派生类型静默降级到粗粒度映射。
+# 蕴含 openapi：精确 schema 只在 OpenAPI 输出中消费。
+schemars = ["openapi", "dep:schemars"]
 
 # CLI 特性 - clap 集成，与 HTTP/MCP 并列的第三种服务入口
 # 独立于 http：cli 模块只用 clap + inventory + crate::core::ApiError
@@ -354,6 +432,10 @@ cli = ["dep:clap", "dep:inventory"]
 # Docs 特性 - 统一文档输出（Swagger UI + CLI/MCP Markdown）
 # 依赖 openapi（复用 OpenAPI 生成）+ utoipa-swagger-ui + clap-markdown + cli（docs 子命令需要 CLI 框架）
 docs = ["openapi", "dep:utoipa-swagger-ui", "dep:clap-markdown", "cli"]
+
+# 客户端 SDK 生成 - 从 openapi/grpc 注册表生成 Rust/TypeScript 客户端，
+# 经保留 CLI 子命令 `sdk` 输出（蕴含 openapi 注册面 + cli 子命令分发）
+sdk = ["openapi", "cli"]
 
 # Cache 特性 - oxcache 0.3 用 minimal feature 提供缓存后端
 # cache 模块不依赖 http（已验证 src/cache/ 无 http/axum 使用）
@@ -396,6 +478,10 @@ hooks = ["http", "tokio"]
 # OTel 全栈观测特性 - OTLP/HTTP JSON 导出（MVP：本地 collector，无 TLS），
 # 请求 span 中间件 + 指标快照导出；零额外依赖（自研轻量 HTTP POST）。
 otel = ["http", "tokio"]
+
+# 幂等重放防护特性 - Idempotency-Key HTTP 中间件 + gRPC metadata 路径
+# 依赖 http（中间件）与 cache（IdempotencyStore 后端）
+idempotency = ["http", "cache", "tokio"]
 
 # Logging 特性
 # `dep:once_cell` is required because `src/logging.rs` uses
@@ -470,6 +556,7 @@ full = [
     "docs",
     "inklog",
     "i18n",
+    "idempotency",
 ]
 
 # build 脚本依赖无法随 feature 条件化（cargo 限制），故保持无条件声明；
@@ -507,6 +594,25 @@ path = "tests/integration/feature_combinations.rs"
 [[test]]
 name = "grpc_tests"
 path = "tests/integration/grpc_tests.rs"
+
+# gRPC server-streaming 端到端 — 宏生成流式 handler + 真实 tonic 网络链路。
+[[test]]
+name = "grpc_streaming_tests"
+path = "tests/integration/grpc_streaming_tests.rs"
+
+# gRPC 自定义 service 挂载点（extra_services）— 应用自有 tonic service
+# 与 SdForgeService 同端口共存；security 用例由文件内 cfg 门控。
+[[test]]
+name = "grpc_extra_services_tests"
+path = "tests/integration/grpc_extra_services_tests.rs"
+required-features = ["grpc"]
+
+# gRPC 优雅停机 — build_server_with_graceful_shutdown 的 signal 语义
+# （对齐 HTTP 侧 serve_with_graceful_shutdown）经真实网络链路验证。
+[[test]]
+name = "grpc_graceful_shutdown_tests"
+path = "tests/integration/grpc_graceful_shutdown_tests.rs"
+required-features = ["grpc"]
 
 [[test]]
 name = "http_integration"
@@ -584,6 +690,12 @@ path = "tests/unit/mcp_tool_instance_tests.rs"
 name = "error_handling_tests"
 path = "tests/integration/error_handling_tests.rs"
 
+# 跨协议错误码行为契约（HTTP ↔ gRPC 状态码/机器码对齐留证）
+[[test]]
+name = "error_code_contract_tests"
+path = "tests/integration/error_code_contract_tests.rs"
+required-features = ["http", "grpc"]
+
 # OpenAPI integration tests
 [[test]]
 name = "openapi_tests"
@@ -592,6 +704,26 @@ required-features = ["http", "openapi"]
 
 # forge-success-status-code: e2e tests for `#[forge(status = <code>)]` and
 # `ServiceResponse::success_with_status` across the HTTP protocol.
+[[test]]
+name = "log_attr_tests"
+required-features = ["inklog"]
+path = "tests/integration/log_attr_tests.rs"
+
+[[test]]
+name = "dist_backends_tests"
+required-features = ["ratelimit-dist", "cache-l2"]
+path = "tests/integration/dist_backends_tests.rs"
+
+[[test]]
+name = "dbnexus_gateway_tests"
+required-features = ["db-integration", "http"]
+path = "tests/integration/dbnexus_gateway_tests.rs"
+
+[[test]]
+name = "sdk_snapshots"
+required-features = ["sdk"]
+path = "tests/sdk_snapshots.rs"
+
 [[test]]
 name = "status_code_tests"
 path = "tests/integration/status_code_tests.rs"
@@ -614,10 +746,12 @@ name = "macro_tests"
 path = "tests/macros/macro_tests.rs"
 
 # health probe e2e — /healthz /readyz bypass auth in build_with_config.
+# Requires `security`: the fixture configures Jwt auth, and the fail-closed
+# contract rejects an AuthConfig when the auth middleware does not exist.
 [[test]]
 name = "health_probes_tests"
 path = "tests/integration/health_probes_tests.rs"
-required-features = ["http", "health"]
+required-features = ["http", "health", "security"]
 
 [[test]]
 name = "health_probe_collision_tests"
@@ -671,6 +805,23 @@ required-features = ["grpc", "websocket", "security"]
 name = "otel_export_tests"
 path = "tests/integration/otel_export_tests.rs"
 required-features = ["http", "otel", "metrics"]
+
+# Idempotency-Key 重放防护 e2e — 重放/无 key 透行/disabled 零影响。
+[[test]]
+name = "idempotency_tests"
+path = "tests/integration/idempotency_tests.rs"
+required-features = ["http", "idempotency"]
+
+# HTTP TLS 终止 e2e — 自签证书 https 全链路 + ALPN 协商 + 证书热重载。
+[[test]]
+name = "http_tls_tests"
+path = "tests/integration/http_tls_tests.rs"
+required-features = ["serve-tls"]
+
+# 测试目标清单漂移检测 — [[test]] 注册数/integration 文件数与文档基线同源。
+[[test]]
+name = "test_target_inventory_tests"
+path = "tests/integration/test_target_inventory_tests.rs"
 
 # ============================================================================
 # 测试目标显式注册（阶段 2 验收）

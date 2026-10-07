@@ -43,6 +43,11 @@ impl SdForgeConfig {
         // Validate authentication configuration
         self.authentication.validate()?;
 
+        // Fail-closed: an auth request that the disabled `security` feature
+        // cannot honor must be rejected here instead of silently ignored.
+        #[cfg(not(feature = "security"))]
+        self.authentication.require_security_feature()?;
+
         // Validate timeout configuration
         if let Some(ref timeout) = self.timeout {
             timeout.validate()?;

@@ -3,7 +3,9 @@
 //! Tests for `stream_to_sse` SSE conversion and `StreamResponse`'s `IntoResponse`
 //! HTTP SSE response impl.
 
-use crate::streaming::{StreamEvent, StreamResponse, stream_to_sse};
+#[cfg(feature = "http")]
+use crate::streaming::StreamResponse;
+use crate::streaming::{StreamEvent, stream_to_sse};
 use futures_util::StreamExt;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;

@@ -1,0 +1,5 @@
+error: unknown level `loud` (supported: trace, debug, info, warn, error)
+ --> tests/trybuild/fail/log_level_invalid.rs:6:14
+  |
+6 | #[forge::log(level = "loud")]
+  |              ^^^^^^^^^^^^^^

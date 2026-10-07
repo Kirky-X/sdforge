@@ -32,6 +32,7 @@ pub fn generate_docs(format: DocFormat) -> Result<String, DocError> {
         }
         DocFormat::CliMarkdown => Ok(cli_markdown::generate_cli_docs()),
         DocFormat::McpMarkdown => Ok(generate_mcp_markdown()),
+        DocFormat::Agent => Ok(agent_knowledge::generate_agent_knowledge().to_string()),
         DocFormat::All => {
             let mut out = String::new();
             out.push_str("# OpenAPI Specification\n\n");
