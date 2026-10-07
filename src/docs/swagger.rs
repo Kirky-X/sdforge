@@ -172,3 +172,121 @@ async fn serve_swagger_ui(
         }
     }
 }
+
+#[cfg(test)]
+mod swagger_route_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Method, Request};
+    use tower::ServiceExt;
+
+    async fn fetch(app: axum::Router, uri: &str) -> (StatusCode, Option<String>, String) {
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(uri)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let status = resp.status();
+        let ct = resp
+            .headers()
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap_or_default();
+        (status, ct, String::from_utf8_lossy(&bytes).into_owned())
+    }
+
+    /// 动态 spec 端点：合法 JSON + 进程级缓存令后续请求字节一致。
+    #[tokio::test]
+    async fn dynamic_spec_is_json_and_cached_byte_identical() {
+        let (status, ct, first) = fetch(swagger_ui_router(), "/api-docs/openapi.json").await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(ct.as_deref(), Some("application/json"));
+        assert!(
+            first.contains("\"openapi\""),
+            "spec 应含 openapi 字段: {}",
+            &first[..first.len().min(120)]
+        );
+
+        let (_, _, second) = fetch(swagger_ui_router(), "/api-docs/openapi.json").await;
+        assert_eq!(first, second, "进程级缓存应使两次响应字节一致");
+    }
+
+    #[tokio::test]
+    async fn swagger_ui_index_is_served_and_missing_asset_404() {
+        let (status, ct, html) = fetch(swagger_ui_router(), "/swagger-ui/").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            ct.unwrap_or_default().contains("text/html"),
+            "首页应以 HTML 返回"
+        );
+        assert!(
+            html.to_lowercase().contains("swagger"),
+            "首页应渲染 Swagger UI"
+        );
+
+        let (missing, _, _) = fetch(swagger_ui_router(), "/swagger-ui/no-such-asset.xyz").await;
+        assert_eq!(missing, StatusCode::NOT_FOUND);
+    }
+
+    /// 路径遍历防护：`..` 形态（含百分号编码）不得读到静态包外文件。
+    #[tokio::test]
+    async fn path_traversal_in_asset_path_is_not_served() {
+        for uri in [
+            "/swagger-ui/../../etc/passwd",
+            "/swagger-ui/..%2f..%2fetc%2fpasswd",
+        ] {
+            let (status, _, body) = fetch(swagger_ui_router(), uri).await;
+            assert!(
+                status == StatusCode::BAD_REQUEST || status == StatusCode::NOT_FOUND,
+                "{uri} 必须被拒（实得 {status}）"
+            );
+            assert!(!body.contains("root:"), "不得回显 passwd 内容: {uri}");
+        }
+    }
+
+    /// `with_spec` 变体只挂 UI：不得占用 `/api-docs/openapi.json`（避免宿主 merge 时 panic）。
+    #[tokio::test]
+    async fn with_spec_variant_does_not_register_spec_endpoint() {
+        let (status, _, _) = fetch(
+            swagger_ui_router_with_spec("/host-provided/spec.json"),
+            "/api-docs/openapi.json",
+        )
+        .await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "该变体不应注册 spec 端点");
+
+        let (ui, _, _) = fetch(
+            swagger_ui_router_with_spec("/host-provided/spec.json"),
+            "/swagger-ui/",
+        )
+        .await;
+        assert_eq!(ui, StatusCode::OK, "UI 路由仍应可用");
+    }
+
+    /// `with_openapi` 变体直接吐调用方给的 spec（而非动态生成的默认 spec）。
+    #[tokio::test]
+    async fn with_openapi_variant_serves_the_provided_spec() {
+        let spec = crate::openapi::OpenApiBuilder::new()
+            .title("MARKER-HOST-API")
+            .version("9.9.9")
+            .build();
+        let (status, _, body) = fetch(
+            swagger_ui_router_with_openapi(spec),
+            "/api-docs/openapi.json",
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            body.contains("MARKER-HOST-API"),
+            "应返回调用方提供的 spec: {}",
+            &body[..body.len().min(120)]
+        );
+    }
+}

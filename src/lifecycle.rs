@@ -85,6 +85,67 @@ pub fn stopped_count() -> u64 {
 use futures_util::FutureExt as _;
 
 #[cfg(all(test, feature = "lifecycle"))]
+mod hook_isolation_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static A_RAN: AtomicBool = AtomicBool::new(false);
+    static STOP_RAN: AtomicBool = AtomicBool::new(false);
+
+    fn start_ok() -> HookFuture {
+        Box::pin(async {
+            A_RAN.store(true, Ordering::SeqCst);
+        })
+    }
+
+    /// 钩子 future 内部 panic：文档承诺不得拖垮进程也不得阻止其余钩子运行。
+    fn start_panics() -> HookFuture {
+        Box::pin(async { panic!("lifecycle hook future panic (expected by test)") })
+    }
+
+    fn stop_ok() -> HookFuture {
+        Box::pin(async {
+            STOP_RAN.store(true, Ordering::SeqCst);
+        })
+    }
+
+    inventory::submit! { LifecycleHookRegistration::new("start", start_ok) }
+    inventory::submit! { LifecycleHookRegistration::new("start", start_panics) }
+    inventory::submit! { LifecycleHookRegistration::new("stop", stop_ok) }
+
+    // 单测内按顺序跑两轮：计数器与标志均为进程全局，拆成两个并发测试会互相脏读。
+    #[tokio::test]
+    async fn hooks_run_per_phase_and_panics_are_isolated() {
+        let started0 = started_count();
+        let stopped0 = stopped_count();
+
+        run_on_start().await;
+
+        assert!(A_RAN.load(Ordering::SeqCst), "phase=start 钩子应被执行");
+        assert_eq!(
+            started_count() - started0,
+            2,
+            "两个 start 钩子均应计数（panic 钩子不短路后续）"
+        );
+        assert_eq!(
+            stopped_count() - stopped0,
+            0,
+            "start 轮次不得执行 phase=stop 钩子"
+        );
+
+        run_on_stop().await;
+
+        assert!(STOP_RAN.load(Ordering::SeqCst), "phase=stop 钩子应被执行");
+        assert_eq!(stopped_count() - stopped0, 1, "仅一个 stop 钩子");
+        assert_eq!(
+            started_count() - started0,
+            2,
+            "stop 轮次不得重跑 start 钩子"
+        );
+    }
+}
+
+#[cfg(all(test, feature = "lifecycle"))]
 mod tests {
     use super::*;
 
