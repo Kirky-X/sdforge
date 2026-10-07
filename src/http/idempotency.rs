@@ -54,12 +54,16 @@ pub async fn idempotency_middleware(
     else {
         return next.run(req).await;
     };
-    // scope 绑定路由模式（防止跨端点键冲突）。
+    // scope 绑定路由模式（防止跨端点键冲突）。实测本仓生产接线（`Router::layer`）
+    // 下 MatchedPath 在中间件内已可用（见 layer_wiring_shares_matched_path_scope_across_ids），
+    // 故正常请求都走上一分支。兜底值不用常量 "unmatched"：那会把所有未匹配请求
+    // （以及任何使 MatchedPath 缺失的上游行为变化）并入同一 scope，使同一 key 跨
+    // 端点互相重放——属可预防的隐患面，改用请求 URI 路径保持端点隔离。
     let scope = req
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .map(|p| p.as_str().to_string())
-        .unwrap_or_else(|| "unmatched".to_string());
+        .unwrap_or_else(|| req.uri().path().to_string());
 
     match store.begin(&scope, &key, inflight_ttl_secs) {
         IdempotencyOutcome::Replay {
@@ -162,6 +166,424 @@ fn attach_trace_id(resp: &mut Response) {
     #[cfg(not(feature = "context"))]
     {
         let _ = resp;
+    }
+}
+
+#[cfg(all(test, feature = "http", feature = "tokio"))]
+mod idempotency_middleware_tests {
+    use super::*;
+    use axum::http::header::CONTENT_TYPE;
+    use axum::http::{Method, StatusCode};
+    use axum::routing::{get, post};
+    use axum::{Router, middleware};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use tower::ServiceExt;
+
+    /// 与生产接线完全同构：`middleware::from_fn` + 闭包捕获（`from_fn_with_state`
+    /// 还要求状态类型 `Sync`，而 IdempotencyStore 的内部缓存句柄不满足）。
+    macro_rules! idem_layer {
+        ($pair:expr) => {{
+            let (store, max_bytes) = $pair;
+            middleware::from_fn(move |req: Request<Body>, next: Next| {
+                let store = Arc::clone(&store);
+                async move { idempotency_middleware(store, 60, 30, max_bytes, req, next).await }
+            })
+        }};
+    }
+
+    /// 外层 layer 接线（与 `http_impl.rs` 一致），/x /a /b 共用成功 handler。
+    fn app_ok(state: (Arc<IdempotencyStore>, usize), hits: Arc<AtomicUsize>) -> Router {
+        let counter = Arc::clone(&hits);
+        let handler = move || {
+            let c = Arc::clone(&counter);
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(CONTENT_TYPE, "text/plain; charset=utf-8")
+                    .body(Body::from("payload"))
+                    .unwrap()
+            }
+        };
+        Router::new()
+            .route("/x", post(handler.clone()))
+            .route("/a", post(handler.clone()))
+            .route("/b", post(handler))
+            .route("/get", get(|| async { "read" }))
+            .layer(idem_layer!(state))
+    }
+
+    /// 指定状态码/响应体的单路由应用（失败与超限分支）。
+    fn app_with_response(
+        state: (Arc<IdempotencyStore>, usize),
+        hits: Arc<AtomicUsize>,
+        status: StatusCode,
+        body: Vec<u8>,
+    ) -> Router {
+        let counter = Arc::clone(&hits);
+        let handler = move || {
+            let c = Arc::clone(&counter);
+            let payload = body.clone();
+            async move {
+                c.fetch_add(1, Ordering::SeqCst);
+                Response::builder()
+                    .status(status)
+                    .body(Body::from(payload))
+                    .unwrap()
+            }
+        };
+        Router::new()
+            .route("/x", post(handler))
+            .layer(idem_layer!(state))
+    }
+
+    fn req(method: Method, uri: &str, key: Option<&str>) -> Request<Body> {
+        let mut b = Request::builder().method(method).uri(uri);
+        if let Some(k) = key {
+            b = b.header(IDEMPOTENCY_KEY_HEADER, k);
+        }
+        b.body(Body::empty()).unwrap()
+    }
+
+    async fn body_text(resp: Response) -> String {
+        let bytes = axum::body::to_bytes(resp.into_body(), IDEMPOTENCY_HARD_CAP)
+            .await
+            .unwrap_or_default();
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    fn replayed(resp: &Response) -> Option<String> {
+        resp.headers()
+            .get(IDEMPOTENCY_REPLAYED_HEADER)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+    }
+
+    fn state(store: Arc<IdempotencyStore>, max_bytes: usize) -> (Arc<IdempotencyStore>, usize) {
+        (store, max_bytes)
+    }
+
+    #[tokio::test]
+    async fn non_post_method_passes_through_without_participation() {
+        let store = Arc::new(IdempotencyStore::new());
+        let hits = Arc::new(AtomicUsize::new(0));
+        let resp = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+            .oneshot(req(Method::GET, "/get", Some("k1")))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(body_text(resp).await, "read");
+        assert_eq!(hits.load(Ordering::SeqCst), 0, "GET 不应进入幂等计数路径");
+
+        // GET 不得占用 key：同 key 的 POST 仍应真实执行
+        let resp = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+            .oneshot(req(Method::POST, "/x", Some("k1")))
+            .await
+            .unwrap();
+        assert_eq!(replayed(&resp).as_deref(), Some("executed"));
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn missing_key_passes_through_and_never_caches() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let store = Arc::new(IdempotencyStore::new());
+        for expect in 1..=2 {
+            let resp = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+                .oneshot(req(Method::POST, "/x", None))
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::OK);
+            assert!(replayed(&resp).is_none(), "无 key 的请求不应被加幂等标记头");
+            assert_eq!(
+                hits.load(Ordering::SeqCst),
+                expect,
+                "无 key 时每次都要真实执行"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn execute_then_replay_restores_body_status_and_content_type() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let store = Arc::new(IdempotencyStore::new());
+        let first = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+            .oneshot(req(Method::POST, "/x", Some("same-key")))
+            .await
+            .unwrap();
+        assert_eq!(replayed(&first).as_deref(), Some("executed"));
+        assert_eq!(
+            first
+                .headers()
+                .get(CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some("text/plain; charset=utf-8")
+        );
+        assert_eq!(body_text(first).await, "payload");
+
+        let second = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+            .oneshot(req(Method::POST, "/x", Some("same-key")))
+            .await
+            .unwrap();
+        assert_eq!(
+            replayed(&second).as_deref(),
+            Some("true"),
+            "重放必须标记 true"
+        );
+        assert_eq!(
+            second
+                .headers()
+                .get(CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some("text/plain; charset=utf-8"),
+            "重放必须还原首次响应的 media type"
+        );
+        assert_eq!(body_text(second).await, "payload");
+        assert_eq!(hits.load(Ordering::SeqCst), 1, "重放不得再次执行 handler");
+    }
+
+    #[tokio::test]
+    async fn inflight_claim_yields_conflict_with_unified_error() {
+        let store = Arc::new(IdempotencyStore::new());
+        // 先手工 claim（等价于并发中的另一路请求正在执行），使中间件命中 InFlight。
+        assert!(matches!(
+            store.begin("/x", "busy-key", 30),
+            IdempotencyOutcome::Execute
+        ));
+        let hits = Arc::new(AtomicUsize::new(0));
+        let resp = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+            .oneshot(req(Method::POST, "/x", Some("busy-key")))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+        assert_eq!(replayed(&resp).as_deref(), Some("in-flight"));
+        let text = body_text(resp).await;
+        assert!(
+            text.contains("CONFLICT"),
+            "错误体必须是 UnifiedError 形状: {text}"
+        );
+        assert_eq!(hits.load(Ordering::SeqCst), 0, "InFlight 不得执行 handler");
+    }
+
+    #[tokio::test]
+    async fn failed_response_is_not_cached_so_retry_executes_again() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let store = Arc::new(IdempotencyStore::new());
+        for expect in 1..=2 {
+            let resp = app_with_response(
+                state(Arc::clone(&store), 4096),
+                Arc::clone(&hits),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                b"boom".to_vec(),
+            )
+            .oneshot(req(Method::POST, "/x", Some("err-key")))
+            .await
+            .unwrap();
+            assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+            assert_eq!(
+                hits.load(Ordering::SeqCst),
+                expect,
+                "失败响应不得缓存：调用方应能立即重试"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn oversized_response_passes_through_intact_with_skipped_header() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let store = Arc::new(IdempotencyStore::new());
+        for expect in 1..=2 {
+            let resp = app_with_response(
+                state(Arc::clone(&store), 1_000),
+                Arc::clone(&hits),
+                StatusCode::OK,
+                vec![b'x'; 8_000],
+            )
+            .oneshot(req(Method::POST, "/x", Some("big-key")))
+            .await
+            .unwrap();
+            assert_eq!(
+                resp.status(),
+                StatusCode::OK,
+                "超限必须原样返回；改 413 会诱导客户端按幂等语义重试→重复副作用"
+            );
+            assert_eq!(
+                resp.headers()
+                    .get(IDEMPOTENCY_SKIPPED_HEADER)
+                    .and_then(|v| v.to_str().ok()),
+                Some("oversized")
+            );
+            assert_eq!(body_text(resp).await.len(), 8_000, "响应体必须完整未被截断");
+            assert_eq!(hits.load(Ordering::SeqCst), expect, "超限不得写入缓存");
+        }
+    }
+
+    /// 回归（本轮修复）：生产接线是 `Router::layer`，外层 layer 在路由匹配之前执行，
+    /// extensions 里还没有 MatchedPath。旧实现把 scope 退化为常量 "unmatched"，
+    /// 于是同一 key 打到不同端点会互相重放（拿到另一端的缓存响应体）。
+    #[tokio::test]
+    async fn same_key_on_different_endpoints_does_not_replay() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let store = Arc::new(IdempotencyStore::new());
+        let a = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+            .oneshot(req(Method::POST, "/a", Some("shared")))
+            .await
+            .unwrap();
+        assert_eq!(replayed(&a).as_deref(), Some("executed"));
+        let b = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+            .oneshot(req(Method::POST, "/b", Some("shared")))
+            .await
+            .unwrap();
+        assert_eq!(
+            replayed(&b).as_deref(),
+            Some("executed"),
+            "不同端点同 key 不得重放另一端的响应"
+        );
+        assert_eq!(hits.load(Ordering::SeqCst), 2);
+    }
+
+    /// MatchedPath 优先分支：`route_layer` 下路由已匹配，参数化路由的不同资源
+    /// id 共享同一 scope（模式级幂等），第二个 id 直接重放首个响应。
+    #[tokio::test]
+    async fn route_layer_uses_matched_path_scope_across_resource_ids() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let store = Arc::new(IdempotencyStore::new());
+        // axum Router 不实现 Clone（oneshot 消费服务），故按请求重建，store 共享。
+        let counter = Arc::clone(&hits);
+        let build = move || {
+            let c = Arc::clone(&counter);
+            let handler = move || {
+                let c = Arc::clone(&c);
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    Response::builder()
+                        .status(StatusCode::OK)
+                        .body(Body::from("item"))
+                        .unwrap()
+                }
+            };
+            Router::new()
+                .route("/item/{id}", post(handler))
+                .route_layer(idem_layer!(state(Arc::clone(&store), 4096)))
+        };
+        let first = build()
+            .oneshot(req(Method::POST, "/item/1", Some("pat-key")))
+            .await
+            .unwrap();
+        assert_eq!(replayed(&first).as_deref(), Some("executed"));
+        let second = build()
+            .oneshot(req(Method::POST, "/item/2", Some("pat-key")))
+            .await
+            .unwrap();
+        assert_eq!(
+            replayed(&second).as_deref(),
+            Some("true"),
+            "同一参数化模式应共享 scope（走 MatchedPath 分支）"
+        );
+        assert_eq!(body_text(second).await, "item");
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+    }
+
+    /// 超过缓冲硬上限（32 MiB）：响应体已被消费无法还原，abort 后以 500 显式报错
+    /// （文档化边界），并释放 claim 让调用方可重试。
+    #[tokio::test]
+    async fn response_beyond_hard_cap_yields_server_error_and_releases_claim() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let store = Arc::new(IdempotencyStore::new());
+        let resp = app_with_response(
+            state(Arc::clone(&store), IDEMPOTENCY_HARD_CAP),
+            Arc::clone(&hits),
+            StatusCode::OK,
+            vec![b'y'; IDEMPOTENCY_HARD_CAP + 1],
+        )
+        .oneshot(req(Method::POST, "/x", Some("huge")))
+        .await
+        .unwrap();
+        assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let text = body_text(resp).await;
+        assert!(
+            text.contains("RESPONSE_TOO_LARGE"),
+            "超硬上限必须显式报错而非静默截断: {text}"
+        );
+        // claim 已 abort：同 key 重试应再次进入执行分支而非 InFlight
+        let again = app_with_response(
+            state(Arc::clone(&store), IDEMPOTENCY_HARD_CAP),
+            Arc::clone(&hits),
+            StatusCode::OK,
+            vec![b'z'; 16],
+        )
+        .oneshot(req(Method::POST, "/x", Some("huge")))
+        .await
+        .unwrap();
+        assert_eq!(again.status(), StatusCode::OK);
+        assert_eq!(hits.load(Ordering::SeqCst), 2, "abort 后重试必须真实执行");
+    }
+
+    #[tokio::test]
+    async fn layer_wiring_shares_matched_path_scope_across_ids() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let store = Arc::new(IdempotencyStore::new());
+        let counter = Arc::clone(&hits);
+        let build = move || {
+            let c = Arc::clone(&counter);
+            let handler = move || {
+                let c = Arc::clone(&c);
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                    Response::builder()
+                        .status(StatusCode::OK)
+                        .body(Body::from("p"))
+                        .unwrap()
+                }
+            };
+            Router::new()
+                .route("/item/{id}", post(handler))
+                .layer(idem_layer!(state(Arc::clone(&store), 4096)))
+        };
+        build()
+            .oneshot(req(Method::POST, "/item/1", Some("probe")))
+            .await
+            .unwrap();
+        let second = build()
+            .oneshot(req(Method::POST, "/item/2", Some("probe")))
+            .await
+            .unwrap();
+        // 实测结论（axum 0.8 + 本仓生产接线 Router::layer）：外层 layer 也能拿到
+        // MatchedPath，故参数化路由的不同 id 共享同一 scope（模式级幂等）。
+        // 该断言同时钉住"未退化为按 URI 路径分 scope"——若上游改变 layer 与路由
+        // 匹配的先后顺序，此处会先红，而不是让跨 id 语义悄悄漂移。
+        assert_eq!(
+            replayed(&second).as_deref(),
+            Some("true"),
+            "外层 layer 下 MatchedPath 应可用，同一参数化模式共享 scope"
+        );
+    }
+
+    #[tokio::test]
+    async fn replay_with_unparsable_cached_status_falls_back_to_ok() {
+        // 缓存条目状态码非法（历史数据/外部写入）时重放不得 panic，回退 200。
+        let store = Arc::new(IdempotencyStore::new());
+        store.complete("/x", "bad-status", 1_000, None, b"body".to_vec(), 60);
+        let hits = Arc::new(AtomicUsize::new(0));
+        let resp = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+            .oneshot(req(Method::POST, "/x", Some("bad-status")))
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::OK,
+            "非法缓存状态码应回退 200 而非 panic"
+        );
+        assert_eq!(replayed(&resp).as_deref(), Some("true"));
+        assert_eq!(
+            resp.headers()
+                .get(CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some("application/json"),
+            "缺失 content_type 时重放回退 JSON"
+        );
+        assert_eq!(body_text(resp).await, "body");
     }
 }
 
