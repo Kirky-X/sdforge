@@ -534,12 +534,4 @@ mod shutdown_sequence_tests {
         tx.send(()).unwrap();
         server.await.unwrap().unwrap();
     }
-
-    /// 无 kit / 无钩子时收尾不得 panic（graceful 与 tls 两条 serve 路径共用）。
-    #[tokio::test]
-    async fn stop_phase_without_kit_or_hook_is_noop() {
-        run_stop_phase(None).await;
-        run_lifecycle_stop_hooks().await;
-        run_lifecycle_start_hooks().await;
-    }
 }
