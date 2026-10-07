@@ -18,6 +18,8 @@
 //! cargo run --features "http security" --example security/comprehensive
 //! ```
 
+// 参考型演示模块：handler/main 仅供文档阅读与 cargo run 演示，
+// lib target 下无调用方属预期，整体放行。
 #![allow(dead_code)]
 
 use sdforge::cache::{DashMapCache, SyncCache};

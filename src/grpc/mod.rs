@@ -32,6 +32,8 @@ pub use handler::{
 
 /// gRPC route registration
 #[derive(Debug, Clone)]
+// 字段由 #[forge(grpc_*)] 宏发射的 create_fn 闭包填充，生产路径仅 touch
+// inventory 防链接器剥离，读取方只有本模块测试——非测试构建按契约保留。
 #[cfg_attr(
     not(test),
     expect(dead_code, reason = "字段仅由 grpc 测试模块读取，非测试构建无消费者")

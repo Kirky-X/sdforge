@@ -26,6 +26,8 @@ pub fn rate_limit_layer(
 ///
 /// A blank `x-request-id` header falls through to UUID generation, matching
 /// the `context` middleware's handling of empty inbound ids.
+// 非 context 态由下方 request-id 中间件消费，context 态调用点被 cfg 排除——
+// allow 谓词须与调用点门控同步。
 #[cfg_attr(feature = "context", allow(dead_code))]
 pub(crate) fn get_or_generate_request_id(req: &axum::http::Request<Body>) -> String {
     req.headers()

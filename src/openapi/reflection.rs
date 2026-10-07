@@ -73,7 +73,7 @@ mod tests {
     /// 关闭态任意类型（含 std）恒兜底。
     #[test]
     fn fallback_probe_is_none_for_plain_types() {
-        #[allow(dead_code)]
+        #[allow(dead_code)] // 仅作 SchemaProbe 类型参数，实例与字段值均不使用
         struct Plain {
             inner: u8,
         }

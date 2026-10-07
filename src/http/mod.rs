@@ -79,6 +79,8 @@ pub(crate) use http_impl::resolve_route_path;
 pub use http_impl::route_path_taken;
 
 /// Request ID header name
+// 非 context 态由 request-id 中间件消费（调用点在 not(context) 门内），
+// context 态编译器视角无消费者——cfg_attr 与调用点门控保持同一谓词。
 #[cfg_attr(feature = "context", allow(dead_code))]
 pub(crate) const X_REQUEST_ID: &str = "x-request-id";
 

@@ -305,6 +305,8 @@ inventory::submit!(OpenApiRouteInfo {
 // 降级到 `response_type` 粗粒度映射（schemars 开关两态行为一致）。
 #[cfg(test)]
 #[derive(Debug)]
+// 探针只消费类型形状（字段名进 schema properties），不读字段值——
+// 编译器 dead_code 分析对 derive/泛型反射路径不可见。
 #[allow(dead_code)]
 #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
 struct TestReflectedPayload {
@@ -344,6 +346,7 @@ inventory::submit!(OpenApiRouteInfo {
 
 #[cfg(test)]
 #[derive(Debug)]
+// 同 TestReflectedPayload：探针载荷只供类型形状，字段值无读取方。
 #[allow(dead_code)]
 struct TestOpaquePayload {
     blob: Vec<u8>,
@@ -1046,7 +1049,7 @@ mod tests {
         #[allow(unused_imports)]
         use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
         #[derive(schemars::JsonSchema)]
-        #[allow(dead_code)]
+        #[allow(dead_code)] // derive 只引用字段名生成 schema，不读字段值
         struct ReflectedPoint {
             x: u64,
             y: String,
@@ -1066,7 +1069,7 @@ mod tests {
     fn schema_probe_degrades_for_plain_type() {
         #[allow(unused_imports)]
         use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
-        #[allow(dead_code)]
+        #[allow(dead_code)] // 仅作 SchemaProbe 类型参数，实例与字段值均不使用
         struct Plain {
             inner: u8,
         }
