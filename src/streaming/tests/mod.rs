@@ -7,7 +7,9 @@
 //!   construction, serialization, deserialization, channel behavior, and Debug impls
 //! - `sse_tests`: `stream_to_sse` SSE conversion and `StreamResponse`'s `IntoResponse`
 //!   HTTP SSE response impl
+//! - `parser_tests`: inbound SSE frame parser (`SseFrameParser` / `frames`)
 
+mod parser_tests;
 mod sse_tests;
 mod stream_builder_tests;
 

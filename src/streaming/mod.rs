@@ -7,7 +7,9 @@
 
 use tokio_stream::wrappers::ReceiverStream;
 
+mod parser;
 mod streaming_impl;
+pub use parser::{SseFrame, SseFrameParser, SseStreamError, frames};
 pub use streaming_impl::{create_stream_channel, stream_to_sse};
 
 /// Stream response wrapper
