@@ -4,6 +4,8 @@
 # 排除生成的 protobuf 代码（src/grpc/pb/*.rs 由 tonic-build 自动生成）
 exclude-from-report = ["src/grpc/pb/*"]
 
-# 覆盖率门禁：核心库 95%（用户要求），与 CI tarpaulin --fail-under 95 对齐
+# 覆盖率门禁见 CI：.github/workflows/ci.yml 的 coverage job（cargo-llvm-cov --lib；
+# 阈值以该 job 的 --fail-under-lines 为准）。tarpaulin 已废除（统一 llvm-cov）。
+# 本文件仅配置排除项与报告输出目录。
 [report]
 output-dir = "target/llvm-cov-report"
