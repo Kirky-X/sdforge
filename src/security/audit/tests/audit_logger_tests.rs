@@ -1059,7 +1059,6 @@ async fn test_worker_merges_fallback_from_queue() {
     // Send a batch to the queue to trigger the worker's fallback merge
     let batch = AuditLogBatch {
         user_id: "worker_user".to_string(),
-        log: make_test_audit_log("worker_user", "queued_action"),
     };
     let _ = logger.queue_sender.send(batch).await;
 
@@ -1105,7 +1104,6 @@ async fn test_worker_no_fallback_does_nothing() {
     // Send a batch
     let batch = AuditLogBatch {
         user_id: "no_fb_user".to_string(),
-        log: make_test_audit_log("no_fb_user", "queued"),
     };
     let _ = logger.queue_sender.send(batch).await;
 
@@ -1206,7 +1204,6 @@ async fn test_log_handles_full_queue() {
     // Fill the queue to capacity
     let filler = AuditLogBatch {
         user_id: "filler_user".to_string(),
-        log: make_test_audit_log("filler_user", "filler"),
     };
     assert!(sender.try_send(filler).is_ok());
 

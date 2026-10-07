@@ -69,7 +69,6 @@ fn cache_key_from_request(req: &Request<Body>) -> String {
 /// inner service without cache interaction.
 pub struct ResponseCacheLayer {
     cache: SharedCache,
-    ttl_secs: u64,
 }
 
 impl ResponseCacheLayer {
@@ -77,11 +76,11 @@ impl ResponseCacheLayer {
     ///
     /// # Arguments
     /// * `cache` — shared sync cache backend
-    /// * `ttl_secs` — TTL hint (informational; the `SyncCache` trait does not
-    ///   enforce TTL natively, but the value is available for future use or
-    ///   for backends that support it)
-    pub fn new(cache: SharedCache, ttl_secs: u64) -> Self {
-        Self { cache, ttl_secs }
+    ///
+    /// TTL 承载于缓存条目编码之外（`SyncCache` 契约无逐条 TTL）；条目过期
+    /// 由后端策略决定，本层不复制 TTL 配置。
+    pub fn new(cache: SharedCache) -> Self {
+        Self { cache }
     }
 }
 
@@ -92,7 +91,6 @@ impl<S> Layer<S> for ResponseCacheLayer {
         ResponseCacheMiddleware {
             inner,
             cache: self.cache.clone(),
-            ttl_secs: self.ttl_secs,
         }
     }
 }
@@ -103,14 +101,9 @@ impl<S> Layer<S> for ResponseCacheLayer {
 /// first; on a hit, returns the cached response. On a miss, delegates to
 /// the inner service and writes the response back to the cache.
 #[derive(Clone)]
-#[expect(
-    dead_code,
-    reason = "TTL 目前仅信息性存储，SyncCache 不消费；为后端集成预留"
-)]
 pub struct ResponseCacheMiddleware<S> {
     inner: S,
     cache: SharedCache,
-    ttl_secs: u64,
 }
 
 impl<S> Service<Request<Body>> for ResponseCacheMiddleware<S>
@@ -205,7 +198,7 @@ mod middleware_behavior_tests {
                     )
                 }
             });
-            ResponseCacheLayer::new(Arc::clone(&$cache), 60).layer(inner)
+            ResponseCacheLayer::new(Arc::clone(&$cache)).layer(inner)
         }};
     }
 
@@ -396,8 +389,10 @@ mod tests {
     #[test]
     fn test_response_cache_layer_creation() {
         let cache: SharedCache = Arc::new(OxcacheSyncCache::new());
-        let layer = ResponseCacheLayer::new(cache, 300);
-        assert_eq!(layer.ttl_secs, 300);
+        let layer = ResponseCacheLayer::new(cache);
+        let _service = layer.layer(tower::service_fn(|_req: Request<Body>| async {
+            Ok::<_, std::convert::Infallible>(Response::new(Body::empty()))
+        }));
     }
 
     /// 注：本例只验证缓存条目自身的存取编码（状态码大端 + 体），不经过

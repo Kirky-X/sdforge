@@ -3,7 +3,6 @@
 //! Tests for `SdForgeAuditLoggerBuilder` and `SdForgeAuditLogger::builder()`.
 
 use super::super::*;
-use super::make_test_audit_log;
 use crate::security::{AuditResult, AuthMetadata, serialize_audit_logs};
 
 // ============================================================================
@@ -117,7 +116,6 @@ async fn test_builder_build_worker_merges_fallback() {
     // Send a batch to trigger the worker
     let batch = AuditLogBatch {
         user_id: "builder_user".to_string(),
-        log: make_test_audit_log("builder_user", "builder_queued"),
     };
     let _ = logger.queue_sender.send(batch).await;
 

@@ -339,7 +339,6 @@ impl SdForgeAuditLogger {
         let sender = self.queue_sender.clone();
         let log_batch = AuditLogBatch {
             user_id: user_id.clone(),
-            log,
         };
 
         // Try non-blocking send — primary storage is already complete above

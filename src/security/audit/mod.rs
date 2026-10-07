@@ -53,16 +53,13 @@ mod inklog_sink;
 #[cfg(feature = "inklog")]
 pub use inklog_sink::InklogAuditSink;
 
-/// Batch of audit logs for async processing.
+/// Batch payload for the fire-and-forget audit queue.
 ///
-/// Internal struct used to pass user ID and log entry through the async channel.
+/// Internal struct used to pass the user ID through the async channel; the
+/// log entry itself is already persisted by the synchronous primary-storage
+/// path before enqueueing, so the queue only carries the merge key.
 pub(crate) struct AuditLogBatch {
     user_id: String,
-    #[expect(
-        dead_code,
-        reason = "批次经 fire-and-forget 队列传输，消费端当前不读取该负载"
-    )]
-    log: AuditLog,
 }
 
 /// Audit logger with DoS protection
