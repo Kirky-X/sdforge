@@ -12,7 +12,6 @@
 //! - [`build`] function that assembles a [`Router`] from all registered
 //!   [`WebSocketRoute`] entries
 
-#[cfg(feature = "websocket")]
 use axum::{
     Router,
     extract::ws::{WebSocket, WebSocketUpgrade},
@@ -24,44 +23,31 @@ use axum::{
 // `http,websocket` (without `security`) does not warn about an unused import.
 #[cfg(all(feature = "websocket", feature = "security"))]
 use axum::http::header::AUTHORIZATION;
-#[cfg(feature = "websocket")]
 use futures_util::SinkExt;
-#[cfg(feature = "websocket")]
 use futures_util::StreamExt;
-#[cfg(feature = "websocket")]
 use std::pin::Pin;
-#[cfg(feature = "websocket")]
 use std::sync::Arc;
 
-#[cfg(feature = "websocket")]
 use crate::websocket::{ConnectionManager, SdForgeState};
-#[cfg(feature = "websocket")]
 use crate::websocket::{MAX_MESSAGE_SIZE, WebSocketMessage, parse_websocket_message};
 
-#[cfg(feature = "websocket")]
 use crate::core::ApiMetadata;
-#[cfg(feature = "websocket")]
 use crate::define_registration;
 
-#[cfg(feature = "websocket")]
 /// Boxed future type for async WebSocket handling
 pub type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
-#[cfg(feature = "websocket")]
 /// WebSocket handler trait
 pub trait WebSocketHandler: Send + Sync {
     /// Handle a WebSocket message and return a response
     fn handle(&self, message: WebSocketMessage) -> BoxFuture<'static, WebSocketMessage>;
 }
 
-#[cfg(feature = "websocket")]
 define_registration!(WebSocketRoute, Arc<dyn WebSocketHandler>, ApiMetadata);
 
-#[cfg(feature = "websocket")]
 /// Default implementation of WebSocketHandler
 pub struct DefaultWebSocketHandler;
 
-#[cfg(feature = "websocket")]
 impl WebSocketHandler for DefaultWebSocketHandler {
     fn handle(&self, message: WebSocketMessage) -> BoxFuture<'static, WebSocketMessage> {
         Box::pin(async move {
@@ -93,7 +79,6 @@ impl WebSocketHandler for DefaultWebSocketHandler {
 ///     ws // performs upgrade automatically via IntoResponse
 /// }
 /// ```
-#[cfg(feature = "websocket")]
 pub struct ValidatedWebSocketUpgrade {
     ws: WebSocketUpgrade,
     manager: Arc<ConnectionManager>,
@@ -102,7 +87,6 @@ pub struct ValidatedWebSocketUpgrade {
     handler: Option<Arc<dyn WebSocketHandler>>,
 }
 
-#[cfg(feature = "websocket")]
 impl ValidatedWebSocketUpgrade {
     /// 为本次升级绑定自定义消息处理器（`build()` 在按路由注册时注入）。
     pub fn with_handler(mut self, handler: Arc<dyn WebSocketHandler>) -> Self {
@@ -111,7 +95,6 @@ impl ValidatedWebSocketUpgrade {
     }
 }
 
-#[cfg(feature = "websocket")]
 impl IntoResponse for ValidatedWebSocketUpgrade {
     fn into_response(self) -> Response {
         let handler = self
@@ -122,7 +105,6 @@ impl IntoResponse for ValidatedWebSocketUpgrade {
     }
 }
 
-#[cfg(feature = "websocket")]
 impl<S> axum::extract::FromRequest<S> for ValidatedWebSocketUpgrade
 where
     S: Clone + Send + Sync + 'static,
@@ -196,7 +178,6 @@ where
     }
 }
 
-#[cfg(feature = "websocket")]
 /// WebSocket upgrade handler with optional JWT authentication.
 ///
 /// Security: When `WebSocketConfig::auth` is `Some`, this handler validates
@@ -206,7 +187,6 @@ pub async fn websocket_upgrade(ws: ValidatedWebSocketUpgrade) -> impl IntoRespon
     ws // IntoResponse performs the upgrade
 }
 
-#[cfg(feature = "websocket")]
 async fn handle_socket(
     socket: WebSocket,
     manager: Arc<ConnectionManager>,
@@ -225,7 +205,6 @@ async fn handle_socket(
     }
 }
 
-#[cfg(feature = "websocket")]
 async fn handle_socket_inner(
     socket: WebSocket,
     manager: Arc<ConnectionManager>,
@@ -332,10 +311,8 @@ async fn handle_socket_inner(
     manager.remove_connection(&conn_id).await;
 }
 
-#[cfg(feature = "websocket")]
 use crate::websocket::WebSocketConnection;
 
-#[cfg(feature = "websocket")]
 /// Build WebSocket router with default connection manager
 ///
 /// This function collects all WebSocket routes registered via `inventory::submit!`
@@ -367,7 +344,6 @@ pub fn build() -> Router {
     router
 }
 
-#[cfg(feature = "websocket")]
 #[cfg(test)]
 mod tests {
     use super::*;

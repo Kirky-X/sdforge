@@ -43,30 +43,22 @@
 //! routes: the metadata is carried, nothing is stamped on responses. HTTP,
 //! gRPC, MCP and OpenAPI consume the same declaration on their own channels.
 
-#[cfg(feature = "websocket")]
 mod broadcast;
-#[cfg(feature = "websocket")]
 mod connection;
-#[cfg(feature = "websocket")]
 mod handler;
-#[cfg(feature = "websocket")]
 mod message;
 
 #[cfg(test)]
-#[cfg(feature = "websocket")]
 mod tests;
 
 // Re-export public API. Order mirrors the original `mod.rs` declarations so
 // downstream `use crate::websocket::*` continues to resolve every type.
-#[cfg(feature = "websocket")]
 pub use connection::{ConnectionManager, SdForgeState, WebSocketConfig, WebSocketConnection};
-#[cfg(feature = "websocket")]
 pub use handler::{
     BoxFuture, DefaultWebSocketHandler, ValidatedWebSocketUpgrade, WebSocketHandler,
     WebSocketRoute, build, websocket_upgrade,
 };
 // `MAX_STRING_LENGTH` 现已由 `parse_websocket_message` 强制执行，随正常 API 导出。
-#[cfg(feature = "websocket")]
 pub use message::{
     MAX_JSON_DEPTH, MAX_MESSAGE_SIZE, MAX_STRING_LENGTH, WebSocketMessage, calculate_value_depth,
     parse_websocket_message,
@@ -74,5 +66,4 @@ pub use message::{
 // Test-only helpers from `message` module — re-exported under test cfg so the
 // split test files can access them via `use crate::websocket::*`.
 #[cfg(test)]
-#[cfg(feature = "websocket")]
 pub use message::calculate_json_depth;

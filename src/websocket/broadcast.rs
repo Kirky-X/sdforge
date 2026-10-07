@@ -7,17 +7,12 @@
 //! affected connections are pruned from the manager to avoid leaking stale
 //! entries.
 
-#[cfg(feature = "websocket")]
 use std::sync::Arc;
 
-#[cfg(feature = "websocket")]
 use crate::websocket::ConnectionManager;
-#[cfg(feature = "websocket")]
 use crate::websocket::WebSocketConnection;
-#[cfg(feature = "websocket")]
 use crate::websocket::WebSocketMessage;
 
-#[cfg(feature = "websocket")]
 impl ConnectionManager {
     /// Broadcast a message to all connections (optimized with Arc)
     ///

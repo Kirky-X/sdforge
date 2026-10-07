@@ -116,7 +116,6 @@ inventory::collect!(GrpcStreamHandlerRegistration);
 /// 镜像同名小写键（`deprecation` / `sunset` / `successor-version`）。
 /// 非法（非可见 ASCII）值优雅跳过——声明了不可编码的值不得使 RPC 失败；
 /// 三项皆未声明时整体 no-op，未注解端点无注入开销。
-#[cfg(feature = "grpc")]
 pub(crate) fn attach_lifecycle_metadata<T>(
     response: &mut tonic::Response<T>,
     deprecated: bool,
@@ -252,7 +251,6 @@ mod tests {
 
     /// 非法（非可见 ASCII）生命周期值必须优雅跳过而非使 RPC 失败；
     /// 未声明时整体 no-op。
-    #[cfg(feature = "grpc")]
     #[test]
     fn attach_lifecycle_metadata_skips_invalid_values_and_no_ops_when_absent() {
         let mut response = tonic::Response::new(());

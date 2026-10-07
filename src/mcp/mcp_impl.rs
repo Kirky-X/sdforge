@@ -8,7 +8,6 @@ use super::*;
 /// This function collects all `McpToolRegistration` entries from the
 /// `inventory` registry and creates `McpToolInstance` objects with the
 /// associated metadata.
-#[cfg(feature = "mcp")]
 pub fn get_mcp_tools() -> Vec<McpToolInstance> {
     inventory::iter::<McpToolRegistration>
         .into_iter()
@@ -38,7 +37,6 @@ pub fn get_mcp_tools() -> Vec<McpToolInstance> {
 /// # Ok(())
 /// # }
 /// ```
-#[cfg(feature = "mcp")]
 pub fn build() -> SdForgeMcpServer {
     SdForgeMcpServer::new()
 }
@@ -73,7 +71,6 @@ pub fn build() -> SdForgeMcpServer {
 /// # Ok(())
 /// # }
 /// ```
-#[cfg(feature = "mcp")]
 pub async fn serve_stdio(
     server: SdForgeMcpServer,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

@@ -289,10 +289,13 @@ async fn connection_manager_broadcast_single() {
 /// the `RateLimitConfig` struct is gone; we now verify
 /// that the migrated `max_message_size` field survives the round-trip
 /// through `SdForgeState::with_config`.
-#[cfg(feature = "websocket")]
 #[test]
 fn app_state_with_config_preserves_max_message_size() {
     let manager = Arc::new(ConnectionManager::new());
+    // security/ratelimit 组合下 auth/api_key_auth/rate_limit 字段经此 update
+    // 补全；两者皆关时字段集为空，clippy 的 needless_update 属组合性误报，
+    // 故就地豁免。
+    #[allow(clippy::needless_update)]
     let config = WebSocketConfig {
         max_message_size: 2048,
         ..Default::default()

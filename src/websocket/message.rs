@@ -6,20 +6,16 @@
 //! exchanges, along with security-hardened parsing that enforces message size
 //! and JSON nesting depth limits.
 
-#[cfg(feature = "websocket")]
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "websocket")]
 use serde_json::Value;
 
 /// Maximum message size in bytes (1MB).
 ///
 /// Enforced by [`parse_websocket_message`] to prevent memory exhaustion from
 /// oversized payloads.
-#[cfg(feature = "websocket")]
 pub const MAX_MESSAGE_SIZE: usize = 1_048_576;
 
 /// Maximum nesting depth for JSON parsing (prevents stack overflow from deeply nested JSON).
-#[cfg(feature = "websocket")]
 pub const MAX_JSON_DEPTH: usize = 16;
 
 /// Maximum length for string fields in WebSocket messages (64KB).
@@ -30,10 +26,8 @@ pub const MAX_JSON_DEPTH: usize = 16;
 /// `method`, `error`, `event`) to prevent:
 /// - Memory exhaustion attacks via oversized string fields
 /// - Performance degradation from processing extremely large strings
-#[cfg(feature = "websocket")]
 pub const MAX_STRING_LENGTH: usize = 64 * 1024; // 64KB
 
-#[cfg(feature = "websocket")]
 /// WebSocket message type
 ///
 /// Represents different types of WebSocket messages exchanged between
@@ -77,7 +71,6 @@ pub enum WebSocketMessage {
     },
 }
 
-#[cfg(feature = "websocket")]
 /// Parse and validate a WebSocket message from JSON text
 ///
 /// # Security
