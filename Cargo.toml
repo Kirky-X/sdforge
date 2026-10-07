@@ -327,7 +327,7 @@ http = [
     "dep:uuid",
 ]
 
-# MCP 特性 (migrated to official rmcp SDK 2.1.0)
+# MCP 特性 (migrated to official rmcp SDK 3.x)
 # http crate needed for MCP 2026-07-28 stateless HTTP header parsing (Mcp-Method/Mcp-Name)
 mcp = ["dep:rmcp", "dep:inventory", "dep:anyhow", "dep:http"]
 
