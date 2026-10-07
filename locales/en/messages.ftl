@@ -28,12 +28,6 @@ forge-limiter-internal = Rate limiter internal error: { $message }
 core-resource-not-found = Resource not found: { $resource }
 core-validation-failed = Validation failed for { $field }: { $constraint }
 
-# --- core::validation sanitizer -----------------------------------------------
-validation-path-invalid = Path contains invalid characters or traversal attempts
-validation-filename-invalid-chars = Filename contains only invalid characters
-validation-params-invalid = Invalid validation parameters for { $field }
-validation-email-invalid = Invalid email format
-
 # --- docs (Swagger UI entry page) ---------------------------------------------
 docs-swagger-title = SDForge API Docs
 docs-swagger-redirecting = Redirecting to <a href="{ $url }">Swagger UI</a>...

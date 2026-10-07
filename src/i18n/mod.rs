@@ -701,22 +701,6 @@ mod builtin_catalog_tests {
                     ("constraint", "must be valid email".to_string()),
                 ],
             ),
-            (
-                "validation-path-invalid",
-                "Path contains invalid characters or traversal attempts",
-                &[],
-            ),
-            (
-                "validation-filename-invalid-chars",
-                "Filename contains only invalid characters",
-                &[],
-            ),
-            (
-                "validation-params-invalid",
-                "Invalid validation parameters for age",
-                &[("field", "age".to_string())],
-            ),
-            ("validation-email-invalid", "Invalid email format", &[]),
             ("docs-swagger-title", "SDForge API Docs", &[]),
             (
                 "docs-swagger-redirecting",

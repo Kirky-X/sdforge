@@ -26,12 +26,6 @@ forge-limiter-internal = 限流器内部错误: { $message }
 core-resource-not-found = 资源未找到: { $resource }
 core-validation-failed = { $field } 校验失败: { $constraint }
 
-# --- core::validation 输入净化 ---------------------------------------------------
-validation-path-invalid = 路径包含无效字符或路径遍历尝试
-validation-filename-invalid-chars = 文件名仅包含无效字符
-validation-params-invalid = { $field } 的校验参数无效
-validation-email-invalid = 邮箱格式无效
-
 # --- 文档（Swagger UI 入口页） ----------------------------------------------------
 docs-swagger-title = SDForge API 文档
 docs-swagger-redirecting = 正在跳转到 <a href="{ $url }">Swagger UI</a>...
