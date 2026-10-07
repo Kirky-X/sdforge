@@ -246,7 +246,7 @@
 - **测试基线漂移**（`docs/TEST_SCENARIOS.md`）：`test_target_inventory_tests` 的三项自洽
   断言在 main 上即为失败——清单注册 48 个 `[[test]]`、`tests/integration/` 实际 39 个文件，
   而文档基线仍写 47/38（新增测试目标时未同步）。本轮按实测刷新为 48 目标 / integration 39 /
-  58 个有产出目标 / 2334 L1 单测 / 3198 passed。注：sdforge 的 CI 仅在 `pull_request` 与
+  58 个有产出目标 / 2340 L1 单测 / 3209 passed。注：sdforge 的 CI 仅在 `pull_request` 与
   `schedule` 触发，直推 main 的改动不会跑该门禁，故漂移得以留存（已在本报告列为流程改进项）。
 - **`docs/USER_GUIDE.md` 的 `[security.rate_limit]` 示例不可反序列化**：示例写作
   `rate`/`window_seconds` 单阈值形状，而实际类型是 limiteron `FlowControlConfig`
@@ -292,9 +292,10 @@
 - **`src/log_attr.rs` 4 项 + `src/lifecycle.rs` 1 项**：超限载荷尾部不得以明文进入日志、
   截断点回退到字符边界不 panic、`render_enter`/`render_exit` 的掩码与键名形态；生命周期
   钩子按 phase 分流且单个钩子 future panic 不短路其余钩子。
-- **覆盖率**：`--lib` 口径 93.68% → 94.16% → **95.13%**（`--fail-under-lines 95` 通过）。
-  同时记录：同一代码在"全目标口径"（含集成/E2E 测试执行、`tests/` 不计分母）下为
-  95.36%——CI 现口径 `--lib` 结构上看不到集成测试的贡献，故本轮以补齐单元测试达标。
+- **覆盖率**：`--lib` 口径 93.68% → 94.16% → 95.13%（并 main 后复测 **95.11%**，
+  `--fail-under-lines 95` 通过）。同时记录：同一代码在"全目标口径"（含集成/E2E 测试
+  执行、`tests/` 不计分母）下并 main 前为 95.36%、并 main 后为 95.80%——CI 现口径
+  `--lib` 结构上看不到集成测试的贡献，故本轮按决定以补齐单元测试达标。
 
 ### 安全加固 (Security Hardening)
 

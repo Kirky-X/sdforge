@@ -329,7 +329,7 @@ Coverage measurement excludes the build.rs-generated protobuf code (`src/grpc/pb
 
 ### Test scale
 
-About **3,219** test functions (`src/` 2,222 + `tests/` 786 + `macros/` 85 + `examples/` 126; via `grep -rEc '#\[(tokio::)?test\b' --include='*.rs'`, re-verified 2026-10-06).
+About **3,266** test functions (`src/` 2,259 + `tests/` 791 + `macros/` 90 + `examples/` 126; via `grep -rEc '#\[(tokio::)?test\b' --include='*.rs'`, re-verified 2026-10-06).
 
 ---
 
