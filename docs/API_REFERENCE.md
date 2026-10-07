@@ -50,10 +50,51 @@
 | `ws_path` | WebSocket 路径（`websocket`） | 否 | - |
 | `stream` / `streaming` | SSE 流式响应开关 | 否 | false |
 | `no_prefix` | 跳过模块/版本前缀拼接 | 否 | false |
-| `validate` | 裸旗标：启用 `#[param(...)]` 校验（`validate`） | 否 | false |
+| `validate` | 裸旗标：使 `#[param(...)]` 的校验规则生效（`validate`），来源声明与 `flatten` 不受此旗标约束，属性表见下节 | 否 | false |
 | `paginate` | 裸旗标：声明式分页（`paginate`） | 否 | false |
 | `on_start` / `on_stop` | 裸旗标：进程生命周期钩子（`lifecycle`） | 否 | false |
 | `auth(role = "...")` | 端点级 RBAC 角色（`http`，无匹配角色返回 403） | 否 | - |
+
+### `#[param]` 参数属性
+
+handler 签名的每个参数经 `#[param(...)]` 声明提取来源与校验规则；规则的生效需端点带 `#[forge(validate)]` 旗标。
+
+| 键 | 形态 | 说明 |
+|------|------|------|
+| `kind` | `kind = "..."` | 提取来源：`path` / `query` / `header` / `form` / `body` / `state` / `extension`（`#[state]` 属性等价 `kind = "state"`） |
+| `ge` / `le` | `ge = 1, le = 100` | 数值下界 / 上界 |
+| `min_length` / `max_length` | `min_length = 2, max_length = 10` | 字符串长度下界 / 上界 |
+| `not_blank` | 裸标记 | 非空白校验 |
+| `email` | 裸标记 | 邮箱格式校验 |
+| `flatten` | 裸标记，或 `flatten = true` / `flatten = false` | **仅对 `kind = "query"` 成立**：结构体查询参数脱离信封，改由独立 `Query<ParamTy>` 槽扁平直提，handler 直接按字段取值（`filters.budget`，无 `.0`） |
+
+#### 结构体查询参数（`flatten`）
+
+`serde_urlencoded` 只支持扁平 `key=value`。结构体型 query 参数默认经信封 `Query<__ForgeQueryParams>` 提取，嵌套 struct 必然反序列化失败返回 400（该 fail-closed 行为由集成测试钉住）；显式 `flatten` 后该参数走独立提取槽：
+
+```rust
+#[derive(Debug, serde::Deserialize)]
+struct SearchFilters {
+    budget: u64,
+    keyword: String,
+}
+
+#[forge(name = "search", version = "v1", path = "/search", method = "GET")]
+async fn search(
+    #[param(kind = "query", ge = 1)] page: u64,
+    #[param(kind = "query", flatten)] filters: SearchFilters,
+) -> serde_json::Value {
+    // GET /api/v1/search?page=1&budget=50&keyword=hello
+    serde_json::json!({ "page": page, "budget": filters.budget, "keyword": filters.keyword })
+}
+```
+
+规则（宏展开期 fail-loud，不静默降级）：
+
+- **与校验规则互斥**——被扁平化结构体的字段校验属于该结构体自身字段，`#[param(kind = "query", flatten, ge = 1)]` 编译报错；
+- **只对 `kind = "query"` 成立**——其余 kind（含未声明 kind）带 `flatten` 编译报错；
+- **布尔字面量限定**——只接受 `flatten`、`flatten = true`、`flatten = false`，非布尔值编译报错；
+- **可多个共存**——同签名内多个 `flatten` 参数各得独立提取槽，并与信封提取的标量 query 参数互不冲突。
 
 ## 🧱 核心 API
 
@@ -201,7 +242,7 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 |---------|------|----------|
 | `http` | `sdforge::http` / `config` / `axum`（facade）/ `rbac` | `build`、`build_with_config`、`build_with_redirect`、`RouteRegistration`、`validate_email` / `validate_length`、`require_role`（配合 `#[forge(auth(role = "..."))]`）；axum/tower/tower-http re-export |
 | `mcp` | `sdforge::mcp` | `SdForgeMcpServer`、`StatelessServerHandler`、`McpToolInstance` / `McpToolRegistration`、`build()`、`get_mcp_tools()`、`serve_stdio()`、`parse_mcp_headers` / `McpHeaderInfo`、`InputRequiredResult`、`MrtrSession` / `MrtrSessionManager`、`cache_semantics`；`rmcp` / `anyhow` re-export |
-| `grpc` | `sdforge::grpc` | `SdForgeGrpcService`（`Call` / `CallStream` / `GetInfo`；`CallStream` 需另启 `streaming`）、`GrpcServerConfig`（`state: Option<Arc<dyn Any + Send + Sync>>`、`require_auth`、`rate_limiter`、`extra_services`：自定义 tonic service 同端口挂载回调）、`build_server(_with_config)`、`GrpcRoute`、`CallRequest` / `CallResponse` / `InfoRequest` / `InfoResponse`、`SdForgeServiceServer`、`GrpcHandlerRegistration` / `GrpcStreamHandlerRegistration`（`streaming`）；`tonic` / `prost` re-export |
+| `grpc` | `sdforge::grpc` | `SdForgeGrpcService`（`Call` / `CallStream` / `GetInfo`；`CallStream` 需另启 `streaming`）、`GrpcServerConfig`（`state: Option<Arc<dyn Any + Send + Sync>>`、`require_auth`（默认 `true`）、`auth`（`security` 下为 `Option<BearerAuth>`，未启用时降级为 `Option<()>`）、`rate_limiter`、`extra_services: Vec<ExtraServiceMount>`（自定义 tonic service 同端口挂载回调；`Clone` 共享同一回调列表）、`max_connections`（默认 1000）、`timeout_seconds`（默认 30 秒）、`http2_keepalive_interval` / `http2_keepalive_timeout`（`None` = tonic 默认）、`tls`（`grpc-tls`，`Option<tonic::transport::ServerTlsConfig>`）、`idempotency_store` / `idempotency_ttl_secs`（默认 86400） / `idempotency_inflight_ttl_secs`（默认 30）（`idempotency`））、`build_server_with_config(addr, config)`、`build_server_with_graceful_shutdown(addr, config, signal)`（`signal: Future<Output = ()>`）、`build_server(addr)`（**已弃用**，见下方注记）、`GrpcRoute`、`CallRequest` / `CallResponse` / `InfoRequest` / `InfoResponse`、`SdForgeServiceServer`、`GrpcHandlerRegistration` / `GrpcStreamHandlerRegistration`（`streaming`）；`tonic` / `prost` re-export |
 | `websocket` | `sdforge::websocket` | `WebSocketRoute` / `WebSocketHandler`、`websocket_upgrade` / `ValidatedWebSocketUpgrade`、`ConnectionManager`、`WebSocketConfig` / `WebSocketConnection` / `WebSocketMessage`、`parse_websocket_message` |
 | `streaming` | `sdforge::streaming` | `StreamEvent`、`StreamResponse`、`stream_to_sse`、`create_stream_channel`（`grpc_method` + `stream = true` 组合映射到 gRPC `CallStream`，见 `grpc` 行）；`tokio_stream` re-export |
 | `ratelimit-dist` | `sdforge::security::ratelimit::dist` | `DistributedRateLimiter`（泛型 limiteron `DistributedLimiter` 后端：`InMemoryDistributedLimiter` 单实例/`RedisDistributedLimiter` 多副本）、`DistributedRateLimitConfig`（含适配层熔断 `with_circuit_failure_threshold`/`with_circuit_open_duration`：连续后端错误打开、打开期不经后端直接按策略裁决、半开探测恢复）、`BackendFailurePolicy`（fail-open 默认/fail-close） |
@@ -223,9 +264,11 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 | `i18n` | `sdforge::i18n` | `HttpI18nFormatter`（ICU4X 本地化格式化）、`I18nError` |
 | `limiteron-integration` / `kit` / `db-integration` | `sdforge::integrations` | trait-kit AsyncKit 集成（`SdforgeModule`）、`LimiteronForgeAdapter`、dbnexus 数据 API 网关（`DbGateway`：`allow_table` + `query(GatewayQuery)` 白名单只读面、`GatewayQuery::all/filter/paging`） |
 
-> 无独立模块的能力：`validate`（`#[forge(validate)]` + `#[param(...)]`）、`paginate`（`#[forge(paginate)]`）、`etag`（GET 强 ETag + 304）、`graceful`（优雅停机）、`timestamp`（响应时间戳）、`simd-json`（SIMD JSON 路径）经宏旗标或构建配置生效。
+> 无独立模块的能力：`validate`（`#[forge(validate)]` + `#[param(...)]`，属性表见 [`#[param]` 参数属性](#param-参数属性)）、`paginate`（`#[forge(paginate)]`）、`etag`（GET 强 ETag + 304）、`graceful`（优雅停机）、`timestamp`（响应时间戳）、`simd-json`（SIMD JSON 路径）经宏旗标或构建配置生效。
 >
 > 独立性说明：`mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` 均独立于 `http`，可单独启用；`security` 拉入 `http` + `ratelimit-http` + `cache`；`websocket` 需 `http` + `streaming`；`docs` 需 `openapi` + `cli`。
+>
+> **⚠️ `build_server(addr)` 已弃用**（源码标 `#[deprecated]`）：该入口启动**无认证**的 gRPC 服务器且无法配置认证，仅为向后兼容保留。新代码请用 `build_server_with_config(addr, config)` 并配置 `auth`——`require_auth` 默认 `true`，此时 `auth` 为 `None` 会在装配期拒绝启动（防误部无认证端点）。地址格式非法时两个入口均返回 `InvalidInput` 错误文本，不回显解析细节。
 
 ## 💻 使用示例
 

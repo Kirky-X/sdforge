@@ -36,6 +36,16 @@
 
 ### ✨ 新增 (Added)
 
+- **结构体查询参数扁平直提（`validate` 宏面，opt-in）**：`#[param(kind = "query", flatten)]` 让结构体
+  query 参数脱离信封 `Query<__ForgeQueryParams>`，改由独立 `Query<ParamTy>` 槽从 query string
+  扁平反序列化（`serde_urlencoded` 不支持嵌套 struct，未 `flatten` 的结构体 query 参数保持 400
+  fail-closed）。handler 直接按字段取值（无 `.0`）；同签名内多个 `flatten` 参数各得独立提取槽，
+  并与信封提取的标量 query 参数共存。宏展开期 fail-loud 三条：与校验规则互斥（字段校验属于
+  被扁平化结构体自身）、只对 `kind = "query"` 成立、只接受布尔字面量（`flatten` /
+  `flatten = true` / `flatten = false`）。文档：`API_REFERENCE.md` 新增「`#[param]` 参数属性」节、
+  `USER_GUIDE.md` 新增「参数校验与结构体查询参数」小节；集成测试 `validate_tests.rs` 覆盖
+  未 opt-in 400 基线、直提取值、与标量混合、多 `flatten` 共存四点。
+
 - **gRPC 优雅停机**（`grpc` feature，新增）：`build_server_with_graceful_shutdown(addr, config, signal)`
   —— 装配链与 `build_server_with_config` 完全一致（认证拦截器、并发/超时/keepalive、TLS、
   `extra_services`），末尾走 tonic `serve_with_shutdown`：signal future 完成后停止接受新连接、

@@ -116,10 +116,9 @@ SDForge 使用自包含的 TOML 配置（无需外部配置中心）。示例配
 
 ```toml
 # config.toml
-[rate_limit]
-enabled = true
-requests_per_minute = 60
-burst_size = 10
+[security.rate_limit]
+rate = 60            # 每窗口允许请求数（limiteron FlowControlConfig）
+window_seconds = 1   # 窗口时长
 
 [cache]
 enabled = true
@@ -130,9 +129,34 @@ track_stats = true
 
 ## 🔧 进阶用法
 
+### 参数校验与结构体查询参数（`validate` × `#[param]`）
+
+handler 参数用 `#[param(...)]` 声明提取来源与规则，`kind` 取 `path` / `query` / `header` / `form` / `body` / `state` / `extension`（`#[state]` 属性等价 `kind = "state"`），规则有 `ge` / `le` / `min_length` / `max_length` / `not_blank` / `email`；规则生效需端点带 `#[forge(validate)]` 旗标，不通过返回 422 字段级错误。
+
+`serde_urlencoded` 只支持扁平 `key=value`，结构体型 query 参数默认经信封提取会嵌套失败返回 400。要按扁平 query 接收结构体，显式 opt-in `flatten`：
+
+```rust
+#[derive(Debug, serde::Deserialize)]
+struct SearchFilters {
+    budget: u64,
+    keyword: String,
+}
+
+#[forge(name = "search", version = "v1", path = "/search", method = "GET", validate)]
+async fn search(
+    #[param(kind = "query", ge = 1)] page: u64,
+    #[param(kind = "query", flatten)] filters: SearchFilters,
+) -> Result<serde_json::Value, ApiError> {
+    // GET /api/v1/search?page=1&budget=50&keyword=hello
+    Ok(serde_json::json!({ "page": page, "budget": filters.budget, "keyword": filters.keyword }))
+}
+```
+
+`flatten` 的四条约束在宏展开期 fail-loud：与校验规则互斥（字段校验属于被扁平化结构体自身）、只对 `kind = "query"` 成立、只接受布尔字面量（`flatten` / `flatten = true` / `flatten = false`）、同签名内可多个共存且与信封提取的标量参数互不冲突。完整属性表与语义见 [API 参考 · `#[param]` 参数属性](API_REFERENCE.md#param-参数属性)。
+
 ### gRPC 服务
 
-启用 `grpc` feature 后，`#[forge(grpc_method = "...")]` 通过 inventory 注册 handler，由 `SdForgeGrpcService` 按 `grpc_method` 路由（实现 `Call` / `GetInfo` 两个 RPC）。服务器经 `build_server_with_config` 启动：
+启用 `grpc` feature 后，`#[forge(grpc_method = "...")]` 通过 inventory 注册 handler，由 `SdForgeGrpcService` 按 `grpc_method` 路由（实现 `Call` / `GetInfo`，及 server-streaming `CallStream`——需启用 `streaming`，未启用时返回 unimplemented）。服务器经 `build_server_with_config` 启动：
 
 ```rust
 use sdforge::grpc::{GrpcServerConfig, build_server_with_config};
@@ -161,6 +185,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 返回值需满足 `serde::Serialize`，错误类型需为 `ApiError`；参数载荷上限 1 MiB。应用状态经 `GrpcServerConfig.state` 注入（`Arc<dyn Any + Send + Sync>`）。
+
+> **⚠️ 不要用 `build_server(addr)`**：该入口已弃用（源码标 `#[deprecated]`），它启动的是**无认证**服务器且无法配置认证。统一走 `build_server_with_config`。
+
+#### gRPC 优雅停机（`build_server_with_graceful_shutdown`）
+
+装配链与 `build_server_with_config` 完全一致（认证拦截器、连接上限/超时/keepalive、TLS、`extra_services`），末尾走 tonic `serve_with_shutdown`：`signal` future 完成后停止接受新连接、等待 in-flight 请求完成后返回 `Ok(())`（语义对齐 HTTP 侧 axum `with_graceful_shutdown`：以 future 完成为准，永不完成的 future 即永驻）：
+
+```rust
+use sdforge::grpc::{GrpcServerConfig, build_server_with_graceful_shutdown};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    sdforge::init_all_plugins();
+    let config = GrpcServerConfig::default();
+    build_server_with_graceful_shutdown("0.0.0.0:50051", config, async {
+        tokio::signal::ctrl_c().await.ok();
+    })
+    .await?;
+    Ok(())
+}
+```
+
+#### 服务参数
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `max_connections` | `usize` | 1000 | 并发连接上限 |
+| `timeout_seconds` | `u64` | 30 | 单请求超时（秒）；0 为合法值（集成测试覆盖） |
+| `http2_keepalive_interval` / `http2_keepalive_timeout` | `Option<Duration>` | `None` | HTTP/2 keepalive 探测间隔与超时（`None` = tonic 默认） |
+| `require_auth` | `bool` | `true` | `true` 且 `auth` 为 `None` 时装配期拒启 |
+| `auth` | `Option<BearerAuth>`（`security`）/ `Option<()>` | `None` | JWT 校验凭据；未启用 `security` 时该字段不可用 |
+| `rate_limiter` | 限流器注入 | - | 服务端限流（`ratelimit`） |
+| `extra_services` | `Vec<ExtraServiceMount>` | 空 | 应用自有 tonic service 同端口挂载（`Clone` 共享同一回调列表） |
+| `tls` | `Option<tonic::transport::ServerTlsConfig>`（`grpc-tls`） | `None` | 只做接线，不做证书加载/轮换 |
+| `idempotency_store` / `idempotency_ttl_secs` / `idempotency_inflight_ttl_secs` | （`idempotency`） | `None` / 86400 / 30 | 幂等重放防护 store、重放窗口与在途 claim 上限 |
 
 #### gRPC server-streaming（`streaming` × `grpc`）
 
