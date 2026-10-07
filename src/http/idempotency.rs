@@ -419,9 +419,9 @@ mod idempotency_middleware_tests {
         }
     }
 
-    /// 回归（本轮修复）：生产接线是 `Router::layer`，外层 layer 在路由匹配之前执行，
-    /// extensions 里还没有 MatchedPath。旧实现把 scope 退化为常量 "unmatched"，
-    /// 于是同一 key 打到不同端点会互相重放（拿到另一端的缓存响应体）。
+    /// 端点隔离（MatchedPath 可用时）：同一 key 打到 /a 与 /b 不得互重放。
+    /// 兜底分支（MatchedPath 缺失）的隔离性由
+    /// unmatched_paths_keep_separate_scope_in_fallback_branch 单独钉住。
     #[tokio::test]
     async fn same_key_on_different_endpoints_does_not_replay() {
         let hits = Arc::new(AtomicUsize::new(0));
@@ -558,6 +558,49 @@ mod idempotency_middleware_tests {
             Some("true"),
             "外层 layer 下 MatchedPath 应可用，同一参数化模式共享 scope"
         );
+    }
+
+    /// 兜底分支判别：走 `fallback` 的未知路径拿不到 MatchedPath，scope 必须改取
+    /// 请求 URI 路径。若退回常量 "unmatched"，两条不同路径的同一 key 会互相
+    /// 重放另一路径的响应体（本例两条路径均返回 2xx，因此写得进缓存）。
+    #[tokio::test]
+    async fn unmatched_paths_keep_separate_scope_in_fallback_branch() {
+        let hits = Arc::new(AtomicUsize::new(0));
+        let store = Arc::new(IdempotencyStore::new());
+        let counter = Arc::clone(&hits);
+        let build = move || {
+            let c = Arc::clone(&counter);
+            Router::new()
+                .fallback(move || {
+                    let c = Arc::clone(&c);
+                    async move {
+                        c.fetch_add(1, Ordering::SeqCst);
+                        Response::builder()
+                            .status(StatusCode::OK)
+                            .body(Body::from("fallback"))
+                            .unwrap()
+                    }
+                })
+                .layer(idem_layer!(state(Arc::clone(&store), 4096)))
+        };
+
+        let first = build()
+            .oneshot(req(Method::POST, "/path-a", Some("fb-key")))
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        assert_eq!(replayed(&first).as_deref(), Some("executed"));
+
+        let second = build()
+            .oneshot(req(Method::POST, "/path-b", Some("fb-key")))
+            .await
+            .unwrap();
+        assert_eq!(
+            replayed(&second).as_deref(),
+            Some("executed"),
+            "两条未知路径不得共享 scope（应走 URI 路径兜底而非 \"unmatched\"）"
+        );
+        assert_eq!(hits.load(Ordering::SeqCst), 2, "两条路径各自回源");
     }
 
     #[tokio::test]
