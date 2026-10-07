@@ -352,7 +352,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ### 测试规模
 
-约 **3,229** 个测试函数（`src/` 2,222 + `tests/` 791 + `macros/` 90 + `examples/` 126，`grep -rEc '#\[(tokio::)?test\b' --include='*.rs'` 统计，2026-10-07 工作树实测）。
+约 **3,266** 个测试函数（`src/` 2,259 + `tests/` 791 + `macros/` 90 + `examples/` 126，`grep -rEc '#\[(tokio::)?test\b' --include='*.rs'` 统计，2026-10-07 合并后工作树实测）。
 
 ---
 

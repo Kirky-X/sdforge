@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: MIT
 //! `#[forge::log]` 的运行时支撑（inklog 结构化日志 + DataMasker 脱敏）。
 //!
-//! 宏展开的壳函数调用本模块的 [`entry`] / [`exit`] / [`exit_error`]；消息
-//! 渲染（[`render_enter`] / [`render_exit`]）对载荷先做 DataMasker 掩码再
+//! 宏展开的壳函数调用本模块的 [`crate::log_attr::entry`] / [`crate::log_attr::exit`]
+//! / [`crate::log_attr::exit_error`]；消息渲染（[`crate::log_attr::render_enter`]
+//! / [`crate::log_attr::render_exit`]）对载荷先做 DataMasker 掩码再
 //! 入日志，避免参数/返回值中的邮箱、卡号、密钥等敏感片段泄漏进日志管道。
 //!
 //! 日志输出经 `log` crate 门面——启用 `inklog` feature 并调用
@@ -64,7 +65,7 @@ fn masker() -> &'static ::inklog::DataMasker {
 const MAX_MASKED_PAYLOAD_BYTES: usize = 64 * 1024;
 
 /// 对待入日志的文本做 DataMasker 掩码（超限载荷先截断，见
-/// [`MAX_MASKED_PAYLOAD_BYTES`]）。
+/// `MAX_MASKED_PAYLOAD_BYTES` 内部常量）。
 #[must_use]
 pub fn mask(text: &str) -> String {
     let truncated = if text.len() > MAX_MASKED_PAYLOAD_BYTES {
@@ -154,6 +155,72 @@ pub fn exit_error(
         detail().as_deref().map(|raw| ("error", raw)),
     );
     log::error!("{message}");
+}
+
+#[cfg(all(test, feature = "inklog"))]
+mod egress_guard_tests {
+    use super::*;
+
+    #[test]
+    fn oversized_payload_tail_never_reaches_logs_in_plaintext() {
+        // 超限：头部的邮箱必须被掩码，尾部凭证必须随截断整体丢弃（不得明文出现）。
+        let tail_secret = "api_key=LEAKED_TAIL_SECRET_9f8e7d6c";
+        let mut text = String::from("user=a@example.com ");
+        text.push_str(&"x".repeat(MAX_MASKED_PAYLOAD_BYTES));
+        text.push(' ');
+        text.push_str(tail_secret);
+
+        let masked = mask(&text);
+        assert!(masked.contains("truncated"), "超限载荷必须留下截断标记");
+        assert!(
+            !masked.contains("LEAKED_TAIL_SECRET"),
+            "截断点之后的内容不得以明文进入日志"
+        );
+        assert!(
+            !masked.contains("a@example.com"),
+            "截断点之内的邮箱 PII 仍需被掩码"
+        );
+        assert!(masked.len() < text.len(), "截断后长度必须下降");
+    }
+
+    #[test]
+    fn truncation_cut_snaps_to_char_boundary() {
+        // 截断点落在多字节字符中间时不得 panic（while 逐字节回退分支）。
+        let mut text = "你".repeat(MAX_MASKED_PAYLOAD_BYTES / 3 + 8);
+        text.push_str("tail=api_key=TAIL_NOPE");
+        let masked = mask(&text);
+        assert!(masked.contains("truncated"));
+        assert!(!masked.contains("TAIL_NOPE"));
+        // 截断后的前缀仍为合法 UTF-8（能从 String 取回）
+        assert!(std::str::from_utf8(masked.as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn render_exit_carries_key_and_masked_detail() {
+        let ok = render_exit("pay", true, 12, Some(("result", "token=abc123")));
+        assert!(ok.contains("fn_exit fn=pay ok=true duration_ms=12"));
+        assert!(ok.contains("result="), "成功载荷键名应为 result: {ok}");
+        assert!(!ok.contains("abc123"), "detail 必须过掩码: {ok}");
+
+        let err = render_exit("pay", false, 7, Some(("error", "password=hunter2")));
+        assert!(err.contains("ok=false") && err.contains("error="), "{err}");
+        assert!(!err.contains("hunter2"));
+
+        let bare = render_exit("pay", true, 1, None);
+        assert_eq!(bare, "fn_exit fn=pay ok=true duration_ms=1");
+    }
+
+    #[test]
+    fn render_enter_omits_args_when_absent() {
+        assert_eq!(
+            render_enter("q", "m", None),
+            "fn_enter fn=q module=m",
+            "无载荷时不应输出空 args= 字段"
+        );
+        let with = render_enter("q", "m", Some("secret_key=zzz1"));
+        assert!(with.starts_with("fn_enter fn=q module=m args="));
+        assert!(!with.contains("zzz1"), "args 必须过掩码: {with}");
+    }
 }
 
 #[cfg(test)]

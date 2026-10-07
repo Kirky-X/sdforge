@@ -56,13 +56,30 @@ jobs:
 
       - name: Resolve version from tag
         id: ver
-        run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        run: |
+          # tag 触发时取 REF_NAME 去 v 前缀；workflow_dispatch 跑在分支上，
+          # REF_NAME 是分支名（如 main），当作版本用会让校验 404 误阻断手动发布，
+          # 故改从 Cargo.toml 取。两者都解析不出数字开头版本则 fail-closed。
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION=$(grep -m1 '^version = ' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          fi
+          case "$VERSION" in
+            [0-9]*) ;;
+            *)
+              echo "::error::无法解析版本号（ref_type=${GITHUB_REF_TYPE} ref=${GITHUB_REF_NAME} 得到 '$VERSION'）"
+              exit 1
+              ;;
+          esac
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "解析到版本 $VERSION（ref_type=${GITHUB_REF_TYPE}）"
 
       - name: Check already published
         id: published
         run: |
-          CODE=$(curl -s -o /dev/null -w "%{http_code}" https://crates.io/api/v1/crates/sdforge/${{ steps.ver.outputs.version }})
-          CODE_M=$(curl -s -o /dev/null -w "%{http_code}" https://crates.io/api/v1/crates/sdforge-macros/${{ steps.ver.outputs.version }})
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" -H 'User-Agent: kirky-x-release-verify' https://crates.io/api/v1/crates/sdforge/${{ steps.ver.outputs.version }})
+          CODE_M=$(curl -s -o /dev/null -w "%{http_code}" -H 'User-Agent: kirky-x-release-verify' https://crates.io/api/v1/crates/sdforge-macros/${{ steps.ver.outputs.version }})
           echo "crates.io: sdforge=$CODE sdforge-macros=$CODE_M for ${{ steps.ver.outputs.version }}"
           echo "main_exists=$([[ "$CODE" == "200" ]] && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "macros_exists=$([[ "$CODE_M" == "200" ]] && echo true || echo false)" >> $GITHUB_OUTPUT
@@ -94,13 +111,13 @@ jobs:
             for i in 1 2 3 4 5; do
               sleep 20
               CODE=$(curl -s -o /dev/null -w "%{http_code}" -H 'User-Agent: kirky-x-release-verify' \
-                "https://crates.io/api/v1/crates/${crate}/0.5.0-rc.5")
+                "https://crates.io/api/v1/crates/${crate}/${{ steps.ver.outputs.version }}")
               echo "try$i ${crate}: HTTP ${CODE}"
               if [ "$CODE" = "200" ]; then ok=1; break; fi
               if [ "$CODE" != "403" ]; then break; fi
             done
             if [ -z "$ok" ]; then
-              echo "::error::${crate} 0.5.0-rc.5 未出现在 crates.io(HTTP ${CODE})"
+              echo "::error::${crate} ${{ steps.ver.outputs.version }} 未出现在 crates.io(HTTP ${CODE})"
               exit 1
             fi
           done

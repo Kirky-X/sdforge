@@ -56,7 +56,12 @@ license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
 
 [bans]
 multiple-versions = "warn"
-wildcards = "deny"
+wildcards = "warn"  # sdforge-macros 的 dev-dep 故意 path-only（见 macros/Cargo.toml:28-29）：
+           # 该 dev-dep 加 version 会在发布期解析失败（macros 先于 sdforge 上 registry），
+           # 与 dbnexus 同款处置；除该项外的 wildcard 仍应逐条复核。
+           # 已验证不成立的替代方案：`[[bans.skip]] name = "sdforge"` 不参与 wildcard
+           # 判定（cargo deny 报 unnecessary-skip，bans 依旧 FAILED），故无法做到
+           # “保留 deny + 精确豁免”；收紧本项需先解开 macros → 父 crate 的发布环。
 
 [[bans.deny]]
 name = "serde_yaml" # deprecated, use serde_yaml_ng

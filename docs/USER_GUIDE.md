@@ -116,9 +116,32 @@ SDForge 使用自包含的 TOML 配置（无需外部配置中心）。示例配
 
 ```toml
 # config.toml
+# 值为 limiteron 的 FlowControlConfig（版本 + 规则列表），不是单个阈值字段
 [security.rate_limit]
-rate = 60            # 每窗口允许请求数（limiteron FlowControlConfig）
-window_seconds = 1   # 窗口时长
+version = "1.0"
+
+[security.rate_limit.global]
+storage = "memory"   # memory | postgresql | redis
+cache = "memory"     # memory | redis | none
+metrics = "prometheus"  # prometheus | statsd | none
+
+[[security.rate_limit.rules]]
+id = "http_default"
+name = "HTTP 默认限流"
+priority = 100
+enabled = true
+
+[[security.rate_limit.rules.matchers]]
+type = "User"
+user_ids = ["*"]
+
+[[security.rate_limit.rules.limiters]]
+type = "TokenBucket"
+capacity = 60        # 桶容量（突发上限）
+refill_rate = 1      # 每秒补充量
+
+[security.rate_limit.rules.action]
+on_exceed = "reject"
 
 [cache]
 enabled = true
