@@ -317,7 +317,7 @@ cargo test --features full --workspace
 # Lib tests (the CI coverage target)
 cargo test --features full --lib
 
-# Coverage (CI gate >=80% line coverage; same gate in lefthook pre-push)
+# Coverage (CI gate >=90% line coverage; same gate in lefthook pre-push)
 cargo llvm-cov --features full --lib --lcov --fail-under-lines 90
 
 # Formatting and zero-warning lint
