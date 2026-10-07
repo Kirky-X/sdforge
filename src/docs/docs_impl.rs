@@ -27,7 +27,7 @@ pub fn generate_docs(format: DocFormat) -> Result<String, DocError> {
             }
             #[cfg(not(feature = "http"))]
             {
-                Ok("<!-- Swagger UI requires the 'http' feature. Enable it to use interactive docs. -->\n".to_string())
+                Ok(swagger_ui_unavailable_note().to_string())
             }
         }
         DocFormat::CliMarkdown => Ok(cli_markdown::generate_cli_docs()),
@@ -49,11 +49,20 @@ pub fn generate_docs(format: DocFormat) -> Result<String, DocError> {
             }
             #[cfg(not(feature = "http"))]
             {
-                out.push_str("<!-- Swagger UI requires the 'http' feature. Enable it to use interactive docs. -->\n");
+                out.push_str(swagger_ui_unavailable_note());
             }
             Ok(out)
         }
     }
+}
+
+/// 非 http 态的 Swagger UI 占位提示。
+///
+/// [`DocFormat::SwaggerUi`] 变体与 [`DocFormat::All`] 拼接两处共用同一文案，
+/// 收敛为单一事实来源，避免字面量漂移。
+#[cfg(not(feature = "http"))]
+fn swagger_ui_unavailable_note() -> &'static str {
+    "<!-- Swagger UI requires the 'http' feature. Enable it to use interactive docs. -->\n"
 }
 
 /// 生成 MCP 工具列表 Markdown。

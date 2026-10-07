@@ -529,7 +529,7 @@ inklog = ["dep:inklog"]
 # always compiled and do not require this feature.
 i18n = ["dep:icu", "dep:writeable", "dep:sys-locale"]
 
-# Full 特性 — 全量运行时特性集（24 项）。
+# Full 特性 — 全量运行时特性集（25 项）。
 # 刻意排除 simd-json / kit / limiteron-integration：三者均为可选重依赖
 # （SIMD 加速 JSON、trait-kit 模块图集成、限流集成基座），收益依赖特定
 # 部署环境，按需单独启用，避免 full 拖入非必要编译成本。

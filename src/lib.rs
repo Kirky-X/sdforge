@@ -501,6 +501,57 @@ pub use docs::swagger_ui_router;
 #[cfg(all(feature = "docgen", feature = "http"))]
 pub use docs::swagger_ui_router_with_openapi;
 
+// 每协议一个条目级计数函数：收集进 OnceLock 全局 static（防链接器优化掉
+// `inventory::submit!` 块）后返回条数。Poison-aware：Mutex 中毒时降级返回
+// 0 而非连锁 panic，避免 init_all_plugins 永久失效。
+// fn 随自身协议 feature 存在，调用点经 `count_if!` 在 feature 关闭时归 0——
+// PluginCounts 字段恒存在，任意 feature 组合下结构体字面量/打印形态稳定
+// （ws-R14 复核修复）。
+
+/// Generate a per-protocol inventory counter (compiled only under its feature).
+macro_rules! inventory_counter {
+    ($(#[$meta:meta])* $fn_name:ident, $feature:literal, $reg:path) => {
+        /// Collect registrations into a global static (prevents linker stripping
+        /// of `inventory::submit!` blocks), then return the count; a poisoned
+        /// Mutex degrades to 0 instead of cascading the panic.
+        #[cfg(feature = $feature)]
+        $(#[$meta])*
+        fn $fn_name() -> usize {
+            use std::sync::{Mutex, OnceLock};
+
+            static ITEMS: OnceLock<Mutex<Vec<&'static $reg>>> = OnceLock::new();
+            let items = ITEMS.get_or_init(|| Mutex::new(inventory::iter::<$reg>().collect()));
+            items.lock().map(|g| g.len()).unwrap_or_else(|e| {
+                log::error!("inventory Mutex poisoned: {}", e);
+                0
+            })
+        }
+    };
+}
+
+/// Call the protocol counter, or 0 when its feature is off.
+/// Same presence predicate as `init_all_plugins`: with no protocol feature
+/// enabled the caller does not exist and the macro would be unused.
+#[cfg(any(
+    feature = "http",
+    feature = "mcp",
+    feature = "websocket",
+    feature = "grpc",
+    feature = "cli"
+))]
+macro_rules! count_if {
+    ($fn_name:ident, $feature:literal) => {{
+        #[cfg(feature = $feature)]
+        {
+            $fn_name()
+        }
+        #[cfg(not(feature = $feature))]
+        {
+            0
+        }
+    }};
+}
+
 /// 初始化所有已注册的插件，确保它们不会被链接器优化掉。
 ///
 /// This function must be called at least once to ensure that all inventory-based
@@ -526,128 +577,75 @@ pub use docs::swagger_ui_router_with_openapi;
     feature = "cli"
 ))]
 pub fn init_all_plugins() -> PluginCounts {
-    use std::sync::Mutex;
-    use std::sync::OnceLock;
-
-    // Store in global static to prevent linker optimization.
-    // Poison-aware: 若任一 inventory 收集期间 panic 导致 Mutex 中毒，
-    // 降级返回 0 而非连锁 panic，避免 init_all_plugins 永久失效。
-    #[cfg(feature = "http")]
-    let routes = {
-        use crate::http::RouteRegistration;
-
-        static ROUTES: OnceLock<Mutex<Vec<&'static RouteRegistration>>> = OnceLock::new();
-        let routes =
-            ROUTES.get_or_init(|| Mutex::new(inventory::iter::<RouteRegistration>().collect()));
-        routes.lock().map(|g| g.len()).unwrap_or_else(|e| {
-            log::error!("inventory Mutex poisoned: {}", e);
-            0
-        })
-    };
-    #[cfg(not(feature = "http"))]
-    let routes = 0;
-
-    #[cfg(feature = "mcp")]
-    let mcp_tools = {
-        use crate::mcp::McpToolRegistration;
-
-        static MCP_TOOLS: OnceLock<Mutex<Vec<&'static McpToolRegistration>>> = OnceLock::new();
-        let tools = MCP_TOOLS
-            .get_or_init(|| Mutex::new(inventory::iter::<McpToolRegistration>().collect()));
-        tools.lock().map(|g| g.len()).unwrap_or_else(|e| {
-            log::error!("inventory Mutex poisoned: {}", e);
-            0
-        })
-    };
-    #[cfg(not(feature = "mcp"))]
-    let mcp_tools = 0;
-    #[cfg(feature = "websocket")]
-    let ws_routes = {
-        use crate::websocket::WebSocketRoute;
-
-        static WS_ROUTES: OnceLock<Mutex<Vec<&'static WebSocketRoute>>> = OnceLock::new();
-        let routes =
-            WS_ROUTES.get_or_init(|| Mutex::new(inventory::iter::<WebSocketRoute>().collect()));
-        routes.lock().map(|g| g.len()).unwrap_or_else(|e| {
-            log::error!("inventory Mutex poisoned: {}", e);
-            0
-        })
-    };
-    #[cfg(not(feature = "websocket"))]
-    let ws_routes = 0;
-    #[cfg(feature = "grpc")]
-    let grpc_routes = {
-        use crate::grpc::GrpcRouteRegistration;
-
-        static GRPC_ROUTES: OnceLock<Mutex<Vec<&'static GrpcRouteRegistration>>> = OnceLock::new();
-        let routes = GRPC_ROUTES
-            .get_or_init(|| Mutex::new(inventory::iter::<GrpcRouteRegistration>().collect()));
-        routes.lock().map(|g| g.len()).unwrap_or_else(|e| {
-            log::error!("inventory Mutex poisoned: {}", e);
-            0
-        })
-    };
-    #[cfg(not(feature = "grpc"))]
-    let grpc_routes = 0;
-
-    // touch `GrpcHandlerRegistration` inventory so the linker keeps
-    // `inventory::submit!` blocks emitted by `#[forge(grpc_method = "...")]`.
-    // Mirrors the http/mcp/websocket/grpc-route/cli blocks above. Without
-    // this, release builds (LTO + opt-level=z) may strip the handler
-    // registrations, leaving `SdForgeGrpcService::call` unable to find any
-    // method at runtime.
-    #[cfg(feature = "grpc")]
-    let grpc_handlers = {
-        use crate::grpc::GrpcHandlerRegistration;
-
-        static GRPC_HANDLERS: OnceLock<Mutex<Vec<&'static GrpcHandlerRegistration>>> =
-            OnceLock::new();
-        let handlers = GRPC_HANDLERS
-            .get_or_init(|| Mutex::new(inventory::iter::<GrpcHandlerRegistration>().collect()));
-        handlers.lock().map(|g| g.len()).unwrap_or_else(|e| {
-            log::error!("inventory Mutex poisoned: {}", e);
-            0
-        })
-    };
-    #[cfg(not(feature = "grpc"))]
-    let grpc_handlers = 0;
-
-    // touch CLI inventory so the linker keeps `inventory::submit!`
-    // blocks emitted by `#[forge(cli = true)]`. Mirrors the http/mcp/
-    // websocket/grpc blocks above. Both `CliCommandRegistration` and
-    // `CliHandlerRegistration` are collected; the returned count reflects
-    // command registrations (handler registrations are paired 1:1).
-    #[cfg(feature = "cli")]
-    let cli_commands = {
-        use crate::cli::{CliCommandRegistration, CliHandlerRegistration};
-
-        static CLI_CMDS: OnceLock<Mutex<Vec<&'static CliCommandRegistration>>> = OnceLock::new();
-        let cmds = CLI_CMDS
-            .get_or_init(|| Mutex::new(inventory::iter::<CliCommandRegistration>().collect()));
-
-        // Also iterate handler registrations to prevent the linker from
-        // stripping the paired `CliHandlerRegistration` submit blocks.
-        static CLI_HANDLERS: OnceLock<Mutex<Vec<&'static CliHandlerRegistration>>> =
-            OnceLock::new();
-        let _handlers = CLI_HANDLERS
-            .get_or_init(|| Mutex::new(inventory::iter::<CliHandlerRegistration>().collect()));
-
-        cmds.lock().map(|g| g.len()).unwrap_or_else(|e| {
-            log::error!("inventory Mutex poisoned: {}", e);
-            0
-        })
-    };
-    #[cfg(not(feature = "cli"))]
-    let cli_commands = 0;
-
     PluginCounts {
-        routes,
-        mcp_tools,
-        ws_routes,
-        grpc_routes,
-        grpc_handlers,
-        cli_commands,
+        routes: count_if!(count_http_routes, "http"),
+        mcp_tools: count_if!(count_mcp_tools, "mcp"),
+        ws_routes: count_if!(count_ws_routes, "websocket"),
+        grpc_routes: count_if!(count_grpc_routes, "grpc"),
+        grpc_handlers: count_if!(count_grpc_handlers, "grpc"),
+        cli_commands: count_if!(count_cli_commands, "cli"),
     }
+}
+
+inventory_counter!(
+    /// Registered HTTP route count.
+    count_http_routes,
+    "http",
+    crate::http::RouteRegistration
+);
+inventory_counter!(
+    /// Registered MCP tool count.
+    count_mcp_tools,
+    "mcp",
+    crate::mcp::McpToolRegistration
+);
+inventory_counter!(
+    /// Registered WebSocket route count.
+    count_ws_routes,
+    "websocket",
+    crate::websocket::WebSocketRoute
+);
+inventory_counter!(
+    /// touch `GrpcRouteRegistration` inventory so the linker keeps its
+    /// `inventory::submit!` blocks (mirrors the http/mcp/websocket/cli counters).
+    count_grpc_routes,
+    "grpc",
+    crate::grpc::GrpcRouteRegistration
+);
+inventory_counter!(
+    /// touch `GrpcHandlerRegistration` inventory so the linker keeps
+    /// `inventory::submit!` blocks emitted by `#[forge(grpc_method = "...")]`.
+    /// Without this, release builds (LTO + opt-level=z) may strip the handler
+    /// registrations, leaving `SdForgeGrpcService::call` unable to find any
+    /// method at runtime.
+    count_grpc_handlers,
+    "grpc",
+    crate::grpc::GrpcHandlerRegistration
+);
+
+/// touch CLI inventory so the linker keeps `inventory::submit!` blocks
+/// emitted by `#[forge(cli = true)]`. Both `CliCommandRegistration` and
+/// `CliHandlerRegistration` are collected; the returned count reflects
+/// command registrations (handler registrations are paired 1:1).
+#[cfg(feature = "cli")]
+fn count_cli_commands() -> usize {
+    use crate::cli::{CliCommandRegistration, CliHandlerRegistration};
+    use std::sync::{Mutex, OnceLock};
+
+    static CLI_CMDS: OnceLock<Mutex<Vec<&'static CliCommandRegistration>>> = OnceLock::new();
+    let cmds =
+        CLI_CMDS.get_or_init(|| Mutex::new(inventory::iter::<CliCommandRegistration>().collect()));
+
+    // Also iterate handler registrations to prevent the linker from
+    // stripping the paired `CliHandlerRegistration` submit blocks.
+    static CLI_HANDLERS: OnceLock<Mutex<Vec<&'static CliHandlerRegistration>>> = OnceLock::new();
+    let _handlers = CLI_HANDLERS
+        .get_or_init(|| Mutex::new(inventory::iter::<CliHandlerRegistration>().collect()));
+
+    cmds.lock().map(|g| g.len()).unwrap_or_else(|e| {
+        log::error!("inventory Mutex poisoned: {}", e);
+        0
+    })
 }
 
 /// Counts of registered plugins after initialization
