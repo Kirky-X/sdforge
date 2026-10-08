@@ -159,7 +159,7 @@ impl SseFrameParser {
     ///
     /// A violation during [`feed`](Self::feed) clears the parser state and
     /// queues a single [`SseStreamError::LimitExceeded`]; the parser is dead
-    /// afterwards (further feeds are no-ops, [`frames`](Self::frames) ends).
+    /// afterwards (further feeds are no-ops, [`frames`](frames) ends).
     pub fn with_limits(max_buffer_bytes: usize, max_frame_bytes: usize) -> Self {
         Self {
             limits: Some((max_buffer_bytes, max_frame_bytes)),
