@@ -5,8 +5,6 @@
 //! These types let protocol dispatch layers (gRPC `Call`, CLI `dispatch`) share
 //! a single function-pointer type and a common value-extraction helper, so a
 //! `#[forge]` function is callable the same way regardless of protocol.
-//!
-//! See `grpc-cli-runtime-dispatch` (D1) for the design rationale.
 
 use crate::prelude::ApiError;
 use serde_json::Value;
