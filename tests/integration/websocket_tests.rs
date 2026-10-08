@@ -49,12 +49,8 @@ mod websocket_tests {
             ..Default::default()
         };
 
-        // 验证认证配置存在
         assert!(config.auth.is_some());
     }
-
-    // 测试连接拒绝场景已移除：依赖已删除的 `check_and_record` 方法，
-    // 连接级限流改由 limiteron Governor 在 HTTP 中间件层处理。
 
     /// 测试多个并发连接
     /// 验证系统能够同时处理多个 WebSocket 连接
@@ -496,8 +492,6 @@ mod websocket_tests {
     // ============================================================================
     // 配置验证测试
     // ============================================================================
-    // NOTE: `test_rate_limit_config_default` 和 `test_rate_limit_config_validation`
-    // 已移除（`RateLimitConfig` 结构体已删除，配置验证逻辑迁移到 WebSocketConfig）。
 
     #[test]
     fn test_websocket_config_default() {
@@ -523,14 +517,6 @@ mod websocket_tests {
         let (conn, _rx) = WebSocketConnection::new("test-conn-1".to_string());
         assert_eq!(conn.id(), "test-conn-1");
     }
-
-    // ============================================================================
-    // 速率限制测试
-    // ============================================================================
-    // NOTE: 连接级速率限制测试（test_rate_limit_exceeded_detection、
-    // test_rate_limit_config_boundaries）已移除。原 `check_and_record` 方法
-    // 依赖已删除的 `RateLimitConfig`，连接级限流算法改由 limiteron Governor
-    // 在 HTTP 中间件层处理（见 design.md D6 "Out of Scope"）。
 
     // ============================================================================
     // 连接生命周期测试
@@ -873,14 +859,6 @@ mod websocket_tests {
         manager.remove_connection("will-fail").await;
         manager.remove_connection("will-succeed").await;
     }
-
-    // ============================================================================
-    // 速率限制高级测试
-    // ============================================================================
-    // NOTE: 连接级速率限制测试（test_rate_limit_window_reset、
-    // test_rate_limit_per_connection）已移除。原 `check_and_record` 方法依赖
-    // 已删除的 `RateLimitConfig`，连接级限流算法改由 limiteron Governor
-    // 在 HTTP 中间件层处理（见 design.md D6 "Out of Scope"）。
 
     // ============================================================================
     // 消息序列化高级测试

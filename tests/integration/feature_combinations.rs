@@ -110,7 +110,6 @@ mod feature_dependency_tests {
         compile_error!("WebSocket feature requires HTTP feature");
     }
 
-    // grpc-requires-http guard 已移除（复查）：grpc 模块依赖只有
-    // tonic/prost/serde_json/futures-util，Cargo.toml 注明"独立于 http"，
-    // `cargo check --features grpc` 库级编译可行 —— 旧 guard 与事实矛盾。
+    // grpc 不要求 http：模块依赖仅 tonic/prost/serde_json/futures-util，
+    // `cargo check --features grpc` 库级可编译，故不设 requires-http guard。
 }

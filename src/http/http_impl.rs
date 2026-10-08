@@ -534,6 +534,6 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
         router = crate::metrics::mount_metrics(router);
     }
 
-    // Note: 日志初始化已移除，由使用方通过 sdforge::inklog 直接管理
+    // 日志初始化由使用方经 sdforge::inklog（`init_inklog_logger`）完成，本函数不介入
     Ok(router)
 }

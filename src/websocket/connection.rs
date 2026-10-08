@@ -44,12 +44,9 @@ impl WebSocketConnection {
 
 /// Connection manager for WebSocket connections.
 ///
-/// Connection-level rate limiting (message counting, window-based throttling)
-/// was removed in the `integrate-limiteron-ratelimit` change. HTTP-level
-/// rate limiting is now provided by `crate::security::ratelimit` (Tower
+/// HTTP-level rate limiting is provided by `crate::security::ratelimit` (Tower
 /// middleware backed by limiteron). Connection-level enforcement via a
-/// limiteron `Governor` is a future follow-up (see `design.md` D6
-/// "Out of Scope").
+/// limiteron `Governor` is a future follow-up.
 pub struct ConnectionManager {
     /// Active connections keyed by ID.
     ///

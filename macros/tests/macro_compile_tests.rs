@@ -25,10 +25,8 @@ mod tests {
 
     #[test]
     fn test_macro_compilation() {
-        // This test verifies that the macros compile correctly.
-        // Reaching here without panicking means compilation succeeded;
-        // the explicit `assert!(true, ...)` was removed to satisfy
-        // clippy::assertions_on_constants.
+        // 走到这里不 panic 即说明宏展开与编译成功；
+        // 不写 `assert!(true, ...)`——会触发 clippy::assertions_on_constants。
         let _result = test_basic_macro;
         let _result2 = test_module::test_fn();
     }
