@@ -11,6 +11,7 @@
 <summary>📑 目录</summary>
 
 - [Unreleased](#unreleased)
+- [0.5.0-rc.7](#050-rc7---2026-10-08)
 - [0.5.0-rc.6](#050-rc6---2026-10-06)
 - [0.5.0-rc.5](#050-rc5---2026-09-21)
 - [0.5.0-rc.4](#050-rc4---2026-09-14)
@@ -33,6 +34,21 @@
 </details>
 
 ## [Unreleased]
+
+## [0.5.0-rc.7] - 2026-10-08
+
+### Added
+
+- **streaming 入站 SSE 帧解析器**（WHATWG 定界，零新增依赖）：为入站 server-sent events 提供逐帧解析基元，供流式上游接入使用。
+
+### Changed
+
+- **docs feature 正名 docgen**（旧名保留兼容别名），并修正 swagger_demo 示例的 required-features。
+- **死代码清理**：删除审计队列死负载、响应缓存死 TTL 字段、预留 sanitizer 死模块及其专属 i18n 条目、生产代码中的测试专用函数；`init_all_plugins` 宏聚合条目级化；模块内 51 处同名冗余 feature 门收敛。
+
+### Documentation
+
+- SSE 解析器 intra-doc 链接修复；漏洞报告渠道统一为 GH 安全通告首选、邮箱备选；specmark 变更名文档指针移除。
 
 ## [0.5.0-rc.6] - 2026-10-06
 

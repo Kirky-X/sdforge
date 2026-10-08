@@ -104,7 +104,7 @@ cargo add sdforge
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5.0-rc.6", features = ["http"] }
+sdforge = { version = "0.5.0-rc.7", features = ["http"] }
 ```
 
 最低要求：

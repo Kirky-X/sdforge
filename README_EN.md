@@ -92,7 +92,7 @@ Or add it to your `Cargo.toml` manually (current version `0.5.0-rc.6`):
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5.0-rc.6", features = ["http"] }
+sdforge = { version = "0.5.0-rc.7", features = ["http"] }
 ```
 
 Minimum requirements:

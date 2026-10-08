@@ -3,7 +3,7 @@ members = [".", "examples", "macros"]
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0-rc.6"
+version = "0.5.0-rc.7"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kirky-X <Kirky-X@outlook.com>"]
@@ -52,7 +52,7 @@ base64 = { version = "0.23", default-features = false, features = ["std", "alloc
 toml = { version = "1.1", default-features = false, features = ["parse", "display"] }
 
 # 缓存依赖 - oxcache 0.5 用 minimal feature 提供内存后端 + 序列化 + tracing
-oxcache = { version = "0.5.0-rc.6", default-features = false, features = ["minimal"] }
+oxcache = { version = "0.5.0-rc.7", default-features = false, features = ["minimal"] }
 
 # 数据库网关 - dbnexus 0.6 embedded（sqlite）+ sql-parser：数据 API 网关的
 # 池化/解析面（db-integration feature）
@@ -183,7 +183,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.6", path = "./macros" }
+sdforge-macros = { version = "0.5.0-rc.7", path = "./macros" }
 
 # HTTP dependencies
 axum = { workspace = true, optional = true }
@@ -270,12 +270,12 @@ limiteron = { workspace = true, optional = true }
 # trait-kit 0.5 is published to crates.io.
 # Mirrors dbnexus's pattern.
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
-trait-kit = { version = "0.5.0-rc.7", default-features = false, features = ["async"], optional = true }
+trait-kit = { version = "0.5.0-rc.8", default-features = false, features = ["async"], optional = true }
 
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # 纯 crates.io 版本依赖（rc.2 已发布）。
 # default-features = false (Rule 6) — only core logging is pulled in.
-inklog = { version = "0.3.0-rc.7", default-features = false, optional = true }
+inklog = { version = "0.3.0-rc.8", default-features = false, optional = true }
 
 # ICU4X internationalization (optional, feature-gated via `i18n`).
 # icu 2.2 provides locale-aware number/date/plural/collation formatting +
@@ -298,7 +298,7 @@ tokio = { workspace = true, features = ["test-util"] }
 schemars = { workspace = true }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.6", path = "./macros", default-features = false }
+sdforge-macros = { version = "0.5.0-rc.7", path = "./macros", default-features = false }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }
