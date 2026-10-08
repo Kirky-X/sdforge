@@ -30,7 +30,10 @@
 
 **不要为安全漏洞创建公开的 GitHub Issue。**
 
-请将安全问题通过邮件发送给维护者 **Kirky-X@outlook.com**，并包含以下信息：
+**首选渠道**：通过 GitHub Security Advisories 私密披露通道 [Report a vulnerability](https://github.com/Kirky-X/sdforge/security/advisories/new) 提交报告。
+**备选渠道**：发送邮件至维护者 **Kirky-X@outlook.com**。
+
+报告时请包含以下信息：
 
 1. 漏洞描述
 2. 复现步骤
