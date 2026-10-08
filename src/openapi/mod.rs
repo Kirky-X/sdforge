@@ -300,92 +300,88 @@ inventory::submit!(OpenApiRouteInfo {
     response_schema: None,
 });
 
-// 返回类型 Schema 反射：test-only 载荷与路由。派生 `JsonSchema` 的载荷在
-// `schemars` feature 态产出精确字段 schema；未派生载荷的提供器返回 `None`，
-// 降级到 `response_type` 粗粒度映射（schemars 开关两态行为一致）。
-#[cfg(test)]
-#[derive(Debug)]
-// 探针只消费类型形状（字段名进 schema properties），不读字段值——
-// 编译器 dead_code 分析对 derive/泛型反射路径不可见。
-#[allow(dead_code)]
-#[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
-struct TestReflectedPayload {
-    id: u64,
-    email: String,
-}
-
-#[cfg(test)]
-inventory::submit!(OpenApiRouteInfo {
-    path: "/__openapi_reflection_test__",
-    method: "GET",
-    summary: "Reflected schema test marker",
-    description: "Route whose response_schema provider reflects a derived JsonSchema payload.",
-    version: "test",
-    tags: &["test"],
-    path_params: &[],
-    success_status: None,
-    i18n_key: None,
-    deprecated: false,
-    sunset: None,
-    successor: None,
-    body_params: &[],
-    response_type: Some(OpenApiTypeInfo {
-        schema_type: "object",
-        schema_format: "",
-        is_array: false,
-    }),
-    response_schema: Some({
-        fn __test_reflected_schema() -> Option<String> {
-            #[allow(unused_imports)]
-            use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
-            SchemaProbe::<TestReflectedPayload>::new().probe()
-        }
-        __test_reflected_schema
-    }),
-});
-
-#[cfg(test)]
-#[derive(Debug)]
-// 同 TestReflectedPayload：探针载荷只供类型形状，字段值无读取方。
-#[allow(dead_code)]
-struct TestOpaquePayload {
-    blob: Vec<u8>,
-}
-
-#[cfg(test)]
-inventory::submit!(OpenApiRouteInfo {
-    path: "/__openapi_reflection_fallback_test__",
-    method: "GET",
-    summary: "Reflection fallback test marker",
-    description: "Route whose payload does not derive JsonSchema; response degrades to the coarse mapping.",
-    version: "test",
-    tags: &["test"],
-    path_params: &[],
-    success_status: None,
-    i18n_key: None,
-    deprecated: false,
-    sunset: None,
-    successor: None,
-    body_params: &[],
-    response_type: Some(OpenApiTypeInfo {
-        schema_type: "string",
-        schema_format: "",
-        is_array: false,
-    }),
-    response_schema: Some({
-        fn __test_opaque_schema() -> Option<String> {
-            #[allow(unused_imports)]
-            use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
-            SchemaProbe::<TestOpaquePayload>::new().probe()
-        }
-        __test_opaque_schema
-    }),
-});
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use utoipa::openapi::path::HttpMethod;
+
+    // 返回类型 Schema 反射：test-only 载荷与路由。派生 `JsonSchema` 的载荷在
+    // `schemars` feature 态产出精确字段 schema；未派生载荷的提供器返回 `None`，
+    // 降级到 `response_type` 粗粒度映射（schemars 开关两态行为一致）。
+    #[derive(Debug)]
+    // 探针只消费类型形状（字段名进 schema properties），不读字段值——
+    // 编译器 dead_code 分析对 derive/泛型反射路径不可见。
+    #[allow(dead_code)]
+    #[cfg_attr(feature = "schemars", derive(schemars::JsonSchema))]
+    struct TestReflectedPayload {
+        id: u64,
+        email: String,
+    }
+
+    inventory::submit!(OpenApiRouteInfo {
+        path: "/__openapi_reflection_test__",
+        method: "GET",
+        summary: "Reflected schema test marker",
+        description: "Route whose response_schema provider reflects a derived JsonSchema payload.",
+        version: "test",
+        tags: &["test"],
+        path_params: &[],
+        success_status: None,
+        i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
+        body_params: &[],
+        response_type: Some(OpenApiTypeInfo {
+            schema_type: "object",
+            schema_format: "",
+            is_array: false,
+        }),
+        response_schema: Some({
+            fn __test_reflected_schema() -> Option<String> {
+                #[allow(unused_imports)]
+                use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+                SchemaProbe::<TestReflectedPayload>::new().probe()
+            }
+            __test_reflected_schema
+        }),
+    });
+
+    #[derive(Debug)]
+    // 同 TestReflectedPayload：探针载荷只供类型形状，字段值无读取方。
+    #[allow(dead_code)]
+    struct TestOpaquePayload {
+        blob: Vec<u8>,
+    }
+
+    inventory::submit!(OpenApiRouteInfo {
+        path: "/__openapi_reflection_fallback_test__",
+        method: "GET",
+        summary: "Reflection fallback test marker",
+        description: "Route whose payload does not derive JsonSchema; response degrades to the coarse mapping.",
+        version: "test",
+        tags: &["test"],
+        path_params: &[],
+        success_status: None,
+        i18n_key: None,
+        deprecated: false,
+        sunset: None,
+        successor: None,
+        body_params: &[],
+        response_type: Some(OpenApiTypeInfo {
+            schema_type: "string",
+            schema_format: "",
+            is_array: false,
+        }),
+        response_schema: Some({
+            fn __test_opaque_schema() -> Option<String> {
+                #[allow(unused_imports)]
+                use reflection::{FallbackSchema, PreciseSchema, SchemaProbe};
+                SchemaProbe::<TestOpaquePayload>::new().probe()
+            }
+            __test_opaque_schema
+        }),
+    });
 
     /// `OpenApiBuilder::new()` should produce a builder with empty fields.
     #[test]

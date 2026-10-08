@@ -209,44 +209,10 @@ fn validate_string_limits(msg: &WebSocketMessage) -> Result<(), String> {
     Ok(())
 }
 
-/// Calculate actual JSON nesting depth by parsing the structure
-/// Returns the maximum nesting level encountered
-///
-/// This function is kept for testing purposes only.
-/// Production code uses [`calculate_value_depth`] which operates on parsed JSON values.
-#[cfg(test)]
-pub fn calculate_json_depth(text: &str) -> usize {
-    let mut depth = 0;
-    let mut max_depth = 0;
-    let mut in_string = false;
-    let mut escaped = false;
-
-    for c in text.chars() {
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if c == '\\' {
-                escaped = true;
-            } else if c == '"' {
-                in_string = false;
-            }
-        } else if c == '"' {
-            in_string = true;
-            escaped = false;
-        } else if c == '{' || c == '[' {
-            depth += 1;
-            max_depth = max_depth.max(depth);
-        } else if (c == '}' || c == ']') && depth > 0 {
-            depth -= 1;
-        }
-    }
-
-    max_depth
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::websocket::tests::calculate_json_depth;
 
     /// Primitive value at non-zero current_depth — the `_ => *current_depth`
     /// branch returns the current depth, not 0. Verifies depth is untouched

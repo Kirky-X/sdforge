@@ -63,7 +63,3 @@ pub use message::{
     MAX_JSON_DEPTH, MAX_MESSAGE_SIZE, MAX_STRING_LENGTH, WebSocketMessage, calculate_value_depth,
     parse_websocket_message,
 };
-// Test-only helpers from `message` module — re-exported under test cfg so the
-// split test files can access them via `use crate::websocket::*`.
-#[cfg(test)]
-pub use message::calculate_json_depth;

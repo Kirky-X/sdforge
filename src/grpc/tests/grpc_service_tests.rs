@@ -674,8 +674,8 @@ fn test_grpc_route_new_basic() {
 
     let route = GrpcRoute::new("my_service".to_string(), metadata);
 
-    assert_eq!(route.service_name(), "my_service");
-    assert_eq!(route.metadata().name(), "test_api");
+    assert_eq!(route.service_name, "my_service");
+    assert_eq!(route.metadata.name(), "test_api");
 }
 
 #[test]
@@ -692,7 +692,7 @@ fn test_grpc_route_new_with_cache_ttl() {
 
     let route = GrpcRoute::new("cached_service".to_string(), metadata);
 
-    assert_eq!(route.metadata().cache_ttl(), Some(600));
+    assert_eq!(route.metadata.cache_ttl(), Some(600));
 }
 
 #[test]
@@ -709,7 +709,7 @@ fn test_grpc_route_new_with_streaming() {
 
     let route = GrpcRoute::new("stream_service".to_string(), metadata);
 
-    assert!(route.metadata().is_streaming());
+    assert!(route.metadata.is_streaming());
 }
 
 #[test]
@@ -719,7 +719,7 @@ fn test_grpc_route_service_name_accessor() {
     let metadata = ApiMetadata::default();
     let route = GrpcRoute::new("unique_service_name".to_string(), metadata);
 
-    assert_eq!(route.service_name(), "unique_service_name");
+    assert_eq!(route.service_name, "unique_service_name");
 }
 
 #[test]
@@ -736,7 +736,7 @@ fn test_grpc_route_metadata_accessor() {
 
     let route = GrpcRoute::new("accessor_service".to_string(), metadata.clone());
 
-    let retrieved_metadata = route.metadata();
+    let retrieved_metadata = &route.metadata;
     assert_eq!(retrieved_metadata.name(), "accessor_test");
     assert_eq!(retrieved_metadata.version(), "v3");
     assert_eq!(
@@ -752,7 +752,7 @@ fn test_grpc_route_empty_service_name() {
     let metadata = ApiMetadata::default();
     let route = GrpcRoute::new("".to_string(), metadata);
 
-    assert_eq!(route.service_name(), "");
+    assert_eq!(route.service_name, "");
 }
 
 #[test]
@@ -762,7 +762,7 @@ fn test_grpc_route_unicode_service_name() {
     let metadata = ApiMetadata::default();
     let route = GrpcRoute::new("服务名称".to_string(), metadata);
 
-    assert_eq!(route.service_name(), "服务名称");
+    assert_eq!(route.service_name, "服务名称");
 }
 
 #[test]
@@ -773,7 +773,7 @@ fn test_grpc_route_long_service_name() {
     let metadata = ApiMetadata::default();
     let route = GrpcRoute::new(long_name.clone(), metadata);
 
-    assert_eq!(route.service_name().len(), 1000);
+    assert_eq!(route.service_name.len(), 1000);
 }
 
 // ============================================================================
@@ -848,8 +848,8 @@ fn test_grpc_route_registration_create() {
         });
     let route = registration.create();
 
-    assert_eq!(route.service_name(), "factory_service");
-    assert_eq!(route.metadata().name(), "factory_api");
+    assert_eq!(route.service_name, "factory_service");
+    assert_eq!(route.metadata.name(), "factory_api");
 }
 
 #[test]
@@ -867,7 +867,7 @@ fn test_grpc_route_registration_create_multiple_times() {
     let route1 = registration.create();
     let route2 = registration.create();
 
-    assert_eq!(route1.service_name(), route2.service_name());
+    assert_eq!(route1.service_name, route2.service_name);
 }
 
 #[test]

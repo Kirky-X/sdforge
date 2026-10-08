@@ -79,16 +79,14 @@ pub fn is_email(value: impl AsRef<str>) -> bool {
         && !v.contains(' ')
 }
 
-#[cfg(feature = "http")]
-mod http_response {
-    // FieldError 仅被下方测试门控的响应构造消费
-    #[cfg(test)]
-    use super::FieldError;
+#[cfg(all(test, feature = "validate"))]
+mod tests {
+    use super::*;
 
     /// Build the standardized 422 response for a failed validation report.
-    /// 仅由下方 http 门控的契约测试消费，非测试构建不参与编译。
-    #[cfg(test)]
-    pub fn validation_failed_response(errors: Vec<FieldError>) -> axum::response::Response {
+    /// 夹具：仅由本 mod 内 http 门控的契约测试消费。
+    #[cfg(feature = "http")]
+    fn validation_failed_response(errors: Vec<FieldError>) -> axum::response::Response {
         use axum::response::IntoResponse;
         (
             axum::http::StatusCode::UNPROCESSABLE_ENTITY,
@@ -100,11 +98,6 @@ mod http_response {
         )
             .into_response()
     }
-}
-
-#[cfg(all(test, feature = "validate"))]
-mod tests {
-    use super::*;
 
     #[test]
     fn field_error_serializes_with_contract_fields() {
@@ -140,11 +133,7 @@ mod tests {
     #[cfg(feature = "http")]
     #[test]
     fn validation_failed_response_is_422_with_contract_body() {
-        let resp = http_response::validation_failed_response(vec![FieldError::new(
-            "age",
-            "ge",
-            "must be >= 1",
-        )]);
+        let resp = validation_failed_response(vec![FieldError::new("age", "ge", "must be >= 1")]);
         assert_eq!(resp.status(), axum::http::StatusCode::UNPROCESSABLE_ENTITY);
     }
 }

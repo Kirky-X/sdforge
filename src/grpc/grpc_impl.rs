@@ -1033,16 +1033,6 @@ impl GrpcRoute {
             metadata,
         }
     }
-
-    #[cfg(test)]
-    pub(crate) fn service_name(&self) -> &str {
-        &self.service_name
-    }
-
-    #[cfg(test)]
-    pub(crate) fn metadata(&self) -> &ApiMetadata {
-        &self.metadata
-    }
 }
 
 /// Build gRPC server
@@ -1284,20 +1274,6 @@ impl tonic::service::Interceptor for AuthGrpcInterceptor {
             }
             None => Err(Status::unauthenticated("Missing authorization header")),
         }
-    }
-}
-
-impl SdForgeGrpcService {
-    /// Test-only accessor: borrow the body_param map.
-    #[cfg(test)]
-    pub(crate) fn body_params_map(&self) -> &HashMap<&'static str, Option<&'static str>> {
-        self.body_params()
-    }
-
-    /// Test-only accessor: borrow the `default_status` map.
-    #[cfg(test)]
-    pub(crate) fn default_statuses_map(&self) -> &HashMap<&'static str, Option<u16>> {
-        self.default_statuses()
     }
 }
 
@@ -1600,7 +1576,7 @@ mod tests {
     #[test]
     fn default_statuses_cache_built_correctly() {
         let service = SdForgeGrpcService::default();
-        let map = service.default_statuses_map();
+        let map = service.default_statuses();
         // 无宏 status 参数 → None
         assert_eq!(map.get("test_echo"), Some(&None));
         assert_eq!(map.get("test_status_code"), Some(&None));
@@ -1631,7 +1607,7 @@ mod tests {
     #[test]
     fn body_params_cache_built_correctly() {
         let service = SdForgeGrpcService::default();
-        let map = service.body_params_map();
+        let map = service.body_params();
         assert_eq!(map.get("test_echo"), Some(&None));
         assert_eq!(map.get("test_body"), Some(&Some("payload")));
     }

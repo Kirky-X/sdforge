@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
+use super::calculate_json_depth;
 use crate::websocket::*;
 
 /// Test WebSocketMessage serialization and deserialization
