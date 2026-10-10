@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! # 结构化日志示例模块
 //!
-//! 本模块展示 inklog `LoggerManager` 的使用方式（自研 `StructuredLogger`
+//! 本模块展示 inklog `LoggerManager` 的使用方式（自研结构化日志栈
 //! 栈已在 0.5.0-rc 期删除）。
 //!
 //! ## 涵盖接口

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! # 结构化日志示例（inklog LoggerManager）
 //!
-//! 自研 `StructuredLogger` 栈已在 0.5.0-rc 期删除，结构化日志收敛到 inklog
+//! 自研结构化日志栈已在 0.5.0-rc 期删除，结构化日志收敛到 inklog
 //! `LoggerManager`。本示例展示迁移目标的四条路径：
 //!
 //! 1. [`init_global`] —— `init_inklog_logger` 安装 inklog 为全局 `log`

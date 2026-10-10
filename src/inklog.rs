@@ -38,7 +38,7 @@
 /// 重导出 inklog 核心类型，供下游直接通过 `sdforge::inklog::` 访问。
 ///
 /// 避免下游 crate 需要单独声明 inklog 依赖。`LogSink`/`LogRecord` 一并导出：
-/// 迁移到 inklog 的下游（含自研 `StructuredLogger` 栈的替代方）需要自定义
+/// 迁移到 inklog 的下游（原自研结构化日志栈的替代方）需要自定义
 /// sink 捕获/校验日志记录。
 pub use ::inklog::{InklogConfig, InklogError, LogRecord, LogSink, LoggerManager};
 

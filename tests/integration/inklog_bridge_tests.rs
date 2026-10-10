@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! inklog 桥行为锚点（StructuredLogger 栈删除后的结构化日志面）。
+//! inklog 桥行为锚点（自研结构化日志栈删除后的结构化日志面）。
 //!
 //! 覆盖三条验收路径：
 //! 1. 安装 inklog 后日志记录进入 inklog 管道（自定义捕获 sink 断言记录的

@@ -61,7 +61,7 @@
 - `src/grpc/` - gRPC 示例
   - `server.rs` - gRPC 服务端：`GrpcRoute` 注册、`GrpcServerConfig`（连接数 / 超时 / 可选 JWT 认证）、`build_server_with_config` 启动（推荐；另含已弃用 `build_server` 的对照函数 `start_default`，以 `#[allow(deprecated)]` 标注）
 - `src/logging/` - 结构化日志示例
-  - `structured.rs` - `StructuredLogger`、`LoggerConfig`、全局日志器与便捷宏
+  - `structured.rs` - inklog LoggerManager：全局安装 / from_file 轮转 / builder / set_level
 - `src/openapi/` - OpenAPI 3.1 规范生成示例
   - `basic.rs` - `generate_openapi_spec()` 自动收集路由、`OpenApiBuilder` 链式定制 `info` 段、手动注册 `OpenApiRouteInfo`
 - `src/combined/` - 多特性组合的完整示例

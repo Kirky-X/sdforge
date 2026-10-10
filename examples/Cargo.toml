@@ -98,7 +98,7 @@ grpc = ["sdforge/grpc"]
 # unsupported combination by design — the field then exists while the
 # literal omits it. The only supported gate is this crate's `grpc_tls`.
 grpc_tls = ["sdforge/grpc-tls"]
-# logging（自研 StructuredLogger 栈）已在 0.5.0-rc 期删除；structured 示例
+# logging（自研结构化日志栈）已在 0.5.0-rc 期删除；structured 示例
 # 迁移到 inklog LoggerManager，本别名层 feature 转指 sdforge/inklog
 logging = ["sdforge/inklog"]
 openapi = ["sdforge/openapi"]
