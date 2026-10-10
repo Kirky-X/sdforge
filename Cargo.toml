@@ -62,6 +62,11 @@ toml = { version = "1.1", default-features = false }
 # 容量（ByteWeightCache）所需
 oxcache = { version = "0.5.0-rc.6", default-features = false, features = ["minimal", "byte-weight"] }
 
+# TLS 证书热重载监听 - confers watch feature 提供去抖文件监听（FsWatcher），
+# 仅 tls-watch feature 门控（默认构建不引入）；confers 主 crate 无 sdforge
+# 依赖，无环
+confers = { version = "0.6.0-rc.6", default-features = false, features = ["watch"] }
+
 # 数据库网关 - dbnexus 0.6 embedded（sqlite）+ sql-parser：数据 API 网关的
 # 池化/解析面（db-integration feature）
 dbnexus = { version = "0.6.0-rc.6", default-features = false, features = ["embedded", "sql-parser"] }
@@ -261,6 +266,9 @@ toml = { workspace = true, optional = true }
 oxcache = { workspace = true, optional = true }
 http = { workspace = true, optional = true }
 
+# TLS 证书文件监听（tls-watch feature 独占，经 confers watch feature 门控）
+confers = { workspace = true, optional = true }
+
 # dbnexus 数据 API 网关（db-integration feature）
 dbnexus = { workspace = true, optional = true }
 
@@ -420,7 +428,8 @@ grpc-tls = ["grpc", "tonic/tls-aws-lc", "tonic/transport"]
 # 与 graceful 收尾共享（run_stop_phase）。与 grpc-tls（tonic ServerTlsConfig
 # 接线）实现独立。h2 能力由 hyper(http2) + hyper-util server-auto 提供，
 # 不经 axum/http2——明文 axum::serve 路径的行为面不受本特性影响。
-# 不并入 `full`：TLS 终止为部署面选项，与 grpc-tls 同口径按需启用。
+# 不直接并入 `full`（TLS 终止为部署面选项，与 grpc-tls 同口径按需启用）；
+# tls-watch 蕴含 serve-tls，启用 tls-watch 即传递开启本特性。
 serve-tls = [
     "http",
     "graceful",
@@ -430,6 +439,11 @@ serve-tls = [
     "dep:hyper",
     "dep:hyper-util",
 ]
+
+# TLS 证书热重载监听特性 - confers FsWatcher 去抖监听 cert/key 文件变化，
+# 驱动 ReloadingTls::reload_async 自动重载。服务于 serve-tls 之上的薄层，
+# 并入 full（默认构建依赖树不变，需显式启用）。
+tls-watch = ["serve-tls", "dep:confers"]
 
 # OpenAPI 特性 - 自动生成 OpenAPI 3.1 规范
 # 独立于 http：openapi 模块只用 utoipa + inventory + serde_json
@@ -588,6 +602,8 @@ full = [
     "inklog",
     "i18n",
     "idempotency",
+    "serve-tls",
+    "tls-watch",
 ]
 
 # build 脚本依赖无法随 feature 条件化（cargo 限制），故保持无条件声明；

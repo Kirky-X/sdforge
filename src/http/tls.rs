@@ -497,6 +497,55 @@ impl ReloadingTls {
     }
 }
 
+/// 启动证书文件监听任务（feature = `tls-watch`）。
+///
+/// confers `MultiFsWatcher` 监听 cert/key 路径，去抖（`debounce_ms`）后的
+/// 事件驱动 [`ReloadingTls::reload_async`] 自动重载；重载失败仅记 error 日志
+/// 并保留旧证书（换入语义见 [`CertReloader::reload`]——confers 只回答
+/// 「何时触发」，换入仍走 rustls resolver）。监听线程建立失败或退出时
+/// 热重载能力显式丧失（记日志），任务随后退出。
+///
+/// `shutdown` 与 serve 家族同构：`impl Future<Output = ()> + Send + 'static`
+/// 的 phase-1 停机触发器（见 [`crate::http::graceful`]），触发后任务退出。
+#[cfg(feature = "tls-watch")]
+pub fn spawn_cert_watcher(
+    reloading: Arc<ReloadingTls>,
+    paths: Vec<String>,
+    debounce_ms: u64,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut watcher = match confers::watcher::MultiFsWatcher::new(&paths, debounce_ms).await {
+            Ok(watcher) => watcher,
+            Err(err) => {
+                log::error!("cert watcher failed to start, hot reload disabled: {err}");
+                return;
+            }
+        };
+        tokio::pin!(shutdown);
+        loop {
+            tokio::select! {
+                _ = &mut shutdown => break,
+                event = watcher.recv() => match event {
+                    Some(_changed_path) => {
+                        if let Err(err) = reloading.reload_async().await {
+                            log::error!(
+                                "cert hot reload failed, keeping previous certificate: {err}"
+                            );
+                        }
+                    }
+                    None => {
+                        // watcher 线程退出（如 OS 拒绝建立 watch）：热重载能力
+                        // 丧失，显式告警而非静默无重载。
+                        log::warn!("cert watcher stopped unexpectedly, hot reload disabled");
+                        break;
+                    }
+                },
+            }
+        }
+    })
+}
+
 /// 在 `listener` 上以 TLS 终止方式服务 `router`，复用优雅停机三阶段时序
 /// （停止接新 → 排空在途 → 停止钩子），模块文档记载了与明文路径的
 /// 语义对应关系与两处有意分叉。
@@ -967,5 +1016,132 @@ mod tests {
             "None interval must disable probing"
         );
         assert_eq!(explicit.http2_keepalive_timeout, Some(Duration::MAX));
+    }
+}
+
+/// 证书文件监听热重载（feature = `tls-watch`）：confers FsWatcher 去抖事件
+/// 驱动 `ReloadingTls::reload_async`——换入语义仍走 rustls resolver，
+/// confers 只回答「何时触发」。
+#[cfg(all(test, feature = "tls-watch"))]
+mod cert_watch_tests {
+    use super::*;
+    use crate::config::TlsConfig;
+
+    fn self_signed_pem(common_name: &str) -> (String, String) {
+        let certified = rcgen::generate_simple_self_signed(vec![common_name.to_string()])
+            .expect("generate self-signed cert");
+        (certified.cert.pem(), certified.signing_key.serialize_pem())
+    }
+
+    fn write_pem(dir: &tempfile::TempDir, name: &str, content: &str) -> String {
+        let path = dir.path().join(name);
+        std::fs::write(&path, content).expect("write pem file");
+        path.to_string_lossy().into_owned()
+    }
+
+    /// 覆写盘上证书为匹配新对后，监听任务的自动重载在 5s 内反映到
+    /// `end_entity_certificate()`（去抖窗口 + 重载耗时）。
+    #[tokio::test]
+    async fn cert_watcher_hot_reloads_on_matching_pair_overwrite() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (cert_v1, key_v1) = self_signed_pem("v1.example");
+        let (cert_v2, key_v2) = self_signed_pem("v2.example");
+        let cert_path = write_pem(&dir, "cert.pem", &cert_v1);
+        let key_path = write_pem(&dir, "key.pem", &key_v1);
+
+        let reloading = Arc::new(
+            ReloadingTls::new(&TlsConfig::new(cert_path.clone(), key_path.clone()))
+                .expect("initial load"),
+        );
+        let before = reloading.end_entity_certificate().expect("initial cert");
+
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let watcher = spawn_cert_watcher(
+            Arc::clone(&reloading),
+            vec![cert_path.clone(), key_path.clone()],
+            100,
+            async move {
+                let _ = shutdown_rx.await;
+            },
+        );
+
+        // 等监听器建立后再覆写，避免竞态漏事件。
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        std::fs::write(&cert_path, &cert_v2).expect("overwrite cert");
+        std::fs::write(&key_path, &key_v2).expect("overwrite key");
+
+        let mut observed = before.clone();
+        for _ in 0..50 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            observed = reloading.end_entity_certificate().expect("cert");
+            if observed != before {
+                break;
+            }
+        }
+        assert_ne!(
+            observed, before,
+            "matching-pair overwrite must hot-reload the served certificate within 5s"
+        );
+
+        let _ = shutdown_tx.send(());
+        let _ = watcher.await;
+    }
+
+    /// 覆写为不匹配对：服务证书保持旧值且监听任务不退出——随后写入正确对，
+    /// 证书再次换新（监听存活验证）。
+    #[tokio::test]
+    async fn cert_watcher_keeps_old_cert_on_mismatched_overwrite() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (cert_v1, key_v1) = self_signed_pem("v1.example");
+        let (cert_v2, key_v2) = self_signed_pem("v2.example");
+        let (cert_foreign, _) = self_signed_pem("foreign.example");
+        let cert_path = write_pem(&dir, "cert.pem", &cert_v1);
+        let key_path = write_pem(&dir, "key.pem", &key_v1);
+
+        let reloading = Arc::new(
+            ReloadingTls::new(&TlsConfig::new(cert_path.clone(), key_path.clone()))
+                .expect("initial load"),
+        );
+        let before = reloading.end_entity_certificate().expect("initial cert");
+
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
+        let watcher = spawn_cert_watcher(
+            Arc::clone(&reloading),
+            vec![cert_path.clone(), key_path.clone()],
+            100,
+            async move {
+                let _ = shutdown_rx.await;
+            },
+        );
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        // 不匹配对（foreign 证书 + v1 密钥）：重载失败必须保留旧证书。
+        std::fs::write(&cert_path, &cert_foreign).expect("overwrite cert with foreign pair");
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        assert_eq!(
+            reloading.end_entity_certificate().expect("cert"),
+            before,
+            "mismatched pair must keep the old certificate"
+        );
+
+        // 监听存活：写入匹配的新对后证书再次换新。
+        std::fs::write(&cert_path, &cert_v2).expect("write matching cert");
+        std::fs::write(&key_path, &key_v2).expect("write matching key");
+        let mut observed = before.clone();
+        for _ in 0..50 {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            observed = reloading.end_entity_certificate().expect("cert");
+            if observed != before {
+                break;
+            }
+        }
+        assert_ne!(
+            observed, before,
+            "watcher must stay alive after a failed reload and pick up the fixed pair"
+        );
+
+        let _ = shutdown_tx.send(());
+        let _ = watcher.await;
     }
 }
