@@ -362,15 +362,6 @@ pub use grpc::sdforge_v1::{
     sd_forge_service_server::SdForgeServiceServer,
 };
 
-/// Structured logging utilities
-#[cfg(feature = "logging")]
-pub mod logging;
-
-#[cfg(feature = "logging")]
-pub use logging::{
-    LogEntry, LogLevel, LoggerConfig, StructuredLogger, get_global_logger, init_global_logger,
-};
-
 /// inklog 结构化日志集成 — 将裸 `log` 输出桥接到 inklog LoggerManager。
 ///
 /// 启用 `inklog` feature 后，调用 [`inklog::init_inklog_logger`] 即可

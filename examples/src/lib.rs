@@ -17,7 +17,7 @@
 //! | [`cache`] | 缓存功能 | `cache_examples` |
 //! | [`grpc`] | gRPC 协议 | `grpc_examples` |
 //! | [`config`] | 配置管理 | `http_examples` |
-//! | [`logging`] | 结构化日志 | `logging_examples` |
+//! | [`inklog`] | 结构化日志（inklog） | `logging_examples` |
 //! | [`openapi`] | OpenAPI 生成 | `openapi_examples` |
 //! | [`combined`] | 组合示例 | `combined_examples` |
 //!
@@ -52,7 +52,7 @@
 //! security_examples = ["sdforge/security"]
 //! cache_examples = ["sdforge/cache", "sdforge/http"]
 //! grpc_examples = ["sdforge/grpc"]
-//! logging_examples = ["sdforge/logging"]
+//! logging_examples = ["sdforge/inklog"]
 //! openapi_examples = ["sdforge/openapi", "http_examples"]
 //! combined_examples = ["http_examples", "mcp_examples", "websocket_examples",
 //!                      "streaming_examples", "security_examples", "openapi_examples"]
@@ -141,10 +141,10 @@ pub mod grpc;
 #[cfg(feature = "http_examples")]
 pub mod config;
 
-/// 结构化日志示例模块
+/// 结构化日志示例模块（inklog LoggerManager）
 ///
 /// 包含日志功能示例：
-/// - [`structured`](logging::structured) - 结构化日志记录
+/// - [`structured`](logging::structured) - inklog 结构化日志（全局安装 / from_file 轮转 / builder / set_level）
 #[cfg(feature = "logging_examples")]
 pub mod logging;
 

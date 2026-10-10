@@ -758,74 +758,67 @@ fn grpc_init_all_plugins_returns_accessible_counts() {
 }
 
 // ============================================================================
-// Section 9: Logging examples (feature = "logging_examples")
+// Section 9: Logging examples (feature = "logging_examples", inklog migration)
 // ============================================================================
 
 #[cfg(feature = "logging_examples")]
 #[test]
-fn logging_default_config_is_info_json() {
-    use sdforge_examples::logging::structured::default_config;
-    let config = default_config();
-    // LoggerConfig default is Info level, JSON format, colored.
-    assert_eq!(config.min_level, sdforge::logging::LogLevel::Info);
-    assert_eq!(config.format, sdforge::logging::LogFormat::Json);
-}
-
-#[cfg(feature = "logging_examples")]
-#[test]
-fn logging_dev_and_production_configs() {
-    use sdforge_examples::logging::structured::{dev_config, production_config};
-    let dev = dev_config();
-    assert_eq!(dev.min_level, sdforge::logging::LogLevel::Debug);
-    assert_eq!(dev.format, sdforge::logging::LogFormat::Text);
-    let prod = production_config();
-    assert_eq!(prod.min_level, sdforge::logging::LogLevel::Warn);
-    assert_eq!(prod.format, sdforge::logging::LogFormat::Json);
-    assert!(!prod.colored);
-    assert_eq!(prod.max_files, 10);
-}
-
-#[cfg(feature = "logging_examples")]
-#[test]
-fn logging_build_log_entry_has_fields() {
-    use sdforge_examples::logging::structured::build_log_entry;
-    let entry = build_log_entry();
-    assert_eq!(entry.target, "user_service");
-    assert_eq!(entry.fields.len(), 4);
-    assert!(entry.fields.contains_key("user_id"));
-    // Verify the entry serializes to JSON containing the expected fields.
-    let json = serde_json::to_string(&entry).expect("LogEntry should serialize");
-    assert!(json.contains("\"target\":\"user_service\""));
-    assert!(json.contains("\"user_id\""));
-}
-
-#[cfg(feature = "logging_examples")]
-#[test]
-fn logging_build_log_entry_with_fields_batch() {
-    use sdforge_examples::logging::structured::build_log_entry_with_fields;
-    let entry = build_log_entry_with_fields();
-    assert_eq!(entry.fields.len(), 4);
-    assert!(entry.fields.contains_key("request_id"));
-    assert!(entry.fields.contains_key("duration_ms"));
+fn logging_rotation_config_toml_carries_rotation_fields() {
+    use sdforge_examples::logging::structured::rotation_config_toml;
+    let toml = rotation_config_toml("/tmp/sdforge-comprehensive.log");
+    assert!(toml.contains("[file_sink]"), "file sink section present");
+    assert!(toml.contains("max_size = \"10MB\""), "size rotation");
+    assert!(
+        toml.contains("rotation_time = \"daily\""),
+        "time rotation (real rotation, not the old stack's claim)"
+    );
+    assert!(toml.contains("keep_files = 5"), "history retention");
+    assert!(toml.contains("/tmp/sdforge-comprehensive.log"), "log path");
 }
 
 #[cfg(feature = "logging_examples")]
 #[tokio::test]
-async fn logging_standalone_logger_does_not_panic() {
-    use sdforge_examples::logging::structured::create_standalone_logger;
-    let logger = create_standalone_logger();
-    logger.flush().await;
-    logger.shutdown().await;
+async fn logging_manager_from_builder_builds() {
+    use sdforge_examples::logging::structured::manager_from_builder;
+    let manager = manager_from_builder()
+        .await
+        .expect("builder construct must succeed");
+    drop(manager);
 }
 
 #[cfg(feature = "logging_examples")]
-#[test]
-fn logging_global_logger_accessor_returns_option() {
-    // get_global_logger returns Option<&StructuredLogger> without panicking,
-    // regardless of whether init_global_logger was called. We do NOT call
-    // init_global_logger here to avoid the OnceCell single-init constraint
-    // across parallel tests.
-    let _logger = sdforge::logging::get_global_logger();
+#[tokio::test]
+async fn logging_manager_with_rotation_from_file() {
+    use sdforge_examples::logging::structured::manager_with_rotation;
+    let dir = std::env::temp_dir().join(format!(
+        "sdforge-comprehensive-logging-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).expect("create scratch dir");
+    let manager = manager_with_rotation(&dir)
+        .await
+        .expect("from_file with rotation config must succeed");
+    drop(manager);
+}
+
+#[cfg(feature = "logging_examples")]
+#[tokio::test]
+async fn logging_bridge_installs_global_logger() {
+    use sdforge_examples::logging::structured::init_global;
+    // init_inklog_logger 幂等：本测试进程无论是否已安装过全局 logger 均 Ok。
+    let manager = init_global().await.expect("init must be idempotent-ok");
+    drop(manager);
+}
+
+#[cfg(feature = "logging_examples")]
+#[tokio::test]
+async fn logging_relax_level_accepts_valid_level() {
+    use sdforge_examples::logging::structured::{manager_from_builder, relax_level};
+    let manager = manager_from_builder()
+        .await
+        .expect("builder construct must succeed");
+    relax_level(&manager).expect("set_level must accept a valid level");
+    drop(manager);
 }
 
 // ============================================================================

@@ -351,7 +351,7 @@ serve_with_graceful_shutdown_tls(
 ### 国际化与日志
 
 - **i18n**：翻译注册表（`register_translation` / `set_locale` / `translate_or_fallback`）始终可用；`i18n` feature 额外提供 ICU4X 的 `HttpI18nFormatter`（本地化数字/日期/复数格式化与 Accept-Language 解析）。HTTP 错误体随请求 `Accept-Language` 选择语言（`build_with_config` 的请求级 locale 作用域 + 未匹配路由 404 统一错误体 + 限流拒绝体逐请求本地化），进程 locale 仅作回退
-- **日志**：`logging` feature 提供 `StructuredLogger` / `init_global_logger`；`inklog` feature 将裸 `log` 调用桥接到 inklog `LoggerManager` 结构化管道（`init_inklog_logger()`），并启用 `#[forge::log]` 声明日志属性宏（进入/退出/耗时/错误 + DataMasker 脱敏；feature 关闭时使用该宏在编译期显性报错）
+- **日志**：`inklog` feature 将裸 `log` 调用桥接到 inklog `LoggerManager` 结构化管道（`init_inklog_logger()`；0.5.0-rc 起承接已删除的自研 `StructuredLogger` 栈，结构化日志唯一入口，含真实轮转），并启用 `#[forge::log]` 声明日志属性宏（进入/退出/耗时/错误 + DataMasker 脱敏；feature 关闭时使用该宏在编译期显性报错）
 - **`#[forge::log]` 边界与语义**：`unsafe fn` 的 `unsafe` 限定原样传播到壳函数（调用方仍需 unsafe 块履行安全契约，宏不会把 unsafe fn 包装成安全函数）；壳函数不捕获 panic/任务取消——函数体 panic 或 async 任务被取消时不会产生 `fn_exit` 记录（需要失败可见性的调用方应在函数体内显式捕获，或在调用方监测 JoinHandle）；**不支持 trait impl 内的方法**（宏会在同一 impl 块内追加隐藏内部函数，trait impl 不允许额外成员）；`const`/变参在宏展开点 fail-loud 拒绝。载荷惰性渲染：目标日志级别被全局 max_level 过滤时，参数捕获与掩码渲染不执行（info 生产配置下 debug 进入日志零额外分配成本）；超过 64 KiB 的载荷在掩码前截断（inklog DataMasker 对 >1 MiB 输入会整体跳过掩码，壳层截断保证敏感值永不以明文入日志）；凭证键值对规则覆盖引号键形态（`"password":"hunter2"` 与 `password=hunter2` 同样被掩码）
 
 ### 客户端 SDK 生成

@@ -145,7 +145,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 | HTTP only | `["http"]` | Traditional REST APIs |
 | MCP only | `["mcp"]` | AI tool integration |
 | HTTP + MCP dual protocol | `["http", "mcp"]` | One codebase, two entrypoints |
-| Full runtime features | `["full"]` | All protocols and capabilities (25 features, incl. `idempotency`; excludes deployment-surface TLS `serve-tls`/`grpc-tls` and the optional heavy deps / opt-ins `simd-json`/`kit`/`limiteron-integration`/`schemars`/`ratelimit-dist`/`cache-l2`/`db-integration`/`sdk`) |
+| Full runtime features | `["full"]` | All protocols and capabilities (26 features, incl. `idempotency` and deployment-surface HTTP TLS `serve-tls`/`tls-watch`; excludes the gRPC-side `grpc-tls` and the optional heavy deps / opt-ins `simd-json`/`kit`/`limiteron-integration`/`schemars`/`ratelimit-dist`/`cache-l2`/`db-integration`/`sdk`) |
 
 `grpc`, `websocket`, `streaming`, `openapi`, `cli`, and `cache` can all be enabled independently of `http`, in any combination.
 
@@ -179,6 +179,7 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>metrics</code></td><td>Prometheus text-format <code>/metrics</code> endpoint (request counts, latency histograms, status code distribution; lightweight in-house renderer)</td><td>❌</td></tr>
   <tr><td><code>graceful</code></td><td>Graceful shutdown (SIGTERM/SIGINT: stop accepting, drain in-flight, phased teardown)</td><td>❌</td></tr>
   <tr><td><code>serve-tls</code></td><td>HTTP TLS termination (rustls aws-lc-rs: PEM cert/key loading, configurable ALPN, <code>ReloadingTls</code> hot reload; per-request <code>ConnectInfo</code> injection, handshake/header-read timeout guards, shutdown choreography sharing graceful's stop phase. Doc-cross-linked with the gRPC-side <code>grpc-tls</code> but implemented independently)</td><td>❌</td></tr>
+  <tr><td><code>tls-watch</code></td><td>Debounced certificate-watch hot reload (confers <code>FsWatcher</code> drives <code>reload_async</code> on cert/key file changes; implies <code>serve-tls</code>; keeps the previous certificate on failed reload)</td><td>❌</td></tr>
   <tr><td><code>context</code></td><td>Request context (request_id/trace_id generation and cross-protocol HTTP/MCP/gRPC/WS injection)</td><td>❌</td></tr>
   <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> + <code>#[param(ge/le/...)]</code> parameter validation; 422 with field-level errors; struct query parameters extracted flatly via <code>#[param(kind = "query", flatten)]</code></td><td>❌</td></tr>
   <tr><td><code>paginate</code></td><td><code>#[forge(paginate)]</code> declarative pagination (auto page/size and the <code>{items,total,next}</code> wrapper)</td><td>❌</td></tr>
@@ -186,26 +187,25 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>lifecycle</code></td><td><code>#[forge(on_start/on_stop)]</code> lifecycle hooks (ordered with graceful shutdown)</td><td>❌</td></tr>
   <tr><td><code>hooks</code></td><td>Pre/post handler hook pipeline (middleware-style, unified error contract)</td><td>❌</td></tr>
   <tr><td><code>otel</code></td><td>OTLP/HTTP JSON export of request spans and metric snapshots (zero extra dependencies)</td><td>❌</td></tr>
-  <tr><td><code>logging</code></td><td>Structured request logging</td><td>❌</td></tr>
   <tr><td><code>timestamp</code></td><td>Response timestamps</td><td>❌</td></tr>
-  <tr><td><code>inklog</code></td><td>inklog structured logging bridge</td><td>❌</td></tr>
+  <tr><td><code>inklog</code></td><td>inklog structured logging bridge (<code>init_inklog_logger()</code>). Since 0.5.0-rc it absorbs the removed in-house <code>StructuredLogger</code> stack (the <code>logging</code> feature is gone, breaking)</td><td>❌</td></tr>
   <tr><td><code>i18n</code></td><td>ICU4X internationalization (locale-aware formatting + Accept-Language parsing)</td><td>❌</td></tr>
   <tr><td><code>simd-json</code></td><td>SIMD-accelerated JSON serialization/deserialization</td><td>❌</td></tr>
   <tr><td><code>limiteron-integration</code></td><td>Pulls in the limiteron dependency (foundation for kit)</td><td>❌</td></tr>
   <tr><td><code>db-integration</code></td><td>dbnexus data-API gateway (<code>DbGateway</code> whitelisted read-only data plane: table/column whitelists + filter-value escaping + server-side page clamping; independent of http)</td><td>❌</td></tr>
   <tr><td><code>kit</code></td><td>trait-kit AsyncKit integration (SdforgeModule graph)</td><td>❌</td></tr>
   <tr><td><code>tokio</code></td><td>Internal feature: enables the tokio dependency (pulled in automatically by other features)</td><td>❌</td></tr>
-  <tr><td><code>full</code></td><td>All runtime features (25: http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/logging/timestamp/openapi/cli/docgen/inklog/i18n/idempotency; excludes deployment-surface TLS <code>serve-tls</code>/<code>grpc-tls</code> and the optional heavy deps / opt-in surface <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code>/<code>schemars</code>/<code>ratelimit-dist</code>/<code>cache-l2</code>/<code>db-integration</code>/<code>sdk</code>)</td><td>❌</td></tr>
+  <tr><td><code>full</code></td><td>All runtime features (26: http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/timestamp/openapi/cli/docgen/inklog/i18n/idempotency/serve-tls/tls-watch; excludes the gRPC-side <code>grpc-tls</code> and the optional heavy deps / opt-in surface <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code>/<code>schemars</code>/<code>ratelimit-dist</code>/<code>cache-l2</code>/<code>db-integration</code>/<code>sdk</code>)</td><td>❌</td></tr>
 </table>
 
 <details>
 <summary>🔗 Feature dependency relations</summary>
 
-- Independent of `http`: `mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `logging` / `inklog` / `i18n` / `simd-json` / `limiteron-integration` / `db-integration` / `schemars` / `ratelimit-dist`
-- Derived from `http`: `security` (includes `ratelimit-http` → `ratelimit` and `cache`), `ratelimit-http`, `websocket` (includes `streaming`), `health` / `metrics` / `graceful` / `serve-tls` (includes `graceful`) / `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
+- Independent of `http`: `mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `inklog` / `i18n` / `simd-json` / `limiteron-integration` / `db-integration` / `schemars` / `ratelimit-dist`
+- Derived from `http`: `security` (includes `ratelimit-http` → `ratelimit` and `cache`), `ratelimit-http`, `websocket` (includes `streaming`), `health` / `metrics` / `graceful` / `serve-tls` (includes `graceful`) / `tls-watch` (includes `serve-tls`) / `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
 - `docgen` = `openapi` + `cli` (mounting the Swagger UI additionally requires `http`; legacy name `docs` remains as a compat alias)
 - `kit` = `trait-kit` (health + lifecycle) + `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
-- `full` covers 25 runtime features (incl. `idempotency` and `docgen`) and excludes the optional heavy deps `simd-json` / `kit` / `limiteron-integration` (SIMD JSON, trait-kit module graph, rate-limit integration foundation) plus `serve-tls` / `grpc-tls` (deployment-surface TLS termination/wiring) and `schemars` / `ratelimit-dist` / `cache-l2` / `db-integration` / `sdk` (opt-in surface) — all enabled individually as needed
+- `full` covers 26 runtime features (incl. `idempotency`, `docgen`, deployment-surface HTTP TLS `serve-tls`/`tls-watch`) and excludes the optional heavy deps `simd-json` / `kit` / `limiteron-integration` (SIMD JSON, trait-kit module graph, rate-limit integration foundation) plus the gRPC-side `grpc-tls` wiring and `schemars` / `ratelimit-dist` / `cache-l2` / `db-integration` / `sdk` (opt-in surface) — all enabled individually as needed
 
 </details>
 
@@ -260,7 +260,7 @@ cargo run --example perf_regex_cache --features cache
 | `streaming/` | SSE streaming responses |
 | `websocket/` | Basic usage and chat room |
 | `grpc/` | gRPC server |
-| `logging/` | Structured logging |
+| `logging/` | Structured logging (inklog LoggerManager: global install / from_file rotation / builder / set_level) |
 | `openapi/` | OpenAPI spec generation (`OpenApiBuilder`, `generate_openapi_spec`) |
 | `combined/` | Complete example combining multiple features (`full_example.rs`) |
 

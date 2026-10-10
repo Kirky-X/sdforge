@@ -12,8 +12,9 @@
 //! - **gRPC** — `SdForgeGrpcService::call` wraps dispatch with a context.
 //! - **WebSocket** — `handle_socket` entry adopts/creates a context.
 //! - **MCP** — the stateless handler wraps tool dispatch.
-//! - **Logging** — `StructuredLogger` appends `request_id`/`trace_id` fields
-//!   from the ambient context (`logging` + `context` features).
+//! - **Logging** — [`log_fields`] supplies `request_id`/`trace_id` fields
+//!   from the ambient context; attach them to `log` records routed into
+//!   inklog (via the `inklog` feature bridge).
 //!
 //! Ids are process-unique without external dependencies (monotonic counter +
 //! wall-clock nanos); correlation is what matters, not global uniqueness.

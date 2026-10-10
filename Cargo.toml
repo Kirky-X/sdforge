@@ -313,6 +313,10 @@ unic-langid = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+# tests/integration/inklog_bridge_tests.rs 用 tracing 宏发射结构化事件：
+# inklog subscriber 的 extra async sender 只由 tracing 路径喂给（log facade
+# 无结构化字段），捕获 sink 经此验证结构化记录形态
+tracing = { version = "0.1", default-features = false, features = ["std", "attributes"] }
 # src/security/ratelimit/dist.rs 熔断测试用 MockClock 推进时间（test-clock
 # feature 提供），与 [dependencies] 的 optional limiteron 统一特性——
 # ratelimit feature 开启时合并为同一 crate 实例；未开启时测试不引用该面
@@ -528,13 +532,6 @@ otel = ["http", "tokio"]
 # 依赖 http（中间件）与 cache（IdempotencyStore 后端）
 idempotency = ["http", "cache", "tokio"]
 
-# Logging 特性
-# `dep:once_cell` is required because `src/logging.rs` uses
-# `once_cell::sync::OnceCell` for `GLOBAL_LOGGER`. Without this, building
-# `--features logging` alone (without `http`, which also enables once_cell)
-# fails with "cannot find module or crate `once_cell`".
-logging = ["dep:chrono", "dep:once_cell", "tokio"]
-
 # tokio feature (enables dep:tokio; referenced by #[cfg(feature = "tokio")] in source)
 tokio = ["dep:tokio"]
 
@@ -595,7 +592,6 @@ full = [
     "hooks",
     "lifecycle",
     "otel",
-    "logging",
     "openapi",
     "cli",
     "docgen",
@@ -684,6 +680,10 @@ path = "tests/integration/security_middleware_tests.rs"
 [[test]]
 name = "security_tests"
 path = "tests/integration/security_tests.rs"
+
+[[test]]
+name = "inklog_bridge_tests"
+path = "tests/integration/inklog_bridge_tests.rs"
 
 [[test]]
 name = "streaming_tests"

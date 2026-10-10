@@ -1,13 +1,17 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! # 结构化日志示例
+//! # 结构化日志示例（inklog LoggerManager）
 //!
-//! 本示例展示 SDForge 结构化日志的使用方式：
+//! 自研 `StructuredLogger` 栈已在 0.5.0-rc 期删除，结构化日志收敛到 inklog
+//! `LoggerManager`。本示例展示迁移目标的四条路径：
 //!
-//! 1. 创建 `StructuredLogger` 实例（独立使用）
-//! 2. 配置 `LoggerConfig`（日志级别、格式、颜色）
-//! 3. 构建带上下文字段的 `LogEntry`
-//! 4. 初始化全局日志器并通过便捷宏记录日志
+//! 1. [`init_global`] —— `init_inklog_logger` 安装 inklog 为全局 `log`
+//!    后端：既有 `log::info!` 等 facade 调用零改动自动进 inklog 管道。
+//! 2. [`rotation_config_toml`] + [`manager_with_rotation`] ——
+//!    `LoggerManager::from_file` 从 TOML 加载含**真实轮转**（大小 + 时间）
+//!    的文件 sink 配置（替换旧栈宣称却不存在的轮转）。
+//! 3. [`manager_from_builder`] —— `LoggerManager::builder()` 编程式构造。
+//! 4. [`relax_level`] —— `set_level` 运行时调级。
 //!
 //! ## 运行方式
 //!
@@ -19,156 +23,94 @@
 //! 编译为库模块时允许保留未调用项。
 #![allow(dead_code)]
 
-use sdforge::logging::{
-    LogEntry, LogFormat, LogLevel, LoggerConfig, StructuredLogger, get_global_logger,
-    init_global_logger,
-};
-use serde_json::json;
+use sdforge::inklog::{LoggerManager, init_inklog_logger};
+use std::path::{Path, PathBuf};
 
 // =============================================================================
-// 日志器配置
+// 配置文件
 // =============================================================================
 
-/// 默认日志器配置 — Info 级别，JSON 格式，启用颜色。
-pub fn default_config() -> LoggerConfig {
-    LoggerConfig::default()
-}
+/// 含轮转配置的 inklog TOML：文件 sink，大小（10MB）与时间（daily）双轮转，
+/// 保留 5 个历史文件。
+pub fn rotation_config_toml(log_path: &str) -> String {
+    format!(
+        r#"[global]
+level = "info"
 
-/// 开发环境配置 — Debug 级别，文本格式，启用颜色。
-pub fn dev_config() -> LoggerConfig {
-    LoggerConfig {
-        min_level: LogLevel::Debug,
-        format: LogFormat::Text,
-        colored: true,
-        ..Default::default()
-    }
-}
+[console_sink]
+enabled = true
 
-/// 生产环境配置 — Warn 级别，JSON 格式，禁用颜色。
-pub fn production_config() -> LoggerConfig {
-    LoggerConfig {
-        min_level: LogLevel::Warn,
-        format: LogFormat::Json,
-        colored: false,
-        max_file_size: 50 * 1024 * 1024, // 50 MB
-        max_files: 10,
-    }
-}
-
-// =============================================================================
-// 日志条目构建
-// =============================================================================
-
-/// 演示构建带上下文字段的日志条目。
-///
-/// `LogEntry` 支持链式调用添加字段，字段以 `BTreeMap` 存储（有序输出）。
-pub fn build_log_entry() -> LogEntry {
-    LogEntry::new(
-        LogLevel::Info,
-        "user_service",
-        "User logged in successfully",
+[file_sink]
+enabled = true
+path = "{log_path}"
+max_size = "10MB"
+rotation_time = "daily"
+keep_files = 5
+"#
     )
-    .with_field("user_id", "12345")
-    .with_field("username", "alice")
-    .with_field("ip_address", "192.168.1.100")
-    .with_field("method", "password")
 }
 
-/// 演示多字段批量添加。
-pub fn build_log_entry_with_fields() -> LogEntry {
-    let fields = vec![
-        ("request_id".to_string(), json!("req-abc-123")),
-        ("duration_ms".to_string(), json!(42)),
-        ("status_code".to_string(), json!(200)),
-        ("endpoint".to_string(), json!("/api/v1/users")),
-    ];
-
-    LogEntry::new(LogLevel::Info, "http", "Request completed").with_fields(fields)
+/// 进程内唯一的临时目录（示例/测试用，不引入 tempfile 依赖）。
+fn scratch_dir(name: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "sdforge-logging-example-{}-{}",
+        std::process::id(),
+        name
+    ));
+    std::fs::create_dir_all(&dir).expect("create scratch dir");
+    dir
 }
 
 // =============================================================================
-// 独立日志器使用（不依赖全局状态）
+// 全局 log 后端安装（facade 零改动入口）
 // =============================================================================
 
-/// 创建一个独立的 `StructuredLogger` 并记录各级别日志。
+/// 安装 inklog 为全局 `log` 后端。
 ///
-/// 独立日志器适用于组件级日志记录，不需要全局状态。
-pub fn create_standalone_logger() -> StructuredLogger {
-    let config = LoggerConfig {
-        min_level: LogLevel::Trace,
-        format: LogFormat::Json,
-        colored: false,
-        ..Default::default()
-    };
-
-    let logger = StructuredLogger::new(config);
-
-    // 各级别日志方法
-    logger.trace(
-        "trace_module",
-        "Detailed trace information",
-        vec![("step".to_string(), json!(1))],
-    );
-
-    logger.debug(
-        "debug_module",
-        "Debug information for development",
-        vec![("var".to_string(), json!("value"))],
-    );
-
-    logger.info(
-        "app",
-        "Application initialized",
-        vec![
-            ("version".to_string(), json!("0.1.0")),
-            ("env".to_string(), json!("production")),
-        ],
-    );
-
-    logger.warn(
-        "cache",
-        "Cache hit rate below threshold",
-        vec![
-            ("hit_rate".to_string(), json!(0.65)),
-            ("threshold".to_string(), json!(0.8)),
-        ],
-    );
-
-    logger.error(
-        "database",
-        "Connection pool exhausted",
-        vec![
-            ("active".to_string(), json!(100)),
-            ("max".to_string(), json!(100)),
-        ],
-    );
-
-    logger
+/// 返回的 `LoggerManager` 必须保持存活以维持 inklog worker 线程；重复调用
+/// 幂等（install 失败降级为 warning，仍返回 Ok）。
+pub async fn init_global() -> Result<LoggerManager, sdforge::inklog::InklogError> {
+    init_inklog_logger().await
 }
 
 // =============================================================================
-// 全局日志器
+// from_file：含轮转配置的构造路径
 // =============================================================================
 
-/// 初始化全局日志器并验证可用性。
-///
-/// `init_global_logger` 只能调用一次（使用 `OnceCell` 保证）。
-/// 重复调用返回 `LoggerError::AlreadyInitialized`。
-pub fn setup_global_logger() -> Result<(), Box<dyn std::error::Error>> {
-    let config = production_config();
-    init_global_logger(config).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+/// 从含轮转配置的 TOML 构造 `LoggerManager`（真实轮转，非宣称）。
+pub async fn manager_with_rotation(
+    dir: &Path,
+) -> Result<LoggerManager, sdforge::inklog::InklogError> {
+    let log_path = dir.join("sdforge.log");
+    let config_path = dir.join("inklog.toml");
+    std::fs::write(
+        &config_path,
+        rotation_config_toml(&log_path.to_string_lossy()),
+    )
+    .expect("write inklog config");
+    LoggerManager::from_file(&config_path).await
 }
 
-/// 通过全局日志器记录日志（如果已初始化）。
-pub fn log_via_global(message: &str) {
-    match get_global_logger() {
-        Some(logger) => {
-            logger.info("global_demo", message, vec![]);
-        }
-        _ => {
-            eprintln!("[fallback] global logger not initialized: {}", message);
-        }
-    }
+// =============================================================================
+// builder：编程式构造
+// =============================================================================
+
+/// `LoggerManager::builder()` 编程式构造（info 级 + console sink）。
+pub async fn manager_from_builder() -> Result<LoggerManager, sdforge::inklog::InklogError> {
+    LoggerManager::builder()
+        .level("info")
+        .console(true)
+        .build()
+        .await
+}
+
+// =============================================================================
+// set_level：运行时调级
+// =============================================================================
+
+/// 运行时调级（全局 target）。低于新级别的记录被过滤。
+pub fn relax_level(manager: &LoggerManager) -> Result<(), sdforge::inklog::InklogError> {
+    manager.set_level(None, "debug")
 }
 
 // =============================================================================
@@ -177,79 +119,35 @@ pub fn log_via_global(message: &str) {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("📝 SDForge Structured Logging Example");
-    println!("======================================\n");
+    println!("📝 SDForge Structured Logging Example (inklog)");
+    println!("=============================================\n");
 
-    // 配置展示
-    println!("⚙️  日志器配置:");
-    println!(
-        "  default:    level={}, format={:?}, colored={}",
-        default_config().min_level,
-        default_config().format,
-        default_config().colored
-    );
-    println!(
-        "  dev:        level={}, format={:?}, colored={}",
-        dev_config().min_level,
-        dev_config().format,
-        dev_config().colored
-    );
-    println!(
-        "  production: level={}, format={:?}, colored={}",
-        production_config().min_level,
-        production_config().format,
-        production_config().colored
-    );
-    println!();
+    // 1. 全局 log 后端：facade 调用零改动
+    println!("🌍 init_inklog_logger:");
+    let manager = init_global().await?;
+    println!("  ✓ inklog installed as the global `log` backend");
+    log::info!("sdforge logging example: routed through inklog");
 
-    // 日志条目展示
-    println!("📋 LogEntry 构建:");
-    let entry = build_log_entry();
-    println!("  level: {}", entry.level);
-    println!("  target: {}", entry.target);
-    println!("  message: {}", entry.message);
-    println!("  fields ({} 个):", entry.fields.len());
-    for (key, value) in &entry.fields {
-        println!("    {} = {}", key, value);
-    }
+    // 2. from_file：含轮转的配置
+    println!("\n📁 LoggerManager::from_file (with rotation):");
+    let dir = scratch_dir("main");
+    let rotating = manager_with_rotation(&dir).await?;
+    println!("  ✓ manager built from TOML with size + time rotation");
+    drop(rotating);
 
-    println!();
-    let multi_entry = build_log_entry_with_fields();
-    println!("  多字段条目: {} 个字段", multi_entry.fields.len());
-    let json = serde_json::to_string(&multi_entry)?;
-    println!("  JSON: {}", json);
-    println!();
+    // 3. builder：编程式构造
+    println!("\n🔧 LoggerManager::builder:");
+    let built = manager_from_builder().await?;
+    println!("  ✓ manager built programmatically (info + console)");
+    drop(built);
 
-    // 独立日志器
-    println!("🔌 独立日志器 (StructuredLogger::new):");
-    println!("  (日志输出到 stdout)");
-    let _logger = create_standalone_logger();
-    println!();
+    // 4. set_level：运行时调级
+    println!("\n🎚️  set_level:");
+    relax_level(&manager)?;
+    println!("  ✓ level relaxed to debug at runtime");
+    log::debug!("sdforge logging example: debug now visible after set_level");
 
-    // 全局日志器
-    println!("🌍 全局日志器:");
-    match setup_global_logger() {
-        Ok(()) => {
-            println!("  ✓ 全局日志器已初始化");
-            log_via_global("Global logger is working");
-        }
-        Err(e) => {
-            println!("  ⚠️  全局日志器已初始化（重复调用返回错误）: {}", e);
-        }
-    }
-
-    println!();
-    println!("💡 便捷宏 (可在任意位置使用):");
-    println!("  sdforge::log_info!(\"module\", \"message\", \"key\" => \"value\");");
-    println!("  sdforge::log_error!(\"module\", \"error\", \"code\" => 500);");
-    println!("  sdforge::log_debug!(\"module\", \"debug info\");");
-
-    println!();
-    println!("✓ 日志示例完成");
-
-    // 给异步日志器一点时间刷新输出
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-
+    println!("\n✓ 日志示例完成");
     Ok(())
 }
 
@@ -262,81 +160,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_default_config_is_info_json() {
-        let config = default_config();
-        assert_eq!(config.min_level, LogLevel::Info);
-        assert_eq!(config.format, LogFormat::Json);
-        assert!(config.colored);
-    }
-
-    #[test]
-    fn test_dev_config_is_debug_text() {
-        let config = dev_config();
-        assert_eq!(config.min_level, LogLevel::Debug);
-        assert_eq!(config.format, LogFormat::Text);
-        assert!(config.colored);
-    }
-
-    #[test]
-    fn test_production_config_is_warn_json_nocolor() {
-        let config = production_config();
-        assert_eq!(config.min_level, LogLevel::Warn);
-        assert_eq!(config.format, LogFormat::Json);
-        assert!(!config.colored);
-        assert_eq!(config.max_files, 10);
-    }
-
-    #[test]
-    fn test_build_log_entry_has_fields() {
-        let entry = build_log_entry();
-        assert_eq!(entry.level, LogLevel::Info);
-        assert_eq!(entry.target, "user_service");
-        assert!(entry.message.contains("User logged in"));
-        assert_eq!(entry.fields.len(), 4, "should have 4 context fields");
-        assert!(entry.fields.contains_key("user_id"));
-        assert!(entry.fields.contains_key("username"));
-    }
-
-    #[test]
-    fn test_build_log_entry_with_fields_batch() {
-        let entry = build_log_entry_with_fields();
-        assert_eq!(entry.fields.len(), 4, "should have 4 batch fields");
-        assert!(entry.fields.contains_key("request_id"));
-        assert!(entry.fields.contains_key("duration_ms"));
-    }
-
-    #[test]
-    fn test_log_entry_serializes_to_json() {
-        let entry = build_log_entry();
-        let json = serde_json::to_string(&entry).expect("serialization should succeed");
+    fn test_rotation_config_toml_carries_rotation_fields() {
+        let toml = rotation_config_toml("/tmp/sdforge-example.log");
+        assert!(toml.contains("[file_sink]"), "file sink section present");
+        assert!(toml.contains("max_size = \"10MB\""), "size rotation");
+        assert!(toml.contains("rotation_time = \"daily\""), "time rotation");
+        assert!(toml.contains("keep_files = 5"), "history retention");
         assert!(
-            json.contains("\"level\":\"info\""),
-            "JSON should contain level"
+            toml.contains("/tmp/sdforge-example.log"),
+            "log path embedded"
         );
-        assert!(
-            json.contains("\"target\":\"user_service\""),
-            "JSON should contain target"
-        );
-        assert!(
-            json.contains("\"user_id\""),
-            "JSON should contain user_id field"
-        );
-    }
-
-    #[test]
-    fn test_log_level_ordering() {
-        // LogLevel derives Ord — verify ordering is correct
-        assert!(LogLevel::Error > LogLevel::Warn);
-        assert!(LogLevel::Warn > LogLevel::Info);
-        assert!(LogLevel::Info > LogLevel::Debug);
-        assert!(LogLevel::Debug > LogLevel::Trace);
     }
 
     #[tokio::test]
-    async fn test_create_standalone_logger_does_not_panic() {
-        // StructuredLogger::new spawns a tokio task, so this must run in a runtime.
-        let logger = create_standalone_logger();
-        logger.flush().await;
-        logger.shutdown().await;
+    async fn test_manager_from_builder_builds() {
+        let manager = manager_from_builder()
+            .await
+            .expect("builder construct must succeed");
+        drop(manager);
+    }
+
+    #[tokio::test]
+    async fn test_manager_with_rotation_from_file() {
+        let dir = scratch_dir("from_file");
+        let manager = manager_with_rotation(&dir)
+            .await
+            .expect("from_file with rotation config must succeed");
+        drop(manager);
+    }
+
+    #[tokio::test]
+    async fn test_init_global_installs_log_backend() {
+        // 幂等：无论本测试进程是否已安装过全局 logger，调用均返回 Ok。
+        let manager = init_global().await.expect("init must be idempotent-ok");
+        drop(manager);
+    }
+
+    #[tokio::test]
+    async fn test_relax_level_filters_below_new_level() {
+        let manager = manager_from_builder()
+            .await
+            .expect("builder construct must succeed");
+        relax_level(&manager).expect("set_level must accept a valid level");
+        drop(manager);
     }
 }

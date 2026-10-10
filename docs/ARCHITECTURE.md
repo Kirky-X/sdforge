@@ -79,19 +79,18 @@ sdforge/
 | `error/` | 无 | 框架错误：`ApiError`、`SdForgeError` / `SdForgeResult`、`ErrorContext`、错误 i18n |
 | `domain/` | 无 | 领域抽象（如 `ForgeRateLimiter`），供集成层消费 |
 | `i18n/` | `i18n`（格式化部分） | 翻译注册表（始终可用）+ ICU4X `HttpI18nFormatter` |
-| `http/` | `http` | Axum 协议实现：`build()` / `build_with_config()`、版本路由、安全头、响应构造、路由注册；`tls.rs`（`serve-tls`）rustls TLS 终止：PEM 证书/密钥加载、ALPN、`ReloadingTls` 热重载、与 graceful 共享停机收尾 |
+| `http/` | `http` | Axum 协议实现：`build()` / `build_with_config()`、版本路由、安全头、响应构造、路由注册；`tls.rs`（`serve-tls`）rustls TLS 终止：PEM 证书/密钥加载、ALPN、`ReloadingTls` 热重载、与 graceful 共享停机收尾；`tls-watch` 叠加 confers `FsWatcher` 去抖监听（`spawn_cert_watcher` 驱动 `reload_async` 自动重载，换入语义仍走 rustls） |
 | `mcp/` | `mcp` | rmcp 集成：`StatelessServerHandler`、HTTP 头协议（`headers.rs`）、MRTR 会话（`mrtr.rs`）、缓存语义（`cache_semantics.rs`）、schema 校验 |
 | `grpc/` | `grpc` | tonic 服务：`SdForgeGrpcService`、`GrpcServerConfig`、protobuf（`proto/sdforge.v1.proto`，`build.rs` 经 tonic-prost 生成到 `OUT_DIR`）、handler 注册与拦截器 |
 | `websocket/` | `websocket` | 连接管理（`connection.rs`）、handler 分发（`handler.rs`）、广播（`broadcast.rs`）、消息解析（`message.rs`） |
 | `streaming/` | `streaming` | SSE：`StreamEvent` / `StreamResponse`、`stream_to_sse`、`StreamBuilder` |
 | `cli/` | `cli` | clap 集成：`CliBuilder`、`dispatch`、`GlobalArg`、docs 子命令 |
-| `security/` | `security` / `ratelimit` / `ratelimit-http` | 认证（Bearer / API Key，`bearer/`、`types/`）、限流（limiteron 适配）、审计（`audit/`）、中间件 |
+| `security/` | `security` / `ratelimit` / `ratelimit-http` | 认证（Bearer / API Key，`bearer/`、`types/`；API key 缓存为 oxcache `ApiKeyCache`，ttl + capacity 逐出）、限流（limiteron 适配；分布式熔断为 limiteron `CircuitBreaker`，FailOpen/FailClose 语义不变）、审计（`audit/`）、中间件 |
 | `cache/` | `cache` | oxcache 透传与适配：`SyncCache` / `SharedCache` / `DashMapCache`、`ResponseCacheLayer` |
 | `openapi/` | `openapi` | `OpenApiRouteInfo` 收集与 utoipa 规范生成、`OpenApiBuilder`、路径参数 schema 映射 |
 | `docs/` | `docs` | 统一文档输出：Swagger UI 路由、CLI/MCP Markdown（`generate_docs` / `write_docs`） |
 | `config/` | `http` | `SdForgeConfig` / `ServerConfig` / `AuthConfig` / `CorsConfig` / `CacheConfig` 等模块化配置 + 集中默认值 + Builder |
-| `logging.rs` | `logging` | `StructuredLogger`、全局 Logger |
-| `inklog.rs` | `inklog` | 裸 `log` → inklog `LoggerManager` 桥接 |
+| `inklog.rs` | `inklog` | 裸 `log` → inklog `LoggerManager` 桥接（0.5.0-rc 起承接已删除的自研 `StructuredLogger` 栈，结构化日志唯一入口；轮转走 inklog `FileSink`） |
 | `integrations/` | `limiteron-integration` / `kit` | trait-kit AsyncKit 集成（`SdforgeModule`）、`LimiteronForgeAdapter` |
 
 `macros/`（独立 crate）：`#[forge]` / `#[service_module]` 解析、参数校验、路径参数提取与 schema 生成、按 feature 门控的多协议代码生成、trybuild 编译失败测试。
@@ -135,7 +134,7 @@ flowchart LR
 7. 请求进入中间件栈：认证（`auth_middleware`，API Key / JWT Bearer）→ 限流（`RateLimitLayer`，基于 `ConnectInfo` 提取的 TCP 对端 IP）→ 安全头 / CORS / 超时
 8. 版本路由匹配 `/api/{version}`，将请求分发到目标 handler；宏生成的提取器把路径/查询参数反序列化为函数参数
 9. 统一 handler 契约执行：`HandlerArgs`（extractor 构造）+ `HandlerState`（`downcast_state` 注入）→ 业务函数 → `Result<T, ApiError>`
-10. 响应管道：`ServiceResponse` 封装（显式 `status` / `success_with_status`）→ 可选 timestamp / logging / i18n 处理 → JSON 输出
+10. 响应管道：`ServiceResponse` 封装（显式 `status` / `success_with_status`）→ 可选 timestamp / i18n 处理 → JSON 输出
 
 ```mermaid
 sequenceDiagram
@@ -151,7 +150,7 @@ sequenceDiagram
     RT->>FN: 匹配 /api/v1 路由<br/>提取路径与查询参数
     FN->>FN: HandlerArgs 与 HandlerState<br/>执行业务逻辑
     FN-->>RS: Result 值或 ApiError
-    RS-->>C: JSON 响应<br/>可选 timestamp i18n logging
+    RS-->>C: JSON 响应<br/>可选 timestamp i18n
 ```
 
 其他协议入口复用 7–10 的后段：MCP 经 `Mcp-Method` / `Mcp-Name` 头（或 stdio）由 `StatelessServerHandler` 路由到同一批工具 handler；gRPC 经 `SdForgeGrpcService` 按 `grpc_method` 路由（载荷上限 1 MiB）；CLI 经 `CliBuilder::execute()` 完成 parse → dispatch → `extract_value`（`Value::String` 输出原始串）→ 退出码。
@@ -173,6 +172,6 @@ sequenceDiagram
 - **编译时裁剪是第一性能设计**：特性门控让未用协议的依赖（tonic/prost、rmcp、tokio-tungstenite、argon2/sha2 等）完全不进入编译图。实测（2026-07-03）`http` only 相比 `full` 节省约 47% 编译时间、约六成框架库体积，详见[编译期门控基准](benchmarks/vs-server-less.md)
 - **运行期零协议税**：协议选择发生在编译期，不存在运行时协议探测或动态加载；运行时热路径基线见[性能基线](PERFORMANCE.md)
 - **注册收集幂等缓存**：`init_all_plugins()` 用 `OnceLock` 缓存 inventory 迭代结果，重复调用零开销
-- **正则缓存**：`core::RegexCache` 以 LRU 缓存编译后的正则（修复过 MRU 误驱逐缺陷），避免热路径重复编译
+- **正则缓存**：`core::RegexCache` 以 oxcache `ByteWeightCache` 缓存编译后的正则（字节预算 256 KiB + moka TinyLFU 逐出 + `get_or_compute` 单飞编译——并发同 pattern 仅一次编译），避免热路径重复编译；0.5.0-rc 起替换自研双 Mutex LRU 簿记
 - **内存缓存**：oxcache 承载响应/工具结果缓存，支持键规范化、模式失效、批量操作与统计
 - **发布 profile**：`lto = "fat"`、`codegen-units = 1`、`opt-level = 3`、`strip = true`，最大化内联与死代码消除（注意：链接期消除可稀释二进制层级的裁剪收益，但编译期成本节省不受影响）

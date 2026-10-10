@@ -87,6 +87,11 @@
   未设 `SDFORGE_TEST_REDIS_URL` 且 PATH 上有 `redis-server` 时拉起一次性回环实例，
   把此前的零断言 skip 变成真实覆盖；同步面用例改用多线程 runtime（模块文档的
   运行时约束）。
+- `tls-watch` 特性与 `http::tls::spawn_cert_watcher`：cert/key 文件去抖监听
+  （confers `FsWatcher` 族）驱动 `ReloadingTls::reload_async` 自动热重载——
+  confers 只回答「何时触发」，换入仍走 rustls resolver（原子换入/失败保留旧证书
+  语义不变）。重载失败记日志并保留旧证书，监听任务不退出。蕴含 `serve-tls`，
+  并入 `full`（默认构建依赖树不变，`serve-tls` 单独构建不含 confers 路径）。
 
 ### 变更 (Changed)
 
@@ -117,6 +122,46 @@
 - CI actions：taiki-e/install-action → v2.87.27、github/codeql-action → v4.38.3、
   dtolnay/rust-toolchain → 1.97.1 分支当前头（含输入处理安全加固，Rust 版本仍为
   1.97.1，与 rust-toolchain.toml 基线一致）；均按 40 位 commit SHA 固定。
+- **自研库族收敛五项**（`selfdev-lib-adoption-r1`）：正则编译缓存换 oxcache
+  `ByteWeightCache`（容量语义由条目数改为 256 KiB 字节预算，逐出由严格 LRU 改
+  moka TinyLFU，`get_or_compile` 走 `get_or_compute` 获得单飞编译——并发同
+  pattern 仅一次 `Regex::new`）；API key 缓存换 oxcache `CacheBuilder`
+  （`ApiKeyCacheConfig { ttl, capacity }` → ttl + capacity 逐出，旧
+  `eviction_threshold` 概念消失）；分布式限流熔断换 limiteron `CircuitBreaker`
+  （失败阈值→`failure_threshold`、打开时长→`timeout`、半开一次探测成功即闭合；
+  FailOpen 放行 / FailClose 以 `CircuitBreakerError` 拒绝的硬安全语义不变，
+  60s 节流告警保留）；TLS 证书热重载获得 confers `FsWatcher` 去抖自动触发
+  （新 `tls-watch` 特性）；结构化日志自研 `StructuredLogger` 栈删除、公共面收敛
+  到既有 `inklog::init_inklog_logger` 桥与 inklog `LoggerManager`
+  （builder/from_file/set_level + 真实轮转，替换旧栈宣称却不存在的轮转）。
+- oxcache workspace features 增 `byte-weight`（仅追加 `moka/sync` 特性位，
+  依赖树零新增 crate）；新增 confers 可选依赖（`watch` feature，
+  `tls-watch` 门控，默认构建不引入）；examples 新增 `log` 直接依赖（日志示例
+  演示 facade 零改动路由）。
+
+### ⚠️ 破坏性变更 (Breaking Changes)
+
+- **`logging` 特性与自研 `StructuredLogger` 栈删除**：`src/logging.rs` 全栈
+  （`StructuredLogger` / `LogEntry` / `LoggerConfig` / `LogLevel` / `LogFormat` /
+  `init_global_logger` / `get_global_logger` / `log_info!` 等便利宏）与
+  `logging` feature 一并移除，0.5.0-rc 预发布期 breaking。迁移路径：
+  `sdforge::inklog::init_inklog_logger()` 安装 inklog 为全局 `log` 后端
+  （既有 `log::info!` 等调用零改动自动进 inklog 管道）；需要结构化字段的
+  调用方直接持 inklog `LoggerManager`（`builder()` / `from_file()` /
+  `set_level()`，轮转为 inklog 现成实现）。不为兼容保留 deprecated 转发薄壳。
+  examples 的 `logging/structured` 示例与 e2e/comprehensive 测试已同步迁移。
+- **`core::regex_cache` 公共面收窄**：`RegexCache::clear()` 与
+  `RegexCacheStats { total_patterns, max_capacity }` 删除（ByteWeightCache 无
+  对应 `invalidate_all`/条目容量面，`clear()` 仓内仅测试调用）；`stats()` 改
+  返回 `oxcache::sync::ByteWeightStats { hits, misses, entry_count }`，字节
+  预算经新增的 `weighted_size()` 观测；`src/core/mod.rs` re-export 同步移除
+  `RegexCacheStats`。`with_capacity` 语义由条目数改为字节预算（参数改名
+  `capacity_bytes`）。`GLOBAL_REGEX_CACHE` / `get_regex` / `common` 模块不变。
+- **`security::api_key` LRU 簿记类型删除**：`LruConfig` / `LruCacheManager` /
+  `LruStats` 及其 re-export 移除，替换为 `ApiKeyCache`（oxcache
+  `Cache<String, Vec<u8>>` 类型别名）与 `ApiKeyCacheConfig { ttl, capacity }`；
+  `with_lru(config)` / builder `.lru(config)` 现收 `ApiKeyCacheConfig`
+  （默认 1 小时 TTL + 10000 条目不变）。`eviction_threshold` 概念删除。
 
 ## [0.5.0-rc.6] - 2026-10-06
 
