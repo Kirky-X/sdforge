@@ -89,3 +89,26 @@ mod service_module_prefix_tests {
         assert_eq!(unprefixed.status(), 404);
     }
 }
+
+#[cfg(feature = "http")]
+mod cache_ttl_passthrough_tests {
+    use sdforge::forge;
+
+    #[forge(
+        name = "ttl_probe",
+        version = "v1",
+        path = "/ttl-probe",
+        method = "GET",
+        cache_ttl = 60
+    )]
+    async fn ttl_probe() -> String {
+        "ok".to_string()
+    }
+
+    #[test]
+    fn cache_ttl_value_passes_through_without_clamping() {
+        // 宏层与 ApiMetadata 层语义一致：用户值原样保留，不静默抬到 300
+        // （历史行为曾是 .max(DEFAULT_CACHE_TTL) 钳制，用户写 60 实得 300）
+        assert_eq!(__axiom_metadata_ttl_probe().cache_ttl(), Some(60));
+    }
+}

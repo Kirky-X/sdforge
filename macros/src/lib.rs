@@ -288,9 +288,6 @@ const RESERVED_KEYWORDS: &[&str] = &[
     "where", "move", "as", "in", "of", "is", "Some", "None", "Ok", "Err",
 ];
 
-/// Default cache TTL in seconds (5 minutes)
-const DEFAULT_CACHE_TTL: u64 = 300;
-
 // =============================================================================
 // structured "extras" attributes parsed before the classic key=value
 // parser. Only new-syntax keys are consumed here; everything else passes
@@ -568,20 +565,15 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
                 })?)
             }
             "cache_ttl" => {
-                cache_ttl = Some(
-                    value
-                        .parse::<u64>()
-                        .map_err(|_| {
-                            syn::Error::new(
-                                proc_macro2::Span::call_site(),
-                                format!(
-                                    "Invalid cache TTL value (must be a positive integer): {}",
-                                    value
-                                ),
-                            )
-                        })?
-                        .max(DEFAULT_CACHE_TTL),
-                )
+                cache_ttl = Some(value.parse::<u64>().map_err(|_| {
+                    syn::Error::new(
+                        proc_macro2::Span::call_site(),
+                        format!(
+                            "Invalid cache TTL value (must be a positive integer): {}",
+                            value
+                        ),
+                    )
+                })?)
             }
             "ws_path" => ws_path = Some(value),
             "grpc_method" => grpc_method = Some(value),
