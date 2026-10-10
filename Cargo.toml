@@ -305,6 +305,10 @@ unic-langid = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+# src/security/ratelimit/dist.rs 熔断测试用 MockClock 推进时间（test-clock
+# feature 提供），与 [dependencies] 的 optional limiteron 统一特性——
+# ratelimit feature 开启时合并为同一 crate 实例；未开启时测试不引用该面
+limiteron = { workspace = true, features = ["test-clock"] }
 # src/config/security.rs 的 TOML 契约测试用 toml::from_str（toml 1.1 中由
 # parse+serde 门控，见 src/lib.rs:182-184；std 一并启用以保持标准库构建路径）。
 # 该测试门控为 cfg(all(test, feature = "http", feature = "ratelimit"))，而
@@ -342,6 +346,9 @@ http = [
     "dep:once_cell",
     "dep:validator",
     "dep:uuid",
+    # regex_cache（http/security 下无条件编译）用 oxcache ByteWeightCache；
+    # resolver v2 下 `oxcache/minimal` 不激活可选依赖，须显式 dep:oxcache。
+    "dep:oxcache",
 ]
 
 # MCP 特性 (migrated to official rmcp SDK 3.x)
@@ -395,6 +402,7 @@ security = [
     # 仅开 http 的构建不再编译 toml/toml_parser/winnow
     "dep:toml",
     "ratelimit-http",
+    "dep:oxcache",
 ]
 
 # WebSocket 特性

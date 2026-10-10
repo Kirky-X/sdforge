@@ -18,13 +18,14 @@
 //! # 熔断（黑洞故障短路）
 //!
 //! fail-open 只在**计数返回错误**后生效——后端"黑洞"（不回错、只是熬满
-//! 超时）时每个请求仍要付满一次超时。内置轻量熔断补上这一段：连续
+//! 超时）时每个请求仍要付满一次超时。内置熔断补上这一段：连续
 //! `circuit_failure_threshold`（默认 5）次后端错误即打开熔断，打开期内
 //! 请求**不经后端**直接按策略裁决（FailOpen → 放行，FailClose → 以
 //! `LimiteronError::CircuitBreakerError` 拒绝——fail-close 的硬语义不因
 //! 熔断而偷换成放行），`circuit_open_duration`（默认 30s）后放一个
-//! 半开探测请求恢复。语义与 limiteron 自带熔断器独立：这里熔的是"计数
-//! 后端不可达"这一适配层故障，不评价业务请求本身。
+//! 半开探测请求恢复。熔断由 limiteron `CircuitBreaker` 承载：失败阈值 →
+//! `failure_threshold`、打开时长 → `timeout`、半开一次探测成功即闭合。
+//! 这里熔的是"计数后端不可达"这一适配层故障，不评价业务请求本身。
 //!
 //! # Example
 //!
@@ -48,6 +49,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use limiteron::circuit::{CircuitBreaker, CircuitBreakerConfig, CircuitCallError};
 use limiteron::limiters::DistributedLimiter;
 
 use super::{RateLimitError, RateLimiter};
@@ -135,15 +137,6 @@ impl DistributedRateLimitConfig {
     }
 }
 
-/// 适配层熔断状态机：Closed（正常，累计连续错误）→ Open（故障窗口，请求
-/// 不经后端）→ HalfOpen（放一个探测）→ 成功回 Closed / 失败回 Open。
-#[derive(Debug, Clone, Copy)]
-enum CircuitState {
-    Closed { consecutive_failures: u32 },
-    Open { opened_at: Instant },
-    HalfOpen,
-}
-
 /// 固定窗口分布式限流器（实现 [`RateLimiter`]）。
 ///
 /// 泛型 `B` 为 limiteron `DistributedLimiter` 计数后端：测试/单实例用
@@ -155,20 +148,47 @@ pub struct DistributedRateLimiter<B: DistributedLimiter + Send + Sync> {
     config: DistributedRateLimitConfig,
     /// fail-open 告警的窗口限速时间戳（60s 一条）。
     last_fail_warn: Mutex<Option<Instant>>,
-    /// 适配层熔断状态（语义见模块文档「熔断」）。
-    circuit: Mutex<CircuitState>,
+    /// 适配层熔断器（limiteron `CircuitBreaker`，语义见模块文档「熔断」）。
+    circuit: CircuitBreaker,
 }
 
 impl<B: DistributedLimiter + Send + Sync> DistributedRateLimiter<B> {
+    /// 配置映射：`circuit_failure_threshold` → failure_threshold、
+    /// `circuit_open_duration` → timeout、success_threshold 取 1（半开一次
+    /// 探测成功即闭合，与「Ok 即闭合」语义对齐）。
+    fn breaker_config(config: &DistributedRateLimitConfig) -> CircuitBreakerConfig {
+        CircuitBreakerConfig::new(
+            config.circuit_failure_threshold as u64,
+            1,
+            config.circuit_open_duration,
+        )
+    }
+
     /// 以共享计数后端构造（多副本共享同一后端实例）。
     pub fn new(backend: Arc<B>, config: DistributedRateLimitConfig) -> Self {
+        let breaker_config = Self::breaker_config(&config);
         Self {
             backend,
             config,
             last_fail_warn: Mutex::new(None),
-            circuit: Mutex::new(CircuitState::Closed {
-                consecutive_failures: 0,
-            }),
+            circuit: CircuitBreaker::new(breaker_config),
+        }
+    }
+
+    /// 测试专用：注入 `MockClock`（test-clock）驱动熔断窗口，其余构造与
+    /// [`Self::new`] 一致。
+    #[cfg(test)]
+    pub(crate) fn with_circuit_clock(
+        backend: Arc<B>,
+        config: DistributedRateLimitConfig,
+        clock: Arc<dyn limiteron::Clock>,
+    ) -> Self {
+        let breaker_config = Self::breaker_config(&config);
+        Self {
+            backend,
+            config,
+            last_fail_warn: Mutex::new(None),
+            circuit: CircuitBreaker::with_clock(breaker_config, clock),
         }
     }
 
@@ -185,73 +205,6 @@ impl<B: DistributedLimiter + Send + Sync> DistributedRateLimiter<B> {
             log::error!("distributed rate limiter backend unavailable, failing open: {err}");
         }
     }
-
-    /// 熔断前置裁决：返回 `false` 表示熔断打开期内——请求**不经后端**直接
-    /// 按策略裁决（黑洞故障期不再每请求熬满超时）。Open 超时升级为
-    /// HalfOpen 并放行当次探测。
-    fn circuit_admits(&self, now: Instant) -> bool {
-        let mut state = self.circuit.lock().expect("circuit mutex not poisoned");
-        match *state {
-            CircuitState::Open { opened_at } => {
-                if now.duration_since(opened_at) >= self.config.circuit_open_duration {
-                    *state = CircuitState::HalfOpen;
-                    log::info!("distributed rate limiter circuit half-open, probing backend");
-                    true
-                } else {
-                    false
-                }
-            }
-            CircuitState::Closed { .. } | CircuitState::HalfOpen => true,
-        }
-    }
-
-    /// 后端结果回灌熔断状态：成功关闭并清零计数；失败累计（半开探测失败
-    /// 立即重开）。
-    fn circuit_record(&self, outcome: Result<(), &limiteron::LimiteronError>, now: Instant) {
-        let mut state = self.circuit.lock().expect("circuit mutex not poisoned");
-        match outcome {
-            Ok(()) => {
-                *state = CircuitState::Closed {
-                    consecutive_failures: 0,
-                };
-            }
-            Err(_) => match *state {
-                CircuitState::HalfOpen => {
-                    *state = CircuitState::Open { opened_at: now };
-                }
-                CircuitState::Closed {
-                    consecutive_failures,
-                } => {
-                    let failures = consecutive_failures + 1;
-                    if failures >= self.config.circuit_failure_threshold {
-                        *state = CircuitState::Open { opened_at: now };
-                        log::warn!(
-                            "distributed rate limiter circuit opened after {failures} consecutive backend failures ({} window)",
-                            describe_duration(self.config.circuit_open_duration)
-                        );
-                    } else {
-                        *state = CircuitState::Closed {
-                            consecutive_failures: failures,
-                        };
-                    }
-                }
-                // Open（并发探测在途时另一失败到达）保持打开并顺延窗口。
-                CircuitState::Open { opened_at } => {
-                    *state = CircuitState::Open { opened_at };
-                }
-            },
-        }
-    }
-}
-
-/// Duration 的简明日志形态（如 `30s` / `2m`）。
-fn describe_duration(duration: Duration) -> String {
-    let secs = duration.as_secs();
-    if secs > 0 && secs.is_multiple_of(60) {
-        format!("{}m", secs / 60)
-    } else {
-        format!("{secs}s")
-    }
 }
 
 impl<B: DistributedLimiter + Send + Sync> RateLimiter for DistributedRateLimiter<B> {
@@ -260,34 +213,29 @@ impl<B: DistributedLimiter + Send + Sync> RateLimiter for DistributedRateLimiter
         identifier: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>> {
         Box::pin(async move {
-            // 熔断打开期：请求不经后端（黑洞故障期不再每请求熬满超时），
-            // 直接按策略裁决——FailOpen 放行、FailClose 以熔断错误拒绝
-            // （硬安全语义不因熔断偷换成放行）。
-            let now = Instant::now();
-            if !self.circuit_admits(now) {
-                return match self.config.policy {
-                    BackendFailurePolicy::FailOpen => Ok(()),
-                    BackendFailurePolicy::FailClose => Err(RateLimitError::Limiteron(
-                        limiteron::LimiteronError::CircuitBreakerError(
-                            "distributed rate limiter circuit is open (backend unreachable)"
-                                .to_string(),
-                        ),
-                    )),
-                };
-            }
-
+            // 熔断裁决与后端调用经 limiteron CircuitBreaker::execute 合一：
+            // 打开期请求不经后端（黑洞故障期不再每请求熬满超时），直接按策略
+            // 裁决——FailOpen 放行、FailClose 以熔断错误拒绝（硬安全语义不因
+            // 熔断偷换成放行）；被拒调用不计入熔断器的慢调用分母。
             let key = format!("{}{identifier}", self.config.key_prefix);
             let outcome = self
-                .backend
-                .incr_with_ttl(&key, 1, self.config.window)
+                .circuit
+                .execute(|| self.backend.incr_with_ttl(&key, 1, self.config.window))
                 .await;
             let count = match outcome {
-                Ok(count) => {
-                    self.circuit_record(Ok(()), Instant::now());
-                    count
+                Ok(count) => count,
+                Err(CircuitCallError::Open) => {
+                    return match self.config.policy {
+                        BackendFailurePolicy::FailOpen => Ok(()),
+                        BackendFailurePolicy::FailClose => Err(RateLimitError::Limiteron(
+                            limiteron::LimiteronError::CircuitBreakerError(
+                                "distributed rate limiter circuit is open (backend unreachable)"
+                                    .to_string(),
+                            ),
+                        )),
+                    };
                 }
-                Err(err) => {
-                    self.circuit_record(Err(&err), Instant::now());
+                Err(CircuitCallError::Inner(err)) => {
                     return match self.config.policy {
                         BackendFailurePolicy::FailOpen => {
                             self.warn_backend_failure_once(&err);
@@ -312,7 +260,8 @@ impl<B: DistributedLimiter + Send + Sync> RateLimiter for DistributedRateLimiter
 #[cfg(test)]
 mod tests {
     use super::{BackendFailurePolicy, DistributedRateLimitConfig, DistributedRateLimiter};
-    use crate::security::ratelimit::RateLimiter;
+    use crate::security::ratelimit::{RateLimitError, RateLimiter};
+    use limiteron::MockClock;
     use limiteron::error::LimiteronError;
     use limiteron::limiters::{DistributedLimiter, InMemoryDistributedLimiter};
     use std::sync::Arc;
@@ -520,14 +469,18 @@ mod tests {
 
     /// 熔断打开：连续后端错误达到阈值后，请求**不经后端**直接裁决——
     /// 黑洞故障期不再每请求熬满超时（调用计数在熔断期冻结）。
+    ///
+    /// 时间推进走 limiteron `MockClock`（test-clock feature），无真实 sleep。
     #[tokio::test]
     async fn circuit_opens_and_short_circuits_backend_calls() {
+        let clock = Arc::new(MockClock::new());
         let backend = Arc::new(CountingBroken::new());
-        let limiter = DistributedRateLimiter::new(
+        let limiter = DistributedRateLimiter::with_circuit_clock(
             Arc::clone(&backend),
             DistributedRateLimitConfig::new(1, Duration::from_secs(60))
                 .with_circuit_failure_threshold(2)
-                .with_circuit_open_duration(Duration::from_secs(60)),
+                .with_circuit_open_duration(Duration::from_secs(30)),
+            clock,
         );
 
         // 前两次到达后端（fail-open 放行），并使熔断打开。
@@ -550,15 +503,17 @@ mod tests {
     }
 
     /// 半开探测恢复：打开窗口过后放一个探测请求，成功即关闭熔断（后续
-    /// 请求恢复正常触达后端）。
+    /// 请求恢复正常触达后端）。MockClock 推进 `circuit_open_duration`。
     #[tokio::test]
     async fn half_open_probe_recovers_on_success() {
+        let clock = Arc::new(MockClock::new());
         let backend = Arc::new(CountingBroken::new());
-        let limiter = DistributedRateLimiter::new(
+        let limiter = DistributedRateLimiter::with_circuit_clock(
             Arc::clone(&backend),
             DistributedRateLimitConfig::new(1, Duration::from_secs(60))
                 .with_circuit_failure_threshold(1)
-                .with_circuit_open_duration(Duration::from_millis(40)),
+                .with_circuit_open_duration(Duration::from_secs(30)),
+            clock.clone(),
         );
 
         assert!(limiter.check("k").await.is_ok());
@@ -569,12 +524,12 @@ mod tests {
         );
         assert_eq!(backend.calls(), 1, "circuit open: backend frozen");
 
-        tokio::time::sleep(Duration::from_millis(60)).await;
+        // 推进打开窗口 → 半开放一个探测；后端改为可用后探测成功 → 闭合。
+        clock.advance(Duration::from_secs(30));
         backend
             .fail
             .store(false, std::sync::atomic::Ordering::SeqCst);
 
-        // 半开探测：放行一次并触达后端；成功 → 熔断关闭。
         assert!(limiter.check("probe").await.is_ok());
         assert_eq!(backend.calls(), 2, "half-open probe reaches the backend");
         assert!(limiter.check("k").await.is_ok());
@@ -582,18 +537,24 @@ mod tests {
     }
 
     /// 半开探测失败：探测请求触达后端且失败时熔断重开，后续请求继续短路。
+    /// MockClock 推进打开窗口触发半开，无需真实 sleep。
     #[tokio::test]
     async fn failed_probe_reopens_the_circuit() {
+        let clock = Arc::new(MockClock::new());
         let backend = Arc::new(CountingBroken::new());
-        let limiter = DistributedRateLimiter::new(
+        let limiter = DistributedRateLimiter::with_circuit_clock(
             Arc::clone(&backend),
             DistributedRateLimitConfig::new(1, Duration::from_secs(60))
                 .with_circuit_failure_threshold(1)
-                .with_circuit_open_duration(Duration::from_millis(30)),
+                .with_circuit_open_duration(Duration::from_secs(30)),
+            clock.clone(),
         );
 
         assert!(limiter.check("k").await.is_ok()); // → open
-        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert!(limiter.check("k").await.is_ok()); // 打开期短路
+        assert_eq!(backend.calls(), 1);
+
+        clock.advance(Duration::from_secs(30));
         assert!(limiter.check("probe").await.is_ok()); // half-open probe fails → reopen
         assert_eq!(backend.calls(), 2);
 
@@ -612,13 +573,15 @@ mod tests {
     /// 语义不因熔断偷换成放行。
     #[tokio::test]
     async fn fail_close_short_circuits_to_error_while_open() {
+        let clock = Arc::new(MockClock::new());
         let backend = Arc::new(CountingBroken::new());
-        let limiter = DistributedRateLimiter::new(
+        let limiter = DistributedRateLimiter::with_circuit_clock(
             Arc::clone(&backend),
             DistributedRateLimitConfig::new(1, Duration::from_secs(60))
                 .with_policy(BackendFailurePolicy::FailClose)
                 .with_circuit_failure_threshold(1)
-                .with_circuit_open_duration(Duration::from_secs(60)),
+                .with_circuit_open_duration(Duration::from_secs(30)),
+            clock,
         );
 
         let first = limiter.check("k").await.expect_err("fail-close rejects");
@@ -631,14 +594,36 @@ mod tests {
             .check("k")
             .await
             .expect_err("open circuit must reject under fail-close");
-        assert!(
-            second.to_string().contains("circuit is open"),
-            "short-circuit rejection names the circuit: {second}"
-        );
+        match second {
+            RateLimitError::Limiteron(LimiteronError::CircuitBreakerError(_)) => {}
+            other => panic!("open circuit must reject with CircuitBreakerError, got {other:?}"),
+        }
         assert_eq!(
             backend.calls(),
             1,
             "open circuit must not call the backend even under fail-close"
         );
+    }
+
+    /// 配置映射：breaker 三值与 `DistributedRateLimitConfig` 输入一致
+    /// （failure_threshold / success_threshold=1 / timeout=打开时长）。
+    #[tokio::test]
+    async fn circuit_config_maps_from_distributed_config() {
+        let backend = Arc::new(InMemoryDistributedLimiter::new());
+        let limiter = DistributedRateLimiter::with_circuit_clock(
+            backend,
+            DistributedRateLimitConfig::new(1, Duration::from_secs(60))
+                .with_circuit_failure_threshold(3)
+                .with_circuit_open_duration(Duration::from_secs(45)),
+            Arc::new(MockClock::new()),
+        );
+
+        let breaker_config = limiter.circuit.config();
+        assert_eq!(breaker_config.failure_threshold, 3);
+        assert_eq!(
+            breaker_config.success_threshold, 1,
+            "半开一次探测成功即闭合，与原 Ok 即闭合语义对齐"
+        );
+        assert_eq!(breaker_config.timeout, Duration::from_secs(45));
     }
 }
