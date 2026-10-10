@@ -12,8 +12,9 @@
 mod security_tests {
     use hmac::{Hmac, KeyInit, Mac};
     use sdforge::security::{
-        ApiKeyMetadata, AuditResult, AuthContext, AuthMetadata, BearerAuth, BearerAuthBuilder,
-        LruConfig, RotationConfig, SdForgeApiKeyAuth, SdForgeApiKeyAuthBuilder, SdForgeAuditLogger,
+        ApiKeyCacheConfig, ApiKeyMetadata, AuditResult, AuthContext, AuthMetadata, BearerAuth,
+        BearerAuthBuilder, RotationConfig, SdForgeApiKeyAuth, SdForgeApiKeyAuthBuilder,
+        SdForgeAuditLogger,
     };
     use sha2::Sha256;
     use std::time::Duration;
@@ -274,7 +275,7 @@ mod security_tests {
     #[tokio::test]
     async fn test_api_key_auth_builder_configuration() {
         let auth = SdForgeApiKeyAuthBuilder::new()
-            .lru(LruConfig::default())
+            .lru(ApiKeyCacheConfig::default())
             .rotation(RotationConfig::default())
             .build();
 
@@ -862,16 +863,15 @@ mod security_tests {
         assert!(metadata.active_version_index.is_none());
     }
 
-    /// Test: LRU configuration defaults
+    /// Test: key cache configuration defaults
     ///
-    /// Verifies that LRU configuration has sensible defaults.
-    /// Note: max_entries default was increased from 1000 to 10000 (see
-    /// `LruConfig::default` in `src/security/api_key_manager.rs`).
+    /// Verifies that the key cache configuration has sensible defaults
+    /// (see `ApiKeyCacheConfig::default` in `src/security/api_key_manager.rs`).
     #[tokio::test]
     async fn test_lru_config_defaults() {
-        let config = LruConfig::default();
+        let config = ApiKeyCacheConfig::default();
 
-        assert_eq!(config.max_entries, 10_000);
+        assert_eq!(config.capacity, 10_000);
         assert_eq!(config.ttl, Duration::from_secs(3600));
     }
 

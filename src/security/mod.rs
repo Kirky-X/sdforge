@@ -84,7 +84,7 @@ pub use ip_util::extract_client_ip;
 // Re-export key management types (full security feature only)
 #[cfg(feature = "security")]
 pub use api_key_manager::{
-    ApiKeyMetadata, ApiKeyVersion, LruCacheManager, LruConfig, LruStats, RotationConfig,
+    ApiKeyCache, ApiKeyCacheConfig, ApiKeyMetadata, ApiKeyVersion, RotationConfig,
 };
 
 // Trait impls for concrete types (full security feature only).

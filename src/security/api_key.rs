@@ -1,26 +1,28 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! API Key authentication implementation with versioning, LRU eviction, and rotation support
+//! API Key authentication implementation with versioning, oxcache-backed caching, and rotation support
 //!
 //! This module provides API key authentication with:
 //! - Brute-force protection
 //! - API key versioning for smooth rotation
-//! - LRU cache eviction to prevent memory growth
+//! - oxcache-backed key cache (TTL + capacity eviction) to prevent memory growth
 //! - Automatic key rotation with grace period
 
 use crate::cache::SharedCache;
-use crate::security::{ApiKeyMetadata, ApiKeyVersion, LruCacheManager, LruConfig, RotationConfig};
+use crate::security::{
+    ApiKeyCache, ApiKeyCacheConfig, ApiKeyMetadata, ApiKeyVersion, RotationConfig,
+};
 use crate::security::{CacheNamespace, serialize_permissions};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// API key authentication with versioning, LRU eviction, and rotation support
+/// API key authentication with versioning, oxcache-backed caching, and rotation support
 ///
 /// Security features:
 /// - Valid API keys storage with permissions mapping (hashed for security)
 /// - Constant-time validation to prevent timing attacks
 /// - API key versioning for smooth rotation
-/// - LRU cache eviction to prevent memory growth
+/// - Key cache with TTL + capacity eviction to prevent memory growth
 ///
 /// Storage: All internal state is stored via `Arc<dyn SyncCache>` trait,
 /// allowing injection of custom storage backends for testing or production.
@@ -30,8 +32,8 @@ pub struct SdForgeApiKeyAuth {
     valid_keys: SharedCache,
     /// API key metadata (key_id -> ApiKeyMetadata) for versioning support
     key_metadata: SharedCache,
-    /// LRU cache manager for automatic eviction
-    lru_manager: Option<Arc<LruCacheManager>>,
+    /// Key cache (oxcache: TTL + capacity eviction)
+    lru_manager: Option<Arc<ApiKeyCache>>,
     /// Key rotation configuration
     rotation_config: Option<RotationConfig>,
 }
@@ -42,11 +44,8 @@ impl SdForgeApiKeyAuth {
         let valid_keys = Arc::new(crate::cache::DashMapCache::new());
         let key_metadata = Arc::new(crate::cache::DashMapCache::new());
 
-        // Enable LRU by default
-        let lru_manager = Some(Arc::new(LruCacheManager::new(
-            valid_keys.clone(),
-            LruConfig::default(),
-        )));
+        // Enable key caching by default
+        let lru_manager = Some(Arc::new(ApiKeyCacheConfig::default().build()));
 
         Self {
             valid_keys,
@@ -63,10 +62,7 @@ impl SdForgeApiKeyAuth {
     pub fn with_dependencies(valid_keys: SharedCache, _key_metadata: Option<SharedCache>) -> Self {
         let key_metadata =
             _key_metadata.unwrap_or_else(|| Arc::new(crate::cache::DashMapCache::new()));
-        let lru_manager = Some(Arc::new(LruCacheManager::new(
-            valid_keys.clone(),
-            LruConfig::default(),
-        )));
+        let lru_manager = Some(Arc::new(ApiKeyCacheConfig::default().build()));
 
         Self {
             valid_keys,
@@ -76,12 +72,9 @@ impl SdForgeApiKeyAuth {
         }
     }
 
-    /// Enable LRU cache eviction with custom configuration
-    pub fn with_lru(mut self, config: LruConfig) -> Self {
-        self.lru_manager = Some(Arc::new(LruCacheManager::new(
-            self.valid_keys.clone(),
-            config,
-        )));
+    /// Enable key cache eviction with custom configuration
+    pub fn with_lru(mut self, config: ApiKeyCacheConfig) -> Self {
+        self.lru_manager = Some(Arc::new(config.build()));
         self
     }
 
@@ -452,7 +445,7 @@ impl Default for SdForgeApiKeyAuth {
 /// Builder for SdForgeApiKeyAuth configuration
 #[derive(Debug, Clone, Default)]
 pub struct SdForgeApiKeyAuthBuilder {
-    lru_config: Option<LruConfig>,
+    lru_config: Option<ApiKeyCacheConfig>,
     rotation_config: Option<RotationConfig>,
 }
 
@@ -478,8 +471,8 @@ impl SdForgeApiKeyAuthBuilder {
         }
     }
 
-    /// Enable LRU cache eviction with custom configuration
-    pub fn lru(mut self, config: LruConfig) -> Self {
+    /// Enable key cache eviction with custom configuration
+    pub fn lru(mut self, config: ApiKeyCacheConfig) -> Self {
         self.lru_config = Some(config);
         self
     }
@@ -632,7 +625,7 @@ mod tests {
     #[test]
     fn test_builder_with_lru() {
         let auth = SdForgeApiKeyAuthBuilder::new()
-            .lru(LruConfig::default())
+            .lru(ApiKeyCacheConfig::default())
             .build();
 
         assert!(auth.lru_manager.is_some());
@@ -861,10 +854,9 @@ mod tests {
 
     #[test]
     fn test_builder_chained_config() {
-        let lru_config = LruConfig {
-            max_entries: 500,
+        let lru_config = ApiKeyCacheConfig {
             ttl: std::time::Duration::from_secs(1800),
-            eviction_threshold: 0.7,
+            capacity: 500,
         };
 
         let rotation_config = RotationConfig {
@@ -885,7 +877,7 @@ mod tests {
     #[test]
     fn test_builder_with_both_lru_and_rotation() {
         let auth = SdForgeApiKeyAuthBuilder::new()
-            .lru(LruConfig::default())
+            .lru(ApiKeyCacheConfig::default())
             .rotation(RotationConfig::default())
             .build();
 

@@ -515,44 +515,63 @@ fn benchmark_bearer_auth(c: &mut Criterion) {
     });
 }
 
-/// Benchmark for LRU cache manager
+/// Benchmark for the oxcache-backed API key cache
 #[cfg(feature = "security")]
 fn benchmark_lru_cache(c: &mut Criterion) {
-    use sdforge::cache::{DashMapCache, SharedCache};
-    use sdforge::security::{LruCacheManager, LruConfig};
-    use std::sync::Arc;
+    use sdforge::security::ApiKeyCacheConfig;
     use std::time::Duration;
 
-    // LruCacheManager operations are synchronous (std::sync::Mutex), so no
-    // tokio runtime context is needed.
-    let cache: SharedCache = Arc::new(DashMapCache::new());
-    let config = LruConfig {
-        max_entries: 100,
+    // ApiKeyCache operations go through the oxcache sync API (native Moka sync
+    // backend via sync_mode), so no tokio runtime context is needed.
+    let cache = ApiKeyCacheConfig {
         ttl: Duration::from_secs(3600),
-        eviction_threshold: 0.8,
-    };
-    let manager = LruCacheManager::new(cache.clone(), config);
+        capacity: 100,
+    }
+    .build();
 
     // Pre-populate for get benchmark
     for i in 0..50 {
-        manager.set(&format!("lru_key_{}", i), b"value".to_vec());
+        cache
+            .set_sync(&format!("lru_key_{}", i), &b"value".to_vec())
+            .expect("bench set");
     }
 
     c.bench_function("lru_cache_set", |b| {
-        b.iter(|| manager.set(black_box("lru_set_key"), black_box(b"v".to_vec())))
+        b.iter(|| {
+            cache
+                .set_sync(
+                    &black_box("lru_set_key".to_string()),
+                    &black_box(b"v".to_vec()),
+                )
+                .expect("bench set")
+        })
     });
 
     c.bench_function("lru_cache_get_hit", |b| {
-        b.iter(|| manager.get(black_box("lru_key_0")))
+        b.iter(|| {
+            cache
+                .get_sync(&black_box("lru_key_0".to_string()))
+                .expect("bench get")
+        })
     });
 
     c.bench_function("lru_cache_get_miss", |b| {
-        b.iter(|| manager.get(black_box("nonexistent_lru_key")))
+        b.iter(|| {
+            cache
+                .get_sync(&black_box("nonexistent_lru_key".to_string()))
+                .expect("bench get")
+        })
     });
 
     c.bench_function("lru_cache_delete", |b| {
-        manager.set("lru_del_key", b"v".to_vec());
-        b.iter(|| manager.delete(black_box("lru_del_key")))
+        cache
+            .set_sync(&"lru_del_key".to_string(), &b"v".to_vec())
+            .expect("bench set");
+        b.iter(|| {
+            cache
+                .delete_sync(&black_box("lru_del_key".to_string()))
+                .expect("bench delete")
+        })
     });
 
     // Eviction: fill beyond capacity to trigger eviction overhead
@@ -562,23 +581,23 @@ fn benchmark_lru_cache(c: &mut Criterion) {
     group.throughput(Throughput::Elements(50));
 
     group.bench_function("evict_at_capacity", |b| {
-        let cache2: SharedCache = Arc::new(DashMapCache::new());
-        let mgr = LruCacheManager::new(
-            cache2,
-            LruConfig {
-                max_entries: 100,
-                ttl: Duration::from_secs(3600),
-                eviction_threshold: 0.8,
-            },
-        );
+        let cache2 = ApiKeyCacheConfig {
+            ttl: Duration::from_secs(3600),
+            capacity: 100,
+        }
+        .build();
         // Pre-fill to capacity
         for i in 0..100 {
-            mgr.set(&format!("pre_{}", i), b"v".to_vec());
+            cache2
+                .set_sync(&format!("pre_{}", i), &b"v".to_vec())
+                .expect("bench set");
         }
         b.iter(|| {
             // Insert beyond capacity → triggers eviction
             for i in 0..50 {
-                mgr.set(&format!("new_{}", i), b"v".to_vec());
+                cache2
+                    .set_sync(&format!("new_{}", i), &b"v".to_vec())
+                    .expect("bench set");
             }
         })
     });

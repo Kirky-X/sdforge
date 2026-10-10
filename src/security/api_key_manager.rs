@@ -1,16 +1,13 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! Enhanced API key management with versioning, LRU eviction, and rotation support
+//! Enhanced API key management with versioning, oxcache-backed caching, and rotation support
 //!
 //! This module provides advanced API key management features:
 //! - Key versioning for smooth rotation
-//! - LRU cache eviction to prevent memory growth
+//! - oxcache-backed key cache (TTL + capacity eviction) to prevent memory growth
 //! - Automatic key rotation with grace period
 
-use crate::cache::SharedCache;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// API key version information
@@ -305,160 +302,52 @@ impl ApiKeyMetadata {
     }
 }
 
-/// LRU configuration for cache eviction
+/// API key cache configuration
+///
+/// Maps to oxcache `CacheBuilder` parameters: `ttl` feeds
+/// `CacheBuilder::ttl`, `capacity` feeds `CacheBuilder::capacity`. The old
+/// `eviction_threshold` (evict-at-percentage) concept is gone — moka capacity
+/// eviction is built in with no threshold semantics.
 #[derive(Debug, Clone)]
-pub struct LruConfig {
-    /// Maximum number of entries to cache
-    pub max_entries: usize,
+pub struct ApiKeyCacheConfig {
     /// Time-to-live for cache entries
     pub ttl: Duration,
-    /// Eviction threshold (percentage of max_entries at which to start eviction)
-    pub eviction_threshold: f64,
+    /// Maximum number of entries in the cache
+    pub capacity: usize,
 }
 
-impl Default for LruConfig {
+impl Default for ApiKeyCacheConfig {
     fn default() -> Self {
         Self {
-            max_entries: 10_000,            // Increased from 1000 to 10000
             ttl: Duration::from_secs(3600), // 1 hour
-            eviction_threshold: 0.8,        // Start eviction at 80% capacity
+            capacity: 10_000,
         }
     }
 }
 
-/// LRU cache wrapper for SharedCache
+impl ApiKeyCacheConfig {
+    /// Build the oxcache sync-face cache backed by the default Moka path.
+    ///
+    /// The `cache` feature pulls `oxcache/minimal` which always includes
+    /// `memory` (the Moka backend), and none of the options that can make
+    /// `build_sync` fail (service_name, stale TTL, adaptive TTL) are set here —
+    /// so on this feature set the build is total.
+    pub fn build(&self) -> ApiKeyCache {
+        oxcache::CacheBuilder::default()
+            .ttl(self.ttl)
+            .capacity(self.capacity as u64)
+            .sync_mode(true)
+            .build_sync()
+            .expect("default Moka path with ttl/capacity cannot fail (memory feature always on)")
+    }
+}
+
+/// API key cache: oxcache sync-face cache with TTL + capacity eviction
 ///
-/// Provides LRU eviction on top of SharedCache to prevent unlimited memory growth.
-/// This is a simplified implementation that tracks metadata separately.
-///
-/// All operations are synchronous. The backing `SharedCache` is itself non-async
-/// (it wraps a `DashMap`), so wrapping synchronous bookkeeping in `tokio::spawn`
-/// only added overhead, runtime-context requirements, and nondeterministic
-/// ordering (spawned tasks could race with subsequent `set`/`delete` calls,
-/// making eviction tests flaky). A `std::sync::Mutex` is the correct choice:
-/// the critical sections are tiny (HashMap insert/remove) and never await.
-pub struct LruCacheManager {
-    cache: SharedCache,
-    access_times: Arc<std::sync::Mutex<HashMap<String, Instant>>>,
-    config: LruConfig,
-}
-
-impl LruCacheManager {
-    /// Create new LRU cache manager
-    pub fn new(cache: SharedCache, config: LruConfig) -> Self {
-        Self {
-            cache,
-            access_times: Arc::new(std::sync::Mutex::new(HashMap::new())),
-            config,
-        }
-    }
-
-    /// Get value and update access time
-    pub fn get(&self, key: &str) -> Option<Vec<u8>> {
-        let value = self.cache.get(key)?;
-
-        // Update access time synchronously. The critical section is a single
-        // HashMap insert and never awaits, so a blocking mutex is appropriate
-        // and avoids the runtime-context requirement of tokio::spawn.
-        if let Ok(mut times) = self.access_times.lock() {
-            times.insert(key.to_string(), Instant::now());
-        }
-
-        Some(value)
-    }
-
-    /// Set value and track access time
-    pub fn set(&self, key: &str, value: Vec<u8>) {
-        // Check if we need to evict entries
-        self.check_and_evict();
-
-        self.cache.set(key, value);
-
-        // Track access time synchronously.
-        if let Ok(mut times) = self.access_times.lock() {
-            times.insert(key.to_string(), Instant::now());
-        }
-    }
-
-    /// Delete value
-    pub fn delete(&self, key: &str) {
-        self.cache.delete(key);
-
-        if let Ok(mut times) = self.access_times.lock() {
-            times.remove(key);
-        }
-    }
-
-    /// Check and evict old entries if needed
-    fn check_and_evict(&self) {
-        let Ok(mut times) = self.access_times.lock() else {
-            return;
-        };
-        let now = Instant::now();
-        let config = &self.config;
-
-        // First, remove expired entries (TTL-based). Collect keys to evict so we
-        // can also delete them from the backing cache (not just access metadata).
-        // The `times` mutex and the backing cache's internal lock are distinct,
-        // so holding `times` while calling `cache.delete` cannot deadlock.
-        let mut expired_keys: Vec<String> = Vec::new();
-        times.retain(|k, &mut last_accessed| {
-            if now.duration_since(last_accessed) > config.ttl {
-                expired_keys.push(k.clone());
-                false
-            } else {
-                true
-            }
-        });
-        for key in &expired_keys {
-            self.cache.delete(key);
-        }
-
-        // Calculate eviction threshold (80% of max_entries by default)
-        let threshold = (config.max_entries as f64 * config.eviction_threshold) as usize;
-
-        // If over threshold, start evicting oldest entries
-        if times.len() > threshold {
-            // Sort by access time (oldest first)
-            let mut entries: Vec<_> = times.iter().map(|(k, v)| (k.clone(), *v)).collect();
-            entries.sort_by_key(|&(_, time)| time);
-
-            // Remove oldest entries to get back under threshold.
-            // Delete both the access-tracking entry AND the cached value
-            // to actually reclaim memory.
-            let to_remove = entries.len().saturating_sub(threshold);
-            for (key, _) in entries.into_iter().take(to_remove) {
-                times.remove(&key);
-                self.cache.delete(&key);
-            }
-        }
-    }
-
-    /// Get cache statistics
-    pub fn stats(&self) -> LruStats {
-        let total_entries = self
-            .access_times
-            .lock()
-            .map(|times| times.len())
-            .unwrap_or(0);
-        LruStats {
-            total_entries,
-            max_entries: self.config.max_entries,
-            ttl: self.config.ttl,
-        }
-    }
-}
-
-/// LRU cache statistics
-#[derive(Debug, Clone)]
-pub struct LruStats {
-    /// Total number of entries in the cache
-    pub total_entries: usize,
-    /// Maximum number of entries allowed
-    pub max_entries: usize,
-    /// Time-to-live for cache entries
-    pub ttl: Duration,
-}
+/// Replaces the hand-written LRU bookkeeping (access-time tracking plus O(n)
+/// sorted eviction). TTL expiry and capacity eviction are backed by oxcache's
+/// test surface; values keep the original `Vec<u8>` wire type.
+pub type ApiKeyCache = oxcache::Cache<String, Vec<u8>>;
 
 /// Key rotation configuration
 #[derive(Debug, Clone)]
@@ -564,24 +453,22 @@ mod tests {
     }
 
     #[test]
-    fn test_lru_config_default() {
-        let config = LruConfig::default();
-        assert_eq!(config.max_entries, 10_000);
+    fn test_api_key_cache_config_default() {
+        let config = ApiKeyCacheConfig::default();
         assert_eq!(config.ttl, Duration::from_secs(3600));
-        assert!((config.eviction_threshold - 0.8).abs() < f64::EPSILON);
+        assert_eq!(config.capacity, 10_000);
     }
 
     #[test]
-    fn test_lru_eviction_threshold() {
-        // Test that eviction threshold is respected
-        let config = LruConfig {
-            max_entries: 100,
-            ttl: Duration::from_secs(3600),
-            eviction_threshold: 0.5, // 50% threshold for testing
+    fn test_api_key_cache_config_clone() {
+        let config = ApiKeyCacheConfig {
+            ttl: Duration::from_secs(7200),
+            capacity: 5000,
         };
 
-        assert_eq!(config.max_entries, 100);
-        assert!((config.eviction_threshold - 0.5).abs() < f64::EPSILON);
+        let cloned = config.clone();
+        assert_eq!(cloned.ttl, Duration::from_secs(7200));
+        assert_eq!(cloned.capacity, 5000);
     }
 
     #[test]
@@ -592,89 +479,89 @@ mod tests {
         assert_eq!(config.keep_versions, 3);
     }
 
-    // ===== LruCacheManager Tests =====
+    // ===== ApiKeyCache Tests =====
 
     #[test]
-    fn test_lru_cache_manager_basic_creation() {
-        use crate::cache::DashMapCache;
+    fn test_api_key_cache_construction() {
+        // 默认配置构造：1 小时 TTL、10000 条目容量
+        let cache = ApiKeyCacheConfig::default().build();
 
-        let cache = DashMapCache::new();
-        let config = LruConfig::default();
-        let manager = LruCacheManager::new(Arc::new(cache), config);
-
-        let stats = manager.stats();
-        assert_eq!(stats.max_entries, 10_000);
-        assert_eq!(stats.ttl, Duration::from_secs(3600));
+        cache
+            .set_sync(&"key1".to_string(), &b"value1".to_vec())
+            .expect("set");
+        assert_eq!(
+            cache.get_sync(&"key1".to_string()).expect("get"),
+            Some(b"value1".to_vec())
+        );
+        assert!(
+            cache
+                .get_sync(&"missing".to_string())
+                .expect("get miss")
+                .is_none()
+        );
     }
 
     #[test]
-    fn test_lru_cache_manager_eviction() {
-        use crate::cache::DashMapCache;
-
-        let cache = DashMapCache::with_capacity(10);
-        let config = LruConfig {
-            max_entries: 5,
+    fn test_api_key_cache_capacity_bounded() {
+        // capacity 为 2 时第三条目写入后条目数有界（moka 容量逐出）
+        let config = ApiKeyCacheConfig {
             ttl: Duration::from_secs(3600),
-            eviction_threshold: 0.8,
+            capacity: 2,
         };
-        let manager = LruCacheManager::new(Arc::new(cache), config);
+        let cache = config.build();
 
-        for i in 0..5 {
-            manager.set(&format!("key_{}", i), vec![i as u8]);
+        cache.set_sync(&"k1".to_string(), &vec![1]).expect("set k1");
+        cache.set_sync(&"k2".to_string(), &vec![2]).expect("set k2");
+        cache.set_sync(&"k3".to_string(), &vec![3]).expect("set k3");
+
+        assert!(
+            cache.len_sync().expect("len") <= 2,
+            "capacity 逐出后条目数有界"
+        );
+
+        // 逐出后再次读取被逐 key 不崩不挂（有界语义），逐出对象不保证
+        for key in ["k1", "k2", "k3"] {
+            let _ = cache.get_sync(&key.to_string());
         }
-
-        // Operations are now synchronous — no sleep needed for spawned tasks.
-        let stats = manager.stats();
-        assert!(stats.total_entries <= 5);
     }
 
     #[test]
-    fn test_lru_cache_manager_access_order() {
-        use crate::cache::DashMapCache;
+    fn test_api_key_cache_set_get_roundtrip() {
+        let cache = ApiKeyCacheConfig::default().build();
 
-        let cache = DashMapCache::new();
-        let config = LruConfig::default();
-        let manager = LruCacheManager::new(Arc::new(cache), config);
+        cache
+            .set_sync(&"key1".to_string(), &b"value1".to_vec())
+            .expect("set key1");
+        cache
+            .set_sync(&"key2".to_string(), &b"value2".to_vec())
+            .expect("set key2");
+        cache
+            .set_sync(&"key3".to_string(), &b"value3".to_vec())
+            .expect("set key3");
 
-        manager.set("key1", b"value1".to_vec());
-        manager.set("key2", b"value2".to_vec());
-        manager.set("key3", b"value3".to_vec());
-
-        let _ = manager.get("key1");
-
-        // Operations are now synchronous — no sleep needed for spawned tasks.
-        assert_eq!(manager.get("key1"), Some(b"value1".to_vec()));
+        assert_eq!(
+            cache.get_sync(&"key1".to_string()).expect("get"),
+            Some(b"value1".to_vec())
+        );
     }
 
     #[test]
-    fn test_lru_cache_manager_custom_config() {
-        use crate::cache::DashMapCache;
-
-        let cache = DashMapCache::new();
-        let config = LruConfig {
-            max_entries: 500,
+    fn test_api_key_cache_custom_config() {
+        let config = ApiKeyCacheConfig {
             ttl: Duration::from_secs(1800),
-            eviction_threshold: 0.6,
+            capacity: 500,
         };
-        let manager = LruCacheManager::new(Arc::new(cache), config);
+        assert_eq!(config.ttl, Duration::from_secs(1800));
+        assert_eq!(config.capacity, 500);
 
-        let stats = manager.stats();
-        assert_eq!(stats.max_entries, 500);
-        assert_eq!(stats.ttl, Duration::from_secs(1800));
-    }
-
-    #[test]
-    fn test_lru_config_clone() {
-        let config = LruConfig {
-            max_entries: 5000,
-            ttl: Duration::from_secs(7200),
-            eviction_threshold: 0.9,
-        };
-
-        let cloned = config.clone();
-        assert_eq!(cloned.max_entries, 5000);
-        assert_eq!(cloned.ttl, Duration::from_secs(7200));
-        assert!((cloned.eviction_threshold - 0.9).abs() < f64::EPSILON);
+        let cache = config.build();
+        cache
+            .set_sync(&"k".to_string(), &vec![1, 2, 3])
+            .expect("set");
+        assert_eq!(
+            cache.get_sync(&"k".to_string()).expect("get"),
+            Some(vec![1, 2, 3])
+        );
     }
 
     #[test]
@@ -845,119 +732,56 @@ mod tests {
     }
 
     #[test]
-    fn test_lru_cache_manager_delete() {
-        use crate::cache::DashMapCache;
+    fn test_api_key_cache_delete() {
+        let cache = ApiKeyCacheConfig::default().build();
 
-        let cache = DashMapCache::new();
-        let config = LruConfig::default();
-        let manager = LruCacheManager::new(Arc::new(cache), config);
+        cache
+            .set_sync(&"key1".to_string(), &b"value1".to_vec())
+            .expect("set");
+        assert_eq!(
+            cache.get_sync(&"key1".to_string()).expect("get"),
+            Some(b"value1".to_vec())
+        );
 
-        manager.set("key1", b"value1".to_vec());
-        // Operations are now synchronous — no sleep needed.
-        assert_eq!(manager.get("key1"), Some(b"value1".to_vec()));
-
-        manager.delete("key1");
-        // Operations are now synchronous — no sleep needed.
-        assert_eq!(manager.get("key1"), None);
-    }
-
-    #[test]
-    fn test_lru_cache_manager_eviction_threshold_triggers() {
-        use crate::cache::DashMapCache;
-
-        let cache = DashMapCache::with_capacity(100);
-        let config = LruConfig {
-            max_entries: 3,
-            ttl: Duration::from_secs(3600),
-            eviction_threshold: 0.5, // threshold = 1
-        };
-        let manager = LruCacheManager::new(Arc::new(cache), config);
-
-        // Operations are now synchronous — eviction happens inline during set().
-        manager.set("key_0", vec![0]);
-        manager.set("key_1", vec![1]);
-        manager.set("key_2", vec![2]);
-
-        let stats = manager.stats();
-        // Eviction logic should have been triggered (times.len() > threshold)
-        assert!(stats.total_entries <= 3);
-    }
-
-    #[test]
-    fn test_lru_eviction_deletes_cache_values() {
-        use crate::cache::DashMapCache;
-
-        // Regression test for : LruCacheManager eviction previously only
-        // removed access-tracking metadata while leaving the actual cached values
-        // in the backing cache — causing unbounded memory growth. This test
-        // verifies that evicted keys are deleted from the backing cache.
-        let cache: SharedCache = Arc::new(DashMapCache::with_capacity(100));
-        let config = LruConfig {
-            max_entries: 2,
-            ttl: Duration::from_secs(3600),
-            eviction_threshold: 0.5, // threshold = 1; evict once > 1 entry
-        };
-        // Keep a reference to the cache so we can inspect it after eviction.
-        let cache_ref = cache.clone();
-        let manager = LruCacheManager::new(cache, config);
-
-        // Operations are now synchronous — eviction happens inline during set().
-        manager.set("k1", b"v1".to_vec());
-        manager.set("k2", b"v2".to_vec());
-        manager.set("k3", b"v3".to_vec());
-
-        // The backing cache should NOT contain all 3 entries forever.
-        // At least one entry must have been evicted from the cache itself
-        // (not just from access-tracking metadata).
-        let remaining = ["k1", "k2", "k3"]
-            .iter()
-            .filter(|k| cache_ref.get(k).is_some())
-            .count();
+        cache.delete_sync(&"key1".to_string()).expect("delete");
         assert!(
-            remaining < 3,
-            "Eviction must delete cached values, not just access metadata. \
-             Still present: {}",
-            remaining
+            cache
+                .get_sync(&"key1".to_string())
+                .expect("get after delete")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_api_key_cache_ttl_expiry() {
+        // 可观测短 TTL（50ms 级）过期后 get 为空——moka TTL 惰性过期
+        let config = ApiKeyCacheConfig {
+            ttl: Duration::from_millis(50),
+            capacity: 100,
+        };
+        let cache = config.build();
+
+        cache
+            .set_sync(&"key".to_string(), &b"value".to_vec())
+            .expect("set");
+        assert_eq!(
+            cache.get_sync(&"key".to_string()).expect("get"),
+            Some(b"value".to_vec())
+        );
+
+        std::thread::sleep(Duration::from_millis(80));
+        assert!(
+            cache
+                .get_sync(&"key".to_string())
+                .expect("get after expiry")
+                .is_none(),
+            "TTL 过期后 get 为空"
         );
     }
 
     // ============================================================================
-    // Branch coverage: poisoned mutex, expired-active filter, retain path
+    // Branch coverage: expired-active filter, retain path
     // ============================================================================
-
-    /// check_and_evict takes the early-return branch when access_times mutex is
-    /// poisoned. set() must still store the value in the backing cache, while
-    /// stats() must report total_entries=0 (poisoned lock falls back to 0).
-    #[test]
-    fn test_check_and_evict_returns_early_on_poisoned_mutex() {
-        use crate::cache::DashMapCache;
-        use std::panic::{self, AssertUnwindSafe};
-
-        let cache: SharedCache = Arc::new(DashMapCache::new());
-        let config = LruConfig::default();
-        let manager = LruCacheManager::new(cache.clone(), config);
-
-        // Poison the access_times mutex by panicking while holding the lock.
-        // catch_unwind catches the panic, but the mutex remains poisoned.
-        let access_times = manager.access_times.clone();
-        let _ = panic::catch_unwind(AssertUnwindSafe(|| {
-            let _guard = access_times.lock().unwrap();
-            panic!("intentional panic to poison mutex");
-        }));
-
-        // Confirm the mutex is poisoned.
-        assert!(manager.access_times.lock().is_err());
-
-        // set() calls check_and_evict() first. With a poisoned mutex the
-        // `let Ok(mut times) = self.access_times.lock() else { return; }`
-        // branch returns early. The value is still stored in the backing cache.
-        manager.set("key1", b"value1".to_vec());
-        assert_eq!(cache.get("key1"), Some(b"value1".to_vec()));
-
-        // stats() locks the mutex; on failure it returns 0 via unwrap_or(0).
-        let stats = manager.stats();
-        assert_eq!(stats.total_entries, 0);
-    }
 
     /// get_active_version returns None when the active version is expired,
     /// exercising the `.filter(|v| v.is_active && !v.is_expired())` branch.
