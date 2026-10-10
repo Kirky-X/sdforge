@@ -1639,7 +1639,7 @@ mod ratelimit_advanced {
 
 // =============================================================================
 // Module: regex_cache_advanced
-// Covers: hit/miss, eviction, clear, stats, common patterns, invalid input
+// Covers: hit/miss, byte-budget eviction, stats, common patterns, invalid input
 // =============================================================================
 #[cfg(any(feature = "http", feature = "security"))]
 mod regex_cache_advanced {
@@ -1680,38 +1680,42 @@ mod regex_cache_advanced {
     }
 
     #[test]
-    fn test_regex_cache_clear_empties_all() {
+    fn test_regex_cache_entry_count_tracks_inserts() {
         let cache = RegexCache::new();
         cache.get_or_compile(r"^\d+$").expect("compile");
         cache.get_or_compile(r"^[a-z]+$").expect("compile");
-        assert_eq!(cache.stats().total_patterns, 2);
-
-        cache.clear();
-        assert_eq!(cache.stats().total_patterns, 0);
+        assert_eq!(cache.stats().entry_count, 2);
     }
 
     #[test]
-    fn test_regex_cache_stats_reports_capacity() {
+    fn test_regex_cache_stats_reports_byte_usage() {
         let cache = RegexCache::with_capacity(500);
         let stats = cache.stats();
-        assert_eq!(stats.max_capacity, 500);
-        assert_eq!(stats.total_patterns, 0);
+        assert_eq!(stats.entry_count, 0);
+        assert_eq!(cache.weighted_size(), 0);
+
+        cache.get_or_compile(r"^\d+$").expect("compile");
+        // pattern 5 字节 + 64 字节摊销 = 69 字节，在 500 字节预算内
+        assert_eq!(cache.stats().entry_count, 1);
+        assert_eq!(cache.weighted_size(), 5 + 64);
     }
 
     #[test]
-    fn test_regex_cache_eviction_removes_oldest() {
-        // Use a tiny cache to force eviction.
-        let cache = RegexCache::with_capacity(2);
+    fn test_regex_cache_eviction_stays_within_byte_budget() {
+        // TinyLFU 不保证具体逐出对象，仅断言字节预算内 entry_count 有界。
+        let budget = 600;
+        let cache = RegexCache::with_capacity(budget);
         cache.get_or_compile(r"^\d+$").expect("first");
         cache.get_or_compile(r"^[a-z]+$").expect("second");
-        // Adding a third should evict the oldest (first).
+        // Adding a third keeps the weighted total within budget.
         cache.get_or_compile(r"^[A-Z]+$").expect("third");
         let stats = cache.stats();
         assert!(
-            stats.total_patterns <= 2,
-            "cache should evict to stay within capacity: got {}",
-            stats.total_patterns
+            stats.entry_count <= 3,
+            "entry_count should stay bounded: got {}",
+            stats.entry_count
         );
+        assert!(cache.weighted_size() <= (budget + 64) as u64);
     }
 
     #[test]
@@ -1760,16 +1764,15 @@ mod regex_cache_advanced {
     fn test_regex_cache_with_capacity_construction() {
         let cache = RegexCache::with_capacity(100);
         let stats = cache.stats();
-        assert_eq!(stats.max_capacity, 100);
-        assert_eq!(stats.total_patterns, 0);
+        assert_eq!(stats.entry_count, 0);
+        assert_eq!(cache.weighted_size(), 0);
     }
 
     #[test]
     fn test_regex_cache_default_construction() {
         let cache = RegexCache::default();
         let stats = cache.stats();
-        assert!(stats.max_capacity > 0);
-        assert_eq!(stats.total_patterns, 0);
+        assert_eq!(stats.entry_count, 0);
     }
 
     #[test]
@@ -1778,8 +1781,9 @@ mod regex_cache_advanced {
         cache.get_or_compile(r"^\d+$").expect("compile");
         let stats = cache.stats();
         let copied = stats;
-        assert_eq!(copied.total_patterns, stats.total_patterns);
-        assert_eq!(copied.max_capacity, stats.max_capacity);
+        assert_eq!(copied.hits, stats.hits);
+        assert_eq!(copied.misses, stats.misses);
+        assert_eq!(copied.entry_count, stats.entry_count);
     }
 }
 

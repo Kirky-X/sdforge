@@ -3,140 +3,74 @@
 //! Regular expression compilation and caching optimization (PERF-005)
 //!
 //! This module provides:
-//! - Thread-safe regex cache with LRU eviction
+//! - Thread-safe regex cache with byte-weight budget (moka TinyLFU eviction)
+//! - Single-flight compilation (concurrent identical patterns compile once)
 //! - Pre-compiled common regex patterns
 //! - Performance monitoring utilities
 //!
 //! Performance: Avoids redundant regex compilation by caching compiled Regex objects.
 
 use once_cell::sync::Lazy;
+use oxcache::sync::ByteWeightCache;
 use regex::Regex;
-use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex;
 
-/// Maximum number of regex patterns to cache
-const MAX_CACHE_SIZE: usize = 1000;
+/// 默认字节预算：256 KiB（典型 pattern 数百字节量级下等效数千条目）
+const DEFAULT_CACHE_BUDGET_BYTES: usize = 256 * 1024;
 
-/// Thread-safe regex cache with LRU eviction
+/// 单条目 weigher 增量：Regex 结构与 Arc 控制块的保守摊销
+const ENTRY_OVERHEAD: usize = 64;
+
+/// weigher 函数签名（值体积下界估算，仅准入/逐出用途）
+type RegexWeigher = fn(&Arc<Regex>) -> u64;
+
+fn regex_weigher(regex: &Arc<Regex>) -> u64 {
+    regex.as_str().len() as u64 + ENTRY_OVERHEAD as u64
+}
+
+/// Thread-safe regex cache with byte-weight budget
 ///
-/// Uses `Mutex<HashMap>` for thread-safe concurrent access and automatic
-/// cache management to prevent unbounded memory growth.
+/// Backed by oxcache `ByteWeightCache` (moka): capacity is a byte budget
+/// enforced by TinyLFU admission/eviction, and compilation is single-flight —
+/// concurrent identical patterns compile once and share the leader result.
+/// Compile errors propagate unchanged and are never cached.
 pub struct RegexCache {
     /// Internal cache storage (pattern -> compiled Regex)
-    cache: Arc<Mutex<HashMap<String, Arc<Regex>>>>,
-    /// Access tracking for LRU eviction
-    access_times: Arc<Mutex<HashMap<String, std::time::Instant>>>,
-    /// Maximum cache size
-    max_size: usize,
+    cache: ByteWeightCache<String, Arc<Regex>, RegexWeigher>,
 }
 
 impl RegexCache {
-    /// Create new regex cache with default size
+    /// Create new regex cache with default byte budget (256 KiB)
     pub fn new() -> Self {
-        Self::with_capacity(MAX_CACHE_SIZE)
+        Self::with_capacity(DEFAULT_CACHE_BUDGET_BYTES)
     }
 
-    /// Create regex cache with specified capacity
-    pub fn with_capacity(capacity: usize) -> Self {
+    /// Create regex cache with specified byte budget
+    pub fn with_capacity(capacity_bytes: usize) -> Self {
         Self {
-            cache: Arc::new(Mutex::new(HashMap::with_capacity(capacity))),
-            access_times: Arc::new(Mutex::new(HashMap::with_capacity(capacity))),
-            max_size: capacity,
+            cache: ByteWeightCache::new(capacity_bytes as u64, regex_weigher),
         }
     }
 
     /// Get or compile a regex pattern
     ///
-    /// Performance: O(1) cache hit, O(pattern complexity) cache miss
-    ///
-    /// Poison-aware: 若 cache lock 中毒（之前 panic 永久污染），降级为
-    /// 每次重新编译 regex，避免全局输入校验子系统连锁失效。
+    /// Single-flight: concurrent identical patterns compile once (leader
+    /// executes `Regex::new`, followers share the leader result). Compile
+    /// errors propagate unchanged and are never cached — a later retry
+    /// re-executes compilation, so a transient failure is not sticky.
     pub fn get_or_compile(&self, pattern: &str) -> Result<Arc<Regex>, regex::Error> {
-        // Update access time
-        let now = std::time::Instant::now();
-        if let Ok(mut times) = self.access_times.lock() {
-            times.insert(pattern.to_string(), now);
-        }
-
-        // Try cache first
-        {
-            if let Ok(cache) = self.cache.lock()
-                && let Some(regex) = cache.get(pattern)
-            {
-                return Ok(regex.clone());
-            }
-            // lock poisoned: 跳过 cache 查询，降级到重新编译
-        }
-
-        // Cache miss - compile new regex
-        let compiled = Regex::new(pattern)?;
-        let regex_arc = Arc::new(compiled);
-
-        // Insert into cache
-        if let Ok(mut cache) = self.cache.lock() {
-            cache.insert(pattern.to_string(), regex_arc.clone());
-        }
-
-        // Check if we need to evict
-        self.maybe_evict();
-
-        Ok(regex_arc)
+        self.cache
+            .get_or_compute(pattern.to_string(), || Regex::new(pattern).map(Arc::new))
     }
 
-    /// Check cache size and evict if necessary
-    fn maybe_evict(&self) {
-        let cache_len = { self.cache.lock().map(|c| c.len()).unwrap_or(0) };
-
-        if cache_len <= self.max_size {
-            return;
-        }
-
-        // Collect all entries with access times
-        let mut entries: Vec<(String, std::time::Instant)> = {
-            match self.access_times.lock() {
-                Ok(times) => times.iter().map(|(k, v)| (k.clone(), *v)).collect(),
-                Err(_) => return, // poison: 跳过本轮驱逐，下次再试
-            }
-        };
-
-        // Sort by access time (oldest first) — ascending order removes
-        // least-recently-used patterns (true LRU eviction).
-        //
-        // Previously used `Reverse(time)` which sorted newest-first, causing
-        // `take(to_remove)` to evict the most-recently-used entries instead —
-        // a correctness bug that effectively disabled the cache after fill.
-        entries.sort_by_key(|&(_, time)| time);
-
-        // Remove oldest entries
-        let to_remove = cache_len - self.max_size;
-        for (pattern, _) in entries.into_iter().take(to_remove) {
-            if let Ok(mut cache) = self.cache.lock() {
-                cache.remove(&pattern);
-            }
-            if let Ok(mut times) = self.access_times.lock() {
-                times.remove(&pattern);
-            }
-        }
+    /// Get cache statistics (hits/misses/entry_count; moka eventually-consistent)
+    pub fn stats(&self) -> oxcache::sync::ByteWeightStats {
+        self.cache.stats()
     }
 
-    /// Clear all cached regex patterns
-    pub fn clear(&self) {
-        if let Ok(mut cache) = self.cache.lock() {
-            cache.clear();
-        }
-        if let Ok(mut times) = self.access_times.lock() {
-            times.clear();
-        }
-    }
-
-    /// Get cache statistics
-    pub fn stats(&self) -> RegexCacheStats {
-        let total_patterns = self.cache.lock().map(|c| c.len()).unwrap_or(0);
-        RegexCacheStats {
-            total_patterns,
-            max_capacity: self.max_size,
-        }
+    /// Current byte-weight total (after pending eviction tasks)
+    pub fn weighted_size(&self) -> u64 {
+        self.cache.weighted_size()
     }
 }
 
@@ -144,15 +78,6 @@ impl Default for RegexCache {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// Regex cache statistics
-#[derive(Debug, Clone, Copy)]
-pub struct RegexCacheStats {
-    /// Total number of cached regex patterns
-    pub total_patterns: usize,
-    /// Maximum capacity of the cache
-    pub max_capacity: usize,
 }
 
 /// Global shared regex cache instance
@@ -314,6 +239,12 @@ pub mod common {
 mod tests {
     use super::*;
 
+    /// 字节预算默认值：256 KiB（等效数千条数百字节量级的典型 pattern）
+    const DEFAULT_BUDGET: usize = 256 * 1024;
+
+    /// 单条 weigher 增量：Regex 结构与 Arc 控制块的保守摊销
+    const ENTRY_OVERHEAD: usize = 64;
+
     #[test]
     fn test_regex_cache_hit() {
         let cache = RegexCache::new();
@@ -340,11 +271,47 @@ mod tests {
     }
 
     #[test]
-    fn test_regex_cache_invalid_pattern() {
+    fn test_single_flight_compiles_once_under_concurrency() {
+        use std::sync::Barrier;
+        use std::thread;
+
+        let cache = Arc::new(RegexCache::new());
+        let barrier = Arc::new(Barrier::new(16));
+        let handles: Vec<_> = (0..16)
+            .map(|_| {
+                let cache = Arc::clone(&cache);
+                let barrier = Arc::clone(&barrier);
+                thread::spawn(move || {
+                    barrier.wait();
+                    cache.get_or_compile(r"\d{4}-\d{2}-\d{2}").unwrap()
+                })
+            })
+            .collect();
+
+        for handle in handles {
+            assert!(handle.join().unwrap().is_match("2026-10-10"));
+        }
+
+        // 单飞语义：并发同 pattern 仅 leader 执行编译（miss），其余共享命中
+        let stats = cache.stats();
+        assert_eq!(stats.misses, 1, "并发同 pattern 编译恰好执行一次");
+        assert_eq!(stats.hits, 15, "等待者共享 leader 结果计 hit");
+    }
+
+    #[test]
+    fn test_invalid_pattern_error_not_cached() {
         let cache = RegexCache::new();
 
         let result = cache.get_or_compile(r"(?P<invalid>["); // Unclosed bracket
         assert!(result.is_err());
+
+        // 非法 pattern 再次调用仍执行编译尝试：错误不写缓存
+        let result2 = cache.get_or_compile(r"(?P<invalid>[");
+        assert!(result2.is_err());
+
+        let stats = cache.stats();
+        assert_eq!(stats.misses, 2, "错误不缓存：每次调用均重新编译");
+        assert_eq!(stats.entry_count, 0, "失败编译不入缓存");
     }
 
     #[test]
@@ -355,7 +322,7 @@ mod tests {
         cache.get_or_compile(r"[a-z]+").unwrap();
 
         let stats = cache.stats();
-        assert_eq!(stats.total_patterns, 2);
+        assert_eq!(stats.entry_count, 2);
     }
 
     #[test]
@@ -501,39 +468,31 @@ mod tests {
     }
 
     #[test]
-    fn test_regex_cache_eviction() {
-        let cache = RegexCache::with_capacity(5);
+    fn test_byte_budget_bounded() {
+        // 字节预算语义：注入权重合计远超预算的 pattern 集合后，
+        // entry_count 有界且 weighted_size 收敛回预算附近（TinyLFU 逐出，
+        // 不保证具体逐出对象）。
+        let budget = DEFAULT_BUDGET;
+        let single_entry_weight = 512 + ENTRY_OVERHEAD;
+        let total = budget / single_entry_weight + 80;
+        let cache = RegexCache::with_capacity(budget);
 
-        // Fill cache to capacity
-        for i in 0..5 {
-            cache.get_or_compile(&format!(r"pattern{}", i)).unwrap();
+        for i in 0..total {
+            let pattern = format!("{}{}", "a".repeat(512), i);
+            cache.get_or_compile(&pattern).unwrap();
         }
 
-        assert_eq!(cache.stats().total_patterns, 5);
-
-        // Add one more - should trigger eviction
-        cache.get_or_compile("pattern5").unwrap();
-
-        // Cache should still be bounded
-        assert!(cache.stats().total_patterns <= 5);
-    }
-
-    // ============================================================================
-    // Additional coverage tests
-    // ============================================================================
-
-    #[test]
-    fn test_regex_cache_clear() {
-        let cache = RegexCache::new();
-        cache.get_or_compile(r"\d+").unwrap();
-        cache.get_or_compile(r"[a-z]+").unwrap();
-        assert_eq!(cache.stats().total_patterns, 2);
-
-        cache.clear();
-
         let stats = cache.stats();
-        assert_eq!(stats.total_patterns, 0);
-        assert_eq!(stats.max_capacity, MAX_CACHE_SIZE);
+        assert!(
+            stats.entry_count < total as u64,
+            "entry_count 应远小于注入总数 {}（实际 {}）",
+            total,
+            stats.entry_count
+        );
+        assert!(
+            cache.weighted_size() <= budget as u64 + single_entry_weight as u64,
+            "weighted_size 不超过预算加一个条目位"
+        );
     }
 
     #[test]
@@ -541,7 +500,6 @@ mod tests {
         let cache = RegexCache::default();
         let regex = cache.get_or_compile(r"\d+").unwrap();
         assert!(regex.is_match("123"));
-        assert_eq!(cache.stats().max_capacity, MAX_CACHE_SIZE);
     }
 
     #[test]

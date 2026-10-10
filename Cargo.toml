@@ -56,8 +56,11 @@ base64 = { version = "0.23", default-features = false, features = ["std", "alloc
 # 显式声明，不依赖 limiteron 的默认特性供给
 toml = { version = "1.1", default-features = false }
 
-# 缓存依赖 - oxcache 0.5 用 minimal feature 提供内存后端 + 序列化 + tracing
-oxcache = { version = "0.5.0-rc.6", default-features = false, features = ["minimal"] }
+# 缓存依赖 - oxcache 0.5 用 minimal feature 提供内存后端 + 序列化 + tracing；
+# byte-weight 仅追加 moka/sync 特性位（byte-weight = ["dep:moka", "moka/sync"]，
+# minimal 已含 memory 即 dep:moka），不新增依赖 crate——正则编译缓存的字节预算
+# 容量（ByteWeightCache）所需
+oxcache = { version = "0.5.0-rc.6", default-features = false, features = ["minimal", "byte-weight"] }
 
 # 数据库网关 - dbnexus 0.6 embedded（sqlite）+ sql-parser：数据 API 网关的
 # 池化/解析面（db-integration feature）
