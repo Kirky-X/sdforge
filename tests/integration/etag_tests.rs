@@ -36,6 +36,18 @@ async fn create_report() -> serde_json::Value {
     serde_json::json!({"ok": true})
 }
 
+#[forge(
+    name = "etag_large",
+    version = "v1",
+    path = "/large",
+    method = "GET",
+    description = "Oversized report"
+)]
+async fn large_report() -> String {
+    // One byte above the middleware's 10 MiB buffering cap.
+    "x".repeat(10 * 1024 * 1024 + 1)
+}
+
 fn app() -> axum::Router {
     let config = sdforge::config::SdForgeConfig::default();
     build_with_config(&config).unwrap()
@@ -94,4 +106,23 @@ async fn post_responses_do_not_get_etag() {
     let res = send("POST", "/api/v1/report", None).await;
     assert_eq!(res.status(), 201);
     assert!(res.headers().get(axum::http::header::ETAG).is_none());
+}
+
+#[tokio::test]
+async fn oversized_response_passes_through_without_an_etag() {
+    // A body above the 10 MiB buffering cap must pass through untouched
+    // instead of being consumed for fingerprinting (a failed buffer read
+    // would surface as 502).
+    let res = send("GET", "/api/v1/large", None).await;
+    assert_eq!(res.status(), 200);
+    assert!(
+        res.headers().get(axum::http::header::ETAG).is_none(),
+        "an oversized body must not gain an ETag"
+    );
+    let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    // The handler's String is JSON-encoded; the payload itself is intact.
+    let payload: String = serde_json::from_slice(&body).expect("body must be the JSON string");
+    assert_eq!(payload.len(), 10 * 1024 * 1024 + 1);
 }

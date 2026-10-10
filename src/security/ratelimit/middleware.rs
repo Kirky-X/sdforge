@@ -107,7 +107,15 @@ where
             // variant-specific response and never touch the inner service.
             match limiter.check_request(&req).await {
                 Ok(()) => inner.call(req).await,
-                Err(err) => Ok(rate_limit_rejection_response(err)),
+                Err(err) => {
+                    // 该层由使用方包在 router 之外，router 内的语言作用域
+                    // 中间件尚未运行——直接从请求头解析语言。
+                    #[cfg(feature = "i18n")]
+                    let locale = crate::i18n::locale_from_headers(req.headers());
+                    #[cfg(not(feature = "i18n"))]
+                    let locale: Option<String> = None;
+                    Ok(rate_limit_rejection_response(err, locale.as_deref()))
+                }
             }
         })
     }
@@ -128,33 +136,40 @@ where
 ///
 /// `Retry-After` is emitted in seconds (RFC 7231 §7.1.3 allows either seconds
 /// or HTTP-date; seconds is simpler and avoids clock-skew issues).
-fn rate_limit_rejection_response(err: RateLimitError) -> Response {
+///
+/// `locale` is the request's resolved `Accept-Language` locale (`None` =
+/// process locale), so rejection bodies follow the caller's language.
+fn rate_limit_rejection_response(err: RateLimitError, locale: Option<&str>) -> Response {
+    let localize = |key: &str, args: &[(&str, String)]| match locale {
+        Some(locale) => crate::i18n::translate_for(locale, key, args),
+        None => crate::i18n::t(key, args),
+    };
     let (status, body, retry_after_secs) = match &err {
         RateLimitError::Exceeded { window_seconds, .. } => (
             StatusCode::TOO_MANY_REQUESTS,
-            crate::i18n::t("ratelimit-exceeded", &[]),
+            localize("ratelimit-exceeded", &[]),
             Some(*window_seconds),
         ),
         RateLimitError::Banned { reason } => (
             StatusCode::FORBIDDEN,
-            crate::i18n::t("ratelimit-banned", &[("reason", reason.clone())]),
+            localize("ratelimit-banned", &[("reason", reason.clone())]),
             None,
         ),
         RateLimitError::CircuitOpen => (
             StatusCode::SERVICE_UNAVAILABLE,
-            crate::i18n::t("ratelimit-circuit-open", &[]),
+            localize("ratelimit-circuit-open", &[]),
             // No window boundary available; suggest a conservative back-off
             // so callers don't hammer the breaker while it's half-open.
             Some(60),
         ),
         RateLimitError::QuotaExhausted { .. } => (
             StatusCode::TOO_MANY_REQUESTS,
-            crate::i18n::t("ratelimit-quota-exhausted", &[]),
+            localize("ratelimit-quota-exhausted", &[]),
             None,
         ),
         RateLimitError::Limiteron(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            crate::i18n::t("ratelimit-internal-error", &[]),
+            localize("ratelimit-internal-error", &[]),
             None,
         ),
     };

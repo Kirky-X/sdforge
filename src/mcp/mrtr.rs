@@ -637,7 +637,6 @@ mod tests {
     #[test]
     fn test_session_manager_cleanup_expired() {
         let manager = MrtrSessionManager::new();
-        // Create a session with very short timeout
         {
             let session = MrtrSession::with_timeout("s1", "tool", Duration::from_millis(1));
             manager

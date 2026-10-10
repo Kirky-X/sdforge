@@ -664,7 +664,6 @@ mod tests {
         );
 
         let handler = route.handler();
-        // Verify handler is accessible
         let _ = handler;
     }
 
@@ -1245,7 +1244,6 @@ mod tests {
 
     #[test]
     fn test_build_version_router_path_format() {
-        // Verify that versioned routes use /api/{version}/{path} format
         let route = VersionedRoute::new(
             "v1".to_string(),
             "/users".to_string(),
@@ -1485,7 +1483,6 @@ mod tests {
 
     #[test]
     fn test_define_versioned_route_macro() {
-        // Verify macro expands correctly for GET method
         async fn macro_test_handler() -> &'static str {
             "macro test"
         }
@@ -1505,7 +1502,6 @@ mod tests {
 
     #[test]
     fn test_define_versioned_route_post_method() {
-        // Verify macro works for POST method
         async fn post_test_handler() -> &'static str {
             "post test"
         }
@@ -1523,7 +1519,6 @@ mod tests {
 
     #[test]
     fn test_define_versioned_route_all_methods() {
-        // Verify macro supports all HTTP methods
         async fn handler() -> &'static str {
             "ok"
         }
@@ -1579,7 +1574,6 @@ mod tests {
 
         let cloned = config.clone();
 
-        // Verify all fields are cloned correctly
         assert_eq!(cloned.default_version, config.default_version);
         assert_eq!(cloned.supported_versions, config.supported_versions);
         assert_eq!(cloned.redirect_unknown, config.redirect_unknown);
@@ -1696,7 +1690,6 @@ mod tests {
         };
 
         // The middleware queries `config.deprecated_versions.get(version_part)`.
-        // Verify the lookup returns the expected sunset date.
         assert_eq!(
             config.deprecated_versions.get("v1"),
             Some(&"2026-12-31".to_string()),

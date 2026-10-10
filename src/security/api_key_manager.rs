@@ -209,7 +209,6 @@ impl ApiKeyMetadata {
     pub fn add_version(&mut self, version: ApiKeyVersion) {
         let is_active = version.is_active;
         self.versions.push(version);
-        // Set as active if it's the first version or explicitly marked active
         if self.active_version_index.is_none() || is_active {
             self.active_version_index = Some(self.versions.len() - 1);
         }
@@ -245,14 +244,6 @@ impl ApiKeyMetadata {
         if let Some(new_version) = self.versions.get_mut(version_index) {
             new_version.is_active = true;
             self.active_version_index = Some(version_index);
-
-            // Log rotation event (tracing will be added when feature is enabled)
-            // tracing::info!(
-            //     key_id = %self.key_id,
-            //     old_version = %old_version,
-            //     new_version = %new_version_name,
-            //     "API key rotated to new version"
-            // );
 
             Ok(())
         } else {

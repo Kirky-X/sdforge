@@ -118,6 +118,25 @@ mod tests {
         assert_eq!(result, None);
     }
 
+    /// 空权限种子（`ApiKeySeed { permissions: [] }`）必须能认证：文档契约是
+    /// 「空表示仅认证不放权」，此前 `validate_key` 对空权限返回 `None`
+    /// （等同无效 key）→ 种子 key 恒 401，文档语义不可达。
+    #[test]
+    fn validate_key_accepts_empty_permissions_as_auth_only() {
+        let auth = SdForgeApiKeyAuth::new();
+        auth.add_key("auth-only-key", vec![]);
+        assert_eq!(
+            auth.validate_key("auth-only-key", "127.0.0.1"),
+            Some(vec![]),
+            "empty permission list must authenticate without granting permissions"
+        );
+        assert_eq!(
+            auth.validate_key("unknown-key", "127.0.0.1"),
+            None,
+            "unknown keys must still be rejected"
+        );
+    }
+
     /// Trait dispatch path returns `None` for an empty key.
     #[test]
     fn trait_validate_key_returns_none_for_empty_key() {

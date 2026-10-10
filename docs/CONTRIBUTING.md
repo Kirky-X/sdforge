@@ -39,7 +39,8 @@ SDForge 是一个基于 Rust 的声明式多协议 SDK 框架。无论是修复 
 git clone https://github.com/Kirky-X/sdforge.git
 cd sdforge
 
-# 安装 pre-commit 钩子（lefthook）
+# 安装 pre-commit 钩子（脚本走 Python pre-commit 框架；
+# lefthook.yml 为等价替代，二者二选一）
 ./scripts/install-pre-commit.sh
 
 # 验证环境
@@ -162,11 +163,12 @@ docs(readme): update installation instructions
 
 ### Pre-commit 检查
 
-项目使用 lefthook 执行本地检查：
+项目通过 pre-commit 或 lefthook 执行本地检查（`.pre-commit-config.yaml` 与 `lefthook.yml` 功能等价，二选一；`scripts/install-pre-commit.sh` 走 Python pre-commit 框架）：
 
 ```bash
-# 安装钩子
-./scripts/install-pre-commit.sh   # 或 lefthook install
+# 安装钩子（二选一）
+./scripts/install-pre-commit.sh   # Python pre-commit 框架
+# 或 lefthook install             # lefthook
 
 # 手动运行检查
 cargo fmt --all -- --check
@@ -197,7 +199,7 @@ cargo audit
 
 - **禁止使用 `--no-verify` 跳过** pre-commit hooks
 - **禁止 `git push --force` 到 main/master 分支**
-- pre-commit 包含 `no-commit-to-branch`（保护 main 分支），必须创建 feature 分支提交
+- pre-commit 包含 `no-commit-to-branch`（`args: ['--branch', 'master']`：本仓工作流在 main 上提交，故仅保护 `master` 分支，main 不受该钩子限制；提交仍推荐创建 feature 分支）
 - 代码质量工具是项目强制门禁：**diting**（简化/架构/性能审查）、**tiangang**（SAST 安全扫描，发布前强制）、**kueiku**（bug 分析/根因分析/FMEA）
 - 提交即代表你同意你的贡献将基于 [MIT 许可证](../LICENSE) 授权
 - 有任何疑问，欢迎提一个带 `question` 标签的 [Issue](https://github.com/Kirky-X/sdforge/issues)

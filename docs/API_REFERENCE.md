@@ -39,21 +39,25 @@
 | `name` | 端点名称（不可为 Rust 保留字） | 是 | - |
 | `version` | API 版本 | 是 | - |
 | `path` | HTTP 路径（如 `/users/:id`） | 否 | - |
+| `prefix` | 模块路径前缀：由 `#[service_module(prefix = "...")]` 注入模块内端点；显式声明可覆盖模块级注入 | 否 | - |
 | `method` | HTTP 方法（GET/POST/PUT/DELETE 等） | 否 | GET |
 | `status` | 成功状态码（100..=999） | 否 | 200 |
 | `description` | 端点描述 | 否 | - |
 | `i18n_key` | `description` 的运行时翻译键 | 否 | - |
+| `deprecated` | 端点级弃用标记（裸旗标或 `= true/false`）：HTTP 成功响应附 `Deprecation: true` 头，gRPC 成功响应注入 `deprecation` metadata | 否 | false |
+| `sunset` | 端点级退役日期/取值（HTTP 成功响应附 `Sunset` 头，gRPC 成功响应注入 `sunset` metadata） | 否 | - |
+| `successor` | 后继端点提示（HTTP 成功响应附 `Link: <...>; rel="successor-version"`，gRPC 成功响应注入 `successor-version` metadata） | 否 | - |
 | `tool_name` | MCP 工具名称（`mcp`） | 否 | - |
 | `grpc_method` | gRPC 方法名（`grpc`） | 否 | - |
 | `cli` | 注册为 CLI 命令（`cli`） | 否 | false |
 | `cache_ttl` | 结果缓存 TTL 秒数（`cache`） | 否 | - |
-| `ws_path` | WebSocket 路径（`websocket`） | 否 | - |
+| `ws_path` | WebSocket 挂载路径（`websocket`）：声明后 `websocket::build()` 挂载于该路径（缺少前导斜杠自动归一化）；未声明时派生 `/{name}` | 否 | - |
 | `stream` / `streaming` | SSE 流式响应开关 | 否 | false |
 | `no_prefix` | 跳过模块/版本前缀拼接 | 否 | false |
 | `validate` | 裸旗标：使 `#[param(...)]` 的校验规则生效（`validate`），来源声明与 `flatten` 不受此旗标约束，属性表见下节 | 否 | false |
 | `paginate` | 裸旗标：声明式分页（`paginate`） | 否 | false |
 | `on_start` / `on_stop` | 裸旗标：进程生命周期钩子（`lifecycle`） | 否 | false |
-| `auth(role = "...")` | 端点级 RBAC 角色（`http`，无匹配角色返回 403） | 否 | - |
+| `auth(role = "...")` | 端点级 RBAC 角色（`http` / `mcp` / `grpc` 三协议生效：无匹配角色 HTTP 返回 403、gRPC 返回 `permission_denied`、MCP 返回 JSON-RPC `-32003`；CLI/WS 不生效） | 否 | - |
 
 ### `#[param]` 参数属性
 
@@ -116,7 +120,7 @@ async fn search(
 | `get_websocket_routes()`（`websocket`） | 收集全部已注册 WebSocket 路由 |
 | `get_mcp_tools()`（`mcp`） | 收集全部已注册 MCP 工具 |
 
-`PluginCounts` 字段按 feature 条件编译：`routes`（HTTP）、`mcp_tools`、`ws_routes`、`grpc_routes`、`grpc_handlers`、`cli_commands`。
+`PluginCounts` 六个字段恒存在（未启用对应协议时值恒 `0`），结构体本身门控于 `http` / `mcp` / `websocket` / `grpc` / `cli` 任一启用：`routes`（HTTP）、`mcp_tools`、`ws_routes`、`grpc_routes`、`grpc_handlers`、`cli_commands`。
 
 ### 始终可用的其他 API
 
@@ -228,7 +232,9 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
   键前缀 `sdforge:idempotency:`，scope 绑定路由/gRPC method
 - `http::idempotency::idempotency_middleware`：`Idempotency-Key` 头（POST/PUT/PATCH），
   重放响应附 `Idempotency-Replayed: true`，并发在途 409；`ServerConfig.idempotency`
-  配置节（`enabled` 默认 false / `ttl_secs` / `max_response_bytes`）
+  配置节（`enabled` 默认 false / `ttl_secs` 默认 86400 / `inflight_ttl_secs` 默认 30 /
+  `max_response_bytes` 默认 1 MiB / `store`——外部注入的共享 `IdempotencyStore`，
+  默认内部新建）
 - gRPC：`idempotency-key` metadata，在途返回 `ALREADY_EXISTS`；经
   `GrpcServerConfig::idempotency_store` 注入
 
@@ -241,10 +247,10 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 | Feature | 模块 | 主要 API |
 |---------|------|----------|
 | `http` | `sdforge::http` / `config` / `axum`（facade）/ `rbac` | `build`、`build_with_config`、`build_with_redirect`、`RouteRegistration`、`validate_email` / `validate_length`、`require_role`（配合 `#[forge(auth(role = "..."))]`）；axum/tower/tower-http re-export |
-| `mcp` | `sdforge::mcp` | `SdForgeMcpServer`、`StatelessServerHandler`、`McpToolInstance` / `McpToolRegistration`、`build()`、`get_mcp_tools()`、`serve_stdio()`、`parse_mcp_headers` / `McpHeaderInfo`、`InputRequiredResult`、`MrtrSession` / `MrtrSessionManager`、`cache_semantics`；`rmcp` / `anyhow` re-export |
+| `mcp` | `sdforge::mcp` | `SdForgeMcpServer`、`StatelessServerHandler`、`McpToolInstance` / `McpToolRegistration`、`build()`、`get_mcp_tools()`、`serve_stdio()`、`parse_mcp_headers` / `McpHeaderInfo`、`InputRequiredResult`、`MrtrSession`（会话管理器 `MrtrSessionManager` 不在根导出，需经 `sdforge::mcp::mrtr::MrtrSessionManager` 访问）、`cache_semantics`；`rmcp` / `anyhow` re-export |
 | `grpc` | `sdforge::grpc` | `SdForgeGrpcService`（`Call` / `CallStream` / `GetInfo`；`CallStream` 需另启 `streaming`）、`GrpcServerConfig`（`state: Option<Arc<dyn Any + Send + Sync>>`、`require_auth`（默认 `true`）、`auth`（`security` 下为 `Option<BearerAuth>`，未启用时降级为 `Option<()>`）、`rate_limiter`、`extra_services: Vec<ExtraServiceMount>`（自定义 tonic service 同端口挂载回调；`Clone` 共享同一回调列表）、`max_connections`（默认 1000）、`timeout_seconds`（默认 30 秒）、`http2_keepalive_interval` / `http2_keepalive_timeout`（`None` = tonic 默认）、`tls`（`grpc-tls`，`Option<tonic::transport::ServerTlsConfig>`）、`idempotency_store` / `idempotency_ttl_secs`（默认 86400） / `idempotency_inflight_ttl_secs`（默认 30）（`idempotency`））、`build_server_with_config(addr, config)`、`build_server_with_graceful_shutdown(addr, config, signal)`（`signal: Future<Output = ()>`）、`build_server(addr)`（**已弃用**，见下方注记）、`GrpcRoute`、`CallRequest` / `CallResponse` / `InfoRequest` / `InfoResponse`、`SdForgeServiceServer`、`GrpcHandlerRegistration` / `GrpcStreamHandlerRegistration`（`streaming`）；`tonic` / `prost` re-export |
 | `websocket` | `sdforge::websocket` | `WebSocketRoute` / `WebSocketHandler`、`websocket_upgrade` / `ValidatedWebSocketUpgrade`、`ConnectionManager`、`WebSocketConfig` / `WebSocketConnection` / `WebSocketMessage`、`parse_websocket_message` |
-| `streaming` | `sdforge::streaming` | `StreamEvent`、`StreamResponse`、`stream_to_sse`、`create_stream_channel`（`grpc_method` + `stream = true` 组合映射到 gRPC `CallStream`，见 `grpc` 行）；`tokio_stream` re-export |
+| `streaming` | `sdforge::streaming` | `StreamEvent`、`StreamResponse`、`stream_to_sse`、`create_stream_channel`、`SseFrame` / `SseFrameParser` / `SseStreamError` / `frames`（入站 SSE 帧解析：WHATWG 分帧、`with_limits` 内存上限、零额外依赖）（`grpc_method` + `stream = true` 组合映射到 gRPC `CallStream`，见 `grpc` 行）；`tokio_stream` re-export |
 | `ratelimit-dist` | `sdforge::security::ratelimit::dist` | `DistributedRateLimiter`（泛型 limiteron `DistributedLimiter` 后端：`InMemoryDistributedLimiter` 单实例/`RedisDistributedLimiter` 多副本）、`DistributedRateLimitConfig`（含适配层熔断 `with_circuit_failure_threshold`/`with_circuit_open_duration`：连续后端错误打开、打开期不经后端直接按策略裁决、半开探测恢复）、`BackendFailurePolicy`（fail-open 默认/fail-close） |
 | `cache-l2` | `sdforge::cache::l2` | `RedisL2Cache`（oxcache `RedisBackend` 同步面 → `SyncCache`，仅多线程 runtime；异步面 `get_async`/`set_async`/`delete_async`/`contains_async` 供异步中间件热路径）、`RedisL2CacheConfig`（AUTH/TLS 连接串——Debug 输出掩码凭据、键前缀、默认 TTL）、`CacheL2Error` |
 | `security` / `ratelimit` / `ratelimit-http` | `sdforge::security` | 认证：`ApiKeyAuth`、`BearerAuth(+Builder)`、`SdForgeApiKeyAuth(+Builder)`、`AuthContext`、`AuthExtractor`、`auth_middleware`；审计：`AuditLogger` / `SdForgeAuditLogger(+Builder)`、`AuditLog` / `AuditResult`、`AuditSink`；限流：`RateLimiter` trait、`LimiteronAdapter`、`RateLimitLayer`（`ratelimit-http`） |
@@ -261,7 +267,7 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 | `hooks` | `sdforge::hooks` | `RequestHooks` trait、`install_hooks`、`hooks_middleware`（处理器前后钩子管道） |
 | `otel` | `sdforge::otel` | `start_span` / `with_attr` / `finish_span` / `take_spans`、`OtelConfig`（OTLP/HTTP JSON 导出） |
 | `inklog` | `sdforge::inklog` / `sdforge::forge::log` | `init_inklog_logger()`：将 `log` 调用桥接到 inklog 结构化管道；`#[forge::log]` 声明日志属性宏（`args`/`result`/`err_detail`/`level` 参数，DataMasker 脱敏 + 64 KiB 截断、级别守卫惰性渲染、`unsafe` 限定传播、`log_attr::mask`/`render_enter`/`render_exit` 可独立复用） |
-| `i18n` | `sdforge::i18n` | `HttpI18nFormatter`（ICU4X 本地化格式化）、`I18nError` |
+| `i18n` | `sdforge::i18n` | `HttpI18nFormatter`（ICU4X 本地化格式化）、`I18nError`、`locale_from_accept_language` / `locale_from_headers`（请求语言解析）、`scope_request_locale` / `request_locale`（请求级 locale 作用域，`t()` 优先消费） |
 | `limiteron-integration` / `kit` / `db-integration` | `sdforge::integrations` | trait-kit AsyncKit 集成（`SdforgeModule`）、`LimiteronForgeAdapter`、dbnexus 数据 API 网关（`DbGateway`：`allow_table` + `query(GatewayQuery)` 白名单只读面、`GatewayQuery::all/filter/paging`） |
 
 > 无独立模块的能力：`validate`（`#[forge(validate)]` + `#[param(...)]`，属性表见 [`#[param]` 参数属性](#param-参数属性)）、`paginate`（`#[forge(paginate)]`）、`etag`（GET 强 ETag + 304）、`graceful`（优雅停机）、`timestamp`（响应时间戳）、`simd-json`（SIMD JSON 路径）经宏旗标或构建配置生效。

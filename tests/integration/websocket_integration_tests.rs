@@ -64,7 +64,6 @@ mod websocket_enhanced_integration_tests {
     async fn test_connection_manager_multiple_connections() {
         let manager = Arc::new(ConnectionManager::new());
 
-        // Create and add multiple connections
         for i in 0..3 {
             let conn_id = format!("integration-conn-{}", i);
             let (conn, _rx) = WebSocketConnection::new(conn_id.clone());
@@ -99,5 +98,64 @@ mod websocket_enhanced_integration_tests {
         // Verify connection no longer exists
         let conn = manager.get_connection("remove-test").await;
         assert!(conn.is_none());
+    }
+}
+
+/// `#[forge(ws_path = "...")]` 回归：声明式挂载路径必须由宏注册进
+/// `WebSocketRoute` 并被 `websocket::build()` 消费（此前 ws_path 被解析后
+/// 丢弃，路由只挂在 `/{name}` 上）。
+#[cfg(feature = "websocket")]
+mod websocket_ws_path_tests {
+    use sdforge::websocket::{BoxFuture, WebSocketHandler, WebSocketMessage};
+    use std::sync::Arc;
+
+    struct Echo;
+    impl WebSocketHandler for Echo {
+        fn handle(&self, message: WebSocketMessage) -> BoxFuture<'static, WebSocketMessage> {
+            Box::pin(async move { message })
+        }
+    }
+
+    #[sdforge::forge(name = "it_ws_internal", version = "v1", ws_path = "/ws/it-declared")]
+    fn it_ws_internal() -> Arc<dyn WebSocketHandler> {
+        Arc::new(Echo)
+    }
+
+    #[test]
+    fn registered_ws_route_exposes_declared_path() {
+        let routes = sdforge::get_websocket_routes();
+        let route = routes
+            .iter()
+            .find(|r| r.name == "it_ws_internal")
+            .expect("ws route registered via #[forge(ws_path)]");
+        assert_eq!(route.path, "/ws/it-declared");
+        assert_eq!(route.mount_path(), "/ws/it-declared");
+    }
+
+    /// 端到端：`build()` 后的路由必须在声明的 ws_path 上完成 101 升级。
+    #[tokio::test]
+    async fn build_serves_declared_ws_path() {
+        let app = sdforge::websocket::build();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = sdforge::axum::serve(listener, app).await;
+        });
+
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut sock = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let req = format!(
+            "GET /ws/it-declared HTTP/1.1\r\nHost: {addr}\r\nUpgrade: websocket\r\n\
+             Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+             Sec-WebSocket-Version: 13\r\n\r\n"
+        );
+        sock.write_all(req.as_bytes()).await.unwrap();
+        let mut buf = vec![0u8; 1024];
+        let n = sock.read(&mut buf).await.unwrap();
+        let head = String::from_utf8_lossy(&buf[..n]).to_string();
+        assert!(
+            head.starts_with("HTTP/1.1 101"),
+            "declared ws_path must serve the upgrade: {head:?}"
+        );
     }
 }

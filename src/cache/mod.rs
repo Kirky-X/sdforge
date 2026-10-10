@@ -800,7 +800,6 @@ mod tests {
             idx.insert("stale_key_2".to_string());
         }
 
-        // Call find_keys_by_pattern with a glob pattern that matches
         let result = cache.find_keys_by_pattern("stale_*");
 
         // The stale keys should not be in the results (backend doesn't have them)

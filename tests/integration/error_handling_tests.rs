@@ -371,7 +371,6 @@ mod error_handling_tests {
         unsafe impl Send for DatabaseError {}
         unsafe impl Sync for DatabaseError {}
 
-        // Create error with source
         let source_error = DatabaseError("connection refused");
         let api_error =
             ApiError::internal_with_source("Database operation failed", "DB001", source_error);
@@ -388,13 +387,11 @@ mod error_handling_tests {
     /// Verifies that ErrorContext can be added to errors with custom metadata.
     #[test]
     fn test_error_context_enrichment() {
-        // Create context with additional metadata
         let context = ErrorContext::new()
             .with_extra("user_id".to_string(), "user_123".to_string())
             .with_extra("operation".to_string(), "create_user".to_string())
             .with_extra("request_path".to_string(), "/api/users".to_string());
 
-        // Create error with context
         let error = ApiError::internal_with_context("Failed to create user", "CREATE001", context);
 
         // Verify error contains context
@@ -500,7 +497,6 @@ mod error_handling_tests {
         // Simulate correlation ID tracking
         let request_id = "req_abc123def456";
 
-        // Create error with request context
         let context = ErrorContext::new()
             .with_extra("request_id".to_string(), request_id.to_string())
             .with_extra("endpoint".to_string(), "/api/v1/users".to_string())

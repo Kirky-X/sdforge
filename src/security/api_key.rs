@@ -10,7 +10,7 @@
 
 use crate::cache::SharedCache;
 use crate::security::{ApiKeyMetadata, ApiKeyVersion, LruCacheManager, LruConfig, RotationConfig};
-use crate::security::{CacheNamespace, deserialize_permissions, serialize_permissions};
+use crate::security::{CacheNamespace, serialize_permissions};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -271,7 +271,6 @@ impl SdForgeApiKeyAuth {
         let mut metadata: ApiKeyMetadata = postcard::from_bytes::<ApiKeyMetadata>(&data)
             .map_err(|e| format!("Failed to deserialize metadata: {}", e))?;
 
-        // Create new version
         let ttl = self
             .rotation_config
             .as_ref()
@@ -361,17 +360,23 @@ impl SdForgeApiKeyAuth {
     /// # Returns
     ///
     /// Returns `Some(Vec<String>)` with permissions if the key is valid,
-    /// or `None` if the key is invalid.
+    /// or `None` if the key is invalid. A **valid key with an empty
+    /// permission list** (seed `permissions: []`) returns `Some(vec![])`:
+    /// the key authenticates but grants no role/permission — matching the
+    /// `ApiKeySeed::permissions` contract ("空表示仅认证不放权"). Only
+    /// undecodable stored bytes are treated as invalid (fail-closed).
     pub fn validate_key(&self, key: &str, _client_ip: &str) -> Option<Vec<String>> {
         let start = Instant::now();
         let key_hash = Self::hash_key(key);
         let store_key = CacheNamespace::ApiKey.key(&key_hash);
 
-        // Always check valid_keys for constant timing
-        let perms = self.valid_keys.get(&store_key).and_then(|data| {
-            let p = deserialize_permissions(&data);
-            if p.is_empty() { None } else { Some(p) }
-        });
+        // Always check valid_keys for constant timing.
+        // 空权限列表是合法状态（仅认证不放权）；`ok()` 只把损坏字节判为无效，
+        // 避免把「解码失败」与「空权限」混为一谈而 fail-open。
+        let perms = self
+            .valid_keys
+            .get(&store_key)
+            .and_then(|data| postcard::from_bytes::<Vec<String>>(&data).ok());
 
         // 强制过期 ——带 ttl 的版本到期后立即失效
         //（过期判断与 perms 查询解耦，恒定时间延迟对两种结果一致）
@@ -658,7 +663,8 @@ mod tests {
         let auth = SdForgeApiKeyAuth::new();
         auth.add_key("test_key", vec![]);
         let perms = auth.validate_key("test_key", "127.0.0.1");
-        assert!(perms.is_none());
+        // 空权限 = 仅认证不放权（ApiKeySeed 文档契约）：认证通过，权限为空。
+        assert_eq!(perms, Some(vec![]));
     }
 
     #[test]

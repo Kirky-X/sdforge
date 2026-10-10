@@ -408,7 +408,6 @@ fn test_build_sorts_routes_deterministically() {
     // Routes are sorted by path (line 176)
     let _router1 = build();
     let _router2 = build();
-    // Both should succeed without panic
 }
 
 #[test]

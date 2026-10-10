@@ -12,6 +12,7 @@
 
 # --- HTTP / security ---------------------------------------------------------
 http-unauthorized = Unauthorized
+http-route-not-found = Route not found
 
 # --- Rate limiting (HTTP rejection bodies) -----------------------------------
 ratelimit-exceeded = Rate limit exceeded
@@ -27,6 +28,11 @@ forge-limiter-internal = Rate limiter internal error: { $message }
 # --- core::str formatting helpers --------------------------------------------
 core-resource-not-found = Resource not found: { $resource }
 core-validation-failed = Validation failed for { $field }: { $constraint }
+
+# --- streaming::SseStreamError (thiserror Display) ---------------------------
+sse-invalid-utf8 = SSE frame is not valid UTF-8: { $error }
+sse-limit-exceeded = SSE stream exceeded configured limit ({ $size } bytes)
+sse-upstream-error = upstream stream error: { $error }
 
 # --- docs (Swagger UI entry page) ---------------------------------------------
 docs-swagger-title = SDForge API Docs

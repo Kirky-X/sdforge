@@ -350,12 +350,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_build_fallback_response_escaped_body_valid_json() {
-        // Verify that escaped quotes produce valid JSON
         let resp = build_fallback_response(400, r#"bad "value" here"#);
         let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
             .unwrap();
-        // Should parse without error
         let parsed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(parsed["error"]["message"], r#"bad "value" here"#);
     }

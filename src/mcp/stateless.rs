@@ -418,11 +418,9 @@ mod tests {
     async fn test_stateless_get_info_consistent_with_initialize() {
         let handler = StatelessServerHandler::from_registry();
 
-        // Get info from get_info()
         let info = handler.get_info();
         let name_from_get_info = info.server_info.name.clone();
 
-        // Get info from initialize()
         let context = make_test_context();
         let request = InitializeRequestParams::new(Default::default(), {
             let mut impl_info = rmcp::model::Implementation::default();

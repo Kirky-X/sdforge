@@ -88,7 +88,6 @@ mod streaming_tests {
     async fn test_sse_event_stream_basic() {
         use futures_util::stream;
 
-        // Create a simple stream of numbers
         let input_stream = stream::iter(vec![1i32, 2, 3, 4, 5]);
         let sse_stream = stream_to_sse(input_stream, |n| StreamEvent::data(serde_json::json!(n)));
 
@@ -124,13 +123,52 @@ mod streaming_tests {
         );
     }
 
+    /// SSE 心跳回归：源静默时按固定间隔发送注释帧（`: keep-alive`，SSE 规范
+    /// 中客户端忽略、本仓 parser 也跳过注释行）；数据帧到达后心跳计时重置，
+    /// 即心跳是空闲保活而非固定节拍的数据注入。
+    #[tokio::test(start_paused = true)]
+    async fn test_sse_idle_heartbeat_and_reset_on_data() {
+        let (tx, rx) = tokio::sync::mpsc::channel::<Result<String, String>>(8);
+        let sse_stream =
+            stream_to_sse(
+                ReceiverStream::new(rx),
+                |msg: Result<String, String>| match msg {
+                    Ok(data) => StreamEvent::data(serde_json::Value::String(data)),
+                    Err(e) => StreamEvent::error(e),
+                },
+            );
+        let mut frames = Box::pin(sse_stream);
+
+        // 源静默 → 心跳帧先到（暂停时钟下自动推进到心跳间隔）。
+        let first = tokio::time::timeout(Duration::from_secs(60), frames.next())
+            .await
+            .expect("idle source must produce a heartbeat frame")
+            .expect("stream item")
+            .expect("infallible");
+        assert_eq!(
+            first, ": keep-alive\n\n",
+            "idle heartbeat must be an SSE comment frame"
+        );
+
+        // 数据到达 → 数据帧优先于下一次心跳（计时重置）。
+        tx.send(Ok("payload".to_string())).await.unwrap();
+        let next = tokio::time::timeout(Duration::from_secs(60), frames.next())
+            .await
+            .expect("data frame after heartbeat")
+            .expect("stream item")
+            .expect("infallible");
+        assert!(
+            next.contains("\"data\":\"payload\"") && !next.starts_with(':'),
+            "data frame must follow the heartbeat without an intervening heartbeat: {next:?}"
+        );
+    }
+
     /// Test SSE stream with multiple event types (data, ping, error, complete)
     /// Verifies that different event types are properly serialized and formatted
     #[tokio::test]
     async fn test_sse_multiple_event_types() {
         use futures_util::stream;
 
-        // Create stream with mixed event types
         let events = vec![
             StreamEvent::data(serde_json::json!("first")),
             StreamEvent::ping(),
@@ -169,7 +207,6 @@ mod streaming_tests {
     /// Verifies that events can be tracked with unique IDs
     #[tokio::test]
     async fn test_sse_event_id_tracking() {
-        // Create events with specific IDs
         let event1 = StreamEvent::Data {
             id: Some("msg-001".to_string()),
             event_name: Some("update".to_string()),
@@ -295,7 +332,6 @@ mod streaming_tests {
     async fn test_stream_large_payload() {
         let (tx, response) = create_stream_channel::<Vec<u8>>(10);
 
-        // Create large payload (1MB)
         let large_data: Vec<u8> = (0..1024 * 1024).map(|i| (i % 256) as u8).collect();
         let expected_len = large_data.len();
 
@@ -314,7 +350,6 @@ mod streaming_tests {
     /// Verifies that the channel properly handles slow consumers
     #[tokio::test]
     async fn test_stream_backpressure_handling() {
-        // Create a channel with small buffer
         let (tx, response) = create_stream_channel::<String>(2);
 
         // Send items up to buffer capacity
@@ -355,7 +390,6 @@ mod streaming_tests {
         // Drop the response (receiver side)
         drop(stream);
 
-        // Try to send after receiver is dropped
         // The send might succeed because it queues the message, but receiver won't get it
         let _send_result = tx.send(Ok(3)).await;
 
@@ -410,7 +444,6 @@ mod streaming_tests {
     async fn test_stream_completion_signal() {
         use futures_util::stream;
 
-        // Create empty stream
         let empty_stream = stream::iter(Vec::<i32>::new());
         let sse_stream = stream_to_sse(empty_stream, |_| StreamEvent::complete());
 
@@ -438,7 +471,6 @@ mod streaming_tests {
         let start = std::time::Instant::now();
         let mut stream = Box::pin(stream);
 
-        // Wait for timeout
         let result = tokio::time::timeout(timeout_duration, stream.next()).await;
 
         assert!(
@@ -492,7 +524,6 @@ mod streaming_tests {
             count
         });
 
-        // Wait for both tasks
         producer_handle.await.unwrap();
         let received_count = consumer_handle.await.unwrap();
 
@@ -605,7 +636,6 @@ mod streaming_tests {
     async fn test_sse_event_name_formatting() {
         use futures_util::stream;
 
-        // Create events with custom event names
         let events = vec![
             StreamEvent::Data {
                 id: Some("1".to_string()),
@@ -778,7 +808,6 @@ mod streaming_tests {
         }
         drop(tx);
 
-        // Wait for consumer to finish
         let items = consumer_handle.await.unwrap();
 
         assert_eq!(items.len(), item_count);
@@ -806,7 +835,6 @@ mod streaming_tests {
         }
         drop(tx);
 
-        // Wait for consumer to finish
         let items = consumer_handle.await.unwrap();
 
         assert_eq!(items.len(), total_items);
@@ -919,7 +947,6 @@ mod streaming_tests {
     async fn test_sse_large_payload_serialization() {
         use futures_util::stream;
 
-        // Create large payload (100KB of JSON-like data)
         let large_data = serde_json::json!({
             "items": (0..1000).map(|i| {
                 serde_json::json!({

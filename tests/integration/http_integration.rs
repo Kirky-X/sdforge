@@ -187,7 +187,6 @@ mod http_tests {
             handles.push(handle);
         }
 
-        // Wait for all tasks and verify responses
         for handle in handles {
             let (idx, status) = handle.await.unwrap();
             assert_eq!(status, StatusCode::OK, "Request {} should succeed", idx);
@@ -327,5 +326,105 @@ mod streaming_tests {
             !std::ptr::eq(&app, std::ptr::null()),
             "HTTP app with streaming should build"
         );
+    }
+}
+
+/// 请求级语言回归：HTTP 错误体（未匹配路由 404、认证拒绝 401）必须随请求的
+/// `Accept-Language` 选择语言，而非固定用进程 locale。
+#[cfg(all(feature = "http", feature = "i18n"))]
+mod http_error_body_locale_tests {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    async fn body_string(response: axum::response::Response) -> String {
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        String::from_utf8(bytes.to_vec()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn unmatched_route_body_follows_accept_language() {
+        let router = sdforge::http::build();
+
+        let resp = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/no-such-route")
+                    .header("accept-language", "zh-CN,zh;q=0.9")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        let zh = body_string(resp).await;
+        assert!(
+            zh.contains("路由未找到"),
+            "zh request must get the Chinese message: {zh}"
+        );
+        assert!(zh.contains("\"code\":\"NOT_FOUND\""), "code missing: {zh}");
+
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .uri("/no-such-route")
+                    .header("accept-language", "en-US,en;q=0.9")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        let en = body_string(resp).await;
+        assert!(
+            en.contains("Route not found"),
+            "en request must get the English message: {en}"
+        );
+    }
+
+    #[tokio::test]
+    async fn auth_rejection_body_follows_accept_language() {
+        let mut config = sdforge::config::SdForgeConfig::default();
+        config.authentication = sdforge::config::AuthConfig::ApiKey {
+            header_name: "x-api-key".to_string(),
+            prefix: "sk_".to_string(),
+            keys: vec![sdforge::config::ApiKeySeed {
+                key: "secret".to_string(),
+                permissions: vec!["read".to_string()],
+            }],
+        };
+        let router = sdforge::http::build_with_config(&config).unwrap();
+
+        let resp = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/any")
+                    .header("accept-language", "zh-CN")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let zh = body_string(resp).await;
+        assert_eq!(zh, "未授权", "zh 401 body: {zh}");
+
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .uri("/any")
+                    .header("accept-language", "en")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let en = body_string(resp).await;
+        assert_eq!(en, "Unauthorized", "en 401 body: {en}");
     }
 }

@@ -234,6 +234,38 @@ pub fn get_locale() -> String {
     reg.locale.clone()
 }
 
+// Request-scoped locale override (task-local).
+//
+// Installed by the HTTP locale middleware from the request's
+// `Accept-Language` header and consulted by `t`, so framework-generated
+// HTTP strings (401/404/429 bodies, RBAC denials, …) follow the request's
+// language instead of the process locale. Task-scoped: concurrent requests
+// keep independent languages. Compiled only with `tokio` (HTTP implies
+// tokio); other builds keep the process-locale behavior.
+#[cfg(feature = "tokio")]
+tokio::task_local! {
+    static REQUEST_LOCALE: String;
+}
+
+/// The current task's request-scoped locale, if one was scoped (see
+/// [`scope_request_locale`]).
+pub fn request_locale() -> Option<String> {
+    #[cfg(feature = "tokio")]
+    {
+        REQUEST_LOCALE.try_with(|l| l.clone()).ok()
+    }
+    #[cfg(not(feature = "tokio"))]
+    {
+        None
+    }
+}
+
+/// Run `fut` with `locale` as the request-scoped locale override for [`t`].
+#[cfg(feature = "tokio")]
+pub async fn scope_request_locale<F: std::future::Future>(locale: String, fut: F) -> F::Output {
+    REQUEST_LOCALE.scope(locale, fut).await
+}
+
 /// Detect the system locale via the ordered fallback chain.
 ///
 /// 1. `SDFORGE_LANG` (project override variable)
@@ -312,8 +344,39 @@ fn normalize_lang(raw: &str) -> Option<String> {
 /// [`register_translation`]) → built-in catalog for the active locale →
 /// built-in English catalog → the key itself (never panics). `{ $name }`
 /// placeholders in the catalog entry are substituted from `args`.
+///
+/// When the current task carries a request-scoped locale
+/// ([`scope_request_locale`]), that locale wins over the process locale —
+/// per-request `Accept-Language` support for framework HTTP strings.
 pub fn t(key: &str, args: &[(&str, String)]) -> String {
-    translate_for(&get_locale(), key, args)
+    let locale = request_locale().unwrap_or_else(get_locale);
+    translate_for(&locale, key, args)
+}
+
+/// Resolve the best bundled locale (`"en"` / `"zh"`) from an
+/// `Accept-Language` header value, honoring q-weights.
+///
+/// Returns `None` when the header carries no usable en/zh entry — callers
+/// then fall back to the process locale. Backed by
+/// [`parse_accept_language`] (`i18n` feature).
+#[cfg(feature = "i18n")]
+pub fn locale_from_accept_language(header: &str) -> Option<String> {
+    parse_accept_language(header)
+        .into_iter()
+        .find_map(|tag| normalize_lang(&tag))
+}
+
+/// Resolve the request locale from an `Accept-Language` header map
+/// (bundled en/zh only).
+///
+/// `None` when the header is absent, non-UTF-8, or carries no usable en/zh
+/// entry — callers then fall back to the process locale.
+#[cfg(all(feature = "i18n", feature = "http"))]
+pub fn locale_from_headers(headers: &axum::http::HeaderMap) -> Option<String> {
+    headers
+        .get(axum::http::header::ACCEPT_LANGUAGE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(locale_from_accept_language)
 }
 
 /// Translate a framework i18n key for an **explicit** locale, ignoring the
@@ -468,20 +531,26 @@ pub struct HttpI18nFormatter {
 // Translation registry tests (always compiled, no ICU4X needed)
 // ============================================================================
 
+/// `REGISTRY` 的逻辑状态（locale + 翻译表）是进程级全局的，Mutex 只保证
+/// 内存安全、不隔离逻辑状态；并行 harness 下各用例互相踩踏（实测
+/// `cargo test --lib translation_tests` 约 4/10 概率失败）→ 以进程级锁
+/// 将触碰全局状态的用例串行化。锁顺序恒为 `REGISTRY_LOCK` → `REGISTRY`
+/// （用例内先取本锁再调 `clear_translations` 等），无反向获取，无死锁面。
+///
+/// `translate_for` 的 en 回退也会查注册表，故读取内建目录的黄金用例同样
+/// 需要持锁，否则会观测到 host 注册的中间态（feature 子集下的并行调度
+/// 差异会把它放大为真实失败）。
+#[cfg(test)]
+static REGISTRY_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+fn registry_guard() -> std::sync::MutexGuard<'static, ()> {
+    REGISTRY_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 #[cfg(test)]
 mod translation_tests {
     use super::*;
-
-    /// `REGISTRY` 的逻辑状态（locale + 翻译表）是进程级全局的，Mutex 只保证
-    /// 内存安全、不隔离逻辑状态；并行 harness 下各用例互相踩踏（实测
-    /// `cargo test --lib translation_tests` 约 4/10 概率失败）→ 以进程级锁
-    /// 将触碰全局状态的用例串行化。锁顺序恒为 `REGISTRY_LOCK` → `REGISTRY`
-    /// （用例内先取本锁再调 `clear_translations` 等），无反向获取，无死锁面。
-    static REGISTRY_LOCK: Mutex<()> = Mutex::new(());
-
-    fn registry_guard() -> std::sync::MutexGuard<'static, ()> {
-        REGISTRY_LOCK.lock().unwrap_or_else(|e| e.into_inner())
-    }
 
     #[test]
     fn test_translate_or_fallback_no_key() {
@@ -665,6 +734,9 @@ mod builtin_catalog_tests {
     /// 守卫：en 内建目录承载迁移点的英文规范串（golden， ambient-locale 无关）。
     #[test]
     fn test_builtin_catalog_golden_en() {
+        // en 回退路径会查注册表：持锁并清空，避免观测到 host 注册的中间态。
+        let _guard = registry_guard();
+        clear_translations();
         let cases: &[GoldenCase<'_>] = &[
             ("http-unauthorized", "Unauthorized", &[]),
             ("ratelimit-exceeded", "Rate limit exceeded", &[]),
@@ -739,6 +811,8 @@ mod builtin_catalog_tests {
     /// 守卫：zh 内建目录非空且与 en 键齐（内容抽查 + 参数替换）。
     #[test]
     fn test_builtin_catalog_golden_zh() {
+        let _guard = registry_guard();
+        clear_translations();
         assert_eq!(translate_for("zh", "http-unauthorized", &[]), "未授权");
         assert_eq!(
             translate_for("zh", "ratelimit-exceeded", &[]),
@@ -784,6 +858,9 @@ mod builtin_catalog_tests {
     /// 守卫：缺失 key 回退到 key 本身（translate_for / t），未知语言回退 en 束。
     #[test]
     fn test_missing_key_and_unknown_locale_fallback() {
+        // `translate_for` 的 en 回退会查注册表，与注册/清理用例串行化。
+        let _guard = registry_guard();
+        clear_translations();
         assert_eq!(t("no-such-builtin-key", &[]), "no-such-builtin-key");
         assert_eq!(
             translate_for("fr", "no-such-builtin-key", &[]),

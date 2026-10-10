@@ -41,12 +41,18 @@ use thiserror::Error;
 pub enum SseStreamError {
     /// A complete frame was not valid UTF-8 (decoded only once a frame is
     /// complete, per WHATWG incremental-decoding semantics).
-    #[error("SSE frame is not valid UTF-8: {0}")]
+    #[error(
+        "{}",
+        crate::i18n::t("sse-invalid-utf8", &[("error", .0.to_string())])
+    )]
     InvalidUtf8(#[from] std::str::Utf8Error),
 
     /// The configured buffer or per-frame size limit was exceeded (see
     /// [`SseFrameParser::with_limits`]). The parser is dead once this fires.
-    #[error("SSE stream exceeded configured limit ({size} bytes)")]
+    #[error(
+        "{}",
+        crate::i18n::t("sse-limit-exceeded", &[("size", .size.to_string())])
+    )]
     LimitExceeded {
         /// Offending buffered size in bytes (accumulated frame bytes or
         /// unconsumed buffer, whichever tripped the limit).
@@ -55,7 +61,10 @@ pub enum SseStreamError {
 
     /// The upstream stream yielded an error; its payload is preserved via
     /// `Display`. The parser treats this as end-of-stream for [`frames`].
-    #[error("upstream stream error: {0}")]
+    #[error(
+        "{}",
+        crate::i18n::t("sse-upstream-error", &[("error", .0.to_string())])
+    )]
     Upstream(String),
 }
 

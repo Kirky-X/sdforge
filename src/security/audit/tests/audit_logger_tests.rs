@@ -695,8 +695,6 @@ fn test_sanitize_token_in_url() {
 #[tokio::test]
 #[serial_test::serial]
 async fn test_log_with_signing_key_generates_signature() {
-    // Set a non-empty signing key — log.generate_signature should be called
-    // and the resulting log should have a non-None signature.
     unsafe {
         std::env::set_var(
             "SDFORGE_AUDIT_SIGNING_KEY",
@@ -731,8 +729,6 @@ async fn test_log_with_signing_key_generates_signature() {
 #[tokio::test]
 #[serial_test::serial]
 async fn test_log_with_empty_signing_key_warns() {
-    // Set an empty signing key — the empty-key warning branch should be
-    // taken and the log should NOT have a signature.
     unsafe {
         std::env::set_var("SDFORGE_AUDIT_SIGNING_KEY", "");
     }

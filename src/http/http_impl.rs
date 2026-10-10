@@ -235,7 +235,61 @@ pub fn build() -> Router {
         router = router.route(&full_path, handler);
     }
 
+    // Unmatched routes answer with the unified error envelope instead of an
+    // empty body, so `Accept-Language` can select the message language.
+    router = router.fallback(route_not_found_fallback);
+
     router
+}
+
+/// Resolve the request locale from `Accept-Language` (bundled en/zh only).
+///
+/// Without the `i18n` feature the header parser is not compiled; callers then
+/// fall back to the process locale.
+#[cfg(feature = "i18n")]
+fn locale_from_headers(headers: &axum::http::HeaderMap) -> Option<String> {
+    crate::i18n::locale_from_headers(headers)
+}
+
+#[cfg(not(feature = "i18n"))]
+fn locale_from_headers(_headers: &axum::http::HeaderMap) -> Option<String> {
+    None
+}
+
+/// Translate a framework key for the request's locale, falling back to the
+/// process locale when the header carries no usable entry.
+fn localize_for_headers(
+    headers: &axum::http::HeaderMap,
+    key: &str,
+    args: &[(&str, String)],
+) -> String {
+    match locale_from_headers(headers) {
+        Some(locale) => crate::i18n::translate_for(&locale, key, args),
+        None => crate::i18n::t(key, args),
+    }
+}
+
+/// Fallback for unmatched routes: the unified error envelope
+/// (`{"code":"NOT_FOUND","message":…}`) with the message localized from the
+/// request's `Accept-Language` (process locale without the `i18n` feature).
+async fn route_not_found_fallback(req: axum::extract::Request) -> axum::response::Response {
+    let message = localize_for_headers(req.headers(), "http-route-not-found", &[]);
+    let err = crate::error::unified::UnifiedError::new("NOT_FOUND", message);
+    crate::error::unified::render_http(axum::http::StatusCode::NOT_FOUND, &err)
+}
+
+/// Scope the request's `Accept-Language` locale over the whole pipeline so
+/// framework strings produced by `i18n::t` (401/403/429 bodies, handler-level
+/// messages) follow the request language instead of the process locale.
+#[cfg(feature = "i18n")]
+async fn request_locale_middleware(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    match locale_from_headers(req.headers()) {
+        Some(locale) => crate::i18n::scope_request_locale(locale, next.run(req)).await,
+        None => next.run(req).await,
+    }
 }
 
 /// Build HTTP router with version redirect middleware
@@ -438,7 +492,6 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
             let prefix = prefix.clone();
             let extract_auth =
                 move |req: &axum::http::Request<Body>| -> Result<AuthContext, AuthError> {
-                    // Get header value; if missing or malformed, return auth error immediately
                     let header_value = match req
                         .headers()
                         .get(&header_name)
@@ -517,6 +570,14 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
         }
         // OAuth2 is already checked before this block
         // None is handled by doing nothing
+    }
+
+    // 请求级语言作用域：在认证层之外再包一层，使认证拒绝（401）、路由处理器
+    // 内 RBAC 拒绝等所有 i18n::t 文案随 Accept-Language 变化（进程 locale
+    // 仅作回退）。
+    #[cfg(feature = "i18n")]
+    {
+        router = router.layer(axum::middleware::from_fn(request_locale_middleware));
     }
 
     // mount /healthz + /readyz AFTER the auth layer — axum layers only

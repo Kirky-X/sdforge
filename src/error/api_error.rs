@@ -830,7 +830,6 @@ mod tests {
                 assert_eq!(error_id, "err-456");
                 assert!(source.is_some());
                 assert!(context.is_none());
-                // Verify source is accessible via source()
                 let src = err.source().expect("source should be present");
                 assert!(src.to_string().contains("downstream failure"));
             }

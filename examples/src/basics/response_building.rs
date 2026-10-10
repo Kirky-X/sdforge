@@ -208,7 +208,6 @@ async fn list_items(
     let offset = offset.unwrap_or(0) as usize;
     let total = 100;
 
-    // 生成模拟数据
     let items: Vec<DataItem> = (0..limit)
         .map(|i| {
             let id = (offset + i + 1) as u64;
@@ -302,7 +301,6 @@ async fn get_wrapped_item(id: u64) -> Result<ApiResponse<DataItem>, ApiError> {
         enabled: true,
     };
 
-    // 获取当前时间戳
     let timestamp = chrono::Utc::now().to_rfc3339();
 
     Ok(ApiResponse {
@@ -338,7 +336,6 @@ pub struct CreateItemRequest {
     description = "创建新数据项"
 )]
 async fn create_item(_request: CreateItemRequest) -> Result<StatusResponse, ApiError> {
-    // 模拟创建操作
     Ok(StatusResponse {
         operation: "create_item".to_string(),
         status: "completed".to_string(),

@@ -467,7 +467,6 @@ mod tests {
         assert!(output.contains("ERROR"));
         assert!(output.contains("Error msg"));
         assert!(output.contains("test"));
-        // Should contain ANSI escape codes
         assert!(output.contains("\x1b["));
     }
 
@@ -514,7 +513,6 @@ mod tests {
         let mut buf = Vec::new();
         write_log_entry(&mut buf, &entry, LogFormat::Json, true).unwrap();
         let output = String::from_utf8_lossy(&buf);
-        // Should contain ANSI escape codes at start
         assert!(output.contains("\x1b["));
         // The JSON content should be inside
         assert!(output.contains("trace"));
@@ -729,7 +727,6 @@ mod tests {
             "Should contain warn color code"
         );
         assert!(output.contains("\x1b[0m"), "Should contain reset code");
-        // Should contain the fields in the {key=value} format
         assert!(output.contains("user"), "Should contain field key 'user'");
         assert!(
             output.contains("admin"),
@@ -737,7 +734,6 @@ mod tests {
         );
         assert!(output.contains("ip"), "Should contain field key 'ip'");
         assert!(output.contains("10.0.0.1"), "Should contain field value");
-        // Should contain the fields brace delimiter
         assert!(
             output.contains("{"),
             "Should contain opening brace for fields"

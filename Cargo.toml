@@ -34,7 +34,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std", "
 tokio-stream = { version = "0.1", default-features = false }
 
 # 工具依赖
-uuid = { version = "1.26", default-features = false, features = ["std", "v4"] }
+uuid = { version = "1.28", default-features = false, features = ["std", "v4"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "serde", "clock"] }
 regex = { version = "1.13", default-features = false, features = ["std", "perf"] }
 validator = { version = "0.21", default-features = false, features = ["derive"] }
@@ -48,8 +48,13 @@ rand = { version = "0.10", default-features = false, features = ["std", "std_rng
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 base64 = { version = "0.23", default-features = false, features = ["std", "alloc"] }
 
-# 配置依赖
-toml = { version = "1.1", default-features = false, features = ["parse", "display"] }
+# 配置依赖 - sdforge 生产面只用 toml::de::Error 类型（AuthConfigError::ParseError
+# 载荷），本包不声明 parse/display；但 security 构建里上游 limiteron 仍以默认
+# 特性引入 toml（parse/serde/std/display，limiteron 0.3.0-rc.6 的
+# [dependencies.toml] 未关默认特性），故「不启用 parse/display」只在 sdforge
+# 声明层成立。仓内 from_str 调用全在测试内，测试所需特性由 [dev-dependencies]
+# 显式声明，不依赖 limiteron 的默认特性供给
+toml = { version = "1.1", default-features = false }
 
 # 缓存依赖 - oxcache 0.5 用 minimal feature 提供内存后端 + 序列化 + tracing
 oxcache = { version = "0.5.0-rc.6", default-features = false, features = ["minimal"] }
@@ -77,7 +82,7 @@ tonic-prost = { version = "0.14", default-features = false }
 limiteron = { version = "0.3.0-rc.6", default-features = false }
 
 # OpenAPI 依赖
-utoipa = { version = "5.5", default-features = false, features = ["macros"] }
+utoipa = { version = "6.0", default-features = false, features = ["macros"] }
 
 # JSON Schema 反射依赖 - schemars 1.2 提供 JsonSchema derive 与 schema 生成
 # （返回类型 Schema 反射：derive JsonSchema 的返回类型产出精确 response schema）
@@ -87,10 +92,11 @@ schemars = { version = "1.2", default-features = false, features = ["derive"] }
 # string feature 启用 Str: From<String>，支持运行时配置程序名
 clap = { version = "4.6", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "suggestions", "string"] }
 
-# Swagger UI 依赖 - utoipa-swagger-ui 8.0 配合 utoipa 5.5 提供交互式 API 文档
-# vendored：zip 随 crate 分发（v5.17.14，与 build.rs 默认下载 URL 同版本），
-# 构建期无需访问 github.com——密封构建，离线/受限网络环境不再被构建脚本卡死
-utoipa-swagger-ui = { version = "9.0", default-features = false, features = ["axum", "vendored"] }
+# Swagger UI 依赖 - utoipa-swagger-ui 10.0 配合 utoipa 6.0 提供交互式 API 文档
+# vendored：zip 随 crate 分发（Swagger UI v5.32.6，与上游 build.rs 默认下载
+# URL 同版本），构建期无需访问 github.com——密封构建，离线/受限网络环境不再
+# 被构建脚本卡死
+utoipa-swagger-ui = { version = "10.0", default-features = false, features = ["axum", "vendored"] }
 
 # CLI Markdown 文档依赖 - clap-markdown 0.1 从 clap::Command 生成 Markdown 命令手册
 clap-markdown = { version = "0.1", default-features = false }
@@ -99,7 +105,7 @@ clap-markdown = { version = "0.1", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["std", "logging", "tls12", "aws-lc-rs"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["aws-lc-rs", "tls12"] }
 rustls-pki-types = { version = "1.15", default-features = false, features = ["std"] }
-hyper = { version = "1.11", default-features = false, features = ["http1", "http2", "server"] }
+hyper = { version = "1.12", default-features = false, features = ["http1", "http2", "server"] }
 hyper-util = { version = "0.1", default-features = false, features = ["server-auto", "tokio"] }
 
 # 其他依赖
@@ -111,8 +117,9 @@ sys-locale = { version = "0.3", default-features = false }
 
 # Fluent 本地化 - 内建 en/zh 目录经 concurrent FluentBundle 双束解析（unify-rust-i18n）；
 # 翻译注册表常驻编译，故无条件依赖（同 dbnexus/limiteron/trait-kit 口径）
-fluent-bundle = "0.16"
-unic-langid = "0.9"
+# 两者 default feature 集为空，显式关闭仅为统一口径（Rule 6）
+fluent-bundle = { version = "0.16", default-features = false }
+unic-langid = { version = "0.9", default-features = false }
 
 # 开发依赖
 tempfile = { version = "3.27", default-features = false }
@@ -183,7 +190,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.6", path = "./macros" }
+sdforge-macros = { version = "0.5.0-rc.6", path = "./macros", default-features = false }
 
 # HTTP dependencies
 axum = { workspace = true, optional = true }
@@ -191,11 +198,11 @@ tower = { workspace = true, optional = true }
 tower-http = { workspace = true, optional = true }
 inventory = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
-axum-extra = { workspace = true, optional = true, features = ["typed-header"] }
+axum-extra = { workspace = true, optional = true }
 
 # MCP dependencies (migrated from mcp-sdk 0.0.3 to official rmcp)
 # transport-io enables rmcp::transport::stdio() used by serve_stdio()
-rmcp = { version = "3.4", optional = true, default-features = false, features = ["server", "transport-io"] }
+rmcp = { version = "3.5", optional = true, default-features = false, features = ["server", "transport-io"] }
 anyhow = { version = "1.0", optional = true, default-features = false, features = ["std"] }
 
 # Streaming dependencies
@@ -281,7 +288,8 @@ inklog = { version = "0.3.0-rc.7", default-features = false, optional = true }
 # icu 2.2 provides locale-aware number/date/plural/collation formatting +
 # Accept-Language HTTP header parsing for HTTP responses.
 icu = { version = "2.3", default-features = false, features = ["compiled_data"], optional = true }
-writeable = { version = "0.6", optional = true }
+# writeable 默认 feature 为 alloc（write_to_string 需要），显式声明同一集合
+writeable = { version = "0.6", default-features = false, features = ["alloc"], optional = true }
 # System locale detection for the i18n detection chain (i18n feature only;
 # without the feature the chain stops at the POSIX env variables).
 sys-locale = { workspace = true, optional = true }
@@ -294,6 +302,13 @@ unic-langid = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+# src/config/security.rs 的 TOML 契约测试用 toml::from_str（toml 1.1 中由
+# parse+serde 门控，见 src/lib.rs:182-184；std 一并启用以保持标准库构建路径）。
+# 该测试门控为 cfg(all(test, feature = "http", feature = "ratelimit"))，而
+# ratelimit → limiteron 已用默认特性打开同一集合，故本条目今日非承重；显式
+# 声明是让契约测试不依赖上游 limiteron 的特性供给（limiteron 若关默认特性，
+# 本条目即成为唯一供给）
+toml = { workspace = true, features = ["parse", "serde", "std"] }
 # 反射两态集成测试的 derive 依赖（dev-only，不影响发布面）
 schemars = { workspace = true }
 tokio-stream = { workspace = true }
@@ -320,7 +335,6 @@ http = [
     "dep:inventory",
     "tokio",
     "dep:axum-extra",
-    "dep:toml",
     "dep:regex",
     "dep:once_cell",
     "dep:validator",
@@ -373,6 +387,10 @@ security = [
     "cache",
     "dep:hex",
     "dep:base64",
+    # toml 的唯一生产消费者是 security 门控的 AuthConfigError::ParseError
+    # （src/security/types/mod.rs），故挂在 security 而非 http 上：
+    # 仅开 http 的构建不再编译 toml/toml_parser/winnow
+    "dep:toml",
     "ratelimit-http",
 ]
 

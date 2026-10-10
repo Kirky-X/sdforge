@@ -81,7 +81,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let _: Option<sdforge_examples::security::api_key::AuthContext> = None;
     }
 
-    // 初始化所有注册的插件
     let counts = sdforge::init_all_plugins();
 
     println!("===========================================");
@@ -100,7 +99,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - gRPC 路由: {}", counts.grpc_routes);
     println!();
 
-    // 获取端口配置
     let port: u16 = env::var("HTTP_PORT")
         .unwrap_or_else(|_| "3000".to_string())
         .parse()
@@ -116,7 +114,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("    POST /api/v1/echo             - 回显请求");
     println!();
 
-    // 构建并启动服务器
     let app = sdforge::http::build();
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
 

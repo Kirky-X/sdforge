@@ -9,7 +9,7 @@
 ```bash
 cargo bench --bench runtime_bench --features http
 cargo bench --bench runtime_bench --features serve-tls -- "tls_termination|plaintext_baseline|tls_cert_reloader"
-cargo bench --bench runtime_bench --features grpc,streaming -- "grpc_stream"
+cargo bench --bench runtime_bench --features http,grpc,streaming -- "grpc_stream"
 cargo bench --bench runtime_bench --features http,simd-json -- "simd_json"
 cargo bench --bench runtime_bench --features http,security,etag,metrics,context,idempotency -- "middleware_tiers"
 ```

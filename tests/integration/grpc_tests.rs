@@ -357,7 +357,6 @@ mod grpc_integration_tests {
 
         let request = create_test_call_request("metadata_test", HashMap::new(), "");
 
-        // Create request with metadata
         let mut req = Request::new(request);
         req.metadata_mut().insert(
             "x-correlation-id",
@@ -408,7 +407,6 @@ mod grpc_integration_tests {
 
         let request = create_test_call_request("deadline_test", HashMap::new(), "");
 
-        // Set deadline of 30 seconds
         let mut req = Request::new(request);
         req.set_timeout(Duration::from_secs(TEST_TIMEOUT_SECS));
 
@@ -747,7 +745,6 @@ mod grpc_integration_tests {
     fn test_grpc_route_streaming_metadata() {
         use sdforge::grpc::GrpcRoute;
 
-        // Create a streaming route
         let streaming_metadata = ApiMetadata::new(
             "stream_service".to_string(),
             "v2".to_string(),
@@ -759,7 +756,6 @@ mod grpc_integration_tests {
         let stream_route = GrpcRoute::new("stream_service".to_string(), streaming_metadata);
         let _stream_debug = format!("{:?}", stream_route);
 
-        // Create a non-streaming route
         let normal_metadata = ApiMetadata::new(
             "normal_service".to_string(),
             "v1".to_string(),

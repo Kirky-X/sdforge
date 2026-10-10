@@ -102,7 +102,6 @@ impl TwoLevelCache {
             // Always set in
             self.l2_cache.set(key, serialized.clone());
 
-            // Set in if under size limit
             if self.l1_cache.len() < self.l1_max_size {
                 self.l1_cache.set(key, serialized);
             }
@@ -231,7 +230,6 @@ async fn fetch_product_from_database(id: u64) -> Result<Product, ApiError> {
     // Simulate database delay
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    // Return mock product
     Ok(Product {
         id,
         name: format!("Product {}", id),
@@ -302,19 +300,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("⚡ SDForge Caching and Performance Example");
     println!("=========================================\n");
 
-    // Initialize two-level cache
     let _two_level_cache = TwoLevelCache::new(1000); // max 1000 items
 
     println!("✓ Two-Level Cache initialized:");
     println!("  L1 Cache: Max {} items (fast access)", 1000);
     println!("  L2 Cache: Unlimited (slower access)\n");
 
-    // Initialize cache-aside pattern
     let _cache_aside = CacheAsidePattern::new(Arc::new(DashMapCache::new()));
 
     println!("✓ Cache-Aside Pattern configured\n");
 
-    // Initialize write-through pattern
     let _write_through = WriteThroughPattern::new(Arc::new(DashMapCache::new()));
 
     println!("✓ Write-Through Pattern configured\n");
@@ -336,7 +331,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   - Write to cache and storage atomically");
     println!("   - Ensures cache consistency\n");
 
-    // Print usage instructions
     println!("📖 Available Endpoints:");
     println!("  GET  /api/v1/products/:id          - Get product (cached)");
     println!("  POST /api/v1/analytics/compute     - Expensive computation (cached)\n");
@@ -368,7 +362,6 @@ mod tests {
     async fn test_two_level_cache() {
         let cache = TwoLevelCache::new(100);
 
-        // Create test product
         let product = Product {
             id: 1,
             name: "Test Product".to_string(),
@@ -377,10 +370,8 @@ mod tests {
             category: "Test".to_string(),
         };
 
-        // Set in cache
         cache.set("product:1", &product).await;
 
-        // Get from cache
         let retrieved: Option<Product> = cache.get("product:1").await;
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().id, 1);

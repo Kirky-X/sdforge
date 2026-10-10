@@ -326,7 +326,6 @@ fn test_source_returns_none_for_errors_without_source() {
 /// Test source() returns Some for errors with source
 #[test]
 fn test_source_returns_some_for_errors_with_source() {
-    // Create a test error
     #[derive(Debug)]
     struct TestError(&'static str);
     impl std::fmt::Display for TestError {
@@ -713,7 +712,6 @@ fn test_sdforge_error_to_service_error() {
     let sdforge_err: SdForgeError = api_err.into();
     let service_err = sdforge_err.to_service_error();
 
-    // Should preserve the error details
     assert!(service_err.code == "NOT_FOUND" || service_err.code.contains("NOT_FOUND"));
 }
 

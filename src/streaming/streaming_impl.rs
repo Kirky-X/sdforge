@@ -86,6 +86,17 @@ impl<T> StreamEvent<T> {
     }
 }
 
+/// Idle heartbeat interval: while the source stream is quiet, a comment frame
+/// is sent so proxies/load balancers do not cut a long-lived SSE connection on
+/// their own idle timeout. The timer resets on every data frame (heartbeats
+/// are idle-only).
+const SSE_HEARTBEAT_INTERVAL: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Heartbeat frame. A comment line (`:` prefix) per the SSE spec — EventSource
+/// clients ignore it, and sdforge's own [`crate::streaming::parser`] skips
+/// comment lines, so the keep-alive never surfaces as application data.
+const SSE_HEARTBEAT_FRAME: &str = ": keep-alive\n\n";
+
 /// Convert a stream to SSE format
 pub fn stream_to_sse<S, T, F>(
     stream: S,
@@ -105,33 +116,53 @@ where
         // for clients to distinguish "source stream ended normally" from
         // "source stream went idle for 30s and was force-closed".
         let mut timed_out = false;
+        // 两个独立截止时刻：数据帧到达时都重置；心跳只重置自己——
+        // 心跳若重置空闲计时，源永久静默时 30s 空闲终止将永不触发。
+        let idle_window = std::time::Duration::from_secs(30);
+        let now = tokio::time::Instant::now();
+        let mut idle_deadline = now + idle_window;
+        let mut heartbeat_deadline = now + SSE_HEARTBEAT_INTERVAL;
 
-        while let Some(item) = tokio::select! {
-            _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
-                timed_out = true;
-                None
-            },
-            next = stream.next() => next,
-        } {
-            let event = mapper(item);
+        loop {
+            tokio::select! {
+                _ = tokio::time::sleep_until(idle_deadline) => {
+                    timed_out = true;
+                    break;
+                },
+                _ = tokio::time::sleep_until(heartbeat_deadline) => {
+                    if tx.send(Ok(SSE_HEARTBEAT_FRAME.to_string())).await.is_err() {
+                        break;
+                    }
+                    heartbeat_deadline = tokio::time::Instant::now() + SSE_HEARTBEAT_INTERVAL;
+                },
+                next = stream.next() => {
+                    let Some(item) = next else { break };
 
-            // Security fix: Handle serialization errors properly instead of silently failing
-            // Log the error and send an error event to the client
-            let data = match serde_json::to_string(&event) {
-                Ok(data) => data,
-                Err(e) => {
-                    // Send error event instead of silently failing
-                    serde_json::to_string(&StreamEvent::<()>::error(format!(
-                        "Serialization error: {}",
-                        e
-                    )))
-                    .unwrap_or_else(|_| r#"{"error":"Serialization failed"}"#.to_string())
+                    let event = mapper(item);
+
+                    // Security fix: Handle serialization errors properly instead of silently failing
+                    // Log the error and send an error event to the client
+                    let data = match serde_json::to_string(&event) {
+                        Ok(data) => data,
+                        Err(e) => {
+                            // Send error event instead of silently failing
+                            serde_json::to_string(&StreamEvent::<()>::error(format!(
+                                "Serialization error: {}",
+                                e
+                            )))
+                            .unwrap_or_else(|_| r#"{"error":"Serialization failed"}"#.to_string())
+                        }
+                    };
+                    let sse = format!("data: {}\n\n", data);
+
+                    if tx.send(Ok(sse)).await.is_err() {
+                        break;
+                    }
+
+                    let now = tokio::time::Instant::now();
+                    idle_deadline = now + idle_window;
+                    heartbeat_deadline = now + SSE_HEARTBEAT_INTERVAL;
                 }
-            };
-            let sse = format!("data: {}\n\n", data);
-
-            if tx.send(Ok(sse)).await.is_err() {
-                break;
             }
         }
 

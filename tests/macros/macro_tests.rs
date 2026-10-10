@@ -33,3 +33,59 @@ mod dual_macro_tests {
         let _ = mcp_build();
     }
 }
+
+#[cfg(feature = "http")]
+mod service_module_prefix_tests {
+    use axum::body::Body;
+    use axum::http::Request;
+    use sdforge::service_module;
+    use tower::ServiceExt;
+
+    #[service_module(prefix = "/auth")]
+    mod auth_endpoints {
+        use sdforge::forge;
+
+        #[forge(name = "prefix_probe", version = "v1", path = "/probe", method = "GET")]
+        async fn probe() -> String {
+            "pong".to_string()
+        }
+    }
+
+    #[test]
+    fn module_prefix_const_and_helper_expose_the_prefix() {
+        // `#[service_module]` emits the prefix const/helper beside the module.
+        assert_eq!(MODULE_PREFIX, "/auth");
+        assert_eq!(apply_prefix("/probe"), "/auth/probe");
+        assert_eq!(apply_prefix("probe"), "/auth/probe");
+    }
+
+    /// `#[service_module(prefix = "/auth")]` 内的 `#[forge]` 端点注册在
+    /// `/auth/api/v1/probe`（前缀拼接生效），原路径不再可用。
+    #[tokio::test]
+    async fn module_prefix_is_part_of_the_generated_route_path() {
+        let router = sdforge::http::build();
+
+        let prefixed = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/auth/api/v1/probe")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(prefixed.status(), 200);
+
+        let unprefixed = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/probe")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unprefixed.status(), 404);
+    }
+}

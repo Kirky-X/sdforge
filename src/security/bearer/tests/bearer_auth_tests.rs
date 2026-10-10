@@ -866,7 +866,6 @@ fn test_blacklist_nonexistent_token() {
     let secret = "MySecureSecret123!@#ABCDEFGHIJKLM";
     let auth = BearerAuth::new(secret);
 
-    // Create a valid token
     let payload = serde_json::json!({
         "sub": "user123",
         "iat": chrono::Utc::now().timestamp(),
@@ -901,7 +900,6 @@ fn test_verify_token_with_special_chars() {
     let secret = "MySecureSecret123!@#ABCDEFGHIJKLM";
     let auth = BearerAuth::new(secret);
 
-    // Create a token with special characters in the payload
     let payload = serde_json::json!({
         "sub": "user@example.com",  // Contains @
         "name": "Test User (Admin)",  // Contains parentheses
@@ -974,7 +972,6 @@ fn test_verify_token_missing_signature_part() {
     let token = create_test_jwt(secret.as_bytes(), &payload);
     let parts: Vec<&str> = token.split('.').collect();
 
-    // Create token without signature (only header.payload)
     let incomplete_token = format!("{}.{}", parts[0], parts[1]);
 
     // Token without signature should be rejected

@@ -23,7 +23,7 @@ publish = false
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(feature, values("http", "mcp", "grpc", "cli", "websocket", "openapi", "security", "lifecycle", "docgen"))'] }
 
 [dependencies]
-sdforge = { version = "0.5.0-rc.6", path = ".." }
+sdforge = { version = "0.5.0-rc.6", path = "..", default-features = false }
 tokio = { workspace = true, features = ["rt"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -39,7 +39,9 @@ chrono = { workspace = true }
 # which requires `utoipa` to be resolvable in the current crate.
 utoipa = { workspace = true }
 oxcache = { workspace = true, optional = true }
-dbnexus = { version = "0.6.0-rc.6", default-features = false, features = ["embedded", "sql-parser"], optional = true }
+# 经 workspace 继承（同 oxcache）：自研依赖定值只需改根清单一处，
+# 避免成员内联版本号漏改而漂移
+dbnexus = { workspace = true, optional = true }
 
 [features]
 default = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "idempotency_examples", "cache_examples", "grpc_examples", "logging_examples", "openapi_examples", "cli_examples", "docs_examples", "combined_examples"]

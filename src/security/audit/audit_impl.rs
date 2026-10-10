@@ -364,14 +364,12 @@ impl SdForgeAuditLogger {
     /// Security: Merges logs from both async and fallback storage to ensure
     /// complete audit trail is available even after channel congestion.
     pub fn get_logs(&self, user_id: &str) -> Vec<AuditLog> {
-        // Get logs from primary storage
         let primary = self
             .logs
             .get(user_id)
             .map(|data| deserialize_audit_logs(&data))
             .unwrap_or_default();
 
-        // Get logs from fallback storage
         let fallback = self
             .fallback_logs
             .get(user_id)

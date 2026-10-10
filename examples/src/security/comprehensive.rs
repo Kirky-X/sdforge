@@ -354,7 +354,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔐 SDForge Comprehensive Security Example");
     println!("========================================\n");
 
-    // Initialize application state
     let state = Arc::new(SdForgeExampleState::default());
 
     // Setup API Key manager
@@ -415,7 +414,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!();
 
-    // Print usage instructions
     println!("📖 Available Endpoints:");
     println!("  GET    /api/v1/users/:id     - Get user by ID");
     println!("  POST   /api/v1/users         - Create new user");
@@ -452,15 +450,12 @@ mod tests {
     async fn test_cache_operations() {
         let state = SdForgeExampleState::default();
 
-        // Set value
         state.cache.set("test_key", vec![1, 2, 3]);
 
-        // Get value
         let value = state.cache.get("test_key");
         assert!(value.is_some());
         assert_eq!(value.unwrap(), vec![1, 2, 3]);
 
-        // Delete value
         state.cache.delete("test_key");
         let value = state.cache.get("test_key");
         assert!(value.is_none());

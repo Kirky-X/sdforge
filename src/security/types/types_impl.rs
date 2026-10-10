@@ -320,7 +320,6 @@ impl AuditLog {
             }
         );
 
-        // Create HMAC
         let mut mac =
             HmacSha256::new_from_slice(secret_key).expect("HMAC can take key of any size");
         mac.update(canonical.as_bytes());

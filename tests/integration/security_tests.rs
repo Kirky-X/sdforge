@@ -259,7 +259,6 @@ mod security_tests {
         let result = auth.validate_key("app_secret_v1", "192.168.1.100");
         assert!(result.is_some());
 
-        // Get and verify metadata
         let metadata = auth.get_key_metadata("app_key_1");
         assert!(metadata.is_some());
 
@@ -358,7 +357,6 @@ mod security_tests {
     /// Verifies that BearerAuth correctly validates tokens via public API.
     #[tokio::test]
     async fn test_bearer_token_validation_public_api() {
-        // Create auth with builder
         let auth = BearerAuth::builder()
             .secret("MySecureSecret123!@#ABCDEFGHIJKLMNOP")
             .build()
@@ -371,7 +369,6 @@ mod security_tests {
             AuthMetadata::default(),
         );
 
-        // Create a fake token and register it
         let fake_token = "test.token.here".to_string();
         auth.register_token(fake_token.clone(), context.clone());
 
@@ -439,7 +436,6 @@ mod security_tests {
             .build()
             .expect("Failed to build BearerAuth");
 
-        // Create a valid JWT token (expires in 1 hour)
         let token = create_jwt_token(secret, "test_user", vec!["read", "write"], 3600);
 
         // Validate should succeed
@@ -463,7 +459,6 @@ mod security_tests {
             .build()
             .expect("Failed to build BearerAuth");
 
-        // Create an expired JWT token (expired 1 hour ago)
         let token = create_jwt_token(secret, "test_user", vec!["read"], -3600);
 
         // Validate should fail
@@ -520,7 +515,6 @@ mod security_tests {
             .build()
             .expect("Failed to build BearerAuth");
 
-        // Create token with different secret
         let token = create_jwt_token(secret2, "test_user", vec!["read"], 3600);
 
         // Should fail signature verification
@@ -540,12 +534,10 @@ mod security_tests {
             .build()
             .expect("Failed to build BearerAuth");
 
-        // Create token with matching audience
         let token = create_jwt_with_audience(secret, "test_user", "my-api", None, 3600);
         let result = auth.validate_token(&token);
         assert!(result.is_some());
 
-        // Create token with wrong audience
         let wrong_aud_token =
             create_jwt_with_audience(secret, "test_user", "other-api", None, 3600);
         let wrong_result = auth.validate_token(&wrong_aud_token);
@@ -564,13 +556,11 @@ mod security_tests {
             .build()
             .expect("Failed to build BearerAuth");
 
-        // Create token with matching issuer
         let token =
             create_jwt_with_audience(secret, "test_user", "my-api", Some("my-issuer"), 3600);
         let result = auth.validate_token(&token);
         assert!(result.is_some());
 
-        // Create token with wrong issuer
         let wrong_iss_token =
             create_jwt_with_audience(secret, "test_user", "my-api", Some("other-issuer"), 3600);
         let wrong_result = auth.validate_token(&wrong_iss_token);
@@ -850,8 +840,10 @@ mod security_tests {
         auth.add_key("empty_perms_key", vec![]);
 
         let result = auth.validate_key("empty_perms_key", "192.168.1.100");
-        // Empty permissions should return None (treated as invalid)
-        assert!(result.is_none());
+        // 空权限 = 仅认证不放权（`ApiKeySeed::permissions` 文档契约）：
+        // 认证通过、权限列表为空；未知 key 仍返回 None。
+        assert_eq!(result, Some(vec![]));
+        assert!(auth.validate_key("unknown_key", "192.168.1.100").is_none());
     }
 
     /// Test: API key metadata structure
@@ -859,7 +851,6 @@ mod security_tests {
     /// Verifies that ApiKeyMetadata can be created and manipulated correctly.
     #[tokio::test]
     async fn test_api_key_metadata_structure() {
-        // Create metadata using the public API
         let metadata = ApiKeyMetadata::new(
             "test_key_id".to_string(),
             Some("Test description".to_string()),

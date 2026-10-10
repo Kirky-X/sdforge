@@ -18,17 +18,14 @@ mod websocket_tests {
     async fn test_websocket_connection_establishment() {
         let manager = Arc::new(ConnectionManager::new());
 
-        // 创建多个连接
         for i in 0..5 {
             let conn_id = format!("conn-{}", i);
             let (conn, _rx) = WebSocketConnection::new(conn_id.clone());
             manager.add_connection(conn_id, conn).await;
         }
 
-        // 验证连接数量
         assert_eq!(manager.connection_count().await, 5);
 
-        // 验证可以获取连接
         let conn = manager.get_connection("conn-2").await;
         assert!(conn.is_some());
         assert_eq!(conn.unwrap().id(), "conn-2");
@@ -59,14 +56,12 @@ mod websocket_tests {
         let manager = Arc::new(ConnectionManager::new());
         let num_connections = 50;
 
-        // 创建多个连接
         for i in 0..num_connections {
             let conn_id = format!("multi-conn-{}", i);
             let (conn, _rx) = WebSocketConnection::new(conn_id);
             manager.add_connection(format!("conn-{}", i), conn).await;
         }
 
-        // 验证所有连接都已添加
         assert_eq!(manager.connection_count().await, num_connections);
 
         // 清理连接
@@ -74,7 +69,6 @@ mod websocket_tests {
             manager.remove_connection(&format!("conn-{}", i)).await;
         }
 
-        // 验证所有连接都已移除
         assert_eq!(manager.connection_count().await, 0);
     }
 
@@ -94,11 +88,9 @@ mod websocket_tests {
             params: serde_json::json!({"key": "value"}),
         };
 
-        // 发送消息
         let result = conn.send(request.clone()).await;
         assert!(result.is_ok());
 
-        // 验证消息被接收
         let received = receiver.recv().await;
         assert!(received.is_some());
 
@@ -125,10 +117,8 @@ mod websocket_tests {
             result: serde_json::json!({"status": "ok", "data": [1, 2, 3]}),
         };
 
-        // 发送响应
         conn.send(response.clone()).await.unwrap();
 
-        // 接收并验证
         let received = receiver.recv().await;
         assert!(received.is_some());
 
@@ -150,7 +140,6 @@ mod websocket_tests {
     async fn test_websocket_json_message_format() {
         let (conn, mut receiver) = WebSocketConnection::new("json-format".to_string());
 
-        // 测试复杂的 JSON 结构
         let request = WebSocketMessage::Request {
             id: "json-test".to_string(),
             method: "complex_query".to_string(),
@@ -170,7 +159,6 @@ mod websocket_tests {
         let received = receiver.recv().await;
         assert!(received.is_some());
 
-        // 验证所有 JSON 类型都正确处理
         if let Some(WebSocketMessage::Request { params, .. }) = received {
             assert_eq!(params["string"], "hello");
             assert_eq!(params["number"], 42);
@@ -218,7 +206,6 @@ mod websocket_tests {
     async fn test_websocket_message_ordering() {
         let (conn, mut receiver) = WebSocketConnection::new("ordering".to_string());
 
-        // 发送多个有序消息
         for i in 0..10 {
             let msg = WebSocketMessage::Notification {
                 event: "ordered_event".to_string(),
@@ -227,7 +214,6 @@ mod websocket_tests {
             conn.send(msg).await.unwrap();
         }
 
-        // 验证消息按顺序接收
         for i in 0..10 {
             let received = receiver.recv().await;
             assert!(received.is_some());
@@ -249,20 +235,16 @@ mod websocket_tests {
     async fn test_websocket_heartbeat_mechanism() {
         let manager = Arc::new(ConnectionManager::new());
 
-        // 创建连接
         let (conn, _rx) = WebSocketConnection::new("heartbeat-conn".to_string());
         manager
             .add_connection("heartbeat-conn".to_string(), conn)
             .await;
 
-        // 验证连接存在
         assert_eq!(manager.connection_count().await, 1);
         assert!(manager.get_connection("heartbeat-conn").await.is_some());
 
-        // 模拟心跳 - 定期检查连接
         for _ in 0..3 {
             tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-            // 验证连接仍然活跃
             assert!(manager.get_connection("heartbeat-conn").await.is_some());
         }
 
@@ -277,14 +259,12 @@ mod websocket_tests {
     async fn test_websocket_ping_pong_handling() {
         let (conn, mut receiver) = WebSocketConnection::new("ping-pong".to_string());
 
-        // 发送 ping 通知（模拟）
         let ping = WebSocketMessage::Notification {
             event: "ping".to_string(),
             data: serde_json::json!({"timestamp": 1234567890}),
         };
         conn.send(ping).await.unwrap();
 
-        // 接收并验证
         let received = receiver.recv().await;
         assert!(received.is_some());
 
@@ -292,7 +272,6 @@ mod websocket_tests {
             assert_eq!(event, "ping");
         }
 
-        // 模拟响应 pong
         let pong = WebSocketMessage::Notification {
             event: "pong".to_string(),
             data: serde_json::json!({"timestamp": 1234567891}),
@@ -317,27 +296,23 @@ mod websocket_tests {
     async fn test_websocket_graceful_disconnect() {
         let manager = Arc::new(ConnectionManager::new());
 
-        // 创建连接
         let (conn, mut receiver) = WebSocketConnection::new("graceful-disconn".to_string());
         manager
             .add_connection("graceful-disconn".to_string(), conn.clone())
             .await;
 
-        // 发送最后一条消息
         let last_msg = WebSocketMessage::Notification {
             event: "goodbye".to_string(),
             data: serde_json::json!({"reason": "normal_close"}),
         };
         conn.send(last_msg).await.unwrap();
 
-        // 验证消息被接收
         let received = receiver.recv().await;
         assert!(received.is_some());
 
         // 优雅移除连接
         manager.remove_connection("graceful-disconn").await;
 
-        // 验证连接已移除
         assert_eq!(manager.connection_count().await, 0);
         assert!(manager.get_connection("graceful-disconn").await.is_none());
     }
@@ -348,7 +323,6 @@ mod websocket_tests {
     async fn test_websocket_abnormal_disconnect() {
         let manager = Arc::new(ConnectionManager::new());
 
-        // 创建多个连接
         for i in 0..5 {
             let (conn, _) = WebSocketConnection::new(format!("abnormal-{}", i));
             manager
@@ -363,7 +337,6 @@ mod websocket_tests {
         manager.remove_connection("abnormal-2").await;
         manager.remove_connection("abnormal-4").await;
 
-        // 验证剩余连接
         assert_eq!(manager.connection_count().await, 2);
         assert!(manager.get_connection("abnormal-1").await.is_some());
         assert!(manager.get_connection("abnormal-3").await.is_some());
@@ -387,14 +360,12 @@ mod websocket_tests {
         manager.remove_connection("reconnect-conn").await;
         assert_eq!(manager.connection_count().await, 0);
 
-        // 重新连接
         let (conn2, _) = WebSocketConnection::new("reconnect-conn".to_string());
         manager
             .add_connection("reconnect-conn".to_string(), conn2)
             .await;
         assert_eq!(manager.connection_count().await, 1);
 
-        // 验证新连接工作正常
         let retrieved = manager.get_connection("reconnect-conn").await;
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().id(), "reconnect-conn");
@@ -414,7 +385,6 @@ mod websocket_tests {
     async fn test_websocket_broadcast_message() {
         let manager = Arc::new(ConnectionManager::new());
 
-        // 创建多个连接
         let mut receivers = Vec::new();
         for i in 0..3 {
             let (conn, rx) = WebSocketConnection::new(format!("broadcast-{}", i));
@@ -431,7 +401,6 @@ mod websocket_tests {
         });
         manager.broadcast(&broadcast_msg).await;
 
-        // 验证所有接收者都收到了消息
         for (i, rx) in receivers.iter_mut().enumerate() {
             let received =
                 tokio::time::timeout(tokio::time::Duration::from_secs(1), rx.recv()).await;
@@ -564,7 +533,6 @@ mod websocket_tests {
         let manager = Arc::new(ConnectionManager::new());
         let mut connection_ids = Vec::new();
 
-        // 创建多个连接，每个都有唯一ID
         for i in 0..100 {
             let conn_id = format!("unique-conn-{}", i);
             let (conn, _rx) = WebSocketConnection::new(conn_id.clone());
@@ -572,7 +540,6 @@ mod websocket_tests {
             connection_ids.push(conn_id);
         }
 
-        // 验证所有连接都能正确获取
         for id in &connection_ids {
             let conn = manager.get_connection(id).await;
             assert!(conn.is_some(), "Connection {} should exist", id);
@@ -640,7 +607,6 @@ mod websocket_tests {
         .await
         .unwrap();
 
-        // 验证所有消息都被接收
         let mut received_count = 0;
         while let Ok(Some(_msg)) =
             tokio::time::timeout(tokio::time::Duration::from_secs(2), receiver.recv()).await
@@ -668,12 +634,10 @@ mod websocket_tests {
             }));
         }
 
-        // 等待所有连接创建完成
         for handle in handles {
             handle.await.unwrap();
         }
 
-        // 验证所有连接都已创建
         assert_eq!(manager.connection_count().await, num_connections);
 
         // 清理
@@ -705,7 +669,6 @@ mod websocket_tests {
             conn.send(msg).await.unwrap();
         }
 
-        // 接收并验证所有消息
         let mut indices = Vec::new();
         for _ in 0..20 {
             let received = receiver.recv().await;
@@ -726,7 +689,6 @@ mod websocket_tests {
     async fn test_mixed_message_types() {
         let (conn, mut receiver) = WebSocketConnection::new("mixed-types".to_string());
 
-        // 发送各种类型的消息
         let request = WebSocketMessage::Request {
             id: "req-1".to_string(),
             method: "test".to_string(),
@@ -750,7 +712,6 @@ mod websocket_tests {
         conn.send(error).await.unwrap();
         conn.send(notification).await.unwrap();
 
-        // 验证接收到的消息类型
         let mut types = Vec::new();
         for _ in 0..4 {
             let received = receiver.recv().await;
@@ -783,7 +744,6 @@ mod websocket_tests {
         let num_connections = 50;
         let mut receivers = Vec::new();
 
-        // 创建多个连接
         for i in 0..num_connections {
             let (conn, rx) = WebSocketConnection::new(format!("broadcast-{}", i));
             manager
@@ -802,7 +762,6 @@ mod websocket_tests {
         });
         manager.broadcast(&broadcast_msg).await;
 
-        // 验证所有接收者都收到了消息
         for (i, rx) in receivers.iter_mut().enumerate() {
             let received =
                 tokio::time::timeout(tokio::time::Duration::from_secs(2), rx.recv()).await;
@@ -851,7 +810,6 @@ mod websocket_tests {
         });
         manager.broadcast(&msg).await;
 
-        // 验证有效连接仍能接收消息
         let received =
             tokio::time::timeout(tokio::time::Duration::from_millis(100), rx2.recv()).await;
         assert!(received.is_ok());
@@ -870,7 +828,6 @@ mod websocket_tests {
     async fn test_unicode_message_content() {
         let (conn, mut receiver) = WebSocketConnection::new("unicode-test".to_string());
 
-        // 测试各种 Unicode 字符
         let request = WebSocketMessage::Request {
             id: "unicode-测试-🎉".to_string(),
             method: "方法-метод-🔧".to_string(),
@@ -903,7 +860,6 @@ mod websocket_tests {
     async fn test_large_params_message() {
         let (conn, mut receiver) = WebSocketConnection::new("large-params".to_string());
 
-        // 创建大型数组参数
         let large_array: Vec<i32> = (0..1000).collect();
         let request = WebSocketMessage::Request {
             id: "large-params".to_string(),
@@ -933,7 +889,6 @@ mod websocket_tests {
     /// 验证可以处理深层嵌套的 JSON 结构
     #[tokio::test]
     async fn test_deeply_nested_json() {
-        // 构建嵌套深度为 10 的 JSON
         let mut nested = serde_json::json!({"value": 42});
         for i in 0..10 {
             nested = serde_json::json!({
@@ -1048,7 +1003,6 @@ mod websocket_tests {
         let manager = Arc::new(ConnectionManager::new());
         let state = SdForgeState::with_config(config, manager.clone());
 
-        // 验证配置被正确应用
         assert!(state.config.auth.is_some());
         assert_eq!(state.config.max_message_size, 2_000_000);
     }
@@ -1065,7 +1019,6 @@ mod websocket_tests {
         let num_connections = 10;
         let num_broadcasts = 5;
 
-        // 创建连接
         let mut receivers = Vec::new();
         for i in 0..num_connections {
             let (conn, rx) = WebSocketConnection::new(format!("concurrent-broadcast-{}", i));
@@ -1088,7 +1041,6 @@ mod websocket_tests {
             }));
         }
 
-        // 等待所有广播完成
         for handle in handles {
             handle.await.unwrap();
         }
@@ -1124,7 +1076,6 @@ mod websocket_tests {
             manager.remove_connection(&conn_id).await;
         }
 
-        // 验证最终状态
         assert_eq!(manager.connection_count().await, 0);
     }
 
@@ -1135,12 +1086,10 @@ mod websocket_tests {
         let manager = Arc::new(ConnectionManager::new());
         let conn_id = "replaceable".to_string();
 
-        // 添加第一个连接
         let (conn1, _) = WebSocketConnection::new(conn_id.clone());
         manager.add_connection(conn_id.clone(), conn1).await;
         assert_eq!(manager.connection_count().await, 1);
 
-        // 添加第二个连接（相同ID）
         let (conn2, _) = WebSocketConnection::new(conn_id.clone());
         manager.add_connection(conn_id.clone(), conn2).await;
 
@@ -1148,7 +1097,6 @@ mod websocket_tests {
         let count = manager.connection_count().await;
         assert!((1..=2).contains(&count));
 
-        // 获取连接应该能成功
         let retrieved = manager.get_connection(&conn_id).await;
         assert!(retrieved.is_some());
 
@@ -1177,7 +1125,6 @@ mod websocket_tests {
             conn.send(msg).await.unwrap();
         }
 
-        // 接收并计数
         let mut received_count = 0;
         while let Ok(Some(_)) =
             tokio::time::timeout(tokio::time::Duration::from_secs(5), receiver.recv()).await
@@ -1190,7 +1137,6 @@ mod websocket_tests {
 
         let elapsed = start.elapsed();
 
-        // 验证所有消息都被接收
         assert_eq!(received_count, num_messages);
         println!("Received {} messages in {:?}", received_count, elapsed);
     }
@@ -1201,7 +1147,6 @@ mod websocket_tests {
     async fn test_connection_lookup_performance() {
         let manager = Arc::new(ConnectionManager::new());
 
-        // 创建100个连接
         for i in 0..100 {
             let (conn, _) = WebSocketConnection::new(format!("perf-{}", i));
             manager.add_connection(format!("perf-{}", i), conn).await;
@@ -1304,7 +1249,6 @@ mod websocket_tests {
 
         let config2 = config1.clone();
 
-        // 验证克隆后的配置值相同
         assert!(config2.auth.is_some());
         assert_eq!(config2.max_message_size, 2_000_000);
     }

@@ -10,6 +10,7 @@
 
 # --- HTTP / 安全 ---------------------------------------------------------------
 http-unauthorized = 未授权
+http-route-not-found = 路由未找到
 
 # --- 限流（HTTP 拒绝响应体） -----------------------------------------------------
 ratelimit-exceeded = 速率限制已超出
@@ -25,6 +26,11 @@ forge-limiter-internal = 限流器内部错误: { $message }
 # --- core::str 格式化辅助 --------------------------------------------------------
 core-resource-not-found = 资源未找到: { $resource }
 core-validation-failed = { $field } 校验失败: { $constraint }
+
+# --- streaming::SseStreamError（thiserror Display） ------------------------------
+sse-invalid-utf8 = SSE 帧不是有效的 UTF-8: { $error }
+sse-limit-exceeded = SSE 流已超出配置上限 ({ $size } 字节)
+sse-upstream-error = 上游流错误: { $error }
 
 # --- 文档（Swagger UI 入口页） ----------------------------------------------------
 docs-swagger-title = SDForge API 文档

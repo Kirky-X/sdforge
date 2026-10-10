@@ -71,7 +71,6 @@ mod security_tests {
             handles.push(handle);
         }
 
-        // Wait for all tasks to complete
         for handle in handles {
             let result = handle.await.unwrap();
             // All validations should complete (may fail, but shouldn't panic)
@@ -86,7 +85,6 @@ mod security_tests {
 
         let auth = SdForgeApiKeyAuth::new();
 
-        // Create and validate many different keys
         for i in 0..100 {
             let key = format!("stress-test-key-{}", i);
             let _metadata = ApiKeyMetadata::new(key.clone(), Some(format!("Key {}", i)));

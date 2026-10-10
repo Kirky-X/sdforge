@@ -269,7 +269,6 @@ async fn get_wrapped_response() -> Result<serde_json::Value, ApiError> {
     description = "获取分页数据"
 )]
 async fn get_paginated(page: u64, per_page: u64) -> Result<serde_json::Value, ApiError> {
-    // 生成分页数据项
     let items: Vec<serde_json::Value> = (0..per_page)
         .map(|i| {
             let item_id = (page.saturating_sub(1)) * per_page + i + 1;
@@ -310,7 +309,6 @@ async fn get_paginated(page: u64, per_page: u64) -> Result<serde_json::Value, Ap
     description = "带错误处理的获取用户"
 )]
 async fn get_user_with_error(id: u64) -> Result<String, ApiError> {
-    // 验证: ID 不能为 0
     if id == 0 {
         // 直接返回 ApiError
         return Err(ApiError::NotFound {
@@ -319,7 +317,6 @@ async fn get_user_with_error(id: u64) -> Result<String, ApiError> {
         });
     }
 
-    // 验证: ID 不能超过 1000
     if id > 1000 {
         // 使用自定义错误，通过 From trait 自动转换
         return Err(SdForgeExampleError::UserNotFound { user_id: id }.into());
@@ -358,7 +355,6 @@ async fn get_user_with_error(id: u64) -> Result<String, ApiError> {
     description = "验证用户输入"
 )]
 async fn validate_user(request: ValidateUserRequest) -> Result<String, ApiError> {
-    // 验证 name 字段
     if request.name.is_empty() {
         return Err(SdForgeExampleError::ValidationError {
             message: "用户名不能为空".to_string(),
@@ -367,7 +363,6 @@ async fn validate_user(request: ValidateUserRequest) -> Result<String, ApiError>
         .into());
     }
 
-    // 验证 email 格式
     if !request.email.contains('@') {
         return Err(SdForgeExampleError::ValidationError {
             message: "邮箱格式不正确".to_string(),

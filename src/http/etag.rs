@@ -8,7 +8,7 @@
 //! `If-None-Match` that matches the current ETag (or `*`) short-circuits to
 //! **304 Not Modified** with an empty body.
 
-use axum::body::Body;
+use axum::body::{Body, HttpBody};
 use axum::http::{Request, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -62,16 +62,19 @@ pub async fn etag_middleware(req: Request<Body>, next: Next) -> Response {
 
     let (mut parts, body) = response.into_parts();
 
-    // A body with a known-oversized Content-Length is passed through
+    // A body whose size is known up front to exceed the cap is passed through
     // untouched: buffering it would consume the stream, and a failed read
-    // cannot be replayed to the client.
-    let oversized = parts
+    // cannot be replayed to the client. Both sources count — a declared
+    // Content-Length and the body's own size hint (axum materializes
+    // Content-Length only at the server write step, so an in-process service
+    // sees the hint alone for large full bodies).
+    let declared_len = parts
         .headers
         .get(axum::http::header::CONTENT_LENGTH)
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u64>().ok())
-        .is_some_and(|len| len > MAX_ETAG_BODY_BYTES as u64);
-    if oversized {
+        .and_then(|v| v.parse::<u64>().ok());
+    let known_len = declared_len.or_else(|| body.size_hint().upper());
+    if known_len.is_some_and(|len| len > MAX_ETAG_BODY_BYTES as u64) {
         return Response::from_parts(parts, body);
     }
 
@@ -203,6 +206,108 @@ mod tests {
         assert!(
             res.headers().get(axum::http::header::ETAG).is_none(),
             "POST responses must not gain an ETag"
+        );
+    }
+
+    #[tokio::test]
+    async fn oversized_content_length_passes_through_without_an_etag() {
+        let app = axum::Router::new()
+            .route(
+                "/huge",
+                axum::routing::get(|| async {
+                    let mut res = Response::new(Body::from("payload"));
+                    res.headers_mut().insert(
+                        axum::http::header::CONTENT_LENGTH,
+                        axum::http::HeaderValue::from_str(&(MAX_ETAG_BODY_BYTES + 1).to_string())
+                            .unwrap(),
+                    );
+                    res
+                }),
+            )
+            .layer(axum::middleware::from_fn(etag_middleware));
+
+        let res = app
+            .oneshot(Request::builder().uri("/huge").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), 200);
+        assert!(
+            res.headers().get(axum::http::header::ETAG).is_none(),
+            "a known-oversized body must not be buffered for fingerprinting"
+        );
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(
+            body, "payload",
+            "the original body must pass through intact"
+        );
+    }
+
+    #[tokio::test]
+    async fn oversized_body_size_hint_passes_through_without_an_etag() {
+        // In-process responses carry no Content-Length header — the body's
+        // size hint is the only up-front signal that the cap is exceeded.
+        let app = axum::Router::new()
+            .route(
+                "/huge-hint",
+                axum::routing::get(|| async { "x".repeat(MAX_ETAG_BODY_BYTES + 1) }),
+            )
+            .layer(axum::middleware::from_fn(etag_middleware));
+
+        let res = app
+            .oneshot(
+                Request::builder()
+                    .uri("/huge-hint")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), 200);
+        assert!(
+            res.headers().get(axum::http::header::ETAG).is_none(),
+            "a size-hinted oversized body must not be buffered for fingerprinting"
+        );
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(body.len(), MAX_ETAG_BODY_BYTES + 1);
+    }
+
+    #[tokio::test]
+    async fn body_read_failure_returns_502_instead_of_an_empty_200() {
+        let app = axum::Router::new()
+            .route(
+                "/broken",
+                axum::routing::get(|| async {
+                    let stream = tokio_stream::iter(vec![
+                        Ok::<axum::body::Bytes, std::io::Error>(axum::body::Bytes::from_static(
+                            b"partial",
+                        )),
+                        Err(std::io::Error::other("simulated read failure")),
+                    ]);
+                    Body::from_stream(stream)
+                }),
+            )
+            .layer(axum::middleware::from_fn(etag_middleware));
+
+        let res = app
+            .oneshot(
+                Request::builder()
+                    .uri("/broken")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            res.status(),
+            StatusCode::BAD_GATEWAY,
+            "a failed body read must surface as an explicit 502, not an empty 200"
         );
     }
 }

@@ -166,7 +166,5 @@ pub mod combined;
 // 重新导出 sdforge prelude
 // ============================================================================
 
-/// 重新导出 sdforge 的 prelude 模块
-///
 /// 方便在示例中使用框架类型
 pub use sdforge::prelude::*;

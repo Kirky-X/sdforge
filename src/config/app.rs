@@ -192,7 +192,6 @@ mod tests {
         assert_eq!(config.server.host, "127.0.0.1"); // fail-safe loopback
         assert_eq!(config.server.port, 8080);
 
-        // Verify other fields have proper defaults
         assert!(config.timeout.is_some());
         assert_eq!(config.timeout.as_ref().unwrap().default_timeout_secs, 30);
     }

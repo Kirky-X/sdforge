@@ -341,8 +341,8 @@ serve_with_graceful_shutdown_tls(
 
 ### SSE 流式与 WebSocket
 
-- **SSE**（`streaming` feature）：`StreamEvent` / `StreamResponse` / `stream_to_sse` / `create_stream_channel`
-- **WebSocket**（`websocket` feature，需 `http` + `streaming`）：`websocket_upgrade`、`WebSocketHandler`、`ConnectionManager`、`WebSocketConfig`
+- **SSE**（`streaming` feature）：`StreamEvent` / `StreamResponse` / `stream_to_sse` / `create_stream_channel`。流内建空闲心跳：源静默时每 10s 发送 `: keep-alive` 注释帧（客户端忽略）防中间层按空闲切断；数据帧重置心跳计时，源 30s 静默仍以 error 事件 + `complete` 终止
+- **WebSocket**（`websocket` feature，需 `http` + `streaming`）：`websocket_upgrade`、`WebSocketHandler`、`ConnectionManager`、`WebSocketConfig`；`#[forge(ws_path = "...")]` 声明挂载路径（`websocket::build()` 消费），未声明时挂载于 `/{name}`
 
 ### 缓存
 
@@ -350,7 +350,7 @@ serve_with_graceful_shutdown_tls(
 
 ### 国际化与日志
 
-- **i18n**：翻译注册表（`register_translation` / `set_locale` / `translate_or_fallback`）始终可用；`i18n` feature 额外提供 ICU4X 的 `HttpI18nFormatter`（本地化数字/日期/复数格式化与 Accept-Language 解析）
+- **i18n**：翻译注册表（`register_translation` / `set_locale` / `translate_or_fallback`）始终可用；`i18n` feature 额外提供 ICU4X 的 `HttpI18nFormatter`（本地化数字/日期/复数格式化与 Accept-Language 解析）。HTTP 错误体随请求 `Accept-Language` 选择语言（`build_with_config` 的请求级 locale 作用域 + 未匹配路由 404 统一错误体 + 限流拒绝体逐请求本地化），进程 locale 仅作回退
 - **日志**：`logging` feature 提供 `StructuredLogger` / `init_global_logger`；`inklog` feature 将裸 `log` 调用桥接到 inklog `LoggerManager` 结构化管道（`init_inklog_logger()`），并启用 `#[forge::log]` 声明日志属性宏（进入/退出/耗时/错误 + DataMasker 脱敏；feature 关闭时使用该宏在编译期显性报错）
 - **`#[forge::log]` 边界与语义**：`unsafe fn` 的 `unsafe` 限定原样传播到壳函数（调用方仍需 unsafe 块履行安全契约，宏不会把 unsafe fn 包装成安全函数）；壳函数不捕获 panic/任务取消——函数体 panic 或 async 任务被取消时不会产生 `fn_exit` 记录（需要失败可见性的调用方应在函数体内显式捕获，或在调用方监测 JoinHandle）；**不支持 trait impl 内的方法**（宏会在同一 impl 块内追加隐藏内部函数，trait impl 不允许额外成员）；`const`/变参在宏展开点 fail-loud 拒绝。载荷惰性渲染：目标日志级别被全局 max_level 过滤时，参数捕获与掩码渲染不执行（info 生产配置下 debug 进入日志零额外分配成本）；超过 64 KiB 的载荷在掩码前截断（inklog DataMasker 对 >1 MiB 输入会整体跳过掩码，壳层截断保证敏感值永不以明文入日志）；凭证键值对规则覆盖引号键形态（`"password":"hunter2"` 与 `password=hunter2` 同样被掩码）
 
@@ -405,9 +405,11 @@ let l2 = RedisL2Cache::connect(&RedisL2CacheConfig::new(redis_url).with_default_
 | 分布式限流 | fail-open（放行 + 60s 窗口限速告警）+ 适配层熔断（连续 5 次后端错误打开，打开期请求不经后端直接裁决，30s 后半开探测恢复；`with_circuit_failure_threshold` / `with_circuit_open_duration` 可调） | fail-open | 限流是保护性机制而非正确性机制：计数存储故障时 fail-close 会把存储故障放大为全服务不可用，违背可用性优先。熔断补足黑洞形态——后端不回错只熬满超时期间，请求不再每请求付满超时。需要硬安全语义（防爆破/防撞库）的部署显式切换 `BackendFailurePolicy::FailClose`（熔断打开期以 `CircuitBreakerError` 拒绝，不偷换成放行） |
 | Redis L2 缓存 | 固有 fail-open（读故障 = miss 回源，写故障 = 跳过）；同步面（`SyncCache`）经 `block_in_place` 桥接仅多线程 runtime 可用，current-thread runtime 上恒 miss——异步中间件热路径必须用 `get_async`/`set_async`/`delete_async`/`contains_async`（无桥接） | fail-open（无开关） | 缓存丢失只影响命中率不影响正确性；缓存层不存在有意义的 fail-close 语义（拒绝服务不是缓存的职责）。装配期连接失败仍显性报错（启动即暴露配置错误） |
 
-真实 Redis 集成测试门控：设置 `SDFORGE_TEST_REDIS_URL` 后运行
-`cargo test --features "ratelimit-dist,cache-l2" --test dist_backends_tests`；
-未设置时用例显式跳过（沙箱/CI 无 Redis 属环境限制）。
+真实 Redis 集成测试后端解析：优先 `SDFORGE_TEST_REDIS_URL`；未设置且 PATH 上
+有 `redis-server` 时用例自行拉起一次性回环实例（随机端口、关闭持久化、用例结束
+终止），二者都没有时才显式跳过。运行方式：
+`cargo test --features "ratelimit-dist,cache-l2" --test dist_backends_tests`
+（同步面用例需多线程 runtime，见上表）。
 
 ## 💡 最佳实践
 

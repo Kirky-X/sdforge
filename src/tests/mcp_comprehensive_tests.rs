@@ -643,7 +643,6 @@ mod mcp_comprehensive_tests {
         let tool = create_complex_schema_tool();
         let schema = tool.input_schema();
 
-        // Should be able to serialize and deserialize
         let serialized = serde_json::to_string(&schema).unwrap();
         let _: serde_json::Value = serde_json::from_str(&serialized).unwrap();
     }
@@ -654,7 +653,6 @@ mod mcp_comprehensive_tests {
         let tool = create_complex_schema_tool();
         let schema = tool.input_schema();
 
-        // Verify nested structure
         let user_props = &schema["properties"]["user"]["properties"];
         assert!(user_props.get("name").is_some());
         assert!(user_props.get("age").is_some());

@@ -34,11 +34,11 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是**编译时�
 
 - **测量方法**：每次测量前执行 `cargo clean` 清空 `target/`，随后 `cargo build` 计时。编译时间取 cargo 自身报告的 `Finished ... in Xs`；同时记录 wall-clock（含 cargo 启动/链接开销）作为参考。
 - **测量场景**：`--features http`（默认，仅 HTTP）vs `--features full`（全量协议）。
-- **构建模式**：`dev`（debug）profile 与 `release` profile。release profile 配置为 `lto = true`、`codegen-units = 1`、`opt-level = "z"`（体积优化）。
+- **构建模式**：`dev`（debug）profile 与 `release` profile。测量时点的 release profile 为 `lto = true`、`codegen-units = 1`、`opt-level = "z"`（体积优化）；当前仓库 release profile 已变更为 `opt-level = 3`、`lto = "fat"`、`codegen-units = 1`、`strip = true`（见 Cargo.toml），本文体积/时间数据未在新 profile 下复测。
 - **体积指标**：
   - `libsdforge.rlib`：框架库编译产物，是反映框架代码体积最干净的单一指标；
   - `target/debug|release/deps` 与 `target/` 目录总大小：反映全部依赖编译产物的磁盘占用；
-  - `sdforge` 二进制：注意，`full` 特性**不含** `cli`，因此默认二进制是 `panic` stub，需另行测量 `--features <x>,cli` 才能得到真实 CLI 二进制体积。
+  - `sdforge` 二进制：测量时点 `full` 特性**不含** `cli`，默认二进制是 `panic` stub，需另行测量 `--features <x>,cli` 才能得到真实 CLI 二进制体积。**当前仓库已无根包二进制目标**（`src/main.rs` 于 v0.3.0、2026-07-04 删除，Cargo.toml 无任何 `[[bin]]`），本文二进制数据与对应复现命令为历史口径、不再可执行；框架代码体积请以 `libsdforge.rlib` 为准。
 - **依赖规模**：用 `cargo tree` 统计去重后的唯一 crate 数。
 - 每个场景独立测量，未跨场景复用缓存。
 
@@ -50,9 +50,9 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是**编译时�
 | Rust 工具链 | rustc 1.93.1 (01f6ddf75 2026-02-11) / cargo 1.93.1 |
 | 操作系统 | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64) |
 | 内存 | 70 GiB 总计 / 60 GiB 可用 |
-| 构建配置 | release: `lto=true`, `codegen-units=1`, `opt-level="z"`；dev: `debug=true`, 依赖 `opt-level=2` |
+| 构建配置（测量时点） | release: `lto=true`, `codegen-units=1`, `opt-level="z"`（当前为 `opt-level=3` / `lto="fat"` / `codegen-units=1` / `strip=true`）；dev: `debug=true`, 依赖 `opt-level=2` |
 
-> 注：测量时点的 `full` 特性集合为 `http, mcp, streaming, timestamp, security, hot-reload, cache, websocket, grpc, logging, openapi`，**不包含** `cli` 与 `simd-json`（该集合为 2026-07-03 口径，与当前 `full` 定义略有差异）。
+> 注：测量时点的 `full` 特性集合为 `http, mcp, streaming, timestamp, security, hot-reload, cache, websocket, grpc, logging, openapi`，**不包含** `cli` 与 `simd-json`；当前 `full` 已扩为 25 项运行时特性并包含 `cli`（见主 README 特性标志表）。本文编译时间/体积数字对应 2026-07-03 口径，与当前 `full` 定义不可直接对应。
 
 ## 📦 依赖规模对比
 
@@ -95,6 +95,8 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是**编译时�
 | full | 1.5 GB | 2.0 GB | 792 MB | 832 MB |
 | 倍数（full / http） | 1.86× | 1.82× | 1.38× | 1.37× |
 
+> ⚠️ **历史口径（2026-07-03）**：以下两节测量于仓库仍含 `src/main.rs`（`panic` stub）的版本；该文件已于 v0.3.0（2026-07-04，commit 3b92d73）删除，当前仓库无根包 `[[bin]]` 目标，`cargo build` 不再产出 `target/release/sdforge`——以下数据与复现命令当前不可执行，保留仅为历史记录。
+
 ### 独立 `sdforge` 二进制体积
 
 | 特性组合 | Debug 二进制 | Release 二进制 |
@@ -102,7 +104,7 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是**编译时�
 | http only | 3.73 MB（3,911,120 B） | 349 KB（357,296 B） |
 | full | 3.73 MB（3,911,120 B，**完全相同**） | 349 KB（357,296 B，**完全相同**） |
 
-> **重要说明**：`full` 特性不含 `cli`，因此 `src/main.rs` 在两种场景下都退化成同一个 `panic` stub（`#[cfg(not(feature = "cli"))] fn main()`）。这意味着**默认二进制体积无法反映协议裁剪的差异**，必须以 `rlib` 或真实 CLI 二进制来评估。
+> **重要说明（历史口径）**：测量时点 `full` 特性不含 `cli`（当前 `full` 已含 `cli`），`src/main.rs` 在两种场景下都退化成同一个 `panic` stub（`#[cfg(not(feature = "cli"))] fn main()`）；该文件此后被删除。这意味着**默认二进制体积无法反映协议裁剪的差异**，必须以 `rlib`（当前仍适用）或真实 CLI 二进制来评估。
 
 ### 真实 CLI 二进制体积（追加 `cli` 特性，release）
 
@@ -113,7 +115,7 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是**编译时�
 | 倍数（full / http） | 1.024× |
 | http 相对 full 节省 | 2.4% |
 
-> 即便启用 `cli`，最终二进制仅差 2.4%：release 的 `lto=true` + `opt-level="z"` + `codegen-units=1` 对二进制做了激进的死代码消除，未被 `main.rs` 实际引用的协议实现会在链接期被剔除。**但这只影响最终二进制体积，编译期的依赖编译成本依旧要付**（见上表编译时间）。
+> 即便启用 `cli`，最终二进制仅差 2.4%：测量时点 release profile（`lto=true` + `opt-level="z"` + `codegen-units=1`）对二进制做了激进的死代码消除，未被 `main.rs` 实际引用的协议实现会在链接期被剔除。**但这只影响最终二进制体积，编译期的依赖编译成本依旧要付**（见上表编译时间）。
 
 ## 🔍 分析
 
@@ -131,7 +133,7 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是**编译时�
 
 ### 4. 二进制体积评估的注意事项
 
-默认 `sdforge` 二进制在 http 与 full 下完全相同（均为 panic stub），**不能**用作特性裁剪的体积证据。真实 CLI 二进制（追加 `cli`）release 下仅差 2.4%，因为链接器死代码消除了未引用代码。这揭示一个重要区别：
+测量时点的默认 `sdforge` 二进制在 http 与 full 下完全相同（均为 panic stub），**不能**用作特性裁剪的体积证据；当前仓库已无根包二进制目标，该维度不再适用。真实 CLI 二进制（追加 `cli`）release 下仅差 2.4%，因为链接器死代码消除了未引用代码。这揭示一个重要区别：
 
 - **编译期成本**（编译时间、依赖图、rlib 体积）由 feature flag 决定，特性门控收益显著；
 - **最终二进制体积**还受 LTO/死代码消除影响，特性门控的边际收益在二进制层面被部分稀释，但前提是你愿意为 `full` 付完整编译时间。
@@ -180,7 +182,9 @@ ls -l target/release/libsdforge.rlib
 cargo clean && cargo build --features full --release 2>&1 | tail -1
 ls -l target/release/libsdforge.rlib
 
-# === 真实 CLI 二进制体积（release）===
+# === 真实 CLI 二进制体积（release；历史口径）===
+# 当前仓库无根包 [[bin]] 目标（src/main.rs 已于 v0.3.0 删除），
+# 以下两条命令不再产出 target/release/sdforge，保留为历史记录。
 cargo clean && cargo build --features http,cli --release 2>&1 | tail -1
 ls -l target/release/sdforge
 
@@ -192,4 +196,4 @@ du -sh target/debug target/release
 du -sh target/debug/deps target/release/deps
 ```
 
-> 测量日期：2026-07-03。数据来自上述环境下的实测，不同机器/工具链版本结果会有差异，趋势（http 显著快于 full、rlib 显著小于 full）应保持一致。
+> 测量日期：2026-07-03。数据来自上述环境下的实测，不同机器/工具链版本结果会有差异，趋势（http 显著快于 full、rlib 显著小于 full）应保持一致。注：release profile 与 `full` 特性集合此后均已变更（见文中注记）；二进制体积两节基于当时的 `src/main.rs` 入口，当前不可复现。

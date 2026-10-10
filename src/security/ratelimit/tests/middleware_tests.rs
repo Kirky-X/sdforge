@@ -433,3 +433,33 @@ async fn cloned_layer_shares_limiter_state() {
         "clone must share the limiter state (Arc), not duplicate it"
     );
 }
+
+/// 请求级语言：429 拒绝体随请求的 `Accept-Language` 选择语言（此前恒用
+/// 进程 locale；该层由使用方包在 router 之外，故直接解析请求头）。
+#[cfg(feature = "i18n")]
+#[tokio::test]
+async fn middleware_exceeded_body_follows_accept_language() {
+    let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(MockLimiterWithError {
+        factory: Box::new(|| RateLimitError::Exceeded {
+            limit: 100,
+            window_seconds: 60,
+        }),
+    });
+    let layer = RateLimitLayer::new(limiter);
+    let mut middleware: RateLimitMiddleware<EchoService> = layer.layer(EchoService);
+
+    let req = Request::builder()
+        .header("accept-language", "zh-CN,zh;q=0.9")
+        .body(Body::empty())
+        .expect("request build");
+    let response = middleware.call(req).await.expect("call must succeed");
+    assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body bytes");
+    assert_eq!(
+        String::from_utf8(bytes.to_vec()).expect("utf8 body"),
+        "速率限制已超出",
+        "429 body must follow Accept-Language"
+    );
+}

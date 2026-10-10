@@ -1041,7 +1041,6 @@ mod http_protocol_tests {
             .route("/large", post(handler))
             .layer(RequestBodyLimitLayer::new(1024)); // 1KB limit
 
-        // Create a large payload
         let large_data = json!({
             "data": "x".repeat(2048) // 2KB of data
         });

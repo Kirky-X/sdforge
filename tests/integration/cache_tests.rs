@@ -36,22 +36,18 @@ mod cache_tests {
     fn test_cache_set_and_get() {
         let cache = DashMapCache::new();
 
-        // 设置字符串值
         cache.set("name", b"Alice".to_vec());
         assert_eq!(cache.get("name"), Some(b"Alice".to_vec()));
 
-        // 设置数字值（序列化后）
         cache.set("age", b"30".to_vec());
         assert_eq!(cache.get("age"), Some(b"30".to_vec()));
 
-        // 设置 JSON 格式的值
         cache.set("user", br#"{"id":1,"name":"Bob"}"#.to_vec());
         assert_eq!(
             cache.get("user"),
             Some(br#"{"id":1,"name":"Bob"}"#.to_vec())
         );
 
-        // 设置空值
         cache.set("empty", b"".to_vec());
         assert_eq!(cache.get("empty"), Some(b"".to_vec()));
     }
@@ -70,13 +66,11 @@ mod cache_tests {
         assert_eq!(cache.get("nonexistent"), None);
         assert!(cache.get("missing_key").is_none());
 
-        // 设置后删除
         cache.set("temp", b"value".to_vec());
         assert_eq!(cache.get("temp"), Some(b"value".to_vec()));
         cache.delete("temp");
         assert_eq!(cache.get("temp"), None);
 
-        // 清空后
         cache.set("k1", b"v1".to_vec());
         cache.set("k2", b"v2".to_vec());
         cache.clear();
@@ -97,15 +91,12 @@ mod cache_tests {
         cache.set("counter", b"1".to_vec());
         assert_eq!(cache.get("counter"), Some(b"1".to_vec()));
 
-        // 更新为新值
         cache.set("counter", b"2".to_vec());
         assert_eq!(cache.get("counter"), Some(b"2".to_vec()));
 
-        // 再次更新
         cache.set("counter", b"100".to_vec());
         assert_eq!(cache.get("counter"), Some(b"100".to_vec()));
 
-        // 验证只有一个键
         assert_eq!(cache.len(), 1);
     }
 
@@ -119,27 +110,22 @@ mod cache_tests {
     fn test_cache_delete_key() {
         let cache = DashMapCache::new();
 
-        // 删除不存在的键
         assert!(!cache.delete("nonexistent"));
         assert_eq!(cache.len(), 0);
 
-        // 设置并删除
         cache.set("key1", b"value1".to_vec());
         cache.set("key2", b"value2".to_vec());
         assert_eq!(cache.len(), 2);
 
-        // 删除第一个键
         assert!(cache.delete("key1"));
         assert_eq!(cache.get("key1"), None);
         assert_eq!(cache.get("key2"), Some(b"value2".to_vec()));
         assert_eq!(cache.len(), 1);
 
-        // 删除第二个键
         assert!(cache.delete("key2"));
         assert_eq!(cache.len(), 0);
         assert!(cache.is_empty());
 
-        // 再次删除已删除的键
         assert!(!cache.delete("key1"));
     }
 
@@ -152,13 +138,11 @@ mod cache_tests {
     fn test_cache_clear_all() {
         let cache = DashMapCache::new();
 
-        // 添加多个键值对
         cache.set("k1", b"v1".to_vec());
         cache.set("k2", b"v2".to_vec());
         cache.set("k3", b"v3".to_vec());
         assert_eq!(cache.len(), 3);
 
-        // 清空缓存
         cache.clear();
         assert!(cache.is_empty());
         assert_eq!(cache.len(), 0);
@@ -166,7 +150,6 @@ mod cache_tests {
         assert_eq!(cache.get("k2"), None);
         assert_eq!(cache.get("k3"), None);
 
-        // 清空后可以继续添加
         cache.set("new_key", b"new_value".to_vec());
         assert_eq!(cache.get("new_key"), Some(b"new_value".to_vec()));
     }
@@ -187,7 +170,6 @@ mod cache_tests {
         let cache = DashMapCache::new();
         let ttl_seconds: u64 = 1;
 
-        // 设置带过期时间的值
         let current_time = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -201,7 +183,6 @@ mod cache_tests {
         // 立即检查：未过期
         assert_eq!(cache.get("data"), Some(b"sensitive".to_vec()));
 
-        // 模拟过期检查函数
         let is_expired = |cache: &DashMapCache, key: &str| -> bool {
             if let Some(expiry_bytes) = cache.get(&format!("{}_expiry", key))
                 && let Ok(expiry) = String::from_utf8(expiry_bytes)
@@ -217,7 +198,6 @@ mod cache_tests {
             false
         };
 
-        // 模拟过期：更新过期时间为过去的时间
         cache.set("data_expiry", (current_time - 1).to_string().into_bytes());
 
         // 检查过期状态
@@ -233,7 +213,6 @@ mod cache_tests {
     fn test_cache_manual_invalidation() {
         let cache = DashMapCache::new();
 
-        // 设置多个缓存项
         cache.set("session:user1", b"session_data_1".to_vec());
         cache.set("session:user2", b"session_data_2".to_vec());
         cache.set("token:123", b"auth_token".to_vec());
@@ -265,7 +244,6 @@ mod cache_tests {
         cache.set("page:home", b"html_content".to_vec());
         cache.set("page:home_last_refresh", b"0".to_vec());
 
-        // 获取当前时间
         let get_current_time = || {
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -275,17 +253,14 @@ mod cache_tests {
 
         let initial_time = get_current_time();
 
-        // 模拟刷新操作：重新设置值并更新时间戳
         cache.set("page:home", b"updated_html".to_vec());
         cache.set(
             "page:home_last_refresh",
             get_current_time().to_string().into_bytes(),
         );
 
-        // 验证值已更新
         assert_eq!(cache.get("page:home"), Some(b"updated_html".to_vec()));
 
-        // 验证时间戳已更新
         let new_time_bytes = cache.get("page:home_last_refresh").unwrap();
         let new_time: u64 = String::from_utf8(new_time_bytes).unwrap().parse().unwrap();
         assert!(new_time >= initial_time);
@@ -304,11 +279,9 @@ mod cache_tests {
     fn test_cache_concurrent_reads() {
         let cache = DashMapCache::new();
 
-        // 设置共享数据
         cache.set("shared_data", b"important_content".to_vec());
         let cache = Arc::new(cache);
 
-        // 启动多个读取线程
         let handles: Vec<_> = (0..10)
             .map(|i| {
                 let cache = cache.clone();
@@ -322,12 +295,10 @@ mod cache_tests {
             })
             .collect();
 
-        // 等待所有线程完成
         for handle in handles {
             let _ = handle.join();
         }
 
-        // 验证缓存仍然完整
         assert_eq!(cache.len(), 1);
         assert_eq!(
             cache.get("shared_data"),
@@ -346,7 +317,6 @@ mod cache_tests {
         let num_threads = 20;
         let keys_per_thread = 5;
 
-        // 启动多个写入线程
         let handles: Vec<_> = (0..num_threads)
             .map(|thread_id| {
                 let cache = cache.clone();
@@ -360,12 +330,10 @@ mod cache_tests {
             })
             .collect();
 
-        // 等待所有线程完成
         for handle in handles {
             handle.join().expect("Thread panicked");
         }
 
-        // 验证所有键值对都已写入
         assert_eq!(cache.len(), num_threads * keys_per_thread);
 
         // 抽样验证几个键的值
@@ -454,7 +422,6 @@ mod cache_tests {
         cache.set("key2", b"value2".to_vec());
         cache.set("key3", b"value3".to_vec());
 
-        // 添加新数据项，现在有 4 个数据项
         cache.set("key4", b"value4".to_vec());
 
         // 手动 LRU 淘汰：删除 lru_list 中的第一个（key1）
@@ -470,14 +437,12 @@ mod cache_tests {
 
         evict_lru(&cache);
 
-        // 验证：key1 被删除，保留 key2, key3, key4, lru_list
         assert_eq!(cache.get("key1"), None);
         assert_eq!(cache.get("key2"), Some(b"value2".to_vec()));
         assert_eq!(cache.get("key3"), Some(b"value3".to_vec()));
         assert_eq!(cache.get("key4"), Some(b"value4".to_vec()));
         assert_eq!(cache.get("lru_list"), Some(b"key1,key2,key3".to_vec()));
 
-        // 验证缓存大小：key2, key3, key4, lru_list = 4
         assert_eq!(cache.len(), 4);
     }
 
@@ -490,11 +455,9 @@ mod cache_tests {
     fn test_cache_memory_limit() {
         let cache = DashMapCache::new();
 
-        // 设置值并追踪大小
         cache.set("data", vec![0u8; 100]);
         cache.set("data_size", b"100".to_vec());
 
-        // 计算缓存项大小的函数
         let calculate_size = |cache: &DashMapCache| -> usize {
             let mut total = 0;
             for key in cache.find_keys_by_pattern("*") {
@@ -506,14 +469,12 @@ mod cache_tests {
             total
         };
 
-        // 添加更多数据直到接近限制
         cache.set("large_data", vec![0u8; 200]);
         cache.set("large_data_size", b"200".to_vec());
 
         let current_size = calculate_size(&cache);
         assert!(current_size > 300); // 至少有 300 字节
 
-        // 模拟内存限制清理
         let memory_limit = 250;
         let enforce_memory_limit = |cache: &DashMapCache| {
             let mut iterations = 0;
@@ -531,7 +492,6 @@ mod cache_tests {
 
         enforce_memory_limit(&cache);
 
-        // 验证内存限制生效
         let final_size = calculate_size(&cache);
         assert!(final_size <= memory_limit + 50); // 允许一些容差
     }
@@ -545,7 +505,6 @@ mod cache_tests {
     fn test_cache_stats_tracking() {
         let cache = DashMapCache::new();
 
-        // 设置统计追踪
         cache.set("stats_hits", b"0".to_vec());
         cache.set("stats_misses", b"0".to_vec());
 
@@ -571,10 +530,8 @@ mod cache_tests {
             }
         };
 
-        // 添加数据
         cache.set("key1", b"value1".to_vec());
 
-        // 模拟多次访问
         for _ in 0..5 {
             if cache.get("key1").is_some() {
                 record_hit(&cache);
@@ -583,7 +540,6 @@ mod cache_tests {
             }
         }
 
-        // 模拟未命中
         for _ in 0..3 {
             if cache.get("nonexistent").is_some() {
                 record_hit(&cache);
@@ -592,7 +548,6 @@ mod cache_tests {
             }
         }
 
-        // 获取最终统计
         let hits: u32 = String::from_utf8(cache.get("stats_hits").unwrap())
             .unwrap()
             .parse()
@@ -605,7 +560,6 @@ mod cache_tests {
         assert_eq!(hits, 5);
         assert_eq!(misses, 3);
 
-        // 计算命中率
         let total = hits + misses;
         let hit_rate = (hits as f64) / (total as f64);
         assert!((hit_rate - 0.625).abs() < 0.001); // 5/8 = 0.625
@@ -624,7 +578,6 @@ mod cache_tests {
     fn test_cache_get_many() {
         let cache = DashMapCache::new();
 
-        // 设置多个键值对
         cache.set("key1", b"value1".to_vec());
         cache.set("key2", b"value2".to_vec());
         cache.set("key3", b"value3".to_vec());
@@ -693,7 +646,6 @@ mod cache_tests {
     fn test_cache_delete_many() {
         let cache = DashMapCache::new();
 
-        // 设置多个键值对
         cache.set("k1", b"v1".to_vec());
         cache.set("k2", b"v2".to_vec());
         cache.set("k3", b"v3".to_vec());
@@ -735,11 +687,9 @@ mod cache_tests {
         assert_eq!(cache.get("shared_key"), Some(b"shared_value".to_vec()));
         assert_eq!(cache.len(), 1);
 
-        // 测试克隆
         let cache2 = cache.clone();
         assert_eq!(cache2.get("shared_key"), Some(b"shared_value".to_vec()));
 
-        // 测试两个引用指向同一个缓存
         cache.set("another", b"value".to_vec());
         assert_eq!(cache2.len(), 2);
     }
@@ -820,16 +770,13 @@ mod cache_tests {
         // 空缓存
         assert!(!cache.contains("any_key"));
 
-        // 添加后
         cache.set("existing", b"value".to_vec());
         assert!(cache.contains("existing"));
         assert!(!cache.contains("nonexistent"));
 
-        // 删除后
         cache.delete("existing");
         assert!(!cache.contains("existing"));
 
-        // 清空后
         cache.set("k1", b"v1".to_vec());
         cache.set("k2", b"v2".to_vec());
         cache.clear();

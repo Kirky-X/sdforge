@@ -127,3 +127,69 @@ async fn gateway_pagination_slices_results() {
     assert_eq!(rows.len(), 1, "page 2 of 3 rows @ size 2 → 1 row: {json}");
     assert_eq!(rows[0]["name"], "carol");
 }
+
+/// 越界表/列不可经 HTTP 参数触发（data-api 白名单契约）：路由 SQL 与列清单
+/// 是编译期固定的，`table=`/`column=` 不是 handler 参数——未知 query 参数被
+/// 忽略，响应仍是白名单 `users.id/name/age`，既不切表也不泄露越界列。
+#[tokio::test]
+async fn out_of_allowlist_table_and_column_params_cannot_change_the_query() {
+    seed_global_pool().await;
+
+    let router = sdforge::http::build();
+    let resp = router
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/gw/users?table=secret_table&column=password")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+    // 全量 3 行白名单数据；`table`/`column` 参数未改变查询。
+    let rows = json["rows"].as_array().expect("rows array");
+    assert_eq!(
+        rows.len(),
+        3,
+        "unknown params must not change the query: {json}"
+    );
+    let first = rows[0].as_object().expect("row object");
+    let mut columns: Vec<&str> = first.keys().map(String::as_str).collect();
+    columns.sort_unstable();
+    assert_eq!(
+        columns,
+        vec!["age", "id", "name"],
+        "only whitelisted columns may appear: {json}"
+    );
+    let raw = json.to_string();
+    assert!(!raw.contains("secret_table"), "table param leaked: {raw}");
+    assert!(!raw.contains("password"), "column param leaked: {raw}");
+}
+
+/// 越界表没有动态路由：`/gw/<table>` 形式的越界表名一律 404，不可触发
+/// 任意表读取。
+#[tokio::test]
+async fn out_of_allowlist_table_path_is_not_routed() {
+    seed_global_pool().await;
+
+    let router = sdforge::http::build();
+    let resp = router
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/gw/secret_table?table=secret_table")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        404,
+        "no route may serve an out-of-allowlist table"
+    );
+}

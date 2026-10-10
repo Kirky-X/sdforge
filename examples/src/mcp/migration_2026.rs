@@ -2,14 +2,14 @@
 // SPDX-License-Identifier: MIT
 //! # MCP 2026-07-28 迁移示例
 //!
-//! 本模块展示从 `mcp-sdk 0.0.3` 迁移到 `rmcp 0.16` 的完整流程，
+//! 本模块展示从 `mcp-sdk 0.0.3` 迁移到 `rmcp 3.5` 的完整流程，
 //! 适配 MCP 2026-07-28 规范的无状态协议模型。
 //!
 //! ## BREAKING 变更概览
 //!
 //! | 旧版本 | 新版本 |
 //! |--------------------------------------|----------------------------------------------|
-//! | `mcp-sdk = "0.0.3"` 依赖             | `rmcp = "0.16"` 依赖                         |
+//! | `mcp-sdk = "0.0.3"` 依赖             | `rmcp = "3.5"` 依赖                          |
 //! | `initialize` 握手流程                | 移除，改用 `server/discover` 端点            |
 //! | 有状态会话（StatefulServerHandler）  | 无状态适配层（`StatelessServerHandler`）    |
 //! | `register_mcp(&mut Server)` 签名      | `register_mcp(&mut dyn McpToolRegistry)`      |

@@ -115,11 +115,9 @@ async fn search_users(
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> Result<serde_json::Value, ApiError> {
-    // 设置默认值
     let limit = limit.unwrap_or(10);
     let offset = offset.unwrap_or(0);
 
-    // 模拟搜索结果
     let results: Vec<serde_json::Value> = (0..limit.min(10))
         .map(|i| {
             serde_json::json!({
@@ -264,7 +262,6 @@ async fn get_data_range(
     description = "批量获取项目"
 )]
 async fn get_batch_items(ids: String) -> Result<serde_json::Value, ApiError> {
-    // 解析逗号分隔的 ID
     let id_list: Vec<&str> = ids.split(',').collect();
 
     let items: Vec<serde_json::Value> = id_list

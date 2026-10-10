@@ -46,6 +46,7 @@ type ServiceApiArgs = Result<
         Option<bool>,   // deprecated — endpoint-level lifecycle flag
         Option<String>, // sunset — endpoint-level sunset date/value
         Option<String>, // successor — endpoint-level successor endpoint hint
+        Option<String>, // prefix — module prefix injected by #[service_module]
     ),
     syn::Error,
 >;
@@ -464,6 +465,7 @@ const KNOWN_FORGE_KEYS: &[&str] = &[
     "version",
     "description",
     "path",
+    "prefix",
     "method",
     "tool_name",
     "stream",
@@ -546,6 +548,7 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
     let mut deprecated = None;
     let mut sunset = None;
     let mut successor = None;
+    let mut module_prefix = None;
 
     for (key, value) in pairs {
         match key.as_str() {
@@ -553,6 +556,7 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
             "version" => version = Some(value),
             "description" => description = Some(value),
             "path" => path = Some(value),
+            "prefix" => module_prefix = Some(value),
             "method" => method = Some(value),
             "tool_name" => tool_name = Some(value),
             "stream" | "streaming" => {
@@ -685,6 +689,7 @@ fn parse_service_api_args(args: TokenStream2, lifecycle_only: bool) -> ServiceAp
         deprecated,
         sunset,
         successor,
+        module_prefix,
     ))
 }
 
@@ -1853,6 +1858,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         deprecated,
         sunset,
         successor,
+        module_prefix,
     ) = args;
     let fn_name = &input.sig.ident;
     let _fn_vis = &input.vis; // Currently unused but kept for future use
@@ -2277,11 +2283,26 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let path_str = path.as_ref().cloned().unwrap_or_default();
     let axum_path = convert_axum_path(&path_str);
-    // If no_prefix is true, use the path as-is; otherwise prefix with /api/{version}
+    // `no_prefix` skips both the `/api/{version}` and the module prefix
+    // (`#[service_module(prefix = "...")]`), keeping the declared path as-is.
     let http_path = if no_prefix.unwrap_or(false) {
         axum_path.clone()
     } else {
-        format!("/api/{}{}", version, axum_path)
+        let versioned_path = format!("/api/{}{}", version, axum_path);
+        match module_prefix.as_deref() {
+            // Prefix wraps the versioned path: `/auth` + `/api/v1/login`
+            // → `/auth/api/v1/login`.
+            Some(prefix) if !prefix.is_empty() => {
+                let prefix = prefix.trim_end_matches('/');
+                let prefix = if prefix.starts_with('/') {
+                    prefix.to_string()
+                } else {
+                    format!("/{prefix}")
+                };
+                format!("{prefix}{versioned_path}")
+            }
+            _ => versioned_path,
+        }
     };
 
     // Build HTTP method
@@ -3016,7 +3037,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
-    let ws_code = if ws_path.is_some() {
+    let ws_code = if let Some(ws_path_value) = ws_path.as_deref() {
         // 端点生命周期注解（deprecated/sunset/successor）随 #grpc_metadata
         // 进入 ws 路由的 ApiMetadata，但 WebSocket 协议层无响应头/metadata
         // 注入点（upgrade 后为双向消息流）——生命周期在 ws 维度是显式
@@ -3028,21 +3049,21 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 #fn_name()
             }
 
-            // DECAY-1 fix: WebSocketRoute::new expects (name, version, create_fn, metadata_fn).
-            // The previous code only passed 2 params (path and create_fn), missing version
-            // and metadata_fn. The path is handled by the WebSocketHandler instance itself.
             #[cfg(feature = "websocket")]
             fn #ws_metadata_fn_name() -> sdforge::core::ApiMetadata {
                 #grpc_metadata
             }
 
+            // `ws_path` 是声明式挂载路径（`name` 是内部标识，不可从中还原）；
+            // `build()` 消费它注册路由。
             #[cfg(feature = "websocket")]
             sdforge::inventory::submit!(sdforge::websocket::WebSocketRoute::new(
                 #name,
                 #version,
                 #ws_create_fn_name,
                 #ws_metadata_fn_name,
-            ));
+            )
+            .with_path(#ws_path_value));
         }
     } else {
         quote! {}
@@ -3192,13 +3213,76 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     generated.into()
 }
 
+/// Whether a `#[forge(...)]` argument list already carries an explicit
+/// `prefix` entry (nested `#[service_module]` case — the first injection
+/// wins).
+fn forge_attr_has_prefix(tokens: &TokenStream2) -> bool {
+    use proc_macro2::TokenTree;
+    let mut iter = tokens.clone().into_iter().peekable();
+    while let Some(tt) = iter.next() {
+        if let TokenTree::Ident(ident) = &tt
+            && ident == "prefix"
+            && matches!(iter.peek(), Some(TokenTree::Punct(p)) if p.as_char() == '=')
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// Inject the module prefix into every `#[forge]` endpoint declared in the
+/// module (nested modules included), so the generated route paths carry the
+/// prefix. Endpoints that already declare `prefix` keep it.
+fn inject_module_prefix(items: &mut [syn::Item], prefix: &str) {
+    for item in items.iter_mut() {
+        match item {
+            syn::Item::Fn(item_fn) => {
+                for attr in item_fn.attrs.iter_mut() {
+                    let is_forge = attr
+                        .path()
+                        .segments
+                        .last()
+                        .is_some_and(|segment| segment.ident == "forge");
+                    if !is_forge {
+                        continue;
+                    }
+                    let syn::Meta::List(list) = &attr.meta else {
+                        continue;
+                    };
+                    if forge_attr_has_prefix(&list.tokens) {
+                        continue;
+                    }
+                    let tokens = list.tokens.clone();
+                    let prefix_lit = proc_macro2::Literal::string(prefix);
+                    // Preserve the original attribute path (`sdforge::forge`
+                    // stays resolvable in modules that don't import `forge`).
+                    let path = attr.path().clone();
+                    attr.meta = syn::parse_quote!(#path(#tokens, prefix = #prefix_lit));
+                }
+            }
+            syn::Item::Mod(item_mod) => {
+                if let Some((_, nested)) = item_mod.content.as_mut() {
+                    inject_module_prefix(nested, prefix);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
 #[proc_macro_attribute]
 pub fn service_module(args: TokenStream, input: TokenStream) -> TokenStream {
     let prefix = match parse_service_module_args(args.into()) {
         Ok(prefix) => prefix,
         Err(e) => return e.into_compile_error().into(),
     };
-    let input = parse_macro_input!(input as ItemMod);
+    let mut input = parse_macro_input!(input as ItemMod);
+
+    // Endpoints declared inside the module are registered with the module
+    // prefix as part of their route paths (`/auth` + `/api/v1/login`).
+    if let Some((_, items)) = input.content.as_mut() {
+        inject_module_prefix(items, &prefix);
+    }
 
     // Generate a constant for the module prefix
     let prefix_const = quote! {
@@ -4048,6 +4132,59 @@ mod macro_parsing_tests {
         let input: TokenStream2 = quote! { prefix = "/api/v1" };
         let result = parse_service_module_args(input).unwrap();
         assert_eq!(result, "/api/v1");
+    }
+
+    /// `#[service_module]` 注入：模块内（含嵌套模块）的 `#[forge]` 端点
+    /// 参数面获得模块前缀；已显式声明 `prefix` 的端点不被覆盖。
+    #[test]
+    fn test_service_module_injects_prefix_into_forge_attrs() {
+        let mut module: syn::ItemMod = syn::parse_quote! {
+            mod api {
+                #[forge(name = "login", version = "v1", path = "/login")]
+                async fn login() -> String { String::new() }
+
+                #[sdforge::forge(name = "logout", version = "v1")]
+                async fn logout() -> String { String::new() }
+
+                mod nested {
+                    #[forge(name = "me", version = "v1", prefix = "/inner")]
+                    async fn me() -> String { String::new() }
+                }
+            }
+        };
+
+        let (_, items) = module.content.as_mut().expect("module has a body");
+        inject_module_prefix(items, "/auth");
+        let text = quote!(#module).to_string();
+
+        assert_eq!(
+            text.matches("prefix = \"/auth\"").count(),
+            2,
+            "both endpoints without an explicit prefix must gain it: {text}"
+        );
+        assert_eq!(
+            text.matches("prefix = \"/inner\"").count(),
+            1,
+            "an explicit endpoint prefix must not be overwritten: {text}"
+        );
+        assert!(
+            text.contains("sdforge :: forge"),
+            "a qualified attribute path must be preserved: {text}"
+        );
+    }
+
+    /// `#[forge(prefix = "...")]` 直接解析（不经 service_module 注入）。
+    #[test]
+    fn test_parse_service_api_args_module_prefix() {
+        let input: TokenStream2 = quote! {
+            name = "login", version = "v1", path = "/login", prefix = "/auth"
+        };
+        let result = parse_service_api_args(input, false).unwrap();
+        assert_eq!(result.17.as_deref(), Some("/auth"));
+
+        let without: TokenStream2 = quote! { name = "login", version = "v1" };
+        let result = parse_service_api_args(without, false).unwrap();
+        assert_eq!(result.17, None);
     }
 
     // ============================================================================

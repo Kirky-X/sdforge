@@ -138,7 +138,6 @@ async fn test_stream_to_sse_single_item() {
 
     let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-    // Should have at least the data event and completion event
     assert!(!results.is_empty());
     let has_data = results.iter().any(|r| r.contains(r#""type":"data""#));
     assert!(has_data);
@@ -172,7 +171,6 @@ async fn test_stream_to_sse_error_in_mapper() {
 async fn test_stream_to_sse_normal_data_passthrough() {
     use futures_util::StreamExt;
 
-    // Verify that serializable items pass through the Ok branch.
     let stream = futures_util::stream::iter(vec![1i32, 2i32, 3i32]);
     let sse_stream = stream_to_sse(stream, |item| {
         StreamEvent::data(serde_json::Value::from(item))
@@ -243,7 +241,6 @@ async fn test_stream_response_into_response_headers() {
     let response = StreamResponse::single("test_item");
     let http_response = response.into_response();
 
-    // Verify SSE headers are set correctly
     assert_eq!(http_response.status(), 200);
     let headers = http_response.headers();
     assert_eq!(headers.get("content-type").unwrap(), "text/event-stream");
@@ -331,7 +328,6 @@ async fn test_stream_to_sse_always_emits_completion_event() {
 
     let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-    // Should have 3 data events + 1 completion event = 4 total.
     assert_eq!(
         results.len(),
         4,

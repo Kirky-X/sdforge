@@ -32,7 +32,6 @@ use crate::websocket::{ConnectionManager, SdForgeState};
 use crate::websocket::{MAX_MESSAGE_SIZE, WebSocketMessage, parse_websocket_message};
 
 use crate::core::ApiMetadata;
-use crate::define_registration;
 
 /// Boxed future type for async WebSocket handling
 pub type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
@@ -43,7 +42,84 @@ pub trait WebSocketHandler: Send + Sync {
     fn handle(&self, message: WebSocketMessage) -> BoxFuture<'static, WebSocketMessage>;
 }
 
-define_registration!(WebSocketRoute, Arc<dyn WebSocketHandler>, ApiMetadata);
+/// WebSocket route registration entry (compile-time, collected via `inventory`).
+///
+/// Hand-written instead of `define_registration!` because it carries the
+/// declared mount path (`#[forge(ws_path = "...")]` /
+/// [`WebSocketRoute::with_path`]): the forge `name` is an internal identifier,
+/// so a declared `ws_path` cannot be recovered from it. The instance type is
+/// `Arc<dyn WebSocketHandler>` so handlers are shared across connections.
+#[derive(Debug, Clone, Copy)]
+pub struct WebSocketRoute {
+    /// API name
+    pub name: &'static str,
+    /// API version
+    pub version: &'static str,
+    /// Function that creates the instance at runtime
+    pub create_fn: fn() -> Arc<dyn WebSocketHandler>,
+    /// Function that creates the metadata at runtime
+    pub metadata_fn: fn() -> ApiMetadata,
+    /// Declared mount path (`ws_path`). Empty = derive from `name`.
+    pub path: &'static str,
+}
+
+impl WebSocketRoute {
+    /// Create a registration without an explicit path (mount path derives
+    /// from `name`).
+    pub const fn new(
+        name: &'static str,
+        version: &'static str,
+        create_fn: fn() -> Arc<dyn WebSocketHandler>,
+        metadata_fn: fn() -> ApiMetadata,
+    ) -> Self {
+        Self {
+            name,
+            version,
+            create_fn,
+            metadata_fn,
+            path: "",
+        }
+    }
+
+    /// Declare the mount path (`#[forge(ws_path = "...")]`); const so
+    /// `inventory::submit!` keeps accepting the builder chain.
+    #[must_use]
+    pub const fn with_path(mut self, path: &'static str) -> Self {
+        self.path = path;
+        self
+    }
+
+    /// Resolve the mount path served by `build()`: a declared `ws_path` wins,
+    /// otherwise the path derives from `name`. A missing leading slash is
+    /// normalized so axum never receives a panic-inducing relative path.
+    pub fn mount_path(&self) -> String {
+        if self.path.is_empty() {
+            format!("/{}", self.name)
+        } else {
+            format!("/{}", self.path.trim_start_matches('/'))
+        }
+    }
+}
+
+impl crate::core::Registration for WebSocketRoute {
+    type Instance = Arc<dyn WebSocketHandler>;
+    type Metadata = ApiMetadata;
+
+    fn name(&self) -> &str {
+        self.name
+    }
+    fn version(&self) -> &str {
+        self.version
+    }
+    fn create(&self) -> Self::Instance {
+        (self.create_fn)()
+    }
+    fn metadata(&self) -> Self::Metadata {
+        (self.metadata_fn)()
+    }
+}
+
+inventory::collect!(WebSocketRoute);
 
 /// Default implementation of WebSocketHandler
 pub struct DefaultWebSocketHandler;
@@ -125,9 +201,20 @@ where
             .and_then(|h| h.strip_prefix("Bearer "))
             .map(String::from);
 
-        // Get SdForgeState from request extensions (injected via with_state by axum)
-        // The state parameter is &Arc<SdForgeState> since that's what we registered
-        let app_state = req.extensions().get::<Arc<SdForgeState>>().cloned();
+        // Get SdForgeState from either wiring channel:
+        // - router state (`MethodRouter::with_state`, the wiring `build()`
+        //   uses): axum bakes the state into the handler service and hands it
+        //   to `from_request` as `&S` — it is never written into request
+        //   extensions;
+        // - an `Extension` layer (the pattern used by handler_tests): the
+        //   state arrives in request extensions.
+        // Consulting both keeps the shared `ConnectionManager`/auth config
+        // reachable instead of silently falling back to a fresh per-connection
+        // manager (which breaks `broadcast` and ignores ws auth).
+        let app_state = (state as &dyn std::any::Any)
+            .downcast_ref::<Arc<SdForgeState>>()
+            .cloned()
+            .or_else(|| req.extensions().get::<Arc<SdForgeState>>().cloned());
 
         // Validate auth if configured. The `auth` field only exists when the
         // `security` feature is enabled (see WebSocketConfig), so the entire
@@ -165,7 +252,6 @@ where
             .await
             .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-        // Get manager for connection handling
         let manager = app_state
             .map(|s| s.manager.clone())
             .unwrap_or_else(|| Arc::new(ConnectionManager::new()));
@@ -329,8 +415,9 @@ pub fn build() -> Router {
     let state = Arc::new(SdForgeState::new(manager));
 
     for route in inventory::iter::<WebSocketRoute> {
-        // Use the registration name to construct the path
-        let path = format!("/{}", route.name);
+        // Declared `ws_path` wins; registrations without one mount at
+        // `/{name}` (see `WebSocketRoute::mount_path`).
+        let path = route.mount_path();
         // 将路由的自定义 handler 注入升级提取器，使连接真正分发到用户 handler
         router = router.route(
             &path,
@@ -432,6 +519,100 @@ mod tests {
             1,
             "connection must stay registered after a successful broadcast"
         );
+    }
+
+    /// `with_state` 接线回归（HIGH）：`build()` 经 `MethodRouter::with_state`
+    /// 注入 `Arc<SdForgeState>`，axum 把它按值烘进 handler service、从不写入
+    /// request extensions。此前提取器只查 extensions，`build()` 注册的路由
+    /// 全部回退到每连接新建的 ConnectionManager：共享 manager 上
+    /// `connection_count()==0`，broadcast 永不到达客户端。修复后两条注入
+    /// 通道（router state / Extension）都必须命中同一 manager。
+    #[tokio::test]
+    async fn with_state_pattern_shares_connection_manager() {
+        let manager = Arc::new(ConnectionManager::new());
+        let state = Arc::new(SdForgeState::new(manager.clone()));
+        let app = Router::new().route(
+            "/ws",
+            axum::routing::get(websocket_upgrade).with_state(state),
+        );
+        let server = axum_test::TestServer::builder().http_transport().build(app);
+
+        let mut ws = server.get_websocket("/ws").await.into_websocket().await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+        assert_eq!(
+            manager.connection_count().await,
+            1,
+            "with_state must reach the shared ConnectionManager"
+        );
+
+        let notification = Arc::new(WebSocketMessage::Notification {
+            event: "state-pattern".to_string(),
+            data: serde_json::json!({"via": "with_state"}),
+        });
+        manager.broadcast(&notification).await;
+        let received = tokio::time::timeout(tokio::time::Duration::from_secs(2), ws.receive_json())
+            .await
+            .expect("broadcast must reach the client wired via with_state");
+        assert!(matches!(
+            received,
+            WebSocketMessage::Notification { ref event, .. } if event == "state-pattern"
+        ));
+    }
+
+    /// `with_state` 通道下的 ws 认证回归：此前 state 不可达时认证配置被静默
+    /// 忽略（无 token 也 101）；修复后配置的 BearerAuth 必须在升级前生效。
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn with_state_pattern_enforces_configured_auth() {
+        let auth =
+            crate::security::BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+                .expect("valid secret");
+        let config = crate::websocket::WebSocketConfig {
+            auth: Some(auth),
+            ..Default::default()
+        };
+        let manager = Arc::new(ConnectionManager::new());
+        let state = Arc::new(SdForgeState::with_config(config, manager));
+        let app = Router::new().route(
+            "/ws",
+            axum::routing::get(websocket_upgrade).with_state(state),
+        );
+        let server = axum_test::TestServer::builder().http_transport().build(app);
+
+        let response = server.get("/ws").await;
+        response.assert_status(axum::http::StatusCode::UNAUTHORIZED);
+    }
+
+    /// `ws_path` 声明回归：显式挂载路径必须优先于 `name` 派生路径，且缺少
+    /// 前导斜杠时归一化（axum 对相对路径 panic）。
+    #[test]
+    fn mount_path_prefers_declared_ws_path() {
+        fn handler() -> Arc<dyn WebSocketHandler> {
+            Arc::new(DefaultWebSocketHandler)
+        }
+        fn metadata() -> ApiMetadata {
+            ApiMetadata {
+                name: "drv_ws_internal".to_string(),
+                version: "v1".to_string(),
+                description: String::new(),
+                cache_ttl: None,
+                is_streaming: true,
+                i18n_key: None,
+                lifecycle: None,
+            }
+        }
+
+        let derived = WebSocketRoute::new("drv_ws_internal", "v1", handler, metadata);
+        assert_eq!(derived.mount_path(), "/drv_ws_internal");
+        assert_eq!(derived.path, "");
+
+        let declared =
+            WebSocketRoute::new("drv_ws_internal", "v1", handler, metadata).with_path("/ws/driver");
+        assert_eq!(declared.mount_path(), "/ws/driver");
+
+        let normalized =
+            WebSocketRoute::new("drv_ws_internal", "v1", handler, metadata).with_path("ws/driver");
+        assert_eq!(normalized.mount_path(), "/ws/driver");
     }
 
     /// 连接泄漏修复回归（HIGH）：此前超大消息路径 close 后直接 return，

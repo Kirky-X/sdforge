@@ -25,8 +25,8 @@
 |------|----------|------|
 | `basic_cli.rs` | `cli` | `#[forge(cli = true)]` + `CliBuilder::execute()` 一站式 CLI（构建 / 解析 / 分发 / 输出 / 退出） |
 | `swagger_demo.rs` | `docgen` + `http` | 注册 HTTP 路由并挂载 Swagger UI（`/swagger-ui/`）与 OpenAPI JSON（`/api-docs/openapi.json`） |
-| `perf_regex_cache.rs` | `cache` | 正则缓存性能验证 |
-| `perf_lru_eviction.rs` | `cache` | LRU 驱逐性能验证 |
+| `perf_regex_cache.rs` | `cache` | 缓存键通配模式匹配验证（`*` / `?` 匹配正确性与单次全量扫描成本；历史名，现不含正则编译缓存） |
+| `perf_lru_eviction.rs` | `cache` | 容量驱逐验证（FIFO 插入序：容量上界、最旧键先出、读不续期 / `set()` 续期；历史名，非 LRU） |
 | `perf_prefix_index.rs` | `cache` | 前缀索引性能验证 |
 | `perf_batch_ops.rs` | `cache` | 批量操作（`get_many` 等）性能验证 |
 
@@ -43,7 +43,7 @@
 - `src/mcp/` - MCP 协议示例（工具定义与注册）
   - `tool_definition.rs` - 各类 MCP 工具的定义方式
   - `tool_registration.rs` - 基于 `inventory` 的工具自动注册
-  - `migration_2026.rs` - MCP 2026-07-28 迁移（`mcp-sdk 0.0.3` → `rmcp 0.16`，`StatelessServerHandler` 无状态协议模型）
+  - `migration_2026.rs` - MCP 2026-07-28 迁移（`mcp-sdk 0.0.3` → `rmcp 3.5`，`StatelessServerHandler` 无状态协议模型）
   - `mrtr_example.rs` - Multi Round-Trip Requests（MRTR）：通过 `InputRequiredResult` 挂起等待客户端补充输入，300 秒超时自动取消
 - `src/security/` - 认证、授权、限流与审计日志
   - `api_key.rs` - API Key 认证的配置与使用
@@ -59,7 +59,7 @@
   - `basic.rs` - 基础连接与消息处理
   - `chat.rs` - 实时聊天室
 - `src/grpc/` - gRPC 示例
-  - `server.rs` - gRPC 服务端：`GrpcRoute` 注册、`GrpcServerConfig`（连接数 / 超时 / 可选 JWT 认证）、`build_server` 启动
+  - `server.rs` - gRPC 服务端：`GrpcRoute` 注册、`GrpcServerConfig`（连接数 / 超时 / 可选 JWT 认证）、`build_server_with_config` 启动（推荐；另含已弃用 `build_server` 的对照函数 `start_default`，以 `#[allow(deprecated)]` 标注）
 - `src/logging/` - 结构化日志示例
   - `structured.rs` - `StructuredLogger`、`LoggerConfig`、全局日志器与便捷宏
 - `src/openapi/` - OpenAPI 3.1 规范生成示例
@@ -77,7 +77,7 @@
 
 ### 启动演示服务器
 
-默认 features 已启用全部 `*_examples`，在本目录（`examples/`）下直接执行：
+默认 features 已启用全部协议与能力 `*_examples` 开关（不含 `oxcache_admin_example` / `dbnexus_gateway_example` 两个生态示例开关，它们按需单独启用），在本目录（`examples/`）下直接执行：
 
 ```bash
 cargo run                    # 启动演示服务器，监听 http://0.0.0.0:3000
@@ -96,7 +96,7 @@ WebSocket（`/ws/basic`、`/ws/chat`）与 SSE（`/stream/events`、`/stream/pro
 
 ### 运行单个可运行示例
 
-以下命令在仓库根目录或 `examples/` 目录下均可执行：
+以下命令在**仓库根目录**执行：`basic_cli` 与 `perf_*.rs` 只声明在根包 `sdforge`，不在本目录的成员 crate `sdforge-examples` 中。在 `examples/` 目录下执行须加 `--package sdforge`（例如 `cargo run --package sdforge --example perf_regex_cache --features cache`），否则报 `no example target named ... in default-run packages`；`swagger_demo` 在本 crate 也声明了同名 `[[example]]`，两边均可执行。
 
 ```bash
 # CLI 示例（echo 命令输出 Hello, world!）
@@ -106,7 +106,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 # 端口可用 SDFORGE_HTTP_PORT 覆盖）
 cargo run --example swagger_demo --features "docgen http"
 
-# 缓存性能验证（默认 features 已包含 cache，此处显式指定以便按需启用）
+# 缓存性能验证（根包默认不含 `cache`，必须显式启用）
 cargo run --example perf_regex_cache --features cache
 cargo run --example perf_lru_eviction --features cache
 cargo run --example perf_prefix_index --features cache
@@ -127,16 +127,19 @@ cargo run --example perf_batch_ops --features cache
 | `streaming_examples` | `streaming` | `streaming/` | ✓ |
 | `security_examples` | `security`（附带启用 `ratelimit`） | `security/` | ✓ |
 | `cache_examples` | `cache`（隐含启用 `http_examples`） | `cache/` | ✓ |
+| `idempotency_examples` | `idempotency`（附带启用 `http`、`cache`） | `config/`、`grpc/` 示例中的幂等配置字段 | ✓ |
 | `grpc_examples` | `grpc` | `grpc/` | ✓ |
 | `logging_examples` | `logging` | `logging/` | ✓ |
 | `openapi_examples` | `openapi`（隐含启用 `http_examples`） | `openapi/` | ✓ |
 | `cli_examples` | `cli` | `basic_cli.rs` | ✓ |
 | `docs_examples` | `docgen` | `swagger_demo.rs`（另需 `http`，运行命令见上文） | ✓ |
-| `combined_examples` | 以上全部 | `combined/` | ✓ |
+| `combined_examples` | 协议与能力示例开关全集（不含 `idempotency_examples` 与两个生态示例开关） | `combined/` | ✓ |
+| `oxcache_admin_example` | `cache_examples` + `http_examples`（`dep:oxcache`） | `oxcache_admin.rs`（见主 README「生态集成示例」） | ✗ |
+| `dbnexus_gateway_example` | `http_examples`（`dep:dbnexus`） | `dbnexus_gateway.rs`（见主 README「生态集成示例」） | ✗ |
 
 补充说明：
 
-- 顶层 `perf_*.rs` 依赖 `cache` 特性（默认已启用）。
+- 顶层 `perf_*.rs` 属于根包 `sdforge`，运行需显式启用 `cache` 特性（根包 `default = []`）。
 - `swagger_demo` 的 `[[example]]` 声明了 `required-features = ["docgen", "http"]`。
 - 精简构建示例：`cargo build --no-default-features --features "http_examples"` 只编译基础与 HTTP 相关示例。
 - `grpc_tls` 是 sdforge 特性别名（映射 `sdforge/grpc-tls`），无独立 `*_examples` 开关：它只门控 `src/grpc/server.rs` 配置示例中的 `GrpcServerConfig.tls` 字段，与 sdforge 侧字段存在性同源，保证 workspace 级特性统一（如 `--all-features`）下任意组合可编译。

@@ -866,7 +866,6 @@ fn test_stream_event_debug_complete() {
 
 #[test]
 fn test_stream_response_struct_is_debug() {
-    // Verify StreamResponse derives Debug
     fn assert_debug<T: std::fmt::Debug>() {}
     assert_debug::<StreamResponse<String>>();
 }

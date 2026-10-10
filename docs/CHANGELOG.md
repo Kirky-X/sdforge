@@ -34,6 +34,90 @@
 
 ## [Unreleased]
 
+### 修复 (Fixed)
+
+- **WebSocket `build()` 的 state 注入失效**：`ValidatedWebSocketUpgrade` 现同时从
+  router state（`MethodRouter::with_state`，`build()` 的接线方式）与 request
+  extensions（`Extension` 层）读取 `SdForgeState`。此前只查 extensions，而
+  `with_state` 按值烘进 handler、从不写 extensions——`build()` 注册的每条路由都
+  回退到每连接新建的 `ConnectionManager`：共享 manager `connection_count()==0`、
+  `broadcast` 永不到达客户端、`WebSocketConfig` 认证被静默忽略。
+- **`#[forge(ws_path = "...")]` 被忽略**：`WebSocketRoute` 改为手写注册结构（对齐
+  `McpToolRegistration` 的 roles 模式）并携带声明路径，`build()` 优先挂载
+  `ws_path`；未声明时仍派生 `/{name}`，缺少前导斜杠自动归一化。
+- **API key 空权限种子恒 401**：`ApiKeySeed { permissions: [] }` 按文档契约是
+  「仅认证不放权」，但 `validate_key` 对空权限返回 `None`（等同无效 key）。现在
+  空权限返回 `Some(vec![])`（认证通过、无权限；角色要求路由仍 403），只有无法
+  解码的存储字节判无效（fail-closed）。
+- **SSE 长连接缺少保活心跳**：源静默时按 10s 间隔发送 `: keep-alive` 注释帧
+  （SSE 规范注释行，客户端与本仓 parser 均忽略），数据帧到达重置心跳计时；
+  30s 源空闲终止语义不变（心跳不重置空闲计时）。
+- **HTTP 错误体语言不随请求 `Accept-Language`**：新增请求级 locale 作用域
+  中间件（`build_with_config`，覆盖认证 401 等 `i18n::t` 框架文案）、未匹配路由
+  404 统一错误体（新增 `http-route-not-found` 目录键）与限流拒绝体的逐请求
+  本地化；进程 locale 仅作回退。
+- **`perf_regex_cache` 示例与实现脱节**：示例仍测「首次调用（正则编译）/ 缓存命中」
+  加速比，并在平均加速比 <10x 时打 ❌ WARNING；而 `cache` 的模式匹配自依赖改造为
+  oxcache 内存后端起已改为无正则的通配算法（`matches_pattern`），不存在正则编译
+  缓存，该阈值不可能达成。示例改为验证 `find_keys_by_pattern` 的 `*` / `?` 匹配
+  正确性与单次全量扫描成本（O(total keys)；点查请用 `get` / `contains`），自检
+  只依赖确定性断言、不再依赖计时阈值；README / README_EN / `examples/README.md`
+  的示例说明同步更正。
+- **`examples/README.md` 的运行位置说明失实**：原文称示例命令「在仓库根目录或
+  `examples/` 目录下均可执行」，但 `basic_cli` 与 `perf_*.rs` 只声明在根包
+  `sdforge`（`swagger_demo` 在成员 crate 也声明，不受影响），在 `examples/`
+  （成员 `sdforge-examples`）下执行报 `no example target named ... in
+  default-run packages`；文档改为「仓库根目录执行」，并给出 `--package sdforge`
+  变体与 `cache` 特性必须显式启用的说明。
+- **`perf_lru_eviction` 示例按 LRU 前提自检失败**：示例断言「重新 `get` 的键能
+  抵抗驱逐」，但 `DashMapCache` 后端（oxcache DashMap 后端）按插入序 FIFO 批量
+  驱逐、`get` 不刷新队列位置，实测打印 `❌ Re-accessed 'item_0' was evicted` 却
+  仍总结「LRU eviction optimization verified!」。示例改为验证真实语义：容量上界、
+  最旧键先出、读不续期 / `set()` 续期（重新写入使旧队列条目因 seq 不匹配作废），
+  写入成本测量保留为信息性输出；自检只依赖确定性断言。README / README_EN /
+  `examples/README.md` 的说明同步更正为「容量驱逐（FIFO）」；需要访问序驱逐的
+  用户应改用 oxcache 提供 LRU/TinyLFU 的 Moka 后端（`MemoryBackendType::Moka`）。
+
+### 新增 (Added)
+
+- `i18n::locale_from_accept_language` / `locale_from_headers` /
+  `scope_request_locale` / `request_locale`：请求级语言解析与作用域。
+- `WebSocketRoute::with_path` / `mount_path`：ws 挂载路径的声明与解析。
+- 真实 Redis 集成测试（`dist_backends_tests`）新增本地 `redis-server` 回退：
+  未设 `SDFORGE_TEST_REDIS_URL` 且 PATH 上有 `redis-server` 时拉起一次性回环实例，
+  把此前的零断言 skip 变成真实覆盖；同步面用例改用多线程 runtime（模块文档的
+  运行时约束）。
+
+### 变更 (Changed)
+
+- 三方依赖升级至最新稳定版：utoipa 5.5→6.0、utoipa-swagger-ui 9.0→10.0（内置
+  Swagger UI v5.32.6，vendored 面不变）、rmcp 3.4→3.5、hyper 1.11→1.12、
+  uuid 1.26→1.28；Cargo.lock 23 个包升版（inventory 0.3.25、syn 3.0.7、
+  toml 1.1.8、trybuild 1.0.122、zip 8.6.0 等）＋ 1 个新增（typed-path）、
+  5 个移除（rust-embed 家族/arbitrary，随 utoipa-swagger-ui vendored 换代），
+  package 记录 549→545。
+- 特性裁剪：fluent-bundle / unic-langid / writeable 补 `default-features = false`
+  （writeable 显式保留 `alloc`，`write_to_string` 依赖）；`toml` 生产面收缩到仅
+  `toml::de::Error` 类型（`AuthConfigError::ParseError` 载荷），sdforge 侧不声明
+  parse/display —— 注意 security 构建中上游 limiteron 仍以默认特性引入 toml
+  （parse/serde/std/display），该收缩只在 sdforge 声明层成立（limiteron 侧收口
+  属跨仓，留待自研依赖定值阶段）。仓内 `from_str` 调用全在测试内
+  （`cfg(all(test, feature = "http", feature = "ratelimit"))`），其 parse/serde/std
+  由 [dev-dependencies] toml 条目经 `workspace = true` 继承后显式声明：今日非
+  承重（该组合必经 ratelimit → limiteron 打开同一集合），声明是为不依赖上游
+  limiteron 的特性供给；`dep:toml` 从 `http` 移到 `security`（唯一生产消费者所在
+  门控），仅开 http 的构建不再引入 toml（`cargo tree --features http --edges
+  normal -i toml` 报 nothing to print）。
+- axum-extra 去掉包级重复的 `features = ["typed-header"]`（workspace 声明已含）；
+  path 依赖 sdforge-macros / sdforge 补 `default-features = false`（两者均无
+  默认特性，属口径统一）；examples 的 dbnexus 改走 `workspace = true` 继承，
+  消除发布链自研依赖定值时的漏改风险。
+- 自研依赖（trait-kit / inklog / oxcache / limiteron / dbnexus）版本号本轮不动，
+  留给发布链「自研依赖定值」阶段统一提升。
+- CI actions：taiki-e/install-action → v2.87.27、github/codeql-action → v4.38.3、
+  dtolnay/rust-toolchain → 1.97.1 分支当前头（含输入处理安全加固，Rust 版本仍为
+  1.97.1，与 rust-toolchain.toml 基线一致）；均按 40 位 commit SHA 固定。
+
 ## [0.5.0-rc.6] - 2026-10-06
 
 ### ⚠️ 破坏性变更 (Breaking Changes)
@@ -246,7 +330,8 @@
 - **测试基线漂移**（`docs/TEST_SCENARIOS.md`）：`test_target_inventory_tests` 的三项自洽
   断言在 main 上即为失败——清单注册 48 个 `[[test]]`、`tests/integration/` 实际 39 个文件，
   而文档基线仍写 47/38（新增测试目标时未同步）。本轮按实测刷新为 48 目标 / integration 39 /
-  58 个有产出目标 / 2340 L1 单测 / 3209 passed。注：sdforge 的 CI 仅在 `pull_request` 与
+  58 个有产出目标 / 2340 L1 单测 / 3209 passed（L1 单测数与 passed 数在后续重构中变动，
+  实时基线以 `docs/TEST_SCENARIOS.md` 为准）。注：sdforge 的 CI 仅在 `pull_request` 与
   `schedule` 触发，直推 main 的改动不会跑该门禁，故漂移得以留存（已在本报告列为流程改进项）。
 - **`docs/USER_GUIDE.md` 的 `[security.rate_limit]` 示例不可反序列化**：示例写作
   `rate`/`window_seconds` 单阈值形状，而实际类型是 limiteron `FlowControlConfig`
@@ -598,27 +683,6 @@
   且 "No safe upgrade available"，postcard 迁移代价仅限序列化调用点等价
   替换，无后续复核负担；README 路线图「依赖治理」登记项就此翻转。
 
-## [0.5.0-rc.4] - 2026-09-14
-
-> 注：0.5.0-rc.3 未单独发布（无 tag、未上 crates.io），本节内容含原 rc.3 开发批次，随 0.5.0-rc.4 一并发布。
-
-### Added
-
-- **SdForgeConfig 安全/缓存字段**：`SdForgeConfig` 新增 `security: SecurityConfig` + `cache: CacheConfig`（feature-gated），builder 同步支持 `.security()` / `.cache()` 方法
-- **`build_rate_limiter()` 自动装配**：`SdForgeConfig::build_rate_limiter()` 从 `security.rate_limit` 配置自动构造 `LimiteronAdapter`
-- **响应缓存中间件**：`ResponseCacheLayer` / `ResponseCacheMiddleware` — GET 路由自动缓存成功响应，key 经 `canonicalize_cache_key` 规范化，命中短路、未命中回源回写
-- **`AuditSink` trait**：抽象审计日志存储后端（`write` / `read` / `clear`），内存环形缓冲保留为默认 sink
-- **`InklogAuditSink`**：`inklog` feature 下桥接审计事件到 inklog 结构化输出管道
-
-### Changed
-
-- 移除 `ratelimit-http` feature 中的 `limiteron/tower-middleware` 死重使能（全仓 0 import，sdforge 自带 Tower middleware 实现）
-- 版本递增至 `0.5.0-rc.3`
-- trait-kit → `0.5.0-rc.3`、oxcache → `0.5.0-rc.4`、limiteron → `0.3.0-rc.3`、inklog → `0.3.0-rc.3`
-- 新增 `[patch.crates-io]` 本地路径联调
-
----
-
 ## [0.5.0-rc.5] - 2026-09-21
 
 ### 新增
@@ -640,6 +704,27 @@
 - **跨仓 path 依赖改走 crates.io**；为 path-only 依赖补全 version 字段
 - **命名统一**：App* 通用类型前缀改为 `SdForge`（AppApiKeyAuthBuilder/AppAuditLoggerBuilder 等）
 - **工程加固**：detect-secrets 基线、pre-commit 门禁、codeql-action SHA 统一 bump v4.37.9、typos 白名单、版权头统一
+
+---
+
+## [0.5.0-rc.4] - 2026-09-14
+
+> 注：0.5.0-rc.3 未单独发布（无 tag、未上 crates.io），本节内容含原 rc.3 开发批次，随 0.5.0-rc.4 一并发布。
+
+### Added
+
+- **SdForgeConfig 安全/缓存字段**：`SdForgeConfig` 新增 `security: SecurityConfig` + `cache: CacheConfig`（feature-gated），builder 同步支持 `.security()` / `.cache()` 方法
+- **`build_rate_limiter()` 自动装配**：`SdForgeConfig::build_rate_limiter()` 从 `security.rate_limit` 配置自动构造 `LimiteronAdapter`
+- **响应缓存中间件**：`ResponseCacheLayer` / `ResponseCacheMiddleware` — GET 路由自动缓存成功响应，key 经 `canonicalize_cache_key` 规范化，命中短路、未命中回源回写
+- **`AuditSink` trait**：抽象审计日志存储后端（`write` / `read` / `clear`），内存环形缓冲保留为默认 sink
+- **`InklogAuditSink`**：`inklog` feature 下桥接审计事件到 inklog 结构化输出管道
+
+### Changed
+
+- 移除 `ratelimit-http` feature 中的 `limiteron/tower-middleware` 死重使能（全仓 0 import，sdforge 自带 Tower middleware 实现）
+- 版本递增至 `0.5.0-rc.3`
+- trait-kit → `0.5.0-rc.3`、oxcache → `0.5.0-rc.4`、limiteron → `0.3.0-rc.3`、inklog → `0.3.0-rc.3`
+- 新增 `[patch.crates-io]` 本地路径联调
 
 ---
 
