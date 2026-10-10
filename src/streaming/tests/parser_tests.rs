@@ -208,3 +208,53 @@ fn limits_do_not_trip_on_compliant_stream() {
     assert_eq!(frame.event.as_deref(), Some("ok"));
     assert!(parser.is_empty());
 }
+
+/// 错误双轨约定：Display 轨保持英文规范串（不随 locale 变化），
+/// `localized_message` 轨经 i18n 注册表按活动 locale 输出目录文案且
+/// 保留插值参数（与 `ForgeError::localized_message` 同一约定）。
+#[test]
+#[serial_test::serial]
+fn error_display_is_canonical_english_while_localized_message_follows_locale() {
+    // 0xFF 单字节是构造非法 UTF-8 的最小样例；该 lint 对此字面量属误报
+    #[allow(invalid_from_utf8)]
+    let utf8_err = std::str::from_utf8(&[0xFF]).unwrap_err();
+    let invalid_utf8 = SseStreamError::InvalidUtf8(utf8_err);
+    let limit = SseStreamError::LimitExceeded { size: 1024 };
+    let upstream = SseStreamError::Upstream("boom".to_string());
+
+    crate::i18n::clear_translations();
+    // 内置目录仅按精确 "zh"/"en" 命中（format_from_builtin）。
+    crate::i18n::set_locale("zh");
+
+    // Display 轨：英文规范串，zh locale 下不变。
+    assert_eq!(
+        invalid_utf8.to_string(),
+        format!("SSE frame is not valid UTF-8: {utf8_err}")
+    );
+    assert_eq!(
+        limit.to_string(),
+        "SSE stream exceeded configured limit (1024 bytes)"
+    );
+    assert_eq!(upstream.to_string(), "upstream stream error: boom");
+
+    // localized_message 轨：zh 目录文案，插值参数保留。
+    let zh_utf8 = invalid_utf8.localized_message();
+    assert!(
+        zh_utf8.contains("SSE 帧不是有效的 UTF-8"),
+        "zh localized message expected: {zh_utf8}"
+    );
+    assert!(zh_utf8.contains(&utf8_err.to_string()));
+    let zh_limit = limit.localized_message();
+    assert!(
+        zh_limit.contains("1024"),
+        "zh localized message keeps size: {zh_limit}"
+    );
+    let zh_upstream = upstream.localized_message();
+    assert!(
+        zh_upstream.contains("上游流错误") && zh_upstream.contains("boom"),
+        "zh localized message keeps source: {zh_upstream}"
+    );
+
+    crate::i18n::clear_translations();
+    crate::i18n::set_locale("en");
+}

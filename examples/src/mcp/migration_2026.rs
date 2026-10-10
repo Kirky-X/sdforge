@@ -16,7 +16,7 @@
 //!
 //! ## 迁移步骤
 //!
-//! 1. 将 `Cargo.toml` 的 `mcp-sdk` 依赖替换为 `rmcp`（`features = ["server"]`）
+//! 1. 将 `Cargo.toml` 的 `mcp-sdk` 依赖替换为 `rmcp`（`features = ["server", "transport-io"]`）
 //! 2. 将 `register_mcp(&mut Server)` 调用改为 `register_mcp(&mut dyn McpToolRegistry)`
 //! 3. 移除 `initialize` 握手相关代码，改用 `server/discover` 端点
 //! 4. 如需 MRTR 或缓存语义，引入对应模块

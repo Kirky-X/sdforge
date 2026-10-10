@@ -41,18 +41,12 @@ use thiserror::Error;
 pub enum SseStreamError {
     /// A complete frame was not valid UTF-8 (decoded only once a frame is
     /// complete, per WHATWG incremental-decoding semantics).
-    #[error(
-        "{}",
-        crate::i18n::t("sse-invalid-utf8", &[("error", .0.to_string())])
-    )]
+    #[error("SSE frame is not valid UTF-8: {0}")]
     InvalidUtf8(#[from] std::str::Utf8Error),
 
     /// The configured buffer or per-frame size limit was exceeded (see
     /// [`SseFrameParser::with_limits`]). The parser is dead once this fires.
-    #[error(
-        "{}",
-        crate::i18n::t("sse-limit-exceeded", &[("size", .size.to_string())])
-    )]
+    #[error("SSE stream exceeded configured limit ({size} bytes)")]
     LimitExceeded {
         /// Offending buffered size in bytes (accumulated frame bytes or
         /// unconsumed buffer, whichever tripped the limit).
@@ -61,11 +55,34 @@ pub enum SseStreamError {
 
     /// The upstream stream yielded an error; its payload is preserved via
     /// `Display`. The parser treats this as end-of-stream for [`frames`].
-    #[error(
-        "{}",
-        crate::i18n::t("sse-upstream-error", &[("error", .0.to_string())])
-    )]
+    #[error("upstream stream error: {0}")]
     Upstream(String),
+}
+
+impl SseStreamError {
+    /// Localized user-facing message for this error, resolved through the
+    /// framework i18n registry (built-in `en` / `zh` catalogs; hosts may
+    /// override via `sdforge::i18n::register_translation`).
+    ///
+    /// The [`std::fmt::Display`] implementation intentionally keeps the
+    /// English canonical string (error-type dual-track convention, mirroring
+    /// `ForgeError::localized_message`); presentation layers that talk to
+    /// end users should prefer this method so the message follows the
+    /// active locale.
+    #[must_use]
+    pub fn localized_message(&self) -> String {
+        match self {
+            Self::InvalidUtf8(err) => {
+                crate::i18n::t("sse-invalid-utf8", &[("error", err.to_string())])
+            }
+            Self::LimitExceeded { size } => {
+                crate::i18n::t("sse-limit-exceeded", &[("size", size.to_string())])
+            }
+            Self::Upstream(error) => {
+                crate::i18n::t("sse-upstream-error", &[("error", error.clone())])
+            }
+        }
+    }
 }
 
 /// A single complete SSE frame.
