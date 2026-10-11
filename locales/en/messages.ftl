@@ -282,6 +282,8 @@ example-types-errors-validation-passed = Validation passed
 
 example-mcp-tool-definition-divisor-zero = Divisor cannot be zero
 example-mcp-tool-definition-unsupported-op = Unsupported operation: { $operation }
+example-mcp-tool-definition-greet-ja = Hello, { $name }!
+example-mcp-tool-definition-greet-zh = Hello, { $name }!
 example-mcp-tool-registration-divisor-zero = Divisor cannot be zero
 
 example-cors-public-data-message = This is public data

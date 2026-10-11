@@ -100,11 +100,11 @@
 cargo add sdforge
 ```
 
-或手动添加到 `Cargo.toml`（当前版本 `0.5.0-rc.6`）：
+或手动添加到 `Cargo.toml`（当前版本 `0.5.0-rc.8`）：
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5.0-rc.6", features = ["http"] }
+sdforge = { version = "0.5.0-rc.8", features = ["http"] }
 ```
 
 最低要求：
@@ -394,7 +394,7 @@ CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `
 
 <table>
   <tr><th>状态</th><th>条目</th><th>说明</th></tr>
-  <tr><td>🚧</td><td><b>v0.5.0 发布</b></td><td>当前处于 <code>0.5.0-rc.6</code>，推进依赖链（trait-kit / oxcache / inklog / limiteron）协同发布与终验</td></tr>
+  <tr><td>🚧</td><td><b>v0.5.0 发布</b></td><td>当前处于 <code>0.5.0-rc.8</code>，推进依赖链（trait-kit / oxcache / inklog / limiteron）协同发布与终验</td></tr>
   <tr><td>✅</td><td>自定义成功状态码</td><td><code>#[forge(status = &lt;code&gt;)]</code> 静态声明 + <code>ServiceResponse::success_with_status</code> 动态控制，已于 0.5.0-rc.2 发布</td></tr>
   <tr><td>✅</td><td>MSRV 声明收敛</td><td>工作区统一为 1.97.1（2026-09-06），覆盖 <code>--all-features</code> 有效要求</td></tr>
   <tr><td>✅</td><td>错误码行为契约统一</td><td>行为契约记录在案（<code>docs/API_REFERENCE.md</code> 错误码行为契约表 + <code>error::unified</code> 单一事实来源）：HTTP 400（语法畸形/<code>InvalidInput</code>）与 422（语义违规/<code>ValidationError</code>）区分保留；gRPC 侧无 422 对应原生码，统一 <code>invalid_argument</code>、语义码经 <code>Status::details</code> 载荷 <code>code</code> 承载；<code>grpc_code_for_http_status</code> 契约表 + 跨协议一致性测试（全集 JOIN 不变量 + wire 级 e2e）钉死</td></tr>
@@ -413,7 +413,7 @@ CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `
 
 详见 [CHANGELOG.md](docs/CHANGELOG.md)。最近版本要点：
 
-- **[0.5.0-rc.6]** (2026-10-06)：MCP 认证贯通 call_tool 与 CLI 入口、`AuthConfig` 无 security 特性时 fail-closed；多协议契约对齐——Idempotency-Key 重放防护、RBAC/认证贯通 gRPC、统一错误映射、参数校验统一 422；异步健康检查与 `ReadinessRenderer` 渲染端口；OpenAPI 外部 spec 合并与 Swagger UI vendored 化（构建期零网络）；知识包 CLI（`--format json`/`docs --format agent`）；graceful 排空后钩子；三轮安全审查修复
+- **[0.5.0-rc.8]** (2026-10-06)：MCP 认证贯通 call_tool 与 CLI 入口、`AuthConfig` 无 security 特性时 fail-closed；多协议契约对齐——Idempotency-Key 重放防护、RBAC/认证贯通 gRPC、统一错误映射、参数校验统一 422；异步健康检查与 `ReadinessRenderer` 渲染端口；OpenAPI 外部 spec 合并与 Swagger UI vendored 化（构建期零网络）；知识包 CLI（`--format json`/`docs --format agent`）；graceful 排空后钩子；三轮安全审查修复
 - **[0.5.0-rc.5]** (2026-09-21)：维护性发布——`forge` status=204/304 无 body 响应、validator crate re-export、Swagger UI 自定义 spec 地址、i18n 整改、命名统一 `SdForge` 前缀、跨仓 path 依赖改走 crates.io 与工程加固
 - **[0.5.0-rc.4]** (2026-09-14，含原 rc.3 批次)：`ResponseCacheLayer` 响应缓存中间件、`SdForgeConfig` security/cache 字段、`AuditSink` 审计存储抽象与 `InklogAuditSink`（0.5.0-rc.3 版本号跳过未发布，内容随本版发布）
 - **[0.5.0-rc.2]** (2026-09-07)：`#[forge(status = <code>)]` 自定义成功状态码、`i18n_key` 参数与翻译注册表、rmcp 2.2 → 3.2

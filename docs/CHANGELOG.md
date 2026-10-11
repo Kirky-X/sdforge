@@ -32,7 +32,7 @@
 
 </details>
 
-## [Unreleased]
+## [0.5.0-rc.8] - 2026-10-10
 
 ### 修复 (Fixed)
 

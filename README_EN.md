@@ -88,11 +88,11 @@ Parameter validation, declarative pagination, ETag conditional requests, lifecyc
 cargo add sdforge
 ```
 
-Or add it to your `Cargo.toml` manually (current version `0.5.0-rc.6`):
+Or add it to your `Cargo.toml` manually (current version `0.5.0-rc.8`):
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5.0-rc.6", features = ["http"] }
+sdforge = { version = "0.5.0-rc.8", features = ["http"] }
 ```
 
 Minimum requirements:
@@ -377,7 +377,7 @@ CI security gates are always on: `cargo deny check` ([deny.toml](deny.toml) poli
 
 <table>
   <tr><th>Status</th><th>Item</th><th>Notes</th></tr>
-  <tr><td>🚧</td><td><b>v0.5.0 release</b></td><td>Currently at <code>0.5.0-rc.6</code>; completing coordinated releases of the dependency chain (trait-kit / oxcache / inklog / limiteron) and final verification</td></tr>
+  <tr><td>🚧</td><td><b>v0.5.0 release</b></td><td>Currently at <code>0.5.0-rc.8</code>; completing coordinated releases of the dependency chain (trait-kit / oxcache / inklog / limiteron) and final verification</td></tr>
   <tr><td>✅</td><td>Custom success status codes</td><td><code>#[forge(status = &lt;code&gt;)]</code> static declaration + <code>ServiceResponse::success_with_status</code> dynamic control, released in 0.5.0-rc.2</td></tr>
   <tr><td>✅</td><td>MSRV alignment</td><td>Workspace unified to 1.97.1 (2026-09-06), covering the effective requirement under <code>--all-features</code></td></tr>
   <tr><td>✅</td><td>Unified error-code behavior contract</td><td>Contract recorded (<code>docs/API_REFERENCE.md</code> error-code contract table + <code>error::unified</code> single source of truth): HTTP 400 (malformed syntax/<code>InvalidInput</code>) vs 422 (semantic violation/<code>ValidationError</code>) distinction retained; gRPC has no native 422 counterpart, so both map to <code>invalid_argument</code> with the semantic code carried in the <code>Status::details</code> payload <code>code</code> field; pinned by the <code>grpc_code_for_http_status</code> contract table + cross-protocol consistency tests (full-universe JOIN invariant + wire-level e2e)</td></tr>
@@ -396,7 +396,7 @@ Contributions are welcome! Development environment setup (toolchain, protoc, lef
 
 See [CHANGELOG.md](docs/CHANGELOG.md). Highlights of recent releases:
 
-- **[0.5.0-rc.6]** (2026-10-06): MCP auth propagation across call_tool and CLI entry, `AuthConfig` fail-closed without the security feature; multi-protocol contract parity — Idempotency-Key replay protection, RBAC/auth across gRPC, unified error mapping, validation unified to 422; async health checks and the `ReadinessRenderer` port; external OpenAPI spec merging and vendored Swagger UI (zero network at build time); knowledge-pack CLI (`--format json` / `docs --format agent`); post-drain graceful hooks; three rounds of security review fixes
+- **[0.5.0-rc.8]** (2026-10-06): MCP auth propagation across call_tool and CLI entry, `AuthConfig` fail-closed without the security feature; multi-protocol contract parity — Idempotency-Key replay protection, RBAC/auth across gRPC, unified error mapping, validation unified to 422; async health checks and the `ReadinessRenderer` port; external OpenAPI spec merging and vendored Swagger UI (zero network at build time); knowledge-pack CLI (`--format json` / `docs --format agent`); post-drain graceful hooks; three rounds of security review fixes
 - **[0.5.0-rc.5]** (2026-09-21): Maintenance release — `forge` status=204/304 bodyless responses, validator crate re-export, custom Swagger UI spec URL, i18n overhaul, `SdForge` naming unification, cross-repo path deps moved to crates.io and hardening
 - **[0.5.0-rc.4]** (2026-09-14, including the original rc.3 batch): `ResponseCacheLayer` response caching middleware, `SdForgeConfig` security/cache fields, `AuditSink` abstraction and `InklogAuditSink` (version 0.5.0-rc.3 was skipped and never published; its content shipped with this release)
 - **[0.5.0-rc.2]** (2026-09-07): `#[forge(status = <code>)]` custom success status codes, `i18n_key` parameter and translation registry, rmcp 2.2 → 3.2

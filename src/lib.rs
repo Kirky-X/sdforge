@@ -914,7 +914,7 @@ mod tests {
 /// Compile-time + runtime assertions that the `sdforge` re-export facade
 /// exposes the axum/tower surface downstream HTTP services need. Each test
 /// pins one re-export point from `expose-axum-tower-reexports`; if a symbol
-/// goes missing the module fails to compile (Red).
+/// goes missing the module fails to compile.
 #[cfg(all(test, feature = "http"))]
 mod reexport_tests {
     use crate::axum;

@@ -277,6 +277,8 @@ example-types-errors-validation-passed = 校验通过
 
 example-mcp-tool-definition-divisor-zero = 除数不能为零
 example-mcp-tool-definition-unsupported-op = 不支持的操作：{ $operation }
+example-mcp-tool-definition-greet-ja = 你好，{ $name }！
+example-mcp-tool-definition-greet-zh = 你好，{ $name }！
 example-mcp-tool-registration-divisor-zero = 除数不能为零
 
 example-cors-public-data-message = 这是公开数据

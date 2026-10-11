@@ -45,7 +45,7 @@
 
 ### 8. [低] 杂项 — 部分过时，残留已修
 
-- `html_root_url` 写死 rc.2（审查记 rc.3，实际更旧）→ 修正为 `0.5.0-rc.6`（`macros/src/lib.rs:7`）。
+- `html_root_url` 写死 rc.2（审查记 rc.3，实际更旧）→ 修正为 `0.5.0-rc.8`（`macros/src/lib.rs:7`）。
 - examples 未用 workspace 依赖：仍未收敛（examples 成员依赖管理独立演进，非缺陷，登记）。
 
 ## §6.3 命名

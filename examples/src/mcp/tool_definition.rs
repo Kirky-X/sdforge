@@ -160,8 +160,14 @@ async fn mcp_greet(request: GreetRequest) -> Result<String, ApiError> {
         Some("es") => format!("Hola, {}!", request.name),
         Some("fr") => format!("Bonjour, {}!", request.name),
         Some("de") => format!("Hallo, {}!", request.name),
-        Some("ja") => format!("こんにちは、{}!", request.name),
-        Some("zh") => format!("你好，{}！", request.name),
+        Some("ja") => t(
+            "example-mcp-tool-definition-greet-ja",
+            &[("name", request.name.clone())],
+        ),
+        Some("zh") => t(
+            "example-mcp-tool-definition-greet-zh",
+            &[("name", request.name.clone())],
+        ),
         _ => format!("Hello, {}!", request.name),
     };
 
