@@ -183,15 +183,28 @@ fn log_handshake_failure(err: &std::io::Error) {
         let suppressed = SUPPRESSED.swap(0, Ordering::Relaxed);
         if suppressed > 0 {
             log::warn!(
-                "TLS handshake failed: {err} ({suppressed} similar failures suppressed in the last window)"
+                "{}",
+                crate::i18n::t(
+                    "tls-handshake-failed-suppressed",
+                    &[
+                        ("error", err.to_string()),
+                        ("suppressed", suppressed.to_string()),
+                    ]
+                )
             );
         } else {
-            log::warn!("TLS handshake failed: {err}");
+            log::warn!(
+                "{}",
+                crate::i18n::t("tls-handshake-failed", &[("error", err.to_string())])
+            );
         }
         LAST_WARN_SECS.store(now_secs, Ordering::Relaxed);
     } else {
         SUPPRESSED.fetch_add(1, Ordering::Relaxed);
-        log::debug!("TLS handshake failed: {err}");
+        log::debug!(
+            "{}",
+            crate::i18n::t("tls-handshake-failed", &[("error", err.to_string())])
+        );
     }
 }
 
@@ -240,7 +253,13 @@ fn load_certs(path: &str) -> Result<Vec<CertificateDer<'static>>, TlsError> {
 fn load_key(path: &str) -> Result<PrivateKeyDer<'static>, TlsError> {
     #[cfg(unix)]
     if let Ok(true) = key_file_permissions_exposed(path) {
-        log::warn!("TLS private key file {path} is readable by group/other; `chmod 600` it");
+        log::warn!(
+            "{}",
+            crate::i18n::t(
+                "tls-key-file-permissions-exposed",
+                &[("path", path.to_string())]
+            )
+        );
     }
 
     PrivateKeyDer::from_pem_file(path).map_err(|err| match err {
@@ -518,7 +537,13 @@ pub fn spawn_cert_watcher(
         let mut watcher = match confers::watcher::MultiFsWatcher::new(&paths, debounce_ms).await {
             Ok(watcher) => watcher,
             Err(err) => {
-                log::error!("cert watcher failed to start, hot reload disabled: {err}");
+                log::error!(
+                    "{}",
+                    crate::i18n::t(
+                        "tls-cert-watcher-start-failed",
+                        &[("error", err.to_string())]
+                    )
+                );
                 return;
             }
         };
@@ -530,14 +555,18 @@ pub fn spawn_cert_watcher(
                     Some(_changed_path) => {
                         if let Err(err) = reloading.reload_async().await {
                             log::error!(
-                                "cert hot reload failed, keeping previous certificate: {err}"
+                                "{}",
+                                crate::i18n::t(
+                                    "tls-cert-reload-failed",
+                                    &[("error", err.to_string())]
+                                )
                             );
                         }
                     }
                     None => {
                         // watcher 线程退出（如 OS 拒绝建立 watch）：热重载能力
                         // 丧失，显式告警而非静默无重载。
-                        log::warn!("cert watcher stopped unexpectedly, hot reload disabled");
+                        log::warn!("{}", crate::i18n::t("tls-cert-watcher-stopped", &[]));
                         break;
                     }
                 },
@@ -660,14 +689,26 @@ pub async fn serve_with_graceful_shutdown_tls(
                         tokio::select! {
                             result = &mut conn => {
                                 if let Err(err) = result {
-                                    log::debug!("TLS connection ended: {err}");
+                                    log::debug!(
+                                        "{}",
+                                        crate::i18n::t(
+                                            "tls-connection-ended",
+                                            &[("error", err.to_string())]
+                                        )
+                                    );
                                 }
                             }
                             _ = stop => {
                                 // 停机先到：让在途请求跑完、keep-alive 连接收尾。
                                 conn.as_mut().graceful_shutdown();
                                 if let Err(err) = conn.await {
-                                    log::debug!("TLS connection during drain: {err}");
+                                    log::debug!(
+                                        "{}",
+                                        crate::i18n::t(
+                                            "tls-connection-drain-error",
+                                            &[("error", err.to_string())]
+                                        )
+                                    );
                                 }
                             }
                         }
@@ -678,9 +719,18 @@ pub async fn serve_with_graceful_shutdown_tls(
                     // 错误都不终止 serve——连接类错误静默重试，其余（如
                     // EMFILE，正是过载场景）error 后退避重试自愈。
                     if is_connection_error(&err) {
-                        log::debug!("TCP accept connection error: {err}");
+                        log::debug!(
+                            "{}",
+                            crate::i18n::t(
+                                "tls-accept-connection-error",
+                                &[("error", err.to_string())]
+                            )
+                        );
                     } else {
-                        log::error!("TCP accept failed: {err}; retrying in 1s");
+                        log::error!(
+                            "{}",
+                            crate::i18n::t("tls-accept-failed", &[("error", err.to_string())])
+                        );
                         tokio::time::sleep(ACCEPT_RETRY_DELAY).await;
                     }
                 }

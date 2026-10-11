@@ -28,7 +28,10 @@ impl ConnectionManager {
             match self.connections.read() {
                 Ok(map) => map.values().cloned().collect(),
                 Err(_) => {
-                    log::warn!("websocket connections lock poisoned; broadcast aborted");
+                    log::warn!(
+                        "{}",
+                        crate::i18n::t("websocket-connections-lock-poisoned-broadcast", &[])
+                    );
                     return;
                 }
             }

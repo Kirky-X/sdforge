@@ -171,16 +171,22 @@ mod egress_guard_tests {
         text.push_str(tail_secret);
 
         let masked = mask(&text);
-        assert!(masked.contains("truncated"), "超限载荷必须留下截断标记");
+        assert!(
+            masked.contains("truncated"),
+            "oversized payloads must keep the truncation marker"
+        );
         assert!(
             !masked.contains("LEAKED_TAIL_SECRET"),
-            "截断点之后的内容不得以明文进入日志"
+            "content after the cut point must not enter the log in plaintext"
         );
         assert!(
             !masked.contains("a@example.com"),
-            "截断点之内的邮箱 PII 仍需被掩码"
+            "email PII before the cut point must still be masked"
         );
-        assert!(masked.len() < text.len(), "截断后长度必须下降");
+        assert!(
+            masked.len() < text.len(),
+            "the length must drop after truncation"
+        );
     }
 
     #[test]
@@ -199,8 +205,14 @@ mod egress_guard_tests {
     fn render_exit_carries_key_and_masked_detail() {
         let ok = render_exit("pay", true, 12, Some(("result", "token=abc123")));
         assert!(ok.contains("fn_exit fn=pay ok=true duration_ms=12"));
-        assert!(ok.contains("result="), "成功载荷键名应为 result: {ok}");
-        assert!(!ok.contains("abc123"), "detail 必须过掩码: {ok}");
+        assert!(
+            ok.contains("result="),
+            "the success payload key must be result: {ok}"
+        );
+        assert!(
+            !ok.contains("abc123"),
+            "detail must go through the masker: {ok}"
+        );
 
         let err = render_exit("pay", false, 7, Some(("error", "password=hunter2")));
         assert!(err.contains("ok=false") && err.contains("error="), "{err}");
@@ -215,11 +227,14 @@ mod egress_guard_tests {
         assert_eq!(
             render_enter("q", "m", None),
             "fn_enter fn=q module=m",
-            "无载荷时不应输出空 args= 字段"
+            "an absent payload must not emit an empty args= field"
         );
         let with = render_enter("q", "m", Some("secret_key=zzz1"));
         assert!(with.starts_with("fn_enter fn=q module=m args="));
-        assert!(!with.contains("zzz1"), "args 必须过掩码: {with}");
+        assert!(
+            !with.contains("zzz1"),
+            "args must go through the masker: {with}"
+        );
     }
 }
 

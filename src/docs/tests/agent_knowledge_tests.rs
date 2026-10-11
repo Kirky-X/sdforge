@@ -253,7 +253,7 @@ fn parse_format_maps_every_declared_doc_format() {
             // 全局 --format 穿透值（text/json）已在 parse_format 显式
             // 回落 All，其余即扩展遗漏，立即失败。
             other => panic!(
-                "FORMAT_VALUES 值 {other:?} 在 parse_format 中缺少显式映射（新增格式需同步 match 分支）"
+                "FORMAT_VALUES value {other:?} has no explicit mapping in parse_format (new formats need a match branch)"
             ),
         }
     }

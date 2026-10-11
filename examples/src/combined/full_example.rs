@@ -159,7 +159,8 @@ pub struct UserUpdateMessage {
     path = "/health",
     method = "GET",
     tool_name = "health_check",
-    description = "服务健康检查"
+    description = "Service health check",
+    i18n_key = "example.full_example.health_check.description"
 )]
 async fn health_check() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -211,7 +212,8 @@ async fn health_check() -> Result<serde_json::Value, ApiError> {
     path = "/full-users/:id",
     method = "GET",
     tool_name = "get_full_user",
-    description = "获取完整用户信息 (支持缓存和日志)"
+    description = "Get full user info (with cache and logging)",
+    i18n_key = "example.full_example.get_full_user.description"
 )]
 async fn get_full_user(id: u64) -> Result<User, ApiError> {
     Ok(User {
@@ -264,7 +266,8 @@ async fn get_full_user(id: u64) -> Result<User, ApiError> {
     path = "/full-users",
     method = "POST",
     tool_name = "create_full_user",
-    description = "创建新用户 (支持日志)"
+    description = "Create a new user (with logging)",
+    i18n_key = "example.full_example.create_full_user.description"
 )]
 async fn create_full_user(request: CreateUserRequest) -> Result<serde_json::Value, ApiError> {
     let user_id = 456;
@@ -314,7 +317,8 @@ async fn create_full_user(request: CreateUserRequest) -> Result<serde_json::Valu
     path = "/full-users/:id",
     method = "PUT",
     tool_name = "update_full_user",
-    description = "更新用户信息 (支持缓存失效)"
+    description = "Update user info (with cache invalidation)",
+    i18n_key = "example.full_example.update_full_user.description"
 )]
 async fn update_full_user(
     id: u64,
@@ -366,7 +370,8 @@ async fn update_full_user(
     path = "/full-users/:id",
     method = "DELETE",
     tool_name = "delete_full_user",
-    description = "删除用户 (带审计日志)"
+    description = "Delete a user (with audit log)",
+    i18n_key = "example.full_example.delete_full_user.description"
 )]
 async fn delete_full_user(id: u64) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -401,7 +406,8 @@ async fn delete_full_user(id: u64) -> Result<serde_json::Value, ApiError> {
     path = "/ws/full-example",
     method = "GET",
     tool_name = "full_example_websocket",
-    description = "全功能示例 WebSocket 端点"
+    description = "Full-featured example WebSocket endpoint",
+    i18n_key = "example.full_example.full_example_websocket.description"
 )]
 async fn full_example_websocket() -> Result<String, ApiError> {
     Ok("Full example WebSocket connection established".to_string())
@@ -431,7 +437,8 @@ async fn full_example_websocket() -> Result<String, ApiError> {
     path = "/full-users/stats",
     method = "GET",
     tool_name = "user_activity_stats",
-    description = "用户活动统计"
+    description = "User activity stats",
+    i18n_key = "example.full_example.user_activity_stats.description"
 )]
 async fn user_activity_stats(user_id: u64) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({

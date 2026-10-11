@@ -293,7 +293,11 @@ fn test_sanitized_message() {
 
     let unavailable = ApiError::service_unavailable("Database connection failed", None);
     let msg = unavailable.sanitized_message();
-    assert!(msg.contains("temporarily unavailable"));
+    // 断言对照 en 目录条目，避免受环境 locale 影响。
+    assert_eq!(
+        msg,
+        crate::i18n::translate_for("en", "api-error-service-generic", &[])
+    );
     assert!(!msg.contains("Database"));
 
     let not_found = ApiError::not_found("user", Some("123".into()));
@@ -549,9 +553,10 @@ fn test_from_std_error() {
             source,
             ..
         } => {
+            // 断言对照 en 目录条目，避免受环境 locale 影响。
             assert_eq!(
                 message,
-                "An internal error occurred. Please try again later."
+                crate::i18n::translate_for("en", "api-error-internal-generic", &[])
             );
             assert!(source.is_some());
             assert!(error_id.len() == 16); // hex format
@@ -820,7 +825,7 @@ fn test_to_mcp_json_internal() {
     // 不得把原始内部消息泄漏到外部协议。
     assert_eq!(
         parsed["error"]["message"],
-        "An internal error occurred. Please try again later."
+        crate::i18n::translate_for("en", "api-error-internal-generic", &[])
     );
     assert!(!json.contains("db failure"));
 }

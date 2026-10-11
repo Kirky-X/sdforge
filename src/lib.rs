@@ -513,7 +513,10 @@ macro_rules! inventory_counter {
             static ITEMS: OnceLock<Mutex<Vec<&'static $reg>>> = OnceLock::new();
             let items = ITEMS.get_or_init(|| Mutex::new(inventory::iter::<$reg>().collect()));
             items.lock().map(|g| g.len()).unwrap_or_else(|e| {
-                log::error!("inventory Mutex poisoned: {}", e);
+                log::error!(
+                    "{}",
+                    crate::i18n::t("inventory-mutex-poisoned", &[("error", e.to_string())])
+                );
                 0
             })
         }
@@ -634,7 +637,10 @@ fn count_cli_commands() -> usize {
         .get_or_init(|| Mutex::new(inventory::iter::<CliHandlerRegistration>().collect()));
 
     cmds.lock().map(|g| g.len()).unwrap_or_else(|e| {
-        log::error!("inventory Mutex poisoned: {}", e);
+        log::error!(
+            "{}",
+            crate::i18n::t("inventory-mutex-poisoned", &[("error", e.to_string())])
+        );
         0
     })
 }

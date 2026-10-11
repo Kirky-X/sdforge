@@ -35,12 +35,12 @@ async fn test_swagger_ui_router_has_swagger_path() {
                 .unwrap(),
         )
         .await
-        .expect("请求应成功");
+        .expect("request should succeed");
 
     assert_ne!(
         response.status(),
         StatusCode::NOT_FOUND,
-        "/swagger-ui/ 不应返回 404"
+        "/swagger-ui/ must not return 404"
     );
 }
 
@@ -63,13 +63,13 @@ async fn test_swagger_ui_router_with_openapi_serves_provided_spec() {
                 .unwrap(),
         )
         .await
-        .expect("请求应成功");
+        .expect("request should succeed");
 
     assert_eq!(response.status(), StatusCode::OK);
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
-        .expect("body 应可读");
-    let json: serde_json::Value = serde_json::from_slice(&bytes).expect("spec 应为 JSON");
+        .expect("body should be readable");
+    let json: serde_json::Value = serde_json::from_slice(&bytes).expect("spec should be JSON");
     assert_eq!(json["info"]["title"], "External API");
     assert_eq!(json["info"]["version"], "9.9.9");
 }

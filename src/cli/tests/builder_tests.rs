@@ -164,15 +164,15 @@ fn test_builder_includes_docs_subcommand() {
     let cmd = CliBuilder::new().build();
     let docs_sub = cmd
         .find_subcommand("docs")
-        .expect("docgen feature 启用时 build() 必须包含 docs 子命令");
-    // 验证子命令名称与 about 描述
+        .expect("build() must include the docs subcommand when the docgen feature is enabled");
+    // Verify the subcommand name and about description
     let about_str = docs_sub
         .get_about()
         .map(|s| s.to_string())
         .unwrap_or_default();
     assert!(
         about_str.contains("documentation") || about_str.contains("文档"),
-        "docs 子命令 about 必须包含文档描述，实际: {}",
+        "the docs subcommand about must describe documentation, got: {}",
         about_str
     );
     // 验证 --format 参数被注入
@@ -180,14 +180,14 @@ fn test_builder_includes_docs_subcommand() {
         docs_sub
             .get_arguments()
             .any(|a| a.get_id().as_str() == "format"),
-        "注入的 docs 子命令必须含 --format 参数"
+        "injected docs subcommand must contain the --format argument"
     );
     // 验证 --output 参数被注入
     assert!(
         docs_sub
             .get_arguments()
             .any(|a| a.get_id().as_str() == "output"),
-        "注入的 docs 子命令必须含 --output 参数"
+        "injected docs subcommand must contain the --output argument"
     );
 }
 
@@ -199,7 +199,7 @@ fn test_builder_excludes_docs_subcommand_when_docs_disabled() {
     let cmd = CliBuilder::new().build();
     assert!(
         cmd.find_subcommand("docs").is_none(),
-        "docgen feature 未启用时不应注入 docs 子命令"
+        "docs subcommand must not be injected when the docgen feature is disabled"
     );
 }
 

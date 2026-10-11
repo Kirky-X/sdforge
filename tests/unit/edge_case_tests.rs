@@ -126,9 +126,18 @@ mod core_edge_case_tests {
     /// Test: Empty error messages
     #[test]
     fn test_format_empty_error_edge_cases() {
+        // Output follows the active locale; expectations use the explicit-en
+        // catalog entry so the test is independent of the ambient locale.
         // Empty field name
         let result = format_empty_error("");
-        assert_eq!(result, " cannot be empty");
+        assert_eq!(
+            result,
+            sdforge::i18n::translate_for(
+                "en",
+                "core-field-cannot-be-empty",
+                &[("field", "".to_string())]
+            )
+        );
 
         // Long field name
         let long_field = "password".repeat(20);
@@ -137,7 +146,14 @@ mod core_edge_case_tests {
 
         // Unicode
         let result = format_empty_error("密码");
-        assert_eq!(result, "密码 cannot be empty");
+        assert_eq!(
+            result,
+            sdforge::i18n::translate_for(
+                "en",
+                "core-field-cannot-be-empty",
+                &[("field", "密码".to_string())]
+            )
+        );
     }
 
     /// Test: Invalid format errors
@@ -145,7 +161,14 @@ mod core_edge_case_tests {
     fn test_format_invalid_error_edge_cases() {
         // Empty field and format
         let result = format_invalid_error("", "");
-        assert_eq!(result, " has invalid format: ");
+        assert_eq!(
+            result,
+            sdforge::i18n::translate_for(
+                "en",
+                "core-field-invalid-format",
+                &[("field", "".to_string()), ("constraint", "".to_string())]
+            )
+        );
 
         // Both long
         let field = "email_address".repeat(10);
@@ -160,7 +183,18 @@ mod core_edge_case_tests {
     fn test_format_range_error_edge_cases() {
         // Zero range
         let result = format_range_error("age", 0, 0);
-        assert_eq!(result, "age must be between 0 and 0");
+        assert_eq!(
+            result,
+            sdforge::i18n::translate_for(
+                "en",
+                "core-field-out-of-range",
+                &[
+                    ("field", "age".to_string()),
+                    ("min", "0".to_string()),
+                    ("max", "0".to_string())
+                ]
+            )
+        );
 
         // Large range
         let result = format_range_error("score", 0, u64::MAX);
@@ -168,7 +202,18 @@ mod core_edge_case_tests {
 
         // Same min max
         let result = format_range_error("exact", 42, 42);
-        assert_eq!(result, "exact must be between 42 and 42");
+        assert_eq!(
+            result,
+            sdforge::i18n::translate_for(
+                "en",
+                "core-field-out-of-range",
+                &[
+                    ("field", "exact".to_string()),
+                    ("min", "42".to_string()),
+                    ("max", "42".to_string())
+                ]
+            )
+        );
     }
 
     /// Test: Sanitize for identifier - comprehensive

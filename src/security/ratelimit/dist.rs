@@ -202,7 +202,13 @@ impl<B: DistributedLimiter + Send + Sync> DistributedRateLimiter<B> {
         let should_warn = last.is_none_or(|t| now.duration_since(t) >= Duration::from_secs(60));
         if should_warn {
             *last = Some(now);
-            log::error!("distributed rate limiter backend unavailable, failing open: {err}");
+            log::error!(
+                "{}",
+                crate::i18n::t(
+                    "ratelimit-dist-backend-unavailable",
+                    &[("error", err.to_string())]
+                )
+            );
         }
     }
 }
@@ -622,7 +628,7 @@ mod tests {
         assert_eq!(breaker_config.failure_threshold, 3);
         assert_eq!(
             breaker_config.success_threshold, 1,
-            "半开一次探测成功即闭合，与原 Ok 即闭合语义对齐"
+            "one successful half-open probe closes the circuit, matching the Ok-closes semantics"
         );
         assert_eq!(breaker_config.timeout, Duration::from_secs(45));
     }

@@ -117,7 +117,8 @@ pub struct StatusUpdate {
     path = "/ws/basic",
     method = "GET",
     tool_name = "websocket_basic",
-    description = "基础 WebSocket 端点"
+    description = "Basic WebSocket endpoint",
+    i18n_key = "example.basic.websocket_basic.description"
 )]
 async fn websocket_basic() -> Result<String, ApiError> {
     Ok("WebSocket connection established".to_string())
@@ -153,7 +154,8 @@ async fn websocket_basic() -> Result<String, ApiError> {
     path = "/ws/auth",
     method = "GET",
     tool_name = "websocket_auth",
-    description = "带认证的 WebSocket 端点"
+    description = "Authenticated WebSocket endpoint",
+    i18n_key = "example.basic.websocket_auth.description"
 )]
 async fn websocket_auth() -> Result<String, ApiError> {
     Ok("Authenticated WebSocket connection".to_string())
@@ -191,7 +193,8 @@ async fn websocket_auth() -> Result<String, ApiError> {
     path = "/ws/subscribe",
     method = "GET",
     tool_name = "websocket_subscribe",
-    description = "状态订阅 WebSocket 端点"
+    description = "Status subscription WebSocket endpoint",
+    i18n_key = "example.basic.websocket_subscribe.description"
 )]
 async fn websocket_subscribe() -> Result<String, ApiError> {
     Ok("WebSocket subscription established".to_string())
@@ -220,7 +223,8 @@ async fn websocket_subscribe() -> Result<String, ApiError> {
     path = "/ws/info",
     method = "GET",
     tool_name = "websocket_info",
-    description = "获取 WebSocket 连接信息"
+    description = "Get WebSocket connection info",
+    i18n_key = "example.basic.websocket_info.description"
 )]
 async fn websocket_info() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({

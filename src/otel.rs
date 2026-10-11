@@ -285,12 +285,18 @@ pub fn install(config: OtelConfig, interval: std::time::Duration) {
             // Export failures must be observable: a silent drop would hide a
             // downed collector from operators.
             if let Err(e) = flush_spans(&config) {
-                log::warn!("otel: span flush failed: {e}");
+                log::warn!(
+                    "{}",
+                    crate::i18n::t("otel-span-flush-failed", &[("error", e.to_string())])
+                );
             }
             #[cfg(feature = "metrics")]
             {
                 if let Err(e) = flush_metrics(&config) {
-                    log::warn!("otel: metrics flush failed: {e}");
+                    log::warn!(
+                        "{}",
+                        crate::i18n::t("otel-metrics-flush-failed", &[("error", e.to_string())])
+                    );
                 }
             }
         }

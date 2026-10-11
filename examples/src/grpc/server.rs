@@ -213,10 +213,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - Call(method)      -> CallResponse");
     println!("  - GetInfo()         -> InfoResponse");
     println!();
-    println!("💡 启动服务器（绑定到 127.0.0.1:50051）:");
+    println!("💡 Start the server (bind to 127.0.0.1:50051):");
     println!("  // start_default(\"127.0.0.1:50051\").await?;");
     println!();
-    println!("💡 测试客户端调用:");
+    println!("💡 Test with a client call:");
     println!("  grpcurl -plaintext -d '{{\"method\":\"GET\"}}' localhost:50051 \\");
     println!("    sdforge.v1.SdForgeService/Call");
     println!();

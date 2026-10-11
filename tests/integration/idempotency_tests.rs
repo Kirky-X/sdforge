@@ -87,14 +87,18 @@ async fn duplicate_key_replays_cached_response() {
     assert_eq!(
         second.headers().get("idempotency-replayed").unwrap(),
         "true",
-        "重放响应必须带 Idempotency-Replayed: true"
+        "replayed response must carry Idempotency-Replayed: true"
     );
     let body2 = axum::body::to_bytes(second.into_body(), usize::MAX)
         .await
         .unwrap();
-    assert_eq!(body, body2, "重放体必须与首次一致");
+    assert_eq!(body, body2, "replayed body must match the first response");
 
-    assert_eq!(EXEC_COUNT.load(Ordering::SeqCst), 1, "handler 只执行一次");
+    assert_eq!(
+        EXEC_COUNT.load(Ordering::SeqCst),
+        1,
+        "handler must run exactly once"
+    );
 }
 
 #[tokio::test]
@@ -107,7 +111,11 @@ async fn request_without_key_passes_through_every_time() {
         assert_eq!(resp.status(), 200);
         assert!(resp.headers().get("idempotency-replayed").is_none());
     }
-    assert_eq!(EXEC_COUNT.load(Ordering::SeqCst), 2, "无 key 不参与幂等");
+    assert_eq!(
+        EXEC_COUNT.load(Ordering::SeqCst),
+        2,
+        "requests without a key bypass idempotency"
+    );
 }
 
 #[tokio::test]
@@ -121,7 +129,11 @@ async fn disabled_config_leaves_behavior_unchanged() {
         let resp = post(router.clone(), "/api/v1/payments", Some("dup-2"), "5").await;
         assert_eq!(resp.status(), 200);
     }
-    assert_eq!(EXEC_COUNT.load(Ordering::SeqCst), 2, "disabled 时零防护");
+    assert_eq!(
+        EXEC_COUNT.load(Ordering::SeqCst),
+        2,
+        "disabled config gives zero protection"
+    );
 }
 
 #[forge(name = "idem_blob", version = "v1", path = "/blob", method = "POST")]
@@ -141,7 +153,11 @@ async fn oversized_response_passes_through_intact() {
     let router = build_with_config(&cfg).unwrap();
 
     let resp = post(router.clone(), "/api/v1/blob", Some("over-1"), "{}").await;
-    assert_eq!(resp.status(), 200, "超限成功响应必须原样返回");
+    assert_eq!(
+        resp.status(),
+        200,
+        "oversized success responses must pass through as-is"
+    );
     assert_eq!(
         resp.headers()
             .get("idempotency-skipped")
@@ -155,7 +171,7 @@ async fn oversized_response_passes_through_intact() {
     assert_eq!(
         parsed["payload"].as_str().unwrap().len(),
         300,
-        "响应体必须完整"
+        "the response body must be complete"
     );
 
     // claim 已 abort：同 key 重试会再次执行（而不是拿到缓存/409）。

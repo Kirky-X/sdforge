@@ -147,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ level relaxed to debug at runtime");
     log::debug!("sdforge logging example: debug now visible after set_level");
 
-    println!("\n✓ 日志示例完成");
+    println!("\n✓ Logging example finished");
     Ok(())
 }
 

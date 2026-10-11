@@ -222,7 +222,11 @@ mod tests {
         let msg = err.sanitized_message();
         // Internal errors are sanitized — the raw message must NOT leak.
         assert!(!msg.contains("secret details"));
-        assert!(msg.contains("internal error"));
+        // 断言对照 en 目录条目，避免受环境 locale 影响。
+        assert_eq!(
+            msg,
+            crate::i18n::translate_for("en", "api-error-internal-generic", &[])
+        );
     }
 
     /// Test sanitized_message() for the Internal variant returns the sanitized

@@ -36,19 +36,28 @@ pub(crate) const DEFAULT_DOC_FORMAT: &str = "all";
 /// - `--output <PATH>`：输出文件路径（省略时输出到 stdout）
 pub fn docs_subcommand_definition() -> clap::Command {
     clap::Command::new("docs")
-        .about("Generate documentation files")
+        .about(crate::i18n::translate_or_fallback(
+            "Generate documentation files",
+            Some("cli-docs-about"),
+        ))
         .arg(
             clap::Arg::new("format")
                 .long("format")
                 .value_parser(clap::builder::PossibleValuesParser::new(FORMAT_VALUES))
                 .default_value(DEFAULT_DOC_FORMAT)
-                .help("Documentation format"),
+                .help(crate::i18n::translate_or_fallback(
+                    "Documentation format",
+                    Some("cli-docs-format-help"),
+                )),
         )
         .arg(
             clap::Arg::new("output")
                 .long("output")
                 .value_parser(clap::value_parser!(PathBuf))
-                .help("Output file path (stdout if omitted)"),
+                .help(crate::i18n::translate_or_fallback(
+                    "Output file path (stdout if omitted)",
+                    Some("cli-docs-output-help"),
+                )),
         )
 }
 
@@ -71,7 +80,10 @@ pub(crate) fn parse_format(s: &str) -> DocFormat {
         "text" | "json" => DocFormat::All,
         // clap value_parser 白名单之外的值不可达；出现即说明扩展
         // FORMAT_VALUES 时遗漏了 match 分支——loud fail 而非静默产 All。
-        _ => unreachable!("clap value_parser 已限定输入集合，得到非法值: {}", s),
+        _ => unreachable!(
+            "clap value_parser restricts the input set; got invalid value: {}",
+            s
+        ),
     }
 }
 

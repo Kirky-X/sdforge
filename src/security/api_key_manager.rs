@@ -516,7 +516,7 @@ mod tests {
 
         assert!(
             cache.len_sync().expect("len") <= 2,
-            "capacity 逐出后条目数有界"
+            "entry count must stay bounded after capacity eviction"
         );
 
         // 逐出后再次读取被逐 key 不崩不挂（有界语义），逐出对象不保证
@@ -775,7 +775,7 @@ mod tests {
                 .get_sync(&"key".to_string())
                 .expect("get after expiry")
                 .is_none(),
-            "TTL 过期后 get 为空"
+            "get must return None after TTL expiry"
         );
     }
 

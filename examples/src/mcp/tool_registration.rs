@@ -125,7 +125,8 @@ pub struct DivideRequest {
     path = "/mcp/calc/add",
     method = "POST",
     tool_name = "add",
-    description = "将两个数相加"
+    description = "Add two numbers",
+    i18n_key = "example.tool_registration.mcp_calc_add.description"
 )]
 async fn mcp_add(request: AddRequest) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -155,7 +156,8 @@ async fn mcp_add(request: AddRequest) -> Result<serde_json::Value, ApiError> {
     path = "/mcp/calc/subtract",
     method = "POST",
     tool_name = "subtract",
-    description = "将两个数相减"
+    description = "Subtract two numbers",
+    i18n_key = "example.tool_registration.mcp_calc_subtract.description"
 )]
 async fn mcp_subtract(request: SubtractRequest) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -185,7 +187,8 @@ async fn mcp_subtract(request: SubtractRequest) -> Result<serde_json::Value, Api
     path = "/mcp/calc/multiply",
     method = "POST",
     tool_name = "multiply",
-    description = "将两个数相乘"
+    description = "Multiply two numbers",
+    i18n_key = "example.tool_registration.mcp_calc_multiply.description"
 )]
 async fn mcp_multiply(request: MultiplyRequest) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -218,12 +221,13 @@ async fn mcp_multiply(request: MultiplyRequest) -> Result<serde_json::Value, Api
     path = "/mcp/calc/divide",
     method = "POST",
     tool_name = "divide",
-    description = "将两个数相除"
+    description = "Divide two numbers",
+    i18n_key = "example.tool_registration.mcp_calc_divide.description"
 )]
 async fn mcp_divide(request: DivideRequest) -> Result<serde_json::Value, ApiError> {
     if request.b == 0.0 {
         return Err(ApiError::InvalidInput {
-            message: "除数不能为零".to_string(),
+            message: "Divisor cannot be zero".to_string(),
             field: Some("b".to_string()),
             value: Some(serde_json::json!(request.b)),
         });
@@ -255,7 +259,8 @@ async fn mcp_divide(request: DivideRequest) -> Result<serde_json::Value, ApiErro
     version = "v1",
     path = "/http-only",
     method = "GET",
-    description = "仅 HTTP 端点 (不注册为 MCP 工具)"
+    description = "HTTP-only endpoint (not registered as an MCP tool)",
+    i18n_key = "example.tool_registration.http_only.description"
 )]
 async fn http_only() -> Result<String, ApiError> {
     Ok("This is HTTP only".to_string())
@@ -274,7 +279,8 @@ async fn http_only() -> Result<String, ApiError> {
     version = "v1",
     path = "/internal/stats",
     method = "GET",
-    description = "内部统计信息"
+    description = "Internal stats info",
+    i18n_key = "example.tool_registration.internal_stats.description"
 )]
 async fn internal_stats() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -316,7 +322,8 @@ pub struct ReverseRequest {
     path = "/mcp/string/reverse",
     method = "POST",
     tool_name = "reverse_string",
-    description = "反转字符串"
+    description = "Reverse a string",
+    i18n_key = "example.tool_registration.mcp_reverse_string.description"
 )]
 async fn reverse_string(request: ReverseRequest) -> Result<serde_json::Value, ApiError> {
     let reversed: String = request.text.chars().rev().collect();
@@ -353,7 +360,8 @@ pub struct UppercaseRequest {
     path = "/mcp/string/uppercase",
     method = "POST",
     tool_name = "uppercase",
-    description = "将字符串转换为大写"
+    description = "Convert a string to uppercase",
+    i18n_key = "example.tool_registration.mcp_uppercase.description"
 )]
 async fn uppercase(request: UppercaseRequest) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({

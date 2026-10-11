@@ -20,10 +20,10 @@ inventory::submit!(CliCommandRegistration::new(
 #[test]
 fn test_generate_cli_docs_contains_command_name() {
     let md = generate_cli_docs();
-    assert!(!md.is_empty(), "CLI Markdown 文档不应为空");
+    assert!(!md.is_empty(), "CLI Markdown document must not be empty");
     assert!(
         md.contains("test_cmd_for_docs"),
-        "CLI Markdown 应包含命令名 `test_cmd_for_docs`，实际: {}",
+        "CLI Markdown must contain the command name `test_cmd_for_docs`, got: {}",
         &md[..md.len().min(300)]
     );
 }

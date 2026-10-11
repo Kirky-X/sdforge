@@ -274,7 +274,11 @@ mod idempotency_middleware_tests {
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
         assert_eq!(body_text(resp).await, "read");
-        assert_eq!(hits.load(Ordering::SeqCst), 0, "GET 不应进入幂等计数路径");
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            0,
+            "GET must not enter the idempotency counting path"
+        );
 
         // GET 不得占用 key：同 key 的 POST 仍应真实执行
         let resp = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
@@ -295,11 +299,14 @@ mod idempotency_middleware_tests {
                 .await
                 .unwrap();
             assert_eq!(resp.status(), StatusCode::OK);
-            assert!(replayed(&resp).is_none(), "无 key 的请求不应被加幂等标记头");
+            assert!(
+                replayed(&resp).is_none(),
+                "requests without a key must not get an idempotency header"
+            );
             assert_eq!(
                 hits.load(Ordering::SeqCst),
                 expect,
-                "无 key 时每次都要真实执行"
+                "each keyless request must really execute"
             );
         }
     }
@@ -329,7 +336,7 @@ mod idempotency_middleware_tests {
         assert_eq!(
             replayed(&second).as_deref(),
             Some("true"),
-            "重放必须标记 true"
+            "replays must be marked true"
         );
         assert_eq!(
             second
@@ -337,10 +344,14 @@ mod idempotency_middleware_tests {
                 .get(CONTENT_TYPE)
                 .and_then(|v| v.to_str().ok()),
             Some("text/plain; charset=utf-8"),
-            "重放必须还原首次响应的 media type"
+            "replays must restore the first response media type"
         );
         assert_eq!(body_text(second).await, "payload");
-        assert_eq!(hits.load(Ordering::SeqCst), 1, "重放不得再次执行 handler");
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            1,
+            "replays must not run the handler again"
+        );
     }
 
     #[tokio::test]
@@ -361,9 +372,13 @@ mod idempotency_middleware_tests {
         let text = body_text(resp).await;
         assert!(
             text.contains("CONFLICT"),
-            "错误体必须是 UnifiedError 形状: {text}"
+            "error body must have the UnifiedError shape: {text}"
         );
-        assert_eq!(hits.load(Ordering::SeqCst), 0, "InFlight 不得执行 handler");
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            0,
+            "InFlight must not run the handler"
+        );
     }
 
     #[tokio::test]
@@ -384,7 +399,7 @@ mod idempotency_middleware_tests {
             assert_eq!(
                 hits.load(Ordering::SeqCst),
                 expect,
-                "失败响应不得缓存：调用方应能立即重试"
+                "failed responses must not be cached: the caller must be able to retry immediately"
             );
         }
     }
@@ -406,7 +421,7 @@ mod idempotency_middleware_tests {
             assert_eq!(
                 resp.status(),
                 StatusCode::OK,
-                "超限必须原样返回；改 413 会诱导客户端按幂等语义重试→重复副作用"
+                "oversized responses must pass through as-is; a 413 would invite clients to retry under idempotency semantics, duplicating side effects"
             );
             assert_eq!(
                 resp.headers()
@@ -414,8 +429,16 @@ mod idempotency_middleware_tests {
                     .and_then(|v| v.to_str().ok()),
                 Some("oversized")
             );
-            assert_eq!(body_text(resp).await.len(), 8_000, "响应体必须完整未被截断");
-            assert_eq!(hits.load(Ordering::SeqCst), expect, "超限不得写入缓存");
+            assert_eq!(
+                body_text(resp).await.len(),
+                8_000,
+                "the response body must stay complete and untruncated"
+            );
+            assert_eq!(
+                hits.load(Ordering::SeqCst),
+                expect,
+                "oversized responses must not be cached"
+            );
         }
     }
 
@@ -438,7 +461,7 @@ mod idempotency_middleware_tests {
         assert_eq!(
             replayed(&b).as_deref(),
             Some("executed"),
-            "不同端点同 key 不得重放另一端的响应"
+            "the same key on different endpoints must not replay the other endpoint's response"
         );
         assert_eq!(hits.load(Ordering::SeqCst), 2);
     }
@@ -479,7 +502,7 @@ mod idempotency_middleware_tests {
         assert_eq!(
             replayed(&second).as_deref(),
             Some("true"),
-            "同一参数化模式应共享 scope（走 MatchedPath 分支）"
+            "the same parameterized pattern should share the scope (MatchedPath branch)"
         );
         assert_eq!(body_text(second).await, "item");
         assert_eq!(hits.load(Ordering::SeqCst), 1);
@@ -504,7 +527,7 @@ mod idempotency_middleware_tests {
         let text = body_text(resp).await;
         assert!(
             text.contains("RESPONSE_TOO_LARGE"),
-            "超硬上限必须显式报错而非静默截断: {text}"
+            "responses beyond the hard cap must fail explicitly rather than being silently truncated: {text}"
         );
         // claim 已 abort：同 key 重试应再次进入执行分支而非 InFlight
         let again = app_with_response(
@@ -517,7 +540,11 @@ mod idempotency_middleware_tests {
         .await
         .unwrap();
         assert_eq!(again.status(), StatusCode::OK);
-        assert_eq!(hits.load(Ordering::SeqCst), 2, "abort 后重试必须真实执行");
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            2,
+            "a retry after abort must really execute"
+        );
     }
 
     #[tokio::test]
@@ -556,7 +583,7 @@ mod idempotency_middleware_tests {
         assert_eq!(
             replayed(&second).as_deref(),
             Some("true"),
-            "外层 layer 下 MatchedPath 应可用，同一参数化模式共享 scope"
+            "MatchedPath must be visible to the outer layer; parameterized routes share one scope per pattern"
         );
     }
 
@@ -598,9 +625,13 @@ mod idempotency_middleware_tests {
         assert_eq!(
             replayed(&second).as_deref(),
             Some("executed"),
-            "两条未知路径不得共享 scope（应走 URI 路径兜底而非 \"unmatched\"）"
+            "two unknown paths must not share a scope (they take the URI fallback, not \"unmatched\")"
         );
-        assert_eq!(hits.load(Ordering::SeqCst), 2, "两条路径各自回源");
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            2,
+            "each path must go to the origin on its own"
+        );
     }
 
     #[tokio::test]
@@ -616,7 +647,7 @@ mod idempotency_middleware_tests {
         assert_eq!(
             resp.status(),
             StatusCode::OK,
-            "非法缓存状态码应回退 200 而非 panic"
+            "an illegal cacheable status code must fall back to 200 rather than panic"
         );
         assert_eq!(replayed(&resp).as_deref(), Some("true"));
         assert_eq!(
@@ -624,7 +655,7 @@ mod idempotency_middleware_tests {
                 .get(CONTENT_TYPE)
                 .and_then(|v| v.to_str().ok()),
             Some("application/json"),
-            "缺失 content_type 时重放回退 JSON"
+            "replay must fall back to JSON when content_type is missing"
         );
         assert_eq!(body_text(resp).await, "body");
     }

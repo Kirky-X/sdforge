@@ -82,8 +82,11 @@ pub async fn verify_async(
     })
     .await
     .map_err(|e| {
-        log::error!("auth verifier worker failed: {e}");
-        "authentication worker failed".to_string()
+        log::error!(
+            "{}",
+            crate::i18n::t("auth-verifier-worker-failed", &[("error", e.to_string())])
+        );
+        crate::i18n::t("auth-worker-failed", &[])
     })?
 }
 

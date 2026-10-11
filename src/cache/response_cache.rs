@@ -229,7 +229,11 @@ mod middleware_behavior_tests {
             .unwrap();
         assert_eq!(first.status(), StatusCode::OK);
         assert_eq!(take_body(first).await, "dynamic");
-        assert_eq!(hits.load(Ordering::SeqCst), 1, "首次必须回源");
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            1,
+            "the first miss must go to the origin"
+        );
 
         let second = mw!(cache, hits, StatusCode::OK, "dynamic2")
             .oneshot(req(Method::GET, "/data"))
@@ -245,9 +249,13 @@ mod middleware_behavior_tests {
         assert_eq!(
             take_body(second).await,
             "dynamic",
-            "HIT 必须返回缓存体而非新响应"
+            "a HIT must return the cached body, not a fresh response"
         );
-        assert_eq!(hits.load(Ordering::SeqCst), 1, "HIT 不得回源");
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            1,
+            "a HIT must not go to the origin"
+        );
     }
 
     /// 首次回源写入缓存时不得伪装成 HIT（否则客户端与命中率指标均失真）。
@@ -262,7 +270,7 @@ mod middleware_behavior_tests {
         assert_eq!(
             resp.headers().get("x-cache").and_then(|v| v.to_str().ok()),
             Some("MISS"),
-            "回源写回的响应必须标 MISS"
+            "an origin-fill response must be labelled MISS"
         );
         assert_eq!(take_body(resp).await, "fresh");
     }
@@ -280,7 +288,11 @@ mod middleware_behavior_tests {
             .oneshot(req(Method::GET, "/search?q=2"))
             .await
             .unwrap();
-        assert_eq!(take_body(resp).await, "a2", "不同 query 必须各自回源");
+        assert_eq!(
+            take_body(resp).await,
+            "a2",
+            "different queries must each go to the origin"
+        );
         assert_eq!(hits.load(Ordering::SeqCst), 2);
 
         // 大小写归一：/Users 与 /users 命中同一 entry
@@ -296,7 +308,7 @@ mod middleware_behavior_tests {
         assert_eq!(
             hit.headers().get("x-cache").and_then(|v| v.to_str().ok()),
             Some("HIT"),
-            "key 已小写归一，/users 应命中 /Users 的缓存"
+            "the key is lowercased: /users must hit the /Users cache entry"
         );
     }
 
@@ -311,13 +323,20 @@ mod middleware_behavior_tests {
                 .unwrap();
             assert!(
                 resp.headers().get("x-cache").is_none(),
-                "{method} 不得经过缓存层"
+                "{method} must bypass the cache layer"
             );
         }
-        assert_eq!(hits.load(Ordering::SeqCst), 4, "非 GET 每次都回源");
-        // 缓存内不得出现该 key
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            4,
+            "non-GET requests always go to the origin"
+        );
+        // The key must not appear in the cache
         let key = canonicalize_cache_key("/write");
-        assert!(cache.get(&key).is_none(), "非 GET 响应不得写入缓存");
+        assert!(
+            cache.get(&key).is_none(),
+            "non-GET responses must not be written to the cache"
+        );
     }
 
     #[tokio::test]
@@ -333,7 +352,7 @@ mod middleware_behavior_tests {
             assert_eq!(
                 hits.load(Ordering::SeqCst),
                 expect,
-                "4xx/5xx 不得缓存，下次仍回源"
+                "4xx/5xx responses must not be cached; the next call still goes to the origin"
             );
         }
     }
@@ -354,9 +373,17 @@ mod middleware_behavior_tests {
                 .oneshot(req(Method::GET, uri))
                 .await
                 .unwrap();
-            assert_eq!(resp.status(), StatusCode::OK, "{uri} 脏条目应回源而非出错");
+            assert_eq!(
+                resp.status(),
+                StatusCode::OK,
+                "a corrupt entry on {uri} must fall through to the origin, not error"
+            );
             assert_eq!(take_body(resp).await, "real");
-            assert_eq!(hits.load(Ordering::SeqCst), 1, "{uri} 脏条目必须回源");
+            assert_eq!(
+                hits.load(Ordering::SeqCst),
+                1,
+                "a corrupt entry on {uri} must go to the origin"
+            );
         }
     }
 }

@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(not(feature = "http"))]
     {
         println!(
-            "swagger_demo 需要 'http' feature。请使用：cargo run --example swagger_demo --features \"docs http\""
+            "swagger_demo requires the 'http' feature. Run: cargo run --example swagger_demo --features \"docs http\""
         );
         return Ok(());
     }
@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Swagger UI:  http://127.0.0.1:{port}/swagger-ui/");
         println!("OpenAPI JSON: http://127.0.0.1:{port}/api-docs/openapi.json");
         println!();
-        println!("按 Ctrl+C 停止");
+        println!("Press Ctrl+C to stop");
         println!("===========================================");
 
         sdforge::axum::serve(listener, app).await?;

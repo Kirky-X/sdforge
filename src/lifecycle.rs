@@ -137,7 +137,7 @@ mod hook_isolation_tests {
         let want_start = registered("start");
         assert!(
             want_start >= 2,
-            "本测试至少应注册 2 个 start 钩子（含一个会 panic 的）"
+            "this test must register at least 2 start hooks (including one that panics)"
         );
 
         run_on_start().await;
@@ -145,12 +145,12 @@ mod hook_isolation_tests {
         assert_eq!(
             START_HITS.with(|c| c.get()),
             want_start,
-            "phase=start 钩子应全部被执行，panic 钩子不得短路后续"
+            "all phase=start hooks must run; a panicking hook must not short-circuit the rest"
         );
         assert_eq!(
             STOP_HITS.with(|c| c.get()),
             0,
-            "start 轮次不得执行 phase=stop 钩子"
+            "the start round must not run phase=stop hooks"
         );
 
         run_on_stop().await;
@@ -158,12 +158,12 @@ mod hook_isolation_tests {
         assert_eq!(
             STOP_HITS.with(|c| c.get()),
             registered("stop"),
-            "phase=stop 钩子应被执行"
+            "phase=stop hooks must run"
         );
         assert_eq!(
             START_HITS.with(|c| c.get()),
             want_start,
-            "stop 轮次不得重跑 start 钩子"
+            "the stop round must not re-run start hooks"
         );
     }
 }

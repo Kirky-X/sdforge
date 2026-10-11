@@ -295,7 +295,13 @@ fn has_async_readiness_checks() -> bool {
     match async_readiness_checks().read() {
         Ok(guard) => !guard.is_empty(),
         Err(_) => {
-            log::warn!("async readiness checks lock poisoned; falling back to sync path");
+            log::warn!(
+                "{}",
+                crate::i18n::translate_or_fallback(
+                    "async readiness checks lock poisoned; falling back to sync path",
+                    Some("health-async-readiness-lock-poisoned-sync"),
+                )
+            );
             false
         }
     }
@@ -344,7 +350,13 @@ fn active_readiness_renderer() -> Arc<dyn ReadinessRenderer> {
                 .clone()
         }),
         Err(_) => {
-            log::warn!("readiness renderer lock poisoned; serving default envelope");
+            log::warn!(
+                "{}",
+                crate::i18n::translate_or_fallback(
+                    "readiness renderer lock poisoned; serving default envelope",
+                    Some("health-readiness-renderer-lock-poisoned"),
+                )
+            );
             DEFAULT
                 .get_or_init(|| Arc::new(DefaultReadinessRenderer))
                 .clone()
@@ -364,7 +376,13 @@ pub fn run_readiness_checks() -> (bool, Vec<CheckOutcome>) {
     let checks: Vec<Arc<dyn ReadinessCheck>> = match readiness_checks().read() {
         Ok(guard) => guard.clone(),
         Err(_) => {
-            log::warn!("readiness checks lock poisoned; running with an empty check set");
+            log::warn!(
+                "{}",
+                crate::i18n::translate_or_fallback(
+                    "readiness checks lock poisoned; running with an empty check set",
+                    Some("health-readiness-lock-poisoned-empty"),
+                )
+            );
             Vec::new()
         }
     };
@@ -384,7 +402,13 @@ pub fn run_readiness_checks() -> (bool, Vec<CheckOutcome>) {
     let source = match health_source().read() {
         Ok(guard) => guard.clone(),
         Err(_) => {
-            log::warn!("health source lock poisoned; skipping the kit aggregate");
+            log::warn!(
+                "{}",
+                crate::i18n::translate_or_fallback(
+                    "health source lock poisoned; skipping the kit aggregate",
+                    Some("health-source-lock-poisoned"),
+                )
+            );
             None
         }
     };
@@ -504,7 +528,13 @@ pub async fn run_readiness_checks_async() -> (bool, Vec<CheckOutcome>) {
     let checks: Vec<Arc<dyn ReadinessCheck>> = match readiness_checks().read() {
         Ok(guard) => guard.clone(),
         Err(_) => {
-            log::warn!("readiness checks lock poisoned; running with an empty check set");
+            log::warn!(
+                "{}",
+                crate::i18n::translate_or_fallback(
+                    "readiness checks lock poisoned; running with an empty check set",
+                    Some("health-readiness-lock-poisoned-empty"),
+                )
+            );
             Vec::new()
         }
     };
@@ -522,7 +552,13 @@ pub async fn run_readiness_checks_async() -> (bool, Vec<CheckOutcome>) {
     let async_checks: Vec<Arc<dyn AsyncReadinessCheck>> = match async_readiness_checks().read() {
         Ok(guard) => guard.clone(),
         Err(_) => {
-            log::warn!("async readiness checks lock poisoned; running with an empty check set");
+            log::warn!(
+                "{}",
+                crate::i18n::translate_or_fallback(
+                    "async readiness checks lock poisoned; running with an empty check set",
+                    Some("health-async-readiness-lock-poisoned-empty"),
+                )
+            );
             Vec::new()
         }
     };
@@ -573,7 +609,13 @@ pub async fn run_readiness_checks_async() -> (bool, Vec<CheckOutcome>) {
                 // panic 与取消等残余路径，兜底显性化，不让任何检查静默
                 // 消失（无法归名，以占位名呈现并排至结果末尾）。
                 Err(join_err) => {
-                    log::warn!("async readiness check task did not complete: {join_err}");
+                    log::warn!(
+                        "{}",
+                        crate::i18n::t(
+                            "health-async-check-incomplete",
+                            &[("join_err", join_err.to_string())]
+                        )
+                    );
                     all_healthy = false;
                     async_outcomes.push((
                         usize::MAX,
@@ -594,7 +636,13 @@ pub async fn run_readiness_checks_async() -> (bool, Vec<CheckOutcome>) {
     let source = match health_source().read() {
         Ok(guard) => guard.clone(),
         Err(_) => {
-            log::warn!("health source lock poisoned; skipping the kit aggregate");
+            log::warn!(
+                "{}",
+                crate::i18n::translate_or_fallback(
+                    "health source lock poisoned; skipping the kit aggregate",
+                    Some("health-source-lock-poisoned"),
+                )
+            );
             None
         }
     };

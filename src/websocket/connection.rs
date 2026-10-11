@@ -187,7 +187,10 @@ impl ConnectionManager {
             if let Ok(mut map) = self.connections.write() {
                 map.insert(id, conn);
             } else {
-                log::warn!("websocket connections lock poisoned; add_connection skipped");
+                log::warn!(
+                    "{}",
+                    crate::i18n::t("websocket-connections-lock-poisoned-add", &[])
+                );
                 return;
             }
         }
@@ -203,7 +206,10 @@ impl ConnectionManager {
             if let Ok(mut map) = self.connections.write() {
                 map.remove(id).is_some()
             } else {
-                log::warn!("websocket connections lock poisoned; remove_connection skipped");
+                log::warn!(
+                    "{}",
+                    crate::i18n::t("websocket-connections-lock-poisoned-remove", &[])
+                );
                 return;
             }
         };
@@ -220,7 +226,10 @@ impl ConnectionManager {
         let map = match self.connections.read() {
             Ok(g) => g,
             Err(_) => {
-                log::warn!("websocket connections lock poisoned; get_connection returned None");
+                log::warn!(
+                    "{}",
+                    crate::i18n::t("websocket-connections-lock-poisoned-get", &[])
+                );
                 return None;
             }
         };

@@ -398,7 +398,7 @@ impl MrtrSessionManager {
         match self.sessions.lock() {
             Ok(sessions) => sessions.get(session_id).map(|s| s.state.clone()),
             Err(_) => {
-                log::warn!("mrtr sessions lock poisoned; get_session returned None");
+                log::warn!("{}", crate::i18n::t("mcp-mrtr-sessions-lock-poisoned", &[]));
                 None
             }
         }

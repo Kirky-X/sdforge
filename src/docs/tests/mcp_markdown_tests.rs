@@ -57,15 +57,15 @@ inventory::submit!(McpToolRegistration::new(
 #[test]
 fn test_generate_mcp_docs_contains_tool_name() {
     let md = generate_mcp_docs();
-    assert!(!md.is_empty(), "MCP Markdown 文档不应为空");
+    assert!(!md.is_empty(), "MCP Markdown document must not be empty");
     assert!(
         md.contains("test_mcp_tool_for_docs"),
-        "MCP Markdown 应包含工具名 `test_mcp_tool_for_docs`，实际: {}",
+        "MCP Markdown must contain the tool name `test_mcp_tool_for_docs`, got: {}",
         &md[..md.len().min(300)]
     );
     assert!(
         md.contains("MCP Tools"),
-        "MCP Markdown 应含 `# MCP Tools` 标题"
+        "MCP Markdown must contain the `# MCP Tools` heading"
     );
 }
 
@@ -75,6 +75,6 @@ fn test_generate_mcp_docs_contains_description() {
     let md = generate_mcp_docs();
     assert!(
         md.contains("A test MCP tool for docs generation"),
-        "MCP Markdown 应含工具描述"
+        "MCP Markdown must contain the tool description"
     );
 }

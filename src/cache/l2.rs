@@ -225,7 +225,13 @@ impl RedisL2Cache {
         let should_warn = last.is_none_or(|t| now.duration_since(t) >= Duration::from_secs(60));
         if should_warn {
             *last = Some(now);
-            log::warn!("redis L2 cache {op} failed (degrading to miss/skip): {err}");
+            log::warn!(
+                "{}",
+                crate::i18n::t(
+                    "cache-l2-op-failed",
+                    &[("op", op.to_string()), ("error", err.to_string())]
+                )
+            );
         }
     }
 

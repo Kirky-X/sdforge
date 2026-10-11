@@ -171,8 +171,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("⚙️  SDForge Configuration Example");
     println!("==================================\n");
 
-    // 模式 1: 默认配置
-    println!("📦 模式 1: 默认配置 (SdForgeConfig::default())");
+    // Mode 1: default config
+    println!("📦 Mode 1: default config (SdForgeConfig::default())");
     let default = default_config();
     println!(
         "  server: {}:{}, timeout: {}s",
@@ -181,8 +181,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  auth: {:?}", default.authentication);
     println!();
 
-    // 模式 2: Builder 模式
-    println!("🔧 模式 2: Builder 模式 (自定义配置)");
+    // Mode 2: builder
+    println!("🔧 Mode 2: builder pattern (custom config)");
     let custom = build_custom_config();
     println!(
         "  server: {}:{}, timeout: {}s",
@@ -191,10 +191,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  auth: {:?}", custom.authentication);
     println!();
 
-    // 模式 3: 序列化/反序列化
-    println!("💾 模式 3: 序列化/反序列化");
+    // Mode 3: serialization / deserialization
+    println!("💾 Mode 3: serialization / deserialization");
     let json = serialize_config(&custom)?;
-    println!("  JSON (前 200 字符):");
+    println!("  JSON (first 200 chars):");
     let preview = if json.len() > 200 {
         &json[..200]
     } else {
@@ -205,13 +205,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let restored = deserialize_config(&json)?;
     println!(
-        "  反序列化: server={}:{}, auth={:?}",
+        "  deserialized: server={}:{}, auth={:?}",
         restored.server.host, restored.server.port, restored.authentication
     );
     println!();
 
-    // 子配置演示
-    println!("📋 子配置示例:");
+    // Sub-config demos
+    println!("📋 Sub-config examples:");
     let server = demo_server_config();
     println!(
         "  ServerConfig: {}:{}, timeout={}s",
@@ -219,13 +219,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     println!();
-    println!("  AuthConfig 变体:");
+    println!("  AuthConfig variants:");
     for (i, auth) in demo_auth_configs().iter().enumerate() {
         println!("    [{}] {:?}", i, auth);
     }
 
     println!();
-    println!("  TimeoutConfig 路由级超时:");
+    println!("  TimeoutConfig per-route timeouts:");
     let timeout = demo_timeout_config();
     println!("    default: {}s", timeout.default_timeout_secs);
     for (route, secs) in &timeout.route_timeouts {
@@ -236,16 +236,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         timeout.get_timeout("/api/upload")
     );
     println!(
-        "    get_timeout(\"/api/unknown\") = {}s (回退到默认)",
+        "    get_timeout(\"/api/unknown\") = {}s (falls back to default)",
         timeout.get_timeout("/api/unknown")
     );
 
     println!();
-    println!("  辅助配置类型:");
+    println!("  Helper config types:");
     demo_helper_configs();
 
     println!();
-    println!("✓ 配置示例完成");
+    println!("✓ Configuration example finished");
 
     Ok(())
 }

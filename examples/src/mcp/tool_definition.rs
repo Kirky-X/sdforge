@@ -112,7 +112,8 @@ pub struct ProcessRequest {
     path = "/mcp/hello",
     method = "GET",
     tool_name = "hello",
-    description = "简单的问候工具"
+    description = "Simple greeting tool",
+    i18n_key = "example.tool_definition.mcp_hello.description"
 )]
 async fn mcp_hello() -> Result<String, ApiError> {
     Ok("Hello from MCP!".to_string())
@@ -150,7 +151,8 @@ async fn mcp_hello() -> Result<String, ApiError> {
     path = "/mcp/greet",
     method = "POST",
     tool_name = "greet",
-    description = "用指定语言问候某人"
+    description = "Greet someone in a given language",
+    i18n_key = "example.tool_definition.mcp_greet.description"
 )]
 async fn mcp_greet(request: GreetRequest) -> Result<String, ApiError> {
     let greeting = match request.language.as_deref() {
@@ -191,7 +193,8 @@ async fn mcp_greet(request: GreetRequest) -> Result<String, ApiError> {
     path = "/mcp/data",
     method = "GET",
     tool_name = "get_data",
-    description = "根据ID获取数据"
+    description = "Get data by ID",
+    i18n_key = "example.tool_definition.mcp_get_data.description"
 )]
 async fn mcp_get_data(id: u64) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -235,7 +238,8 @@ async fn mcp_get_data(id: u64) -> Result<serde_json::Value, ApiError> {
     path = "/mcp/process",
     method = "POST",
     tool_name = "process_data",
-    description = "处理数据并应用选项"
+    description = "Process data and apply options",
+    i18n_key = "example.tool_definition.mcp_process.description"
 )]
 async fn mcp_process(request: ProcessRequest) -> Result<serde_json::Value, ApiError> {
     let mut result = serde_json::json!({
@@ -289,7 +293,8 @@ async fn mcp_process(request: ProcessRequest) -> Result<serde_json::Value, ApiEr
     path = "/mcp/time",
     method = "GET",
     tool_name = "get_time",
-    description = "获取当前时间"
+    description = "Get current time",
+    i18n_key = "example.tool_definition.mcp_get_time.description"
 )]
 async fn mcp_get_time() -> Result<serde_json::Value, ApiError> {
     let now = chrono::Utc::now();
@@ -338,7 +343,8 @@ pub struct CalculateRequest {
     path = "/mcp/calculate",
     method = "POST",
     tool_name = "calculate",
-    description = "执行数学运算"
+    description = "Perform a math calculation",
+    i18n_key = "example.tool_definition.mcp_calculate.description"
 )]
 async fn mcp_calculate(request: CalculateRequest) -> Result<serde_json::Value, ApiError> {
     let result = match request.operation.as_str() {
@@ -348,7 +354,7 @@ async fn mcp_calculate(request: CalculateRequest) -> Result<serde_json::Value, A
         "divide" => {
             if request.b == 0.0 {
                 return Err(ApiError::InvalidInput {
-                    message: "除数不能为零".to_string(),
+                    message: "Divisor cannot be zero".to_string(),
                     field: Some("b".to_string()),
                     value: Some(serde_json::json!(request.b)),
                 });
@@ -357,7 +363,7 @@ async fn mcp_calculate(request: CalculateRequest) -> Result<serde_json::Value, A
         }
         _ => {
             return Err(ApiError::InvalidInput {
-                message: format!("不支持的操作: {}", request.operation),
+                message: format!("Unsupported operation: {}", request.operation),
                 field: Some("operation".to_string()),
                 value: Some(serde_json::json!(request.operation)),
             });

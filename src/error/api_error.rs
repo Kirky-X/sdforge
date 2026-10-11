@@ -284,7 +284,7 @@ impl ApiError {
             .as_nanos();
         let error_id = format!("{:016x}", timestamp);
         Self::Internal {
-            message: "An internal error occurred. Please try again later.".to_string(),
+            message: crate::i18n::t("api-error-internal-generic", &[]),
             error_id,
             source: Some(Box::new(error)),
             context: None,
@@ -374,32 +374,42 @@ impl ApiError {
     /// Get a sanitized error message for external display
     ///
     /// This strips any sensitive information that should not be exposed to clients.
+    /// The two generic server-error branches resolve through the i18n registry
+    /// (built-in `en` / `zh` catalogs; keys `api-error-internal-generic` /
+    /// `api-error-service-generic`), so the text follows the active locale.
     pub fn sanitized_message(&self) -> String {
         match self {
-            ApiError::Internal { .. } => {
-                "An internal error occurred. Please try again later.".into()
-            }
-            ApiError::ServiceUnavailable { .. } => {
-                "The service is temporarily unavailable. Please try again later.".into()
-            }
+            ApiError::Internal { .. } => crate::i18n::t("api-error-internal-generic", &[]),
+            ApiError::ServiceUnavailable { .. } => crate::i18n::t("api-error-service-generic", &[]),
             other => other.to_string(),
         }
     }
 
-    /// Format error as MCP-compatible JSON string
+    /// Format error as MCP-compatible JSON string.
+    ///
+    /// Messages resolve through the i18n registry (built-in `en` / `zh`
+    /// catalogs; keys shared with [`crate::error::LocalizedError`]), so the
+    /// text follows the active locale. The `InvalidInput` branch passes the
+    /// caller-supplied message through verbatim (no framework text to
+    /// translate).
     pub fn to_mcp_json(&self) -> String {
         let (code, message) = match self {
-            ApiError::NotFound { resource, .. } => {
-                ("NOT_FOUND", format!("Resource not found: {}", resource))
-            }
+            ApiError::NotFound { resource, .. } => (
+                "NOT_FOUND",
+                crate::i18n::t("api-error-not-found", &[("resource", resource.clone())]),
+            ),
             ApiError::InvalidInput { message, .. } => ("INVALID_INPUT", message.clone()),
             ApiError::AuthenticationFailed { reason } => (
                 "AUTHENTICATION_FAILED",
-                format!("Authentication failed: {}", reason),
+                crate::i18n::t("api-error-auth-failed", &[("reason", reason.clone())]),
             ),
-            ApiError::AccessDenied { permission, .. } => {
-                ("ACCESS_DENIED", format!("Access denied: {}", permission))
-            }
+            ApiError::AccessDenied { permission, .. } => (
+                "ACCESS_DENIED",
+                crate::i18n::t(
+                    "api-error-access-denied",
+                    &[("permission", permission.clone())],
+                ),
+            ),
             ApiError::RateLimitExceeded { .. } => (
                 "RATE_LIMIT_EXCEEDED",
                 crate::i18n::t("ratelimit-exceeded", &[]),
@@ -408,19 +418,28 @@ impl ApiError {
             // 不再把原始内部消息（可能含主机名/路径/SQL 等）泄漏到外部协议。
             ApiError::Internal { .. } => (
                 "INTERNAL_ERROR",
-                "An internal error occurred. Please try again later.".to_string(),
+                crate::i18n::t("api-error-internal-generic", &[]),
             ),
             ApiError::QuotaExhausted { used, total } => (
                 "QUOTA_EXHAUSTED",
-                format!("Quota exhausted: {}/{}", used, total),
+                crate::i18n::t(
+                    "api-error-quota-exhausted",
+                    &[("used", used.to_string()), ("total", total.to_string())],
+                ),
             ),
             ApiError::ServiceUnavailable { service, .. } => (
                 "SERVICE_UNAVAILABLE",
-                format!("Service unavailable: {}", service),
+                crate::i18n::t(
+                    "api-error-service-unavailable",
+                    &[("service", service.clone())],
+                ),
             ),
             ApiError::ValidationError { field, constraint } => (
                 "VALIDATION_ERROR",
-                format!("Validation failed for {}: {}", field, constraint),
+                crate::i18n::t(
+                    "core-validation-failed",
+                    &[("field", field.clone()), ("constraint", constraint.clone())],
+                ),
             ),
         };
 
@@ -444,6 +463,10 @@ impl ApiError {
     /// duplicating the ~80-line match (which previously diverged: the
     /// `From` impl added a `timestamp` under the `timestamp` feature while
     /// `to_service_error` did not).
+    ///
+    /// Messages resolve through the i18n registry (built-in `en` / `zh`
+    /// catalogs; keys shared with [`crate::error::LocalizedError`]), so the
+    /// HTTP response body follows the active locale.
     pub fn to_service_error(&self) -> ServiceError {
         match self {
             ApiError::NotFound {
@@ -451,7 +474,7 @@ impl ApiError {
                 resource_id,
             } => ServiceError::with_details(
                 "NOT_FOUND",
-                format!("Resource not found: {}", resource),
+                crate::i18n::t("api-error-not-found", &[("resource", resource.clone())]),
                 serde_json::json!({ "resource": resource, "resource_id": resource_id }),
                 404,
             ),
@@ -467,7 +490,7 @@ impl ApiError {
             ),
             ApiError::AuthenticationFailed { reason } => ServiceError::with_details(
                 "AUTHENTICATION_FAILED",
-                format!("Authentication failed: {}", reason),
+                crate::i18n::t("api-error-auth-failed", &[("reason", reason.clone())]),
                 serde_json::json!({ "reason": reason }),
                 401,
             ),
@@ -476,7 +499,10 @@ impl ApiError {
                 user_id,
             } => ServiceError::with_details(
                 "ACCESS_DENIED",
-                format!("Access denied: {}", permission),
+                crate::i18n::t(
+                    "api-error-access-denied",
+                    &[("permission", permission.clone())],
+                ),
                 serde_json::json!({ "permission": permission, "user_id": user_id }),
                 403,
             ),
@@ -491,7 +517,10 @@ impl ApiError {
             ),
             ApiError::QuotaExhausted { used, total } => ServiceError::with_details(
                 "QUOTA_EXHAUSTED",
-                format!("Quota exhausted: {}/{}", used, total),
+                crate::i18n::t(
+                    "api-error-quota-exhausted",
+                    &[("used", used.to_string()), ("total", total.to_string())],
+                ),
                 serde_json::json!({ "used": used, "total": total }),
                 429,
             ),
@@ -525,13 +554,16 @@ impl ApiError {
                 source: _,
             } => ServiceError::with_details(
                 "SERVICE_UNAVAILABLE",
-                format!("Service unavailable: {}", service),
+                crate::i18n::t(
+                    "api-error-service-unavailable",
+                    &[("service", service.clone())],
+                ),
                 serde_json::json!({ "service": service, "retry_after": retry_after }),
                 503,
             ),
             ApiError::ValidationError { field, constraint } => ServiceError::with_details(
                 "VALIDATION_ERROR",
-                format!("Validation failed: {}", field),
+                crate::i18n::t("api-error-validation-field", &[("field", field.clone())]),
                 serde_json::json!({ "field": field, "constraint": constraint }),
                 422,
             ),
@@ -897,7 +929,11 @@ mod tests {
             } => {
                 // Message must be sanitized — raw failure details must NOT leak.
                 assert!(!message.contains("raw failure"));
-                assert!(message.contains("internal error"));
+                // 断言对照 en 目录条目，避免受环境 locale 影响。
+                assert_eq!(
+                    message,
+                    crate::i18n::translate_for("en", "api-error-internal-generic", &[])
+                );
                 // error_id should be a 16-char hex string.
                 assert_eq!(error_id.len(), 16);
                 assert!(source.is_some());
@@ -1104,7 +1140,11 @@ mod tests {
         let err = ApiError::internal_error("secret stack trace", "id");
         let msg = err.sanitized_message();
         assert!(!msg.contains("secret stack trace"));
-        assert!(msg.contains("internal error"));
+        // 断言对照 en 目录条目，避免受环境 locale 影响。
+        assert_eq!(
+            msg,
+            crate::i18n::translate_for("en", "api-error-internal-generic", &[])
+        );
     }
 
     /// Test sanitized_message() for ServiceUnavailable strips sensitive details.
@@ -1114,7 +1154,11 @@ mod tests {
         let msg = err.sanitized_message();
         // The service name must NOT leak in the sanitized message.
         assert!(!msg.contains("internal-db-host"));
-        assert!(msg.contains("unavailable") || msg.contains("try again"));
+        // 断言对照 en 目录条目，避免受环境 locale 影响。
+        assert_eq!(
+            msg,
+            crate::i18n::translate_for("en", "api-error-service-generic", &[])
+        );
     }
 
     // =========================================================================

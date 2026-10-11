@@ -110,6 +110,11 @@ fn text_render_error_keeps_error_prefix() {
         resource_id: Some("nope".to_string()),
     };
     let rendered = fmt.render_error(&err);
+    // 对照 en 目录条目，避免受环境 locale 影响。
+    assert_eq!(
+        rendered,
+        crate::i18n::translate_for("en", "cli-error-prefix", &[("message", err.to_string())])
+    );
     assert!(rendered.starts_with("error: "), "got: {rendered}");
     assert!(rendered.contains("Resource not found"));
 }
@@ -120,8 +125,13 @@ fn text_render_error_keeps_error_prefix() {
 #[cfg(feature = "security")]
 #[test]
 fn auth_failure_text_keeps_lowercase_compat() {
+    // 对照 en 目录条目（与历史文案逐字一致），避免受环境 locale 影响。
     assert_eq!(
         crate::cli::output::auth_failure_text("missing bearer token"),
-        "error: authentication failed: missing bearer token"
+        crate::i18n::translate_for(
+            "en",
+            "cli-auth-failure",
+            &[("reason", "missing bearer token".to_string())]
+        )
     );
 }

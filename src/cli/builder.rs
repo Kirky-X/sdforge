@@ -182,7 +182,12 @@ impl CliBuilder {
     pub fn build(&self) -> clap::Command {
         let mut root = clap::Command::new(self.name.clone())
             .version(env!("CARGO_PKG_VERSION"))
-            .about("SDForge multi-protocol CLI");
+            // Root about is a compile-time framework default; hosts may
+            // override it per locale (same wiring as build_subcommand).
+            .about(crate::i18n::translate_or_fallback(
+                "SDForge multi-protocol CLI",
+                Some("cli-root-about"),
+            ));
 
         for reg in inventory::iter::<CliCommandRegistration>() {
             root = root.subcommand(build_subcommand(reg));

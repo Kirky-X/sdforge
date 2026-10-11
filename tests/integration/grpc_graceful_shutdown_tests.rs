@@ -92,7 +92,7 @@ async fn graceful_shutdown_stops_serve_and_releases_listener() {
         .expect("get_info before shutdown");
     assert!(
         !info.into_inner().name.is_empty(),
-        "GetInfo 应返回非空服务名"
+        "GetInfo must return a non-empty service name"
     );
 
     // 触发停机 signal
@@ -114,8 +114,12 @@ async fn graceful_shutdown_stops_serve_and_releases_listener() {
     )
     .await;
     match reconnect {
-        Err(_) => panic!("停机后 connect 不应超时（监听已释放应立即拒绝）"),
-        Ok(Ok(_)) => panic!("shutdown 后新连接应失败；成功说明监听未释放"),
+        Err(_) => panic!(
+            "connect after shutdown must not time out (the listener is released and should refuse immediately)"
+        ),
+        Ok(Ok(_)) => panic!(
+            "a new connection after shutdown must fail; success means the listener was not released"
+        ),
         Ok(Err(_)) => {}
     }
 }
@@ -188,6 +192,6 @@ async fn serve_keeps_running_without_signal() {
         .await;
     assert!(
         call.is_ok(),
-        "未触发 signal 时服务应持续可用（GetInfo 正常响应）"
+        "the service must stay available when no signal is triggered (GetInfo responds normally)"
     );
 }

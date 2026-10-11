@@ -388,15 +388,19 @@ mod shutdown_sequence_tests {
         let body = http_get(addr).await.unwrap();
         assert!(
             body.contains("200 OK") && body.contains("served"),
-            "响应: {body}"
+            "response: {body}"
         );
-        assert_eq!(hits.load(Ordering::SeqCst), 1, "请求应真实到达 handler");
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            1,
+            "the request must really reach the handler"
+        );
 
         tx.send(()).unwrap();
         server.await.unwrap().unwrap();
         assert!(
             ran.load(Ordering::SeqCst),
-            "自然排空路径必须 await 调用方的 after_drain 钩子"
+            "the natural drain path must await the caller's after_drain hook"
         );
     }
 
@@ -412,7 +416,7 @@ mod shutdown_sequence_tests {
         let body = client.await.unwrap().unwrap();
         assert!(
             body.contains("200 OK") && body.contains("served"),
-            "在途请求应被排空而非掉断: {body}"
+            "in-flight requests must be drained, not dropped: {body}"
         );
         server.await.unwrap().unwrap();
         assert_eq!(hits.load(Ordering::SeqCst), 1);
@@ -431,7 +435,7 @@ mod shutdown_sequence_tests {
         // server 必须在远小于 handler 延时的时间内返回（否则为未强制中止）
         let done = tokio::time::timeout(Duration::from_secs(2), server)
             .await
-            .expect("drain 超时后应强制中止，而非等完 3s handler");
+            .expect("after a drain timeout the server must abort, not wait out the 3s handler");
         done.unwrap().unwrap();
 
         let res = tokio::time::timeout(Duration::from_millis(500), client)
@@ -441,7 +445,7 @@ mod shutdown_sequence_tests {
             Err(_) => {} // 连接被掉：客户端永不读完
             Ok(Ok(body)) => assert!(
                 !body.contains("served"),
-                "强制中止不得将完整 handler 响应交付客户端: {body}"
+                "a forced abort must not deliver the complete handler response to the client: {body}"
             ),
             Ok(Err(_)) => {} // 读失败亦属中止可观测结果
         }
@@ -483,12 +487,12 @@ mod shutdown_sequence_tests {
         let _ = tokio::time::timeout(Duration::from_secs(2), client).await;
         tokio::time::timeout(Duration::from_secs(2), server)
             .await
-            .expect("强制中止路径应按时完成收尾")
+            .expect("the forced-abort path must finish its cleanup on time")
             .unwrap()
             .unwrap();
         assert!(
             ran.load(Ordering::SeqCst),
-            "强制中止路径也必须 await after_drain 钩子"
+            "the forced-abort path must also await the after_drain hook"
         );
     }
 
@@ -529,7 +533,7 @@ mod shutdown_sequence_tests {
         let body = String::from_utf8_lossy(&buf).into_owned();
         assert!(
             body.contains(&client_port.to_string()),
-            "处理器应看到客户端真实临时端口（期望 {client_port}，响应: {body}）"
+            "the handler must see the client's real ephemeral port (expected {client_port}, response: {body})"
         );
         tx.send(()).unwrap();
         server.await.unwrap().unwrap();

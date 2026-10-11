@@ -73,9 +73,12 @@ impl OutputFormat {
     }
 
     /// 渲染错误（`Json` 模式含 `error: ` 无前缀的 UnifiedError JSON 行）。
+    ///
+    /// `Text` 模式的 `error: ` 前缀经 i18n 注册表解析（内建 `en` / `zh`
+    /// 目录；键 `cli-error-prefix`，en 值与历史形态一致）。
     pub fn render_error(&self, err: &ApiError) -> String {
         match self {
-            Self::Text => format!("error: {err}"),
+            Self::Text => crate::i18n::t("cli-error-prefix", &[("message", err.to_string())]),
             Self::Json => UnifiedError::from(err).to_json().to_string(),
         }
     }
@@ -102,7 +105,11 @@ pub(crate) fn format_arg() -> clap::Arg {
         .global(true)
         .value_parser(FORMAT_VALUES)
         .default_value(FORMAT_DEFAULT)
-        .help(FORMAT_HELP)
+        // 编译期默认串 + i18n 键：宿主可按 locale 覆盖帮助文案。
+        .help(crate::i18n::translate_or_fallback(
+            FORMAT_HELP,
+            Some("cli-format-help"),
+        ))
 }
 
 /// CLI text 模式的认证失败文案（历史兼容）。
@@ -112,9 +119,12 @@ pub(crate) fn format_arg() -> clap::Arg {
 /// `authentication failed: …`，按旧字符串匹配的脚本依赖该形态，故 CLI
 /// text 路径显式构造小写文案（json 模式走 UnifiedError，不受影响）。
 ///
+/// 文案经 i18n 注册表解析（内建 `en` / `zh` 目录；键 `cli-auth-failure`，
+/// en 值与历史形态逐字一致），zh locale 下输出对应译文。
+///
 /// 唯一调用点是 `execute` 的凭据预检（`security` 特性），定义随之同门
 /// 编译，避免 `cli` 单独启用时产生 dead_code。
 #[cfg(feature = "security")]
 pub(crate) fn auth_failure_text(reason: &str) -> String {
-    format!("error: authentication failed: {reason}")
+    crate::i18n::t("cli-auth-failure", &[("reason", reason.to_string())])
 }

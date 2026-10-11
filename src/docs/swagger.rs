@@ -106,7 +106,13 @@ async fn serve_fixed_openapi_json(
             .into_response(),
         // spec 序列化失败属服务端数据错误，不向客户端泄露细节，仅记日志。
         Err(err) => {
-            log::error!("OpenAPI spec serialize failed: {err}");
+            log::error!(
+                "{}",
+                crate::i18n::t(
+                    "docs-openapi-serialize-failed",
+                    &[("error", err.to_string())]
+                )
+            );
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
         }
     }
@@ -127,7 +133,13 @@ async fn serve_openapi_json() -> axum::response::Response {
             // 序列化失败属服务端数据错误：显性记日志并以空缓冲哨兵，后续
             // 请求维持 500 而不是反复重试重建。
             Err(err) => {
-                log::error!("OpenAPI spec serialize failed: {err}");
+                log::error!(
+                    "{}",
+                    crate::i18n::t(
+                        "docs-openapi-serialize-failed",
+                        &[("error", err.to_string())]
+                    )
+                );
                 Vec::new()
             }
         }
@@ -167,7 +179,10 @@ async fn serve_swagger_ui(
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(error) => {
             // 不向客户端泄露内部错误详情，仅记录日志。
-            log::error!("Swagger UI serve failed: {}", error);
+            log::error!(
+                "{}",
+                crate::i18n::t("docs-swagger-serve-failed", &[("error", error.to_string())])
+            );
             (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
         }
     }
@@ -211,12 +226,15 @@ mod swagger_route_tests {
         assert_eq!(ct.as_deref(), Some("application/json"));
         assert!(
             first.contains("\"openapi\""),
-            "spec 应含 openapi 字段: {}",
+            "spec must contain the openapi field: {}",
             &first[..first.len().min(120)]
         );
 
         let (_, _, second) = fetch(swagger_ui_router(), "/api-docs/openapi.json").await;
-        assert_eq!(first, second, "进程级缓存应使两次响应字节一致");
+        assert_eq!(
+            first, second,
+            "process-level cache must make both responses byte-identical"
+        );
     }
 
     #[tokio::test]
@@ -225,11 +243,11 @@ mod swagger_route_tests {
         assert_eq!(status, StatusCode::OK);
         assert!(
             ct.unwrap_or_default().contains("text/html"),
-            "首页应以 HTML 返回"
+            "index page must be served as HTML"
         );
         assert!(
             html.to_lowercase().contains("swagger"),
-            "首页应渲染 Swagger UI"
+            "index page must render the Swagger UI"
         );
 
         let (missing, _, _) = fetch(swagger_ui_router(), "/swagger-ui/no-such-asset.xyz").await;
@@ -246,9 +264,12 @@ mod swagger_route_tests {
             let (status, _, body) = fetch(swagger_ui_router(), uri).await;
             assert!(
                 status == StatusCode::BAD_REQUEST || status == StatusCode::NOT_FOUND,
-                "{uri} 必须被拒（实得 {status}）"
+                "{uri} must be rejected (got {status})"
             );
-            assert!(!body.contains("root:"), "不得回显 passwd 内容: {uri}");
+            assert!(
+                !body.contains("root:"),
+                "passwd content must not be echoed: {uri}"
+            );
         }
     }
 
@@ -260,14 +281,18 @@ mod swagger_route_tests {
             "/api-docs/openapi.json",
         )
         .await;
-        assert_eq!(status, StatusCode::NOT_FOUND, "该变体不应注册 spec 端点");
+        assert_eq!(
+            status,
+            StatusCode::NOT_FOUND,
+            "this variant must not register the spec endpoint"
+        );
 
         let (ui, _, _) = fetch(
             swagger_ui_router_with_spec("/host-provided/spec.json"),
             "/swagger-ui/",
         )
         .await;
-        assert_eq!(ui, StatusCode::OK, "UI 路由仍应可用");
+        assert_eq!(ui, StatusCode::OK, "the UI route must still be available");
     }
 
     /// `with_openapi` 变体直接吐调用方给的 spec（而非动态生成的默认 spec）。
@@ -285,7 +310,7 @@ mod swagger_route_tests {
         assert_eq!(status, StatusCode::OK);
         assert!(
             body.contains("MARKER-HOST-API"),
-            "应返回调用方提供的 spec: {}",
+            "must return the caller-provided spec: {}",
             &body[..body.len().min(120)]
         );
     }

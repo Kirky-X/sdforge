@@ -77,9 +77,13 @@ pub async fn serve_stdio(
     #[cfg(feature = "security")]
     if server.auth_verifier.is_some() {
         log::warn!(
-            "serve_stdio: an auth verifier is configured but the stdio transport cannot \
-             carry transport credentials — every call_tool/list_tools will be rejected. \
-             Serve authenticated MCP over a transport adapter that injects McpCredentials."
+            "{}",
+            crate::i18n::translate_or_fallback(
+                "serve_stdio: an auth verifier is configured but the stdio transport cannot \
+                 carry transport credentials — every call_tool/list_tools will be rejected. \
+                 Serve authenticated MCP over a transport adapter that injects McpCredentials.",
+                Some("mcp-stdio-auth-verifier-warning"),
+            )
         );
     }
     use rmcp::ServiceExt;

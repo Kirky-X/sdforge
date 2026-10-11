@@ -159,7 +159,8 @@ pub struct DataItem {
     path = "/items/:id",
     method = "GET",
     tool_name = "get_item",
-    description = "获取单个数据项"
+    description = "Get a single item",
+    i18n_key = "example.response_building.get_item.description"
 )]
 async fn get_item(id: u64) -> Result<DataItem, ApiError> {
     // 返回模拟数据
@@ -198,7 +199,8 @@ async fn get_item(id: u64) -> Result<DataItem, ApiError> {
     path = "/items",
     method = "GET",
     tool_name = "list_items",
-    description = "获取数据项列表"
+    description = "List items",
+    i18n_key = "example.response_building.list_items.description"
 )]
 async fn list_items(
     limit: Option<u32>,
@@ -253,7 +255,8 @@ async fn list_items(
     path = "/items/:id",
     method = "DELETE",
     tool_name = "delete_item",
-    description = "删除数据项"
+    description = "Delete an item",
+    i18n_key = "example.response_building.delete_item.description"
 )]
 async fn delete_item(_id: u64) -> Result<StatusResponse, ApiError> {
     Ok(StatusResponse {
@@ -291,7 +294,8 @@ async fn delete_item(_id: u64) -> Result<StatusResponse, ApiError> {
     path = "/wrapped/items/:id",
     method = "GET",
     tool_name = "get_wrapped_item",
-    description = "获取包装后的数据项"
+    description = "Get a wrapped item",
+    i18n_key = "example.response_building.get_wrapped_item.description"
 )]
 async fn get_wrapped_item(id: u64) -> Result<ApiResponse<DataItem>, ApiError> {
     let item = DataItem {
@@ -333,7 +337,8 @@ pub struct CreateItemRequest {
     path = "/items",
     method = "POST",
     tool_name = "create_item",
-    description = "创建新数据项"
+    description = "Create a new item",
+    i18n_key = "example.response_building.create_item.description"
 )]
 async fn create_item(_request: CreateItemRequest) -> Result<StatusResponse, ApiError> {
     Ok(StatusResponse {
@@ -366,7 +371,8 @@ pub struct UpdateItemRequest {
     path = "/items/:id",
     method = "PUT",
     tool_name = "update_item",
-    description = "更新数据项"
+    description = "Update an item",
+    i18n_key = "example.response_building.update_item.description"
 )]
 async fn update_item(
     id: u64,
@@ -413,7 +419,8 @@ async fn update_item(
     method = "POST",
     status = 201,
     tool_name = "create_item_with_status",
-    description = "创建数据项（静态 201）"
+    description = "Create an item (static 201)",
+    i18n_key = "example.response_building.create_item_with_status.description"
 )]
 async fn create_item_with_status(request: CreateItemRequest) -> Result<DataItem, ApiError> {
     Ok(DataItem {
@@ -444,7 +451,8 @@ async fn create_item_with_status(request: CreateItemRequest) -> Result<DataItem,
     path = "/items-dynamic-status",
     method = "POST",
     tool_name = "create_item_dynamic_status",
-    description = "创建数据项（动态状态码）"
+    description = "Create an item (dynamic status code)",
+    i18n_key = "example.response_building.create_item_dynamic_status.description"
 )]
 async fn create_item_dynamic_status(
     request: CreateItemRequest,

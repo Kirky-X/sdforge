@@ -314,8 +314,8 @@ on_exceed = "reject"
     #[test]
     fn security_rate_limit_documented_shape_deserializes() {
         let cfg: SecurityConfig = toml::from_str(DOCUMENTED_TOML)
-            .expect("USER_GUIDE 的 [security.rate_limit] 示例必须可解析");
-        let rl = cfg.rate_limit.expect("rate_limit 应存在");
+            .expect("the [security.rate_limit] example in USER_GUIDE must parse");
+        let rl = cfg.rate_limit.expect("rate_limit must be present");
         assert_eq!(rl.version, "1.0");
         assert_eq!(rl.rules.len(), 1);
         assert_eq!(rl.rules[0].id, "http_default");
@@ -327,7 +327,7 @@ on_exceed = "reject"
         let bad = "[rate_limit]\nrate = 60\nwindow_seconds = 1\n";
         assert!(
             toml::from_str::<SecurityConfig>(bad).is_err(),
-            "单个阈值字段不应被误当作合法配置"
+            "a single threshold field must not be mistaken for a valid config"
         );
     }
 
@@ -369,16 +369,23 @@ on_exceed = "reject"
 
         const DOC: &str = include_str!("../../docs/USER_GUIDE.md");
         let block = extract_toml_block(DOC, "[security.rate_limit]")
-            .expect("USER_GUIDE 应保留 [security.rate_limit] 的 toml 代码块");
-        let root: DocRoot =
-            toml::from_str(&block).expect("USER_GUIDE 的限流示例必须可反序列化为 SecurityConfig");
-        let rl = root.security.rate_limit.expect("rate_limit 字段应存在");
+            .expect("USER_GUIDE must keep the [security.rate_limit] toml code block");
+        let root: DocRoot = toml::from_str(&block)
+            .expect("the rate-limit example in USER_GUIDE must deserialize into SecurityConfig");
+        let rl = root
+            .security
+            .rate_limit
+            .expect("rate_limit field must be present");
         assert_eq!(rl.version, "1.0");
-        assert_eq!(rl.rules.len(), 1, "文档示例应含一条规则");
+        assert_eq!(
+            rl.rules.len(),
+            1,
+            "the documented example must contain exactly one rule"
+        );
         assert_eq!(rl.rules[0].id, "http_default");
         assert!(
             !block.contains("window_seconds"),
-            "文档不得回退到单个阈值旧写法"
+            "the document must not fall back to the single-threshold legacy form"
         );
     }
 }

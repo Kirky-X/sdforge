@@ -175,7 +175,8 @@ pub struct EchoResponse {
     path = "/hello",
     method = "GET",
     tool_name = "get_hello",
-    description = "返回简单的问候语"
+    description = "Return a simple greeting",
+    i18n_key = "example.simple_api.get_hello.description"
 )]
 async fn get_hello() -> Result<String, ApiError> {
     // 直接返回 Ok，框架会自动包装响应
@@ -210,7 +211,8 @@ async fn get_hello() -> Result<String, ApiError> {
     path = "/users/:id",
     method = "GET",
     tool_name = "get_user",
-    description = "根据 ID 获取用户信息"
+    description = "Get user info by ID",
+    i18n_key = "example.simple_api.get_user.description"
 )]
 async fn get_user(id: u64) -> Result<UserResponse, ApiError> {
     // 在实际应用中，这里会查询数据库
@@ -255,7 +257,8 @@ async fn get_user(id: u64) -> Result<UserResponse, ApiError> {
     path = "/users",
     method = "POST",
     tool_name = "create_user",
-    description = "创建新用户"
+    description = "Create a new user",
+    i18n_key = "example.simple_api.create_user.description"
 )]
 async fn create_user(user: UserRequest) -> Result<UserResponse, ApiError> {
     // 使用请求中的数据构造响应
@@ -289,7 +292,8 @@ async fn create_user(user: UserRequest) -> Result<UserResponse, ApiError> {
     path = "/users/:user_id/posts/:post_id",
     method = "GET",
     tool_name = "get_user_post",
-    description = "获取用户发布的指定帖子"
+    description = "Get a specific post of a user",
+    i18n_key = "example.simple_api.get_user_post.description"
 )]
 async fn get_user_post(user_id: u64, post_id: u64) -> Result<String, ApiError> {
     // 格式化响应消息
@@ -324,7 +328,8 @@ async fn get_user_post(user_id: u64, post_id: u64) -> Result<String, ApiError> {
     path = "/echo",
     method = "POST",
     tool_name = "post_echo",
-    description = "回显请求体内容"
+    description = "Echo the request body",
+    i18n_key = "example.simple_api.post_echo.description"
 )]
 async fn post_echo(body: EchoRequest) -> Result<EchoResponse, ApiError> {
     Ok(EchoResponse {

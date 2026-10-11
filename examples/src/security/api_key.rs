@@ -107,12 +107,13 @@ pub struct AuthRequest {
     path = "/public/data",
     method = "GET",
     tool_name = "public_data",
-    description = "公开数据端点"
+    description = "Public data endpoint",
+    i18n_key = "example.api_key.public_data.description"
 )]
 async fn public_data() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "message": "这是公开数据",
-        "accessible": "任何人可访问"
+        "message": "This is public data",
+        "accessible": "anyone"
     }))
 }
 
@@ -152,11 +153,12 @@ async fn public_data() -> Result<serde_json::Value, ApiError> {
     path = "/protected/api-key",
     method = "GET",
     tool_name = "api_key_protected",
-    description = "API Key 保护的端点"
+    description = "API Key protected endpoint",
+    i18n_key = "example.api_key.api_key_protected.description"
 )]
 async fn api_key_protected() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "message": "已通过 API Key 认证",
+        "message": "Authenticated via API Key",
         "user_id": "user_123",
         "permissions": ["read", "write"]
     }))
@@ -193,11 +195,12 @@ async fn api_key_protected() -> Result<serde_json::Value, ApiError> {
     path = "/protected/bearer",
     method = "GET",
     tool_name = "bearer_protected",
-    description = "Bearer Token 保护的端点"
+    description = "Bearer Token protected endpoint",
+    i18n_key = "example.api_key.bearer_protected.description"
 )]
 async fn bearer_protected() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "message": "已通过 Bearer Token 认证",
+        "message": "Authenticated via Bearer Token",
         "user": {
             "id": "user_456",
             "email": "user@example.com"
@@ -235,11 +238,12 @@ async fn bearer_protected() -> Result<serde_json::Value, ApiError> {
     path = "/protected/multi",
     method = "GET",
     tool_name = "multi_auth",
-    description = "支持多种认证方式的端点"
+    description = "Endpoint supporting multiple auth methods",
+    i18n_key = "example.api_key.multi_auth.description"
 )]
 async fn multi_auth() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "message": "认证成功",
+        "message": "Authentication succeeded",
         "method": "any supported method"
     }))
 }
@@ -274,7 +278,8 @@ pub struct RefreshTokenRequest {
     path = "/auth/refresh",
     method = "POST",
     tool_name = "refresh_token",
-    description = "刷新访问令牌"
+    description = "Refresh access token",
+    i18n_key = "example.api_key.refresh_token.description"
 )]
 async fn refresh_token(request: RefreshTokenRequest) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({

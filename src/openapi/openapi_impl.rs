@@ -753,7 +753,11 @@ fn merge_extra_into(spec: &mut OpenApi, extra: &OpenApi) {
 /// metadata use [`OpenApiBuilder`] directly.
 pub fn generate_openapi_spec() -> OpenApi {
     OpenApiBuilder::new()
-        .title("SDForge API")
+        // 产品名型标题：默认值与 en 目录一致；宿主可按 locale 覆盖。
+        .title(crate::i18n::translate_or_fallback(
+            "SDForge API",
+            Some("openapi-info-title"),
+        ))
         .version(env!("CARGO_PKG_VERSION"))
         .build()
 }

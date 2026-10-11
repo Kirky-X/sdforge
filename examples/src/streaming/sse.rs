@@ -136,7 +136,8 @@ pub struct ProgressUpdate {
     path = "/stream/events",
     method = "GET",
     tool_name = "sse_stream",
-    description = "SSE 流式事件端点",
+    description = "SSE streaming events endpoint",
+    i18n_key = "example.sse.sse_stream.description",
     streaming = true
 )]
 async fn sse_stream() -> Result<String, ApiError> {
@@ -162,7 +163,8 @@ async fn sse_stream() -> Result<String, ApiError> {
     path = "/stream/subscribe",
     method = "GET",
     tool_name = "event_stream",
-    description = "事件流订阅端点",
+    description = "Event stream subscription endpoint",
+    i18n_key = "example.sse.event_stream.description",
     streaming = true
 )]
 async fn event_stream() -> Result<String, ApiError> {
@@ -218,7 +220,8 @@ async fn event_stream() -> Result<String, ApiError> {
     path = "/stream/progress/:task_id",
     method = "GET",
     tool_name = "progress_stream",
-    description = "进度流端点",
+    description = "Progress stream endpoint",
+    i18n_key = "example.sse.progress_stream.description",
     streaming = true
 )]
 async fn progress_stream(task_id: String) -> Result<String, ApiError> {
@@ -244,7 +247,8 @@ async fn progress_stream(task_id: String) -> Result<String, ApiError> {
     path = "/stream/data",
     method = "GET",
     tool_name = "data_stream",
-    description = "实时数据流端点",
+    description = "Real-time data stream endpoint",
+    i18n_key = "example.sse.data_stream.description",
     streaming = true
 )]
 async fn data_stream() -> Result<String, ApiError> {
@@ -267,7 +271,8 @@ async fn data_stream() -> Result<String, ApiError> {
     path = "/stream/heartbeat",
     method = "GET",
     tool_name = "heartbeat_stream",
-    description = "心跳流端点",
+    description = "Heartbeat stream endpoint",
+    i18n_key = "example.sse.heartbeat_stream.description",
     streaming = true
 )]
 async fn heartbeat_stream() -> Result<String, ApiError> {

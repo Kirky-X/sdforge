@@ -89,9 +89,14 @@ pub fn sdk_subcommand(matches: &clap::ArgMatches) -> Result<(), ApiError> {
     }
 
     println!(
-        "generated {} sdk file(s): {}",
-        written.len(),
-        written.join(", ")
+        "{}",
+        crate::i18n::t(
+            "cli-sdk-generated",
+            &[
+                ("count", written.len().to_string()),
+                ("files", written.join(", "))
+            ]
+        )
     );
     Ok(())
 }
@@ -134,7 +139,7 @@ mod tests {
         let cmd = crate::cli::CliBuilder::new().build();
         assert!(
             cmd.find_subcommand("sdk").is_some(),
-            "sdk feature 启用时 build() 必须包含保留子命令 sdk"
+            "build() must include the reserved sdk subcommand when the sdk feature is enabled"
         );
 
         let dir = std::env::temp_dir().join(format!("sdforge-sdk-test-{}", std::process::id()));

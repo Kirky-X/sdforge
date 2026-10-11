@@ -122,18 +122,33 @@ impl SyncCache for OxcacheSyncCache {
             Ok(idx) => idx,
             Err(_) => {
                 log::warn!(
-                    "cache key_index poisoned; set falling back to backend-only for key={:?}",
-                    key
+                    "{}",
+                    crate::i18n::t(
+                        "cache-key-index-poisoned-set",
+                        &[("key", format!("{key:?}"))]
+                    )
                 );
                 if let Err(e) = self.backend.set(Arc::from(key), Arc::new(value), None) {
-                    log::warn!("cache backend set failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
+                    log::warn!(
+                        "{}",
+                        crate::i18n::t(
+                            "cache-backend-set-failed",
+                            &[("key", format!("{key:?}")), ("error", e.to_string())]
+                        )
+                    ); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                 }
                 return;
             }
         };
         // 不静默吞掉 backend 错误；失败时不更新 index 以保持一致
         if let Err(e) = self.backend.set(Arc::from(key), Arc::new(value), None) {
-            log::warn!("cache backend set failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
+            log::warn!(
+                "{}",
+                crate::i18n::t(
+                    "cache-backend-set-failed",
+                    &[("key", format!("{key:?}")), ("error", e.to_string())]
+                )
+            ); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
             return;
         }
         idx.insert(key.to_string());
@@ -145,12 +160,21 @@ impl SyncCache for OxcacheSyncCache {
             Ok(idx) => idx,
             Err(_) => {
                 log::warn!(
-                    "cache key_index poisoned; delete falling back to backend-only for key={:?}",
-                    key
+                    "{}",
+                    crate::i18n::t(
+                        "cache-key-index-poisoned-delete",
+                        &[("key", format!("{key:?}"))]
+                    )
                 );
                 let existed = self.backend.exists(key).unwrap_or(false);
                 if existed && let Err(e) = self.backend.delete(key) {
-                    log::warn!("cache backend delete failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
+                    log::warn!(
+                        "{}",
+                        crate::i18n::t(
+                            "cache-backend-delete-failed",
+                            &[("key", format!("{key:?}")), ("error", e.to_string())]
+                        )
+                    ); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                     // 契约修复：删除失败 = 键未被删除，必须返回 false，
                     // 不能把 `existed` 当作删除成功（此前违反 trait 契约）。
                     return false;
@@ -162,7 +186,13 @@ impl SyncCache for OxcacheSyncCache {
         if existed {
             // backend 失败时不更新 index，保持一致
             if let Err(e) = self.backend.delete(key) {
-                log::warn!("cache backend delete failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
+                log::warn!(
+                    "{}",
+                    crate::i18n::t(
+                        "cache-backend-delete-failed",
+                        &[("key", format!("{key:?}")), ("error", e.to_string())]
+                    )
+                ); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                 // 契约修复：删除失败返回 false（键仍存在），调用方不得误以为已删除。
                 return false;
             }
@@ -181,15 +211,21 @@ impl SyncCache for OxcacheSyncCache {
         let mut idx = match self.key_index.lock() {
             Ok(idx) => idx,
             Err(_) => {
-                log::warn!("cache key_index poisoned; clear falling back to backend-only");
+                log::warn!("{}", crate::i18n::t("cache-key-index-poisoned-clear", &[]));
                 if let Err(e) = self.backend.clear() {
-                    log::warn!("cache backend clear failed: {}", e);
+                    log::warn!(
+                        "{}",
+                        crate::i18n::t("cache-backend-clear-failed", &[("error", e.to_string())])
+                    );
                 }
                 return;
             }
         };
         if let Err(e) = self.backend.clear() {
-            log::warn!("cache backend clear failed: {}", e);
+            log::warn!(
+                "{}",
+                crate::i18n::t("cache-backend-clear-failed", &[("error", e.to_string())])
+            );
             return;
         }
         idx.clear();
@@ -252,15 +288,24 @@ impl SyncCache for OxcacheSyncCache {
             Ok(idx) => idx,
             Err(_) => {
                 log::warn!(
-                    "cache key_index poisoned; set_many falling back to backend-only for {} items",
-                    items.len()
+                    "{}",
+                    crate::i18n::t(
+                        "cache-key-index-poisoned-set-many",
+                        &[("count", items.len().to_string())]
+                    )
                 );
                 for (key, value) in items {
                     if let Err(e) =
                         self.backend
                             .set(Arc::from(key.as_str()), Arc::new(value.clone()), None)
                     {
-                        log::warn!("cache backend set failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
+                        log::warn!(
+                            "{}",
+                            crate::i18n::t(
+                                "cache-backend-set-failed",
+                                &[("key", format!("{key:?}")), ("error", e.to_string())]
+                            )
+                        ); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                     }
                 }
                 return;
@@ -273,7 +318,13 @@ impl SyncCache for OxcacheSyncCache {
                 .backend
                 .set(Arc::from(key.as_str()), Arc::new(value.clone()), None)
             {
-                log::warn!("cache backend set failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
+                log::warn!(
+                    "{}",
+                    crate::i18n::t(
+                        "cache-backend-set-failed",
+                        &[("key", format!("{key:?}")), ("error", e.to_string())]
+                    )
+                ); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
             } else {
                 succeeded.push(key);
             }
@@ -289,15 +340,24 @@ impl SyncCache for OxcacheSyncCache {
             Ok(idx) => idx,
             Err(_) => {
                 log::warn!(
-                    "cache key_index poisoned; delete_many falling back to backend-only for {} keys",
-                    keys.len()
+                    "{}",
+                    crate::i18n::t(
+                        "cache-key-index-poisoned-delete-many",
+                        &[("count", keys.len().to_string())]
+                    )
                 );
                 let mut deleted = 0usize;
                 for &key in keys {
                     let existed = self.backend.exists(key).unwrap_or(false);
                     if existed {
                         if let Err(e) = self.backend.delete(key) {
-                            log::warn!("cache backend delete failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
+                            log::warn!(
+                                "{}",
+                                crate::i18n::t(
+                                    "cache-backend-delete-failed",
+                                    &[("key", format!("{key:?}")), ("error", e.to_string())]
+                                )
+                            ); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                         } else {
                             deleted += 1;
                         }
@@ -311,7 +371,13 @@ impl SyncCache for OxcacheSyncCache {
             let existed = self.backend.exists(key).unwrap_or(false);
             if existed {
                 if let Err(e) = self.backend.delete(key) {
-                    log::warn!("cache backend delete failed for key={:?}: {}", key, e); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
+                    log::warn!(
+                        "{}",
+                        crate::i18n::t(
+                            "cache-backend-delete-failed",
+                            &[("key", format!("{key:?}")), ("error", e.to_string())]
+                        )
+                    ); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
                 } else {
                     idx.remove(key);
                     deleted += 1;
@@ -356,17 +422,24 @@ impl SyncCache for OxcacheSyncCache {
                         f.round() as u64
                     };
                     log::debug!(
-                        "cache stat {:?} parsed as f64={} converted to u64={}",
-                        k,
-                        f,
-                        converted
+                        "{}",
+                        crate::i18n::t(
+                            "cache-stat-parsed-float",
+                            &[
+                                ("key", k.clone()),
+                                ("value", f.to_string()),
+                                ("converted", converted.to_string()),
+                            ]
+                        )
                     );
                     stats.entry(k).or_insert(converted);
                 } else {
                     log::warn!(
-                        "cache stat {:?} value {:?} could not be parsed as u64 or f64; dropped",
-                        k,
-                        v
+                        "{}",
+                        crate::i18n::t(
+                            "cache-stat-unparsed",
+                            &[("key", format!("{k:?}")), ("value", format!("{v:?}"))]
+                        )
                     );
                 }
             }

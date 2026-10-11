@@ -2286,7 +2286,7 @@ mod tests {
             assert_eq!(
                 count_clone.count.load(Ordering::SeqCst),
                 2,
-                "call 与 get_info 各触发一次限流检查"
+                "call and get_info each run one rate-limit check"
             );
         }
     }
@@ -2458,11 +2458,11 @@ mod tests {
                 .await
                 .unwrap()
                 .into_inner();
-            assert_eq!(second.data, first.data, "重放数据一致");
+            assert_eq!(second.data, first.data, "replayed data must match");
             assert_eq!(
                 EXEC_COUNT.load(std::sync::atomic::Ordering::SeqCst),
                 1,
-                "handler 只执行一次"
+                "handler must run exactly once"
             );
         }
 
@@ -2504,7 +2504,7 @@ mod tests {
             assert_eq!(
                 outcome,
                 crate::cache::IdempotencyOutcome::Execute,
-                "early-return 不得泄漏 InFlight claim"
+                "early-return must not leak an InFlight claim"
             );
         }
 
@@ -2544,7 +2544,7 @@ mod tests {
             assert_eq!(
                 EXEC_COUNT.load(std::sync::atomic::Ordering::SeqCst),
                 2,
-                "无 key 不参与幂等"
+                "calls without a key bypass idempotency"
             );
         }
     }

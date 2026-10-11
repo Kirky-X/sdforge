@@ -91,7 +91,7 @@ pub enum SdForgeExampleError {
     /// ```text
     /// SdForgeExampleError::UserNotFound { user_id: 123 }
     /// ```
-    #[error("用户不存在: {user_id}")]
+    #[error("User not found: {user_id}")]
     UserNotFound { user_id: u64 },
 
     /// 输入验证错误
@@ -99,7 +99,7 @@ pub enum SdForgeExampleError {
     /// # 字段
     /// - `message` - 错误消息
     /// - `field` - 出错的字段名 (可选)
-    #[error("输入验证失败: {message}")]
+    #[error("Input validation failed: {message}")]
     ValidationError {
         /// 错误描述
         message: String,
@@ -113,7 +113,7 @@ pub enum SdForgeExampleError {
     /// ```text
     /// SdForgeExampleError::DatabaseError { details: "Connection timeout".into() }
     /// ```
-    #[error("数据库错误: {details}")]
+    #[error("Database error: {details}")]
     DatabaseError { details: String },
 }
 
@@ -137,7 +137,7 @@ impl From<SdForgeExampleError> for ApiError {
             },
             // 数据库错误 -> 500 Internal Server Error
             SdForgeExampleError::DatabaseError { details } => ApiError::InvalidInput {
-                message: format!("数据库错误: {}", details),
+                message: format!("Database error: {}", details),
                 field: None,
                 value: None,
             },
@@ -188,11 +188,12 @@ pub struct ValidateUserRequest {
     path = "/meta",
     method = "GET",
     tool_name = "get_metadata_info",
-    description = "获取 API 元数据信息"
+    description = "Get API metadata info",
+    i18n_key = "example.types_and_errors.get_metadata_info.description"
 )]
 async fn get_metadata_info() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "message": "元数据由 SDForge 自动管理",
+        "message": "Metadata is managed automatically by SDForge",
         "available_fields": ["name", "version", "description"]
     }))
 }
@@ -224,7 +225,8 @@ async fn get_metadata_info() -> Result<serde_json::Value, ApiError> {
     path = "/wrapped",
     method = "GET",
     tool_name = "get_wrapped_response",
-    description = "获取包装后的响应"
+    description = "Get a wrapped response",
+    i18n_key = "example.types_and_errors.get_wrapped_response.description"
 )]
 async fn get_wrapped_response() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -266,7 +268,8 @@ async fn get_wrapped_response() -> Result<serde_json::Value, ApiError> {
     path = "/paginated-items",
     method = "GET",
     tool_name = "get_paginated",
-    description = "获取分页数据"
+    description = "Get paginated data",
+    i18n_key = "example.types_and_errors.get_paginated.description"
 )]
 async fn get_paginated(page: u64, per_page: u64) -> Result<serde_json::Value, ApiError> {
     let items: Vec<serde_json::Value> = (0..per_page)
@@ -306,7 +309,8 @@ async fn get_paginated(page: u64, per_page: u64) -> Result<serde_json::Value, Ap
     path = "/error-users/:id",
     method = "GET",
     tool_name = "get_user_with_error",
-    description = "带错误处理的获取用户"
+    description = "Get user with error handling",
+    i18n_key = "example.types_and_errors.get_user_with_error.description"
 )]
 async fn get_user_with_error(id: u64) -> Result<String, ApiError> {
     if id == 0 {
@@ -352,12 +356,13 @@ async fn get_user_with_error(id: u64) -> Result<String, ApiError> {
     path = "/users/validate",
     method = "POST",
     tool_name = "validate_user",
-    description = "验证用户输入"
+    description = "Validate user input",
+    i18n_key = "example.types_and_errors.validate_user.description"
 )]
 async fn validate_user(request: ValidateUserRequest) -> Result<String, ApiError> {
     if request.name.is_empty() {
         return Err(SdForgeExampleError::ValidationError {
-            message: "用户名不能为空".to_string(),
+            message: "Username cannot be empty".to_string(),
             field: Some("name".to_string()),
         }
         .into());
@@ -365,11 +370,11 @@ async fn validate_user(request: ValidateUserRequest) -> Result<String, ApiError>
 
     if !request.email.contains('@') {
         return Err(SdForgeExampleError::ValidationError {
-            message: "邮箱格式不正确".to_string(),
+            message: "Invalid email format".to_string(),
             field: Some("email".to_string()),
         }
         .into());
     }
 
-    Ok("验证通过".to_string())
+    Ok("Validation passed".to_string())
 }

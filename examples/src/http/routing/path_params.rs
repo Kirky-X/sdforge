@@ -97,7 +97,8 @@ pub struct UpdatePostRequest {
     path = "/http-users/:user_id",
     method = "GET",
     tool_name = "get_user_by_id",
-    description = "根据用户ID获取用户信息"
+    description = "Get user info by user ID",
+    i18n_key = "example.path_params.get_user_by_id.description"
 )]
 async fn get_user_by_id(user_id: u64) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -137,7 +138,8 @@ async fn get_user_by_id(user_id: u64) -> Result<serde_json::Value, ApiError> {
     path = "/users/:user_id/posts/:post_id/comments/:comment_id",
     method = "GET",
     tool_name = "get_user_post_comment",
-    description = "获取嵌套评论"
+    description = "Get nested comment",
+    i18n_key = "example.path_params.get_user_post_comment.description"
 )]
 async fn get_user_post_comment(
     user_id: u64,
@@ -185,7 +187,8 @@ async fn get_user_post_comment(
     path = "/users/:user_id/posts/:post_id",
     method = "POST",
     tool_name = "update_user_post",
-    description = "更新用户帖子"
+    description = "Update user post",
+    i18n_key = "example.path_params.update_user_post.description"
 )]
 async fn update_user_post(
     user_id: u64,
@@ -231,7 +234,8 @@ async fn update_user_post(
     path = "/users/:user_id/posts",
     method = "GET",
     tool_name = "get_user_posts",
-    description = "获取用户帖子列表"
+    description = "List user posts",
+    i18n_key = "example.path_params.get_user_posts.description"
 )]
 async fn get_user_posts(
     user_id: u64,
@@ -266,7 +270,8 @@ async fn get_user_posts(
     path = "/categories/:category/items/:id",
     method = "GET",
     tool_name = "get_category_item",
-    description = "获取分类下的指定资源"
+    description = "Get a resource under a category",
+    i18n_key = "example.path_params.get_category_item.description"
 )]
 async fn get_category_item(category: String, id: u64) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({

@@ -108,7 +108,8 @@ pub enum SortOrder {
     path = "/users/search",
     method = "GET",
     tool_name = "search_users",
-    description = "搜索用户"
+    description = "Search users",
+    i18n_key = "example.query_params.search_users.description"
 )]
 async fn search_users(
     query: String,
@@ -171,7 +172,8 @@ async fn search_users(
     path = "/filtered-items",
     method = "GET",
     tool_name = "list_filtered_items",
-    description = "获取过滤后的项目列表"
+    description = "List filtered items",
+    i18n_key = "example.query_params.list_filtered_items.description"
 )]
 async fn list_filtered_items(
     published: Option<bool>,
@@ -219,7 +221,8 @@ async fn list_filtered_items(
     path = "/data/range",
     method = "GET",
     tool_name = "get_data_range",
-    description = "获取日期范围内的数据"
+    description = "Get data in a date range",
+    i18n_key = "example.query_params.get_data_range.description"
 )]
 async fn get_data_range(
     start_date: String,
@@ -259,7 +262,8 @@ async fn get_data_range(
     path = "/items/batch",
     method = "GET",
     tool_name = "get_batch_items",
-    description = "批量获取项目"
+    description = "Batch get items",
+    i18n_key = "example.query_params.get_batch_items.description"
 )]
 async fn get_batch_items(ids: String) -> Result<serde_json::Value, ApiError> {
     let id_list: Vec<&str> = ids.split(',').collect();
@@ -315,7 +319,8 @@ async fn get_batch_items(ids: String) -> Result<serde_json::Value, ApiError> {
     path = "/paginated",
     method = "GET",
     tool_name = "get_paginated_data",
-    description = "分页查询数据"
+    description = "Paginated query data",
+    i18n_key = "example.query_params.get_paginated_data.description"
 )]
 async fn get_paginated_data(
     page: Option<u32>,

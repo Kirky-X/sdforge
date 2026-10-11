@@ -277,12 +277,20 @@ impl SdForgeAuditLogger {
                 log.generate_signature(signing_key_str.as_bytes());
             } else {
                 warn!(
-                    "⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY is empty. Audit logs will not be signed."
+                    "{}",
+                    crate::i18n::translate_or_fallback(
+                        "⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY is empty. Audit logs will not be signed.",
+                        Some("audit-signing-key-empty"),
+                    )
                 );
             }
         } else {
             warn!(
-                "⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY not set. Audit logs will not be signed.\n   For production, set this environment variable to a secure random value (min 32 bytes).\n   Example: export SDFORGE_AUDIT_SIGNING_KEY=$(openssl rand -hex 32)"
+                "{}",
+                crate::i18n::translate_or_fallback(
+                    "⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY not set. Audit logs will not be signed.\n   For production, set this environment variable to a secure random value (min 32 bytes).\n   Example: export SDFORGE_AUDIT_SIGNING_KEY=$(openssl rand -hex 32)",
+                    Some("audit-signing-key-missing"),
+                )
             );
         }
 
@@ -505,8 +513,8 @@ impl crate::security::AuditLogger for SdForgeAuditLogger {
                 // making drops invisible to operators).
                 dropped_log_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 warn!(
-                    "[AuditLogger] WARNING: no tokio runtime available, audit log dropped for action={}",
-                    action
+                    "{}",
+                    crate::i18n::t("audit-no-tokio-runtime", &[("action", action.to_string())])
                 );
             }
         }

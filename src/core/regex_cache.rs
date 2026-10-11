@@ -294,8 +294,14 @@ mod tests {
 
         // 单飞语义：并发同 pattern 仅 leader 执行编译（miss），其余共享命中
         let stats = cache.stats();
-        assert_eq!(stats.misses, 1, "并发同 pattern 编译恰好执行一次");
-        assert_eq!(stats.hits, 15, "等待者共享 leader 结果计 hit");
+        assert_eq!(
+            stats.misses, 1,
+            "concurrent same-pattern compiles must run exactly once"
+        );
+        assert_eq!(
+            stats.hits, 15,
+            "waiters sharing the leader result must count as hits"
+        );
     }
 
     #[test]
@@ -310,8 +316,14 @@ mod tests {
         assert!(result2.is_err());
 
         let stats = cache.stats();
-        assert_eq!(stats.misses, 2, "错误不缓存：每次调用均重新编译");
-        assert_eq!(stats.entry_count, 0, "失败编译不入缓存");
+        assert_eq!(
+            stats.misses, 2,
+            "errors must not be cached: every call recompiles"
+        );
+        assert_eq!(
+            stats.entry_count, 0,
+            "failed compiles must not enter the cache"
+        );
     }
 
     #[test]
@@ -485,13 +497,13 @@ mod tests {
         let stats = cache.stats();
         assert!(
             stats.entry_count < total as u64,
-            "entry_count 应远小于注入总数 {}（实际 {}）",
+            "entry_count must stay far below the injected total {} (actual {})",
             total,
             stats.entry_count
         );
         assert!(
             cache.weighted_size() <= budget as u64 + single_entry_weight as u64,
-            "weighted_size 不超过预算加一个条目位"
+            "weighted_size must not exceed the budget plus a single entry slot"
         );
     }
 

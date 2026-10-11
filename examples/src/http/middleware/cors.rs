@@ -93,12 +93,13 @@ use sdforge::prelude::*;
     path = "/cors/public-data",
     method = "GET",
     tool_name = "cors_public_data",
-    description = "公开数据端点"
+    description = "Public data endpoint",
+    i18n_key = "example.cors.cors_public_data.description"
 )]
 async fn public_data() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "message": "这是公开数据",
-        "accessible": "任何人可访问"
+        "message": "This is public data",
+        "accessible": "anyone"
     }))
 }
 
@@ -127,7 +128,8 @@ async fn public_data() -> Result<serde_json::Value, ApiError> {
     path = "/public/resources",
     method = "GET",
     tool_name = "public_resources",
-    description = "获取公开资源列表"
+    description = "List public resources",
+    i18n_key = "example.cors.public_resources.description"
 )]
 async fn public_resources() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -160,13 +162,14 @@ async fn public_resources() -> Result<serde_json::Value, ApiError> {
     path = "/cors/test",
     method = "GET",
     tool_name = "cors_test_get",
-    description = "CORS 测试端点 (GET)"
+    description = "CORS test endpoint (GET)",
+    i18n_key = "example.cors.cors_test_get.description"
 )]
 async fn cors_test_get() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "method": "GET",
         "cors_enabled": true,
-        "message": "CORS 配置正常工作"
+        "message": "CORS is working as configured"
     }))
 }
 
@@ -198,14 +201,15 @@ pub struct CorsTestRequest {
     path = "/cors/test",
     method = "POST",
     tool_name = "cors_test_post",
-    description = "CORS 测试端点 (POST)"
+    description = "CORS test endpoint (POST)",
+    i18n_key = "example.cors.cors_test_post.description"
 )]
 async fn cors_test_post(request: CorsTestRequest) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "method": "POST",
         "received_data": request.data,
         "cors_enabled": true,
-        "message": "POST 请求 CORS 配置正常工作"
+        "message": "CORS is working as configured for POST requests"
     }))
 }
 
@@ -234,7 +238,8 @@ async fn cors_test_post(request: CorsTestRequest) -> Result<serde_json::Value, A
     path = "/cors/resources/:id",
     method = "GET",
     tool_name = "cors_resource",
-    description = "跨域资源访问"
+    description = "Cross-origin resource access",
+    i18n_key = "example.cors.cors_resource.description"
 )]
 async fn cors_resource(id: u64) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -271,13 +276,14 @@ async fn cors_resource(id: u64) -> Result<serde_json::Value, ApiError> {
     path = "/api/info",
     method = "GET",
     tool_name = "api_info",
-    description = "API 信息"
+    description = "API info",
+    i18n_key = "example.cors.api_info.description"
 )]
 async fn api_info() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "name": "SDForge API",
         "version": "0.2.0",
-        "description": "多协议 SDK 框架示例",
+        "description": "Multi-protocol SDK framework example",
         "cors": {
             "enabled": true,
             "allow_all_origins": true,

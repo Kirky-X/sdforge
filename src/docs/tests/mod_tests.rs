@@ -24,9 +24,13 @@ fn test_doc_format_variants() {
     for (i, &a) in variants.iter().enumerate() {
         for (j, &b) in variants.iter().enumerate() {
             if i == j {
-                assert_eq!(a, b, "相同变体必须相等: idx={}", i);
+                assert_eq!(a, b, "identical variants must compare equal: idx={}", i);
             } else {
-                assert_ne!(a, b, "不同变体必须不等: idx={} vs {}", i, j);
+                assert_ne!(
+                    a, b,
+                    "different variants must compare unequal: idx={} vs {}",
+                    i, j
+                );
             }
         }
     }
@@ -35,7 +39,7 @@ fn test_doc_format_variants() {
     let debug = format!("{:?}", openapi);
     assert!(
         debug.contains("OpenApi"),
-        "Debug 输出应含变体名，实际: {}",
+        "Debug output must contain the variant name, got: {}",
         debug
     );
 
@@ -49,7 +53,7 @@ fn test_doc_format_variants() {
 
     // Default 派生 — 默认 OpenApi
     let default = DocFormat::default();
-    assert_eq!(default, DocFormat::OpenApi, "Default 应为 OpenApi");
+    assert_eq!(default, DocFormat::OpenApi, "Default must be OpenApi");
 }
 
 // ============================================================================
@@ -60,10 +64,10 @@ fn test_doc_format_variants() {
 #[test]
 fn test_generate_docs_openapi_returns_json() {
     let json = generate_docs(DocFormat::OpenApi).expect("generate_docs OpenApi");
-    assert!(!json.is_empty(), "OpenApi 文档不应为空");
+    assert!(!json.is_empty(), "OpenApi document must not be empty");
     assert!(
         json.trim_start().starts_with('{'),
-        "OpenApi 文档首字符应为 `{{`，实际首字符: {:?}",
+        "OpenApi document must start with `{{`, got first char: {:?}",
         json.chars().next()
     );
 }
@@ -72,10 +76,10 @@ fn test_generate_docs_openapi_returns_json() {
 #[test]
 fn test_generate_docs_cli_markdown_returns_md() {
     let md = generate_docs(DocFormat::CliMarkdown).expect("generate_docs CliMarkdown");
-    assert!(!md.is_empty(), "CliMarkdown 文档不应为空");
+    assert!(!md.is_empty(), "CliMarkdown document must not be empty");
     assert!(
         md.contains('#'),
-        "CliMarkdown 文档应含 markdown 标题标记 `#`，实际: {}",
+        "CliMarkdown document must contain the markdown heading marker `#`, got: {}",
         &md[..md.len().min(200)]
     );
 }
@@ -87,20 +91,24 @@ fn test_generate_docs_cli_markdown_returns_md() {
 /// `write_docs` 应将生成的文档写入指定路径，文件存在且内容非空。
 #[test]
 fn test_write_docs_creates_file() {
-    let dir = tempfile::tempdir().expect("创建临时目录失败");
+    let dir = tempfile::tempdir().expect("create temp dir");
     let file_path = dir.path().join("openapi.json");
 
-    write_docs(DocFormat::OpenApi, &file_path).expect("write_docs 应成功");
+    write_docs(DocFormat::OpenApi, &file_path).expect("write_docs should succeed");
 
-    // 文件存在
-    assert!(file_path.exists(), "文档文件应被创建: {:?}", file_path);
+    // File exists
+    assert!(
+        file_path.exists(),
+        "document file must be created: {:?}",
+        file_path
+    );
 
-    // 内容非空
-    let content = std::fs::read_to_string(&file_path).expect("读取写入的文件");
-    assert!(!content.is_empty(), "文档内容不应为空");
+    // Content is not empty
+    let content = std::fs::read_to_string(&file_path).expect("read the written file");
+    assert!(!content.is_empty(), "document content must not be empty");
     assert!(
         content.trim_start().starts_with('{'),
-        "OpenApi 文档首字符应为 `{{`，实际: {:?}",
+        "OpenApi document must start with `{{`, got first char: {:?}",
         content.chars().next()
     );
 }
@@ -116,18 +124,18 @@ fn test_write_docs_creates_file() {
 #[test]
 fn test_generate_docs_swagger_returns_html() {
     let html = generate_docs(DocFormat::SwaggerUi).expect("generate_docs SwaggerUi");
-    assert!(!html.is_empty(), "SwaggerUi 输出不应为空");
+    assert!(!html.is_empty(), "SwaggerUi output must not be empty");
     let lower = html.to_lowercase();
     #[cfg(feature = "http")]
     {
         assert!(
             lower.contains("<html"),
-            "SwaggerUi 输出应含 <html 标签，实际: {}",
+            "SwaggerUi output must contain the <html tag, got: {}",
             &html[..html.len().min(200)]
         );
         assert!(
             lower.contains("swagger-ui"),
-            "SwaggerUi 输出应含 swagger-ui 链接，实际: {}",
+            "SwaggerUi output must contain the swagger-ui link, got: {}",
             &html[..html.len().min(200)]
         );
     }
@@ -135,7 +143,7 @@ fn test_generate_docs_swagger_returns_html() {
     {
         assert!(
             lower.contains("requires the 'http' feature"),
-            "未启用 http 时应返回占位提示，实际: {}",
+            "a placeholder hint must be returned without the http feature, got: {}",
             &html[..html.len().min(200)]
         );
     }
@@ -152,12 +160,12 @@ fn test_generate_docs_swagger_returns_html() {
 #[test]
 fn test_generate_docs_mcp_markdown() {
     let md = generate_docs(DocFormat::McpMarkdown).expect("generate_docs McpMarkdown");
-    assert!(!md.is_empty(), "McpMarkdown 文档不应为空");
+    assert!(!md.is_empty(), "McpMarkdown document must not be empty");
     #[cfg(feature = "mcp")]
     {
         assert!(
             md.contains("# MCP Tools"),
-            "McpMarkdown 应含 `# MCP Tools` 标题，实际: {}",
+            "McpMarkdown must contain the `# MCP Tools` heading, got: {}",
             &md[..md.len().min(200)]
         );
     }
@@ -165,7 +173,7 @@ fn test_generate_docs_mcp_markdown() {
     {
         assert!(
             md.to_lowercase().contains("mcp"),
-            "McpMarkdown 占位提示应含 `mcp` 字样，实际: {}",
+            "the McpMarkdown placeholder must mention `mcp`, got: {}",
             &md[..md.len().min(200)]
         );
     }
@@ -179,17 +187,17 @@ fn test_generate_docs_mcp_markdown() {
 #[test]
 fn test_generate_docs_all_combines() {
     let all = generate_docs(DocFormat::All).expect("generate_docs All");
-    assert!(!all.is_empty(), "All 文档不应为空");
-    // 含 OpenApi JSON 内容
+    assert!(!all.is_empty(), "All document must not be empty");
+    // Contains the OpenApi JSON content
     assert!(
         all.contains('{'),
-        "All 应含 OpenApi JSON 内容（`{{`），实际: {}",
+        "All must contain the OpenApi JSON content (`{{`), got: {}",
         &all[..all.len().min(200)]
     );
-    // 含 CliMarkdown 内容（`#` 标题）
+    // Contains the CliMarkdown content (`#` heading marker)
     assert!(
         all.contains('#'),
-        "All 应含 CliMarkdown 标题标记 `#`，实际: {}",
+        "All must contain the CliMarkdown heading marker `#`, got: {}",
         &all[..all.len().min(200)]
     );
 }

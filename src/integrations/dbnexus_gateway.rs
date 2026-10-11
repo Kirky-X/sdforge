@@ -237,7 +237,7 @@ mod tests {
         assert_eq!(
             DbGateway::escape_literal("x'; DROP TABLE users;--"),
             "x''; DROP TABLE users;--",
-            "单引号翻倍后注入载荷成为字面量"
+            "quote doubling turns the injected payload into a literal"
         );
     }
 

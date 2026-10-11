@@ -165,7 +165,8 @@ pub struct MessageResponse {
     path = "/ws/chat",
     method = "GET",
     tool_name = "chat_ws",
-    description = "聊天 WebSocket 端点"
+    description = "Chat WebSocket endpoint",
+    i18n_key = "example.chat.chat_ws.description"
 )]
 // #161 演示说明：此端点是普通 HTTP GET 演示桩，不做 WebSocket 升级。
 // 框架的完整 WS 能力见 sdforge::websocket 模块（#[forge(ws_path=...)] 会
@@ -205,7 +206,8 @@ async fn chat_ws() -> Result<String, ApiError> {
     path = "/chat/message",
     method = "POST",
     tool_name = "send_message",
-    description = "发送聊天消息 (HTTP)"
+    description = "Send chat message (HTTP)",
+    i18n_key = "example.chat.send_message.description"
 )]
 async fn send_message(message: ChatMessage) -> Result<MessageResponse, ApiError> {
     let response = MessageResponse {
@@ -243,7 +245,8 @@ async fn send_message(message: ChatMessage) -> Result<MessageResponse, ApiError>
     path = "/chat/rooms/:room",
     method = "GET",
     tool_name = "get_room_info",
-    description = "获取房间信息"
+    description = "Get room info",
+    i18n_key = "example.chat.get_room_info.description"
 )]
 async fn get_room_info(room: String) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -280,7 +283,8 @@ async fn get_room_info(room: String) -> Result<serde_json::Value, ApiError> {
     path = "/chat/rooms",
     method = "GET",
     tool_name = "list_rooms",
-    description = "获取房间列表"
+    description = "List rooms",
+    i18n_key = "example.chat.list_rooms.description"
 )]
 async fn list_rooms() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
@@ -322,7 +326,8 @@ async fn list_rooms() -> Result<serde_json::Value, ApiError> {
     path = "/chat/rooms/:room/history",
     method = "GET",
     tool_name = "get_chat_history",
-    description = "获取聊天历史"
+    description = "Get chat history",
+    i18n_key = "example.chat.get_chat_history.description"
 )]
 async fn get_chat_history(
     room: String,

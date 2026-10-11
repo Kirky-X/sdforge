@@ -73,18 +73,27 @@ pub fn format_validation_error(field: &str, constraint: &str) -> String {
 
 /// Format an "empty field" error message.
 ///
+/// Resolved through the i18n registry (built-in `en` / `zh` catalogs; key
+/// `core-field-cannot-be-empty`), so the text follows the active locale.
+///
 /// # Arguments
 ///
 /// * `field_name` - Name of the field that cannot be empty
 ///
 /// # Returns
 ///
-/// Formatted error message like "email cannot be empty"
+/// Formatted error message like "email cannot be empty" (English locale)
 pub fn format_empty_error(field_name: &str) -> String {
-    format!("{} cannot be empty", field_name)
+    crate::i18n::t(
+        "core-field-cannot-be-empty",
+        &[("field", field_name.to_string())],
+    )
 }
 
 /// Format an "invalid format" error message.
+///
+/// Resolved through the i18n registry (built-in `en` / `zh` catalogs; key
+/// `core-field-invalid-format`), so the text follows the active locale.
 ///
 /// # Arguments
 ///
@@ -93,12 +102,21 @@ pub fn format_empty_error(field_name: &str) -> String {
 ///
 /// # Returns
 ///
-/// Formatted error message like "email has invalid format: must be valid email"
+/// Formatted error message like "email has invalid format: must be valid email" (English locale)
 pub fn format_invalid_error(field_name: &str, expected_format: &str) -> String {
-    format!("{} has invalid format: {}", field_name, expected_format)
+    crate::i18n::t(
+        "core-field-invalid-format",
+        &[
+            ("field", field_name.to_string()),
+            ("constraint", expected_format.to_string()),
+        ],
+    )
 }
 
 /// Format a "out of range" error message.
+///
+/// Resolved through the i18n registry (built-in `en` / `zh` catalogs; key
+/// `core-field-out-of-range`), so the text follows the active locale.
 ///
 /// # Arguments
 ///
@@ -108,9 +126,16 @@ pub fn format_invalid_error(field_name: &str, expected_format: &str) -> String {
 ///
 /// # Returns
 ///
-/// Formatted error message like "age must be between 0 and 150"
+/// Formatted error message like "age must be between 0 and 150" (English locale)
 pub fn format_range_error(field_name: &str, min: u64, max: u64) -> String {
-    format!("{} must be between {} and {}", field_name, min, max)
+    crate::i18n::t(
+        "core-field-out-of-range",
+        &[
+            ("field", field_name.to_string()),
+            ("min", min.to_string()),
+            ("max", max.to_string()),
+        ],
+    )
 }
 
 /// Sanitize a string for use in identifiers.
@@ -215,14 +240,28 @@ mod tests {
 
     #[test]
     fn test_format_empty_error() {
-        assert_eq!(format_empty_error("email"), "email cannot be empty");
+        assert_eq!(
+            format_empty_error("email"),
+            crate::i18n::translate_for(
+                "en",
+                "core-field-cannot-be-empty",
+                &[("field", "email".to_string())]
+            )
+        );
     }
 
     #[test]
     fn test_format_invalid_error() {
         assert_eq!(
             format_invalid_error("email", "must be valid email"),
-            "email has invalid format: must be valid email"
+            crate::i18n::translate_for(
+                "en",
+                "core-field-invalid-format",
+                &[
+                    ("field", "email".to_string()),
+                    ("constraint", "must be valid email".to_string())
+                ]
+            )
         );
     }
 
@@ -230,7 +269,15 @@ mod tests {
     fn test_format_range_error() {
         assert_eq!(
             format_range_error("age", 0, 150),
-            "age must be between 0 and 150"
+            crate::i18n::translate_for(
+                "en",
+                "core-field-out-of-range",
+                &[
+                    ("field", "age".to_string()),
+                    ("min", "0".to_string()),
+                    ("max", "150".to_string())
+                ]
+            )
         );
     }
 
@@ -294,14 +341,28 @@ mod tests {
 
     #[test]
     fn test_format_empty_error_empty() {
-        assert_eq!(format_empty_error(""), " cannot be empty");
+        assert_eq!(
+            format_empty_error(""),
+            crate::i18n::translate_for(
+                "en",
+                "core-field-cannot-be-empty",
+                &[("field", "".to_string())]
+            )
+        );
     }
 
     #[test]
     fn test_format_invalid_error_empty() {
         assert_eq!(
             format_invalid_error("", "format"),
-            " has invalid format: format"
+            crate::i18n::translate_for(
+                "en",
+                "core-field-invalid-format",
+                &[
+                    ("field", "".to_string()),
+                    ("constraint", "format".to_string())
+                ]
+            )
         );
     }
 
@@ -309,7 +370,15 @@ mod tests {
     fn test_format_range_error_zero_min() {
         assert_eq!(
             format_range_error("age", 0, 150),
-            "age must be between 0 and 150"
+            crate::i18n::translate_for(
+                "en",
+                "core-field-out-of-range",
+                &[
+                    ("field", "age".to_string()),
+                    ("min", "0".to_string()),
+                    ("max", "150".to_string())
+                ]
+            )
         );
     }
 
@@ -317,7 +386,15 @@ mod tests {
     fn test_format_range_error_same_min_max() {
         assert_eq!(
             format_range_error("count", 5, 5),
-            "count must be between 5 and 5"
+            crate::i18n::translate_for(
+                "en",
+                "core-field-out-of-range",
+                &[
+                    ("field", "count".to_string()),
+                    ("min", "5".to_string()),
+                    ("max", "5".to_string())
+                ]
+            )
         );
     }
 

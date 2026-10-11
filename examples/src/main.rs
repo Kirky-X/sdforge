@@ -83,20 +83,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let counts = sdforge::init_all_plugins();
 
+    // 注册示例路由描述的简体中文译文（宿主侧运行时注册，先例见
+    // tests/integration/openapi_tests.rs 的 i18n_key 探针）；英文为默认语言，
+    // 未激活 zh locale 时协议消费点直接渲染英文源串。
+    sdforge_examples::i18n::register_zh_translations();
+
     println!("===========================================");
     println!("       SDForge Examples Server");
     println!("===========================================");
     println!();
-    println!("版本: 0.2.0");
+    println!("Version: 0.2.0");
     println!();
-    println!("已注册的组件:");
-    println!("  - HTTP 路由: {}", counts.routes);
+    println!("Registered components:");
+    println!("  - HTTP routes: {}", counts.routes);
     #[cfg(feature = "mcp_examples")]
-    println!("  - MCP 工具: {}", counts.mcp_tools);
+    println!("  - MCP tools: {}", counts.mcp_tools);
     #[cfg(feature = "websocket_examples")]
-    println!("  - WebSocket 路由: {}", counts.ws_routes);
+    println!("  - WebSocket routes: {}", counts.ws_routes);
     #[cfg(feature = "grpc_examples")]
-    println!("  - gRPC 路由: {}", counts.grpc_routes);
+    println!("  - gRPC routes: {}", counts.grpc_routes);
     println!();
 
     let port: u16 = env::var("HTTP_PORT")
@@ -104,20 +109,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .parse()
         .unwrap_or(3000);
 
-    println!("启动 HTTP 服务器...");
-    println!("监听地址: http://0.0.0.0:{}", port);
+    println!("Starting HTTP server...");
+    println!("Listening on http://0.0.0.0:{}", port);
     println!();
-    println!("可用端点:");
+    println!("Available endpoints:");
     println!("  HTTP API:");
-    println!("    GET  /api/v1/hello           - 问候语");
-    println!("    GET  /api/v1/users/:id       - 获取用户");
-    println!("    POST /api/v1/echo             - 回显请求");
+    println!("    GET  /api/v1/hello           - greeting");
+    println!("    GET  /api/v1/users/:id       - get user");
+    println!("    POST /api/v1/echo            - echo request");
     println!();
 
     let app = sdforge::http::build();
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
 
-    println!("服务器已启动，按 Ctrl+C 停止");
+    println!("Server started, press Ctrl+C to stop");
     println!("===========================================");
 
     sdforge::axum::serve(listener, app).await?;
@@ -134,24 +139,24 @@ fn main() {
     println!("       SDForge Examples");
     println!("===========================================");
     println!();
-    println!("请启用 HTTP 功能来启动服务器:");
+    println!("Enable the HTTP feature to start the server:");
     println!();
     println!("  cargo run --features http_examples");
     println!();
-    println!("可用模块:");
-    println!("  - basics:      基础 API 定义和类型");
-    println!("  - http:        HTTP 路由和参数");
-    println!("  - mcp:         MCP 工具定义");
-    println!("  - websocket:   WebSocket 连接");
-    println!("  - streaming:   SSE 流式传输");
-    println!("  - security:    API Key 和速率限制");
-    println!("  - combined:    完整功能示例");
+    println!("Available modules:");
+    println!("  - basics:      basic API definitions and types");
+    println!("  - http:        HTTP routes and parameters");
+    println!("  - mcp:         MCP tool definitions");
+    println!("  - websocket:   WebSocket connections");
+    println!("  - streaming:   SSE streaming");
+    println!("  - security:    API Key and rate limiting");
+    println!("  - combined:    full-featured example");
     println!();
-    println!("示例:");
-    println!("  # 运行基础示例");
+    println!("Examples:");
+    println!("  # Run the basic example");
     println!("  cargo run --example sdforge --features http_examples");
     println!();
-    println!("  # 运行组合示例");
+    println!("  # Run the combined example");
     println!("  cargo run --example sdforge --features combined_examples");
     println!("===========================================");
 }
