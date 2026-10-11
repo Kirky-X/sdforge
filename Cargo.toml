@@ -359,7 +359,8 @@ http = [
     "dep:validator",
     "dep:uuid",
     # regex_cache（http/security 下无条件编译）用 oxcache ByteWeightCache；
-    # resolver v2 下 `oxcache/minimal` 不激活可选依赖，须显式 dep:oxcache。
+    # http 不蕴含 cache 特性，显式 dep:oxcache 使本特性单独启用时 oxcache 必在依赖面
+    # （cache 特性经 `oxcache/minimal` 隐式激活可选依赖，见下文）
     "dep:oxcache",
 ]
 
