@@ -52,7 +52,7 @@ SDForge 是一个声明式 SDK 框架，核心设计理念之一是**编译时�
 | 内存 | 70 GiB 总计 / 60 GiB 可用 |
 | 构建配置（测量时点） | release: `lto=true`, `codegen-units=1`, `opt-level="z"`（当前为 `opt-level=3` / `lto="fat"` / `codegen-units=1` / `strip=true`）；dev: `debug=true`, 依赖 `opt-level=2` |
 
-> 注：测量时点的 `full` 特性集合为 `http, mcp, streaming, timestamp, security, hot-reload, cache, websocket, grpc, logging, openapi`，**不包含** `cli` 与 `simd-json`；当前 `full` 已扩为 25 项运行时特性并包含 `cli`（见主 README 特性标志表）。本文编译时间/体积数字对应 2026-07-03 口径，与当前 `full` 定义不可直接对应。
+> 注：测量时点的 `full` 特性集合为 `http, mcp, streaming, timestamp, security, hot-reload, cache, websocket, grpc, logging, openapi`，**不包含** `cli` 与 `simd-json`；当前 `full` 已扩为 26 项运行时特性并包含 `cli`（见主 README 特性标志表）。本文编译时间/体积数字对应 2026-07-03 口径，与当前 `full` 定义不可直接对应。
 
 ## 📦 依赖规模对比
 

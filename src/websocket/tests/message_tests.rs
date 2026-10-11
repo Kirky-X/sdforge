@@ -171,7 +171,6 @@ fn test_parse_websocket_message_too_large() {
 /// Test parse_websocket_message with deeply nested JSON
 #[test]
 fn test_parse_websocket_message_too_deep() {
-    // Create a valid deeply nested JSON structure
     let mut deep_json = String::from("0");
     for _ in 0..=MAX_JSON_DEPTH {
         deep_json = format!(r#"{{"a":{}}}"#, deep_json);

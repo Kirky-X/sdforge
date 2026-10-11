@@ -174,7 +174,6 @@ mod config_tests {
     #[test]
     fn test_app_config_default() {
         let config = SdForgeConfig::default();
-        // Verify we can create a default config and access its fields
         let _ = config.server.port;
         let _ = config.server.host.clone();
     }

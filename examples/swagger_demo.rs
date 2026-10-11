@@ -18,6 +18,7 @@
 
 use sdforge::core::ApiError;
 use sdforge::forge;
+use sdforge::i18n::t;
 
 /// Hello endpoint. 注册为 HTTP 路由 /api/v1/hello，会被 generate_openapi_spec()
 /// 收集到 OpenAPI spec 中，Swagger UI 随之展示。
@@ -36,9 +37,7 @@ async fn hello() -> Result<String, ApiError> {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(not(feature = "http"))]
     {
-        println!(
-            "swagger_demo requires the 'http' feature. Run: cargo run --example swagger_demo --features \"docs http\""
-        );
+        println!("{}", t("example-swagger-demo-http-feature", &[]));
         return Ok(());
     }
     #[cfg(feature = "http")]
@@ -67,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Swagger UI:  http://127.0.0.1:{port}/swagger-ui/");
         println!("OpenAPI JSON: http://127.0.0.1:{port}/api-docs/openapi.json");
         println!();
-        println!("Press Ctrl+C to stop");
+        println!("{}", t("example-swagger-demo-ctrl-c", &[]));
         println!("===========================================");
 
         sdforge::axum::serve(listener, app).await?;

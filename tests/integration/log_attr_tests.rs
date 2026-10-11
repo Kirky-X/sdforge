@@ -209,6 +209,10 @@ fn async_result_fn_splits_ok_and_err_paths() {
 #[test]
 #[serial_test::serial]
 fn async_wrapper_runs_on_tokio_runtime() {
+    // 与其余用例一致先安装捕获 logger：#[serial] 只保证互斥、不保证本用例
+    // 在别处安装完成之后才拿到锁（首轮则 records_for 恒为空，断言随调度抖动）
+    let _ = install_capture_logger();
+
     let rt = tokio::runtime::Builder::new_current_thread()
         .build()
         .expect("runtime");

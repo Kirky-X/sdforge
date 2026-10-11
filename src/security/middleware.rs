@@ -69,7 +69,6 @@ mod tests {
             })
         };
         let middleware = auth_middleware((), extract_auth);
-        // Verify it's Send + Sync by assigning to a typed variable
         fn check<T: Send + Sync>(_: T) {}
         check(middleware.clone());
 
@@ -88,7 +87,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_auth_middleware_returns_closure() {
-        // Verify auth_middleware returns a callable closure
         let extract_auth = |_req: &Request<Body>| -> AuthResult<AuthContext> {
             Err(crate::security::AuthError::MissingAuth)
         };

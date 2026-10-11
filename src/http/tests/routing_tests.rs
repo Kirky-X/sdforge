@@ -197,7 +197,6 @@ fn test_http_route_handler_accessor() {
         None,
     );
 
-    // Verify handler accessor returns a reference
     let _handler = route.handler();
 }
 
@@ -372,7 +371,6 @@ fn test_preserve_grpc_inventory() {
 
 #[test]
 fn test_build_router_deterministic() {
-    // Call build twice - should not panic
     let _router1 = build();
     let _router2 = build();
 }
@@ -414,7 +412,6 @@ fn test_build_sorts_routes_deterministically() {
 fn test_build_collects_registrations() {
     // This tests lines 162-168: collecting and creating from registrations
     let router = build();
-    // Verify router is valid
     let _ = router;
 }
 

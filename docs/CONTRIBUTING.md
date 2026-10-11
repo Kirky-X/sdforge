@@ -77,10 +77,12 @@ git checkout -b feat/<功能名>   # 或 chore/<任务名>
 - 为所有新功能编写测试
 - 单元测试内嵌在源文件 `#[cfg(test)] mod tests` 中；集成测试放 `tests/integration/`
 - 确保所有特性组合可编译：`cargo test --features "<feature>"`
-- 覆盖率目标：核心逻辑 90%+（CI 门禁同口径），工具代码 70%+
+- 覆盖率目标：核心逻辑 90%+（与 CI 门禁阈值一致），工具代码 70%+
 - **覆盖率口径（唯一强制项）**：CI 的 coverage job 跑
-  `cargo llvm-cov --features full --lib --fail-under-lines 90`（本地同口径见
-  `lefthook.yml` pre-push）。Codecov 上传的也是这一份 `--lib` lcov；
+  `cargo llvm-cov --features full --lib --fail-under-lines 90`；`lefthook.yml`
+  pre-push 仅沿用同一 90% 阈值，命令为默认特性、全目标的
+  `cargo llvm-cov --fail-under-lines 90`（测量范围与 CI 不同，非同一口径）。
+  Codecov 上传的也是这一份 `--lib` lcov；
   `codecov/patch` 为**咨询性**状态（`fail_ci_if_error: false`，不影响 CI 结果），
   其目标由 Codecov 默认策略（auto ≈ 项目当前覆盖率）决定——大 PR 的 patch
   覆盖率低于项目均值时会显示红色，属信号而非门禁。若要显式控制该状态，
@@ -201,5 +203,5 @@ cargo audit
 - **禁止 `git push --force` 到 main/master 分支**
 - pre-commit 包含 `no-commit-to-branch`（`args: ['--branch', 'master']`：本仓工作流在 main 上提交，故仅保护 `master` 分支，main 不受该钩子限制；提交仍推荐创建 feature 分支）
 - 代码质量工具是项目强制门禁：**diting**（简化/架构/性能审查）、**tiangang**（SAST 安全扫描，发布前强制）、**kueiku**（bug 分析/根因分析/FMEA）
-- 提交即代表你同意你的贡献将基于 [MIT 许可证](../LICENSE) 授权
+- 提交即代表你同意你的贡献将基于 [MIT + Commons Clause](../LICENSE) 双重条款授权（未经作者单独书面授权不得销售）
 - 有任何疑问，欢迎提一个带 `question` 标签的 [Issue](https://github.com/Kirky-X/sdforge/issues)

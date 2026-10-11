@@ -48,6 +48,12 @@ fn fixture_grpc() -> Vec<GrpcMethodInfo> {
     }]
 }
 
+/// 快照锁定英文产物：产物注释文案经 i18n 目录按进程 locale 渲染，故每个
+/// 生成用例先显式固定 locale，环境变量（`SDFORGE_LANG` / `LANG` …）不再影响判定。
+fn pin_en_locale() {
+    sdforge::i18n::set_locale("en");
+}
+
 /// 快照比对（文件缺失时写出并提示回填入库）。
 fn assert_snapshot(name: &str, actual: &str) {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -72,18 +78,21 @@ fn assert_snapshot(name: &str, actual: &str) {
 
 #[test]
 fn rust_client_matches_snapshot() {
+    pin_en_locale();
     let out = generate_rust_client(&fixture_routes(), &fixture_grpc(), false);
     assert_snapshot("rust_client", &out);
 }
 
 #[test]
 fn rust_client_reqwest_variant_matches_snapshot() {
+    pin_en_locale();
     let out = generate_rust_client(&fixture_routes(), &fixture_grpc(), true);
     assert_snapshot("rust_client_reqwest", &out);
 }
 
 #[test]
 fn typescript_client_matches_snapshot() {
+    pin_en_locale();
     let out = generate_typescript_client(&fixture_routes(), &fixture_grpc());
     assert_snapshot("typescript_client", &out);
 }
@@ -92,6 +101,7 @@ fn typescript_client_matches_snapshot() {
 /// --crate-type lib --emit=metadata`。
 #[test]
 fn generated_rust_client_compiles() {
+    pin_en_locale();
     let out = generate_rust_client(&fixture_routes(), &fixture_grpc(), false);
     let dir = std::env::temp_dir().join(format!("sdforge-sdk-compile-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
@@ -128,6 +138,7 @@ fn generated_rust_client_compiles() {
 /// URL/方法/体。
 #[test]
 fn generated_client_prepends_base_url_in_execution() {
+    pin_en_locale();
     let generated = generate_rust_client(&fixture_routes(), &[], false);
     let harness = r#"
 struct Recording;

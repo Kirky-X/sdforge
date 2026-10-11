@@ -101,7 +101,6 @@ pub fn parse_websocket_message(text: &str) -> Result<WebSocketMessage, String> {
     // This provides more accurate depth checking than manual bracket counting
     use serde_json::Deserializer;
 
-    // Parse and validate depth
     let mut max_depth = 0;
     let mut current_depth = 0;
 
@@ -126,7 +125,6 @@ pub fn parse_websocket_message(text: &str) -> Result<WebSocketMessage, String> {
         }
     }
 
-    // Parse the actual WebSocket message
     let msg = serde_json::from_str::<WebSocketMessage>(text)
         .map_err(|e| format!("Invalid JSON: {}", e))?;
     validate_string_limits(&msg)?;

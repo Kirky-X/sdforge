@@ -222,7 +222,6 @@ mod tests {
     async fn forge_rate_limiter_is_object_safe() {
         let limiter: Arc<dyn ForgeRateLimiter + Send + Sync> =
             Arc::new(MockForgeRateLimiter { allow: false });
-        // Verify the trait object can be called via Arc.
         let allowed: bool = limiter.check("k").await.unwrap();
         assert!(!allowed);
     }

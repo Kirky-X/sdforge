@@ -56,6 +56,7 @@
 //! 3. **一致的参数命名** - 使用 snake_case
 //! 4. **类型安全** - 使用强类型参数
 
+use sdforge::i18n::t;
 use sdforge::prelude::*;
 use sdforge::serde::{Deserialize, Serialize};
 
@@ -227,7 +228,7 @@ async fn mcp_multiply(request: MultiplyRequest) -> Result<serde_json::Value, Api
 async fn mcp_divide(request: DivideRequest) -> Result<serde_json::Value, ApiError> {
     if request.b == 0.0 {
         return Err(ApiError::InvalidInput {
-            message: "Divisor cannot be zero".to_string(),
+            message: t("example-mcp-tool-registration-divisor-zero", &[]),
             field: Some("b".to_string()),
             value: Some(serde_json::json!(request.b)),
         });

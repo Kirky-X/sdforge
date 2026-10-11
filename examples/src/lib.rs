@@ -17,7 +17,7 @@
 //! | [`cache`] | 缓存功能 | `cache_examples` |
 //! | [`grpc`] | gRPC 协议 | `grpc_examples` |
 //! | [`config`] | 配置管理 | `http_examples` |
-//! | [`inklog`] | 结构化日志（inklog） | `logging_examples` |
+//! | [`logging`] | 结构化日志（inklog） | `logging_examples` |
 //! | [`openapi`] | OpenAPI 生成 | `openapi_examples` |
 //! | [`combined`] | 组合示例 | `combined_examples` |
 //!

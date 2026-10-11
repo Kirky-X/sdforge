@@ -110,10 +110,7 @@ fn parse_kv_pairs(args: TokenStream2) -> Result<Vec<(String, String)>, syn::Erro
                     }
                     other => token_tree_value(other)?,
                 };
-                // 严格性收紧：非引号值只允许单 token——值后紧跟非逗号 token
-                // 说明值是多 token 形态（如 `path = /a/b` 或漏写引号的带空格
-                // 文本），旧实现会静默截断首 token、把余下 token 当键解析。
-                // fail-loud 指向 offending token，而不是产出截断值。
+                // 非引号值只允许单 token：多 token 值 fail-loud 指向 offending token（不静默截断）。
                 if let Some(extra) = iter.peek()
                     && !matches!(extra, TokenTree::Punct(p) if p.as_char() == ',')
                 {
@@ -192,7 +189,6 @@ const MAX_API_NAME_LENGTH: usize = 64;
 fn validate_api_name(name: &str) -> Result<String, syn::Error> {
     let name = name.trim_matches('"').trim();
 
-    // Check for empty name
     if name.is_empty() {
         return Err(syn::Error::new(
             proc_macro2::Span::call_site(),
@@ -211,7 +207,6 @@ fn validate_api_name(name: &str) -> Result<String, syn::Error> {
         ));
     }
 
-    // Check for invalid characters (allow alphanumeric and underscores)
     if !name.chars().all(|c| c.is_alphanumeric() || c == '_') {
         return Err(syn::Error::new(
             proc_macro2::Span::call_site(),
@@ -227,7 +222,6 @@ fn validate_api_name(name: &str) -> Result<String, syn::Error> {
         ));
     }
 
-    // Check for reserved Rust keywords
     if RESERVED_KEYWORDS.contains(&name) {
         return Err(syn::Error::new(
             proc_macro2::Span::call_site(),
@@ -251,7 +245,6 @@ fn validate_api_name(name: &str) -> Result<String, syn::Error> {
 fn validate_version(version: &str) -> Result<String, syn::Error> {
     let version = version.trim_matches('"').trim();
 
-    // Check for empty version
     if version.is_empty() {
         return Err(syn::Error::new(
             proc_macro2::Span::call_site(),
@@ -858,7 +851,6 @@ impl ParamInfo {
             let ty_str = quote! { #ty }.to_string();
             let ty_str_trimmed = ty_str.trim().to_string();
 
-            // Check for explicit #[param(kind = "...")] attribute
             let (explicit_annotation, validations, query_flatten) =
                 Self::parse_param_attributes(pat_type)?;
             // quote! 的 ToTokens 输出在 token 之间带空格；类型前缀判断
@@ -934,7 +926,6 @@ impl ParamInfo {
         let mut validations = Vec::new();
         let mut flatten = false;
         for attr in &pat_type.attrs {
-            // Check for #[state] attribute (Extension state injection)
             if attr.path().is_ident("state") {
                 kind = Some(ParamKind::State);
                 continue;
@@ -1318,7 +1309,6 @@ fn handler_closure_pre_call(
     params: &[ParamInfo],
     validate: bool,
 ) -> TokenStream2 {
-    // Validate State params are Arc<T> — emit compile_error if not.
     for p in params
         .iter()
         .filter(|p| matches!(p.param_kind, ParamKind::State))
@@ -1829,7 +1819,6 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     };
     let input = parse_macro_input!(input as ItemFn);
 
-    // Create a cleaned version of the function without #[state] and #[param] attributes
     let cleaned_input = clean_function_attributes(input.clone());
 
     let (
@@ -1898,7 +1887,6 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         Err(e) => return e.into_compile_error().into(),
     };
 
-    // Check if there are any parameters
     let _has_params = !params.is_empty();
 
     // Generate HTTP code - define is_streaming early (before param_patterns)
@@ -2162,11 +2150,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
     let path_destructure: proc_macro2::TokenStream = quote! { #(#prelude_stmts)* };
 
-    // Build parameter unwrapping logic
-    // All parameter types use the same unwrapping pattern: extract .0 field
-    //
-    // Previously this block was duplicated verbatim (the second definition
-    // shadowed the first). The duplicate has been removed.
+    // 统一解包：所有参数类型都取 `.0` 字段。
     let _param_unwraps: Vec<_> = params // Currently unused but kept for future use
         .iter()
         .map(|p| {
@@ -2297,11 +2281,9 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
-    // Build HTTP method
     let http_method_upper = method.as_ref().unwrap_or(&"GET".to_string()).to_uppercase();
     let http_method_lower = http_method_upper.to_lowercase();
 
-    // Convert cache_ttl to a proper expression for the quote macro
     let cache_ttl_expr = match &cache_ttl {
         Some(ttl) => quote! { Some(#ttl) },
         None => quote! { None },
@@ -2335,7 +2317,6 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     // （derive JsonSchema 生效，未派生运行时静默降级）。
     let openapi_response_schema_expr = response_schema_field_tokens(return_type);
 
-    // Build description expression
     let description_literal = description.as_deref().unwrap_or(&name);
 
     // endpoint-level RBAC. When `auth(role = "...")` is declared, the
@@ -2355,7 +2336,6 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
-    // Build i18n_key expression for runtime translation lookup
     let i18n_key_expr = match &i18n_key {
         Some(key) => quote! { Some(#key.to_string()) },
         None => quote! { None },
@@ -2578,7 +2558,6 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 None => quote! { None },
             };
 
-            // Build parameter call arguments with proper extraction
             let param_call_args: Vec<_> = params
                 .iter()
                 .enumerate()
@@ -3003,10 +2982,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 #mcp_struct_name::create()
             }
 
-            // DECAY-1 fix: McpToolRegistration::new expects (name, version, create_fn, metadata_fn).
-            // The previous code passed description (&str) as create_fn and create_fn as metadata_fn,
-            // causing a compile-time type mismatch. Reuse #grpc_metadata (already-computed
-            // ApiMetadata tokens) for the metadata_fn body, matching the HTTP pattern.
+            // 复用已计算的 #grpc_metadata 作为 metadata_fn 本体（与 HTTP 侧同构）。
             #[cfg(feature = "mcp")]
             fn #mcp_metadata_fn_name() -> sdforge::core::ApiMetadata {
                 #grpc_metadata
@@ -3107,9 +3083,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 )
             }
 
-            // DECAY-1 fix: GrpcRouteRegistration::new expects (name, version, create_fn, metadata_fn).
-            // The previous code only passed 2 params (name and create_fn), missing version
-            // and metadata_fn.
+            // GrpcRouteRegistration::new 需 (name, version, create_fn, metadata_fn) 四参数。
             #[cfg(feature = "grpc")]
             fn #grpc_metadata_fn_name() -> sdforge::core::ApiMetadata {
                 #grpc_metadata

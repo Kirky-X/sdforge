@@ -9,9 +9,12 @@
 //!
 //! - [`init_inklog_logger`](sdforge::inklog::init_inklog_logger) — 安装
 //!   inklog 为全局 `log` 后端（facade 调用零改动）
-//! - [`LoggerManager::from_file`] — 从含轮转配置的 TOML 构造
-//! - [`LoggerManager::builder`] — 编程式构造
-//! - [`LoggerManager::set_level`] — 运行时调级
+//! - [`LoggerManager::from_file`](sdforge::inklog::LoggerManager::from_file)
+//!   — 从含轮转配置的 TOML 构造
+//! - [`LoggerManager::builder`](sdforge::inklog::LoggerManager::builder)
+//!   — 编程式构造
+//! - [`LoggerManager::set_level`](sdforge::inklog::LoggerManager::set_level)
+//!   — 运行时调级
 
 /// 结构化日志示例
 pub mod structured;

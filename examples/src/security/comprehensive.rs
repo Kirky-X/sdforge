@@ -129,10 +129,8 @@ fn anonymous_context() -> AuthContext {
 /// - Audit logging
 /// - Caching
 async fn get_user(id: u64, state: &SdForgeExampleState) -> Result<UserResponse, ApiError> {
-    // 1. Check cache first
     let cache_key = format!("user:{}", id);
     if let Some(cached) = state.cache.get(&cache_key) {
-        // Parse cached JSON back to User
         let user: User = serde_json::from_slice(&cached).map_err(|e| ApiError::Internal {
             message: format!("Cache deserialization failed: {}", e),
             error_id: uuid::Uuid::new_v4().to_string(),
@@ -160,7 +158,6 @@ async fn get_user(id: u64, state: &SdForgeExampleState) -> Result<UserResponse, 
         });
     }
 
-    // 2. Fetch from "database"
     let users = state.users.read().await;
     let user = users
         .iter()
@@ -173,7 +170,6 @@ async fn get_user(id: u64, state: &SdForgeExampleState) -> Result<UserResponse, 
     let user = user.clone();
     drop(users);
 
-    // 3. Cache for future requests
     let serialized = serde_json::to_vec(&user).map_err(|e| ApiError::Internal {
         message: format!("Serialization failed: {}", e),
         error_id: uuid::Uuid::new_v4().to_string(),
@@ -182,7 +178,6 @@ async fn get_user(id: u64, state: &SdForgeExampleState) -> Result<UserResponse, 
     })?;
     state.cache.set(&cache_key, serialized);
 
-    // 4. Log successful access
     let ctx = anonymous_context();
     state
         .audit_logger
@@ -217,7 +212,6 @@ async fn create_user(
     use sdforge::core::validation::MIN_PASSWORD_LENGTH;
     use sdforge::core::validation::validators::{validate_email, validate_length};
 
-    // 1. Validate input manually (in addition to derive Validate)
     if validate_email(&request.email).is_err() {
         return Err(ApiError::ValidationError {
             field: "email".to_string(),
@@ -235,7 +229,6 @@ async fn create_user(
         });
     }
 
-    // 2. Check for duplicate username
     let users = state.users.read().await;
     let exists = users.iter().any(|u| u.username == request.username);
     if exists {
@@ -247,13 +240,11 @@ async fn create_user(
     }
     drop(users);
 
-    // 3. Generate new user ID
     let new_id = {
         let users = state.users.read().await;
         users.iter().map(|u| u.id).max().unwrap_or(0) + 1
     };
 
-    // 4. Create user
     let new_user = User {
         id: new_id,
         username: request.username.clone(),
@@ -261,18 +252,14 @@ async fn create_user(
         role: UserRole::User,
     };
 
-    // 5. Store in "database"
     {
         let mut users = state.users.write().await;
         users.push(new_user.clone());
     }
 
-    // 6. Invalidate cache
     state.cache.delete("users:list");
 
-    // 7. Log creation via SdForgeAuditLogger.
-    // Tamper-proof signatures are applied automatically when the
-    // SDFORGE_AUDIT_SIGNING_KEY environment variable is set.
+    // SDFORGE_AUDIT_SIGNING_KEY 设置时自动附加防篡改签名。
     let ctx = anonymous_context();
     state
         .audit_logger
@@ -303,7 +290,6 @@ async fn delete_user(
     id: u64,
     state: &SdForgeExampleState,
 ) -> Result<ServiceResponse<()>, ApiError> {
-    // 1. Check if user exists
     let user_exists = {
         let users = state.users.read().await;
         users.iter().any(|u| u.id == id)
@@ -316,19 +302,16 @@ async fn delete_user(
         });
     }
 
-    // 2. Remove from "database"
     {
         let mut users = state.users.write().await;
         users.retain(|u| u.id != id);
     }
 
-    // 3. Invalidate cache
     let cache_key = format!("user:{}", id);
     state.cache.delete(&cache_key);
     state.cache.delete("users:list");
 
-    // 4. Log critical action via SdForgeAuditLogger.
-    // Signatures are applied automatically when SDFORGE_AUDIT_SIGNING_KEY is set.
+    // SDFORGE_AUDIT_SIGNING_KEY 设置时自动附加防篡改签名。
     let ctx = anonymous_context();
     state
         .audit_logger
@@ -375,14 +358,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - testkey_test_admin_123456 (Admin: admin, read, write)");
     println!("  - testkey_test_user_abcdef (User: read)\n");
 
-    // Setup JWT authentication
     let jwt_secret = sdforge::security::generate_secure_jwt_secret();
     let _jwt_auth = BearerAuth::builder().secret(jwt_secret.clone()).build();
 
     println!("✓ JWT Authentication configured");
     println!("  Secret length: {} characters\n", jwt_secret.len());
 
-    // Demonstrate audit logging
     let ctx = anonymous_context();
     state
         .audit_logger
@@ -395,7 +376,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .await;
 
-    // Retrieve and display audit logs to demonstrate log retrieval + signature
     let logs = state.audit_logger.get_logs("anonymous");
     println!("✓ Audit Logging configured ({} log entries)", logs.len());
     for log in &logs {

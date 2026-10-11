@@ -443,9 +443,7 @@ mod tests {
 
     #[test]
     fn test_truncate_with_ellipsis_unicode() {
-        // Each unicode character counts as one
-        // "你好世界" has 4 characters, requesting 5 chars total including ellipsis
-        // Since 4 chars < 5, returns full string
+        // "你好世界" 4 字符 < 5：每 Unicode 字符计 1，返回整串
         let result = truncate_with_ellipsis("你好世界", 5);
         assert_eq!(result.len(), 9); // Full 4 Chinese chars + quotes = 9 bytes
         // Note: The function may or may not truncate depending on byte vs char counting
@@ -453,9 +451,7 @@ mod tests {
 
     #[test]
     fn test_truncate_with_ellipsis_multibyte_chars() {
-        // Test with multibyte characters
-        // "a你b好c" has 5 characters, requesting 6 chars total
-        // Since 5 chars < 6, returns full string
+        // "a你b好c" 5 字符 < 6：返回整串
         let result = truncate_with_ellipsis("a你b好c", 6);
         assert_eq!(result.len(), 8); // "a" + "你" + "b" + "好" + "c" = 8 bytes
     }

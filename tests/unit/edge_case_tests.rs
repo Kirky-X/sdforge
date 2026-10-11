@@ -310,7 +310,6 @@ mod core_edge_case_tests {
     fn test_error_context_extensive_extra_data() {
         let mut ctx = ErrorContext::new();
 
-        // Add many extra fields
         for i in 0..100 {
             ctx = ctx.with_extra(format!("key_{}", i), format!("value_{}", i));
         }
@@ -342,12 +341,6 @@ mod core_edge_case_tests {
     }
 
     // ============================================================================
-    // Validation Edge Cases
-    // ============================================================================
-
-    // Note: validate_required tests moved to validation-specific test file
-
-    // ============================================================================
     // Combined Scenarios
     // ============================================================================
 
@@ -362,7 +355,6 @@ mod core_edge_case_tests {
         assert!(error_msg.contains(field));
         assert!(error_msg.contains(constraint));
 
-        // Add context
         let ctx = ErrorContext::new()
             .with_extra("field".to_string(), field.to_string())
             .with_extra("constraint".to_string(), constraint.to_string())

@@ -137,3 +137,154 @@ inventory-mutex-poisoned = inventory Mutex 已中毒：{ $error }
 core-field-cannot-be-empty = { $field } 不能为空
 core-field-invalid-format = { $field } 格式无效：{ $constraint }
 core-field-out-of-range = { $field } 必须在 { $min } 和 { $max } 之间
+
+# --- SDK 生成器（写进生成客户端里的文案） ------------------------------------------------------------
+# 注释标记（`//!`、`///`、`/** */`）与代码骨架留在生成器里，本目录只承载正文；
+# 值内的换行决定生成注释的折行位置，生成器逐行补回标记。
+sdk-rust-header = SDForge 生成的 HTTP 客户端（零外部依赖；`reqwest` feature 追加
+    `ReqwestTransport` 实现）。
+sdk-rust-transport-doc = 传输抽象：一次 HTTP 调用（方法 / 完整 URL / 可选 JSON 字符串
+    请求体 → 响应体字符串）。
+sdk-rust-transport-execute-doc = 执行一次调用。`path` 是完整 URL（客户端已拼入 `base_url`）。
+sdk-rust-client-error-doc = 客户端错误（传输层错误文本或非 2xx 响应体）。
+sdk-rust-client-doc = SDForge 服务客户端（`base_url` 形如 `http://host:port`；末尾斜杠会被去除）。
+sdk-rust-client-new-doc = 以服务基址和传输实现构造。
+sdk-rust-route-doc = { $summary }（`{ $method } { $path }`）。
+sdk-rust-grpc-doc = gRPC 方法清单（经 `tonic` 客户端或 gRPC 网关调用；`method` 与
+    `CallRequest.method` 匹配，元组第二项是请求体参数名）。
+sdk-rust-reqwest-doc = `reqwest` 传输实现（使用方 crate 需要 `reqwest` 0.12 依赖，本节由
+    `reqwest` feature 门控；JSON 请求体自动携带 application/json 头，请求体字符串按值
+    移交而不是复制）。
+sdk-rust-reqwest-new-doc = 以共享的 `reqwest::Client` 构造。
+sdk-ts-header = SDForge 生成的 HTTP 客户端（fetch + 内嵌类型定义）。
+sdk-ts-request-options-doc = 请求选项。
+sdk-ts-base-url-doc = 服务基址，例如 `http://localhost:8080`（不带末尾斜杠）。
+sdk-ts-fetch-impl-doc = 可选的自定义 fetch（默认使用全局 fetch）。
+sdk-ts-client-error-doc = 客户端错误（非 2xx 响应）。
+sdk-ts-client-error-message = HTTP { $status }：{ $body }
+sdk-ts-params-doc = { $summary }（`{ $method } { $path }`）参数。
+sdk-ts-method-doc = { $summary }（`{ $method } { $path }`）。
+sdk-ts-client-doc = SDForge 服务客户端。
+sdk-ts-grpc-doc = gRPC 方法清单（经 tonic 客户端或 gRPC 网关调用）。
+
+# --- sdforge-examples（控制台输出 / 演示载荷） --------------------------------------------------------
+# 示例程序默认用英文；缩进、运行时计算的 ✅/❌ 标记与 shell 命令行留在示例代码里。
+example-main-version = 版本：{ $version }
+example-main-registered-components = 已注册组件：
+example-main-http-routes = - HTTP 路由：{ $count }
+example-main-mcp-tools = - MCP 工具：{ $count }
+example-main-ws-routes = - WebSocket 路由：{ $count }
+example-main-grpc-routes = - gRPC 路由：{ $count }
+example-main-starting-http = 正在启动 HTTP 服务器...
+example-main-listening = 监听 http://0.0.0.0:{ $port }
+example-main-available-endpoints = 可用端点：
+example-main-http-api = HTTP API：
+example-main-endpoint-hello = 问候语
+example-main-endpoint-user = 获取用户
+example-main-endpoint-echo = 回显请求
+example-main-server-started = 服务器已启动，按 Ctrl+C 停止
+example-main-enable-http = 启用 HTTP feature 才能启动服务器：
+example-main-available-modules = 可用模块：
+example-main-module-basics = 基础 API 定义与类型
+example-main-module-http = HTTP 路由与参数
+example-main-module-mcp = MCP 工具定义
+example-main-module-websocket = WebSocket 连接
+example-main-module-streaming = SSE 流式推送
+example-main-module-security = API Key 与限流
+example-main-module-combined = 全功能示例
+example-main-examples = 示例：
+example-main-run-basic-hint = 运行基础示例
+example-main-run-combined-hint = 运行组合示例
+
+example-perf-lru-title = 🧪 缓存容量驱逐（FIFO）- 性能验证
+example-perf-lru-legacy-note = ℹ️  旧名保留：perf_lru_eviction。DashMapCache 按插入序驱逐：get() 不刷新键，set() 刷新。
+example-perf-lru-capacity-title = 📊 容量上界与驱逐顺序（容量=100，插入 200 个键）：
+example-perf-lru-final-size = 最终大小：{ $size }（容量 { $capacity }）
+example-perf-lru-oldest-evicted = 旧的一半 key_0..key_99 已驱逐：key_0 存在={ $first }，key_99 存在={ $last }
+example-perf-lru-newest-kept = 新的一半 key_100..key_199 保留：key_100 存在={ $first }，key_199 存在={ $last }
+example-perf-lru-rw-title = 📊 读取与写入对驱逐顺序的影响（容量=50）：
+example-perf-lru-read-case = get() 之后 item_0，再插入 { $inserts } 个：{ $outcome }
+example-perf-lru-write-case = set() 之后 item_0，再插入 { $inserts } 个：{ $outcome }
+example-perf-lru-evicted-read = 已被驱逐——读取不会刷新驱逐顺序
+example-perf-lru-still-cached-unexpected = 仍在缓存——非预期的 FIFO 未命中
+example-perf-lru-still-cached-write = 仍在缓存——写入会把键移到队尾
+example-perf-lru-evicted-unexpected = 已被驱逐——非预期的 FIFO 未命中
+example-perf-lru-cost-title = 📊 写入成本（信息性）：
+example-perf-lru-default-inserts = ⏱️  1000 次写入，new()（默认容量 10_000）：{ $elapsed } - { $entries } 条目
+example-perf-lru-lowcap-inserts = ⏱️  1000 次写入，容量=100：{ $elapsed } - { $entries } 条目
+example-perf-lru-ratio = 📈 有界/默认耗时比：{ $ratio }x——到达容量上界后每次写入还会驱逐最旧条目，因此有界路径的每次写入成本更高。
+example-perf-lru-success = ✅ 成功：容量驱逐已验证（FIFO 插入序）。
+example-perf-lru-tip = 💡 读取不会刷新驱逐顺序——要保留热点键请重新 set()。DashMapCache 不提供基于新近度的（LRU）驱逐。
+example-perf-lru-warning = ❌ 警告：容量驱逐行为异常。
+
+example-perf-regex-title = 🧪 缓存键模式匹配 - 性能验证
+example-perf-regex-legacy-note = ℹ️  旧名保留：perf_regex_cache。find_keys_by_pattern() 用 `*` / `?` 通配符匹配键，不编译正则，因此重复调用的成本与首次调用相同。
+example-perf-regex-setup = ✅ 准备完成：已创建含 { $count } 个键的缓存
+example-perf-regex-correctness-title = 📊 匹配正确性（首次调用 / 重复调用）：
+example-perf-regex-match-row = { $pattern } 首次 { $first } / 重复 { $repeat } - { $keys } 个键（期望 { $expected }）
+example-perf-regex-first-vs-repeat = 📈 首次与重复：{ $ratio }x——期望 ≈1.0x：没有正则编译可摊销，重复调用会重新扫描每个键。
+example-perf-regex-scale-title = 📊 单次调用成本随数据集规模变化（模式 "key:*"）：
+example-perf-regex-scale-row = { $size } 个键：{ $elapsed } - { $matches } 个匹配
+example-perf-regex-success = ✅ 成功：通配匹配已验证（键正确，成本为全量扫描）。
+example-perf-regex-tip = 💡 find_keys_by_pattern() / invalidate() 会扫描每个键：每次调用 O(总键数)。热点路径上的点查请用 get() / contains()。
+example-perf-regex-warning = ❌ 警告：模式匹配返回了非预期结果。
+
+example-config-mode-default = 📦 模式 1：默认配置（SdForgeConfig::default()）
+example-config-server-line = server：{ $host }:{ $port }，timeout：{ $timeout }s
+example-config-auth-line = auth：{ $auth }
+example-config-mode-builder = 🔧 模式 2：builder 模式（自定义配置）
+example-config-mode-serialization = 💾 模式 3：序列化 / 反序列化
+example-config-json-preview = JSON（前 200 字符）：
+example-config-deserialized = 反序列化结果：server={ $host }:{ $port }，auth={ $auth }
+example-config-subconfig-title = 📋 子配置示例：
+example-config-server-config-line = ServerConfig：{ $host }:{ $port }，timeout={ $timeout }s
+example-config-auth-variants = AuthConfig 变体：
+example-config-auth-variant-row = [{ $index }] { $auth }
+example-config-timeout-title = TimeoutConfig 各路由超时：
+example-config-timeout-default = default：{ $seconds }s
+example-config-timeout-route = { $route }：{ $seconds }s
+example-config-get-timeout-upload = get_timeout("/api/upload") = { $seconds }s
+example-config-get-timeout-unknown = get_timeout("/api/unknown") = { $seconds }s（回退到默认值）
+example-config-helper-title = 辅助配置类型：
+example-config-finished = ✓ 配置示例结束
+
+example-grpc-server-start-hint = 💡 启动服务器（绑定 127.0.0.1:50051）：
+example-grpc-server-test-hint = 💡 用客户端调用测试：
+
+example-swagger-demo-http-feature = swagger_demo 需要 'http' feature。请运行：cargo run --example swagger_demo --features "docs http"
+example-swagger-demo-ctrl-c = 按 Ctrl+C 停止
+
+example-logging-title = 📝 SDForge 结构化日志示例（inklog）
+example-logging-init-title = 🌍 init_inklog_logger：
+example-logging-init-done = ✓ inklog 已安装为全局 `log` 后端
+example-logging-from-file-title = 📁 LoggerManager::from_file（含轮转）：
+example-logging-from-file-done = ✓ 已从 TOML 构建管理器，含大小 + 时间轮转
+example-logging-builder-title = 🔧 LoggerManager::builder：
+example-logging-builder-done = ✓ 已编程式构建管理器（info + console）
+example-logging-set-level-title = 🎚️  set_level：
+example-logging-set-level-done = ✓ 运行时级别已放宽到 debug
+example-logging-finished = ✓ 日志示例结束
+example-logging-routed-info = sdforge 日志示例：经 inklog 路由
+example-logging-debug-visible = sdforge 日志示例：set_level 后 debug 已可见
+
+example-types-errors-user-not-found = 用户未找到：{ $user_id }
+example-types-errors-validation-failed = 输入校验失败：{ $message }
+example-types-errors-database-error = 数据库错误：{ $details }
+example-types-errors-metadata-note = 元数据由 SDForge 自动管理
+example-types-errors-username-empty = 用户名不能为空
+example-types-errors-invalid-email = 邮箱格式无效
+example-types-errors-validation-passed = 校验通过
+
+example-mcp-tool-definition-divisor-zero = 除数不能为零
+example-mcp-tool-definition-unsupported-op = 不支持的操作：{ $operation }
+example-mcp-tool-registration-divisor-zero = 除数不能为零
+
+example-cors-public-data-message = 这是公开数据
+example-cors-get-message = CORS 按配置正常工作
+example-cors-post-message = CORS 对 POST 请求按配置正常工作
+example-cors-api-info-description = 多协议 SDK 框架示例
+
+example-api-key-public-data-message = 这是公开数据
+example-api-key-authenticated-api-key = 已通过 API Key 认证
+example-api-key-authenticated-bearer = 已通过 Bearer Token 认证
+example-api-key-auth-succeeded = 认证成功

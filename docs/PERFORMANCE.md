@@ -67,7 +67,7 @@ cargo bench --bench runtime_bench --features http,security,etag,metrics,context,
 
 - **增量线性**：10 项 ~7.3 µs → 1000 项 ~352 µs，每增量项约 ~350 ns（守卫链底价 + 每项映射）。
 - **每项映射**：`stream_output_from` 消费 1e4 项 ~1.52 ms（约 152 ns/项，`to_value` + `extract_value` 双阶段）。
-- 记录日期 2026-09-30（与 TLS 组同批）。
+- 记录日期 2026-09-30（与 i18n 组同日）。
 
 ## 🌐 i18n 翻译查表
 

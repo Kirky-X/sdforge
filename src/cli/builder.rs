@@ -211,7 +211,6 @@ impl CliBuilder {
         // silently shadowing).
         root = root.arg(crate::cli::output::format_arg());
 
-        // Apply global args (added via with_global_arg) to the root command.
         for arg in &self.global_args {
             root = root.arg(arg.to_clap_arg());
         }

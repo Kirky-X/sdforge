@@ -11,7 +11,6 @@ mod websocket_integration_tests {
     #[test]
     fn test_websocket_config_default() {
         let config = WebSocketConfig::default();
-        // Verify it can be created and cloned
         let _cloned = config.clone();
         // `max_message_size` is now a top-level field (default 1 MiB).
         assert_eq!(config.max_message_size, 1_048_576);
@@ -20,7 +19,6 @@ mod websocket_integration_tests {
     #[test]
     fn test_connection_manager_new() {
         let manager = ConnectionManager::new();
-        // Verify it creates a valid instance (construction without panic)
         let _ = manager;
     }
 
@@ -28,7 +26,6 @@ mod websocket_integration_tests {
     fn test_app_state_with_manager() {
         let manager = Arc::new(ConnectionManager::new());
         let state = SdForgeState::new(manager);
-        // Verify state is created
         let _state_clone = state.clone();
         assert_eq!(state.config.max_message_size, 1_048_576);
     }
@@ -70,10 +67,8 @@ mod websocket_enhanced_integration_tests {
             manager.add_connection(conn_id, conn).await;
         }
 
-        // Verify connection count
         assert_eq!(manager.connection_count().await, 3);
 
-        // Verify we can retrieve connections
         let conn = manager.get_connection("integration-conn-1").await;
         assert!(conn.is_some());
         assert_eq!(conn.unwrap().id(), "integration-conn-1");
@@ -84,18 +79,15 @@ mod websocket_enhanced_integration_tests {
     async fn test_connection_removal() {
         let manager = Arc::new(ConnectionManager::new());
 
-        // Add connection
         let (conn, _rx) = WebSocketConnection::new("remove-test".to_string());
         manager
             .add_connection("remove-test".to_string(), conn)
             .await;
         assert_eq!(manager.connection_count().await, 1);
 
-        // Remove connection
         manager.remove_connection("remove-test").await;
         assert_eq!(manager.connection_count().await, 0);
 
-        // Verify connection no longer exists
         let conn = manager.get_connection("remove-test").await;
         assert!(conn.is_none());
     }

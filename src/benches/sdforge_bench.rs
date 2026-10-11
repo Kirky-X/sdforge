@@ -294,9 +294,7 @@ fn benchmark_cache_operations(c: &mut Criterion) {
 
     c.bench_function("cache_clear", |b| {
         let local = DashMapCache::new();
-        // FIX: 原实现只在迭代外填充一次，clear 原地清空后，第 2 次起
-        // 度量的都是"清空空缓存"。现在每次迭代内重新填充，保证度量的
-        // 始终是清空非空缓存（成本含 2 次 set，恒定且已计入）。
+        // 每次迭代内重新填充：保证度量清空非空缓存的成本（含 2 次 set，恒定）。
         b.iter(|| {
             local.set("k1", b"v1".to_vec());
             local.set("k2", b"v2".to_vec());
@@ -352,9 +350,7 @@ fn benchmark_cache_pattern_invalidate(c: &mut Criterion) {
             criterion::BenchmarkId::from_parameter(size),
             size,
             |b, &size| {
-                // FIX: 原实现把 O(n) 重填充放进 b.iter()，度量的是
-                // sets+invalidate 而非纯失效开销。iter_batched 的 setup
-                // 不计入度量，每次迭代拿到全新填充好的缓存。
+                // iter_batched 的 setup 不计入度量：每次迭代拿到全新填充好的缓存，度量纯失效开销。
                 b.iter_batched(
                     || {
                         let cache = DashMapCache::new();
@@ -466,9 +462,7 @@ fn benchmark_jwt_operations(c: &mut Criterion) {
     });
 
     c.bench_function("jwt_secret_validation", |b| {
-        // FIX: 原实现每次迭代调用 generate_secure_jwt_secret()，度量的是
-        // 生成成本。现在生成一次、循环外持有，仅度量校验（长度 + BearerAuth
-        // 同款字符类别策略）。
+        // 生成一次、循环外持有：仅度量校验成本（长度 + BearerAuth 同款字符类别策略）。
         let secret = generate_secure_jwt_secret();
         b.iter(|| {
             let s = black_box(&secret);

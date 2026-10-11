@@ -49,6 +49,8 @@
 //! | `/stream/events` | 事件流 |
 //! | `/stream/progress` | 进度流 |
 
+use sdforge::i18n::t;
+
 /// 主函数
 ///
 /// 根据启用的 features 启动相应的服务
@@ -92,16 +94,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("       SDForge Examples Server");
     println!("===========================================");
     println!();
-    println!("Version: 0.2.0");
+    println!(
+        "{}",
+        t("example-main-version", &[("version", "0.2.0".to_string())])
+    );
     println!();
-    println!("Registered components:");
-    println!("  - HTTP routes: {}", counts.routes);
+    println!("{}", t("example-main-registered-components", &[]));
+    println!(
+        "  {}",
+        t(
+            "example-main-http-routes",
+            &[("count", counts.routes.to_string())]
+        )
+    );
     #[cfg(feature = "mcp_examples")]
-    println!("  - MCP tools: {}", counts.mcp_tools);
+    println!(
+        "  {}",
+        t(
+            "example-main-mcp-tools",
+            &[("count", counts.mcp_tools.to_string())]
+        )
+    );
     #[cfg(feature = "websocket_examples")]
-    println!("  - WebSocket routes: {}", counts.ws_routes);
+    println!(
+        "  {}",
+        t(
+            "example-main-ws-routes",
+            &[("count", counts.ws_routes.to_string())]
+        )
+    );
     #[cfg(feature = "grpc_examples")]
-    println!("  - gRPC routes: {}", counts.grpc_routes);
+    println!(
+        "  {}",
+        t(
+            "example-main-grpc-routes",
+            &[("count", counts.grpc_routes.to_string())]
+        )
+    );
     println!();
 
     let port: u16 = env::var("HTTP_PORT")
@@ -109,20 +138,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .parse()
         .unwrap_or(3000);
 
-    println!("Starting HTTP server...");
-    println!("Listening on http://0.0.0.0:{}", port);
+    println!("{}", t("example-main-starting-http", &[]));
+    println!(
+        "{}",
+        t("example-main-listening", &[("port", port.to_string())])
+    );
     println!();
-    println!("Available endpoints:");
-    println!("  HTTP API:");
-    println!("    GET  /api/v1/hello           - greeting");
-    println!("    GET  /api/v1/users/:id       - get user");
-    println!("    POST /api/v1/echo            - echo request");
+    println!("{}", t("example-main-available-endpoints", &[]));
+    println!("  {}", t("example-main-http-api", &[]));
+    println!(
+        "    GET  /api/v1/hello           - {}",
+        t("example-main-endpoint-hello", &[])
+    );
+    println!(
+        "    GET  /api/v1/users/:id       - {}",
+        t("example-main-endpoint-user", &[])
+    );
+    println!(
+        "    POST /api/v1/echo            - {}",
+        t("example-main-endpoint-echo", &[])
+    );
     println!();
 
     let app = sdforge::http::build();
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{}", port)).await?;
 
-    println!("Server started, press Ctrl+C to stop");
+    println!("{}", t("example-main-server-started", &[]));
     println!("===========================================");
 
     sdforge::axum::serve(listener, app).await?;
@@ -139,24 +180,36 @@ fn main() {
     println!("       SDForge Examples");
     println!("===========================================");
     println!();
-    println!("Enable the HTTP feature to start the server:");
+    println!("{}", t("example-main-enable-http", &[]));
     println!();
     println!("  cargo run --features http_examples");
     println!();
-    println!("Available modules:");
-    println!("  - basics:      basic API definitions and types");
-    println!("  - http:        HTTP routes and parameters");
-    println!("  - mcp:         MCP tool definitions");
-    println!("  - websocket:   WebSocket connections");
-    println!("  - streaming:   SSE streaming");
-    println!("  - security:    API Key and rate limiting");
-    println!("  - combined:    full-featured example");
+    println!("{}", t("example-main-available-modules", &[]));
+    println!("  - basics:      {}", t("example-main-module-basics", &[]));
+    println!("  - http:        {}", t("example-main-module-http", &[]));
+    println!("  - mcp:         {}", t("example-main-module-mcp", &[]));
+    println!(
+        "  - websocket:   {}",
+        t("example-main-module-websocket", &[])
+    );
+    println!(
+        "  - streaming:   {}",
+        t("example-main-module-streaming", &[])
+    );
+    println!(
+        "  - security:    {}",
+        t("example-main-module-security", &[])
+    );
+    println!(
+        "  - combined:    {}",
+        t("example-main-module-combined", &[])
+    );
     println!();
-    println!("Examples:");
-    println!("  # Run the basic example");
+    println!("{}", t("example-main-examples", &[]));
+    println!("  # {}", t("example-main-run-basic-hint", &[]));
     println!("  cargo run --example sdforge --features http_examples");
     println!();
-    println!("  # Run the combined example");
+    println!("  # {}", t("example-main-run-combined-hint", &[]));
     println!("  cargo run --example sdforge --features combined_examples");
     println!("===========================================");
 }

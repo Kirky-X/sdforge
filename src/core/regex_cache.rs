@@ -434,7 +434,6 @@ mod tests {
 
     #[test]
     fn test_global_regex_cache_is_thread_safe() {
-        // Verify the global cache can be safely accessed from multiple threads
         use std::thread;
 
         let handles: Vec<_> = (0..10)
@@ -468,7 +467,6 @@ mod tests {
 
     #[test]
     fn test_common_regex_functions_are_cached() {
-        // Verify common regex functions return the same cached instance
         let email1 = common::email();
         let email2 = common::email();
 

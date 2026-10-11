@@ -76,7 +76,6 @@ fn test_sanitize_error_message_truncation() {
 
 #[test]
 fn test_global_regex_patterns_are_initialized() {
-    // Verify global regex patterns are properly initialized
     assert!(JWT_PATTERN.is_match("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxw"));
     assert!(SECRET_PATTERN.is_match("password=secret123"));
     assert!(PATH_PATTERN.is_match("/path/to/cert.pem"));
@@ -813,7 +812,6 @@ async fn test_log_merges_fallback_logs_synchronously() {
         serialize_audit_logs(std::slice::from_ref(&fallback_log)),
     );
 
-    // Verify fallback was stored
     assert!(logger.fallback_logs.get("merge_user").is_some());
 
     // Now call log() for the same user — this should merge the fallback
@@ -837,7 +835,6 @@ async fn test_log_merges_fallback_logs_synchronously() {
     let logs = logger.get_logs("merge_user");
     assert_eq!(logs.len(), 2, "Should have 2 logs after merge");
 
-    // Verify both logs are present
     let actions: Vec<&str> = logs.iter().map(|l| l.action()).collect();
     assert!(
         actions.contains(&"fallback_action"),
@@ -970,11 +967,9 @@ async fn test_get_logs_deduplicates_by_id() {
         logs.len()
     );
 
-    // Verify the shared log appears only once
     let shared_count = logs.iter().filter(|l| l.id() == "shared-id-1").count();
     assert_eq!(shared_count, 1, "Shared log should appear exactly once");
 
-    // Verify the fallback-only log appears
     let fallback_count = logs.iter().filter(|l| l.id() == "fallback-only-1").count();
     assert_eq!(fallback_count, 1, "Fallback-only log should appear once");
 }
@@ -1058,7 +1053,6 @@ async fn test_worker_merges_fallback_from_queue() {
     };
     let _ = logger.queue_sender.send(batch).await;
 
-    // Wait for the worker to process the batch
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
     // The worker should have merged the fallback into primary and deleted it
@@ -1097,7 +1091,6 @@ async fn test_worker_no_fallback_does_nothing() {
         .logs
         .set("no_fb_user", serialize_audit_logs(&[primary_log]));
 
-    // Send a batch
     let batch = AuditLogBatch {
         user_id: "no_fb_user".to_string(),
     };
@@ -1163,7 +1156,6 @@ async fn test_audit_logger_trait_with_runtime_spawns_task() {
     // spawn a task that calls the async log() method.
     AuditLoggerTrait::log(&logger, log);
 
-    // Wait for the spawned task to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
     // The log should have been stored

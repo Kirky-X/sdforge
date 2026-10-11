@@ -326,8 +326,8 @@ SDForge 由两个 crate 组成：`macros/sdforge-macros` 负责解析 `#[forge]`
 | 单元测试 | `src/` 内嵌 `#[cfg(test)]`、`tests/unit/` | 模块级测试，含 proptest 属性测试（`src/tests/property_tests.rs`） |
 | 集成测试 | `tests/integration/` | 覆盖 http / mcp / grpc / websocket / security / cache / streaming / openapi / cli / docs / health_probes / graceful_shutdown / http_tls / validate / paginate / etag / lifecycle / otel_export / status_code / rbac 等协议与特性组合 |
 | 宏测试 | `tests/macros/`、`macros/tests/` | trybuild 编译失败用例与宏展开验证 |
-| E2E | `tests/e2e/` | `e2e_advanced` 多域 E2E 场景（12 域规模基线见 [测试场景](docs/TEST_SCENARIOS.md)） |
-| 示例综合测试 | `examples/tests/` | 全 feature re-export 与跨协议 dispatch（77 个测试）及网关 E2E |
+| E2E | `tests/e2e/` | `e2e_advanced` 多域 E2E 场景（11 域规模基线见 [测试场景](docs/TEST_SCENARIOS.md)） |
+| 示例综合测试 | `examples/tests/` | 全 feature re-export 与跨协议 dispatch（76 个测试）及网关 E2E |
 | 基准测试 | `benches/`、`src/benches/` | criterion：`runtime_bench` / `config_and_cache_bench` / `sdforge_bench` |
 | Doc-tests | `src/` 文档注释 | rustdoc 内嵌示例 |
 
@@ -346,7 +346,7 @@ cargo test --workspace --all-features
 # lib 测试（CI 覆盖率口径）
 cargo test --features full --lib
 
-# 覆盖率（CI 门禁 ≥90% 行覆盖，lefthook pre-push 同口径）
+# 覆盖率（CI 门禁 ≥90% 行覆盖：--features full --lib；lefthook pre-push 仅沿用同一阈值，未限定 --features full --lib）
 cargo llvm-cov --features full --lib --lcov --fail-under-lines 90
 
 # 格式化与零告警 Lint
@@ -354,11 +354,11 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-覆盖率测量经 `llvm-cov.toml` 排除 build.rs 生成的 protobuf 代码（`src/grpc/pb/`）。
+build.rs 生成的 protobuf 代码写入 `OUT_DIR`，不再落源树；`llvm-cov.toml` 中的 `src/grpc/pb/*` 排除项为旧布局残留，当前不匹配任何文件。
 
 ### 测试规模
 
-约 **3,220** 个测试函数（`src/` 2,213 + `tests/` 791 + `macros/` 90 + `examples/` 126，`grep -rEc '#\[(tokio::)?test\b' --include='*.rs'` 统计，2026-10-10 实测）。
+约 **3,181** 个测试函数（`src/` 2,180 + `tests/` 785 + `macros/` 92 + `examples/` 124，`grep -rEc '#\[(tokio::)?test\b' --include='*.rs'` 统计，2026-10-11 实测）。
 
 ---
 

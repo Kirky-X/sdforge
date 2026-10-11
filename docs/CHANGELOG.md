@@ -95,6 +95,9 @@
 
 ### 变更 (Changed)
 
+- `serve-tls` / `tls-watch` 并入 `full`（`tls-watch` 蕴含 `serve-tls`）：0.5.0-rc.6
+  发布节「`serve-tls` 不并入 `full`（部署面选项）」为该发布时点表述，本版起
+  `full` 计 26 项，含部署面 HTTP TLS 两项。
 - 三方依赖升级至最新稳定版：utoipa 5.5→6.0、utoipa-swagger-ui 9.0→10.0（内置
   Swagger UI v5.32.6，vendored 面不变）、rmcp 3.4→3.5、hyper 1.11→1.12、
   uuid 1.26→1.28；Cargo.lock 23 个包升版（inventory 0.3.25、syn 3.0.7、

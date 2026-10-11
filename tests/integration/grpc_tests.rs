@@ -160,7 +160,6 @@ mod grpc_integration_tests {
     async fn setup_grpc_test_server() -> (SdForgeServiceClient<Channel>, SocketAddr) {
         let (tx, rx) = std::sync::mpsc::channel();
 
-        // Spawn the server in a background task
         let server_handle = tokio::spawn(async move {
             let addr: SocketAddr = TEST_SERVER_ADDR.parse().unwrap();
             let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
@@ -182,7 +181,6 @@ mod grpc_integration_tests {
                 .unwrap();
         });
 
-        // Wait for server to start and get the bound address (with timeout)
         let server_addr = tokio::time::timeout(Duration::from_secs(5), async {
             tokio::task::spawn_blocking(move || rx.recv().unwrap())
                 .await
@@ -548,7 +546,6 @@ mod grpc_integration_tests {
     #[tokio::test]
     #[ignore = "environmental issue: real network binding to 127.0.0.1:0, hangs in CI/sandboxed environments"]
     async fn test_grpc_error_status_mapping() {
-        // Verify that valid calls return OK status
         let (mut client, _server_addr) = setup_grpc_test_server().await;
 
         let request = create_test_call_request("status_test", HashMap::new(), "");
@@ -556,7 +553,6 @@ mod grpc_integration_tests {
 
         assert!(result.is_ok(), "Valid request should return OK status");
 
-        // Verify response structure
         let response = result.unwrap().into_inner();
         assert_eq!(
             response.status_code, 200,
@@ -732,7 +728,6 @@ mod grpc_integration_tests {
 
         let route = GrpcRoute::new("test_service".to_string(), metadata);
 
-        // Verify the route was created - use Debug format to validate structure
         let debug_str = format!("{:?}", route);
         assert!(debug_str.contains("test_service"));
     }
@@ -880,7 +875,6 @@ mod grpc_integration_tests {
     #[test]
     fn test_grpc_localhost_address() {
         let addr_str = "localhost:8080";
-        // Parse the address format
         let parts: Vec<&str> = addr_str.split(':').collect();
         assert_eq!(parts.len(), 2);
         assert_eq!(parts[0], "localhost");
@@ -1035,7 +1029,6 @@ mod grpc_integration_tests {
         let result1 = client.call(Request::new(request1)).await;
         assert!(result1.is_ok(), "First request should succeed");
 
-        // Wait a bit to verify connection stays alive
         tokio::time::sleep(Duration::from_millis(10)).await;
 
         // Make second request
@@ -1228,7 +1221,6 @@ mod grpc_integration_tests {
     fn test_grpc_build_server_valid_address() {
         let addr = "127.0.0.1:0"; // Port 0 for auto-assignment
 
-        // Verify address is valid
         let socket_addr: SocketAddr = addr.parse().unwrap();
         assert!(socket_addr.port() == 0 || socket_addr.port() > 0);
     }

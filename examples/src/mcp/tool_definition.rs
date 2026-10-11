@@ -53,6 +53,7 @@
 //! "Hello, World!"
 //! ```
 
+use sdforge::i18n::t;
 use sdforge::prelude::*;
 use sdforge::serde::{Deserialize, Serialize};
 
@@ -354,7 +355,7 @@ async fn mcp_calculate(request: CalculateRequest) -> Result<serde_json::Value, A
         "divide" => {
             if request.b == 0.0 {
                 return Err(ApiError::InvalidInput {
-                    message: "Divisor cannot be zero".to_string(),
+                    message: t("example-mcp-tool-definition-divisor-zero", &[]),
                     field: Some("b".to_string()),
                     value: Some(serde_json::json!(request.b)),
                 });
@@ -363,7 +364,10 @@ async fn mcp_calculate(request: CalculateRequest) -> Result<serde_json::Value, A
         }
         _ => {
             return Err(ApiError::InvalidInput {
-                message: format!("Unsupported operation: {}", request.operation),
+                message: t(
+                    "example-mcp-tool-definition-unsupported-op",
+                    &[("operation", request.operation.clone())],
+                ),
                 field: Some("operation".to_string()),
                 value: Some(serde_json::json!(request.operation)),
             });

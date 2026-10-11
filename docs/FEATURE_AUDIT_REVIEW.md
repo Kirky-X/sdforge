@@ -8,8 +8,9 @@
 
 ### 1. [高] `full` 覆盖失真 — 部分过时，残留已修
 
-- 审查所指 9 项缺失中 validate/paginate/etag/hooks/lifecycle/otel 已在后续提交入 `full`（`Cargo.toml` `full` 现为 25 项，含 idempotency）。
+- 审查所指 9 项缺失中 validate/paginate/etag/hooks/lifecycle/otel 已在后续提交入 `full`（`Cargo.toml` `full` 本次复核时点为 25 项，含 idempotency）。
 - 残留修复：README 特性表宣称"24 项"与 Cargo 实际 25 项漂移（`idempotency` 未入文档）→ 已同步为 25 项。
+- 时点注记（复核后）：`tls-watch` 特性提交（2026-10-10）将 `serve-tls` / `tls-watch` 并入 `full`，现行 `full` 为 26 项（README 特性表随行同步）；上文「25 项」为 2026-09-30 复核时点口径。
 - 口径登记（非缺失）：`simd-json` / `kit` / `limiteron-integration` 与本轮新增的 `schemars`（opt-in 精确度）、`ratelimit-dist` / `cache-l2` / `db-integration`（可选跨仓重依赖）、`sdk`（生成期工具面）不并入 `full`——`full` 语义为"运行时特性全集"，重依赖/精确度选项按需启用，README 特性表已逐行标注。
 
 ### 2. [高] build.rs 无条件编译 proto — 过时

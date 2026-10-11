@@ -58,9 +58,7 @@ fn test_address_validation_valid() {
 /// Test address validation with valid address (with hostname)
 #[test]
 fn test_address_validation_hostname() {
-    // Hostnames require DNS resolution, which can't be done with simple parse
-    // This test verifies that "localhost:8080" is a valid address format
-    // Note: In actual code, use std::net::ToSocketAddrs for hostname resolution
+    // 主机名需 DNS 解析（真实代码用 ToSocketAddrs）；此处只验证 "localhost:8080" 的地址格式拆解。
     let valid_addr = "localhost:8080";
     // Split to verify format is correct
     let parts: Vec<&str> = valid_addr.split(':').collect();
@@ -610,7 +608,6 @@ fn test_grpc_error_propagation_server_to_client() {
         value: Some(serde_json::Value::String("invalid".to_string())),
     };
 
-    // Convert to status code representation
     let error_msg = server_error.to_string();
     assert!(error_msg.contains("Invalid input"));
     assert!(error_msg.contains("Invalid gRPC request parameter"));

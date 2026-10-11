@@ -246,11 +246,8 @@ impl SyncCache for OxcacheSyncCache {
             Ok(idx) => idx,
             Err(_) => return Vec::new(),
         };
-        // oxcache backend 达到容量时会内部驱逐键，但 `key_index` 不会同步感知，
-        // 导致 index 逐渐成为 backend 的超集，`find_keys_by_pattern` 返回已不存在的键。
-        //
-        // 修复策略：遍历 index 时通过 `backend.exists()` 过滤，并惰性清理已被驱逐的键，
-        // 既保证返回结果与 backend 一致，又避免 index 无限增长（内存泄漏）。
+        // oxcache backend 达容量会驱逐键，`key_index` 可能残留为超集：遍历时以
+        // `backend.exists()` 过滤并惰性清理，保证结果一致且 index 不无限增长。
         let mut result = Vec::new();
         let mut stale_keys = Vec::new();
         for k in idx.iter() {
@@ -396,17 +393,8 @@ impl SyncCache for OxcacheSyncCache {
             "capacity".to_string(),
             SyncCacheReader::capacity(&self.backend).unwrap_or(0),
         );
-        // 透传 backend stats（命中数、未命中数、命中率等）
-        //
-        // 原代码仅尝试 `v.parse::<u64>`，对 float 类型统计
-        // （如 hit_rate="0.85"）静默丢弃，违反 Rule 12（失败必须显性化）。
-        //
-        // 修复策略：
-        // 1. 先尝试 u64 解析（适用于 hits、misses 等整数统计）
-        // 2. 失败则尝试 f64 解析：
-        //    - 若键名含 "rate"/"ratio"/"pct"，视为 0.0-1.0 的比率，×100 后四舍五入为百分比 u64
-        //    - 否则直接四舍五入为 u64
-        // 3. 两者均失败则 log::warn! 显性化（不再静默丢弃）
+        // 透传 backend stats；解析先试 u64，失败试 f64（rate/ratio/pct 键按
+        // 0-1 比率 ×100 取整），两者皆失败则 log::warn! 显性化（Rule 12）。
         if let Ok(backend_stats) = self.backend.stats() {
             for (k, v) in backend_stats {
                 if let Ok(n) = v.parse::<u64>() {

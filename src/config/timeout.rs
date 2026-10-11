@@ -62,14 +62,12 @@ impl TimeoutConfig {
             ));
         }
 
-        // Check for unreasonably long timeouts
         if self.default_timeout_secs > 3600 {
             return Err(crate::config::ConfigError::ValidationError(
                 "timeout.default_timeout_secs should not exceed 3600 seconds (1 hour)".into(),
             ));
         }
 
-        // Validate route-specific timeouts
         for (route, timeout) in &self.route_timeouts {
             if *timeout == 0 {
                 return Err(crate::config::ConfigError::ValidationError(format!(

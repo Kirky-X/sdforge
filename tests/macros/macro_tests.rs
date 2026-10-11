@@ -108,7 +108,7 @@ mod cache_ttl_passthrough_tests {
     #[test]
     fn cache_ttl_value_passes_through_without_clamping() {
         // 宏层与 ApiMetadata 层语义一致：用户值原样保留，不静默抬到 300
-        // （历史行为曾是 .max(DEFAULT_CACHE_TTL) 钳制，用户写 60 实得 300）
+        // （历史行为曾把用户值钳制到下限 300，用户写 60 实得 300）
         assert_eq!(__axiom_metadata_ttl_probe().cache_ttl(), Some(60));
     }
 }

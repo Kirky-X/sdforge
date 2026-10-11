@@ -12,7 +12,8 @@
 //! - **gRPC** — `SdForgeGrpcService::call` wraps dispatch with a context.
 //! - **WebSocket** — `handle_socket` entry adopts/creates a context.
 //! - **MCP** — the stateless handler wraps tool dispatch.
-//! - **Logging** — [`log_fields`] supplies `request_id`/`trace_id` fields
+//! - **Logging** — [`log_fields`](crate::context::log_fields) supplies
+//!   `request_id`/`trace_id` fields
 //!   from the ambient context; attach them to `log` records routed into
 //!   inklog (via the `inklog` feature bridge).
 //!

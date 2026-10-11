@@ -25,12 +25,8 @@ use sdforge::serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 
-// =============================================================================
-// 本地 Cacheable trait
-// =============================================================================
-// oxcache 0.3 移除了全局 Cacheable trait（序列化职责交由调用方负责）。
-// 本示例直接使用 serde_json::to_vec / from_slice 进行序列化，
-// 通过 trait bound `T: Serialize + for<'de> Deserialize<'de>` 约束可缓存类型。
+// 本地 Cacheable trait：oxcache 0.3 已移除全局 trait，序列化由调用方负责——
+// 示例用 serde_json + `T: Serialize + for<'de> Deserialize<'de>` 约束可缓存类型。
 
 /// 可缓存类型约定 — 实现 Serialize + Deserialize 即可
 pub trait Cacheable: Serialize + for<'de> Deserialize<'de> {}
@@ -449,10 +445,8 @@ mod tests {
             category: "Test".to_string(),
         };
 
-        // Write through cache
         cache.write("product:1", &product).await.unwrap();
 
-        // Verify it's in cache
         let cached = cache.cache.get("product:1");
         assert!(cached.is_some());
 

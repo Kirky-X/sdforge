@@ -155,19 +155,13 @@ where
         None => (req.uri().path().to_string(), String::new()),
     };
 
-    // Check if path starts with /api/ and has a version
     if let Some(path_after_api) = path.strip_prefix("/api/") {
-        // Check if it has a version (v1, v2, etc.)
         if path_after_api.starts_with('v') {
             let end_of_version = path_after_api.find('/').unwrap_or(path_after_api.len());
             let version_part = &path_after_api[..end_of_version];
 
-            // Check if version is valid (starts with 'v' followed by at least
-            // one digit). Previously, `version_part[1..].chars().all(...)` on
-            // an empty slice (when version_part == "v") returned true, so the
-            // bare path "/api/v" was treated as a valid version — a boundary
-            // bug that caused the middleware to forward instead of redirecting
-            // to the default version.
+            // 版本段须 'v' + 至少一位数字：空段（version_part == "v"）曾被当作合法版本，
+            // 导致裸路径 /api/v 转发而非重定向到默认版本。
             if version_part
                 .chars()
                 .next()
@@ -196,7 +190,6 @@ where
                 if !has_lifecycle_header
                     && let Some(sunset_date) = config.deprecated_versions.get(version_part)
                 {
-                    // Add Deprecation header
                     response.headers_mut().insert(
                         axum::http::header::HeaderName::from_static("deprecation"),
                         axum::http::HeaderValue::from_static("true"),
@@ -210,7 +203,6 @@ where
                         response.headers_mut().insert(name, val);
                     }
 
-                    // Add Link header to newer version
                     if let Some(newer_version) =
                         find_newer_version(version_part, &config.supported_versions)
                     {
@@ -1580,7 +1572,6 @@ mod tests {
         assert_eq!(cloned.deprecated_versions, config.deprecated_versions);
         assert_eq!(cloned.sunset_header, config.sunset_header);
 
-        // Verify independence (modifying clone doesn't affect original)
         let mut cloned_modified = cloned.clone();
         cloned_modified.default_version = "v4".to_string();
         assert_eq!(config.default_version, "v3");

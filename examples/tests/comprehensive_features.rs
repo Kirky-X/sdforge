@@ -163,7 +163,6 @@ fn http_simple_api_user_response_constructible() {
         created_at: "2024-01-01T00:00:00Z".to_string(),
     };
     assert_eq!(user.id, 123);
-    // Verify serialization round-trip.
     let json = serde_json::to_string(&user).expect("UserResponse should serialize");
     let parsed: UserResponse =
         serde_json::from_str(&json).expect("UserResponse should deserialize");
@@ -501,7 +500,6 @@ fn security_comprehensive_user_and_role_constructible() {
         role: UserRole::Admin,
     };
     assert_eq!(admin.role, UserRole::Admin);
-    // Verify serialization round-trip.
     let json = serde_json::to_string(&admin).expect("User should serialize");
     let parsed: User = serde_json::from_str(&json).expect("User should deserialize");
     assert_eq!(parsed.id, admin.id);
@@ -1021,7 +1019,6 @@ fn combined_full_example_user_constructible() {
         created_at: "2024-01-01T00:00:00Z".to_string(),
     };
     assert_eq!(user.id, 123);
-    // Verify serialization round-trip.
     let json = serde_json::to_string(&user).expect("User should serialize");
     let parsed: User = serde_json::from_str(&json).expect("User should deserialize");
     assert_eq!(parsed.id, 123);

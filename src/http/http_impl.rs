@@ -83,7 +83,6 @@ impl HttpRoute {
 pub(crate) fn resolve_route_path(base_path: &str, module_prefix: Option<&str>) -> String {
     match module_prefix {
         Some(prefix) if !prefix.is_empty() => {
-            // Remove leading slash from prefix if present
             let clean_prefix = prefix.trim_start_matches('/');
             // HIGH 修复（#38）：防御性切片——此前 `base_path[1..]` 假定首字符
             // 必为 '/'，空串会越界 panic、多字节首字符会 panic（非 char
@@ -437,7 +436,6 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
         }));
     }
 
-    // Apply response compression
     router = router.layer(tower_http::compression::CompressionLayer::new());
 
     // Use configurable request timeout from server config
@@ -447,16 +445,13 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
         std::time::Duration::from_secs(timeout_secs),
     ));
 
-    // Apply CORS
     if let Some(cors) = &config.server.cors {
         let cors_layer = crate::config::build_cors_layer(cors)?;
         router = router.layer(cors_layer);
     }
 
-    // Apply security headers
     router = apply_security_headers(router);
 
-    // Apply authentication middleware
     #[cfg(feature = "security")]
     {
         use crate::config::AuthConfig;

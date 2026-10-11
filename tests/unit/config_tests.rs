@@ -388,7 +388,6 @@ mod config_enhanced_tests {
     fn test_app_config_default_implementation() {
         let default = SdForgeConfig::default();
 
-        // Verify we can access all major fields
         let _ = &default.server;
         let _ = &default.authentication;
         let _ = &default.timeout;

@@ -55,7 +55,6 @@ fn test_generate_secure_jwt_secret() {
     // Check length (base64 encoded 32 bytes = 44 characters)
     assert_eq!(secret.len(), 44);
 
-    // Check it can be used to create BearerAuth
     let result = BearerAuth::try_new(&secret);
     assert!(result.is_ok());
 }
@@ -65,7 +64,6 @@ fn test_generate_multiple_secrets_are_different() {
     let secret1 = generate_secure_jwt_secret();
     let secret2 = generate_secure_jwt_secret();
 
-    // Ensure uniqueness
     assert_ne!(secret1, secret2);
 }
 
@@ -410,7 +408,6 @@ fn test_invalidate_token_blacklists() {
     // Use invalidate_token to blacklist
     auth.invalidate_token(&token);
 
-    // Verify the blacklist cache was updated
     let key = CacheNamespace::BearerBlacklist.key(&token);
     assert!(blacklisted_tokens.get(&key).is_some());
     assert!(auth.blacklisted_tokens.contains(&key));
@@ -419,9 +416,7 @@ fn test_invalidate_token_blacklists() {
 
 #[test]
 fn test_invalidate_token_blacklist_blocks_token() {
-    // Test that a blacklisted token is blocked unconditionally.
-    // Previously this test validated buggy behavior where the blacklist
-    // never blocked any token due to Instant::now().elapsed() ≈ 0.
+    // 黑名单 token 必须被无条件拒绝。
     let secret = "MySecureSecret123!@#ABCDEFGHIJKLM";
     let valid_tokens = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
     let blacklisted_tokens = Arc::new(crate::cache::DashMapCache::new()) as SharedCache;
@@ -499,7 +494,6 @@ fn test_register_and_validate_token() {
         metadata: AuthMetadata::default(),
     };
 
-    // Register the token
     auth.register_token(token.clone(), context);
 
     // Token should still be valid
@@ -850,10 +844,8 @@ fn test_verify_blacklisted_token_rejected() {
     // Token should be valid initially
     assert!(auth.validate_token(&token).is_some());
 
-    // Add to blacklist using invalidate_token
     auth.invalidate_token(&token);
 
-    // Verify the blacklist cache was updated
     let key = CacheNamespace::BearerBlacklist.key(&token);
     assert!(blacklisted_tokens.get(&key).is_some());
     assert!(auth.blacklisted_tokens.contains(&key));
@@ -880,7 +872,6 @@ fn test_blacklist_nonexistent_token() {
     // Original token should still be valid
     assert!(auth.validate_token(&token).is_some());
 
-    // Verify the nonexistent token was blacklisted (the method should work without errors)
     let key = CacheNamespace::BearerBlacklist.key(nonexistent_token);
     assert!(auth.blacklisted_tokens.get(&key).is_some());
 }
@@ -949,7 +940,6 @@ fn test_bearer_auth_with_custom_caches() {
     assert_eq!(auth.expected_audience, Some("custom-audience".to_string()));
     assert_eq!(auth.expected_issuer, Some("custom-issuer".to_string()));
 
-    // Verify custom caches are used
     assert!(Arc::ptr_eq(&auth.valid_tokens, &custom_valid_cache));
     assert!(Arc::ptr_eq(
         &auth.blacklisted_tokens,

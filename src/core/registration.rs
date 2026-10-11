@@ -306,7 +306,6 @@ mod tests {
             },
         );
 
-        // Verify struct fields exist and are accessible
         assert_eq!(reg.name, "test_api");
         assert_eq!(reg.version, "v1");
         assert!(std::mem::size_of_val(&reg.create_fn) > 0);

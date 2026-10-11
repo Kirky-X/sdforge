@@ -63,15 +63,8 @@ where
     T: Serialize,
 {
     fn into_response(self) -> axum::response::Response {
-        // 优先级链（防御性修复）
-        //   - 成功路径（error.is_none()）：status_code 字段 > 200
-        //     success_with_status 设置的字段直接生效；未设置则默认 200。
-        //   - 错误路径（error.is_some()）：始终使用 error.http_status，
-        //     绝不读取 status_code 字段。此前实现 `status_code.or_else(|| error.http_status)`
-        //     在理论上允许成功侧字段覆盖错误状态码（虽然 ServiceResponse::error
-        //     构造器把 status_code 设为 None，但防御性编程要求错误路径
-        //     不依赖该不变量 — 任何意外同时设置两者的代码路径都会被
-        //     此处的显式分支挡住，保证错误响应始终使用错误状态码）。
+        // 优先级链（防御性）：成功路径 status_code 字段 > 200；错误路径始终用
+        // error.http_status，绝不读 status_code——不依赖「错误构造器置 None」的不变量。
         let status = if self.error.is_none() {
             self.status_code.unwrap_or(200)
         } else {

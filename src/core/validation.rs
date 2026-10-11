@@ -710,7 +710,6 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn test_security_limits_constants_defined() {
-        // Verify all security limit constants are properly defined
         assert!(MAX_REQUEST_BODY_SIZE > 0);
         assert!(MAX_HEADER_NAME_LENGTH > 0);
         assert!(MAX_HEADER_VALUE_LENGTH > 0);
@@ -732,8 +731,6 @@ mod tests {
     #[test]
     #[allow(clippy::assertions_on_constants)]
     fn test_security_limits_reasonable_values() {
-        // Verify limits are within reasonable ranges
-
         // Request body: 1MB - 100MB is reasonable
         assert!(MAX_REQUEST_BODY_SIZE >= 1024 * 1024); // At least 1MB
         assert!(MAX_REQUEST_BODY_SIZE <= 100 * 1024 * 1024); // At most 100MB
@@ -857,17 +854,7 @@ mod tests {
     }
 
     // ============================================================================
-    // sanitize_filename edge case tests
-    // ============================================================================
-
-    // ============================================================================
-    // extract_validated deserialization failure path
-    //
-    // The `serde_json::from_value(...).map_err(|_| ValidationErrorsWrapper::new(vec![]))`
-    // closure is exercised when the input JSON cannot be deserialized into T
-    // (e.g., wrong field types or missing required fields). Existing tests
-    // only feed JSON that deserializes successfully but fails validation, so
-    // the deserialization-error branch was previously uncovered.
+    // extract_validated 反序列化失败分支：输入 JSON 无法反序列化为 T 时走空错误包装
     // ============================================================================
 
     /// Test extract_validated returns Err when JSON has a wrong type for a

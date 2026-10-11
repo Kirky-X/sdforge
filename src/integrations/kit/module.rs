@@ -70,9 +70,7 @@ impl ModuleMeta for SdforgeModule {
     const NAME: &'static str = "sdforge";
 
     fn dependencies() -> &'static [(&'static str, TypeId)] {
-        // OnceLock lazy init — mirrors dbnexus's pattern.
-        // OnceLock (stable since 1.70) gives a `&'static` reference to a
-        // runtime-constructed `Vec`.
+        // OnceLock 惰性初始化（镜像 dbnexus 模式；自 1.70 stable）：为运行时构造的 Vec 提供 &'static 引用。
         static DEPS: OnceLock<Vec<(&'static str, TypeId)>> = OnceLock::new();
         DEPS.get_or_init(|| vec![("limiteron", TypeId::of::<LimiteronModule>())])
             .as_slice()
@@ -92,9 +90,7 @@ impl AsyncAutoBuilder for SdforgeModule {
                 .require::<LimiteronModule>()
                 .map_err(|e| SdForgeError::internal(format!("require LimiteronModule: {e}")))?;
 
-            // 2. Wrap in LimiteronForgeAdapter — the adapter IS the capability
-            //    (Rule 7: ForgeApp/ForgeBuilder don't exist; the rate-limiter
-            //    abstraction IS the capability, not a ForgeApp that contains it).
+            // 适配器自身即 capability（Rule 7：不存在 ForgeApp/ForgeBuilder，限流抽象本身就是 capability）。
             let adapter = LimiteronForgeAdapter::new(governor);
 
             // 3. Return as Arc<dyn ForgeRateLimiter + Send + Sync>.

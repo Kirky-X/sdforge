@@ -81,14 +81,8 @@ mod tests {
     use super::*;
 
     // ========================================================================
-    // init_inklog_logger — 验证 inklog 被正确安装为全局 log 后端
-    //
-    // 这些测试验证：
-    // 1. init_inklog_logger 返回 Ok（LoggerManager 构造成功）
-    // 2. 初始化后全局 log 级别被设置（证明 inklog LogLogger::install 执行）
-    // 3. 初始化后 log:: 调用不 panic（证明桥接器正常工作）
-    //
-    // 使用 #[serial] 因为 inklog 安装全局 log logger（进程级单例）。
+    // init_inklog_logger 测试：安装成功、级别生效、log:: 不 panic
+    // （全局 logger 进程级单例，故 #[serial]）
     // ========================================================================
 
     /// 验证 init_inklog_logger 成功返回 LoggerManager。

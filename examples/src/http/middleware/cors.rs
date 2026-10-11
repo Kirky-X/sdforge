@@ -55,6 +55,7 @@
 //!
 //! 需要认证信息的端点示例。
 
+use sdforge::i18n::t;
 use sdforge::prelude::*;
 
 // ============================================================================
@@ -98,7 +99,7 @@ use sdforge::prelude::*;
 )]
 async fn public_data() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "message": "This is public data",
+        "message": t("example-cors-public-data-message", &[]),
         "accessible": "anyone"
     }))
 }
@@ -169,7 +170,7 @@ async fn cors_test_get() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "method": "GET",
         "cors_enabled": true,
-        "message": "CORS is working as configured"
+        "message": t("example-cors-get-message", &[])
     }))
 }
 
@@ -209,7 +210,7 @@ async fn cors_test_post(request: CorsTestRequest) -> Result<serde_json::Value, A
         "method": "POST",
         "received_data": request.data,
         "cors_enabled": true,
-        "message": "CORS is working as configured for POST requests"
+        "message": t("example-cors-post-message", &[])
     }))
 }
 
@@ -283,7 +284,7 @@ async fn api_info() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "name": "SDForge API",
         "version": "0.2.0",
-        "description": "Multi-protocol SDK framework example",
+        "description": t("example-cors-api-info-description", &[]),
         "cors": {
             "enabled": true,
             "allow_all_origins": true,

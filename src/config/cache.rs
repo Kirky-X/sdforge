@@ -71,14 +71,12 @@ impl crate::config::ValidateConfig for CacheConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
         use crate::config::ConfigError;
 
-        // Validate TTL is positive
         if self.default_ttl_secs == 0 {
             return Err(ConfigError::ValidationError(
                 "Cache default_ttl_secs cannot be 0".into(),
             ));
         }
 
-        // Validate max_items is reasonable
         if self.max_items == 0 {
             return Err(ConfigError::ValidationError(
                 "Cache max_items cannot be 0".into(),
@@ -124,12 +122,7 @@ mod tests {
     }
 
     // ============================================================================
-    // ValidateConfig tests
-    //
-    // The validate() method checks two invariants:
-    //   1. default_ttl_secs must be > 0
-    //   2. max_items must be > 0
-    // These tests cover the success path and both error branches.
+    // ValidateConfig tests：覆盖成功路径与两个错误分支（default_ttl_secs>0、max_items>0）
     // ============================================================================
 
     #[test]

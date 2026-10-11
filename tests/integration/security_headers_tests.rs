@@ -19,7 +19,6 @@ mod security_headers_tests {
     fn test_http_build_with_security() {
         // Build HTTP server - security headers are applied internally
         let app = sdforge::http::build();
-        // Verify the build succeeded
         assert!(
             !std::ptr::eq(&app, std::ptr::null()),
             "HTTP build with security should succeed"

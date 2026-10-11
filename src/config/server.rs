@@ -111,14 +111,12 @@ impl Default for ServerConfig {
 impl ServerConfig {
     /// Validate server configuration
     pub fn validate(&self) -> Result<(), crate::config::ConfigError> {
-        // Validate port range
         if self.port == 0 {
             return Err(crate::config::ConfigError::ValidationError(
                 "Server port cannot be 0".into(),
             ));
         }
 
-        // Validate timeout is reasonable
         if self.request_timeout_secs == 0 {
             return Err(crate::config::ConfigError::ValidationError(
                 "Server request_timeout_secs cannot be 0".into(),
@@ -139,7 +137,6 @@ impl ServerConfig {
             ));
         }
 
-        // Validate CORS if present
         if let Some(ref cors) = self.cors {
             cors.validate()?;
         }
@@ -157,8 +154,7 @@ impl ServerConfig {
 
 impl crate::config::ValidateConfig for ServerConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
-        // Delegate to inherent method to keep a single source of truth.
-        // Previously this body was a verbatim duplicate of the inherent impl.
+        // 委托固有 validate：校验逻辑单一来源。
         ServerConfig::validate(self)
     }
 }
@@ -449,12 +445,7 @@ mod tests {
     }
 
     // ============================================================================
-    // validate() with Some(cors) branch coverage
-    //
-    // The `if let Some(ref cors) = self.cors { cors.validate()?; }` branch in
-    // ServerConfig::validate() was previously uncovered: test_server_config_with_cors
-    // constructs a config with CORS but never calls validate(), while the other
-    // validate tests use cors: None.
+    // validate() with Some(cors) branch 覆盖（原有用例构造 cors 却从未调用 validate）
     // ============================================================================
 
     /// Test ServerConfig::validate() succeeds when a valid CorsConfig is

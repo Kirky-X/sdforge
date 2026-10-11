@@ -610,7 +610,6 @@ mod tests {
             "meta should be None for a plain list_tools response"
         );
 
-        // Verify each tool has a name and description
         for tool in &tools_result.tools {
             assert!(
                 !tool.name.as_ref().is_empty(),

@@ -20,6 +20,5 @@ async fn rate_limit_layer_constructs_from_limiteron_adapter() {
     let adapter = LimiteronAdapter::new().await;
     let limiter: Arc<dyn HttpRequestRateLimiter> = Arc::new(adapter);
     let layer = rate_limit_layer(limiter);
-    // Verify the layer is constructed (no panic, no error).
     let _ = layer;
 }

@@ -69,7 +69,6 @@ impl LogSink for CaptureSink {
 /// 进程级共享：首个用例构建带捕获 sink 的管理器（在常驻专用 runtime
 /// 上），并安装全局 tracing/log 前端；后续用例复用同一实例。
 struct SharedBridge {
-    #[allow(dead_code)]
     manager: LoggerManager,
     sink: Arc<CaptureSink>,
 }

@@ -67,13 +67,11 @@ mod mcp_registration_tests {
         let _registration =
             McpToolRegistration::new("test_tool", "v1", create_tool, create_metadata);
 
-        // Verify the registration was created successfully (construction without panic)
         let _ = &_registration;
     }
 
     #[test]
     fn test_mcp_tool_creation() {
-        // Create a tool instance directly to verify the SdForgeTool implementation works
         let tool = TestTool;
         assert_eq!(tool.name(), "test_tool");
     }

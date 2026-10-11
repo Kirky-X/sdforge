@@ -1365,7 +1365,6 @@ mod ratelimit_advanced {
     async fn test_limiteron_adapter_new_constructs_successfully() {
         use sdforge::security::LimiteronAdapter;
         let adapter = LimiteronAdapter::new().await;
-        // Verify check() works on the default permissive config.
         let result = adapter.check("127.0.0.1").await;
         assert!(result.is_ok(), "default config should allow first request");
     }
@@ -1559,7 +1558,6 @@ mod plugin_init_advanced {
     #[serial_test::serial]
     fn test_plugin_init_returns_counts() {
         let counts = init_all_plugins();
-        // Verify all fields are accessible.
         let _ = counts.routes;
     }
 
@@ -1780,12 +1778,10 @@ mod cross_module_advanced {
     fn test_cross_error_api_to_sdforge_error_chain() {
         let api_err = ApiError::not_found("User", Some("42".to_string()));
         let sd_err: SdForgeError = api_err.into();
-        // Verify the category propagates.
         assert_eq!(
             sd_err.category(),
             sdforge::error::ErrorCategory::ClientError
         );
-        // Verify sanitized_message delegates to ApiError.
         let msg = sd_err.sanitized_message();
         assert!(msg.contains("User"));
     }

@@ -720,13 +720,7 @@ mod tests {
     use super::*;
 
     // ============================================================================
-    // init_all_plugins tests
-    //
-    // init_all_plugins uses process-wide OnceLocks to cache inventory iterations,
-    // so the function is idempotent: the first call initializes the locks and
-    // subsequent calls return the same counts. We use #[serial] to ensure these
-    // tests don't run concurrently with any other test that may touch the same
-    // globals.
+    // init_all_plugins tests：OnceLock 缓存 inventory 迭代（幂等），#[serial] 防并发触碰全局
     // ============================================================================
 
     #[cfg(any(

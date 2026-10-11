@@ -18,7 +18,6 @@ mod streaming_tests {
     fn test_create_stream_channel() {
         let (tx, response) = create_stream_channel::<String>(10);
 
-        // Verify the channel was created successfully
         assert!(tx.capacity() > 0);
         let _ = response;
     }
@@ -29,7 +28,6 @@ mod streaming_tests {
         let stream = ReceiverStream::new(rx);
         let response = StreamResponse::new(stream);
 
-        // Verify the response was created
         let _ = response;
     }
 
@@ -73,7 +71,6 @@ mod streaming_tests {
             data: "test data".to_string(),
         };
 
-        // Verify serialization works
         let json = serde_json::to_string(&event).unwrap();
         assert!(json.contains("test data"));
     }
@@ -94,7 +91,6 @@ mod streaming_tests {
         // Collect all SSE formatted events
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-        // Verify we got data events
         let data_events: Vec<_> = results
             .iter()
             .filter(|r| r.contains(r#""type":"data""#))
@@ -116,7 +112,6 @@ mod streaming_tests {
             }
         }
 
-        // Verify final completion event
         assert!(
             results.last().unwrap().contains("complete"),
             "Last event should be completion signal"
@@ -234,7 +229,6 @@ mod streaming_tests {
         assert!(json2.contains(r#""id":"msg-002""#));
         assert!(json3.contains(r#""id":"msg-003""#));
 
-        // Verify event names are also preserved
         assert!(json1.contains(r#""event_name":"update""#));
         assert!(json2.contains(r#""event_name":"update""#));
         assert!(json3.contains(r#""event_name":"final""#));
@@ -305,7 +299,6 @@ mod streaming_tests {
     async fn test_stream_response_chunks() {
         let (tx, response) = create_stream_channel::<String>(10);
 
-        // Send chunks of data
         let chunks = vec!["chunk1", "chunk2", "chunk3", "chunk4", "chunk5"];
 
         for chunk in &chunks {
@@ -360,7 +353,6 @@ mod streaming_tests {
         let result = tx.try_send(Ok("item3".to_string()));
         assert!(result.is_err(), "try_send should fail when buffer is full");
 
-        // Verify we can still receive the buffered items
         let mut stream = response.into_stream();
         let item1 = stream.next().await.unwrap().unwrap();
         let item2 = stream.next().await.unwrap().unwrap();
@@ -375,7 +367,6 @@ mod streaming_tests {
     async fn test_stream_cancellation() {
         let (tx, response) = create_stream_channel::<i32>(10);
 
-        // Send some data before dropping receiver
         tx.send(Ok(1)).await.unwrap();
         tx.send(Ok(2)).await.unwrap();
 
@@ -387,13 +378,11 @@ mod streaming_tests {
         assert_eq!(item1, 1);
         assert_eq!(item2, 2);
 
-        // Drop the response (receiver side)
         drop(stream);
 
         // The send might succeed because it queues the message, but receiver won't get it
         let _send_result = tx.send(Ok(3)).await;
 
-        // Create new response to verify the old one is dropped
         let (_tx2, response2) = create_stream_channel::<i32>(10);
         let _stream2 = response2.into_stream();
 
@@ -411,7 +400,6 @@ mod streaming_tests {
     async fn test_stream_error_recovery() {
         let (tx, response) = create_stream_channel::<String>(10);
 
-        // Send mix of success and error values
         tx.send(Ok("success1".to_string())).await.unwrap();
         tx.send(Err("error1".to_string())).await.unwrap();
         tx.send(Ok("success2".to_string())).await.unwrap();
@@ -492,7 +480,6 @@ mod streaming_tests {
         // Immediately drop the sender
         drop(tx);
 
-        // Verify stream is empty
         let count = response.into_stream().count().await;
         assert_eq!(
             count, 0,
@@ -536,7 +523,6 @@ mod streaming_tests {
     async fn test_stream_sequential_with_final_marker() {
         let (tx, response) = create_stream_channel::<String>(10);
 
-        // Send sequential data
         for i in 1..=10 {
             tx.send(Ok(format!("item-{}", i))).await.unwrap();
         }
@@ -594,10 +580,8 @@ mod streaming_tests {
         for capacity in [1, 5, 10, 100, 1000] {
             let (tx, response) = create_stream_channel::<i32>(capacity);
 
-            // Verify capacity
             assert_eq!(tx.capacity(), capacity);
 
-            // Send and receive some data
             tx.send(Ok(42)).await.unwrap();
             let item = response.into_stream().next().await;
             assert_eq!(item.unwrap().unwrap(), 42);
@@ -654,7 +638,6 @@ mod streaming_tests {
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-        // Verify event names are serialized
         assert!(results[0].contains(r#""event_name":"custom-update""#));
         assert!(results[1].contains(r#""event_name":"notification""#));
     }
@@ -676,7 +659,6 @@ mod streaming_tests {
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-        // Verify ID is in the serialized output
         assert!(results[0].contains(r#""id":"msg-abc-123""#));
     }
 
@@ -694,7 +676,6 @@ mod streaming_tests {
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
-        // Verify multiline data is serialized
         assert!(results[0].contains("Line 1"));
         assert!(results[0].contains("Line 2"));
         assert!(results[0].contains("Line 3"));
@@ -713,7 +694,6 @@ mod streaming_tests {
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
         let _after = chrono::Utc::now().timestamp();
 
-        // Verify timestamp is present and reasonable
         assert!(results[0].contains(r#""type":"ping""#));
         assert!(results[0].contains("timestamp"));
     }
@@ -728,7 +708,6 @@ mod streaming_tests {
     async fn test_stream_channel_closed_behavior() {
         let (tx, response) = create_stream_channel::<String>(10);
 
-        // Drop the sender immediately
         drop(tx);
 
         // Stream should be empty after sender drop
@@ -781,7 +760,6 @@ mod streaming_tests {
         // Should have all 5 items
         assert_eq!(results.len(), 5);
 
-        // Verify alternating pattern
         assert!(results[0].is_ok());
         assert!(results[1].is_err());
         assert!(results[2].is_ok());
@@ -802,7 +780,6 @@ mod streaming_tests {
             items
         });
 
-        // Send items
         for i in 0..item_count {
             tx.send(Ok(i as u8)).await.unwrap();
         }
@@ -850,7 +827,6 @@ mod streaming_tests {
     async fn test_stream_immediate_consumption() {
         let (tx, response) = create_stream_channel::<i32>(10);
 
-        // Send and immediately consume in a loop
         let expected_sum: i32 = (1..=10).sum();
 
         for i in 1..=10 {
@@ -890,7 +866,6 @@ mod streaming_tests {
         let (tx1, response1) = create_stream_channel::<String>(10);
         let (tx2, response2) = create_stream_channel::<String>(10);
 
-        // Send to both streams
         tx1.send(Ok("stream1-item".to_string())).await.unwrap();
         tx2.send(Ok("stream2-item".to_string())).await.unwrap();
 
@@ -913,7 +888,6 @@ mod streaming_tests {
         let tx_clone = tx.clone();
         let tx_for_drop = tx.clone();
 
-        // Send from both senders
         let handle1 = tokio::spawn(async move {
             for i in 0..50 {
                 tx.send(Ok(i)).await.unwrap();
@@ -963,7 +937,6 @@ mod streaming_tests {
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
         assert!(!results.is_empty());
-        // Verify the large payload is in the output
         assert!(results[0].contains("items"));
     }
 
@@ -1208,7 +1181,6 @@ mod streaming_tests {
     async fn test_stream_delayed_sending() {
         let (tx, response) = create_stream_channel::<i32>(10);
 
-        // Send with small delays
         for i in 0..5 {
             tx.send(Ok(i)).await.unwrap();
             tokio::time::sleep(Duration::from_millis(10)).await;
@@ -1228,7 +1200,6 @@ mod streaming_tests {
     async fn test_stream_selective_consumption() {
         let (tx, response) = create_stream_channel::<i32>(10);
 
-        // Send numbers 1-10
         for i in 1..=10 {
             tx.send(Ok(i)).await.unwrap();
         }
@@ -1274,7 +1245,6 @@ mod streaming_tests {
             tokio::time::sleep(Duration::from_millis(1)).await;
         }
 
-        // Send completion
         let completion = serde_json::json!({
             "status": "complete",
             "total_steps": total_steps
@@ -1288,10 +1258,8 @@ mod streaming_tests {
 
         assert_eq!(items.len(), total_steps + 1);
 
-        // Verify first item is step 1
         assert_eq!(items[0]["step"], 1);
 
-        // Verify last item is completion
         assert_eq!(items.last().unwrap()["status"], "complete");
     }
 

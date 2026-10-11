@@ -17,7 +17,6 @@ mod http_tests {
     #[tokio::test]
     async fn test_http_server_builds() {
         let app = build();
-        // Verify the app is not null and has expected structure
         assert!(
             !std::ptr::eq(&app, std::ptr::null()),
             "HTTP app should build successfully"
@@ -27,7 +26,6 @@ mod http_tests {
     #[test]
     fn test_http_build_sync() {
         let app = build();
-        // Verify the app builds without panic
         assert!(
             !std::ptr::eq(&app, std::ptr::null()),
             "HTTP sync build should succeed"
@@ -169,7 +167,6 @@ mod http_tests {
 
         let mut handles = vec![];
 
-        // Spawn 20 concurrent requests
         for i in 0..20 {
             let app_clone = app.clone();
             let handle = tokio::spawn(async move {

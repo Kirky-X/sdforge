@@ -110,11 +110,7 @@ where
     let (tx, rx) = mpsc::channel(32);
     tokio::spawn(async move {
         let mut stream = Box::pin(stream);
-        // Track whether the loop exited due to idle timeout. Previously the
-        // 30s sleep timeout silently terminated the stream and the code below
-        // unconditionally emitted a `complete` event — making it impossible
-        // for clients to distinguish "source stream ended normally" from
-        // "source stream went idle for 30s and was force-closed".
+        // 记录是否因空闲超时退出：客户端据此区分「正常结束」与「30s 空闲被强制关闭」。
         let mut timed_out = false;
         // 两个独立截止时刻：数据帧到达时都重置；心跳只重置自己——
         // 心跳若重置空闲计时，源永久静默时 30s 空闲终止将永不触发。
@@ -145,7 +141,6 @@ where
                     let data = match serde_json::to_string(&event) {
                         Ok(data) => data,
                         Err(e) => {
-                            // Send error event instead of silently failing
                             serde_json::to_string(&StreamEvent::<()>::error(format!(
                                 "Serialization error: {}",
                                 e
@@ -176,7 +171,6 @@ where
             }
         }
 
-        // Send completion event
         let _ = tx
             .send(Ok("event: complete\ndata: {}\n\n".to_string()))
             .await;
@@ -195,7 +189,6 @@ where
         use axum::body::Body;
         use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE};
 
-        // Convert stream to SSE format
         let sse_stream = stream_to_sse(self.stream, |item| match item {
             Ok(data) => {
                 StreamEvent::data(serde_json::to_value(data).unwrap_or(serde_json::Value::Null))
@@ -203,7 +196,6 @@ where
             Err(err) => StreamEvent::error(err),
         });
 
-        // Build SSE response with proper headers
         Response::builder()
             .status(200)
             .header(CONTENT_TYPE, "text/event-stream")

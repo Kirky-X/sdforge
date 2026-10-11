@@ -435,7 +435,6 @@ mod tests {
         entry.extend_from_slice(b"cached body");
         cache.set(&key, entry);
 
-        // Verify cache lookup
         let cached = cache.get(&key).unwrap();
         let status_code = u16::from_be_bytes([cached[0], cached[1]]);
         assert_eq!(status_code, 200);

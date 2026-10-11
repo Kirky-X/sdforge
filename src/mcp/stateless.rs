@@ -301,7 +301,6 @@ mod tests {
             "next_cursor should be None for non-paginated response"
         );
 
-        // Verify each tool has a non-empty name
         for tool in &tools_result.tools {
             assert!(
                 !tool.name.as_ref().is_empty(),

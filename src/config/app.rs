@@ -37,10 +37,8 @@ impl SdForgeConfig {
 
     /// Validate configuration with cross-field validation
     pub fn validate(&self) -> Result<(), ConfigError> {
-        // Validate server configuration
         self.server.validate()?;
 
-        // Validate authentication configuration
         self.authentication.validate()?;
 
         // Fail-closed: an auth request that the disabled `security` feature
@@ -48,7 +46,6 @@ impl SdForgeConfig {
         #[cfg(not(feature = "security"))]
         self.authentication.require_security_feature()?;
 
-        // Validate timeout configuration
         if let Some(ref timeout) = self.timeout {
             timeout.validate()?;
         }
@@ -58,7 +55,6 @@ impl SdForgeConfig {
         #[cfg(feature = "security")]
         crate::config::ValidateConfig::validate(&self.security)?;
 
-        // Validate cache configuration
         #[cfg(feature = "cache")]
         crate::config::ValidateConfig::validate(&self.cache)?;
 
@@ -90,9 +86,7 @@ impl SdForgeConfig {
 
 impl crate::config::ValidateConfig for SdForgeConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
-        // Delegate to inherent method to keep a single source of truth.
-        // Previously this body was a near-duplicate of the inherent impl and
-        // contained a YAGNI "Cross-field validation" placeholder comment.
+        // 委托固有 validate：校验逻辑单一来源。
         SdForgeConfig::validate(self)
     }
 }
@@ -174,7 +168,6 @@ impl SdForgeConfigBuilder {
             cache: self.cache.unwrap_or_default(),
         };
 
-        // Validate the built configuration
         config.validate()?;
 
         Ok(config)

@@ -33,17 +33,13 @@ mod error_handling_tests {
             resource_id: Some("12345".to_string()),
         };
 
-        // Verify error message contains resource info
         assert!(error.to_string().contains("Resource not found"));
         assert!(error.to_string().contains("user"));
 
-        // Verify category classification
         assert_eq!(error.category(), ErrorCategory::ClientError);
 
-        // Verify source error is not available for NotFound
         assert!(error.source().is_none());
 
-        // Verify sanitized message
         let sanitized = error.sanitized_message();
         assert!(sanitized.contains("user"));
     }
@@ -58,17 +54,13 @@ mod error_handling_tests {
             constraint: "must be valid email format".to_string(),
         };
 
-        // Verify error message
         assert!(error.to_string().contains("Validation failed"));
         assert!(error.to_string().contains("email"));
 
-        // Verify category classification
         assert_eq!(error.category(), ErrorCategory::ValidationError);
 
-        // Verify source error is not available
         assert!(error.source().is_none());
 
-        // Verify sanitized message
         let sanitized = error.sanitized_message();
         assert!(sanitized.contains("email"));
     }
@@ -82,17 +74,13 @@ mod error_handling_tests {
             reason: "Invalid or expired token".to_string(),
         };
 
-        // Verify error message
         assert!(error.to_string().contains("Authentication failed"));
         assert!(error.to_string().contains("Invalid or expired token"));
 
-        // Verify category classification
         assert_eq!(error.category(), ErrorCategory::AuthError);
 
-        // Verify source error is not available
         assert!(error.source().is_none());
 
-        // Verify sanitized message preserves reason
         let sanitized = error.sanitized_message();
         assert!(sanitized.contains("Authentication failed"));
     }
@@ -107,16 +95,12 @@ mod error_handling_tests {
             window_seconds: 60,
         };
 
-        // Verify error message
         assert!(error.to_string().contains("Rate limit exceeded"));
 
-        // Verify category classification
         assert_eq!(error.category(), ErrorCategory::RateLimitError);
 
-        // Verify source error is not available
         assert!(error.source().is_none());
 
-        // Verify sanitized message
         let sanitized = error.sanitized_message();
         assert!(sanitized.contains("Rate limit"));
     }
@@ -133,16 +117,12 @@ mod error_handling_tests {
             context: None,
         };
 
-        // Verify error message is generic for internal errors
         assert!(error.to_string().contains("Internal server error"));
 
-        // Verify category classification
         assert_eq!(error.category(), ErrorCategory::ServerError);
 
-        // Verify source error is not available
         assert!(error.source().is_none());
 
-        // Verify sanitized message does NOT contain sensitive info
         let sanitized = error.sanitized_message();
         assert!(!sanitized.contains("localhost"));
         assert!(!sanitized.contains("5432"));
@@ -160,17 +140,13 @@ mod error_handling_tests {
             value: Some(json!("{broken")),
         };
 
-        // Verify error message
         assert!(error.to_string().contains("Invalid input"));
         assert!(error.to_string().contains("Invalid JSON payload"));
 
-        // Verify category classification
         assert_eq!(error.category(), ErrorCategory::ClientError);
 
-        // Verify source error is not available
         assert!(error.source().is_none());
 
-        // Verify sanitized message preserves error info
         let sanitized = error.sanitized_message();
         assert!(sanitized.contains("Invalid input"));
     }
@@ -375,7 +351,6 @@ mod error_handling_tests {
         let api_error =
             ApiError::internal_with_source("Database operation failed", "DB001", source_error);
 
-        // Verify source is accessible
         let source = api_error.source();
         assert!(source.is_some());
         let source_msg = source.unwrap().to_string();
@@ -394,7 +369,6 @@ mod error_handling_tests {
 
         let error = ApiError::internal_with_context("Failed to create user", "CREATE001", context);
 
-        // Verify error contains context
         match error {
             ApiError::Internal {
                 message,
@@ -435,12 +409,10 @@ mod error_handling_tests {
 
         let json = serde_json::to_string(&error).expect("Should serialize to JSON");
 
-        // Verify JSON contains required fields
         assert!(json.contains("\"type\":\"NotFound\""));
         assert!(json.contains("\"resource\":\"order\""));
         assert!(json.contains("\"resource_id\":\"ORD-12345\""));
 
-        // Verify JSON is valid and can be deserialized
         let deserialized: ApiError = serde_json::from_str(&json).expect("Should deserialize");
         match deserialized {
             ApiError::NotFound {
@@ -462,13 +434,11 @@ mod error_handling_tests {
         // Capture context at known location
         let context = ErrorContext::current();
 
-        // Verify file is captured
         assert!(context.file.is_some());
         let file = context.file.as_ref().unwrap();
         // Should contain "error_handling_tests" in path (this file)
         assert!(file.contains("error_handling_tests") || file.ends_with(".rs"));
 
-        // Verify line number is captured (should be greater than 0)
         assert!(context.line.is_some());
         assert!(context.line.unwrap() > 0);
 
@@ -481,7 +451,6 @@ mod error_handling_tests {
         );
         assert!(context.function.is_none());
 
-        // Verify extra map exists
         assert!(context.extra.is_empty());
 
         // Test ErrorContext serialization for logging
@@ -505,7 +474,6 @@ mod error_handling_tests {
         let error =
             ApiError::internal_with_context("Request processing failed", "PROC001", context);
 
-        // Verify error contains correlation ID
         match error {
             ApiError::Internal {
                 message,
@@ -644,7 +612,6 @@ mod error_handling_tests {
 
         let response: ServiceResponse<String> = ServiceResponse::error(service_error);
 
-        // Verify error response structure
         assert!(!response.is_success());
         assert!(response.data().is_none());
         assert!(response.error_ref().is_some());
@@ -687,13 +654,10 @@ mod error_handling_tests {
             context: Some(Box::new(context)),
         };
 
-        // Verify source is accessible
         assert!(error.source().is_some());
 
-        // Verify category
         assert_eq!(error.category(), ErrorCategory::ServerError);
 
-        // Verify serialization preserves all fields
         let json = serde_json::to_string(&error).expect("Should serialize");
         assert!(json.contains("ERR_ALL_FIELDS"));
         assert!(json.contains("key1"));
@@ -716,7 +680,6 @@ mod error_handling_tests {
         // Deserialize back
         let deserialized: ApiError = serde_json::from_str(&json).expect("Should deserialize");
 
-        // Verify content is preserved
         match deserialized {
             ApiError::ValidationError { field, constraint } => {
                 assert_eq!(field, "username");
@@ -737,7 +700,6 @@ mod error_handling_tests {
         assert!(context.line.is_none());
         assert!(context.function.is_none());
 
-        // Verify serialization works with empty context
         let json = serde_json::to_string(&context).expect("Should serialize");
         let deserialized: ErrorContext = serde_json::from_str(&json).expect("Should deserialize");
         assert!(deserialized.extra.is_empty());

@@ -5,13 +5,17 @@
 //! 自研结构化日志栈已在 0.5.0-rc 期删除，结构化日志收敛到 inklog
 //! `LoggerManager`。本示例展示迁移目标的四条路径：
 //!
-//! 1. [`init_global`] —— `init_inklog_logger` 安装 inklog 为全局 `log`
+//! 1. [`init_global`](crate::logging::structured::init_global) ——
+//!    `init_inklog_logger` 安装 inklog 为全局 `log`
 //!    后端：既有 `log::info!` 等 facade 调用零改动自动进 inklog 管道。
-//! 2. [`rotation_config_toml`] + [`manager_with_rotation`] ——
-//!    `LoggerManager::from_file` 从 TOML 加载含**真实轮转**（大小 + 时间）
+//! 2. [`rotation_config_toml`](crate::logging::structured::rotation_config_toml)
+//!    + [`manager_with_rotation`](crate::logging::structured::manager_with_rotation)
+//!    —— `LoggerManager::from_file` 从 TOML 加载含**真实轮转**（大小 + 时间）
 //!    的文件 sink 配置（替换旧栈宣称却不存在的轮转）。
-//! 3. [`manager_from_builder`] —— `LoggerManager::builder()` 编程式构造。
-//! 4. [`relax_level`] —— `set_level` 运行时调级。
+//! 3. [`manager_from_builder`](crate::logging::structured::manager_from_builder)
+//!    —— `LoggerManager::builder()` 编程式构造。
+//! 4. [`relax_level`](crate::logging::structured::relax_level) ——
+//!    `set_level` 运行时调级。
 //!
 //! ## 运行方式
 //!
@@ -23,6 +27,7 @@
 //! 编译为库模块时允许保留未调用项。
 #![allow(dead_code)]
 
+use sdforge::i18n::t;
 use sdforge::inklog::{LoggerManager, init_inklog_logger};
 use std::path::{Path, PathBuf};
 
@@ -119,35 +124,32 @@ pub fn relax_level(manager: &LoggerManager) -> Result<(), sdforge::inklog::Inklo
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("📝 SDForge Structured Logging Example (inklog)");
-    println!("=============================================\n");
+    println!("{}", t("example-logging-title", &[]));
+    println!("=============================================");
+    println!();
 
-    // 1. 全局 log 后端：facade 调用零改动
-    println!("🌍 init_inklog_logger:");
+    println!("{}", t("example-logging-init-title", &[]));
     let manager = init_global().await?;
-    println!("  ✓ inklog installed as the global `log` backend");
-    log::info!("sdforge logging example: routed through inklog");
+    println!("  {}", t("example-logging-init-done", &[]));
+    log::info!("{}", t("example-logging-routed-info", &[]));
 
-    // 2. from_file：含轮转的配置
-    println!("\n📁 LoggerManager::from_file (with rotation):");
+    println!("\n{}", t("example-logging-from-file-title", &[]));
     let dir = scratch_dir("main");
     let rotating = manager_with_rotation(&dir).await?;
-    println!("  ✓ manager built from TOML with size + time rotation");
+    println!("  {}", t("example-logging-from-file-done", &[]));
     drop(rotating);
 
-    // 3. builder：编程式构造
-    println!("\n🔧 LoggerManager::builder:");
+    println!("\n{}", t("example-logging-builder-title", &[]));
     let built = manager_from_builder().await?;
-    println!("  ✓ manager built programmatically (info + console)");
+    println!("  {}", t("example-logging-builder-done", &[]));
     drop(built);
 
-    // 4. set_level：运行时调级
-    println!("\n🎚️  set_level:");
+    println!("\n{}", t("example-logging-set-level-title", &[]));
     relax_level(&manager)?;
-    println!("  ✓ level relaxed to debug at runtime");
-    log::debug!("sdforge logging example: debug now visible after set_level");
+    println!("  {}", t("example-logging-set-level-done", &[]));
+    log::debug!("{}", t("example-logging-debug-visible", &[]));
 
-    println!("\n✓ Logging example finished");
+    println!("\n{}", t("example-logging-finished", &[]));
     Ok(())
 }
 

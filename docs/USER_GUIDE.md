@@ -370,8 +370,11 @@ Rust 产物以 `Transport` trait 抽象传输（实现一次即可接入任意 H
 收到的是完整 URL，不再需要自行拼接基址）；`--reqwest` 段经生成
 文件内的 `#[cfg(feature = "reqwest")]` 门控，使用方需自行声明 `reqwest`
 依赖。方法名在渲染前按 `(method, path)` 排序派生，产物与路由注册顺序无关
-（确定性快照锁定）。库内亦可直接调用 `sdforge::sdk::generate_rust_client /
-generate_typescript_client` 做定制化生成。
+（确定性快照锁定）。产物内注释文案经 `sdforge::i18n` 内建目录按激活 locale
+渲染（默认英文，`SDFORGE_LANG` 等检测链可切换），注释标记（`//!` / `///` /
+`/** */`）与代码骨架不随语言变化。库内亦可直接调用
+`sdforge::sdk::generate_rust_client / generate_typescript_client` 做定制化
+生成。
 
 ### 分布式限流与 Redis L2 缓存（多副本部署）
 

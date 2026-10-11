@@ -113,7 +113,6 @@ impl SdForgeApiKeyAuth {
         hasher.update(key.as_bytes());
         let result = hasher.finalize();
 
-        // Convert to hex string
         hex::encode(result)
     }
 
@@ -255,7 +254,6 @@ impl SdForgeApiKeyAuth {
         let new_key_hash = Self::hash_key(&new_key.into());
         let version_str = version.into();
 
-        // Load existing metadata
         let data = self
             .key_metadata
             .get(&metadata_key)
@@ -276,7 +274,6 @@ impl SdForgeApiKeyAuth {
             ttl,
         );
 
-        // Add new version and activate it
         metadata.add_version(new_version);
 
         // Determine which old hashes stop being valid, before any writes.
@@ -426,7 +423,6 @@ impl SdForgeApiKeyAuth {
             version.deactivate();
         }
 
-        // Save updated metadata
         self.key_metadata.set(
             &metadata_key,
             postcard::to_allocvec(&metadata).unwrap_or_default(),
@@ -574,7 +570,6 @@ mod tests {
     fn test_key_rotation() {
         let auth = SdForgeApiKeyAuth::new().with_rotation(RotationConfig::default());
 
-        // Add initial version
         auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
             .unwrap();
 
@@ -588,7 +583,6 @@ mod tests {
 
         assert!(result.is_ok());
 
-        // Verify new version exists
         let metadata = auth.get_key_metadata("key1");
         assert!(metadata.is_some());
         let meta = metadata.unwrap();
@@ -606,7 +600,6 @@ mod tests {
         let result = auth.revoke_key("key1");
         assert!(result.is_ok());
 
-        // Verify all versions are deactivated
         let metadata = auth.get_key_metadata("key1");
         assert!(metadata.is_some());
         let meta = metadata.unwrap();
@@ -822,9 +815,7 @@ mod tests {
         let result = auth.revoke_key("key1");
         assert!(result.is_ok());
 
-        // After revocation, the key must no longer validate.
-        // Previously revoke_key only deactivated metadata without deleting from valid_keys cache,
-        // allowing revoked keys to continue authenticating. This is now fixed.
+        // 撤销后必须同时清出 valid_keys 缓存，否则已撤销 key 仍可通过认证。
         let perms = auth.validate_key("secret_v1", "127.0.0.1");
         assert!(perms.is_none(), "Revoked key must not validate");
     }
@@ -1008,7 +999,6 @@ mod tests {
         };
         let auth = SdForgeApiKeyAuth::new().with_rotation(rotation_config);
 
-        // Add initial version
         auth.add_key_version("kid1", "secret_v1", vec!["read".to_string()], "v1", None)
             .unwrap();
 

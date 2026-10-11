@@ -122,14 +122,12 @@ struct TestAppState {
 /// "constructor pattern 3" (full DI).
 #[test]
 fn test_builder_with_dependencies_injects_state() {
-    // 1. `new()` starts with no state.
     let empty = CliBuilder::new();
     assert!(
         empty.state().is_none(),
         "CliBuilder::new() must start with no state"
     );
 
-    // 2. `with_dependencies(state)` injects state.
     let state: Arc<dyn Any + Send + Sync> = Arc::new(TestAppState {
         counter: 42,
         label: "test",
@@ -139,15 +137,13 @@ fn test_builder_with_dependencies_injects_state() {
         .state()
         .expect("state must be present after with_dependencies");
 
-    // 3. State is downcastable to the original concrete type — confirms
-    //    the Arc<dyn Any + Send + Sync> round-trips correctly.
+    // 确认 Arc<dyn Any + Send + Sync> 往返后仍可下钻回原类型。
     let typed = state_ref
         .downcast_ref::<TestAppState>()
         .expect("downcast to TestAppState must succeed");
     assert_eq!(typed.counter, 42);
     assert_eq!(typed.label, "test");
 
-    // 4. `build()` must succeed after state injection (no panic, no error).
     let _cmd = builder.build();
 }
 
@@ -165,7 +161,6 @@ fn test_builder_includes_docs_subcommand() {
     let docs_sub = cmd
         .find_subcommand("docs")
         .expect("build() must include the docs subcommand when the docgen feature is enabled");
-    // Verify the subcommand name and about description
     let about_str = docs_sub
         .get_about()
         .map(|s| s.to_string())
@@ -175,14 +170,12 @@ fn test_builder_includes_docs_subcommand() {
         "the docs subcommand about must describe documentation, got: {}",
         about_str
     );
-    // 验证 --format 参数被注入
     assert!(
         docs_sub
             .get_arguments()
             .any(|a| a.get_id().as_str() == "format"),
         "injected docs subcommand must contain the --format argument"
     );
-    // 验证 --output 参数被注入
     assert!(
         docs_sub
             .get_arguments()
@@ -296,7 +289,6 @@ fn test_global_arg_inherited_by_subcommand() {
         .with_global_arg(GlobalArg::new("db").long("db").default_value("./default"))
         .build();
 
-    // Parse args with --db provided at the top level (before subcommand).
     let matches = cmd.try_get_matches_from([
         "test_app",
         "--db",

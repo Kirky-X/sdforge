@@ -32,6 +32,7 @@ use sdforge::core::ApiMetadata;
 use sdforge::grpc::{
     GrpcRoute, GrpcServerConfig, SdForgeGrpcService, build_server, build_server_with_config,
 };
+use sdforge::i18n::t;
 
 // =============================================================================
 // 路由注册
@@ -213,10 +214,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - Call(method)      -> CallResponse");
     println!("  - GetInfo()         -> InfoResponse");
     println!();
-    println!("💡 Start the server (bind to 127.0.0.1:50051):");
+    println!("{}", t("example-grpc-server-start-hint", &[]));
     println!("  // start_default(\"127.0.0.1:50051\").await?;");
     println!();
-    println!("💡 Test with a client call:");
+    println!("{}", t("example-grpc-server-test-hint", &[]));
     println!("  grpcurl -plaintext -d '{{\"method\":\"GET\"}}' localhost:50051 \\");
     println!("    sdforge.v1.SdForgeService/Call");
     println!();

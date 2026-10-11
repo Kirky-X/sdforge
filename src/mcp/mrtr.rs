@@ -289,7 +289,6 @@ impl MrtrSessionManager {
     /// that an oversized or deeply nested payload cannot be used to enumerate
     /// session existence via error-timing side channels.
     pub fn resume_session(&self, session_id: &str, input: Value) -> Result<(), ErrorData> {
-        // 1. Size check (reject before touching sessions map).
         let payload_size = serde_json::to_vec(&input)
             .map(|v| v.len())
             .unwrap_or(usize::MAX);
@@ -303,7 +302,6 @@ impl MrtrSessionManager {
             ));
         }
 
-        // 2. Depth check (reject before touching sessions map).
         let depth = json_depth(&input);
         if depth > MAX_RESUME_PAYLOAD_DEPTH {
             return Err(ErrorData::invalid_params(
@@ -769,7 +767,6 @@ mod tests {
                 .unwrap()
                 .insert("s1".to_string(), session);
         }
-        // Wait for the session to exceed its timeout.
         std::thread::sleep(Duration::from_millis(5));
 
         let result = manager.resume_session("s1", serde_json::json!({"input": "value"}));
@@ -1093,10 +1090,7 @@ mod tests {
     #[test]
     fn test_vuln0003_resume_accepts_payload_at_size_limit() {
         let manager = manager_with_pending_session();
-        // Build a payload whose serialized size is exactly
-        // MAX_RESUME_PAYLOAD_SIZE_BYTES. A JSON string of N ASCII chars
-        // serializes to N + 2 bytes (quotes) under serde_json::to_vec, so
-        // N = MAX - 2 yields exactly MAX bytes.
+        // JSON 字符串 N 个 ASCII 字符序列化为 N+2 字节（引号），故 N = MAX-2 恰好达到上限。
         let n = MAX_RESUME_PAYLOAD_SIZE_BYTES - 2;
         let payload = Value::String("a".repeat(n));
         // Sanity-check the size.
@@ -1114,9 +1108,7 @@ mod tests {
     #[test]
     fn test_vuln0003_resume_rejects_oversized_payload() {
         let manager = manager_with_pending_session();
-        // Build a payload 1 byte over the limit (string of N+1 chars where
-        // N = MAX - 2 gives exactly MAX bytes; N+1 = MAX - 1 chars gives
-        // MAX + 1 bytes including quotes).
+        // N = MAX-1 字符 → 含引号 MAX+1 字节，恰好超限 1 字节。
         let n = MAX_RESUME_PAYLOAD_SIZE_BYTES - 1;
         let payload = Value::String("a".repeat(n));
         let size = serde_json::to_vec(&payload).map(|v| v.len()).unwrap();

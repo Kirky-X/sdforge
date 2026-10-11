@@ -118,7 +118,6 @@ pub fn parse_mcp_headers(headers: &HeaderMap) -> Result<McpHeaderInfo, McpHeader
         .ok_or(McpHeaderError::MissingMethod)?
         .to_string();
 
-    // Validate the method
     match method.as_str() {
         MCP_METHOD_TOOLS_LIST | MCP_METHOD_PING => Ok(McpHeaderInfo {
             method,

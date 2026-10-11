@@ -50,6 +50,7 @@
 //! 3. **定期轮换** - 定期更换 API Key
 //! 4. **最小权限** - 为每个 Key 设置最小必要权限
 
+use sdforge::i18n::t;
 use sdforge::prelude::*;
 use sdforge::serde::{Deserialize, Serialize};
 
@@ -112,7 +113,7 @@ pub struct AuthRequest {
 )]
 async fn public_data() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "message": "This is public data",
+        "message": t("example-api-key-public-data-message", &[]),
         "accessible": "anyone"
     }))
 }
@@ -158,7 +159,7 @@ async fn public_data() -> Result<serde_json::Value, ApiError> {
 )]
 async fn api_key_protected() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "message": "Authenticated via API Key",
+        "message": t("example-api-key-authenticated-api-key", &[]),
         "user_id": "user_123",
         "permissions": ["read", "write"]
     }))
@@ -200,7 +201,7 @@ async fn api_key_protected() -> Result<serde_json::Value, ApiError> {
 )]
 async fn bearer_protected() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "message": "Authenticated via Bearer Token",
+        "message": t("example-api-key-authenticated-bearer", &[]),
         "user": {
             "id": "user_456",
             "email": "user@example.com"
@@ -243,7 +244,7 @@ async fn bearer_protected() -> Result<serde_json::Value, ApiError> {
 )]
 async fn multi_auth() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "message": "Authentication succeeded",
+        "message": t("example-api-key-auth-succeeded", &[]),
         "method": "any supported method"
     }))
 }

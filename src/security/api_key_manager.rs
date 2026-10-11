@@ -286,7 +286,6 @@ impl ApiKeyMetadata {
             kept.reverse();
             self.versions = kept;
 
-            // Update active index
             if let Some(ref version_name) = active_version_name {
                 self.active_version_index = self
                     .versions
@@ -441,7 +440,6 @@ mod tests {
     fn test_api_key_metadata_cleanup() {
         let mut metadata = ApiKeyMetadata::new("key1".to_string(), None);
 
-        // Add multiple versions
         for i in 1..=5 {
             let version = ApiKeyVersion::new(format!("v{}", i), format!("hash{}", i), vec![], None);
             metadata.add_version(version);
@@ -801,7 +799,6 @@ mod tests {
         // Before expiration the active version is present.
         assert!(metadata.get_active_version().is_some());
 
-        // Wait for the TTL to elapse.
         std::thread::sleep(Duration::from_millis(20));
 
         // After expiration the filter rejects the version (is_expired() true),
@@ -837,7 +834,6 @@ mod tests {
         metadata.add_version(v2);
         metadata.add_version(v3);
 
-        // Wait for v1 and v2 to expire.
         std::thread::sleep(Duration::from_millis(20));
 
         // Rotate active to v1 (index 0). active_idx = Some(0), last_idx = 2,

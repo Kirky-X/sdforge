@@ -301,18 +301,15 @@ impl BearerAuth {
             return None;
         }
 
-        // Decode payload
         let payload = Self::base64url_decode(parts[1])?;
         let payload_str = String::from_utf8_lossy(&payload);
         let payload_value: serde_json::Value = serde_json::from_str(&payload_str).ok()?;
 
-        // Verify signature using HMAC-SHA256
         let signature_input = format!("{}.{}", parts[0], parts[1]);
         let mut mac = Hmac::<Sha256>::new_from_slice(&self.secret).ok()?;
         mac.update(signature_input.as_bytes());
         let expected_signature = mac.finalize().into_bytes();
 
-        // Decode provided signature
         let provided_signature = Self::base64url_decode(parts[2])?;
         if provided_signature.len() != 32 {
             return None;
@@ -323,7 +320,6 @@ impl BearerAuth {
             return None;
         }
 
-        // Check expiration if present
         if let Some(exp) = payload_value.get("exp").and_then(|v| v.as_i64())
             && chrono::Utc::now().timestamp() > exp
         {
@@ -389,7 +385,6 @@ impl BearerAuth {
             return None; // Token is blacklisted
         }
 
-        // Verify JWT signature and claims
         let payload = self.verify_jwt(token)?;
 
         // Extract claims from payload
@@ -627,7 +622,6 @@ impl BearerAuthBuilder {
             .secret
             .ok_or_else(|| AuthConfigError::InvalidSecret("Secret is required".to_string()))?;
 
-        // Validate secret length
         if secret.len() < 32 {
             return Err(AuthConfigError::SecretTooShort {
                 length: secret.len(),
@@ -647,7 +641,6 @@ impl BearerAuthBuilder {
             ));
         }
 
-        // Validate character classes
         if !secret.chars().any(|c| c.is_uppercase()) {
             return Err(AuthConfigError::MissingCharacterClass {
                 required_type: "uppercase letter",

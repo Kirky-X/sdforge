@@ -12,19 +12,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use uuid::Uuid;
 
-// =============================================================================
-// Global State - Pre-compiled Regex Patterns for Sanitization
-// =============================================================================
-// These are immutable, thread-safe, pre-compiled regex patterns.
-// Using Lazy initialization ensures they are compiled only once at first use,
-// providing optimal performance while maintaining safety guarantees.
-//
-// Design Rationale:
-// - Immutable after initialization (no mutable global state)
-// - Thread-safe access via once_cell::Lazy
-// - Performance optimization (avoid re-compilation on each call)
-// - No dependency injection needed (these are pure functions with no side effects)
-// =============================================================================
+// 预编译、不可变的脱敏正则：Lazy 首次使用时编译一次，线程安全且避免重复编译；
+// 纯函数无副作用，无需依赖注入。
 
 /// Pattern to match JWT tokens (three base64url-encoded segments separated by dots)
 ///
@@ -80,34 +69,28 @@ static SSN_PATTERN: Lazy<regex::Regex> =
 pub(crate) fn sanitize_error_message(message: &str) -> String {
     let mut result = message.to_string();
 
-    // Remove JWT tokens
     result = JWT_PATTERN
         .replace_all(&result, "[REDACTED_JWT]")
         .to_string();
 
-    // Remove secret patterns
     result = SECRET_PATTERN
         .replace_all(&result, |caps: &regex::Captures| {
             format!("{}={}", &caps[1], "[REDACTED]")
         })
         .to_string();
 
-    // Remove API keys
     result = API_KEY_PATTERN
         .replace_all(&result, "[REDACTED_API_KEY]")
         .to_string();
 
-    // Remove credit card numbers
     result = CREDIT_CARD_PATTERN
         .replace_all(&result, "[REDACTED_CREDIT_CARD]")
         .to_string();
 
-    // Remove SSN numbers
     result = SSN_PATTERN
         .replace_all(&result, "[REDACTED_SSN]")
         .to_string();
 
-    // Remove certificate/key file paths
     result = PATH_PATTERN
         .replace_all(&result, "[REDACTED_PATH]")
         .to_string();
@@ -169,7 +152,6 @@ impl SdForgeAuditLogger {
     pub fn with_limit(max_logs: usize) -> Self {
         let (queue_sender, mut queue_receiver) = tokio::sync::mpsc::channel::<AuditLogBatch>(1000);
 
-        // Spawn background worker for async log processing
         let logs: SharedCache = Arc::new(crate::cache::DashMapCache::new());
         let fallback_logs: SharedCache = Arc::new(crate::cache::DashMapCache::new());
         let logs_clone = logs.clone();
@@ -273,7 +255,6 @@ impl SdForgeAuditLogger {
         // Security: Use a cryptographically secure random key of at least 32 bytes
         if let Ok(signing_key_str) = std::env::var("SDFORGE_AUDIT_SIGNING_KEY") {
             if !signing_key_str.is_empty() {
-                // Convert string to bytes and use as HMAC key
                 log.generate_signature(signing_key_str.as_bytes());
             } else {
                 warn!(
@@ -299,14 +280,9 @@ impl SdForgeAuditLogger {
             .clone()
             .unwrap_or_else(|| "anonymous".to_string());
 
-        // === Synchronous write to primary storage ===
-        // This ensures logs are immediately visible via get_logs() without
-        // relying on the async worker being scheduled. Critical for tests and
-        // for any code that reads logs immediately after logging.
-        //
-        // HIGH 修复：get→push→set 读改写必须与 worker 的 fallback 合并互斥，
-        // 否则同用户并发 log() 会互相覆盖、静默丢审计日志。临界区内无 await，
-        // 标准 Mutex 即可（semaphore 已把并发限制在 100 以内）。
+        // 同步写主存储：日志立即对 get_logs() 可见，不依赖异步 worker 调度。
+        // 读改写与 worker 的 fallback 合并互斥（否则并发 log() 互相覆盖、静默丢审计日志）；
+        // 临界区内无 await，标准 Mutex 即可（semaphore 已把并发限制在 100 以内）。
         let key = &user_id;
         let merge_guard = self.merge_lock.lock();
         let data = self.logs.get(key);
@@ -363,7 +339,6 @@ impl SdForgeAuditLogger {
             }
         }
 
-        // Drop permit to release semaphore
         drop(permit);
     }
 
@@ -458,7 +433,6 @@ impl SdForgeAuditLogger {
 /// Implement AuditLogger trait for SdForgeAuditLogger
 impl crate::security::AuditLogger for SdForgeAuditLogger {
     fn log(&self, log: AuditLog) {
-        // Build an AuthContext from the audit log for the async log method
         let context = AuthContext {
             user_id: log.user_id.clone(),
             permissions: vec![],
@@ -484,10 +458,7 @@ impl crate::security::AuditLogger for SdForgeAuditLogger {
         let total_log_count = self.total_log_count.clone();
         let merge_lock = self.merge_lock.clone();
 
-        // Reuse the current tokio runtime instead of spawning a new OS thread + runtime per log call.
-        // Previous implementation used std::thread::spawn + tokio::runtime::Builder which had
-        // unacceptable overhead (thread creation + runtime construction per audit log) and
-        // could panic the process on resource exhaustion.
+        // 复用当前 tokio runtime（旧实现每次 log 新建 OS 线程 + runtime：开销大且资源耗尽会 panic）。
         match tokio::runtime::Handle::try_current() {
             Ok(handle) => {
                 handle.spawn(async move {
@@ -687,7 +658,6 @@ impl SdForgeAuditLoggerBuilder {
         let (queue_sender, mut queue_receiver) =
             tokio::sync::mpsc::channel::<AuditLogBatch>(queue_size);
 
-        // Spawn background worker for async log processing
         let logs: SharedCache = Arc::new(crate::cache::DashMapCache::new());
         let fallback_logs: SharedCache = Arc::new(crate::cache::DashMapCache::new());
         let logs_clone = logs.clone();

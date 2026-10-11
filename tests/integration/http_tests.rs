@@ -289,7 +289,6 @@ mod http_protocol_tests {
     #[tokio::test]
     async fn test_http_path_parameters_uuid() {
         async fn handler(Path(id): Path<String>) -> (StatusCode, &'static str) {
-            // Validate UUID format
             if uuid::Uuid::parse_str(&id).is_ok() {
                 (StatusCode::OK, "Valid UUID")
             } else {

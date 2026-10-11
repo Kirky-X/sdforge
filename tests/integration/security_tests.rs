@@ -132,10 +132,8 @@ mod security_tests {
         let test_key = "test_api_key_12345";
         let permissions = vec!["read".to_string(), "write".to_string()];
 
-        // Add the API key
         auth.add_key(test_key, permissions.clone());
 
-        // Validate the key
         let result = auth.validate_key(test_key, "192.168.1.100");
 
         assert!(result.is_some());
@@ -152,7 +150,6 @@ mod security_tests {
     async fn test_api_key_invalid_key() {
         let auth = SdForgeApiKeyAuth::new();
 
-        // Validate with an invalid key
         let result = auth.validate_key("invalid_key_not_registered", "192.168.1.100");
 
         assert!(result.is_none());
@@ -219,7 +216,6 @@ mod security_tests {
             .rotation(rotation_config)
             .build();
 
-        // Add initial key version
         auth.add_key_version("key1", "secret_v1", vec!["read".to_string()], "v1", None)
             .unwrap();
 
@@ -233,7 +229,6 @@ mod security_tests {
 
         assert!(result.is_ok());
 
-        // Verify metadata has both versions
         let metadata = auth.get_key_metadata("key1");
         assert!(metadata.is_some());
         let meta = metadata.unwrap();
@@ -256,7 +251,6 @@ mod security_tests {
         )
         .unwrap();
 
-        // Validate v1 key works
         let result = auth.validate_key("app_secret_v1", "192.168.1.100");
         assert!(result.is_some());
 
@@ -279,7 +273,6 @@ mod security_tests {
             .rotation(RotationConfig::default())
             .build();
 
-        // Verify builder created the instance successfully
         auth.add_key("builder_test_key", vec!["test".to_string()]);
         let result = auth.validate_key("builder_test_key", "127.0.0.1");
         assert!(result.is_some());
@@ -292,7 +285,6 @@ mod security_tests {
     async fn test_api_key_revocation() {
         let auth = SdForgeApiKeyAuth::new();
 
-        // Add key and verify it works
         auth.add_key_version(
             "revocable_key",
             "revoke_secret",
@@ -308,7 +300,6 @@ mod security_tests {
         let revoke_result = auth.revoke_key("revocable_key");
         assert!(revoke_result.is_ok());
 
-        // Verify metadata shows all versions are inactive
         let metadata = auth.get_key_metadata("revocable_key");
         assert!(metadata.is_some());
         let meta = metadata.unwrap();
@@ -363,7 +354,6 @@ mod security_tests {
             .build()
             .expect("Failed to build BearerAuth");
 
-        // Register a context and token for testing
         let context = AuthContext::new(
             Some("test_user".to_string()),
             vec!["read".to_string()],
@@ -390,7 +380,6 @@ mod security_tests {
         let test_token = "user_token_12345";
         auth.invalidate_token(test_token);
 
-        // Validate should fail for invalidated token
         let result = auth.validate_token(test_token);
         assert!(result.is_none());
     }
@@ -415,7 +404,6 @@ mod security_tests {
         )
         .expect("valid secret must pass validation");
 
-        // Register and verify
         let context = create_test_context(Some("dep_user"));
         let test_token = "dep_token_abc";
         auth.register_token(test_token.to_string(), context);
@@ -439,7 +427,6 @@ mod security_tests {
 
         let token = create_jwt_token(secret, "test_user", vec!["read", "write"], 3600);
 
-        // Validate should succeed
         let result = auth.validate_token(&token);
         assert!(result.is_some());
 
@@ -462,7 +449,6 @@ mod security_tests {
 
         let token = create_jwt_token(secret, "test_user", vec!["read"], -3600);
 
-        // Validate should fail
         let result = auth.validate_token(&token);
         assert!(result.is_none());
     }
@@ -585,7 +571,6 @@ mod security_tests {
             .log(&context, "api.read", "/api/users", true, None)
             .await;
 
-        // Verify log was created
         let logs = logger.get_logs("user123");
         assert_eq!(logs.len(), 1);
         assert_eq!(logs[0].action(), "api.read");
@@ -613,12 +598,10 @@ mod security_tests {
             )
             .await;
 
-        // Verify log was created with failure details
         let logs = logger.get_logs("anonymous");
         assert_eq!(logs.len(), 1);
         assert_eq!(logs[0].action(), "auth.failed");
 
-        // Verify error message is present (may be sanitized)
         match &logs[0].result() {
             AuditResult::Failure { message } => {
                 assert!(!message.is_empty());
@@ -653,7 +636,6 @@ mod security_tests {
             )
             .await;
 
-        // Verify all logs are stored
         let logs = logger.get_logs("user456");
         assert_eq!(logs.len(), 3);
 
@@ -682,7 +664,6 @@ mod security_tests {
             .log(&context, "test_action", "test_resource", true, None)
             .await;
 
-        // Verify logs are stored
         let logs = logger.get_logs("builder_test_user");
         assert_eq!(logs.len(), 1);
     }
@@ -695,7 +676,6 @@ mod security_tests {
         let logger = SdForgeAuditLogger::with_limit(100);
         let context = create_test_context(Some("user789"));
 
-        // Add logs
         logger
             .log(&context, "action1", "resource1", true, None)
             .await;
@@ -708,7 +688,6 @@ mod security_tests {
         // Clear logs
         logger.clear_logs("user789");
 
-        // Verify logs are cleared
         assert_eq!(logger.get_logs("user789").len(), 0);
     }
 
@@ -734,7 +713,6 @@ mod security_tests {
         let logs = logger.get_logs("security_test_user");
         assert_eq!(logs.len(), 1);
 
-        // Check that sensitive patterns are sanitized
         match &logs[0].result() {
             AuditResult::Failure { message } => {
                 // JWT should be redacted
@@ -763,7 +741,6 @@ mod security_tests {
             .log(&context, "token.validated", "/api/service", true, None)
             .await;
 
-        // Verify audit log
         let logs = logger.get_logs("service_account");
         assert_eq!(logs.len(), 1);
         assert_eq!(logs[0].action(), "token.validated");
@@ -793,7 +770,6 @@ mod security_tests {
                 .await;
         }
 
-        // Verify audit logs
         let logs = logger.get_logs("e2e_user");
         assert_eq!(logs.len(), 10);
     }
@@ -822,7 +798,6 @@ mod security_tests {
             )
             .await;
 
-        // Verify log exists
         let logs = logger.get_logs("unknown_user");
         assert_eq!(logs.len(), 1);
         assert!(matches!(logs[0].result(), AuditResult::Failure { .. }));
@@ -959,7 +934,6 @@ mod security_tests {
         let test_key = "consistency_test_key";
         auth.add_key(test_key, vec!["admin".to_string()]);
 
-        // Validate multiple times
         let results: Vec<_> = (0..5)
             .map(|_| auth.validate_key(test_key, "192.168.1.100"))
             .collect();
@@ -977,7 +951,6 @@ mod security_tests {
     async fn test_multiple_api_keys() {
         let auth = SdForgeApiKeyAuth::new();
 
-        // Add multiple keys
         auth.add_key("key1", vec!["read".to_string()]);
         auth.add_key("key2", vec!["write".to_string()]);
         auth.add_key("key3", vec!["admin".to_string()]);
@@ -1003,10 +976,8 @@ mod security_tests {
     async fn test_api_key_update_permissions() {
         let auth = SdForgeApiKeyAuth::new();
 
-        // Add key with initial permissions
         auth.add_key("update_test_key", vec!["read".to_string()]);
 
-        // Verify initial permissions
         let result1 = auth.validate_key("update_test_key", "192.168.1.100");
         assert!(result1.is_some());
         let perms1 = result1.unwrap();

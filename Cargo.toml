@@ -23,20 +23,30 @@ syn = { version = "3.0", default-features = false, features = ["full", "extra-tr
 quote = { version = "1.0", default-features = false, features = ["proc-macro"] }
 
 # HTTP 依赖
-axum = { version = "0.8", default-features = false, features = ["http1", "json", "form", "matched-path", "original-uri", "query", "tokio", "tower-log", "tracing", "ws"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "form", "matched-path", "query", "tokio", "tower-log", "tracing", "ws"] }
 tower = { version = "0.5", default-features = false, features = ["log", "util", "timeout", "limit", "load-shed"] }
 tower-http = { version = "0.7", default-features = false, features = ["cors", "limit", "timeout", "set-header", "compression-gzip", "compression-deflate"] }
 inventory = { version = "0.3", default-features = false }
 
 # 异步依赖
 tokio = { version = "1.53", default-features = false, features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
-futures-util = { version = "0.3", default-features = false, features = ["std", "async-await", "async-await-macro"] }
+# 仅用 StreamExt/Stream/SinkExt/stream::{iter,unfold}（均属 std/alloc 面）；
+# async-await 与 async-await-macro 提供的 join!/select!/poll!/pending! 宏全仓
+# 零使用（仓内 select! 均为 tokio::select!），显式关掉以剪掉 futures-macro
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio-stream = { version = "0.1", default-features = false }
 
 # 工具依赖
 uuid = { version = "1.28", default-features = false, features = ["std", "v4"] }
-chrono = { version = "0.4", default-features = false, features = ["std", "serde", "clock"] }
-regex = { version = "1.13", default-features = false, features = ["std", "perf"] }
+# clock 提供 Utc::now()；serde 未声明——生产面用 chrono 处一律取
+# .timestamp()/to_rfc3339()（i64/String），无 chrono 类型进入公共签名或
+# 序列化面，chrono 亦未 re-export（下游自带 chrono 时自行决定其 serde）
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+# unicode：src/core/validation.rs 与 regex_cache 编译调用方传入的任意
+# pattern（#[param(pattern = ...)]），`\p{...}`/Unicode 感知的 \w \d \s 与
+# (?i) 折叠属用户可见语义，必须显式声明——此前靠 oxcache 的 regex 声明
+# 顺带点亮，oxcache 收窄特性即静默降级为 ASCII 语义
+regex = { version = "1.13", default-features = false, features = ["std", "perf", "unicode"] }
 validator = { version = "0.21", default-features = false, features = ["derive"] }
 once_cell = { version = "1.21", default-features = false, features = ["std"] }
 
@@ -94,7 +104,10 @@ utoipa = { version = "6.0", default-features = false, features = ["macros"] }
 
 # JSON Schema 反射依赖 - schemars 1.2 提供 JsonSchema derive 与 schema 生成
 # （返回类型 Schema 反射：derive JsonSchema 的返回类型产出精确 response schema）
-schemars = { version = "1.2", default-features = false, features = ["derive"] }
+# std：HashMap/HashSet/Path(Buf)/IpAddr/SystemTime 等 std 类型 impl 由该 feature
+# 门控（schemars 自身默认集）；下游 DTO 含这类字段时缺它即编译失败，且随 mcp
+# 关闭（rmcp 会顺带打开 schemars/default）而暴露，故显式声明
+schemars = { version = "1.2", default-features = false, features = ["derive", "std"] }
 
 # CLI 依赖 - clap 4.6 提供命令行解析（derive feature 用于过程宏派生）
 # string feature 启用 Str: From<String>，支持运行时配置程序名
@@ -117,8 +130,11 @@ hyper = { version = "1.12", default-features = false, features = ["http1", "http
 hyper-util = { version = "0.1", default-features = false, features = ["server-auto", "tokio"] }
 
 # 其他依赖
-url = { version = "2.5", default-features = false }
-simd-json = { version = "0.18", default-features = false, features = ["serde_impl"] }
+# simd-json 的 runtime-detection：x86 上运行时探测 avx2/sse4.2 的 SIMD 分派。
+# 关默认特性后只剩 serde_impl 会静默落到 Native 回退实现（上游 README 明确：
+# 关掉它需同时 RUSTFLAGS="-C target-cpu=native" 才有加速），故显式补回，
+# 使普通可移植构建仍兑现 simd-json 特性承诺的加速语义
+simd-json = { version = "0.18", default-features = false, features = ["serde_impl", "runtime-detection"] }
 
 # 系统语言探测 - i18n 检测链尾段（SDFORGE_LANG → LC_ALL → LC_MESSAGES → LANG → sys-locale → en）
 sys-locale = { version = "0.3", default-features = false }
@@ -130,14 +146,16 @@ fluent-bundle = { version = "0.16", default-features = false }
 unic-langid = { version = "0.9", default-features = false }
 
 # 开发依赖
-tempfile = { version = "3.27", default-features = false }
+# tempfile 的 getrandom（上游默认集）：文件名随机性失败重试时从系统熵重播种
+# 的缓解项由该特性门控（tempfile README「Denial of Service」小节），关掉只剩
+# 6 字符默认随机度且不再重播种；getrandom 已在依赖树中（rand 引入），零新增
+tempfile = { version = "3.27", default-features = false, features = ["getrandom"] }
 serial_test = { version = "4.0", default-features = false }
 axum-test = { version = "21", default-features = false, features = ["ws"] }
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
 criterion = { version = "0.8", default-features = false }
 trybuild = { version = "1.0", default-features = false }
-proptest = { version = "1.11", default-features = false, features = ["std", "alloc", "bit-set"] }
-pretty_assertions = { version = "1.4", default-features = false, features = ["std"] }
+proptest = { version = "1.12", default-features = false, features = ["std", "alloc", "bit-set"] }
 
 [workspace.lints.rust]
 
@@ -339,9 +357,7 @@ axum-test = { workspace = true }
 reqwest = { workspace = true, features = ["rustls", "http2"] }
 rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }
 criterion = { workspace = true }
-trybuild = { workspace = true }
 proptest = { workspace = true }
-url = { workspace = true }
 
 [features]
 default = []
@@ -605,8 +621,9 @@ full = [
 
 # build 脚本依赖无法随 feature 条件化（cargo 限制），故保持无条件声明；
 # 未启用 grpc 时它们只参与 build.rs 编译、不执行 protoc 代码生成。
+# 仅 tonic-prost-build 被 build.rs 直接调用（tonic-build 是其传递依赖，
+# 代码生成产物不引用），不再重复声明直接依赖。
 [build-dependencies]
-tonic-build = { version = "0.14", default-features = false }
 tonic-prost-build = { version = "0.14", default-features = false }
 
 [package.metadata.docs.rs]

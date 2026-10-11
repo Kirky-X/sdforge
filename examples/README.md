@@ -129,7 +129,7 @@ cargo run --example perf_batch_ops --features cache
 | `cache_examples` | `cache`（隐含启用 `http_examples`） | `cache/` | ✓ |
 | `idempotency_examples` | `idempotency`（附带启用 `http`、`cache`） | `config/`、`grpc/` 示例中的幂等配置字段 | ✓ |
 | `grpc_examples` | `grpc` | `grpc/` | ✓ |
-| `logging_examples` | `logging` | `logging/` | ✓ |
+| `logging_examples` | `inklog`（经本地别名 `logging` 转发） | `logging/` | ✓ |
 | `openapi_examples` | `openapi`（隐含启用 `http_examples`） | `openapi/` | ✓ |
 | `cli_examples` | `cli` | `basic_cli.rs` | ✓ |
 | `docs_examples` | `docgen` | `swagger_demo.rs`（另需 `http`，运行命令见上文） | ✓ |

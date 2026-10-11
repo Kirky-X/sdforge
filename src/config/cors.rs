@@ -20,7 +20,6 @@ pub struct CorsConfig {
 impl CorsConfig {
     /// Validate CORS configuration
     pub fn validate(&self) -> Result<(), crate::config::ConfigError> {
-        // Check if allowed_origins is empty
         if self.allowed_origins.is_empty() {
             return Err(crate::config::ConfigError::ValidationError(
                 "CORS allowed_origins cannot be empty".into(),
@@ -143,7 +142,6 @@ pub fn build_cors_layer(
         .allow_methods(parse_allowed_methods(&config.allowed_methods)?)
         .allow_headers(parse_allowed_headers(&config.allowed_headers)?);
 
-    // Parse and validate origins
     let origins: Vec<_> = config
         .allowed_origins
         .iter()
@@ -409,9 +407,7 @@ mod cors_behavior_tests {
         };
         let app = cors_router(&config);
         let resp = app.oneshot(preflight("DELETE")).await.unwrap();
-        // tower-http 0.7 不在服务端拒绝预检，而是回显 Access-Control-Allow-Methods
-        // 交给浏览器执行。因此断言该头精确反映配置（修复前硬编码 Any →
-        // 该头不存在，浏览器回退为放行所有 method）。
+        // tower-http 0.7 服务端不拒绝预检、而是回显 Allow-Methods 交浏览器执行：断言该头精确反映配置。
         let allow_methods = resp
             .headers()
             .get("access-control-allow-methods")

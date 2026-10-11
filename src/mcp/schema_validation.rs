@@ -63,7 +63,6 @@ pub(crate) fn validate_arguments(schema: &Value, arguments: &Value) -> Result<()
         None => return Ok(()),
     };
 
-    // 1. Type check
     if let Some(type_value) = schema_obj.get("type")
         && !check_type(type_value, arguments)
     {
@@ -77,7 +76,6 @@ pub(crate) fn validate_arguments(schema: &Value, arguments: &Value) -> Result<()
         ));
     }
 
-    // 2. Required fields check (only when arguments is an object)
     if let Some(required) = schema_obj.get("required").and_then(|v| v.as_array())
         && let Some(args_obj) = arguments.as_object()
     {
@@ -96,28 +94,23 @@ pub(crate) fn validate_arguments(schema: &Value, arguments: &Value) -> Result<()
         }
     }
 
-    // 3. additionalProperties: false → reject unknown fields
-    //
-    // Per JSON Schema spec, `additionalProperties: false` means only properties
-    // listed in `properties` are allowed. If `properties` is absent, NO properties
-    // are allowed (only an empty object `{}` is valid).
-    if let Some(additional) = schema_obj.get("additionalProperties") {
-        // Only check when additionalProperties is explicitly false
-        if additional.as_bool() == Some(false) {
-            let properties = schema_obj.get("properties").and_then(|v| v.as_object());
-            if let Some(args_obj) = arguments.as_object() {
-                for key in args_obj.keys() {
-                    // If properties is absent, no key is allowed.
-                    let allowed = properties.map(|p| p.contains_key(key)).unwrap_or(false);
-                    if !allowed {
-                        return Err(ErrorData::invalid_params(
-                            format!(
-                                "unknown field: '{}' (tool input_schema has additionalProperties: false)",
-                                key
-                            ),
-                            None,
-                        ));
-                    }
+    // additionalProperties: false 时仅允许 `properties` 列出的键；`properties`
+    // 缺失则只接受空对象 `{}`（JSON Schema 规范语义）。
+    if let Some(additional) = schema_obj.get("additionalProperties")
+        && additional.as_bool() == Some(false)
+    {
+        let properties = schema_obj.get("properties").and_then(|v| v.as_object());
+        if let Some(args_obj) = arguments.as_object() {
+            for key in args_obj.keys() {
+                let allowed = properties.map(|p| p.contains_key(key)).unwrap_or(false);
+                if !allowed {
+                    return Err(ErrorData::invalid_params(
+                        format!(
+                            "unknown field: '{}' (tool input_schema has additionalProperties: false)",
+                            key
+                        ),
+                        None,
+                    ));
                 }
             }
         }

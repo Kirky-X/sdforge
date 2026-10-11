@@ -703,11 +703,9 @@ impl SdForgeGrpcService {
                 Ok(grpc_response)
             }
             Ok(Err(e)) => {
-                // business error → 真实 gRPC Status（vuln-SIMPL-002 修复）：
-                // 此前走 Status::ok + body success:false，标准 gRPC 客户端、
-                // 监控错误率与重试/熔断策略对该批错误全部失明。现按统一
-                // 映射表落到 tonic::Code，details 携带 UnifiedError JSON
-                //（机器可读 code/field/trace_id 不丢失）。
+                // business error → 真实 gRPC Status（vuln-SIMPL-002 修复）：统一映射表落到
+                // tonic::Code，details 携带 UnifiedError JSON；此前 success:false 的 ok 响应
+                // 会让标准客户端与监控/重试策略对这批错误失明。
                 let unified = crate::error::unified::UnifiedError::from(&e);
                 let code = crate::error::unified::grpc_code_for(&e);
                 // 业务失败不缓存：清除在途 claim，调用方可立即重试。
@@ -1164,7 +1162,6 @@ where
         None => service,
     };
 
-    // Build server with optional JWT auth interceptor
     #[cfg(feature = "security")]
     let mut builder = {
         let auth_interceptor = make_auth_interceptor(config.auth.clone());

@@ -295,7 +295,6 @@ async fn validated_websocket_upgrade_accepts_without_auth() {
 
     // A successful WS connect means the extractor accepted the request.
     let mut ws = server.get_websocket("/ws").await.into_websocket().await;
-    // Send a request to confirm the connection is functional.
     let request = WebSocketMessage::Request {
         id: "no-auth-1".to_string(),
         method: "ping".to_string(),

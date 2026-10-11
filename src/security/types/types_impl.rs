@@ -68,7 +68,6 @@ pub fn parse_audit_log(v: &serde_json::Value) -> Option<AuditLog> {
         _ => return None,
     };
 
-    // Parse metadata: AuthMetadata
     let meta_val = obj.get("metadata")?.as_object()?;
     let client_ip = meta_val
         .get("client_ip")
@@ -325,7 +324,6 @@ impl AuditLog {
         mac.update(canonical.as_bytes());
         let result = mac.finalize();
 
-        // Encode to base64
         let signature = base64::engine::general_purpose::STANDARD.encode(result.into_bytes());
 
         // Store and return

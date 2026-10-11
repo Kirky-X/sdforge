@@ -84,7 +84,6 @@ fn test_docs_subcommand_writes_file() {
         "the output file must be non-empty (OpenAPI JSON should have content)"
     );
 
-    // Verify the content is valid JSON (the OpenApi variant produces JSON)
     let content = std::fs::read_to_string(&output_path).expect("read the output file");
     let parsed: serde_json::Value =
         serde_json::from_str(&content).expect("the OpenAPI output must be valid JSON");

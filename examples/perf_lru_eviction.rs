@@ -19,6 +19,7 @@
 //! Moka 后端（`MemoryBackendType::Moka`）。
 
 use sdforge::cache::{DashMapCache, SyncCache};
+use sdforge::i18n::t;
 use std::time::Instant;
 
 /// 自检标记：通过打印 ✅，失败打印 ❌
@@ -27,14 +28,15 @@ fn mark(ok: bool) -> &'static str {
 }
 
 fn main() {
-    println!("🧪 Cache Capacity Eviction (FIFO) - Performance Verification\n");
-    println!("ℹ️  Legacy name: perf_lru_eviction. DashMapCache evicts by insertion");
-    println!("    order: get() does not refresh a key, set() does.\n");
+    println!("{}", t("example-perf-lru-title", &[]));
+    println!();
+    println!("{}", t("example-perf-lru-legacy-note", &[]));
+    println!();
 
     let mut all_correct = true;
 
     // Test 1: 容量上界 + 插入序驱逐
-    println!("📊 Capacity bound and eviction order (capacity=100, insert 200 keys):");
+    println!("{}", t("example-perf-lru-capacity-title", &[]));
     const CAPACITY: usize = 100;
     let bounded = DashMapCache::with_capacity(CAPACITY);
     for i in 0..CAPACITY * 2 {
@@ -49,26 +51,41 @@ fn main() {
     all_correct &= size_ok && oldest_evicted && boundary_evicted && boundary_kept && newest_kept;
 
     println!(
-        "  {} Final size: {} (capacity {})",
+        "  {} {}",
         mark(size_ok),
-        bounded.len(),
-        CAPACITY
+        t(
+            "example-perf-lru-final-size",
+            &[
+                ("size", bounded.len().to_string()),
+                ("capacity", CAPACITY.to_string()),
+            ]
+        )
     );
     println!(
-        "  {} Oldest half key_0..key_99 evicted: key_0 present={}, key_99 present={}",
+        "  {} {}",
         mark(oldest_evicted && boundary_evicted),
-        bounded.get("key_0").is_some(),
-        bounded.get("key_99").is_some()
+        t(
+            "example-perf-lru-oldest-evicted",
+            &[
+                ("first", bounded.get("key_0").is_some().to_string()),
+                ("last", bounded.get("key_99").is_some().to_string()),
+            ]
+        )
     );
     println!(
-        "  {} Newest half key_100..key_199 kept: key_100 present={}, key_199 present={}",
+        "  {} {}",
         mark(boundary_kept && newest_kept),
-        bounded.get("key_100").is_some(),
-        bounded.get("key_199").is_some()
+        t(
+            "example-perf-lru-newest-kept",
+            &[
+                ("first", bounded.get("key_100").is_some().to_string()),
+                ("last", bounded.get("key_199").is_some().to_string()),
+            ]
+        )
     );
 
     // Test 2: 读取不续期，写入续期
-    println!("\n📊 Read vs write effect on eviction order (capacity=50):");
+    println!("\n{}", t("example-perf-lru-rw-title", &[]));
     const SMALL: usize = 50;
     // 两个分支都追加 SMALL/2 个新键：不足以绕回队尾，仅淘汰最旧的 25 个
     const EXTRA: usize = SMALL / 2;
@@ -84,15 +101,18 @@ fn main() {
     }
     let read_evicted = read_case.get("item_0").is_none();
     all_correct &= read_evicted;
+    let read_outcome = if read_evicted {
+        t("example-perf-lru-evicted-read", &[])
+    } else {
+        t("example-perf-lru-still-cached-unexpected", &[])
+    };
     println!(
-        "  {} item_0 after get() + {} inserts: {}",
+        "  {} {}",
         mark(read_evicted),
-        EXTRA,
-        if read_evicted {
-            "evicted — reads do not refresh eviction order"
-        } else {
-            "still cached — unexpected FIFO miss"
-        }
+        t(
+            "example-perf-lru-read-case",
+            &[("inserts", EXTRA.to_string()), ("outcome", read_outcome),]
+        )
     );
 
     // 2b: 重新写入——移到队尾，可抵抗后续驱逐
@@ -106,19 +126,22 @@ fn main() {
     }
     let write_refreshed = write_case.get("item_0").as_deref() == Some(b"refreshed".as_slice());
     all_correct &= write_refreshed;
+    let write_outcome = if write_refreshed {
+        t("example-perf-lru-still-cached-write", &[])
+    } else {
+        t("example-perf-lru-evicted-unexpected", &[])
+    };
     println!(
-        "  {} item_0 after set() + {} inserts: {}",
+        "  {} {}",
         mark(write_refreshed),
-        EXTRA,
-        if write_refreshed {
-            "still cached — a write moves the key to the back of the queue"
-        } else {
-            "evicted — unexpected FIFO miss"
-        }
+        t(
+            "example-perf-lru-write-case",
+            &[("inserts", EXTRA.to_string()), ("outcome", write_outcome),]
+        )
     );
 
     // Test 3: 写入成本（信息性测量，不作为通过条件）
-    println!("\n📊 Write cost (informational):");
+    println!("\n{}", t("example-perf-lru-cost-title", &[]));
     let default_cap = DashMapCache::new();
     let start = Instant::now();
     for i in 0..1000 {
@@ -134,26 +157,43 @@ fn main() {
     let low_cap_time = start.elapsed();
 
     println!(
-        "  ⏱️  1000 inserts, new() (default capacity 10_000): {:?} - {} entries",
-        default_time,
-        default_cap.len()
+        "  {}",
+        t(
+            "example-perf-lru-default-inserts",
+            &[
+                ("elapsed", format!("{default_time:?}")),
+                ("entries", default_cap.len().to_string()),
+            ]
+        )
     );
     println!(
-        "  ⏱️  1000 inserts, capacity=100:                    {:?} - {} entries",
-        low_cap_time,
-        low_cap.len()
+        "  {}",
+        t(
+            "example-perf-lru-lowcap-inserts",
+            &[
+                ("elapsed", format!("{low_cap_time:?}")),
+                ("entries", low_cap.len().to_string()),
+            ]
+        )
     );
     println!(
-        "  📈 Bounded/default time ratio: {:.2}x — at the capacity bound every write",
-        low_cap_time.as_secs_f64() / default_time.as_secs_f64().max(0.000_001)
+        "  {}",
+        t(
+            "example-perf-lru-ratio",
+            &[(
+                "ratio",
+                format!(
+                    "{:.2}",
+                    low_cap_time.as_secs_f64() / default_time.as_secs_f64().max(0.000_001)
+                ),
+            )]
+        )
     );
-    println!("     also evicts the oldest entry, so the bounded path does more work per write.");
 
     if all_correct {
-        println!("\n✅ SUCCESS: capacity eviction verified (FIFO insertion order).");
-        println!("💡 Reads never refresh eviction order — re-set() a key to keep it hot.");
-        println!("   DashMapCache provides no recency-based (LRU) eviction.");
+        println!("\n{}", t("example-perf-lru-success", &[]));
+        println!("{}", t("example-perf-lru-tip", &[]));
     } else {
-        println!("\n❌ WARNING: capacity eviction behaved unexpectedly.");
+        println!("\n{}", t("example-perf-lru-warning", &[]));
     }
 }

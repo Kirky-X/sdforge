@@ -30,7 +30,6 @@ fn test_audit_log_signature_generation() {
     let secret_key = b"test-secret-key";
     let signature = log.generate_signature(secret_key);
 
-    // Verify signature was generated and stored
     assert!(!signature.is_empty());
     assert!(log.signature.is_some());
     assert_eq!(log.signature.as_ref().unwrap(), &signature);
@@ -58,7 +57,6 @@ fn test_audit_log_signature_verification_success() {
     let secret_key = b"test-secret-key";
     let _signature = log.generate_signature(secret_key);
 
-    // Verify with correct key
     let result = log.verify_signature(secret_key);
     assert!(result.is_ok());
     assert!(result.unwrap());
@@ -144,7 +142,6 @@ fn test_audit_log_no_signature() {
         signature: None,
     };
 
-    // Verify should return error when no signature present
     let result = log.verify_signature(b"any-key");
     assert!(result.is_err());
     assert_eq!(result.unwrap_err(), "No signature present");

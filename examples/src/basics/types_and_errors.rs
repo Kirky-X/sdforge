@@ -66,6 +66,7 @@
 //! }
 //! ```
 
+use sdforge::i18n::t;
 use sdforge::prelude::*;
 use sdforge::serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -91,7 +92,13 @@ pub enum SdForgeExampleError {
     /// ```text
     /// SdForgeExampleError::UserNotFound { user_id: 123 }
     /// ```
-    #[error("User not found: {user_id}")]
+    #[error(
+        "{}",
+        t(
+            "example-types-errors-user-not-found",
+            &[("user_id", user_id.to_string())]
+        )
+    )]
     UserNotFound { user_id: u64 },
 
     /// 输入验证错误
@@ -99,7 +106,13 @@ pub enum SdForgeExampleError {
     /// # 字段
     /// - `message` - 错误消息
     /// - `field` - 出错的字段名 (可选)
-    #[error("Input validation failed: {message}")]
+    #[error(
+        "{}",
+        t(
+            "example-types-errors-validation-failed",
+            &[("message", message.to_string())]
+        )
+    )]
     ValidationError {
         /// 错误描述
         message: String,
@@ -113,7 +126,13 @@ pub enum SdForgeExampleError {
     /// ```text
     /// SdForgeExampleError::DatabaseError { details: "Connection timeout".into() }
     /// ```
-    #[error("Database error: {details}")]
+    #[error(
+        "{}",
+        t(
+            "example-types-errors-database-error",
+            &[("details", details.to_string())]
+        )
+    )]
     DatabaseError { details: String },
 }
 
@@ -137,7 +156,10 @@ impl From<SdForgeExampleError> for ApiError {
             },
             // 数据库错误 -> 500 Internal Server Error
             SdForgeExampleError::DatabaseError { details } => ApiError::InvalidInput {
-                message: format!("Database error: {}", details),
+                message: t(
+                    "example-types-errors-database-error",
+                    &[("details", details)],
+                ),
                 field: None,
                 value: None,
             },
@@ -193,7 +215,7 @@ pub struct ValidateUserRequest {
 )]
 async fn get_metadata_info() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
-        "message": "Metadata is managed automatically by SDForge",
+        "message": t("example-types-errors-metadata-note", &[]),
         "available_fields": ["name", "version", "description"]
     }))
 }
@@ -362,7 +384,7 @@ async fn get_user_with_error(id: u64) -> Result<String, ApiError> {
 async fn validate_user(request: ValidateUserRequest) -> Result<String, ApiError> {
     if request.name.is_empty() {
         return Err(SdForgeExampleError::ValidationError {
-            message: "Username cannot be empty".to_string(),
+            message: t("example-types-errors-username-empty", &[]),
             field: Some("name".to_string()),
         }
         .into());
@@ -370,11 +392,11 @@ async fn validate_user(request: ValidateUserRequest) -> Result<String, ApiError>
 
     if !request.email.contains('@') {
         return Err(SdForgeExampleError::ValidationError {
-            message: "Invalid email format".to_string(),
+            message: t("example-types-errors-invalid-email", &[]),
             field: Some("email".to_string()),
         }
         .into());
     }
 
-    Ok("Validation passed".to_string())
+    Ok(t("example-types-errors-validation-passed", &[]))
 }

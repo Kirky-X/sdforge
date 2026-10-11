@@ -22,6 +22,7 @@ use sdforge::config::{
     ApiConfig, ApiKeySeed, AuthConfig, EnvHelper, SdForgeConfig, ServerConfig, TimeoutConfig,
     TracingConfig,
 };
+use sdforge::i18n::t;
 
 // =============================================================================
 // 模式 1: 开箱即用 — 默认配置
@@ -172,29 +173,55 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("==================================\n");
 
     // Mode 1: default config
-    println!("📦 Mode 1: default config (SdForgeConfig::default())");
+    println!("{}", t("example-config-mode-default", &[]));
     let default = default_config();
     println!(
-        "  server: {}:{}, timeout: {}s",
-        default.server.host, default.server.port, default.server.request_timeout_secs
+        "  {}",
+        t(
+            "example-config-server-line",
+            &[
+                ("host", default.server.host.clone()),
+                ("port", default.server.port.to_string()),
+                ("timeout", default.server.request_timeout_secs.to_string()),
+            ]
+        )
     );
-    println!("  auth: {:?}", default.authentication);
+    println!(
+        "  {}",
+        t(
+            "example-config-auth-line",
+            &[("auth", format!("{:?}", default.authentication))]
+        )
+    );
     println!();
 
     // Mode 2: builder
-    println!("🔧 Mode 2: builder pattern (custom config)");
+    println!("{}", t("example-config-mode-builder", &[]));
     let custom = build_custom_config();
     println!(
-        "  server: {}:{}, timeout: {}s",
-        custom.server.host, custom.server.port, custom.server.request_timeout_secs
+        "  {}",
+        t(
+            "example-config-server-line",
+            &[
+                ("host", custom.server.host.clone()),
+                ("port", custom.server.port.to_string()),
+                ("timeout", custom.server.request_timeout_secs.to_string()),
+            ]
+        )
     );
-    println!("  auth: {:?}", custom.authentication);
+    println!(
+        "  {}",
+        t(
+            "example-config-auth-line",
+            &[("auth", format!("{:?}", custom.authentication))]
+        )
+    );
     println!();
 
     // Mode 3: serialization / deserialization
-    println!("💾 Mode 3: serialization / deserialization");
+    println!("{}", t("example-config-mode-serialization", &[]));
     let json = serialize_config(&custom)?;
-    println!("  JSON (first 200 chars):");
+    println!("{}", t("example-config-json-preview", &[]));
     let preview = if json.len() > 200 {
         &json[..200]
     } else {
@@ -205,47 +232,85 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let restored = deserialize_config(&json)?;
     println!(
-        "  deserialized: server={}:{}, auth={:?}",
-        restored.server.host, restored.server.port, restored.authentication
+        "  {}",
+        t(
+            "example-config-deserialized",
+            &[
+                ("host", restored.server.host.clone()),
+                ("port", restored.server.port.to_string()),
+                ("auth", format!("{:?}", restored.authentication)),
+            ]
+        )
     );
     println!();
 
     // Sub-config demos
-    println!("📋 Sub-config examples:");
+    println!("{}", t("example-config-subconfig-title", &[]));
     let server = demo_server_config();
     println!(
-        "  ServerConfig: {}:{}, timeout={}s",
-        server.host, server.port, server.request_timeout_secs
+        "  {}",
+        t(
+            "example-config-server-config-line",
+            &[
+                ("host", server.host.clone()),
+                ("port", server.port.to_string()),
+                ("timeout", server.request_timeout_secs.to_string()),
+            ]
+        )
     );
 
     println!();
-    println!("  AuthConfig variants:");
+    println!("  {}", t("example-config-auth-variants", &[]));
     for (i, auth) in demo_auth_configs().iter().enumerate() {
-        println!("    [{}] {:?}", i, auth);
+        println!(
+            "    {}",
+            t(
+                "example-config-auth-variant-row",
+                &[("index", i.to_string()), ("auth", format!("{auth:?}")),]
+            )
+        );
     }
 
     println!();
-    println!("  TimeoutConfig per-route timeouts:");
+    println!("  {}", t("example-config-timeout-title", &[]));
     let timeout = demo_timeout_config();
-    println!("    default: {}s", timeout.default_timeout_secs);
+    println!(
+        "    {}",
+        t(
+            "example-config-timeout-default",
+            &[("seconds", timeout.default_timeout_secs.to_string())]
+        )
+    );
     for (route, secs) in &timeout.route_timeouts {
-        println!("    {}: {}s", route, secs);
+        println!(
+            "    {}",
+            t(
+                "example-config-timeout-route",
+                &[("route", route.clone()), ("seconds", secs.to_string())]
+            )
+        );
     }
     println!(
-        "    get_timeout(\"/api/upload\") = {}s",
-        timeout.get_timeout("/api/upload")
+        "    {}",
+        t(
+            "example-config-get-timeout-upload",
+            &[("seconds", timeout.get_timeout("/api/upload").to_string())]
+        )
     );
     println!(
-        "    get_timeout(\"/api/unknown\") = {}s (falls back to default)",
-        timeout.get_timeout("/api/unknown")
+        "    {}",
+        t(
+            "example-config-get-timeout-unknown",
+            &[("seconds", timeout.get_timeout("/api/unknown").to_string())]
+        )
     );
 
     println!();
-    println!("  Helper config types:");
+    println!("  {}", t("example-config-helper-title", &[]));
     demo_helper_configs();
 
     println!();
-    println!("✓ Configuration example finished");
+    println!("{}", t("example-config-finished", &[]));
 
     Ok(())
 }

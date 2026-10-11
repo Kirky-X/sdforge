@@ -11,7 +11,6 @@ mod security_tests {
     fn test_api_key_auth_builder() {
         let auth = SdForgeApiKeyAuth::builder().build();
 
-        // Verify the builder works and creates a valid instance
         assert!(
             !std::ptr::eq(&auth, std::ptr::null()),
             "API Key Auth builder should create an instance"
@@ -41,7 +40,6 @@ mod security_tests {
 
         let start = std::time::Instant::now();
 
-        // Validate the same key multiple times
         for _ in 0..1000 {
             let _ = auth.validate_key("perf-test-key", "127.0.0.1");
         }
@@ -61,7 +59,6 @@ mod security_tests {
         let auth = Arc::new(SdForgeApiKeyAuth::new());
         let mut handles = vec![];
 
-        // Spawn 10 concurrent validation tasks
         for i in 0..10 {
             let auth_clone = Arc::clone(&auth);
             let handle = tokio::spawn(async move {
@@ -195,7 +192,6 @@ mod security_middleware_enhanced_tests {
     fn test_app_api_key_auth_basic() {
         let auth = SdForgeApiKeyAuth::new();
 
-        // Verify we can call basic methods without panic
         let _ = auth.validate_key("test-key", "127.0.0.1");
     }
 
@@ -205,7 +201,6 @@ mod security_middleware_enhanced_tests {
         let builder = SdForgeApiKeyAuth::builder();
         let auth = builder.build();
 
-        // Verify builder creates valid instance
         assert!(!std::ptr::eq(&auth, std::ptr::null()));
     }
 
@@ -215,7 +210,6 @@ mod security_middleware_enhanced_tests {
         let auth1 = SdForgeApiKeyAuth::new();
         let auth2 = SdForgeApiKeyAuth::new();
 
-        // Verify they are separate instances
         assert!(!std::ptr::eq(&auth1, &auth2));
 
         // Both should work independently

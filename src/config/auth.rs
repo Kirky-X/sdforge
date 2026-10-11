@@ -140,7 +140,6 @@ impl AuthConfig {
                 }
             }
             AuthConfig::Jwt { secret } => {
-                // Validate JWT secret strength
                 if secret.is_empty() {
                     return Err(crate::config::ConfigError::ValidationError(
                         "JWT secret cannot be empty".into(),
@@ -160,7 +159,6 @@ impl AuthConfig {
                     )));
                 }
 
-                // Check for obviously weak secrets
                 let lower = secret.to_lowercase();
                 if lower == "secret"
                     || lower == "password"
@@ -182,10 +180,7 @@ impl AuthConfig {
 
 impl crate::config::ValidateConfig for AuthConfig {
     fn validate(&self) -> Result<(), crate::config::ConfigError> {
-        // Delegate to the inherent method to guarantee both code paths run
-        // identical validation logic. Previously this body was a verbatim
-        // copy that diverged (it omitted the eprintln! for short secrets,
-        // producing two different behaviors from the same name).
+        // 委托固有 validate：两条路径共用同一校验逻辑。
         AuthConfig::validate(self)
     }
 }

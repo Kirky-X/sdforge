@@ -274,7 +274,6 @@ mod mcp_protocol_tests {
         let response = result.unwrap();
         assert!(!response.content.is_empty());
 
-        // Verify content is text
         assert!(matches!(
             response.content.first(),
             Some(c) if c.as_text().is_some()
@@ -439,7 +438,6 @@ mod mcp_protocol_tests {
         assert!(required.contains(&serde_json::json!("b")));
         assert!(required.contains(&serde_json::json!("operation")));
 
-        // Verify enum constraint
         let op_schema = &schema["properties"]["operation"];
         let enum_values = op_schema["enum"].as_array().unwrap();
         assert!(enum_values.contains(&serde_json::json!("add")));
@@ -486,7 +484,6 @@ mod mcp_protocol_tests {
         let response = tool.call(Some(input)).unwrap();
         assert!(!response.content.is_empty());
 
-        // Verify content is text type
         assert!(matches!(
             response.content.first(),
             Some(c) if c.as_text().is_some()

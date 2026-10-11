@@ -357,7 +357,6 @@ async fn handle_socket_inner(
         match result {
             Ok(msg) => {
                 if let Ok(text) = msg.to_text() {
-                    // Check message size early
                     if text.len() > MAX_MESSAGE_SIZE {
                         // Close connection immediately to prevent DoS。
                         // 连接清理由 ConnectionGuard 的 Drop 兜底；abort forwarder
@@ -450,7 +449,6 @@ mod tests {
 
         let mut ws = server.get_websocket("/ws").await.into_websocket().await;
 
-        // Send a message larger than MAX_MESSAGE_SIZE
         let oversized = "x".repeat(MAX_MESSAGE_SIZE + 1);
         ws.send_text(&oversized).await;
 
@@ -664,7 +662,6 @@ mod tests {
         ws.send_message(axum_test::WsMessage::Binary(vec![0xFF, 0xFE, 0xFD].into()))
             .await;
 
-        // Send a text Request — should get a Response
         let request = WebSocketMessage::Request {
             id: "after-binary".to_string(),
             method: "ping".to_string(),

@@ -308,8 +308,8 @@ The `#[forge]` macro generates protocol registrations for the features currently
 | Unit tests | Embedded `#[cfg(test)]` in `src/`, `tests/unit/` | Module-level tests, including proptest property tests (`src/tests/property_tests.rs`) |
 | Integration tests | `tests/integration/` | Covers http / mcp / grpc / websocket / security / cache / streaming / openapi / cli / docs / health_probes / graceful_shutdown / http_tls / validate / paginate / etag / lifecycle / otel_export / status_code / rbac protocol and feature combinations |
 | Macro tests | `tests/macros/`, `macros/tests/` | trybuild compile-failure cases and macro expansion verification |
-| E2E | `tests/e2e/` | `e2e_advanced` multi-domain E2E scenarios (12-domain scale baseline in [Test Scenarios](docs/TEST_SCENARIOS.md)) |
-| Examples comprehensive tests | `examples/tests/` | All-feature re-export accessibility and cross-protocol dispatch (77 tests) plus gateway E2E |
+| E2E | `tests/e2e/` | `e2e_advanced` multi-domain E2E scenarios (11-domain scale baseline in [Test Scenarios](docs/TEST_SCENARIOS.md)) |
+| Examples comprehensive tests | `examples/tests/` | All-feature re-export accessibility and cross-protocol dispatch (76 tests) plus gateway E2E |
 | Benchmarks | `benches/`, `src/benches/` | criterion: `runtime_bench` / `config_and_cache_bench` / `sdforge_bench` |
 | Doc-tests | `src/` doc comments | Embedded rustdoc examples |
 
@@ -329,7 +329,7 @@ cargo test --workspace --all-features
 # Lib tests (the CI coverage target)
 cargo test --features full --lib
 
-# Coverage (CI gate >=90% line coverage; same gate in lefthook pre-push)
+# Coverage (CI gate >=90% line coverage: --features full --lib; lefthook pre-push applies the same threshold without --features full --lib)
 cargo llvm-cov --features full --lib --lcov --fail-under-lines 90
 
 # Formatting and zero-warning lint
@@ -337,11 +337,11 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-Coverage measurement excludes the build.rs-generated protobuf code (`src/grpc/pb/`) via `llvm-cov.toml`.
+The build.rs-generated protobuf code goes to `OUT_DIR` and no longer enters the source tree; the `src/grpc/pb/*` exclusion in `llvm-cov.toml` is a leftover from the old layout and currently matches no files.
 
 ### Test scale
 
-About **3,220** test functions (`src/` 2,213 + `tests/` 791 + `macros/` 90 + `examples/` 126; via `grep -rEc '#\[(tokio::)?test\b' --include='*.rs'`, re-verified 2026-10-10).
+About **3,181** test functions (`src/` 2,180 + `tests/` 785 + `macros/` 92 + `examples/` 124; via `grep -rEc '#\[(tokio::)?test\b' --include='*.rs'`, re-verified 2026-10-11).
 
 ---
 

@@ -520,7 +520,7 @@ impl ReloadingTls {
 ///
 /// confers `MultiFsWatcher` 监听 cert/key 路径，去抖（`debounce_ms`）后的
 /// 事件驱动 [`ReloadingTls::reload_async`] 自动重载；重载失败仅记 error 日志
-/// 并保留旧证书（换入语义见 [`CertReloader::reload`]——confers 只回答
+/// 并保留旧证书（换入语义见 `CertReloader::reload`——confers 只回答
 /// 「何时触发」，换入仍走 rustls resolver）。监听线程建立失败或退出时
 /// 热重载能力显式丧失（记日志），任务随后退出。
 ///

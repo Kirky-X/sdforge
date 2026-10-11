@@ -6,21 +6,21 @@
 
 | 层级 | 承载 | 数量基线 |
 |------|------|----------|
-| L1 lib 单元测试 | `src/**` 内 `#[cfg(test)]`：sdforge 2167 / sdforge-macros 83 / sdforge-examples 44 | 2294 passed |
-| L2 集成测试 | 主 crate `tests/` 48 目标（integration/ 39 + unit/ 5 + 顶层 2：integration_http_mcp、sdk_snapshots + macros/macro_tests 1 + e2e 1：e2e_advanced，其 178 计入 L3）+ sdforge-macros crate `tests/` 2 目标（macro_compile/trybuild）+ sdforge-examples crate `tests/` 3 目标（comprehensive_features、dbnexus_gateway_e2e、oxcache_admin_e2e） | 664 passed |
-| L3 E2E 场景 | `tests/e2e/`（e2e_advanced 单目标，12 域） | 178 passed |
+| L1 lib 单元测试 | `src/**` 内 `#[cfg(test)]`：sdforge 2134 / sdforge-macros 85 / sdforge-examples 41 | 2260 passed |
+| L2 集成测试 | 主 crate `tests/` 49 目标（integration/ 40 + unit/ 5 + 顶层 2：integration_http_mcp、sdk_snapshots + macros/macro_tests 1 + e2e 1：e2e_advanced，其 157 计入 L3）+ sdforge-macros crate `tests/` 2 目标（macro_compile/trybuild）+ sdforge-examples crate `tests/` 3 目标（comprehensive_features、dbnexus_gateway_e2e、oxcache_admin_e2e） | 679 passed |
+| L3 E2E 场景 | `tests/e2e/`（e2e_advanced 单目标，11 域） | 157 passed |
 | L4 Doc-tests | sdforge 23 + sdforge-examples 5 | 28 passed + 43 ignored |
 
-全量结果（`--all-features --workspace`，2026-10-10 实测）：**3164 passed / 0 failed / 71 ignored**（ignored = grpc_tests 28 环境门控 + Doc-tests 43 文档示例门控）。
+全量结果（`--all-features --workspace`，2026-10-11 实测）：**3124 passed / 0 failed / 71 ignored**（ignored = grpc_tests 28 环境门控 + Doc-tests 43 文档示例门控）。
 
 ## 🎯 测试目标落点
 
-- 主 crate：48 个测试目标全部 `[[test]]` 显式注册（tests/e2e、tests/integration、tests/unit、tests/macros 子目录均脱离 Cargo 自动发现范围，不注册即静默消失；顶层 integration_http_mcp 亦注册；`test_target_inventory_tests` 持续断言本行与 integration/ 文件数的漂移）
+- 主 crate：49 个测试目标全部 `[[test]]` 显式注册（tests/e2e、tests/integration、tests/unit、tests/macros 子目录均脱离 Cargo 自动发现范围，不注册即静默消失；顶层 integration_http_mcp 亦注册；`test_target_inventory_tests` 持续断言本行与 integration/ 文件数的漂移）
 - sdforge-macros / sdforge-examples crate：`tests/` 顶层自动发现（macro_compile_tests、trybuild_tests、comprehensive_features、dbnexus_gateway_e2e、oxcache_admin_e2e）
-- e2e_advanced：由 `tests/e2e/` 目录承载（e2e_* 不裸放顶层）；子目录脱离自动发现范围，经 `[[test]]` 显式注册，178 测试完整保留
-- 特性门控：e2e_advanced 内 12 mod 独立 `#[cfg(feature)]`，任意 feature 子集可编译（无需 required-features）；全量口径 `--all-features` 无静默跳过风险
+- e2e_advanced：由 `tests/e2e/` 目录承载（e2e_* 不裸放顶层）；子目录脱离自动发现范围，经 `[[test]]` 显式注册，157 测试完整保留
+- 特性门控：e2e_advanced 内 11 mod 独立 `#[cfg(feature)]`，任意 feature 子集可编译（无需 required-features）；全量口径 `--all-features` 无静默跳过风险
 
-## 🧭 E2E 场景定义（12 域，178 测试，0 ignored）
+## 🧭 E2E 场景定义（11 域，157 测试，0 ignored）
 
 tests/e2e/e2e_advanced.rs（场景要点取自各 mod 声明的公共 API）：
 
@@ -30,7 +30,6 @@ tests/e2e/e2e_advanced.rs（场景要点取自各 mod 声明的公共 API）：
 | config_advanced | 19 | 配置模块高级语义 |
 | error_advanced | 23 | core::ServiceError 分类/上下文/错误链 |
 | ratelimit_error_advanced | 8 | ApiError 限流错误族映射（exceeded/banned/circuit/quota/溢出饱和） |
-| logging_advanced | 21 | logging 模块高级语义 |
 | i18n_advanced | 26 | HttpI18nFormatter / parse_accept_language / I18nError 多语言回退 |
 | security_advanced | 14 | JwtError / AuthError / AuthConfigError 错误族 |
 | ratelimit_advanced | 9 | RateLimiter / RateLimitError 限流语义 |
@@ -43,11 +42,11 @@ tests/e2e/e2e_advanced.rs（场景要点取自各 mod 声明的公共 API）：
 
 | 组合 | 覆盖 | 结果 |
 |------|------|------|
-| `--all-features --workspace`（全量口径） | 全部 58 个有产出目标 | 3164 passed / 0 failed / 71 ignored |
-| 七特性子集 `http,security,cache,logging,i18n,ratelimit,openapi` | e2e_advanced 12 域 | 178 passed / 0 failed |
+| `--all-features --workspace`（全量口径） | 全部 59 个有产出目标 | 3124 passed / 0 failed / 71 ignored |
+| 七特性子集 `http,security,cache,inklog,i18n,ratelimit,openapi` | e2e_advanced 11 域 | 157 passed / 0 failed |
 | trybuild | 宏编译失败诊断用例 | 2 passed |
 
-58 个有产出目标 = 主 crate 48 + sdforge-macros tests 2 + sdforge-examples tests 3 + unittests 3（sdforge/macros/examples）+ Doc-tests 2（sdforge/sdforge-examples；sdforge-macros Doc-tests 空产出不计入）。
+59 个有产出目标 = 主 crate 49 + sdforge-macros tests 2 + sdforge-examples tests 3 + unittests 3（sdforge/macros/examples）+ Doc-tests 2（sdforge/sdforge-examples；sdforge-macros Doc-tests 空产出不计入）。
 
 ## 🚦 静态门槛
 
@@ -62,7 +61,7 @@ tests/e2e/e2e_advanced.rs（场景要点取自各 mod 声明的公共 API）：
 
 ## ℹ️ 统计口径与 Ignored 项
 
-- **统计口径**：全量 3164 按各测试目标的 `cargo test` 输出求和，`0 passed; 0 failed` 的空目标不计入有产出目标数。
+- **统计口径**：全量 3124 按各测试目标的 `cargo test` 输出求和，`0 passed; 0 failed` 的空目标不计入有产出目标数。
 - **grpc_tests 28 ignored**：上游 `#[ignore]` 标注真实网络绑定 `127.0.0.1:0` 在 CI / 沙箱环境会挂起，属环境门控而非缺陷，予以保留。
 - **Doc-tests 43 ignored**：文档示例依赖运行上下文，按门控跳过。
 - **cargo-deny 许可证核对**：`deny.toml` 中 sdforge / sdforge-macros / limiteron / oxcache 四个成员以 license-file 形式声明许可证（cargo-deny 不识别该形态），已通过 clarify 绑定 MIT hash 0xfb13e7ad；license-file 路径相对被 clarify crate 的 manifest 目录解析（sdforge-macros 位于 `macros/` 子目录，使用 `../LICENSE` 回退一级）。advisories / bans / sources 检查均通过。
