@@ -1403,7 +1403,7 @@ fn test_builder_rejects_empty_audience_and_issuer() {
         .expect_err("empty audience must be rejected");
     assert!(matches!(
         err,
-        AuthConfigError::MissingCharacterClass { required_type } if required_type == "special character"
+        AuthConfigError::InvalidSecret(msg) if msg.contains("audience")
     ));
 
     let err = BearerAuth::builder()

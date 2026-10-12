@@ -9,7 +9,12 @@ yanked = "warn"
 # 按仓库填:传递依赖 RUSTSEC 豁免(每项须注释原因)
 # 历史豁免 RUSTSEC-2025-0141(bincode unmaintained)已随 bincode → postcard
 # 迁移完成而清除,裁决留档见 docs/CHANGELOG.md Unreleased「依赖治理收口」。
-ignore = []
+ignore = [
+    # RUSTSEC-2024-0449（2026-10-12 入库）：unsafe-libyaml unmaintained，经测试
+    # 依赖 limiteron 的 serde_yaml_ng 传递入图；源头豁免与 serde-saphyr 迁移
+    # 裁决在 limiteron 仓，此处随行豁免直至上游迁移完成。
+    "RUSTSEC-2024-0449",
+]
 
 [licenses]
 # 允许的宽松许可证;新增非宽松许可证需在此放行

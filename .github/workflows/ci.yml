@@ -127,7 +127,17 @@ jobs:
         run: brew install protobuf
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
-        run: choco install protoc -y
+        shell: pwsh
+        # choco 源曾 504 超时且 0/0 安装仍静默成功，改 GitHub release 直装并显式
+        # 指定 PROTOC（prost-build/tonic-prost-build 优先读该变量）
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = "v36.2"
+          $zip = "$env:RUNNER_TEMP\protoc.zip"
+          Invoke-WebRequest -Uri "https://github.com/protocolbuffers/protobuf/releases/download/$tag/protoc-36.2-win64.zip" -OutFile $zip
+          $dest = "$env:RUNNER_TEMP\protoc"
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+          "PROTOC=$dest\bin\protoc.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Build
         run: cargo build --all-features --workspace
 
