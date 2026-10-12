@@ -1401,11 +1401,10 @@ fn test_builder_rejects_empty_audience_and_issuer() {
         .audience("")
         .build()
         .expect_err("empty audience must be rejected");
-    assert!(
-        err.to_string().contains("audience"),
-        "error must mention audience: {}",
-        err
-    );
+    assert!(matches!(
+        err,
+        AuthConfigError::MissingCharacterClass { required_type } if required_type == "special character"
+    ));
 
     let err = BearerAuth::builder()
         .secret(derived_test_secret(33))
