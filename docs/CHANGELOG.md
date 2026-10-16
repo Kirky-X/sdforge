@@ -390,7 +390,7 @@
   `Self::new`），属陈旧文档描述；`src/sdk/generator.rs`(2 处) 与 `src/log_attr.rs` 的
   公开文档链接私有项（`sorted_routes`/`MAX_MASKED_PAYLOAD_BYTES`）降为 code span——两者是
   内部辅助，放开可见性会扩大公共 API 面；`src/integrations/dbnexus_gateway.rs` 冗余显式
-  目标 `[`DbPool`](dbnexus::DbPool)` 合并为单一链接。
+  目标 `DbPool` 合并为单一链接。
 - **测试基线漂移**（`docs/TEST_SCENARIOS.md`）：`test_target_inventory_tests` 的三项自洽
   断言在 main 上即为失败——清单注册 48 个 `[[test]]`、`tests/integration/` 实际 39 个文件，
   而文档基线仍写 47/38（新增测试目标时未同步）。本轮按实测刷新为 48 目标 / integration 39 /
