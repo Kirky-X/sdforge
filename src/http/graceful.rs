@@ -312,7 +312,10 @@ mod shutdown_sequence_tests {
         dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> + Send + Sync,
     >;
 
-    /// 返回 (服务地址, server 任务, 停机扳机发送端)。handler 按 sleep_ms 延时并计数。
+    /// 返回 (服务地址, server 任务, 停机扳机发送端, handler 启动信号接收端)。
+    /// handler 按 sleep_ms 延时并计数；启动信号用于确定性同步——触发停机前
+    /// 先确认请求已真正进入 handler，避免固定 sleep 赌调度延迟（CI 负载下
+    /// connect→accept→handler 链路可超过任何常量等待）。
     async fn spawn_server(
         sleep_ms: u64,
         drain: Duration,
@@ -322,13 +325,17 @@ mod shutdown_sequence_tests {
         std::net::SocketAddr,
         tokio::task::JoinHandle<std::io::Result<()>>,
         tokio::sync::oneshot::Sender<()>,
+        tokio::sync::mpsc::Receiver<()>,
     ) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let counter = Arc::clone(&hits);
+        let (started_tx, started_rx) = tokio::sync::mpsc::channel(1);
         let handler = move || {
             let c = Arc::clone(&counter);
+            let started = started_tx.clone();
             async move {
+                let _ = started.send(()).await;
                 c.fetch_add(1, Ordering::SeqCst);
                 if sleep_ms > 0 {
                     tokio::time::sleep(Duration::from_millis(sleep_ms)).await;
@@ -356,7 +363,7 @@ mod shutdown_sequence_tests {
                 GracefulShutdownConfig::with_drain_timeout(drain),
             )),
         };
-        (addr, server, tx)
+        (addr, server, tx, started_rx)
     }
 
     /// 发送一个 HTTP/1.1 请求并读完整个响应（连接关闭为界）。
@@ -382,7 +389,7 @@ mod shutdown_sequence_tests {
             })
         });
         let hits = Arc::new(AtomicUsize::new(0));
-        let (addr, server, tx) =
+        let (addr, server, tx, _handler_started) =
             spawn_server(0, Duration::from_secs(5), Arc::clone(&hits), Some(hook)).await;
 
         let body = http_get(addr).await.unwrap();
@@ -408,10 +415,15 @@ mod shutdown_sequence_tests {
     #[tokio::test]
     async fn in_flight_request_completes_during_drain() {
         let hits = Arc::new(AtomicUsize::new(0));
-        let (addr, server, tx) =
+        let (addr, server, tx, mut handler_started) =
             spawn_server(200, Duration::from_secs(5), Arc::clone(&hits), None).await;
         let client = tokio::spawn(async move { http_get(addr).await });
-        tokio::time::sleep(Duration::from_millis(40)).await;
+        // 请求真正进入 handler 后才触发停机：确定性同步取代固定 sleep，
+        // 使被排空的必然是已开始处理的请求。
+        tokio::time::timeout(Duration::from_secs(5), handler_started.recv())
+            .await
+            .expect("handler must start while the server is up")
+            .expect("handler start signal must be a message");
         tx.send(()).unwrap();
         let body = client.await.unwrap().unwrap();
         assert!(
@@ -426,10 +438,15 @@ mod shutdown_sequence_tests {
     #[tokio::test]
     async fn drain_timeout_forces_abort_and_returns_ok() {
         let hits = Arc::new(AtomicUsize::new(0));
-        let (addr, server, tx) =
+        let (addr, server, tx, mut handler_started) =
             spawn_server(3_000, Duration::from_millis(100), Arc::clone(&hits), None).await;
         let client = tokio::spawn(async move { http_get(addr).await });
-        tokio::time::sleep(Duration::from_millis(40)).await;
+        // 同上：确认 3s handler 已在执行后再触发，保证测的是“强制中止
+        // 真在途请求”，而非连接尚未被接受的时序偶然。
+        tokio::time::timeout(Duration::from_secs(5), handler_started.recv())
+            .await
+            .expect("handler must start while the server is up")
+            .expect("handler start signal must be a message");
         tx.send(()).unwrap();
 
         // server 必须在远小于 handler 延时的时间内返回（否则为未强制中止）

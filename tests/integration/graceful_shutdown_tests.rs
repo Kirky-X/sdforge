@@ -43,10 +43,13 @@ async fn inflight_request_completes_before_shutdown() {
     let listener = test_listener().await;
     let addr = listener.local_addr().unwrap();
 
-    // Slow route: sleeps 300ms then answers.
+    // Slow route: signals the test the moment the handler starts, then
+    // sleeps 300ms before answering.
+    let (handler_started_tx, mut handler_started_rx) = tokio::sync::mpsc::channel(1);
     let router = axum::Router::new().route(
         "/slow",
-        axum::routing::get(|| async {
+        axum::routing::get(move || async move {
+            let _ = handler_started_tx.send(()).await;
             tokio::time::sleep(Duration::from_millis(300)).await;
             "done"
         }),
@@ -64,9 +67,16 @@ async fn inflight_request_completes_before_shutdown() {
 
     wait_until_up(addr).await;
 
-    // Fire the in-flight slow request, then trigger shutdown while it runs.
+    // Fire the in-flight slow request, then trigger shutdown only once the
+    // request has verifiably reached the handler: under CI load the
+    // connect→accept→handler chain can outlast any fixed sleep, and a
+    // premature trigger severs the connection before drain semantics apply
+    // (observed as hyper IncompleteMessage on the client).
     let in_flight = tokio::spawn(get_status(format!("http://{addr}/slow")));
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    tokio::time::timeout(Duration::from_secs(5), handler_started_rx.recv())
+        .await
+        .expect("slow handler must start while the server is up")
+        .expect("handler start signal must be a message");
     trigger_tx.send(()).unwrap();
 
     // Phase 2: the in-flight request still completes successfully.
@@ -137,10 +147,13 @@ async fn drain_timeout_forces_shutdown() {
     let listener = test_listener().await;
     let addr = listener.local_addr().unwrap();
 
-    // Route that outlives the drain timeout (1.5s hold vs 200ms budget).
+    // Route that outlives the drain timeout (1.5s hold vs 200ms budget);
+    // signals the test the moment the handler starts.
+    let (handler_started_tx, mut handler_started_rx) = tokio::sync::mpsc::channel(1);
     let router = axum::Router::new().route(
         "/stuck",
-        axum::routing::get(|| async {
+        axum::routing::get(move || async move {
+            let _ = handler_started_tx.send(()).await;
             tokio::time::sleep(Duration::from_millis(1500)).await;
             "late"
         }),
@@ -158,7 +171,14 @@ async fn drain_timeout_forces_shutdown() {
 
     wait_until_up(addr).await;
     let in_flight = tokio::spawn(get_status(format!("http://{addr}/stuck")));
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    // Trigger only once the stuck handler is verifiably running, so the
+    // forced path severs a genuinely in-flight request rather than one
+    // still waiting to be accepted (same determinism rationale as the
+    // drain test above).
+    tokio::time::timeout(Duration::from_secs(5), handler_started_rx.recv())
+        .await
+        .expect("stuck handler must start while the server is up")
+        .expect("handler start signal must be a message");
     let t0 = std::time::Instant::now();
     trigger_tx.send(()).unwrap();
 
