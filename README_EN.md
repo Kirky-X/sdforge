@@ -4,7 +4,7 @@
 
 [![CI Status](https://github.com/Kirky-X/sdforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Kirky-X/sdforge/actions/workflows/ci.yml) [![Version](https://img.shields.io/crates/v/sdforge.svg)](https://crates.io/crates/sdforge) [![Docs.rs](https://docs.rs/sdforge/badge.svg)](https://docs.rs/sdforge) [![Downloads](https://img.shields.io/crates/d/sdforge.svg)](https://crates.io/crates/sdforge) [![License](https://img.shields.io/crates/l/sdforge.svg)](LICENSE) [![Rust](https://img.shields.io/badge/rust-1.97.1%2B-orange.svg)](https://www.rust-lang.org/) [![Coverage](https://codecov.io/gh/Kirky-X/sdforge/branch/main/graph/badge.svg)](https://codecov.io/gh/Kirky-X/sdforge)
 
-[中文](README.md) | **English**
+[Chinese](README.md) | **English**
 
 **One macro annotation, multi-protocol SDKs assembled at compile time**
 
@@ -31,7 +31,7 @@ Annotate a function once with `#[forge]`; registration code for HTTP, MCP, gRPC,
 ## 📋 Table of Contents
 
 <details open>
-<summary>📑 目录</summary>
+<summary>📑 Table of Contents</summary>
 
 - [✨ Features](#-features)
 - [🚀 Quick Start](#-quick-start)
@@ -166,7 +166,7 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>cli</code></td><td>CLI integration (clap, independent of http)</td><td>❌</td></tr>
   <tr><td><code>openapi</code></td><td>OpenAPI 3.1 spec generation (utoipa, independent of http)</td><td>❌</td></tr>
   <tr><td><code>schemars</code></td><td>Return-type schema reflection (implies openapi: <code>#[forge]</code> emits field-precise response schemas for return types deriving <code>JsonSchema</code>, silently degrading to coarse mapping otherwise)</td><td>❌</td></tr>
-  <tr><td><code>docgen</code></td><td>Unified docs output (Swagger UI + CLI/MCP Markdown; requires openapi + cli; legacy name <code>docs</code> remains as a compat alias)</td><td>❌</td></tr>
+  <tr><td><code>docgen</code> 🚫</td><td>Unified docs output (Swagger UI + CLI/MCP Markdown; requires openapi + cli; legacy name <code>docs</code> remains as a compat alias). Currently unusable: upstream zip full-range yank breaks utoipa-swagger-ui (zip ^8.6) resolution, see the notice below</td><td>❌</td></tr>
   <tr><td><code>sdk</code></td><td>Multi-protocol client SDK generation (Rust zero-dep / optional reqwest + TypeScript fetch with type definitions; keeps the CLI <code>sdk</code> subcommand; requires openapi + cli)</td><td>❌</td></tr>
   <tr><td><code>security</code></td><td>Auth (API Key / JWT Bearer), audit, security headers, rate limiting and caching (includes http + ratelimit-http + cache)</td><td>❌</td></tr>
   <tr><td><code>ratelimit</code></td><td>Rate limiting core (limiteron, no http dependency)</td><td>❌</td></tr>
@@ -206,6 +206,8 @@ cargo run --example basic_cli --features cli -- echo --name world
 - `docgen` = `openapi` + `cli` (mounting the Swagger UI additionally requires `http`; legacy name `docs` remains as a compat alias)
 - `kit` = `trait-kit` (health + lifecycle) + `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
 - `full` covers 26 runtime features (incl. `idempotency`, `docgen`, deployment-surface HTTP TLS `serve-tls`/`tls-watch`) and excludes the optional heavy deps `simd-json` / `kit` / `limiteron-integration` (SIMD JSON, trait-kit module graph, rate-limit integration foundation) plus the gRPC-side `grpc-tls` wiring and `schemars` / `ratelimit-dist` / `cache-l2` / `db-integration` / `sdk` (opt-in surface) — all enabled individually as needed
+
+> 🚫 **Do not enable the `docgen` feature** (since 2026-10-16): the upstream `zip` crate has been fully yanked on crates.io (only 9.0.3 remains). `docgen` depends on `utoipa-swagger-ui` (pinned to `zip ^8.6`), which can no longer be resolved — enabling `docgen` from scratch (including `full`, which covers it) fails at dependency resolution. `openapi` and `cli` are unaffected (OpenAPI JSON and Markdown generation work; only Swagger UI hosting is unavailable). Existing projects with a committed `Cargo.lock` are unaffected. This will be lifted once the utoipa upstream publishes a release adapted to zip 9.x.
 
 </details>
 
