@@ -143,6 +143,14 @@ docs/test.md
 docs/uat.md
 docs/superpowers/
 
+# --- 设计文档(不入库) ---
+docs/PRD.md
+docs/ADD.md
+docs/TRD.md
+docs/DDD.md
+docs/HUB_PROTOCOL.md
+docs/SECURITY.md
+
 # --- 本地开发笔记 ---
 DEV_NOTES.md
 TODO.md
