@@ -113,11 +113,10 @@ schemars = { version = "1.2", default-features = false, features = ["derive", "s
 # string feature 启用 Str: From<String>，支持运行时配置程序名
 clap = { version = "4.6", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "suggestions", "string"] }
 
-# Swagger UI 依赖 - utoipa-swagger-ui 10.0 配合 utoipa 6.0 提供交互式 API 文档
-# vendored：zip 随 crate 分发（Swagger UI v5.32.6，与上游 build.rs 默认下载
-# URL 同版本），构建期无需访问 github.com——密封构建，离线/受限网络环境不再
-# 被构建脚本卡死
-utoipa-swagger-ui = { version = "10.0", default-features = false, features = ["axum", "vendored"] }
+# Swagger UI 交互式文档的静态资产自 vendor 于 assets/swagger-ui/
+#（include_bytes! 编译期内嵌，见 src/docs/swagger_assets.rs 与资产 NOTICE；
+# 升级经 scripts/update_swagger_ui.sh），不依赖 utoipa-swagger-ui——后者
+# 锁定被 crates.io yank 的 zip ^8.6，致下游解析断裂
 
 # CLI Markdown 文档依赖 - clap-markdown 0.1 从 clap::Command 生成 Markdown 命令手册
 clap-markdown = { version = "0.1", default-features = false }
@@ -256,8 +255,8 @@ schemars = { workspace = true, optional = true }
 # CLI dependencies - clap 用于命令行参数解析
 clap = { workspace = true, optional = true }
 
-# Docs dependencies - Swagger UI 和 Markdown 文档生成
-utoipa-swagger-ui = { workspace = true, optional = true }
+# Docs dependencies - CLI/Markdown 文档生成
+#（Swagger UI 静态资产自 vendor 于 assets/swagger-ui/，零额外依赖）
 clap-markdown = { workspace = true, optional = true }
 
 # Feature dependencies
@@ -494,8 +493,10 @@ schemars = ["openapi", "dep:schemars"]
 cli = ["dep:clap", "dep:inventory"]
 
 # Docgen 特性 - 统一文档输出（Swagger UI + CLI/MCP Markdown）
-# 依赖 openapi（复用 OpenAPI 生成）+ utoipa-swagger-ui + clap-markdown + cli（docs 子命令需要 CLI 框架）
-docgen = ["openapi", "dep:utoipa-swagger-ui", "dep:clap-markdown", "cli"]
+# 依赖 openapi（复用 OpenAPI 生成）+ clap-markdown + cli（docs 子命令需要 CLI 框架）；
+# Swagger UI 静态资产经 include_bytes! 自 vendor 内嵌（assets/swagger-ui/，见
+# scripts/update_swagger_ui.sh），不再依赖 utoipa-swagger-ui
+docgen = ["openapi", "dep:clap-markdown", "cli"]
 # 兼容别名：旧 feature 名 docs 转发到 docgen（正名迁移，避免与 docs.rs 文档构建歧义）
 docs = ["docgen"]
 
