@@ -6,8 +6,10 @@ repos:
     hooks:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
-        # vendor 资产按上游字节原样保留，不做空白/行尾/文件尾规范化——
-        # 下述 check-added-large-files 同组注释有完整理由
+        # vendor 资产不做空白/行尾/文件尾规范化（规范化会破坏压缩产物与
+        # NOTICE.md 哈希锚点）；本组三个规范化钩子按**目录**整体排除（此目录
+        # 内容一律不做规范化），与下方 check-added-large-files 的按**文件**
+        # 豁免语义不同，勿合并
         exclude: '^assets/swagger-ui/'
       - id: end-of-file-fixer
         exclude: '^assets/swagger-ui/'
@@ -15,11 +17,11 @@ repos:
       - id: check-toml
       - id: check-added-large-files
         args: ['--maxkb=1000']
-        # assets/swagger-ui/ 是自 vendor 的 Swagger UI 官方 dist 功能子集
-        # （swagger-ui-bundle.js 约 1.46 MiB 等），内容为公开 Web bundle，
-        # 体积属预期且随 .crate 包分发；升级经 scripts/update_swagger_ui.sh
-        # （下载后 fail-closed sha256 校验，锚点即 NOTICE.md 哈希表）
-        exclude: '^assets/swagger-ui/'
+        # assets/swagger-ui/ 自 vendor 的 Swagger UI 官方 dist 资产（公开 Web
+        # bundle，体积属预期、随 .crate 分发，升级经 scripts/update_swagger_ui.sh
+        # 且下载后 fail-closed sha256 校验）。按**文件**豁免 10 文件契约：契约
+        # 内已知资产放行，目录内新增任意文件重新回到 1000 KB 门禁
+        exclude: '^assets/swagger-ui/(index\.html|index\.css|swagger-initializer\.js|swagger-ui\.css|swagger-ui-bundle\.js|swagger-ui-standalone-preset\.js|favicon-32x32\.png|favicon-16x16\.png|LICENSE|NOTICE\.md)$'
       - id: detect-private-key
       - id: check-merge-conflict
         args: ['--assume-in-merge']

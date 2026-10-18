@@ -347,6 +347,10 @@ limiteron = { workspace = true, features = ["test-clock"] }
 toml = { workspace = true, features = ["parse", "serde", "std"] }
 # 反射两态集成测试的 derive 依赖（dev-only，不影响发布面）
 schemars = { workspace = true }
+# 资产审计自证测试：NOTICE.md 的 SHA-256 表↔assets/swagger-ui/ 文件字节复验
+# （swagger_assets.rs 测试）。sha2 0.11 已是本 crate 可选依赖（etag/security
+# 门控），此处仅为测试面在所有 feature 组合下可见，[dependencies] 零变化
+sha2 = { workspace = true }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
 sdforge-macros = { version = "0.5.0-rc.8", path = "./macros", default-features = false }

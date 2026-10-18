@@ -285,10 +285,11 @@ mod swagger_route_tests {
         );
     }
 
-    /// index.html 引用自 vendor 的 bundle 与 initializer。
+    /// 显式文件名（`/swagger-ui/index.html`）经查表命中并引用自 vendor 的 bundle
+    /// 与 initializer（默认 `/swagger-ui/` 路径由 404 测试覆盖）。
     #[tokio::test]
     async fn index_html_references_vendored_bundle_and_initializer() {
-        let (status, _, html) = fetch(swagger_ui_router(), "/swagger-ui/").await;
+        let (status, _, html) = fetch(swagger_ui_router(), "/swagger-ui/index.html").await;
         assert_eq!(status, StatusCode::OK);
         assert!(
             html.contains("swagger-ui-bundle.js"),

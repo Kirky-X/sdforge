@@ -163,7 +163,7 @@ mod tests {
     /// 防止升级（scripts/update_swagger_ui.sh）与代码清单漂移。
     #[test]
     fn vendored_assets_directory_matches_embedded_inventory() {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/swagger-ui");
+        let dir = assets_dir();
         let mut names: Vec<String> = std::fs::read_dir(&dir)
             .unwrap_or_else(|e| panic!("read {}: {e}", dir.display()))
             .map(|entry| {
@@ -189,5 +189,76 @@ mod tests {
             names, expected,
             "vendored asset directory drifted from the embedded inventory"
         );
+    }
+
+    /// NOTICE.md 自证：其 SHA-256 表必须与目录内文件字节逐项一致。
+    ///
+    /// 哈希唯一来源为 NOTICE.md（由 scripts/update_swagger_ui.sh 生成）——
+    /// 单边修改文件或表值即测试红；表格式（`## SHA-256` 段 + 围栏代码块 +
+    /// `sha256sum` 行）是本测试固定的解析契约，脚本升级时不得改变。
+    #[test]
+    fn notice_sha256_table_matches_vendored_bytes() {
+        use sha2::{Digest, Sha256};
+
+        let dir = assets_dir();
+        let notice = std::fs::read_to_string(dir.join("NOTICE.md")).expect("NOTICE.md readable");
+        let section = notice
+            .split_once("## SHA-256")
+            .expect("NOTICE.md must contain a '## SHA-256' section")
+            .1;
+        let block = section
+            .split_once("```")
+            .expect("SHA-256 section must open a fenced block")
+            .1
+            .split_once("```")
+            .expect("SHA-256 section must close the fenced block")
+            .0;
+
+        let table: Vec<(String, String)> = block
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| {
+                let mut columns = line.split_whitespace();
+                let digest = columns.next().expect("hash column").to_string();
+                let name = columns.next().expect("file column").to_string();
+                assert!(columns.next().is_none(), "unexpected extra column: {line}");
+                assert_eq!(
+                    digest.len(),
+                    64,
+                    "not a SHA-256 hex digest in NOTICE.md: {line}"
+                );
+                (name, digest)
+            })
+            .collect();
+
+        let mut names: Vec<&str> = table.iter().map(|(name, _)| name.as_str()).collect();
+        names.sort_unstable();
+        let mut expected: Vec<&str> = STATIC_PATHS
+            .iter()
+            .map(|(path, _)| *path)
+            .chain([INITIALIZER_PATH, "LICENSE"])
+            .collect();
+        expected.sort_unstable();
+        assert_eq!(
+            names, expected,
+            "NOTICE SHA-256 table must cover exactly the 9-file contract"
+        );
+
+        for (name, digest) in &table {
+            let bytes =
+                std::fs::read(dir.join(name)).unwrap_or_else(|e| panic!("read {name}: {e}"));
+            let computed: String = Sha256::digest(&bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect();
+            assert_eq!(
+                &computed, digest,
+                "{name} bytes drifted from the NOTICE.md SHA-256 table"
+            );
+        }
+    }
+
+    fn assets_dir() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/swagger-ui")
     }
 }
