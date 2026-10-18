@@ -166,14 +166,15 @@ log_ok "期望哈希校验通过(9 文件)"
 } > "${STAGE}/NOTICE.md"
 # NOTICE.md 自身不参与哈希锚点(其内容含上面动态生成的表), 10 文件契约由下方计数保障
 
-# ---- 6. 落盘(全部校验通过后替换, 不留半成品) ----------------------------
+# ---- 6. 落盘前终检(全部校验通过后才替换, 不留半成品) --------------------
+COUNT="$(ls -1 "${STAGE}" | wc -l)"
+[[ "${COUNT}" -eq 10 ]] || { log_err "暂存资产文件数 ${COUNT} != 10"; exit 1; }
+grep -q '__OPENAPI_URL__' "${STAGE}/swagger-initializer.js" || { log_err "占位符未注入"; exit 1; }
+! grep -q 'layout: "StandaloneLayout"' "${STAGE}/swagger-initializer.js" || { log_err "layout 行未删除"; exit 1; }
+
+# ---- 7. 落盘(同文件系统内暂存目录校验通过后替换) ------------------------
 rm -rf "${DEST}"
 mv "${STAGE}" "${DEST}"
-
-COUNT="$(ls -1 "${DEST}" | wc -l)"
-[[ "${COUNT}" -eq 10 ]] || { log_err "资产文件数 ${COUNT} != 10"; exit 1; }
-grep -q '__OPENAPI_URL__' "${DEST}/swagger-initializer.js" || { log_err "占位符未注入"; exit 1; }
-! grep -q 'layout: "StandaloneLayout"' "${DEST}/swagger-initializer.js" || { log_err "layout 行未删除"; exit 1; }
 
 log_ok "Swagger UI v${VERSION} 已 vendor 至 assets/swagger-ui/ (10 文件)"
 (cd "${DEST}" && ls -la)
