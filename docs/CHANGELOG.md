@@ -33,6 +33,22 @@
 
 </details>
 
+## [Unreleased]
+
+### 变更 (Changed)
+
+- **Swagger UI 托管自 vendor 化，`docgen` 下游解析断裂解除**：移除 `utoipa-swagger-ui`
+  依赖（其 vendored zip 链锁定被 crates.io 全系 yank 的 `zip ^8.6`，致全新依赖解析
+  失败）。Swagger UI v5.32.6 官方 dist 功能子集（Apache-2.0，`index.html` 引用链的
+  8 个文件，修改说明见资产 `NOTICE.md`）自 vendor 于 `assets/swagger-ui/`，经
+  `include_bytes!` 编译期内嵌；`swagger_ui_router*` 直接服务静态资产并在请求期向
+  `swagger-initializer.js` 注入 spec 地址；`docgen` 特性收缩为
+  `openapi + clap-markdown + cli`，三个 router 函数公共签名与路由形状不变。
+  `utoipa` 本体与 OpenAPI JSON 生成不受影响。资产升级经
+  `scripts/update_swagger_ui.sh`（支持本地 zip 离线模式）。行为差异：
+  `swagger-ui.js`/es-bundle/`oauth2-redirect.*` 不再随包服务（`index.html` 不引用的
+  dist 文件不再内嵌）；内嵌资产体积约 4.11 MiB → 1.87 MiB。
+
 ## [0.5.0-rc.8] - 2026-10-10
 
 ### 修复 (Fixed)

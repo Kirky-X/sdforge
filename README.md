@@ -178,7 +178,7 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>cli</code></td><td>CLI 集成（clap，独立于 http）</td><td>❌</td></tr>
   <tr><td><code>openapi</code></td><td>OpenAPI 3.1 规范生成（utoipa，独立于 http）</td><td>❌</td></tr>
   <tr><td><code>schemars</code></td><td>返回类型 Schema 反射（蕴含 openapi：<code>#[forge]</code> 为派生 <code>JsonSchema</code> 的返回类型生成字段级精确 response schema，未派生静默降级粗粒度映射）</td><td>❌</td></tr>
-  <tr><td><code>docgen</code> 🚫</td><td>统一文档输出（Swagger UI + CLI/MCP Markdown，依赖 openapi + cli；旧名 <code>docs</code> 为兼容别名）。暂不可用：上游 zip 全系 yank 致 utoipa-swagger-ui（zip ^8.6）解析失败，见下方告示</td><td>❌</td></tr>
+  <tr><td><code>docgen</code></td><td>统一文档输出（Swagger UI + CLI/MCP Markdown，依赖 openapi + cli；旧名 <code>docs</code> 为兼容别名。Swagger UI v5.32.6 资产自 vendor 于 <code>assets/swagger-ui/</code>，零额外依赖）</td><td>❌</td></tr>
   <tr><td><code>sdk</code></td><td>多协议客户端 SDK 生成（Rust 零依赖 / reqwest 可选 + TypeScript fetch+类型定义；保留 CLI 子命令 <code>sdk</code>，依赖 openapi + cli）</td><td>❌</td></tr>
   <tr><td><code>security</code></td><td>认证（API Key / JWT Bearer）、审计、安全头、限流与缓存（含 http + ratelimit-http + cache）</td><td>❌</td></tr>
   <tr><td><code>ratelimit</code></td><td>限流核心（limiteron，不依赖 http）</td><td>❌</td></tr>
@@ -225,7 +225,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 - `kit` = `trait-kit`（health + lifecycle）+ `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
 - `full` 覆盖 26 项运行时特性（含 `idempotency`、`docgen`、部署面 HTTP TLS `serve-tls`/`tls-watch`），不含 `simd-json` / `kit` / `limiteron-integration` 可选重依赖（SIMD JSON、trait-kit 模块图、限流集成基座）与 `grpc-tls`（gRPC 侧 TLS 接线）/ `schemars` / `ratelimit-dist` / `cache-l2` / `db-integration` / `sdk`（opt-in 面），均按需单独启用
 
-> 🚫 **请勿启用 `docgen` 特性**（2026-10-16 起）：上游 `zip` crate 在 crates.io 全系 yank（仅 9.0.3 可用），`docgen` 依赖的 `utoipa-swagger-ui`（锁定 `zip ^8.6`）无法完成依赖解析，从零启用 `docgen`（含 `full`，其覆盖 `docgen`）会在依赖解析阶段直接报错。`openapi` 与 `cli` 不受影响（OpenAPI JSON 与 Markdown 生成可用，仅 Swagger UI 托管不可用）。已提交 `Cargo.lock` 的存量项目不受影响。等待 utoipa 上游发布适配 zip 9.x 的版本后解除。
+> ℹ️ **`docgen` 可用性说明**（2026-10-16 上游 `zip` 全系 yank 事件）：该事件曾致 `docgen` 依赖的 `utoipa-swagger-ui`（锁定 `zip ^8.6`）无法完成依赖解析，全新启用 `docgen`（含 `full`，其覆盖 `docgen`）直接报错。现已移除该依赖：Swagger UI v5.32.6 官方 dist 功能子集（Apache-2.0，修改说明见资产 `NOTICE.md`）自 vendor 于 `assets/swagger-ui/` 并经 `include_bytes!` 编译期内嵌，`swagger_ui_router*` 直接服务；`docgen` 收缩为 `openapi + cli`，下游依赖解析恢复正常。升级资产经 `scripts/update_swagger_ui.sh`。
 
 </details>
 
