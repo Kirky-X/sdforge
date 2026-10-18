@@ -107,15 +107,25 @@ async fn tls_connect(
     connector.connect(name, tcp).await.expect("tls handshake")
 }
 
-/// 接受任意服务端证书的 https 客户端。
+/// 信任被测自签证书的客户端构造基座：把测试证书挂为**根锚定**、显式 `no_proxy`。
 ///
-/// 显式 `no_proxy`：测试前提是与本地监听器**直接**握手，宿主机
+/// 不以 `danger_accept_invalid_certs` 降级校验：那会触发 CodeQL
+/// rust/disabled-certificate-check，且让测试在服务端出示任意证书时都通过——
+/// 根锚定既保留真实验证语义又更严格。
+/// `no_proxy` 说明：测试前提是与本地监听器**直接**握手，宿主机
 /// `HTTP(S)_PROXY`（WSL 等环境的 `NO_PROXY=127.*` 通配不被 reqwest 匹配）
 /// 会经代理隧道转发，使连接路径脱离被测对象。
-fn https_client() -> reqwest::Client {
+fn https_client_builder(cert_pem: &str) -> reqwest::ClientBuilder {
+    let root =
+        reqwest::Certificate::from_pem(cert_pem.as_bytes()).expect("test cert parses as root");
     reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
+        .add_root_certificate(root)
         .no_proxy()
+}
+
+/// 根锚定 + 直连的 https 客户端。
+fn https_client(cert_pem: &str) -> reqwest::Client {
+    https_client_builder(cert_pem)
         .build()
         .expect("https client")
 }
@@ -181,7 +191,7 @@ async fn tls_roundtrip_serves_https_request() {
 
     wait_until_up(addr).await;
 
-    let client = https_client();
+    let client = https_client(&cert);
     let resp = client
         .get(format!("https://{addr}/ping"))
         .send()
@@ -371,8 +381,7 @@ async fn alpn_h2_connection_serves_http2_requests() {
 
     // ALPN 协商出 h2 后，serve 循环必须能真正服务 HTTP/2 请求
     //（prior knowledge 跳过 http/1.1 升级路径，强制走 h2）。
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(true)
+    let client = https_client_builder(&cert)
         .http2_prior_knowledge()
         .build()
         .expect("h2 client");
@@ -504,8 +513,9 @@ async fn inflight_tls_request_completes_before_shutdown() {
     ));
     wait_until_up(addr).await;
 
+    let drained_client = https_client(&cert);
     let in_flight = tokio::spawn(async move {
-        https_client()
+        drained_client
             .get(format!("https://{addr}/slow"))
             .send()
             .await
@@ -565,8 +575,9 @@ async fn drain_timeout_forces_tls_shutdown() {
     ));
     wait_until_up(addr).await;
 
+    let stuck_client = https_client(&cert);
     let in_flight = tokio::spawn(async move {
-        https_client()
+        stuck_client
             .get(format!("https://{addr}/stuck"))
             .send()
             .await
@@ -615,7 +626,7 @@ async fn serve_accepts_default_shutdown_signal_future() {
     ));
     wait_until_up(addr).await;
 
-    let resp = https_client()
+    let resp = https_client(&cert)
         .get(format!("https://{addr}/ping"))
         .send()
         .await
