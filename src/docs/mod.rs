@@ -3,7 +3,8 @@
 //! 统一文档输出模块 — Swagger UI + CLI/MCP Markdown。
 //!
 //! 仅当 `docgen` feature 启用时可用。依赖 `openapi`（复用 `generate_openapi_spec`）、
-//! `cli`（复用 `CliBuilder`）和 `clap-markdown`/`utoipa-swagger-ui`。
+//! `cli`（复用 `CliBuilder`）和 `clap-markdown`；Swagger UI v5.32.6 静态资产自
+//! vendor 内嵌（`assets/swagger-ui/`，见 `swagger_assets` 模块）。
 //!
 //! # 示例
 //!
@@ -19,6 +20,8 @@ pub mod cli_markdown;
 pub mod mcp_markdown;
 #[cfg(feature = "http")]
 pub mod swagger;
+#[cfg(feature = "http")]
+mod swagger_assets;
 
 #[cfg(feature = "http")]
 pub use swagger::{swagger_ui_router, swagger_ui_router_with_openapi, swagger_ui_router_with_spec};
@@ -34,7 +37,7 @@ pub use mcp_markdown::generate_mcp_docs;
 /// | 变体 | 输出格式 | 来源 |
 /// |------|----------|------|
 /// | `OpenApi` | OpenAPI 3.1 JSON | `openapi::generate_openapi_spec()` |
-/// | `SwaggerUi` | HTML 入口页（指向 `/swagger-ui/`） | `utoipa-swagger-ui` |
+/// | `SwaggerUi` | HTML 入口页（指向 `/swagger-ui/`） | `assets/swagger-ui/` 内嵌资产 |
 /// | `CliMarkdown` | CLI 命令手册 Markdown | `clap_markdown::help_markdown_command` |
 /// | `McpMarkdown` | MCP 工具列表 Markdown | `inventory::iter::<McpToolRegistration>` |
 /// | `All` | OpenApi + CliMarkdown + McpMarkdown 拼接（SwaggerUi 为 HTML，需单独访问 /swagger-ui/） | 各格式组合 |

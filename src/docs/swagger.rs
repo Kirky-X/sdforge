@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: MIT
 //! Swagger UI Router 集成。
 //!
-//! `utoipa-swagger-ui 8.x` 的 `From<SwaggerUi> for Router` impl 针对 axum 0.7，
-//! 与本项目 axum 0.8 不兼容。此处手动构建 axum 0.8 路由，复用
-//! `utoipa_swagger_ui::serve()` 底层 API 提供 Swagger UI 文件服务。
+//! Swagger UI 静态资产自 vendor 于 `assets/swagger-ui/`（修改说明见其
+//! `NOTICE.md`），本模块以手工构建的 axum 0.8 路由直接服务，不经
+//! `utoipa-swagger-ui`——其 `From<SwaggerUi> for Router` impl 面向 axum 0.7，
+//! 且 vendored zip 链锁定被 crates.io yank 的 `zip` 版本，致下游依赖解析断裂。
+//! `/api-docs/openapi.json` 的 spec 生成仍由 utoipa 提供。
 
 use std::sync::{Arc, OnceLock};
 
@@ -14,7 +16,13 @@ use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::routing::get;
 use utoipa::openapi::OpenApi;
-use utoipa_swagger_ui::{Config, serve};
+
+use super::swagger_assets;
+
+/// Swagger UI 路由的 Extension 状态：spec 地址（宿主不可见，占独立 TypeId，
+/// 避免与宿主自己的 `Extension<Arc<str>>` 相互覆盖）。
+#[derive(Clone)]
+struct SwaggerSpecUrl(Arc<str>);
 
 /// 构建挂载 Swagger UI 的 axum Router。
 ///
@@ -58,12 +66,13 @@ pub fn swagger_ui_router() -> axum::Router {
 ///     .merge(swagger_ui_router_with_spec("/api-docs/openapi.json"));
 /// ```
 pub fn swagger_ui_router_with_spec(openapi_url: &str) -> axum::Router {
-    let config: Arc<Config<'static>> = Arc::new(Config::new([openapi_url.to_string()]));
+    // Extension 承载 spec 地址，供 initializer 请求期注入。
+    let state = SwaggerSpecUrl(Arc::from(openapi_url));
 
     axum::Router::new()
         .route("/swagger-ui/", get(serve_swagger_ui))
         .route("/swagger-ui/{*rest}", get(serve_swagger_ui))
-        .layer(Extension(config))
+        .layer(Extension(state))
 }
 
 /// 构建挂载 Swagger UI 的 axum Router，spec 由调用方直接提供。
@@ -81,14 +90,13 @@ pub fn swagger_ui_router_with_spec(openapi_url: &str) -> axum::Router {
 /// let app = sdforge::docs::swagger_ui_router_with_openapi(spec);
 /// ```
 pub fn swagger_ui_router_with_openapi(spec: OpenApi) -> axum::Router {
-    let config: Arc<Config<'static>> =
-        Arc::new(Config::new(["/api-docs/openapi.json".to_string()]));
+    let state = SwaggerSpecUrl(Arc::from("/api-docs/openapi.json"));
 
     axum::Router::new()
         .route("/api-docs/openapi.json", get(serve_fixed_openapi_json))
         .route("/swagger-ui/", get(serve_swagger_ui))
         .route("/swagger-ui/{*rest}", get(serve_swagger_ui))
-        .layer(Extension(config))
+        .layer(Extension(state))
         .layer(Extension(Arc::new(spec)))
 }
 
@@ -158,9 +166,10 @@ async fn serve_openapi_json() -> axum::response::Response {
 ///
 /// `/swagger-ui/` → tail = ""（渲染 index.html）
 /// `/swagger-ui/swagger-ui.css` → tail = "swagger-ui.css"
+/// `/swagger-ui/swagger-initializer.js` → 注入 spec 地址后的 initializer
 async fn serve_swagger_ui(
     path: Option<Path<String>>,
-    Extension(state): Extension<Arc<Config<'static>>>,
+    Extension(SwaggerSpecUrl(openapi_url)): Extension<SwaggerSpecUrl>,
 ) -> impl IntoResponse {
     let tail = path.as_ref().map(|p| p.as_str()).unwrap_or("");
 
@@ -169,22 +178,20 @@ async fn serve_swagger_ui(
         return StatusCode::BAD_REQUEST.into_response();
     }
 
-    match serve(tail, state) {
-        Ok(Some(file)) => (
+    if tail == swagger_assets::INITIALIZER_PATH {
+        return (
             StatusCode::OK,
-            [("Content-Type", file.content_type)],
-            file.bytes.into_owned(),
+            [("Content-Type", swagger_assets::INITIALIZER_CONTENT_TYPE)],
+            swagger_assets::render_initializer(&openapi_url),
         )
-            .into_response(),
-        Ok(None) => StatusCode::NOT_FOUND.into_response(),
-        Err(error) => {
-            // 不向客户端泄露内部错误详情，仅记录日志。
-            log::error!(
-                "{}",
-                crate::i18n::t("docs-swagger-serve-failed", &[("error", error.to_string())])
-            );
-            (StatusCode::INTERNAL_SERVER_ERROR, "internal server error").into_response()
+            .into_response();
+    }
+
+    match swagger_assets::get(tail) {
+        Some((bytes, content_type)) => {
+            (StatusCode::OK, [("Content-Type", content_type)], bytes).into_response()
         }
+        None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
@@ -252,6 +259,71 @@ mod swagger_route_tests {
 
         let (missing, _, _) = fetch(swagger_ui_router(), "/swagger-ui/no-such-asset.xyz").await;
         assert_eq!(missing, StatusCode::NOT_FOUND);
+    }
+
+    /// initializer 在请求期注入 spec 地址（JSON 字符串字面量）。
+    #[tokio::test]
+    async fn initializer_serves_injected_spec_url() {
+        let (status, ct, js) = fetch(
+            swagger_ui_router_with_spec("/host-provided/spec.json"),
+            "/swagger-ui/swagger-initializer.js",
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            ct.as_deref(),
+            Some("text/javascript"),
+            "initializer Content-Type must match the pre-migration mime_guess value"
+        );
+        assert!(
+            js.contains("url: \"/host-provided/spec.json\""),
+            "initializer must inject the configured spec url: {js}"
+        );
+        assert!(
+            !js.contains("__OPENAPI_URL__"),
+            "placeholder must be consumed: {js}"
+        );
+    }
+
+    /// index.html 引用自 vendor 的 bundle 与 initializer。
+    #[tokio::test]
+    async fn index_html_references_vendored_bundle_and_initializer() {
+        let (status, _, html) = fetch(swagger_ui_router(), "/swagger-ui/").await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            html.contains("swagger-ui-bundle.js"),
+            "index must reference the vendored bundle: {html}"
+        );
+        assert!(
+            html.contains("swagger-initializer.js"),
+            "index must reference the initializer: {html}"
+        );
+    }
+
+    /// 静态响应不携带缓存头（与迁移前握手行为一致：仅 Content-Type）。
+    #[tokio::test]
+    async fn static_assets_carry_no_cache_headers() {
+        let resp = swagger_ui_router()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/swagger-ui/swagger-ui.css")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        for header in [
+            axum::http::header::CACHE_CONTROL,
+            axum::http::header::ETAG,
+            axum::http::header::LAST_MODIFIED,
+        ] {
+            assert!(
+                resp.headers().get(&header).is_none(),
+                "unexpected cache header on a static asset: {header}"
+            );
+        }
     }
 
     /// 路径遍历防护：`..` 形态（含百分号编码）不得读到静态包外文件。

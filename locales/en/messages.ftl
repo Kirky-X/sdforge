@@ -120,7 +120,6 @@ otel-metrics-flush-failed = otel: metrics flush failed: { $error }
 
 # --- docs (Swagger UI routing) -------------------------------------------------------------
 docs-openapi-serialize-failed = OpenAPI spec serialize failed: { $error }
-docs-swagger-serve-failed = Swagger UI serve failed: { $error }
 
 # --- MCP stdio transport --------------------------------------------------------------------
 mcp-stdio-auth-verifier-warning = serve_stdio: an auth verifier is configured but the stdio transport cannot carry transport credentials — every call_tool/list_tools will be rejected. Serve authenticated MCP over a transport adapter that injects McpCredentials.

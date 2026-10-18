@@ -118,7 +118,6 @@ otel-metrics-flush-failed = otel：metrics 刷新失败：{ $error }
 
 # --- 文档（Swagger UI 路由） --------------------------------------------------------------------------
 docs-openapi-serialize-failed = OpenAPI 规范序列化失败：{ $error }
-docs-swagger-serve-failed = Swagger UI 服务失败：{ $error }
 
 # --- MCP stdio 传输 -----------------------------------------------------------------------------------
 mcp-stdio-auth-verifier-warning = serve_stdio：已配置认证验证程序，但 stdio 传输无法携带传输凭据——所有 call_tool/list_tools 都将被拒绝。请通过注入 McpCredentials 的传输适配器提供经认证的 MCP 服务。
