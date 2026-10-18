@@ -6,11 +6,20 @@ repos:
     hooks:
       - id: trailing-whitespace
         args: [--markdown-linebreak-ext=md]
+        # vendor 资产按上游字节原样保留，不做空白/行尾/文件尾规范化——
+        # 下述 check-added-large-files 同组注释有完整理由
+        exclude: '^assets/swagger-ui/'
       - id: end-of-file-fixer
+        exclude: '^assets/swagger-ui/'
       - id: check-yaml
       - id: check-toml
       - id: check-added-large-files
         args: ['--maxkb=1000']
+        # assets/swagger-ui/ 是自 vendor 的 Swagger UI 官方 dist 功能子集
+        # （swagger-ui-bundle.js 约 1.46 MiB 等），内容为公开 Web bundle，
+        # 体积属预期且随 .crate 包分发；升级经 scripts/update_swagger_ui.sh
+        # （下载后 fail-closed sha256 校验，锚点即 NOTICE.md 哈希表）
+        exclude: '^assets/swagger-ui/'
       - id: detect-private-key
       - id: check-merge-conflict
         args: ['--assume-in-merge']
@@ -33,6 +42,10 @@ repos:
     rev: v1.28.0
     hooks:
       - id: typos
+        # vendor 的压缩 JS/CSS 是机器产物，typos --write-changes 会破坏其内容
+        # （字节锚点与 NOTICE.md 哈希表失配）；目录级放行仅限本钩子，
+        # typos.toml 的「词级白名单、禁整目录排除」政策不适用于第三方机器产物
+        exclude: '^assets/swagger-ui/'
 
   - repo: local
     hooks:
