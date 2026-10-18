@@ -9,6 +9,7 @@ use axum::Router;
 use axum::body::Body;
 
 /// 测试专用派生密钥：固定种子程序化生成，避免密钥形态字面量（CodeQL）。
+#[cfg(feature = "security")]
 fn derived_test_secret(n: usize) -> String {
     (0..n)
         .map(|i| (i as u8).wrapping_mul(31).wrapping_add(0x21) as char)
