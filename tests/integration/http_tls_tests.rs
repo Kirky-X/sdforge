@@ -108,11 +108,24 @@ async fn tls_connect(
 }
 
 /// 接受任意服务端证书的 https 客户端。
+///
+/// 显式 `no_proxy`：测试前提是与本地监听器**直接**握手，宿主机
+/// `HTTP(S)_PROXY`（WSL 等环境的 `NO_PROXY=127.*` 通配不被 reqwest 匹配）
+/// 会经代理隧道转发，使连接路径脱离被测对象。
 fn https_client() -> reqwest::Client {
     reqwest::Client::builder()
         .danger_accept_invalid_certs(true)
+        .no_proxy()
         .build()
         .expect("https client")
+}
+
+/// 默认校验器（信任系统根）+ 直连本地监听器的客户端。
+fn local_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("local client")
 }
 
 /// Bind an ephemeral listener for tests.
@@ -214,7 +227,10 @@ async fn self_signed_cert_rejected_by_default_verifier() {
 
     // 默认校验器（信任系统根）必须拒绝自签证书——证明线上跑的是真 TLS，
     // 而不是某个被静默降级的明文通道。
-    let result = reqwest::get(format!("https://{addr}/ping")).await;
+    let result = local_client()
+        .get(format!("https://{addr}/ping"))
+        .send()
+        .await;
     assert!(
         result.is_err(),
         "default verifier must reject the self-signed cert"
@@ -255,7 +271,11 @@ async fn plain_http_to_tls_port_fails() {
     wait_until_up(addr).await;
 
     // 明文 HTTP 打到 TLS 端口：TLS 握手必然失败，绝不能返回响应。
-    let result = reqwest::get(format!("http://{addr}/ping")).await;
+    // （直连由 local_client 的 no_proxy 保证：代理会替连并回非 Err 响应。）
+    let result = local_client()
+        .get(format!("http://{addr}/ping"))
+        .send()
+        .await;
     assert!(
         result.is_err(),
         "plain http must not get a TLS-port response"
