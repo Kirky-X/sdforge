@@ -96,16 +96,26 @@
 
 ### 📦 安装
 
+<details>
+<summary>📄 代码 · bash</summary>
+
 ```bash
 cargo add sdforge
 ```
 
+</details>
+
 或手动添加到 `Cargo.toml`（当前版本 `0.5.0-rc.8`）：
+
+<details>
+<summary>📄 代码 · toml</summary>
 
 ```toml
 [dependencies]
 sdforge = { version = "0.5.0-rc.8", features = ["http"] }
 ```
+
+</details>
 
 最低要求：
 
@@ -117,6 +127,9 @@ sdforge = { version = "0.5.0-rc.8", features = ["http"] }
 ### 💡 最小可运行示例
 
 以下示例来自 [`examples/basic_cli.rs`](examples/basic_cli.rs)（`cli` feature）：
+
+<details>
+<summary>📄 代码 · rust</summary>
 
 ```rust
 use sdforge::cli::CliBuilder;
@@ -136,10 +149,17 @@ async fn main() {
 }
 ```
 
+</details>
+
+<details>
+<summary>📄 代码 · bash</summary>
+
 ```bash
 cargo run --example basic_cli --features cli -- echo --name world
 # 输出：Hello, world!（Value::String 智能提取，无引号）
 ```
+
+</details>
 
 ### 🧭 核心概念
 
@@ -166,6 +186,9 @@ cargo run --example basic_cli --features cli -- echo --name world
 ## 🎨 特性标志
 
 `default = []`：所有特性均为可选，按需显式启用。
+
+<details>
+<summary>📋 表格</summary>
 
 <table>
   <tr><th>标志</th><th>说明</th><th>默认</th></tr>
@@ -210,6 +233,8 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>full</code></td><td>全部运行时特性（26 项：http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/timestamp/openapi/cli/docgen/inklog/i18n/idempotency/serve-tls/tls-watch；不含 gRPC 侧 <code>grpc-tls</code> 与 <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code>/<code>schemars</code>/<code>ratelimit-dist</code>/<code>cache-l2</code>/<code>db-integration</code>/<code>sdk</code> 可选重依赖与 opt-in 面）</td><td>❌</td></tr>
 </table>
 
+</details>
+
 <details>
 <summary>🔗 特性依赖关系</summary>
 
@@ -233,6 +258,9 @@ cargo run --example basic_cli --features cli -- echo --name world
 
 ## 📚 文档
 
+<details>
+<summary>📋 表格</summary>
+
 | 文档 | 说明 |
 |------|------|
 | [📖 用户指南](docs/USER_GUIDE.md) | 从安装、核心概念到进阶用法的完整教程 |
@@ -246,11 +274,16 @@ cargo run --example basic_cli --features cli -- echo --name world
 | [🤝 贡献指南](docs/CONTRIBUTING.md) | 开发环境、TDD 工作流与 PR 流程 |
 | [📦 在线 API 文档](https://docs.rs/sdforge) | docs.rs 自动生成的最新文档（all-features） |
 
+</details>
+
 ---
 
 ## 💻 示例
 
 ### 根包示例（`cargo run --example`）
+
+<details>
+<summary>📋 表格</summary>
 
 | 示例 | 所需特性 | 说明 |
 |------|----------|------|
@@ -261,13 +294,23 @@ cargo run --example basic_cli --features cli -- echo --name world
 | `perf_prefix_index` | `cache` | 前缀索引性能验证 |
 | `perf_batch_ops` | `cache` | 批量操作性能验证 |
 
+</details>
+
+<details>
+<summary>📄 代码 · bash</summary>
+
 ```bash
 cargo run --example basic_cli --features cli -- echo --name world
 cargo run --example swagger_demo --features "docgen http"
 cargo run --example perf_regex_cache --features cache
 ```
 
+</details>
+
 ### 综合示例库（workspace 成员 `sdforge-examples`，`examples/src/`）
+
+<details>
+<summary>📋 表格</summary>
 
 | 模块 | 内容 |
 |------|------|
@@ -284,6 +327,8 @@ cargo run --example perf_regex_cache --features cache
 | `openapi/` | OpenAPI 规范生成（`OpenApiBuilder`、`generate_openapi_spec`） |
 | `combined/` | 多特性组合完整示例（`full_example.rs`） |
 
+</details>
+
 ### 生态集成示例（`sdforge-examples` 成员示例）
 
 | 示例 | 启用特性 | 说明 |
@@ -291,9 +336,14 @@ cargo run --example perf_regex_cache --features cache
 | `oxcache_admin` | `oxcache_admin_example` | 经 `BackendRegistry` 暴露 oxcache 管理端点 |
 | `dbnexus_gateway` | `dbnexus_gateway_example` | 白名单表上的只读数据 API 网关（sqlite 内存库） |
 
+<details>
+<summary>📄 代码 · bash</summary>
+
 ```bash
 cargo run -p sdforge-examples --example oxcache_admin --features oxcache_admin_example
 ```
+
+</details>
 
 示例配置文件位于 `examples/config/`（`default.toml`、`minimal.toml`、`production.toml`、`api-key-auth.toml`）。
 
@@ -323,6 +373,9 @@ SDForge 由两个 crate 组成：`macros/sdforge-macros` 负责解析 `#[forge]`
 
 ### 测试策略矩阵
 
+<details>
+<summary>📋 表格</summary>
+
 | 层级 | 位置 | 说明 |
 |------|------|------|
 | 单元测试 | `src/` 内嵌 `#[cfg(test)]`、`tests/unit/` | 模块级测试，含 proptest 属性测试（`src/tests/property_tests.rs`） |
@@ -333,7 +386,12 @@ SDForge 由两个 crate 组成：`macros/sdforge-macros` 负责解析 `#[forge]`
 | 基准测试 | `benches/`、`src/benches/` | criterion：`runtime_bench` / `config_and_cache_bench` / `sdforge_bench` |
 | Doc-tests | `src/` 文档注释 | rustdoc 内嵌示例 |
 
+</details>
+
 ### 运行命令
+
+<details>
+<summary>📄 代码 · bash</summary>
 
 ```bash
 # 与 CI 矩阵一致（http / mcp / http,mcp / http,security / http,cache /
@@ -355,6 +413,8 @@ cargo llvm-cov --features full --lib --lcov --fail-under-lines 90
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
+
+</details>
 
 build.rs 生成的 protobuf 代码写入 `OUT_DIR`，不再落源树；`llvm-cov.toml` 中的 `src/grpc/pb/*` 排除项为旧布局残留，当前不匹配任何文件。
 
@@ -394,6 +454,9 @@ CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `
 
 ## 🗺️ 开发路线图
 
+<details>
+<summary>📋 表格</summary>
+
 <table>
   <tr><th>状态</th><th>条目</th><th>说明</th></tr>
   <tr><td>🚧</td><td><b>v0.5.0 发布</b></td><td>当前处于 <code>0.5.0-rc.8</code>，推进依赖链（trait-kit / oxcache / inklog / limiteron）协同发布与终验</td></tr>
@@ -402,6 +465,8 @@ CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `
   <tr><td>✅</td><td>错误码行为契约统一</td><td>行为契约记录在案（<code>docs/API_REFERENCE.md</code> 错误码行为契约表 + <code>error::unified</code> 单一事实来源）：HTTP 400（语法畸形/<code>InvalidInput</code>）与 422（语义违规/<code>ValidationError</code>）区分保留；gRPC 侧无 422 对应原生码，统一 <code>invalid_argument</code>、语义码经 <code>Status::details</code> 载荷 <code>code</code> 承载；<code>grpc_code_for_http_status</code> 契约表 + 跨协议一致性测试（全集 JOIN 不变量 + wire 级 e2e）钉死</td></tr>
   <tr><td>✅</td><td>依赖治理</td><td><code>bincode</code>（RUSTSEC-2025-0141 unmaintained）已整体迁移至 <code>postcard</code>（API Key 元数据/权限位序列化等价替换），<code>deny.toml</code> 失效豁免清除，<code>cargo deny</code> / <code>cargo audit</code> 复验为净</td></tr>
 </table>
+
+</details>
 
 ---
 

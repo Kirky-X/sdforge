@@ -2,9 +2,9 @@
 
 <img src="docs/assets/sdforge.png" alt="SDForge Logo" width="240">
 
-[![CI Status](https://github.com/Kirky-X/sdforge/actions/workflows/ci.yml/badge.svg)](https://github.com/Kirky-X/sdforge/actions/workflows/ci.yml) [![Version](https://img.shields.io/crates/v/sdforge.svg)](https://crates.io/crates/sdforge) [![Docs.rs](https://docs.rs/sdforge/badge.svg)](https://docs.rs/sdforge) [![Downloads](https://img.shields.io/crates/d/sdforge.svg)](https://crates.io/crates/sdforge) [![License](https://img.shields.io/crates/l/sdforge.svg)](LICENSE) [![Rust](https://img.shields.io/badge/rust-1.97.1%2B-orange.svg)](https://www.rust-lang.org/) [![Coverage](https://codecov.io/gh/Kirky-X/sdforge/branch/main/graph/badge.svg)](https://codecov.io/gh/Kirky-X/sdforge)
+[![Rust 2024](https://img.shields.io/badge/Rust-2024-edded?logo=rust&style=for-the-badge)](https://www.rust-lang.org/) [![Rustc 1.97.1+](https://img.shields.io/badge/Rustc-1.97.1+-orange.svg?style=for-the-badge)](https://www.rust-lang.org/) [![crates.io](https://img.shields.io/crates/v/sdforge?style=for-the-badge)](https://crates.io/crates/sdforge) [![docs.rs](https://img.shields.io/docsrs/sdforge?style=for-the-badge)](https://docs.rs/sdforge) [![downloads](https://img.shields.io/crates/d/sdforge?style=for-the-badge)](https://crates.io/crates/sdforge) [![CI](https://img.shields.io/github/actions/workflow/status/Kirky-X/sdforge/ci.yml?branch=main&label=CI&style=for-the-badge)](https://github.com/Kirky-X/sdforge/actions/workflows/ci.yml) [![coverage](https://img.shields.io/codecov/c/github/Kirky-X/sdforge?style=for-the-badge)](https://codecov.io/gh/Kirky-X/sdforge) [![license](https://img.shields.io/crates/l/sdforge?style=for-the-badge)](LICENSE)
 
-[Chinese](README.md) | **English**
+[中文](README.md) | **English**
 
 **One macro annotation, multi-protocol SDKs assembled at compile time**
 
@@ -56,20 +56,32 @@ Annotate a function once with `#[forge]`; registration code for HTTP, MCP, gRPC,
 
 ## ✨ Features
 
-| Feature | Description |
-|---------|-------------|
-| 🎯 **Unified interface definition** | A single `#[forge]` macro configures HTTP, MCP, gRPC, WebSocket, and CLI at once |
-| ⚡ **Zero protocol tax** | Protocol selection happens at compile time; no runtime probing or dynamic loading |
-| 🌐 **Multi-protocol support** | Axum 0.8, rmcp 3.5 (MCP 2026-07-28 spec), tonic, WebSocket, SSE, clap |
-| 🔒 **Type safety** | Interface definitions validated at compile time; trybuild covers compile-failure cases |
-| 🛡️ **Security features** | API Key / JWT Bearer auth, limiteron rate limiting, audit logging, security headers |
-| 💾 **In-memory caching** | oxcache provides LRU, pattern invalidation, batch ops, and stats; no database required |
-| 🔧 **Configuration management** | Self-contained TOML config with modular defaults and Builder pattern |
-| 📊 **Versioning** | Built-in `/api/{version}` version routing and `#[service_module]` module prefixes |
-| 📜 **OpenAPI 3.1** | Routes collected at compile time via utoipa; runtime spec generation + Swagger UI |
-| 🌍 **Internationalization** | ICU4X locale-aware formatting and Accept-Language parsing |
-| 🔭 **Observability** | Prometheus metrics, OTLP export, health probes, graceful shutdown, request context |
-| 🧩 **Feature composition** | 30+ Cargo features assembled on demand; the always-on core depends on no protocol stack |
+<table style="width:100%; border-collapse: collapse">
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🎯 <b>Unified interface definition</b><br><span style="color:#64748B">A single <code>#[forge]</code> macro configures HTTP, MCP, gRPC, WebSocket, and CLI at once</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">⚡ <b>Zero protocol tax</b><br><span style="color:#64748B">Protocol selection happens at compile time; no runtime probing or dynamic loading</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🌐 <b>Multi-protocol support</b><br><span style="color:#64748B">Axum 0.8, rmcp 3.5 (MCP 2026-07-28 spec), tonic, WebSocket, SSE, clap</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🔒 <b>Type safety</b><br><span style="color:#64748B">Interface definitions validated at compile time; trybuild covers compile-failure cases</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🛡️ <b>Security features</b><br><span style="color:#64748B">API Key / JWT Bearer auth, limiteron rate limiting, audit logging, security headers</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">💾 <b>In-memory caching</b><br><span style="color:#64748B">oxcache provides LRU, pattern invalidation, batch ops, and stats; no database required</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🔧 <b>Configuration management</b><br><span style="color:#64748B">Self-contained TOML config with modular defaults and Builder pattern</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">📊 <b>Versioning</b><br><span style="color:#64748B">Built-in <code>/api/{version}</code> version routing and <code>#[service_module]</code> module prefixes</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">📜 <b>OpenAPI 3.1</b><br><span style="color:#64748B">Routes collected at compile time via utoipa; runtime spec generation + Swagger UI</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🌍 <b>Internationalization</b><br><span style="color:#64748B">ICU4X locale-aware formatting and Accept-Language parsing</span></td>
+</tr>
+<tr>
+<td width="50%" style="vertical-align:top; padding: 12px">🔭 <b>Observability</b><br><span style="color:#64748B">Prometheus metrics, OTLP export, health probes, graceful shutdown, request context</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🧩 <b>Feature composition</b><br><span style="color:#64748B">30+ Cargo features assembled on demand; the always-on core depends on no protocol stack</span></td>
+</tr>
+</table>
 
 <details>
 <summary>🔧 Advanced capabilities, enabled on demand</summary>
@@ -84,16 +96,26 @@ Parameter validation, declarative pagination, ETag conditional requests, lifecyc
 
 ### 📦 Installation
 
+<details>
+<summary>📄 Code · bash</summary>
+
 ```bash
 cargo add sdforge
 ```
 
+</details>
+
 Or add it to your `Cargo.toml` manually (current version `0.5.0-rc.8`):
+
+<details>
+<summary>📄 Code · toml</summary>
 
 ```toml
 [dependencies]
 sdforge = { version = "0.5.0-rc.8", features = ["http"] }
 ```
+
+</details>
 
 Minimum requirements:
 
@@ -105,6 +127,9 @@ Minimum requirements:
 ### 💡 Minimal runnable example
 
 The following example comes from [`examples/basic_cli.rs`](examples/basic_cli.rs) (`cli` feature):
+
+<details>
+<summary>📄 Code · rust</summary>
 
 ```rust
 use sdforge::cli::CliBuilder;
@@ -124,10 +149,17 @@ async fn main() {
 }
 ```
 
+</details>
+
+<details>
+<summary>📄 Code · bash</summary>
+
 ```bash
 cargo run --example basic_cli --features cli -- echo --name world
 # Output: Hello, world! (smart Value::String extraction, no quotes)
 ```
+
+</details>
 
 ### 🧭 Core concepts
 
@@ -154,6 +186,9 @@ cargo run --example basic_cli --features cli -- echo --name world
 ## 🎨 Feature Flags
 
 `default = []`: every feature is optional and enabled explicitly.
+
+<details>
+<summary>📋 Table</summary>
 
 <table>
   <tr><th>Flag</th><th>Description</th><th>Default</th></tr>
@@ -198,6 +233,8 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>full</code></td><td>All runtime features (26: http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/timestamp/openapi/cli/docgen/inklog/i18n/idempotency/serve-tls/tls-watch; excludes the gRPC-side <code>grpc-tls</code> and the optional heavy deps / opt-in surface <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code>/<code>schemars</code>/<code>ratelimit-dist</code>/<code>cache-l2</code>/<code>db-integration</code>/<code>sdk</code>)</td><td>❌</td></tr>
 </table>
 
+</details>
+
 <details>
 <summary>🔗 Feature dependency relations</summary>
 
@@ -215,6 +252,9 @@ cargo run --example basic_cli --features cli -- echo --name world
 
 ## 📚 Documentation
 
+<details>
+<summary>📋 Table</summary>
+
 | Document | Description |
 |----------|-------------|
 | [📖 User Guide](docs/USER_GUIDE.md) | Complete tutorial from installation and core concepts to advanced usage |
@@ -228,11 +268,16 @@ cargo run --example basic_cli --features cli -- echo --name world
 | [🤝 Contributing](docs/CONTRIBUTING.md) | Development environment, TDD workflow, and PR process |
 | [📦 Online API Docs](https://docs.rs/sdforge) | Latest docs.rs documentation (all features) |
 
+</details>
+
 ---
 
 ## 💻 Examples
 
 ### Root package examples (`cargo run --example`)
+
+<details>
+<summary>📋 Table</summary>
 
 | Example | Required features | Description |
 |---------|-------------------|-------------|
@@ -243,13 +288,23 @@ cargo run --example basic_cli --features cli -- echo --name world
 | `perf_prefix_index` | `cache` | Prefix index performance verification |
 | `perf_batch_ops` | `cache` | Batch operation performance verification |
 
+</details>
+
+<details>
+<summary>📄 Code · bash</summary>
+
 ```bash
 cargo run --example basic_cli --features cli -- echo --name world
 cargo run --example swagger_demo --features "docgen http"
 cargo run --example perf_regex_cache --features cache
 ```
 
+</details>
+
 ### Comprehensive example library (workspace member `sdforge-examples`, `examples/src/`)
+
+<details>
+<summary>📋 Table</summary>
 
 | Module | Contents |
 |--------|----------|
@@ -266,6 +321,8 @@ cargo run --example perf_regex_cache --features cache
 | `openapi/` | OpenAPI spec generation (`OpenApiBuilder`, `generate_openapi_spec`) |
 | `combined/` | Complete example combining multiple features (`full_example.rs`) |
 
+</details>
+
 ### Ecosystem integration examples (`sdforge-examples` member examples)
 
 | Example | Feature | Description |
@@ -273,9 +330,14 @@ cargo run --example perf_regex_cache --features cache
 | `oxcache_admin` | `oxcache_admin_example` | Expose oxcache management endpoints via `BackendRegistry` |
 | `dbnexus_gateway` | `dbnexus_gateway_example` | Read-only data API gateway over a whitelisted table (in-memory sqlite) |
 
+<details>
+<summary>📄 Code · bash</summary>
+
 ```bash
 cargo run -p sdforge-examples --example oxcache_admin --features oxcache_admin_example
 ```
+
+</details>
 
 Sample configuration files live in `examples/config/` (`default.toml`, `minimal.toml`, `production.toml`, `api-key-auth.toml`).
 
@@ -305,6 +367,9 @@ The `#[forge]` macro generates protocol registrations for the features currently
 
 ### Test strategy matrix
 
+<details>
+<summary>📋 Table</summary>
+
 | Layer | Location | Description |
 |-------|----------|-------------|
 | Unit tests | Embedded `#[cfg(test)]` in `src/`, `tests/unit/` | Module-level tests, including proptest property tests (`src/tests/property_tests.rs`) |
@@ -315,7 +380,12 @@ The `#[forge]` macro generates protocol registrations for the features currently
 | Benchmarks | `benches/`, `src/benches/` | criterion: `runtime_bench` / `config_and_cache_bench` / `sdforge_bench` |
 | Doc-tests | `src/` doc comments | Embedded rustdoc examples |
 
+</details>
+
 ### Running commands
+
+<details>
+<summary>📄 Code · bash</summary>
 
 ```bash
 # Aligned with the CI matrix (http / mcp / http,mcp / http,security / http,cache /
@@ -338,6 +408,8 @@ cargo llvm-cov --features full --lib --lcov --fail-under-lines 90
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
+
+</details>
 
 The build.rs-generated protobuf code goes to `OUT_DIR` and no longer enters the source tree; the `src/grpc/pb/*` exclusion in `llvm-cov.toml` is a leftover from the old layout and currently matches no files.
 
@@ -377,6 +449,9 @@ CI security gates are always on: `cargo deny check` ([deny.toml](deny.toml) poli
 
 ## 🗺️ Roadmap
 
+<details>
+<summary>📋 Table</summary>
+
 <table>
   <tr><th>Status</th><th>Item</th><th>Notes</th></tr>
   <tr><td>🚧</td><td><b>v0.5.0 release</b></td><td>Currently at <code>0.5.0-rc.8</code>; completing coordinated releases of the dependency chain (trait-kit / oxcache / inklog / limiteron) and final verification</td></tr>
@@ -385,6 +460,8 @@ CI security gates are always on: `cargo deny check` ([deny.toml](deny.toml) poli
   <tr><td>✅</td><td>Unified error-code behavior contract</td><td>Contract recorded (<code>docs/API_REFERENCE.md</code> error-code contract table + <code>error::unified</code> single source of truth): HTTP 400 (malformed syntax/<code>InvalidInput</code>) vs 422 (semantic violation/<code>ValidationError</code>) distinction retained; gRPC has no native 422 counterpart, so both map to <code>invalid_argument</code> with the semantic code carried in the <code>Status::details</code> payload <code>code</code> field; pinned by the <code>grpc_code_for_http_status</code> contract table + cross-protocol consistency tests (full-universe JOIN invariant + wire-level e2e)</td></tr>
   <tr><td>✅</td><td>Dependency hygiene</td><td><code>bincode</code> (RUSTSEC-2025-0141 unmaintained) fully migrated to <code>postcard</code> (equivalent replacement for API-key metadata/permission serialization); stale <code>deny.toml</code> exemption removed; <code>cargo deny</code> / <code>cargo audit</code> re-verified clean</td></tr>
 </table>
+
+</details>
 
 ---
 
