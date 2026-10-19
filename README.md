@@ -380,7 +380,7 @@ build.rs 生成的 protobuf 代码写入 `OUT_DIR`，不再落源树；`llvm-cov
 
 ### 🚨 漏洞上报
 
-**请勿通过公开 issue 报告安全漏洞。** 请使用 GitHub [Security Advisories](https://github.com/Kirky-X/sdforge/security/advisories/new) 私密披露通道提交，响应时限与流程见 [安全文档](docs/SECURITY.md)。
+**请勿通过公开 issue 报告安全漏洞。** 请使用 GitHub [Security Advisories](https://github.com/Kirky-X/sdforge/security/policy) 私密披露通道提交，响应时限与流程见 [安全文档](docs/SECURITY.md)。
 
 ### 🛡️ 安全设计要点
 

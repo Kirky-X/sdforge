@@ -30,8 +30,8 @@
 
 **不要为安全漏洞创建公开的 GitHub Issue。**
 
-**首选渠道**：通过 GitHub Security Advisories 私密披露通道 [Report a vulnerability](https://github.com/Kirky-X/sdforge/security/advisories/new) 提交报告。
-**备选渠道**：发送邮件至维护者 **Kirky-X@outlook.com**。
+**首选渠道**：通过 GitHub Security Advisories 私密披露通道 [Report a vulnerability](https://github.com/Kirky-X/sdforge/security/policy) 提交报告。
+**备选渠道**：仅当首选通道不可用时，发送邮件至 **Kirky-X@outlook.com**（受理人：Kirky.X）。
 
 报告时请包含以下信息：
 
