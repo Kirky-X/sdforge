@@ -143,12 +143,12 @@ impl ReadinessRenderer for DefaultReadinessRenderer {
     fn render(&self, all_healthy: bool, checks: Vec<CheckOutcome>) -> Response {
         let status = if all_healthy { "ready" } else { "unavailable" };
         let body = serde_json::json!({
-            "status": status,
             "checks": checks.iter().map(|c| serde_json::json!({
-                "name": c.name,
-                "healthy": c.healthy,
                 "details": c.details,
+                "healthy": c.healthy,
+                "name": c.name,
             })).collect::<Vec<_>>(),
+            "status": status,
         });
         let code = if all_healthy {
             StatusCode::OK
