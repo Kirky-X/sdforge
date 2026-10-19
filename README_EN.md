@@ -105,14 +105,14 @@ cargo add sdforge
 
 </details>
 
-Or add it to your `Cargo.toml` manually (current version `0.5.0-rc.8`):
+Or add it to your `Cargo.toml` manually:
 
 <details>
 <summary>📄 Code · toml</summary>
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5.0-rc.8", features = ["http"] }
+sdforge = { version = "0.5.0-rc.9", features = ["http"] }
 ```
 
 </details>
@@ -454,7 +454,7 @@ CI security gates are always on: `cargo deny check` ([deny.toml](deny.toml) poli
 
 <table>
   <tr><th>Status</th><th>Item</th><th>Notes</th></tr>
-  <tr><td>🚧</td><td><b>v0.5.0 release</b></td><td>Currently at <code>0.5.0-rc.8</code>; completing coordinated releases of the dependency chain (trait-kit / oxcache / inklog / limiteron) and final verification</td></tr>
+  <tr><td>🚧</td><td><b>v0.5.0 release</b></td><td>Currently on the <code>0.5.x</code> release line; completing coordinated releases of the dependency chain (trait-kit / oxcache / inklog / limiteron) and final verification</td></tr>
   <tr><td>✅</td><td>Custom success status codes</td><td><code>#[forge(status = &lt;code&gt;)]</code> static declaration + <code>ServiceResponse::success_with_status</code> dynamic control, released in 0.5.0-rc.2</td></tr>
   <tr><td>✅</td><td>MSRV alignment</td><td>Workspace unified to 1.97.1 (2026-09-06), covering the effective requirement under <code>--all-features</code></td></tr>
   <tr><td>✅</td><td>Unified error-code behavior contract</td><td>Contract recorded (<code>docs/API_REFERENCE.md</code> error-code contract table + <code>error::unified</code> single source of truth): HTTP 400 (malformed syntax/<code>InvalidInput</code>) vs 422 (semantic violation/<code>ValidationError</code>) distinction retained; gRPC has no native 422 counterpart, so both map to <code>invalid_argument</code> with the semantic code carried in the <code>Status::details</code> payload <code>code</code> field; pinned by the <code>grpc_code_for_http_status</code> contract table + cross-protocol consistency tests (full-universe JOIN invariant + wire-level e2e)</td></tr>

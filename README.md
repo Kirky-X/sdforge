@@ -105,14 +105,14 @@ cargo add sdforge
 
 </details>
 
-或手动添加到 `Cargo.toml`（当前版本 `0.5.0-rc.8`）：
+或手动添加到 `Cargo.toml`：
 
 <details>
 <summary>📄 代码 · toml</summary>
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5.0-rc.8", features = ["http"] }
+sdforge = { version = "0.5.0-rc.9", features = ["http"] }
 ```
 
 </details>
@@ -459,7 +459,7 @@ CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `
 
 <table>
   <tr><th>状态</th><th>条目</th><th>说明</th></tr>
-  <tr><td>🚧</td><td><b>v0.5.0 发布</b></td><td>当前处于 <code>0.5.0-rc.8</code>，推进依赖链（trait-kit / oxcache / inklog / limiteron）协同发布与终验</td></tr>
+  <tr><td>🚧</td><td><b>v0.5.0 发布</b></td><td>当前处于 <code>0.5.x</code> 发布线，推进依赖链（trait-kit / oxcache / inklog / limiteron）协同发布与终验</td></tr>
   <tr><td>✅</td><td>自定义成功状态码</td><td><code>#[forge(status = &lt;code&gt;)]</code> 静态声明 + <code>ServiceResponse::success_with_status</code> 动态控制，已于 0.5.0-rc.2 发布</td></tr>
   <tr><td>✅</td><td>MSRV 声明收敛</td><td>工作区统一为 1.97.1（2026-09-06），覆盖 <code>--all-features</code> 有效要求</td></tr>
   <tr><td>✅</td><td>错误码行为契约统一</td><td>行为契约记录在案（<code>docs/API_REFERENCE.md</code> 错误码行为契约表 + <code>error::unified</code> 单一事实来源）：HTTP 400（语法畸形/<code>InvalidInput</code>）与 422（语义违规/<code>ValidationError</code>）区分保留；gRPC 侧无 422 对应原生码，统一 <code>invalid_argument</code>、语义码经 <code>Status::details</code> 载荷 <code>code</code> 承载；<code>grpc_code_for_http_status</code> 契约表 + 跨协议一致性测试（全集 JOIN 不变量 + wire 级 e2e）钉死</td></tr>

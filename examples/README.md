@@ -4,6 +4,15 @@
 
 更多示例运行方式与特性说明参见[主 README「💻 示例」章节](../README.md#-示例)。
 
+## 与父 crate 的关系
+
+| 项 | 内容 |
+|---|---|
+| 所属仓库 | [sdforge](https://github.com/Kirky-X/sdforge) |
+| 依赖方向 | 本 crate → `sdforge`（示例以 `path = ".."` 依赖父 crate） |
+| 是否发布 | 否：`publish = false`，仅用于演示与回归验证 |
+| 版本与支持 | 版本经 `version.workspace = true` 随仓库统一；仅维护当前 minor 版本线，见 [安全文档 · 支持的版本](../docs/SECURITY.md#-支持的版本与维护策略) |
+
 ## 目录
 
 - [目录结构](#目录结构)
