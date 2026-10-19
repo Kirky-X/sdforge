@@ -28,7 +28,7 @@ SDForge 由两个 crate 组成：
 
 ## 🧭 设计原则
 
-1. **编译时协议选择** — 所有协议实现都由 `#[cfg(feature = "...")]` 门控。启用 `http` 不编译 MCP/gRPC/CLI 的任何代码；反之 `mcp`、`grpc`、`openapi`、`cli`、`streaming`、`cache` 也独立于 `http`（`#[forge(path=...)]` 生成的 HTTP 注册代码同样被 `#[cfg(feature = "http")]` 包裹）。量化收益：`http` only 相比 `full` 节省约 46–47% 编译时间、约六成库体积（见[编译期门控基准](benchmarks/vs-server-less.md)）。
+1. **编译时协议选择** — 所有协议实现都由 `#[cfg(feature = "...")]` 门控。启用 `http` 不编译 MCP/gRPC/CLI 的任何代码；反之 `mcp`、`grpc`、`openapi`、`cli`、`streaming`、`cache` 也独立于 `http`（`#[forge(path=...)]` 生成的 HTTP 注册代码同样被 `#[cfg(feature = "http")]` 包裹）。量化收益：`http` only 相比 `full` 节省约 46–47% 编译时间、约六成库体积（见[编译期门控基准](benchmarks/VS_SERVER_LESS.md)）。
 2. **统一接口定义** — 单个 `#[forge]` 注解描述端点，多协议各自消费同一份元数据（名称、版本、描述、参数 schema），消除跨协议的重复定义。
 3. **Inventory 注册模式** — 编译期 `inventory::submit!()` 注册、运行期收集；`init_all_plugins()` 通过 `OnceLock` 缓存收集结果，防止 release 构建（LTO + 死代码消除）剔除注册项，并返回各协议注册计数用于自检。
 4. **统一注册系统** — HTTP、MCP、WebSocket、gRPC 四大协议模块共享 `define_registration!` 宏与 `Registration` trait 抽象，消除重复样板代码。
@@ -169,7 +169,7 @@ sequenceDiagram
 
 ## ⚡ 性能设计
 
-- **编译时裁剪是第一性能设计**：特性门控让未用协议的依赖（tonic/prost、rmcp、tokio-tungstenite、argon2/sha2 等）完全不进入编译图。实测（2026-07-03）`http` only 相比 `full` 节省约 47% 编译时间、约六成框架库体积，详见[编译期门控基准](benchmarks/vs-server-less.md)
+- **编译时裁剪是第一性能设计**：特性门控让未用协议的依赖（tonic/prost、rmcp、tokio-tungstenite、argon2/sha2 等）完全不进入编译图。实测（2026-07-03）`http` only 相比 `full` 节省约 47% 编译时间、约六成框架库体积，详见[编译期门控基准](benchmarks/VS_SERVER_LESS.md)
 - **运行期零协议税**：协议选择发生在编译期，不存在运行时协议探测或动态加载；运行时热路径基线见[性能基线](PERFORMANCE.md)
 - **注册收集幂等缓存**：`init_all_plugins()` 用 `OnceLock` 缓存 inventory 迭代结果，重复调用零开销
 - **正则缓存**：`core::RegexCache` 以 oxcache `ByteWeightCache` 缓存编译后的正则（字节预算 256 KiB + moka TinyLFU 逐出 + `get_or_compute` 单飞编译——并发同 pattern 仅一次编译），避免热路径重复编译；0.5.0-rc 起替换自研双 Mutex LRU 簿记

@@ -679,8 +679,7 @@
   扫描，迁 `syn::meta::parse_nested_meta` 是无行为增益的等价重构），登记为
   后续可选项。
 
-- **feature 门控卫生（ws-R14 复核修复，`docs/FEATURE_AUDIT_REVIEW.md` 逐条
-  留证）**：`GrpcServerConfig` 的 `auth`/`auth_verifier`/`rate_limiter` 改为
+- **feature 门控卫生（ws-R14 复核修复，逐条裁决留证）**：`GrpcServerConfig` 的 `auth`/`auth_verifier`/`rate_limiter` 改为
   字段恒存在 + 类型按 feature 切换（开启态 `Option<T>`、关闭态空壳
   `Option<()>` 恒 `None`），`PluginCounts` 字段恒存在（关闭协议计数恒
   `0`）——两类公开结构体的字面量构造跨 feature 形态稳定，构造点 `#[cfg]`
@@ -1215,7 +1214,7 @@
 - 新增 "OpenAPI 自动生成" 章节（README.md + README_EN.md）
 - 新增 "MCP 2026-07-28 迁移指南" 章节（README.md + README_EN.md）
 - 项目结构图补充 `streaming/` 模块
-- 新增 `docs/benchmarks/vs-server-less.md` 性能基准文档（http vs full 编译时间/体积对比，实测数据）
+- 新增 `docs/benchmarks/VS_SERVER_LESS.md` 性能基准文档（http vs full 编译时间/体积对比，实测数据）
 - 新增 `SIMPLIFY-DEBT.md` 技术债清单（记录 25 项 Medium/High 技术债作为 v0.2.1+ backlog，含源代码路径索引）
 
 #### 测试

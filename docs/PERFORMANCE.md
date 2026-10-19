@@ -14,7 +14,7 @@ cargo bench --bench runtime_bench --features http,simd-json -- "simd_json"
 cargo bench --bench runtime_bench --features http,security,etag,metrics,context,idempotency -- "middleware_tiers"
 ```
 
-> 本机基线数字用于回归参照（CI 阈值门禁待多机采样稳定后启用）。编译期成本（宏展开、依赖编译）单独记录于[编译期门控基准](benchmarks/vs-server-less.md)，不计入运行时基线。
+> 本机基线数字用于回归参照（CI 阈值门禁待多机采样稳定后启用）。编译期成本（宏展开、依赖编译）单独记录于[编译期门控基准](benchmarks/VS_SERVER_LESS.md)，不计入运行时基线。
 
 ## 📊 基线汇总
 
@@ -105,7 +105,7 @@ gRPC / CLI 统一处理入口共享的参数装配（`HandlerArgs` String map �
 
 ## 🚧 基线外开销
 
-- **宏展开编译期**：编译期成本见[编译期门控基准](benchmarks/vs-server-less.md)，`http` only 相比 `full` 省约 47% 编译时间；该口径明确不计入运行时基线。
+- **宏展开编译期**：编译期成本见[编译期门控基准](benchmarks/VS_SERVER_LESS.md)，`http` only 相比 `full` 省约 47% 编译时间；该口径明确不计入运行时基线。
 - ~~**全中间件栈（`build_with_config`）**~~：已于 2026-09-30 收口——`middleware_tiers/*` 分档基准见 [基线汇总](#-基线汇总) 与下方 [中间件栈分档](#️-中间件栈分档build_with_config)。
 
 ## ✅ 回归门禁

@@ -261,7 +261,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 | [📘 API Reference](docs/API_REFERENCE.md) | Public APIs of the core and every feature gate |
 | [🏗️ Architecture](docs/ARCHITECTURE.md) | Design principles, module breakdown, data flow, security and performance design |
 | [⚡ Performance Baselines](docs/PERFORMANCE.md) | Runtime hot-path criterion baselines and regression guidelines |
-| [📶 Compile-Time Gating Benchmarks](docs/benchmarks/vs-server-less.md) | Compile time and artifact size: feature gating vs full build |
+| [📶 Compile-Time Gating Benchmarks](docs/benchmarks/VS_SERVER_LESS.md) | Compile time and artifact size: feature gating vs full build |
 | [🔒 Security](docs/SECURITY.md) | Vulnerability reporting process, security design, and best practices |
 | [🧾 Test Scenarios](docs/TEST_SCENARIOS.md) | Test pyramid baseline and E2E scenario definitions |
 | [📋 Changelog](docs/CHANGELOG.md) | Change log for every release |
@@ -427,7 +427,7 @@ About **3,181** test functions (`src/` 2,180 + `tests/` 785 + `macros/` 92 + `ex
 
 ### Compile-time gating gains (feature gating vs full build)
 
-`http` only saves ~47% compile time, roughly 60% of framework rlib size, and 82 unique dependency crates compared to `full`; the full data and methodology are in the [compile-time gating benchmarks](docs/benchmarks/vs-server-less.md) (measured 2026-07-03 on AMD Ryzen 9 9950X / rustc 1.93.1 / WSL2).
+`http` only saves ~47% compile time, roughly 60% of framework rlib size, and 82 unique dependency crates compared to `full`; the full data and methodology are in the [compile-time gating benchmarks](docs/benchmarks/VS_SERVER_LESS.md) (measured 2026-07-03 on AMD Ryzen 9 9950X / rustc 1.93.1 / WSL2).
 
 ---
 

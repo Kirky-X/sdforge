@@ -267,7 +267,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 | [📘 API 参考](docs/API_REFERENCE.md) | 核心类型与各 feature 门控的公开 API |
 | [🏗️ 架构文档](docs/ARCHITECTURE.md) | 设计原则、模块划分、数据流、安全与性能设计 |
 | [⚡ 性能基线](docs/PERFORMANCE.md) | 运行时热路径 criterion 基线与回归口径 |
-| [📶 编译期门控基准](docs/benchmarks/vs-server-less.md) | feature 门控 vs 全量打包的编译时间与产物体积 |
+| [📶 编译期门控基准](docs/benchmarks/VS_SERVER_LESS.md) | feature 门控 vs 全量打包的编译时间与产物体积 |
 | [🔒 安全文档](docs/SECURITY.md) | 漏洞报告流程、安全设计与最佳实践 |
 | [🧾 测试场景](docs/TEST_SCENARIOS.md) | 测试金字塔基线与 E2E 场景定义 |
 | [📋 更新日志](docs/CHANGELOG.md) | 每个版本的变更记录 |
@@ -432,7 +432,7 @@ build.rs 生成的 protobuf 代码写入 `OUT_DIR`，不再落源树；`llvm-cov
 
 ### 编译时门控收益（feature 门控 vs 全量打包）
 
-`http` only 相比 `full` 节省约 47% 编译时间、框架库 rlib 体积缩减约六成、唯一依赖少 82 个 crate；完整数据与方法论见 [编译期门控基准](docs/benchmarks/vs-server-less.md)（2026-07-03 实测，AMD Ryzen 9 9950X / rustc 1.93.1 / WSL2）。
+`http` only 相比 `full` 节省约 47% 编译时间、框架库 rlib 体积缩减约六成、唯一依赖少 82 个 crate；完整数据与方法论见 [编译期门控基准](docs/benchmarks/VS_SERVER_LESS.md)（2026-07-03 实测，AMD Ryzen 9 9950X / rustc 1.93.1 / WSL2）。
 
 ---
 

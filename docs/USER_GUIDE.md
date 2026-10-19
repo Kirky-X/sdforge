@@ -27,7 +27,7 @@ SDForge 的核心思路是：**一份函数注解，多协议消费**。你只�
 - 启用 `cli` → clap 命令
 - 启用 `openapi` → OpenAPI 3.1 规范条目
 
-未启用的协议完全不进入编译产物，这是 SDForge 与"全量打包"框架的根本区别（量化对比见[编译期门控基准](benchmarks/vs-server-less.md)）。
+未启用的协议完全不进入编译产物，这是 SDForge 与"全量打包"框架的根本区别（量化对比见[编译期门控基准](benchmarks/VS_SERVER_LESS.md)）。
 
 ## 🚀 快速开始
 
@@ -416,7 +416,7 @@ let l2 = RedisL2Cache::connect(&RedisL2CacheConfig::new(redis_url).with_default_
 
 ## 💡 最佳实践
 
-1. **按需启用特性** — 只需 HTTP 时用 `--features http`，不要默认上 `full`：编译时间节省约 46–47%、库体积缩减约六成（见[编译期门控基准](benchmarks/vs-server-less.md)）
+1. **按需启用特性** — 只需 HTTP 时用 `--features http`，不要默认上 `full`：编译时间节省约 46–47%、库体积缩减约六成（见[编译期门控基准](benchmarks/VS_SERVER_LESS.md)）
 2. **在 `main` 开头调用 `init_all_plugins()`** — 否则 release 构建（LTO + 死代码消除）可能剔除 inventory 注册项
 3. **用 `From<MyError> for ServiceError` 统一错误** — 业务错误通过 `?` 自动转换，错误码/状态码集中管理
 4. **安全相关部署实践以安全文档为准** — 生产 host、JWT 密钥 ≥ 32 字符、`ConnectInfo` 配置、API Key 显式播种与轮换等，见[安全文档](SECURITY.md#-安全最佳实践)
@@ -436,5 +436,5 @@ let l2 = RedisL2Cache::connect(&RedisL2CacheConfig::new(redis_url).with_default_
 | MCP 请求返回 400 | 无状态协议要求请求头 `Mcp-Method` / `Mcp-Name`，缺失即 400（2026-07-28 规范行为） |
 | gRPC 服务器拒绝启动并提示 authentication | 启用 `security` 时 `GrpcServerConfig.require_auth` 默认 `true`，需配置 `auth`（开发环境可显式置 `false`） |
 | 端口冲突 | `lsof -i :3000` 查找占用进程后更换端口或结束进程 |
-| 需要定位性能问题 | `cargo bench --bench runtime_bench --features http` 对照[性能基线](PERFORMANCE.md)；编译期成本对照[编译期门控基准](benchmarks/vs-server-less.md) |
+| 需要定位性能问题 | `cargo bench --bench runtime_bench --features http` 对照[性能基线](PERFORMANCE.md)；编译期成本对照[编译期门控基准](benchmarks/VS_SERVER_LESS.md) |
 | 其他问题 | 查阅 [API 参考](API_REFERENCE.md) 与 [架构文档](ARCHITECTURE.md)，或在 [Issues](https://github.com/Kirky-X/sdforge/issues) 提问 |
