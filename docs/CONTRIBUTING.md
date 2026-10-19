@@ -26,7 +26,7 @@ SDForge 是一个基于 Rust 的声明式多协议 SDK 框架。无论是修复 
 
 - **Rust 1.97.1+**（edition 2024，工具链见 `rust-toolchain.toml`）
 - **protoc**（gRPC 特性编译需要，`sudo apt-get install protobuf-compiler`）
-- **pre-commit hooks**（安装：`./scripts/install-pre-commit.sh`）
+- **Git 钩子**（安装：`lefthook install`，或 `pip install pre-commit && pre-commit install`）
 - 安全与质量工具：
   - `cargo-audit`（依赖漏洞扫描）：`cargo install cargo-audit`
   - `cargo-deny`（依赖许可/漏洞策略）：`cargo install cargo-deny`
@@ -39,9 +39,9 @@ SDForge 是一个基于 Rust 的声明式多协议 SDK 框架。无论是修复 
 git clone https://github.com/Kirky-X/sdforge.git
 cd sdforge
 
-# 安装 pre-commit 钩子（脚本走 Python pre-commit 框架；
-# lefthook.yml 为等价替代，二者二选一）
-./scripts/install-pre-commit.sh
+# 安装 Git 钩子（二选一）
+lefthook install
+# 或：pip install pre-commit && pre-commit install
 
 # 验证环境
 cargo build --all-features
@@ -165,12 +165,12 @@ docs(readme): update installation instructions
 
 ### Pre-commit 检查
 
-项目通过 pre-commit 或 lefthook 执行本地检查（`.pre-commit-config.yaml` 与 `lefthook.yml` 功能等价，二选一；`scripts/install-pre-commit.sh` 走 Python pre-commit 框架）：
+项目通过 pre-commit 或 lefthook 执行本地检查（`.pre-commit-config.yaml` 与 `lefthook.yml` 功能等价，二选一）：
 
 ```bash
 # 安装钩子（二选一）
-./scripts/install-pre-commit.sh   # Python pre-commit 框架
-# 或 lefthook install             # lefthook
+lefthook install             # lefthook
+# 或 pip install pre-commit && pre-commit install   # Python pre-commit 框架
 
 # 手动运行检查
 cargo fmt --all -- --check
