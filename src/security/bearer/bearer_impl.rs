@@ -702,7 +702,19 @@ impl BearerAuthBuilder {
 pub fn generate_secure_jwt_secret() -> String {
     use base64::Engine;
     use rand::Rng;
-    let mut bytes = [0u8; 32];
-    rand::rng().fill_bytes(&mut bytes);
-    base64::engine::general_purpose::STANDARD.encode(bytes)
+    // BearerAuth::try_new 要求密钥同时含大写/小写/数字/特殊字符；
+    // 随机 base64 偶尔缺某一类（尤其数字），此处重采直到满足校验契约，
+    // 避免下游拿到生成器输出却被构造器拒绝。
+    loop {
+        let mut bytes = [0u8; 32];
+        rand::rng().fill_bytes(&mut bytes);
+        let secret = base64::engine::general_purpose::STANDARD.encode(bytes);
+        let has_upper = secret.chars().any(|c| c.is_uppercase());
+        let has_lower = secret.chars().any(|c| c.is_lowercase());
+        let has_digit = secret.chars().any(|c| c.is_ascii_digit());
+        let has_special = secret.chars().any(|c| !c.is_alphanumeric());
+        if has_upper && has_lower && has_digit && has_special {
+            return secret;
+        }
+    }
 }
