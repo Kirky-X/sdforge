@@ -11,6 +11,7 @@
 <summary>📑 目录</summary>
 
 - [Unreleased](#unreleased)
+- [0.5.0-rc.9](#050-rc9---2026-10-19)
 - [0.5.0-rc.7](#050-rc7---2026-10-08)
 - [0.5.0-rc.6](#050-rc6---2026-10-06)
 - [0.5.0-rc.5](#050-rc5---2026-09-21)
@@ -34,6 +35,12 @@
 </details>
 
 ## [Unreleased]
+
+## [0.5.0-rc.9] - 2026-10-19
+
+### 变更 (Changed)
+
+- **发布依赖传播**：`oxcache` rc.8 → rc.9、`confers` rc.10 → rc.11、`dbnexus` rc.9 → rc.10、`trait-kit` rc.9 → rc.10、`inklog` rc.9 → rc.10；子 crate `sdforge-macros` 自钉同步 rc.9；`limiteron` 保持 rc.6（反向可选边，断环约定）
 
 ### 变更 (Changed)
 

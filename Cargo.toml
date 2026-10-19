@@ -3,7 +3,7 @@ members = [".", "examples", "macros"]
 resolver = "2"
 
 [workspace.package]
-version = "0.5.0-rc.8"
+version = "0.5.0-rc.9"
 edition = "2024"
 rust-version = "1.97.1"
 authors = ["Kirky-X <Kirky-X@outlook.com>"]
@@ -70,16 +70,16 @@ toml = { version = "1.1", default-features = false }
 # byte-weight 仅追加 moka/sync 特性位（byte-weight = ["dep:moka", "moka/sync"]，
 # minimal 已含 memory 即 dep:moka），不新增依赖 crate——正则编译缓存的字节预算
 # 容量（ByteWeightCache）所需
-oxcache = { version = "0.5.0-rc.8", default-features = false, features = ["minimal", "byte-weight"] }
+oxcache = { version = "0.5.0-rc.9", default-features = false, features = ["minimal", "byte-weight"] }
 
 # TLS 证书热重载监听 - confers watch feature 提供去抖文件监听（FsWatcher），
 # 仅 tls-watch feature 门控（默认构建不引入）；confers 主 crate 无 sdforge
 # 依赖，无环
-confers = { version = "0.6.0-rc.10", default-features = false, features = ["watch"] }
+confers = { version = "0.6.0-rc.11", default-features = false, features = ["watch"] }
 
 # 数据库网关 - dbnexus 0.6 embedded（sqlite）+ sql-parser：数据 API 网关的
 # 池化/解析面（db-integration feature）
-dbnexus = { version = "0.6.0-rc.9", default-features = false, features = ["embedded", "sql-parser"] }
+dbnexus = { version = "0.6.0-rc.10", default-features = false, features = ["embedded", "sql-parser"] }
 
 # async trait 实现 - limiteron DistributedLimiter trait 的 mock/适配实现用
 # （trait 本身以 async_trait 声明；依赖已在依赖树中，显式声明供实现侧使用）
@@ -215,7 +215,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.8", path = "./macros", default-features = false }
+sdforge-macros = { version = "0.5.0-rc.9", path = "./macros", default-features = false }
 
 # HTTP dependencies
 axum = { workspace = true, optional = true }
@@ -305,12 +305,12 @@ limiteron = { workspace = true, optional = true }
 # trait-kit 0.5 is published to crates.io.
 # Mirrors dbnexus's pattern.
 # default-features = false (Rule 6) — only the `async` feature is pulled in.
-trait-kit = { version = "0.5.0-rc.9", default-features = false, features = ["async"], optional = true }
+trait-kit = { version = "0.5.0-rc.10", default-features = false, features = ["async"], optional = true }
 
 # inklog 结构化日志集成 (optional, feature-gated by `inklog`).
 # 纯 crates.io 版本依赖（rc.2 已发布）。
 # default-features = false (Rule 6) — only core logging is pulled in.
-inklog = { version = "0.3.0-rc.9", default-features = false, optional = true }
+inklog = { version = "0.3.0-rc.10", default-features = false, optional = true }
 
 # ICU4X internationalization (optional, feature-gated via `i18n`).
 # icu 2.2 provides locale-aware number/date/plural/collation formatting +
@@ -353,7 +353,7 @@ schemars = { workspace = true }
 sha2 = { workspace = true }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
-sdforge-macros = { version = "0.5.0-rc.8", path = "./macros", default-features = false }
+sdforge-macros = { version = "0.5.0-rc.9", path = "./macros", default-features = false }
 tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }
