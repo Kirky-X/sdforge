@@ -5,7 +5,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 description = "Procedural macros for SDForge framework"
-license = "MIT"
+license.workspace = true
 repository.workspace = true
 documentation = "https://docs.rs/sdforge-macros"
 

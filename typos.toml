@@ -1,5 +1,5 @@
-# typos 白名单 —— 仅收录已人工核实的"非笔误"用法
-# (缩写、故意构造的测试数据、外文示例)，避免 typos --write-changes 误改真实内容。
+# typos 白名单 —— 仅登记「确为真词 / 真实标识符 / 刻意测试数据」的命中，
+# 不放宽任何门禁：真正的拼写错误仍会由 typos 报告并阻断提交。
 # 新增条目务必写明依据，禁止整目录/整文件排除。
 
 [default]
@@ -15,3 +15,7 @@ nmae = "nmae"
 # src/error/i18n.rs 文档示例中的法语译文，属真实外文内容
 Ressource = "Ressource"
 invalide = "invalide"
+# writeable —— ICU4X 组件 crate 的真实名字（无 r）。src/i18n/i18n_impl.rs 的
+# `use writeable::Writeable;` 与 docs/CHANGELOG.md 的特性裁剪记录均为真实标识符，
+# 不是 `writable` 的拼写错误。
+writeable = "writeable"

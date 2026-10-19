@@ -37,27 +37,8 @@ allow = [
 ]
 confidence-threshold = 0.8
 unused-allowed-license = "warn"
-
-# 工作区自研 crate 以 license-file 形态声明许可证（非标准 SPDX 字段），
-# cargo-deny 无法自动识别 → clarify 绑定 MIT 与 LICENSE 文件哈希。
-# path 相对【被 clarify 的 crate manifest 目录】解析（非本 deny.toml 目录），
-# 故 sdforge-macros（macros/ 子 crate）需回退一级（"../LICENSE"）指向本仓 LICENSE。
-[[licenses.clarify]]
-name = "sdforge"
-expression = "MIT"
-license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
-[[licenses.clarify]]
-name = "sdforge-macros"
-expression = "MIT"
-license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
-[[licenses.clarify]]
-name = "limiteron"
-expression = "MIT"
-license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
-[[licenses.clarify]]
-name = "oxcache"
-expression = "MIT"
-license-files = [{ path = "LICENSE", hash = 0xfb13e7ad }]
+# 许可证口径（2026-10-12 用户裁决）：统一纯 MIT——manifest license = "MIT"，
+# LICENSE 文件为标准 MIT 全文，deny 直接读 manifest SPDX，无需 clarify。
 
 [bans]
 multiple-versions = "warn"

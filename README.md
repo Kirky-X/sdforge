@@ -490,7 +490,7 @@ CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `
 
 ## 📄 许可证
 
-本项目基于 **MIT + Commons Clause** 双重条款发布：在 MIT 许可下可自由使用、修改与分发，但未经作者单独书面授权不得销售。详见 [LICENSE](LICENSE)。
+本项目基于 [MIT](LICENSE) 许可证发布。
 
 Copyright (c) 2026 Kirky.X🌠
 

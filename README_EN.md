@@ -485,7 +485,7 @@ See [CHANGELOG.md](docs/CHANGELOG.md). Highlights of recent releases:
 
 ## 📄 License
 
-This project is licensed under **MIT + Commons Clause**: free to use, modify, and distribute under the MIT License, but selling requires separate written authorization from the licensor. See [LICENSE](LICENSE).
+This project is licensed under the [MIT](LICENSE) License.
 
 Copyright (c) 2026 Kirky.X🌠
 
