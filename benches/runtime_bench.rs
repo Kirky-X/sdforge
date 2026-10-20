@@ -331,7 +331,7 @@ fn bench_tls_termination(c: &mut Criterion) {
     group.finish();
 
     // 证书重载器：读路径与换盘成本。resolve 读路径以
-    // `end_entity_certificate()` 为代理（rustls `ClientHello` 无法在
+    // `end_entity_certificate` 为代理（rustls `ClientHello` 无法在
     // bench 内构造；两者同为 RwLock 读 + 终端实体 DER 访问）。
     let reloading = ReloadingTls::new(&tls).expect("reloading tls builds");
 

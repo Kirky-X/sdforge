@@ -49,7 +49,7 @@ fn test_mcp_error_invalid_params() {
 
 #[test]
 fn test_mcp_error_method_not_found() {
-    // rmcp 0.16's method_not_found() takes a ConstString type parameter,
+    // rmcp 0.16's method_not_found takes a ConstString type parameter,
     // which is awkward to use directly. Use ErrorData::new with the
     // METHOD_NOT_FOUND error code instead for this test.
     use rmcp::model::ErrorCode;

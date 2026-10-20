@@ -186,7 +186,7 @@ fn test_tool_execution_with_result() {
     let result = tool.call(Some(input));
     assert!(result.is_ok());
     let response = result.unwrap();
-    // rmcp's CallToolResult::success() sets is_error to Some(false)
+    // rmcp's CallToolResult::success sets is_error to Some(false)
     assert_eq!(response.is_error, Some(false));
     assert!(!response.content.is_empty());
 }

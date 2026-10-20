@@ -9,10 +9,10 @@
 //!
 //! ```ignore
 //! #[forge(name = "warmup", on_start)]
-//! async fn warmup() { /* load caches */ }
+//! async fn warmup { /* load caches */ }
 //!
 //! #[forge(name = "flush", on_stop)]
-//! async fn flush() { /* flush audit/log sinks */ }
+//! async fn flush { /* flush audit/log sinks */ }
 //! ```
 
 use std::pin::Pin;
@@ -90,8 +90,8 @@ mod hook_isolation_tests {
     use std::cell::Cell;
 
     // 钩子注册集是进程全局（inventory），且其余测试（如 graceful 的 drain 与
-    // 收尾路径）也会调 run_on_start/run_on_stop，因此不能拿 started_count()/
-    // stopped_count() 做增量断言，也不能用共享布尔量证明“本测试跑到了钩子”
+    // 收尾路径）也会调 run_on_start/run_on_stop，因此不能拿 started_count/
+    // stopped_count 做增量断言，也不能用共享布尔量证明“本测试跑到了钩子”
     //（别的线程也会把它置 true）。
     // `#[tokio::test]` 默认 current_thread，run_on_start/run_on_stop 在当前线程
     // 上逐钩同步执行，故线程局部计数只会被本测试抬高——断言既确定又能真正

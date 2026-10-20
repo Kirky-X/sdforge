@@ -21,9 +21,7 @@ use sdforge::{forge, http};
 use serde::{Deserialize, Serialize};
 use tower::ServiceExt;
 
-// ============================================================================
 // Test fixtures
-// ============================================================================
 
 #[derive(Debug, Serialize, Deserialize)]
 struct CreateUserPayload {
@@ -38,9 +36,7 @@ struct User {
     email: String,
 }
 
-// ============================================================================
 // (a) Bare type + `#[forge(status = 201)]` → HTTP 201
-// ============================================================================
 
 #[forge(
     name = "status_code_create_with_status",
@@ -58,9 +54,7 @@ async fn create_with_status(payload: CreateUserPayload) -> User {
     }
 }
 
-// ============================================================================
 // (b) `ServiceResponse::success_with_status(data, 201)` → HTTP 201 (dynamic)
-// ============================================================================
 
 #[forge(
     name = "status_code_create_service_response",
@@ -78,9 +72,7 @@ async fn create_service_response(payload: CreateUserPayload) -> ServiceResponse<
     ServiceResponse::success_with_status(user, 201)
 }
 
-// ============================================================================
 // (c) Bare type without `status` → HTTP 200 (zero-breaking regression)
-// ============================================================================
 
 #[forge(
     name = "status_code_create_default",
@@ -97,9 +89,7 @@ async fn create_default(payload: CreateUserPayload) -> User {
     }
 }
 
-// ============================================================================
 // Tests
-// ============================================================================
 
 /// Build the HTTP router from all registered `#[forge]` routes.
 fn build_router() -> axum::Router {
@@ -195,9 +185,7 @@ async fn test_service_response_body_contains_status_code_field() {
     assert_eq!(body_json["data"]["name"], "Alice");
 }
 
-// ============================================================================
 // (d) `status = 204` → HTTP 204 无 body（bare-type Result 与裸值两条路径）
-// ============================================================================
 
 #[forge(
     name = "status_code_delete_with_204",

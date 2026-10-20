@@ -22,13 +22,13 @@
 //!    capability — it IS the rate limiter abstraction).
 //!
 //! 2. **`ForgeBuilder` does NOT exist** — spec wrote
-//!    `ForgeBuilder::new().config(config).rate_limiter(adapter).build().await`.
+//!    `ForgeBuilder::new.config(config).rate_limiter(adapter).build.await`.
 //!    Grep for `ForgeBuilder` in `sdforge/src` returns 0 matches. There is no
 //!    multi-step builder to construct a ForgeApp. The adapter is wrapped in
 //!    `Arc` and returned directly as the capability.
 //!
 //! 3. **`SdforgeConfig` does NOT exist** — spec wrote
-//!    `kit.config::<SdforgeConfig>()`. Grep for `SdforgeConfig` in
+//!    `kit.config::<SdforgeConfig>`. Grep for `SdforgeConfig` in
 //!    `sdforge/src` returns 0 matches. The adapter only needs the `Governor`
 //!    from `LimiteronModule`; no additional config is read.
 //!
@@ -55,10 +55,10 @@ use crate::integrations::LimiteronForgeAdapter;
 /// capability.
 ///
 /// Depends on `LimiteronModule` (registered first via topological sort).
-/// Register with `AsyncKit::register::<SdforgeModule>()`, configure
+/// Register with `AsyncKit::register::<SdforgeModule>`, configure
 /// `LimiteronModule` via `kit.set_config(FlowControlConfig { ... })`, then
-/// `kit.build().await` and retrieve the capability with
-/// `kit.require::<SdforgeModule>()`.
+/// `kit.build.await` and retrieve the capability with
+/// `kit.require::<SdforgeModule>`.
 ///
 /// The returned `Arc<dyn ForgeRateLimiter + Send + Sync>` wraps a
 /// [`LimiteronForgeAdapter`] — see the module-level docs for the
@@ -107,7 +107,7 @@ mod tests {
     };
 
     /// Build a minimal valid `FlowControlConfig` (1 rule matching all IPs with
-    /// a permissive token bucket). `FlowControlConfig::default()` has an
+    /// a permissive token bucket). `FlowControlConfig::default` has an
     /// empty rules vec which fails validation. Mirrors the config pattern from
     /// `limiteron_adapter::tests::make_minimal_config`.
     fn make_minimal_valid_config() -> FlowControlConfig {
@@ -137,7 +137,7 @@ mod tests {
         assert_eq!(SdforgeModule::NAME, "sdforge");
     }
 
-    /// #2: `SdforgeModule::dependencies()` declares a
+    /// #2: `SdforgeModule::dependencies` declares a
     /// dependency on `LimiteronModule`.
     #[test]
     fn sdforge_module_meta_dependencies() {

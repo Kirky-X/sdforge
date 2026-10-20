@@ -21,9 +21,9 @@
 //!     method = "GET",
 //!     tool_name = "hello_world",
 //!     description = "简单的 Hello World API"
-//! )]
-//! async fn hello_world() -> Result<String, ApiError> {
-//!     Ok("Hello, World!".to_string())
+//!)]
+//! async fn hello_world -> Result<String, ApiError> {
+//!     Ok("Hello, World!".to_string)
 //! }
 //! ```
 //!

@@ -25,7 +25,7 @@
 //!     }
 //!     fn call(&self, input: Option<serde_json::Value>) -> Result<rmcp::model::CallToolResult, rmcp::model::ErrorData> {
 //!         Ok(rmcp::model::CallToolResult::success(vec![
-//!             rmcp::model::Content::text("Hello from my_tool".to_string()),
+//!             rmcp::model::Content::text("Hello from my_tool".to_string),
 //!         ]))
 //!     }
 //! }
@@ -34,8 +34,8 @@
 //!     "my_tool",
 //!     "v1",
 //!     || std::sync::Arc::new(MyTool) as std::sync::Arc<dyn SdForgeTool>,
-//!     || ApiMetadata::default(),
-//! ));
+//!     || ApiMetadata::default,
+//!));
 //! ```
 
 use crate::core::{ApiMetadata, Registration};
@@ -51,9 +51,7 @@ use std::sync::Arc;
 /// to work without changes.
 pub type McpError = ErrorData;
 
-// ============================================================================
 // Sub-modules
-// ============================================================================
 
 // Sub-modules for MCP 2026-07-28 protocol adaptation.
 pub mod cache_semantics;
@@ -71,9 +69,7 @@ mod server;
 #[cfg(test)]
 mod tests;
 
-// ============================================================================
 // Re-exports of public types
-// ============================================================================
 
 pub use handler::McpToolInstance;
 pub(crate) use handler::value_to_json_object_arc;
@@ -84,9 +80,7 @@ pub use server::SdForgeMcpServer;
 pub use server::{MCP_UNAUTHENTICATED, McpCredentials};
 pub use stateless::StatelessServerHandler;
 
-// ============================================================================
 // SdForgeTool trait — bridges SDForge tools to rmcp's ServerHandler
-// ============================================================================
 
 /// Trait for MCP tools registered via SDForge's inventory system.
 ///
@@ -109,9 +103,7 @@ pub trait SdForgeTool: Send + Sync + 'static {
     fn call(&self, input: Option<Value>) -> Result<rmcp::model::CallToolResult, McpError>;
 }
 
-// ============================================================================
 // McpToolRegistration — compile-time registration via inventory
-// ============================================================================
 
 /// MCP tool registration entry (compile-time, collected via `inventory`).
 ///
@@ -185,9 +177,7 @@ impl crate::core::Registration for McpToolRegistration {
 
 inventory::collect!(McpToolRegistration);
 
-// ============================================================================
 // get_mcp_tools — collect all registered tools from inventory
-// ============================================================================
 
 mod mcp_impl;
 pub use mcp_impl::{build, get_mcp_tools, serve_stdio};

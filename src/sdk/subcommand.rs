@@ -132,7 +132,7 @@ mod tests {
         assert_eq!(SDK_LANG_VALUES, ["rust", "typescript", "all"]);
     }
 
-    /// 端到端：CliBuilder::build() 注入保留子命令 `sdk`；sdk_subcommand 落盘
+    /// 端到端：CliBuilder::build 注入保留子命令 `sdk`；sdk_subcommand 落盘
     /// rust+typescript 两产物到临时目录。
     #[test]
     fn sdk_subcommand_writes_artifacts_to_output_dir() {

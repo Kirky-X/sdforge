@@ -11,7 +11,7 @@
 //! Also hosts the process-global ready-kit registry: register a built
 //! `AsyncKit<AsyncReady>` with [`set_ready_kit`] and
 //! `http::serve_with_graceful_shutdown` runs its phased
-//! `shutdown_async()` as the final stage of the graceful-stop sequence.
+//! `shutdown_async` as the final stage of the graceful-stop sequence.
 
 pub mod module;
 pub use module::SdforgeModule;

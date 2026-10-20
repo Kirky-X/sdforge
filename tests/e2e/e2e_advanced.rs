@@ -13,10 +13,8 @@
 //!   -- --nocapture
 //! ```
 
-// =============================================================================
 // Module: cache_advanced
 // Covers: pattern matching (*/?), bulk ops, poison-aware fallback, stats
-// =============================================================================
 #[cfg(feature = "cache")]
 mod cache_advanced {
     use sdforge::cache::{DashMapCache, SyncCache};
@@ -138,7 +136,7 @@ mod cache_advanced {
     fn test_cache_stats_default_reports_keys() {
         let cache = DashMapCache::new();
         let stats = cache.get_stats();
-        // OxcacheSyncCache overrides get_stats() to report total_keys and capacity.
+        // OxcacheSyncCache overrides get_stats to report total_keys and capacity.
         assert!(stats.contains_key("total_keys"));
         assert_eq!(stats.get("total_keys"), Some(&0));
     }
@@ -183,11 +181,9 @@ mod cache_advanced {
     }
 }
 
-// =============================================================================
 // Module: config_advanced
 // Covers: validation failures (port=0, timeout=0, timeout>86400),
 //         AuthConfig edge cases, ValidateConfig trait impls
-// =============================================================================
 #[cfg(feature = "http")]
 mod config_advanced {
     use sdforge::config::{
@@ -473,10 +469,8 @@ mod config_advanced {
     }
 }
 
-// =============================================================================
 // Module: error_advanced
 // Covers: from_std_error, source chain, sanitized_message, conversion paths
-// =============================================================================
 mod error_advanced {
     use sdforge::core::ServiceError;
     use sdforge::error::{ApiError, ErrorCategory, ErrorContext, SdForgeError};
@@ -826,10 +820,8 @@ mod error_advanced {
     }
 }
 
-// =============================================================================
 // Module: ratelimit_error_advanced
 // Covers: From<RateLimitError> for ApiError, u64→u32 saturation, all variants
-// =============================================================================
 #[cfg(feature = "ratelimit")]
 mod ratelimit_error_advanced {
     use sdforge::error::ApiError;
@@ -983,10 +975,8 @@ mod ratelimit_error_advanced {
     }
 }
 
-// =============================================================================
 // Module: i18n_advanced
 // Covers: parse_accept_language edge cases, HttpI18nFormatter error paths
-// =============================================================================
 #[cfg(feature = "i18n")]
 mod i18n_advanced {
     use sdforge::i18n::{HttpI18nFormatter, I18nError, parse_accept_language};
@@ -1182,10 +1172,8 @@ mod i18n_advanced {
     }
 }
 
-// =============================================================================
 // Module: security_advanced
 // Covers: AuthError, JwtError, AuthConfigError Display impls and construction
-// =============================================================================
 #[cfg(feature = "security")]
 mod security_advanced {
     use sdforge::security::{AuthConfigError, AuthError, JwtError};
@@ -1304,10 +1292,8 @@ mod security_advanced {
     }
 }
 
-// =============================================================================
 // Module: ratelimit_advanced
 // Covers: RateLimitError construction, LimiteronAdapter async construction
-// =============================================================================
 #[cfg(feature = "ratelimit")]
 mod ratelimit_advanced {
     use sdforge::security::{RateLimitError, RateLimiter};
@@ -1396,10 +1382,8 @@ mod ratelimit_advanced {
     }
 }
 
-// =============================================================================
 // Module: regex_cache_advanced
 // Covers: hit/miss, byte-budget eviction, stats, common patterns, invalid input
-// =============================================================================
 #[cfg(any(feature = "http", feature = "security"))]
 mod regex_cache_advanced {
     use sdforge::core::regex_cache::{RegexCache, common, get_regex};
@@ -1546,10 +1530,8 @@ mod regex_cache_advanced {
     }
 }
 
-// =============================================================================
 // Module: plugin_init_advanced
 // Covers: init_all_plugins idempotency, PluginCounts field access
-// =============================================================================
 #[cfg(feature = "http")]
 mod plugin_init_advanced {
     use sdforge::init_all_plugins;
@@ -1588,10 +1570,8 @@ mod plugin_init_advanced {
     }
 }
 
-// =============================================================================
 // Module: cross_module_advanced
 // Covers: error→i18n localization, TranslationStore, ApiError→SdForgeError chain
-// =============================================================================
 mod cross_module_advanced {
     use sdforge::error::{ApiError, LocalizedError, SdForgeError, TranslationStore};
 
@@ -1822,10 +1802,8 @@ mod cross_module_advanced {
     }
 }
 
-// =============================================================================
 // Module: validation_constants_advanced
 // Covers: validation constants, validators (requires http feature)
-// =============================================================================
 #[cfg(feature = "http")]
 mod validation_constants_advanced {
     use sdforge::core::validation::{

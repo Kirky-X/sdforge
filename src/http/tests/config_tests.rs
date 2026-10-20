@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! Tests for `build_with_config()`: various `ServerConfig`, `AuthConfig`, and
+//! Tests for `build_with_config`: various `ServerConfig`, `AuthConfig`, and
 //! `CorsConfig` combinations, middleware layer wiring, and feature-gated
-//! inventory preservation through `build()`.
+//! inventory preservation through `build`.
 
 #[cfg(feature = "cache")]
 use crate::config::CacheConfig;
@@ -123,9 +123,7 @@ fn test_build_with_config_cors() {
     assert!(result.is_ok(), "Should build successfully with CORS config");
 }
 
-// ============================================================================
 // build_with_config Extended Tests - Middleware Integration
-// ============================================================================
 
 #[test]
 fn test_build_with_config_request_id_middleware() {
@@ -357,16 +355,14 @@ fn test_build_with_config_cors_all_methods() {
     assert!(result.is_ok());
 }
 
-// ============================================================================
 // Authentication Tests - ApiKey Edge Cases
-// ============================================================================
 
 #[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_api_key_empty_prefix() {
     // Test ApiKey with empty prefix (lines 306-308)
     // NOTE: prefix emptiness is only rejected by the auth middleware itself;
-    // build_with_config does not run AuthConfig::validate(), so this is Ok.
+    // build_with_config does not run AuthConfig::validate, so this is Ok.
     let config = SdForgeConfig {
         server: ServerConfig {
             host: "127.0.0.1".to_string(),
@@ -447,9 +443,7 @@ fn test_build_with_config_api_key_special_chars() {
     assert!(result.is_ok());
 }
 
-// ============================================================================
 // Authentication Tests - JWT Edge Cases
-// ============================================================================
 
 #[cfg(feature = "security")]
 #[test]
@@ -501,7 +495,7 @@ fn test_build_with_config_jwt_special_chars() {
 #[cfg(feature = "security")]
 #[test]
 fn test_build_with_config_jwt_empty_secret() {
-    // Note: BearerAuth::new() panics with empty/invalid secrets.
+    // Note: BearerAuth::new panics with empty/invalid secrets.
     // This test uses a valid secret to verify build path works.
     let config = SdForgeConfig {
         server: ServerConfig {
@@ -522,9 +516,7 @@ fn test_build_with_config_jwt_empty_secret() {
     assert!(result.is_ok());
 }
 
-// ============================================================================
 // Feature-Gated Code Paths Tests
-// ============================================================================
 
 #[cfg(feature = "mcp")]
 #[test]
@@ -553,9 +545,7 @@ fn test_build_preserves_grpc_inventory_with_routes() {
     let _ = router;
 }
 
-// ============================================================================
 // build_with_config Integration Tests - All Middleware Combined
-// ============================================================================
 
 #[cfg(feature = "security")]
 #[test]
@@ -616,13 +606,11 @@ fn test_build_with_config_full_api_key_cors() {
     assert!(result.is_ok(), "Should build with full config");
 }
 
-// ============================================================================
 // build_with_config with AuthConfig::None
 //
 // The existing build_with_config tests cover Jwt, ApiKey, and OAuth2
 // error paths, but not the AuthConfig::None (no authentication) path.
 // This test verifies build_with_config succeeds when auth is disabled.
-// ============================================================================
 
 /// Test build_with_config succeeds with AuthConfig::None and no CORS,
 /// verifying the non-security, non-auth path through the function.
@@ -681,9 +669,7 @@ fn test_build_with_config_minimal_config() {
     );
 }
 
-// ============================================================================
 // Fail-closed feature contract
-// ============================================================================
 
 /// With the `security` feature disabled, an AuthConfig requesting
 /// authentication (ApiKey/Jwt) must fail at build time instead of silently

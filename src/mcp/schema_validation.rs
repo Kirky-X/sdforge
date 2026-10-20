@@ -21,7 +21,7 @@
 //!
 //! Tools that need full JSON Schema validation (e.g. complex `format`,
 //! `pattern`, `minimum`/`maximum` constraints) should validate in their
-//! `call()` implementation via `serde` deserialization (which macros-generated
+//! `call` implementation via `serde` deserialization (which macros-generated
 //! tools already do via `#[serde(deny_unknown_fields)]`).
 //!
 //! # vuln-0002 context
@@ -30,7 +30,7 @@
 //! tool existence. The `input_schema` was used solely for documentation
 //! (building the `Tool` model for `tools/list`). This meant hand-written
 //! `SdForgeTool` implementations that forgot to validate arguments in their
-//! `call()` method would accept arbitrary input. This validator closes that
+//! `call` method would accept arbitrary input. This validator closes that
 //! gap by checking the schema at the entry point, before the tool is invoked.
 
 use rmcp::model::ErrorData;
@@ -38,7 +38,7 @@ use serde_json::Value;
 
 /// Validate a JSON instance against a lightweight JSON Schema.
 ///
-/// Returns `Ok(())` if the instance is valid, or `Err(ErrorData)` with
+/// Returns `Ok()` if the instance is valid, or `Err(ErrorData)` with
 /// `invalid_params` if validation fails.
 ///
 /// # Supported keywords
@@ -53,11 +53,11 @@ use serde_json::Value;
 /// - `minimum`, `maximum`, `minLength`, `maxLength`: handled by serde deserialization
 /// - `$ref`, `$defs`, `allOf`, `oneOf`, `anyOf`: complex composition
 ///
-/// These are deferred to the tool's `call()` implementation (serde does this
+/// These are deferred to the tool's `call` implementation (serde does this
 /// automatically for macros-generated tools).
 pub(crate) fn validate_arguments(schema: &Value, arguments: &Value) -> Result<(), ErrorData> {
     // Schema must be an object; if not, skip validation (fail-open for
-    // malformed schemas — the tool's call() is the final authority).
+    // malformed schemas — the tool's call is the final authority).
     let schema_obj = match schema.as_object() {
         Some(obj) => obj,
         None => return Ok(()),
@@ -131,7 +131,7 @@ fn check_type(type_value: &Value, instance: &Value) -> bool {
                 .map(|s| matches_json_type(s, instance))
                 .unwrap_or(false)
         }),
-        // Malformed type — fail-open (let the tool's call() handle it)
+        // Malformed type — fail-open (let the tool's call handle it)
         _ => true,
     }
 }
@@ -169,15 +169,13 @@ fn json_type_name(value: &Value) -> &'static str {
     }
 }
 
-// ============================================================================
 // Unit tests
-// ============================================================================
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
 
-    // --- Type validation tests ---
+    // Type validation tests
 
     #[test]
     fn test_type_object_matches_object() {
@@ -245,7 +243,7 @@ mod tests {
         assert!(validate_arguments(&schema, &json!(42)).is_err());
     }
 
-    // --- Required fields tests ---
+    // Required fields tests
 
     #[test]
     fn test_required_all_present() {
@@ -279,7 +277,7 @@ mod tests {
         assert!(validate_arguments(&schema, &args).is_ok());
     }
 
-    // --- additionalProperties tests ---
+    // additionalProperties tests
 
     #[test]
     fn test_additional_properties_false_rejects_unknown() {
@@ -335,7 +333,7 @@ mod tests {
         assert!(validate_arguments(&schema, &args).is_ok());
     }
 
-    // --- Edge cases ---
+    // Edge cases
 
     #[test]
     fn test_empty_schema_allows_anything() {
@@ -387,7 +385,7 @@ mod tests {
         assert!(validate_arguments(&schema, &json!(null)).is_ok());
     }
 
-    // --- additionalProperties: false without properties (security fix) ---
+    // additionalProperties: false without properties (security fix)
 
     #[test]
     fn test_additional_properties_false_without_properties_rejects_non_empty() {

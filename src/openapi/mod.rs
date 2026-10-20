@@ -14,14 +14,14 @@
 //! use sdforge::openapi::{generate_openapi_spec, OpenApiBuilder};
 //!
 //! // Default spec from all registered routes
-//! let spec = generate_openapi_spec();
+//! let spec = generate_openapi_spec;
 //!
 //! // Customized spec
-//! let spec = OpenApiBuilder::new()
+//! let spec = OpenApiBuilder::new
 //!     .title("My Service")
 //!     .version("2.0.0")
 //!     .description("User-facing API")
-//!     .build();
+//!     .build;
 //! ```
 //!
 //! # Feature Flag
@@ -383,7 +383,7 @@ mod tests {
         }),
     });
 
-    /// `OpenApiBuilder::new()` should produce a builder with empty fields.
+    /// `OpenApiBuilder::new` should produce a builder with empty fields.
     #[test]
     fn builder_new_yields_empty_fields() {
         let builder = OpenApiBuilder::new();
@@ -405,7 +405,7 @@ mod tests {
         assert_eq!(builder.description.as_deref(), Some("hello"));
     }
 
-    /// `OpenApiBuilder::default()` should equal `new()` (Default impl).
+    /// `OpenApiBuilder::default` should equal `new` (Default impl).
     #[test]
     fn builder_default_matches_new() {
         let a = OpenApiBuilder::new();
@@ -415,7 +415,7 @@ mod tests {
         assert_eq!(a.description, b.description);
     }
 
-    /// `build()` should populate `info.title` and `info.version` from the
+    /// `build` should populate `info.title` and `info.version` from the
     /// builder, and leave `info.description` as `None` when unset.
     #[test]
     fn build_propagates_info_fields_without_description() {
@@ -428,7 +428,7 @@ mod tests {
         assert!(spec.info.description.is_none());
     }
 
-    /// `build()` should set `info.description` when provided.
+    /// `build` should set `info.description` when provided.
     #[test]
     fn build_propagates_description_when_set() {
         let spec = OpenApiBuilder::new()
@@ -439,7 +439,7 @@ mod tests {
         assert_eq!(spec.info.description.as_deref(), Some("desc"));
     }
 
-    /// `to_parameter()` with an unknown schema_type falls back to
+    /// `to_parameter` with an unknown schema_type falls back to
     /// `Type::String` (line 93 — the `_` match arm).
     #[test]
     fn to_parameter_unknown_schema_type_falls_back_to_string() {
@@ -448,7 +448,7 @@ mod tests {
         assert_eq!(parameter.name, "id");
     }
 
-    /// `with_path_params()` constructs a route info with explicit path
+    /// `with_path_params` constructs a route info with explicit path
     /// parameters (line 171 — the const fn body). Called at runtime (not
     /// const context) so tarpaulin attributes the coverage.
     #[test]
@@ -471,7 +471,7 @@ mod tests {
         assert_eq!(route.path_params[0].name, "id");
     }
 
-    /// `generate_openapi_spec()` should always use the crate title and the
+    /// `generate_openapi_spec` should always use the crate title and the
     /// compile-time crate version, regardless of registered routes.
     #[test]
     fn generate_openapi_spec_uses_crate_identity() {

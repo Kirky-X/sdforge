@@ -21,9 +21,9 @@
 //! use sdforge::cache::{SyncCache, DashMapCache};
 //! use std::sync::Arc;
 //!
-//! let cache = Arc::new(DashMapCache::new());
-//! cache.set("key", b"value".to_vec());
-//! assert!(cache.get("key").is_some());
+//! let cache = Arc::new(DashMapCache::new);
+//! cache.set("key", b"value".to_vec);
+//! assert!(cache.get("key").is_some);
 //! ```
 //!
 //! # 异步缓存使用示例（透传 oxcache）
@@ -31,8 +31,8 @@
 //! ```rust,ignore
 //! use sdforge::cache::Cache;
 //!
-//! let cache: Cache<String, MyData> = Cache::builder().build().await?;
-//! cache.set(&"key".to_string(), &data).await?;
+//! let cache: Cache<String, MyData> = Cache::builder.build.await?;
+//! cache.set(&"key".to_string, &data).await?;
 //! ```
 
 use std::collections::{HashMap, HashSet};
@@ -64,9 +64,7 @@ mod response_cache;
 #[cfg(feature = "http")]
 pub use response_cache::{ResponseCacheLayer, ResponseCacheMiddleware};
 
-// =============================================================================
 // 同步缓存 Trait（用于 security 模块等需要同步操作的场景）
-// =============================================================================
 
 /// 同步缓存 trait — 功能组件的标准存储接口
 ///
@@ -84,7 +82,7 @@ pub trait SyncCache: Send + Sync {
     /// 批量获取多个键的值
     ///
     /// # Performance
-    /// 比单独调用 get() 更高效，减少锁竞争和系统调用
+    /// 比单独调用 get 更高效，减少锁竞争和系统调用
     ///
     /// # Arguments
     /// * `keys` - 要获取的键列表
@@ -103,7 +101,7 @@ pub trait SyncCache: Send + Sync {
     /// 批量设置多个键值对
     ///
     /// # Performance
-    /// 比单独调用 set() 更高效，减少锁竞争和系统调用
+    /// 比单独调用 set 更高效，减少锁竞争和系统调用
     ///
     /// # Arguments
     /// * `items` - 键值对切片
@@ -122,7 +120,7 @@ pub trait SyncCache: Send + Sync {
     /// 批量删除多个键
     ///
     /// # Performance
-    /// 比单独调用 delete() 更高效，减少锁竞争和系统调用
+    /// 比单独调用 delete 更高效，减少锁竞争和系统调用
     ///
     /// # Arguments
     /// * `keys` - 要删除的键列表
@@ -184,9 +182,7 @@ pub trait SyncCache: Send + Sync {
 /// SyncCache 的 Arc 智能指针别名
 pub type SharedCache = Arc<dyn SyncCache>;
 
-// =============================================================================
 // OxcacheSyncCache — 基于 oxcache DashMapMemoryBackend 的同步缓存实现
-// =============================================================================
 
 /// 基于 oxcache `DashMapMemoryBackend` 的同步缓存实现。
 ///
@@ -201,9 +197,9 @@ pub type SharedCache = Arc<dyn SyncCache>;
 /// ```rust,ignore
 /// use sdforge::cache::{SyncCache, OxcacheSyncCache};
 ///
-/// let cache = OxcacheSyncCache::new();
-/// cache.set("key", b"value".to_vec());
-/// assert_eq!(cache.get("key"), Some(b"value".to_vec()));
+/// let cache = OxcacheSyncCache::new;
+/// cache.set("key", b"value".to_vec);
+/// assert_eq!(cache.get("key"), Some(b"value".to_vec));
 /// ```
 pub struct OxcacheSyncCache {
     /// oxcache 后端（实现了 SyncCacheBackend）
@@ -215,13 +211,11 @@ pub struct OxcacheSyncCache {
 /// DashMapCache 类型别名 — 保持调用方兼容
 ///
 /// 底层实现已切换为 `OxcacheSyncCache`（基于 oxcache `DashMapMemoryBackend`）。
-/// 历史代码中的 `DashMapCache::new()` / `DashMapCache::with_capacity(n)` 调用
+/// 历史代码中的 `DashMapCache::new` / `DashMapCache::with_capacity(n)` 调用
 /// 自动指向新的 oxcache 实现，无需修改调用方。
 pub type DashMapCache = OxcacheSyncCache;
 
-// =============================================================================
 // oxcache 异步缓存透传
-// =============================================================================
 
 // 直接透传 oxcache 库的异步缓存接口（用于需要 TTL、分层缓存等高级功能的场景）
 pub use oxcache::cache::Cache;
@@ -252,9 +246,7 @@ mod tests {
         assert_eq!(canonicalize_cache_key("\tMIXED_CASE\n"), "mixed_case");
     }
 
-    // ========================================================================
     // matches_pattern 单元测试
-    // ========================================================================
 
     #[test]
     fn test_matches_pattern_exact() {
@@ -306,9 +298,7 @@ mod tests {
         assert!(matches_pattern("*", "anything"));
     }
 
-    // ========================================================================
     // SyncCache trait 测试（通过 DashMapCache 别名指向 OxcacheSyncCache）
-    // ========================================================================
 
     #[test]
     fn test_synccache_trait_get_set() {
@@ -453,9 +443,7 @@ mod tests {
         assert!(cache.contains("key"));
     }
 
-    // ============================================================================
     // OxcacheSyncCache 专属测试
-    // ============================================================================
 
     #[test]
     fn test_oxcache_sync_cache_with_capacity() {
@@ -490,7 +478,6 @@ mod tests {
         assert!(!cache.delete("nonexistent"));
     }
 
-    // ============================================================================
     // Default trait method coverage tests
     //
     // OxcacheSyncCache overrides get_many/set_many/delete_many/get_stats, so the
@@ -498,7 +485,6 @@ mod tests {
     // the tests above. The MinimalCache below deliberately only implements
     // the required methods, leaving the default implementations in place so
     // they get coverage.
-    // ============================================================================
 
     /// Minimal SyncCache implementation that relies on the default trait
     /// method implementations for batch operations and stats.
@@ -641,18 +627,16 @@ mod tests {
         assert!(cache.contains("session:1"));
     }
 
-    // ========================================================================
     // Mutex poison 分支测试
     //
     // OxcacheSyncCache 在 set/delete/clear/find_keys_by_pattern/set_many/
     // delete_many 中先获取 `key_index` 锁。若锁中毒（持有锁时 panic），
     // 各方法会降级为 backend-only 模式或返回安全默认值。这些测试通过
     // 故意 panic 让 Mutex 中毒，验证降级路径。
-    // ========================================================================
 
     /// Helper: 让 cache 的 key_index Mutex 中毒。
     ///
-    /// 持有锁时 panic 会导致 Mutex 中毒，后续 lock() 调用返回 Err。
+    /// 持有锁时 panic 会导致 Mutex 中毒，后续 lock 调用返回 Err。
     fn poison_key_index(cache: &OxcacheSyncCache) {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _guard = cache.key_index.lock().unwrap();
@@ -777,7 +761,7 @@ mod tests {
     /// (lines 408-416) is not the only path exercised.
     #[test]
     fn test_get_with_poisoned_mutex_still_works() {
-        // get() 不使用 key_index 锁，只读 backend，所以不受中毒影响
+        // get 不使用 key_index 锁，只读 backend，所以不受中毒影响
         let cache = OxcacheSyncCache::new();
         cache.set("k", b"v".to_vec());
         poison_key_index(&cache);

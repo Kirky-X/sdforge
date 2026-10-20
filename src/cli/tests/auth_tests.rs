@@ -3,11 +3,11 @@
 //! CLI authentication tests.
 //!
 //! With the `security` feature `CliBuilder` accepts a verifier via
-//! `with_auth_verifier`; `execute()` then requires credentials from the
+//! `with_auth_verifier`; `execute` then requires credentials from the
 //! `SDFORGE_TOKEN` (bearer) / `SDFORGE_API_KEY` environment variables and
 //! rejects the run through the standard `error: …` + exit(1) channel before
 //! any dispatch. The enforcement logic is exercised here through
-//! `authenticate_cli` (the function `execute()` delegates to).
+//! `authenticate_cli` (the function `execute` delegates to).
 
 #![cfg(all(feature = "cli", feature = "security"))]
 

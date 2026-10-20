@@ -57,9 +57,7 @@ use sdforge::i18n::t;
 use sdforge::prelude::*;
 use sdforge::serde::{Deserialize, Serialize};
 
-// ============================================================================
 // 请求类型定义
-// ============================================================================
 
 /// 问候请求
 ///
@@ -89,9 +87,7 @@ pub struct ProcessRequest {
     pub options: Option<serde_json::Value>,
 }
 
-// ============================================================================
 // API 端点定义
-// ============================================================================
 
 /// 简单问候工具
 ///
@@ -254,7 +250,6 @@ async fn mcp_process(request: ProcessRequest) -> Result<serde_json::Value, ApiEr
         "processed": true
     });
 
-    // 处理选项
     if let Some(opts) = request.options {
         if let Some(transform) = opts.get("transform") {
             result["transformed"] = transform.clone();

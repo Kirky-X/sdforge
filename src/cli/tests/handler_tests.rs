@@ -13,9 +13,7 @@ use crate::core::{HandlerArgs, HandlerFuture, HandlerState};
 use crate::prelude::ApiError;
 use serde_json::Value;
 
-// ============================================================================
 // CliHandlerRegistration
-// ============================================================================
 
 /// Test handler used by `test_handler_registration_call`. Returns
 /// `Ok(Value::Null)` unconditionally so the test can assert the happy path.

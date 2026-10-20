@@ -61,7 +61,7 @@ impl ApiMetadata {
     /// iterating the inventory directly. Falls back to the English
     /// `description` when no translation is found.
     ///
-    /// Builder-pattern method so existing `new()` call sites remain
+    /// Builder-pattern method so existing `new` call sites remain
     /// backward-compatible.
     pub fn with_i18n_key(mut self, key: Option<String>) -> Self {
         self.i18n_key = key;

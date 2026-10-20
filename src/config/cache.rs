@@ -121,9 +121,7 @@ mod tests {
         assert_eq!(config.max_items(), 10_000);
     }
 
-    // ============================================================================
     // ValidateConfig tests：覆盖成功路径与两个错误分支（default_ttl_secs>0、max_items>0）
-    // ============================================================================
 
     #[test]
     fn test_cache_config_validate_valid() {
@@ -175,7 +173,7 @@ mod tests {
 
     #[test]
     fn test_cache_config_validate_both_invalid_reports_ttl_first() {
-        // When both TTL and max_items are invalid, validate() checks TTL first
+        // When both TTL and max_items are invalid, validate checks TTL first
         // and returns that error, never reaching the max_items check.
         let config = CacheConfig {
             default_ttl_secs: 0,
@@ -204,7 +202,7 @@ mod tests {
 
     #[test]
     fn test_cache_config_disabled_validates() {
-        // disabled() only sets enabled=false; TTL and max_items keep defaults.
+        // disabled only sets enabled=false; TTL and max_items keep defaults.
         let config = CacheConfig::disabled();
         assert!(config.validate().is_ok());
     }

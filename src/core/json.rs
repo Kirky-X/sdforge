@@ -119,9 +119,7 @@ pub fn api_metadata_response(name: &str, version: &str, description: &str) -> St
     .unwrap_or_else(|e| error_response("SERIALIZATION_ERROR", &e.to_string()))
 }
 
-// =============================================================================
 // SIMD-Accelerated JSON Operations (PERF-002)
-// =============================================================================
 
 /// Serialize using simd-json when available (performance optimization)
 ///
@@ -318,13 +316,11 @@ mod tests {
         assert_eq!(original, restored);
     }
 
-    // ============================================================================
     // Serialization error path tests
     //
     // simd_to_string uses serde_json::to_string internally. When the value's
     // Serialize impl fails, the map_err branch should produce a descriptive
     // error message. These tests cover that error path.
-    // ============================================================================
 
     /// A type whose Serialize impl always fails, to exercise the error
     /// branch in simd_to_string.
@@ -371,9 +367,7 @@ mod tests {
         assert!(result.unwrap_err().contains("JSON deserialization failed"));
     }
 
-    // ============================================================================
     // Additional edge case tests
-    // ============================================================================
 
     #[test]
     fn test_paginated_response_single_page() {
@@ -492,7 +486,6 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // ============================================================================
     // Defensive fallback path documentation
     //
     // The `unwrap_or_else` fallback closures in `error_response`,
@@ -500,10 +493,10 @@ mod tests {
     // are defensive code paths that are effectively unreachable in practice:
     //
     // - `error_response` serializes a `serde_json::Value` built from `&str`
-    //   slices via `serde_json::json!()`. Converting `&str` to `Value` never
+    //   slices via `serde_json::json!`. Converting `&str` to `Value` never
     //   fails, and `serde_json::to_string` on a `Value` always succeeds.
     // - `success_response`/`paginated_response`/`api_metadata_response` embed
-    //   the caller's `T: Serialize` value inside `serde_json::json!()`. The
+    //   the caller's `T: Serialize` value inside `serde_json::json!`. The
     //   `json!` macro calls `serde_json::to_value(..).expect(..)`, which
     //   *panics* if `T`'s `Serialize` impl fails — so execution never reaches
     //   the `to_string` call, let alone its `unwrap_or_else` fallback.
@@ -512,7 +505,6 @@ mod tests {
     // passing a non-serializable type panics rather than triggering the
     // fallback. This is the real runtime behavior and must not be silently
     // changed without updating the fallback design.
-    // ============================================================================
 
     /// Document that `success_response` panics (rather than falling back) when
     /// given a value whose `Serialize` implementation fails, because the
@@ -532,9 +524,7 @@ mod tests {
         let _ = paginated_response(&items, 1, 1, 1);
     }
 
-    // ============================================================================
     // Edge case tests for the success paths
-    // ============================================================================
 
     /// Test error_response with unicode characters in both code and message.
     #[test]

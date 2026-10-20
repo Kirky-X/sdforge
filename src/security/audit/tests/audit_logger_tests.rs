@@ -124,9 +124,7 @@ async fn test_clear_logs() {
     assert_eq!(logger.get_logs("test_user").len(), 0);
 }
 
-// ============================================================================
 // SdForgeAuditLogger::log_key_rotation Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_log_key_rotation_success() {
@@ -159,9 +157,7 @@ async fn test_log_key_rotation_failure() {
     assert!(matches!(logs[0].result(), AuditResult::Failure { .. }));
 }
 
-// ============================================================================
 // SdForgeAuditLogger::total_log_count Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_total_log_count_returns_zero() {
@@ -184,9 +180,7 @@ async fn test_total_log_count_after_logging() {
     assert_eq!(logger.total_log_count(), 1);
 }
 
-// ============================================================================
 // SdForgeAuditLogger::dropped_log_count Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_dropped_log_count_initial_value() {
@@ -207,9 +201,7 @@ async fn test_dropped_log_count_after_logging() {
     assert_eq!(logger.dropped_log_count(), 0);
 }
 
-// ============================================================================
-// SdForgeAuditLogger::log() with Failure + Error Sanitization Tests
-// ============================================================================
+// SdForgeAuditLogger::log with Failure + Error Sanitization Tests
 
 #[tokio::test]
 async fn test_log_failure_with_message() {
@@ -299,9 +291,7 @@ async fn test_log_failure_default_message() {
     }
 }
 
-// ============================================================================
 // AuditLogger Trait Implementation Tests
-// ============================================================================
 
 #[test]
 fn test_audit_logger_trait_log() {
@@ -370,9 +360,7 @@ fn test_audit_logger_trait_log_failure() {
     });
 }
 
-// ============================================================================
 // Multiple Log Entries and Truncation Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_multiple_log_entries_per_user() {
@@ -474,9 +462,7 @@ async fn test_log_with_anonymous_user() {
     assert_eq!(logs[0].action(), "anonymous_action");
 }
 
-// ============================================================================
 // Additional Boundary Tests for sanitize_error_message
-// ============================================================================
 
 #[test]
 fn test_sanitize_jwt_token() {
@@ -550,9 +536,7 @@ fn test_sanitize_bearer_token() {
     assert!(!sanitized.contains("eyJ"));
 }
 
-// ============================================================================
 // AuditLog Structure Tests
-// ============================================================================
 
 #[test]
 fn test_audit_log_creation() {
@@ -657,9 +641,7 @@ fn test_audit_log_serialization_roundtrip() {
     assert_eq!(log.metadata().request_id, original.metadata().request_id);
 }
 
-// ============================================================================
 // Edge Case Tests for sanitize_error_message
-// ============================================================================
 
 #[test]
 fn test_sanitize_very_long_jwt_token() {
@@ -683,13 +665,11 @@ fn test_sanitize_token_in_url() {
     assert!(!sanitized.contains("secret_token_123"));
 }
 
-// ============================================================================
 // Signing key environment variable tests
 //
-// The log() method checks SDFORGE_AUDIT_SIGNING_KEY env var to optionally
+// The log method checks SDFORGE_AUDIT_SIGNING_KEY env var to optionally
 // sign audit logs. These tests use #[serial] to safely set/unset the env
 // var without interfering with other tests.
-// ============================================================================
 
 #[tokio::test]
 #[serial_test::serial]
@@ -719,7 +699,6 @@ async fn test_log_with_signing_key_generates_signature() {
         "Audit log should have a signature when signing key is set"
     );
 
-    // Clean up
     unsafe {
         std::env::remove_var("SDFORGE_AUDIT_SIGNING_KEY");
     }
@@ -750,7 +729,6 @@ async fn test_log_with_empty_signing_key_warns() {
         "Audit log should NOT have a signature when signing key is empty"
     );
 
-    // Clean up
     unsafe {
         std::env::remove_var("SDFORGE_AUDIT_SIGNING_KEY");
     }
@@ -784,13 +762,11 @@ async fn test_log_without_signing_key_warns() {
     );
 }
 
-// ============================================================================
-// log() fallback merge tests
+// log fallback merge tests
 //
-// log() synchronously merges fallback logs into primary storage before
+// log synchronously merges fallback logs into primary storage before
 // sending to the queue. These tests manually populate fallback_logs to
 // exercise that merge path (lines 324-333).
-// ============================================================================
 
 #[tokio::test]
 async fn test_log_merges_fallback_logs_synchronously() {
@@ -814,7 +790,7 @@ async fn test_log_merges_fallback_logs_synchronously() {
 
     assert!(logger.fallback_logs.get("merge_user").is_some());
 
-    // Now call log() for the same user — this should merge the fallback
+    // Now call log for the same user — this should merge the fallback
     // into primary storage and delete the fallback.
     let context = AuthContext {
         user_id: Some("merge_user".to_string()),
@@ -894,7 +870,7 @@ async fn test_log_fallback_merge_respects_max_logs() {
         .fallback_logs
         .set("trunc_user", serialize_audit_logs(&fallback_logs));
 
-    // Call log() which merges fallback into primary
+    // Call log which merges fallback into primary
     let context = AuthContext {
         user_id: Some("trunc_user".to_string()),
         permissions: vec![],
@@ -911,12 +887,10 @@ async fn test_log_fallback_merge_respects_max_logs() {
     );
 }
 
-// ============================================================================
 // get_logs dedup tests
 //
 // get_logs merges primary and fallback, deduplicating by log ID.
 // These tests populate both stores with overlapping IDs (lines 386-389).
-// ============================================================================
 
 #[tokio::test]
 async fn test_get_logs_deduplicates_by_id() {
@@ -1002,16 +976,14 @@ async fn test_get_logs_with_only_fallback() {
     assert_eq!(logs[0].id(), "fb-only-2");
 }
 
-// ============================================================================
 // Worker fallback merge tests
 //
-// The spawned worker task in with_limit() and build() drains the queue and
-// merges any remaining fallback logs. Since log() already merges fallback
+// The spawned worker task in with_limit and build drains the queue and
+// merges any remaining fallback logs. Since log already merges fallback
 // synchronously, the worker's fallback merge is only triggered when
 // fallback data exists at the time the worker processes a batch. These
 // tests manually inject fallback data and send a batch to trigger the
 // worker's merge path.
-// ============================================================================
 
 #[tokio::test]
 async fn test_worker_merges_fallback_from_queue() {
@@ -1107,29 +1079,27 @@ async fn test_worker_no_fallback_does_nothing() {
     );
 }
 
-// ============================================================================
 // AuditLogger trait no-runtime path test
 //
-// The AuditLogger trait impl's log() method checks for a tokio runtime. If
+// The AuditLogger trait impl's log method checks for a tokio runtime. If
 // none is available, it falls back to printing to stderr (lines 498-503).
 // This test calls the trait method from a plain std::thread (no runtime).
-// ============================================================================
 
 #[tokio::test]
 async fn test_audit_logger_trait_no_runtime_path() {
     use crate::security::AuditLogger as AuditLoggerTrait;
 
-    // with_limit() calls tokio::spawn(), so we need a runtime.
+    // with_limit calls tokio::spawn, so we need a runtime.
     // The spawned thread below has NO runtime, testing the no-runtime fallback path.
     let logger = SdForgeAuditLogger::with_limit(10);
     let log = make_test_audit_log("no_rt_user", "no_runtime_action");
 
     // Spawn a plain OS thread with NO tokio runtime. The trait impl's
-    // log() should detect the missing runtime and print to stderr instead
+    // log should detect the missing runtime and print to stderr instead
     // of panicking.
     let logger_clone = logger.clone();
     let handle = std::thread::spawn(move || {
-        // This calls the AuditLogger trait method, not the async log()
+        // This calls the AuditLogger trait method, not the async log
         AuditLoggerTrait::log(&logger_clone, log);
     });
 
@@ -1153,7 +1123,7 @@ async fn test_audit_logger_trait_with_runtime_spawns_task() {
     let log = make_test_audit_log("rt_user", "runtime_action");
 
     // Call the trait method from within a tokio runtime — it should
-    // spawn a task that calls the async log() method.
+    // spawn a task that calls the async log method.
     AuditLoggerTrait::log(&logger, log);
 
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
@@ -1168,21 +1138,19 @@ async fn test_audit_logger_trait_with_runtime_spawns_task() {
     assert_eq!(logs[0].action(), "runtime_action");
 }
 
-// ============================================================================
 // Channel Full/Closed and semaphore timeout branch tests
 //
-// log() sends an AuditLogBatch via try_send(). The Full and Closed error
-// arms are hard to reach in normal operation because log() also writes
+// log sends an AuditLogBatch via try_send. The Full and Closed error
+// arms are hard to reach in normal operation because log also writes
 // synchronously and the channel is created by the logger. These tests
 // exercise both arms by constructing a logger with a controlled channel
 // state (no spawned worker to drain the queue).
-// ============================================================================
 
-/// Verify that log() still stores to primary storage when the async queue
+/// Verify that log still stores to primary storage when the async queue
 /// is full, hitting the `TrySendError::Full(_)` arm (lines 370-373).
 ///
 /// Constructs a logger with a capacity-1 channel that is pre-filled, so
-/// the next try_send from log() returns Full. The receiver is held (not
+/// the next try_send from log returns Full. The receiver is held (not
 /// dropped) to keep the channel open, and no worker is spawned so the
 /// queue stays full deterministically.
 #[tokio::test]
@@ -1223,7 +1191,7 @@ async fn test_log_handles_full_queue() {
     assert_eq!(logs[0].action(), "full_action");
 }
 
-/// Verify that log() still stores to primary storage when the async
+/// Verify that log still stores to primary storage when the async
 /// channel is closed (receiver dropped), hitting the
 /// `TrySendError::Closed(_)` arm (lines 374-376).
 #[tokio::test]
@@ -1261,11 +1229,11 @@ async fn test_log_handles_closed_channel() {
     assert_eq!(logs[0].action(), "closed_action");
 }
 
-/// Verify that log() skips storage entirely when the semaphore permit
+/// Verify that log skips storage entirely when the semaphore permit
 /// cannot be acquired within the 1-second timeout (lines 271-274).
 ///
 /// Builds a logger with max_concurrent_ops=1, acquires the only permit,
-/// then calls log() which must wait and eventually time out.
+/// then calls log which must wait and eventually time out.
 #[tokio::test]
 async fn test_log_skips_when_semaphore_times_out() {
     let logger = SdForgeAuditLogger::builder()
@@ -1305,7 +1273,7 @@ async fn test_log_skips_when_semaphore_times_out() {
     );
 }
 
-/// HIGH 修复回归：同用户并发 log() 不得互相覆盖丢日志
+/// HIGH 修复回归：同用户并发 log 不得互相覆盖丢日志
 /// （此前 get→push→set 读改写无互斥，写并发会静默丢失审计记录）。
 #[tokio::test]
 async fn test_concurrent_same_user_logs_not_lost() {

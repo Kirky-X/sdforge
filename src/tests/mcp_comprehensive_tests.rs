@@ -4,7 +4,7 @@
 //!
 //! This module provides comprehensive external integration tests for the MCP module,
 //! focusing on:
-//! - get_mcp_tools() function behavior
+//! - get_mcp_tools function behavior
 //! - McpToolInstance accessor methods
 //! - Edge cases not covered by internal tests
 //! - Concurrent tool execution scenarios
@@ -17,9 +17,7 @@ mod mcp_comprehensive_tests {
     use std::sync::Arc;
     use std::thread;
 
-    // ============================================================================
     // Helper Functions
-    // ============================================================================
 
     fn create_simple_tool(name: &str) -> Arc<dyn SdForgeTool> {
         struct SimpleTool {
@@ -240,9 +238,7 @@ mod mcp_comprehensive_tests {
         Arc::new(ComplexSchemaTool) as Arc<dyn SdForgeTool>
     }
 
-    // ============================================================================
-    // get_mcp_tools() Function Tests
-    // ============================================================================
+    // get_mcp_tools Function Tests
 
     /// Test that get_mcp_tools returns a vector (may be empty if no tools registered)
     #[test]
@@ -273,9 +269,7 @@ mod mcp_comprehensive_tests {
         }
     }
 
-    // ============================================================================
     // McpToolInstance Accessor Tests (via get_mcp_tools)
-    // ============================================================================
 
     #[test]
     fn test_mcp_tool_instance_tool_accessor() {
@@ -314,9 +308,7 @@ mod mcp_comprehensive_tests {
         }
     }
 
-    // ============================================================================
     // Edge Case Tests - Tool Behavior
-    // ============================================================================
 
     #[test]
     fn test_tool_with_empty_name() {
@@ -359,9 +351,7 @@ mod mcp_comprehensive_tests {
         }
     }
 
-    // ============================================================================
     // Tool Execution Tests
-    // ============================================================================
 
     /// Test echo tool with valid input
     #[test]
@@ -457,9 +447,7 @@ mod mcp_comprehensive_tests {
         assert!(result.is_err());
     }
 
-    // ============================================================================
     // Concurrent Tool Execution Tests
-    // ============================================================================
 
     /// Test concurrent tool execution with multiple threads
     #[test]
@@ -561,11 +549,9 @@ mod mcp_comprehensive_tests {
         }
     }
 
-    // ============================================================================
     // McpToolRegistration Tests
-    // ============================================================================
 
-    /// Test McpToolRegistration creation through new() constructor
+    /// Test McpToolRegistration creation through new constructor
     #[test]
     fn test_registration_creation() {
         let _registration = McpToolRegistration::new(
@@ -594,9 +580,7 @@ mod mcp_comprehensive_tests {
         assert_eq!(tool2.name(), "tool_b");
     }
 
-    // ============================================================================
     // Response Content Tests
-    // ============================================================================
 
     /// Test tool response with text content
     #[test]
@@ -633,9 +617,7 @@ mod mcp_comprehensive_tests {
         assert!(response.meta.is_none());
     }
 
-    // ============================================================================
     // Input Schema Tests
-    // ============================================================================
 
     /// Test that input_schema returns valid JSON
     #[test]

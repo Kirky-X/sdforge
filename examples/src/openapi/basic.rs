@@ -8,7 +8,7 @@
 //!
 //! 启用 `openapi` feature 后，每个 `#[forge]` 宏会在编译时通过
 //! `sdforge::inventory::submit!` 注册一条 `OpenApiRouteInfo`。运行时调用
-//! `generate_openapi_spec()` 即可收集所有路由并生成完整规范。
+//! `generate_openapi_spec` 即可收集所有路由并生成完整规范。
 //!
 //! ## 启用方式
 //!
@@ -22,8 +22,8 @@
 //! ```rust,no_run
 //! use sdforge::openapi::generate_openapi_spec;
 //!
-//! let spec = generate_openapi_spec();
-//! let json = serde_json::to_string_pretty(&spec).unwrap();
+//! let spec = generate_openapi_spec;
+//! let json = serde_json::to_string_pretty(&spec).unwrap;
 //! println!("{json}");
 //! ```
 //!
@@ -32,19 +32,17 @@
 //! ```rust,no_run
 //! use sdforge::openapi::OpenApiBuilder;
 //!
-//! let spec = OpenApiBuilder::new()
+//! let spec = OpenApiBuilder::new
 //!     .title("My Service")
 //!     .version("2.0.0")
 //!     .description("User-facing API")
-//!     .build();
+//!     .build;
 //! ```
 
 use sdforge::openapi::{OpenApiBuilder, OpenApiRouteInfo, generate_openapi_spec};
 use sdforge::prelude::*;
 
-// ============================================================================
 // 示例端点定义 — 这些端点会被宏自动注册到 OpenApiRouteInfo
-// ============================================================================
 
 /// 用户查询端点
 ///
@@ -82,9 +80,7 @@ async fn openapi_list_users() -> Result<serde_json::Value, ApiError> {
     }))
 }
 
-// ============================================================================
 // OpenAPI 规范生成示例函数
-// ============================================================================
 
 /// 生成默认的 OpenAPI 规范
 ///
@@ -114,9 +110,7 @@ pub fn demo_spec_to_json() -> String {
     serde_json::to_string_pretty(&spec).expect("OpenApi spec should serialize to JSON string")
 }
 
-// ============================================================================
 // 手动注册路由（不使用 #[forge] 宏的场景）
-// ============================================================================
 
 // 手动注册一条 OpenAPI 路由信息
 //
@@ -132,9 +126,7 @@ sdforge::inventory::submit!(OpenApiRouteInfo::new(
     &["manual", "demo"]
 ));
 
-// ============================================================================
 // 单元测试
-// ============================================================================
 
 #[cfg(test)]
 mod tests {

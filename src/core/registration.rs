@@ -41,8 +41,8 @@
 ///
 ///     fn name(&self) -> &str { self.name }
 ///     fn version(&self) -> &str { self.version }
-///     fn create(&self) -> Self::Instance { (self.create_fn)() }
-///     fn metadata(&self) -> Self::Metadata { (self.metadata_fn)() }
+///     fn create(&self) -> Self::Instance { (self.create_fn) }
+///     fn metadata(&self) -> Self::Metadata { (self.metadata_fn) }
 /// }
 /// ```
 pub trait Registration: 'static + Send + Sync {
@@ -318,7 +318,7 @@ mod tests {
         assert_eq!(meta._name, "test");
     }
 
-    /// Test that new() is a const fn
+    /// Test that new is a const fn
     #[test]
     fn test_define_registration_macro_new_const_fn() {
         const REG: TestRegistration = TestRegistration::new(
@@ -342,7 +342,7 @@ mod tests {
         assert_eq!(meta._name, "const");
     }
 
-    /// Test Registration trait name() method
+    /// Test Registration trait name method
     #[test]
     fn test_registration_trait_name_method() {
         let reg = TestRegistration::new(
@@ -367,7 +367,7 @@ mod tests {
         assert_eq!(meta._name, "test");
     }
 
-    /// Test Registration trait version() method
+    /// Test Registration trait version method
     #[test]
     fn test_registration_trait_version_method() {
         let reg = TestRegistration::new(
@@ -391,7 +391,7 @@ mod tests {
         assert_eq!(meta._name, "test");
     }
 
-    /// Test Registration trait create() method
+    /// Test Registration trait create method
     #[test]
     fn test_registration_trait_create_method() {
         let reg = TestRegistration::new(
@@ -413,7 +413,7 @@ mod tests {
         assert_eq!(meta._name, "test");
     }
 
-    /// Test Registration trait metadata() method
+    /// Test Registration trait metadata method
     #[test]
     fn test_registration_trait_metadata_method() {
         let reg = TestRegistration::new(

@@ -99,7 +99,7 @@ pub const MCP_FORBIDDEN: rmcp::model::ErrorCode = rmcp::model::ErrorCode(-32003)
 /// MCP server that dispatches to tools registered via SDForge's inventory.
 ///
 /// This struct implements `rmcp::handler::server::ServerHandler` so it can be
-/// served via `ServiceExt::serve()` on any rmcp transport (stdio, HTTP, etc.).
+/// served via `ServiceExt::serve` on any rmcp transport (stdio, HTTP, etc.).
 /// It collects all `McpToolRegistration` entries at construction time and
 /// dispatches `call_tool` requests to the matching tool.
 #[derive(Clone)]

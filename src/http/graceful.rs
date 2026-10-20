@@ -22,9 +22,9 @@
 //! sdforge::http::serve_with_graceful_shutdown(
 //!     router,
 //!     listener,
-//!     sdforge::http::default_shutdown_signal(),
-//!     GracefulShutdownConfig::default(),
-//! ).await?;
+//!     sdforge::http::default_shutdown_signal,
+//!     GracefulShutdownConfig::default,
+//!).await?;
 //! ```
 
 use std::pin::Pin;
@@ -140,7 +140,7 @@ pub async fn serve_with_graceful_shutdown(
 ///
 /// Identical to [`serve_with_graceful_shutdown`] except the router is served
 /// via `into_make_service_with_connect_info`, so handlers and middleware can
-/// extract the unspoofable peer IP (`req.extensions().get::<ConnectInfo<..>>()`).
+/// extract the unspoofable peer IP (`req.extensions.get::<ConnectInfo<..>>`).
 /// IP-based security layers (rate limiting, auth) should prefer this variant:
 /// without `ConnectInfo`, client-IP extraction must fall back to spoofable
 /// forwarded headers or a shared `"unknown"` bucket.

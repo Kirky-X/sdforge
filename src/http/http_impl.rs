@@ -11,7 +11,7 @@ use uuid::Uuid;
 /// Construct a `RateLimitLayer` from any `HttpRequestRateLimiter`.
 ///
 /// Convenience helper: wraps `RateLimitLayer::new` so users can write
-/// `Router::new().layer(rate_limit_layer(limiter))` without importing both
+/// `Router::new.layer(rate_limit_layer(limiter))` without importing both
 /// `RateLimitLayer` and the `HttpRequestRateLimiter` trait.
 ///
 /// Only available when the `ratelimit-http` feature is enabled.
@@ -165,7 +165,7 @@ pub(crate) fn preserve_grpc_inventory() {
 ///
 /// # Note
 /// This is the simplest router building function. For production use,
-/// consider using `build_with_config()` for middleware support.
+/// consider using `build_with_config` for middleware support.
 pub fn build() -> Router {
     // Force inventory collection to prevent linker optimization
     // Using inline(never) functions to ensure symbols are preserved
@@ -344,7 +344,7 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
     let mut router = build();
 
     // request metrics middleware (count / latency / status per route
-    // template). Installed early so every route from build() is measured;
+    // template). Installed early so every route from build is measured;
     // the /metrics endpoint itself is mounted after the auth layer below and
     // therefore not self-recorded.
     #[cfg(feature = "metrics")]

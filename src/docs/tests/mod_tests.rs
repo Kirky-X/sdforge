@@ -5,9 +5,7 @@
 
 use crate::docs::{DocFormat, generate_docs, write_docs};
 
-// ============================================================================
 // DocFormat 枚举
-// ============================================================================
 
 /// 验证 `DocFormat` 5 个变体存在、互异，且派生了 `Debug`/`Clone`/`Copy`/
 /// `PartialEq`/`Eq`/`Default`（默认 `OpenApi`）。
@@ -43,7 +41,6 @@ fn test_doc_format_variants() {
         debug
     );
 
-    // Clone 派生
     let cloned = openapi;
     assert_eq!(openapi, cloned);
 
@@ -56,9 +53,7 @@ fn test_doc_format_variants() {
     assert_eq!(default, DocFormat::OpenApi, "Default must be OpenApi");
 }
 
-// ============================================================================
 // generate_docs 入口
-// ============================================================================
 
 /// `generate_docs(OpenApi)` 应返回非空 JSON 字符串，首字符为 `{`。
 #[test]
@@ -84,9 +79,7 @@ fn test_generate_docs_cli_markdown_returns_md() {
     );
 }
 
-// ============================================================================
 // write_docs 写文件
-// ============================================================================
 
 /// `write_docs` 应将生成的文档写入指定路径，文件存在且内容非空。
 #[test]
@@ -113,9 +106,7 @@ fn test_write_docs_creates_file() {
     );
 }
 
-// ============================================================================
 // generate_docs 支持 SwaggerUi
-// ============================================================================
 
 /// `generate_docs(SwaggerUi)` 的输出随 `http` 特性切换：
 ///
@@ -149,9 +140,7 @@ fn test_generate_docs_swagger_returns_html() {
     }
 }
 
-// ============================================================================
 // generate_docs 支持 McpMarkdown 和 All
-// ============================================================================
 
 /// `generate_docs(McpMarkdown)` 应返回非空字符串。
 ///

@@ -25,7 +25,7 @@ fn test_websocket_config_default() {
     assert_eq!(config.max_message_size, 1_048_576);
     #[cfg(feature = "ratelimit")]
     {
-        // FlowControlConfig::default() has an empty rules vec; we only
+        // FlowControlConfig::default has an empty rules vec; we only
         // assert that the field exists and is the default value.
         let expected = limiteron::config::FlowControlConfig::default();
         assert_eq!(config.rate_limit.rules.len(), expected.rules.len());
@@ -417,14 +417,12 @@ async fn connection_manager_get_removed_connection() {
     assert!(manager.get_connection("removed-test").await.is_none());
 }
 
-// ============================================================================
-// broadcast() error cleanup path
-// ============================================================================
+// broadcast error cleanup path
 
 /// Test broadcast cleans up connections whose receiver has been dropped.
 ///
-/// Covers the `failed_connections` cleanup path in `broadcast()`: when
-/// `conn.send()` returns an error (because the receiver was dropped),
+/// Covers the `failed_connections` cleanup path in `broadcast`: when
+/// `conn.send` returns an error (because the receiver was dropped),
 /// the failed connection is removed from the manager.
 #[tokio::test]
 async fn broadcast_cleans_up_failed_connections() {
@@ -456,13 +454,11 @@ async fn broadcast_cleans_up_failed_connections() {
     assert!(manager.get_connection("healthy-conn").await.is_some());
 }
 
-// ============================================================================
 // RwLock poison branch coverage (lines 196, 212, 229-230)
 //
 // ConnectionManager::add_connection / remove_connection / get_connection each
 // have an `else` branch that handles a poisoned RwLock. These branches were
 // previously uncovered because no test poisons the `connections` RwLock.
-// ============================================================================
 
 /// Cover the RwLock poison branch in `add_connection` (line 196).
 #[tokio::test]

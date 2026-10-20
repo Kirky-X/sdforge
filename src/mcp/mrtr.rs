@@ -10,7 +10,7 @@
 //!
 //! 1. Client calls a tool
 //! 2. Tool returns `InputRequiredResult` with a session ID
-//! 3. Client provides input via `resume_session()`
+//! 3. Client provides input via `resume_session`
 //! 4. Tool completes and returns the final `CallToolResult`
 //!
 //! Sessions have a 300-second timeout. After timeout, the session is
@@ -753,7 +753,7 @@ mod tests {
 
     /// Verify that resuming a session that has timed out returns a timeout
     /// error and marks the session state as Timeout.
-    /// This covers the `is_timed_out()` branch in `resume_session`.
+    /// This covers the `is_timed_out` branch in `resume_session`.
     #[test]
     fn test_session_manager_resume_timed_out_session() {
         let manager = MrtrSessionManager::new();
@@ -851,7 +851,7 @@ mod tests {
         );
     }
 
-    /// Verify that `remaining()` returns zero (saturating) when the session
+    /// Verify that `remaining` returns zero (saturating) when the session
     /// has exceeded its timeout.
     #[test]
     fn test_mrtr_session_remaining_zero_after_timeout() {
@@ -884,7 +884,7 @@ mod tests {
         assert_eq!(manager.session_count(), 1);
     }
 
-    /// Verify that `resume_input()` returns None for a session that was never
+    /// Verify that `resume_input` returns None for a session that was never
     /// resumed (i.e. no input was provided).
     #[test]
     fn test_mrtr_session_resume_input_none_when_not_resumed() {
@@ -965,13 +965,11 @@ mod tests {
         assert!(result2.is_err(), "Duplicate creation should fail");
     }
 
-    // ========================================================================
     // Mutex poison 分支测试
     //
     // MrtrSessionManager 的所有写/读方法在获取 `sessions` 锁时，若锁中毒
     // （持有锁时 panic），会返回 internal_error 或安全默认值。这些测试
     // 通过故意 panic 让 Mutex 中毒，验证降级路径。
-    // ========================================================================
 
     /// Helper: 让 manager 的 sessions Mutex 中毒。
     fn poison_sessions_mutex(manager: &MrtrSessionManager) {
@@ -1060,14 +1058,12 @@ mod tests {
         assert_eq!(count, 0, "poisoned mutex should yield count 0");
     }
 
-    // ========================================================================
     // vuln-0003 regression tests: MRTR resume_session payload limits
     //
     // resume_session previously accepted any `serde_json::Value` without
     // bounding payload size or nesting depth, allowing a client to crash
     // the server via memory exhaustion (huge JSON blob) or stack overflow
     // (deeply nested JSON).
-    // ========================================================================
 
     /// Build a manager with a single pending session for resume tests.
     fn manager_with_pending_session() -> MrtrSessionManager {

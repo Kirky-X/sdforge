@@ -20,9 +20,7 @@ mod mcp_protocol_tests {
     use serde_json::Value;
     use std::sync::Arc;
 
-    // ============================================================================
     // Helper Functions
-    // ============================================================================
 
     /// Creates a simple echo tool for testing
     fn create_echo_tool() -> Arc<dyn SdForgeTool> {
@@ -213,9 +211,7 @@ mod mcp_protocol_tests {
         Arc::new(ComplexTool) as Arc<dyn SdForgeTool>
     }
 
-    // ============================================================================
     // SdForgeMcpServer Tests (ServerHandler integration)
-    // ============================================================================
 
     /// Test: Create server with explicit tools
     #[test]
@@ -258,9 +254,7 @@ mod mcp_protocol_tests {
         assert!(!info.server_info.version.is_empty());
     }
 
-    // ============================================================================
     // Tool Execution Tests
-    // ============================================================================
 
     /// Test: Echo tool with valid input
     #[test]
@@ -411,9 +405,7 @@ mod mcp_protocol_tests {
         assert!(result.is_ok()); // Uses default "unknown"
     }
 
-    // ============================================================================
     // Input Schema Validation Tests
-    // ============================================================================
 
     /// Test: Echo tool schema structure
     #[test]
@@ -471,9 +463,7 @@ mod mcp_protocol_tests {
         assert!(deserialized.is_object());
     }
 
-    // ============================================================================
     // Response Content Tests
-    // ============================================================================
 
     /// Test: Text content type
     #[test]
@@ -516,9 +506,7 @@ mod mcp_protocol_tests {
         assert!(response.structured_content.is_none());
     }
 
-    // ============================================================================
     // Multiple Tools Coexistence Tests
-    // ============================================================================
 
     /// Test: Multiple tools can coexist with different names
     #[test]
@@ -540,9 +528,7 @@ mod mcp_protocol_tests {
         assert!(server.find_tool("complex").is_some());
     }
 
-    // ============================================================================
     // get_mcp_tools Integration Tests
-    // ============================================================================
 
     /// Test: get_mcp_tools returns instances with accessible metadata
     #[test]
@@ -569,9 +555,7 @@ mod mcp_protocol_tests {
         }
     }
 
-    // ============================================================================
     // McpToolRegistration Tests
-    // ============================================================================
 
     /// Test: Registration creates valid tool instances
     #[test]

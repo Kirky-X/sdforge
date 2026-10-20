@@ -15,9 +15,7 @@ mod stream_builder_tests;
 
 use crate::streaming::StreamEvent;
 
-// ============================================================================
 // Shared test helpers — accessible by all sub-modules via `super::`
-// ============================================================================
 
 pub(super) fn create_test_data_event() -> StreamEvent<serde_json::Value> {
     StreamEvent::data(serde_json::json!({"test": "value"}))

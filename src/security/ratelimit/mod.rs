@@ -51,7 +51,7 @@ mod tests;
 pub trait RateLimiter: Send + Sync {
     /// Check whether the given identifier (e.g. IP, user ID) is allowed.
     ///
-    /// Returns `Ok(())` if the request is allowed, or a `RateLimitError`
+    /// Returns `Ok()` if the request is allowed, or a `RateLimitError`
     /// describing the rejection reason.
     fn check<'a>(
         &'a self,

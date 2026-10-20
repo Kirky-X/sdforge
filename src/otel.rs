@@ -16,9 +16,9 @@
 //!
 //! ```ignore
 //! sdforge::otel::install(sdforge::otel::OtelConfig {
-//!     endpoint: "http://127.0.0.1:4318".into(),
-//!     service_name: "my-service".into(),
-//!     ..Default::default()
+//!     endpoint: "http://127.0.0.1:4318".into,
+//!     service_name: "my-service".into,
+//!     ..Default::default
 //! });
 //! ```
 
@@ -338,7 +338,7 @@ pub fn flush_metrics(config: &OtelConfig) -> Result<u16, String> {
 mod tests {
     use super::*;
 
-    /// take_spans() 清空进程级缓冲;并行测试共享该缓冲,必须串行触碰。
+    /// take_spans 清空进程级缓冲;并行测试共享该缓冲,必须串行触碰。
     static BUF_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]

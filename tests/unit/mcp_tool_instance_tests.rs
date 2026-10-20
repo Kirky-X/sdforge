@@ -79,7 +79,7 @@ mod mcp_tool_instance_tests {
 
     #[test]
     fn test_mcp_tool_registration_new() {
-        // Test that McpToolRegistration::new() works with the new API
+        // Test that McpToolRegistration::new works with the new API
         let _registration =
             McpToolRegistration::new("test_tool", "v1", create_echo_tool, create_echo_metadata);
         // Registration was successful if we reach here

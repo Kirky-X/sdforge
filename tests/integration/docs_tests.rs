@@ -14,10 +14,8 @@ use sdforge::core::ApiError;
 use sdforge::forge;
 use sdforge::{DocFormat, generate_docs, write_docs};
 
-// ============================================================================
 // Test fixture: 注册测试用 CLI 命令（docs 隐式包含 cli feature）。
 // generate_docs(CliMarkdown) 从 inventory 收集 CliCommandRegistration。
-// ============================================================================
 
 #[forge(
     name = "docs_test_cmd",
@@ -29,9 +27,7 @@ async fn docs_test_cmd(name: String) -> Result<String, ApiError> {
     Ok(format!("docs:{}", name))
 }
 
-// ============================================================================
 // Tests
-// ============================================================================
 
 /// `generate_docs(OpenApi)` 必须返回 OpenAPI 3.1 JSON（以 `{` 开头）。
 #[test]
@@ -97,9 +93,7 @@ fn test_generate_docs_mcp_markdown_returns_nonempty() {
     assert!(!md.is_empty(), "MCP markdown should not be empty");
 }
 
-// ============================================================================
 // 外部命令生成：generate_cli_docs_from_command 直接渲染调用方的 Command。
-// ============================================================================
 
 /// 直接传入外部构建的 `clap::Command`（非 sdforge 注册表），应渲染出包含
 /// 命令名与选项的 Markdown。
@@ -126,7 +120,7 @@ fn test_generate_cli_docs_from_command_renders_external_command() {
     );
 }
 
-/// 委托路径逐字节一致：`generate_cli_docs()` 必须与对同一 Command 直接
+/// 委托路径逐字节一致：`generate_cli_docs` 必须与对同一 Command 直接
 /// 调用 `generate_cli_docs_from_command` 输出完全相同。
 #[test]
 fn test_generate_cli_docs_delegates_byte_identical() {

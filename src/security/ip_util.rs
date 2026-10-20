@@ -210,9 +210,7 @@ mod tests {
         assert!(!is_ip_in_range("8.8.8.8", "10.0.0.0/8"));
     }
 
-    // ============================================================================
     // Extended IP Validation Tests
-    // ============================================================================
 
     #[test]
     fn test_is_valid_ip_multicast_rejected() {
@@ -270,9 +268,7 @@ mod tests {
         assert!(!is_valid_ip(&long_ip));
     }
 
-    // ============================================================================
     // Extended CIDR Range Tests
-    // ============================================================================
 
     #[test]
     fn test_is_ip_in_range_localhost() {
@@ -312,9 +308,7 @@ mod tests {
         assert!(!is_ip_in_range("172.32.0.1", "172.16.0.0/12"));
     }
 
-    // ============================================================================
     // Extract Client IP Tests
-    // ============================================================================
 
     #[test]
     fn test_extract_client_ip_x_forwarded_for_single() {
@@ -415,9 +409,7 @@ mod tests {
         assert_eq!(ip, None);
     }
 
-    // ============================================================================
     // is_ip_in_range edge case tests (migrated from middleware.rs)
-    // ============================================================================
 
     #[test]
     fn test_is_ip_in_range_non_ipv4_address() {
@@ -433,10 +425,8 @@ mod tests {
         assert!(is_ip_in_range("1.2.3.4", "0.0.0.0/0"));
     }
 
-    // ============================================================================
     // Trusted-proxy X-Real-IP and multi-IP X-Forwarded-For branch coverage
     // (migrated from middleware.rs)
-    // ============================================================================
 
     /// Trusted proxy (10.0.0.1) with X-Real-IP header but no X-Forwarded-For.
     /// Exercises the X-Real-IP secondary path in the trusted-proxy branch,
@@ -459,7 +449,7 @@ mod tests {
 
     /// Trusted proxy (10.0.0.1) with X-Forwarded-For containing multiple
     /// comma-separated IPs. Verifies the leftmost (original client) IP is
-    /// returned, exercising the `value.split(',').next()` path in the
+    /// returned, exercising the `value.split(',').next` path in the
     /// trusted-proxy branch with a multi-IP list.
     #[test]
     fn test_extract_client_ip_trusted_proxy_x_forwarded_for_multiple_ips() {
@@ -478,9 +468,7 @@ mod tests {
         assert_eq!(ip, Some("203.0.113.5".to_string()));
     }
 
-    // ============================================================================
     // Empty / whitespace X-Forwarded-For edge cases (migrated from middleware.rs)
-    // ============================================================================
 
     #[test]
     fn test_extract_client_ip_x_forwarded_for_empty() {

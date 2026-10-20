@@ -13,7 +13,7 @@
 //!
 //! All tests use real functionality without mocks where possible.
 //!
-//! NOTE: Tests that call `setup_grpc_test_server()` bind to a real network
+//! NOTE: Tests that call `setup_grpc_test_server` bind to a real network
 //! address (127.0.0.1:0) and are marked with `#[ignore]` because they hang in
 //! CI/sandboxed environments where network binding is restricted. Run them
 //! explicitly with `cargo test --features grpc -- --ignored` when needed.
@@ -34,7 +34,6 @@ mod grpc_integration_tests {
     use tonic::Request;
     use tonic::transport::Channel;
 
-    // ============================================================================
     // Test handler registered for integration tests.
     //
     // The new `call` routing returns `Status::not_found` for methods
@@ -42,7 +41,6 @@ mod grpc_integration_tests {
     // previously asserted the stub's `{"result":"processed"}` response now
     // call this registered handler so they continue to exercise the success
     // path (real routing, not the stub).
-    // ============================================================================
 
     fn integration_test_echo_handler(
         args: std::collections::HashMap<String, String>,
@@ -145,16 +143,12 @@ mod grpc_integration_tests {
         successor: None,
     });
 
-    // ============================================================================
     // Test Configuration Constants
-    // ============================================================================
 
     const TEST_SERVER_ADDR: &str = "127.0.0.1:0"; // Port 0 = automatic assignment
     const TEST_TIMEOUT_SECS: u64 = 30;
 
-    // ============================================================================
     // Helper Functions
-    // ============================================================================
 
     /// Starts a gRPC test server and returns (client, server_address).
     async fn setup_grpc_test_server() -> (SdForgeServiceClient<Channel>, SocketAddr) {
@@ -221,9 +215,7 @@ mod grpc_integration_tests {
         }
     }
 
-    // ============================================================================
     // gRPC Server Streaming Tests
-    // ============================================================================
 
     /// Test: gRPC server streaming - simulating server-side streaming behavior
     ///
@@ -340,9 +332,7 @@ mod grpc_integration_tests {
         }
     }
 
-    // ============================================================================
     // gRPC Metadata Tests
-    // ============================================================================
 
     /// Test: gRPC call with metadata
     ///
@@ -438,9 +428,7 @@ mod grpc_integration_tests {
         );
     }
 
-    // ============================================================================
     // gRPC Error Handling Tests
-    // ============================================================================
 
     /// Test: gRPC invalid request format
     ///
@@ -560,9 +548,7 @@ mod grpc_integration_tests {
         );
     }
 
-    // ============================================================================
     // gRPC Service Configuration Tests
-    // ============================================================================
 
     /// Test: gRPC default service configuration
     ///
@@ -706,9 +692,7 @@ mod grpc_integration_tests {
         );
     }
 
-    // ============================================================================
     // gRPC Route Registration Tests
-    // ============================================================================
 
     /// Test: gRPC route creation with metadata
     ///
@@ -763,9 +747,7 @@ mod grpc_integration_tests {
         let _normal_debug = format!("{:?}", normal_route);
     }
 
-    // ============================================================================
     // gRPC Service Method Tests
-    // ============================================================================
 
     /// Test: gRPC Call method with parameters
     ///
@@ -855,9 +837,7 @@ mod grpc_integration_tests {
         assert!(result.is_ok(), "GetInfo with version should succeed");
     }
 
-    // ============================================================================
     // gRPC Address Validation Tests
-    // ============================================================================
 
     /// Test: Valid gRPC server address format
     ///
@@ -899,9 +879,7 @@ mod grpc_integration_tests {
         assert!(result.is_err(), "Address without port should be rejected");
     }
 
-    // ============================================================================
     // gRPC Response Tests
-    // ============================================================================
 
     /// Test: gRPC response success flag
     ///
@@ -987,9 +965,7 @@ mod grpc_integration_tests {
         assert!(err.message().contains("definitely_not_registered"));
     }
 
-    // ============================================================================
     // gRPC Connection Management Tests
-    // ============================================================================
 
     /// Test: gRPC connection reuse
     ///
@@ -1040,9 +1016,7 @@ mod grpc_integration_tests {
         );
     }
 
-    // ============================================================================
     // gRPC Security Tests (when security feature is enabled)
-    // ============================================================================
 
     /// Test: gRPC server config with auth (security feature dependent)
     ///
@@ -1090,9 +1064,7 @@ mod grpc_integration_tests {
         assert!(config.auth.is_none(), "Default config should have no auth");
     }
 
-    // ============================================================================
     // gRPC Concurrency Tests
-    // ============================================================================
 
     /// Test: gRPC high concurrency stress test
     ///
@@ -1136,9 +1108,7 @@ mod grpc_integration_tests {
         );
     }
 
-    // ============================================================================
     // gRPC Edge Case Tests
-    // ============================================================================
 
     /// Test: gRPC with very large method name
     ///
@@ -1210,9 +1180,7 @@ mod grpc_integration_tests {
         );
     }
 
-    // ============================================================================
     // gRPC Build Server Tests
-    // ============================================================================
 
     /// Test: Build server with valid address
     ///
@@ -1271,13 +1239,11 @@ mod grpc_integration_tests {
     }
 }
 
-// ============================================================================
 // forge-success-status-code: gRPC status_code e2e tests
 //
 // Verifies that `CallResponse.status_code` correctly reflects the
 // `ServiceResponse.status_code` field when the handler returns a
 // ServiceResponse, and defaults to 200 for bare types.
-// ============================================================================
 
 #[cfg(feature = "grpc")]
 mod grpc_status_code_tests {

@@ -89,7 +89,7 @@ impl WebSocketRoute {
         self
     }
 
-    /// Resolve the mount path served by `build()`: a declared `ws_path` wins,
+    /// Resolve the mount path served by `build`: a declared `ws_path` wins,
     /// otherwise the path derives from `name`. A missing leading slash is
     /// normalized so axum never receives a panic-inducing relative path.
     pub fn mount_path(&self) -> String {
@@ -158,13 +158,13 @@ impl WebSocketHandler for DefaultWebSocketHandler {
 pub struct ValidatedWebSocketUpgrade {
     ws: WebSocketUpgrade,
     manager: Arc<ConnectionManager>,
-    /// 该路由对应的自定义消息处理器；由 `build()` 链路注入。
+    /// 该路由对应的自定义消息处理器；由 `build` 链路注入。
     /// 为 `None` 时回退到 `DefaultWebSocketHandler`。
     handler: Option<Arc<dyn WebSocketHandler>>,
 }
 
 impl ValidatedWebSocketUpgrade {
-    /// 为本次升级绑定自定义消息处理器（`build()` 在按路由注册时注入）。
+    /// 为本次升级绑定自定义消息处理器（`build` 在按路由注册时注入）。
     pub fn with_handler(mut self, handler: Arc<dyn WebSocketHandler>) -> Self {
         self.handler = Some(handler);
         self
@@ -202,7 +202,7 @@ where
             .map(String::from);
 
         // Get SdForgeState from either wiring channel:
-        // - router state (`MethodRouter::with_state`, the wiring `build()`
+        // - router state (`MethodRouter::with_state`, the wiring `build`
         //   uses): axum bakes the state into the handler service and hands it
         //   to `from_request` as `&S` — it is never written into request
         //   extensions;
@@ -352,7 +352,6 @@ async fn handle_socket_inner(
         }
     });
 
-    // Handle incoming messages
     while let Some(result) = stream.next().await {
         match result {
             Ok(msg) => {
@@ -492,7 +491,6 @@ mod tests {
         let server = axum_test::TestServer::builder().http_transport().build(app);
 
         let mut ws = server.get_websocket("/ws").await.into_websocket().await;
-        // 等待服务端完成连接注册
         tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
         assert_eq!(manager.connection_count().await, 1);
 
@@ -519,11 +517,11 @@ mod tests {
         );
     }
 
-    /// `with_state` 接线回归（HIGH）：`build()` 经 `MethodRouter::with_state`
+    /// `with_state` 接线回归（HIGH）：`build` 经 `MethodRouter::with_state`
     /// 注入 `Arc<SdForgeState>`，axum 把它按值烘进 handler service、从不写入
-    /// request extensions。此前提取器只查 extensions，`build()` 注册的路由
+    /// request extensions。此前提取器只查 extensions，`build` 注册的路由
     /// 全部回退到每连接新建的 ConnectionManager：共享 manager 上
-    /// `connection_count()==0`，broadcast 永不到达客户端。修复后两条注入
+    /// `connection_count==0`，broadcast 永不到达客户端。修复后两条注入
     /// 通道（router state / Extension）都必须命中同一 manager。
     #[tokio::test]
     async fn with_state_pattern_shares_connection_manager() {
@@ -645,7 +643,7 @@ mod tests {
     }
 
     /// Test that handle_socket silently ignores binary messages (the implicit
-    /// else of `if let Ok(text) = msg.to_text()` on line 171).
+    /// else of `if let Ok(text) = msg.to_text` on line 171).
     ///
     /// Sends a binary message followed by a text Request, and verifies only
     /// the text Request gets a Response — the binary message is dropped.
@@ -657,7 +655,7 @@ mod tests {
         let mut ws = server.get_websocket("/ws").await.into_websocket().await;
 
         // Send a binary message with invalid UTF-8 — should be silently
-        // ignored by handle_socket (msg.to_text() returns Err, so the
+        // ignored by handle_socket (msg.to_text returns Err, so the
         // `if let Ok(text)` branch on line 171 is not taken).
         ws.send_message(axum_test::WsMessage::Binary(vec![0xFF, 0xFE, 0xFD].into()))
             .await;

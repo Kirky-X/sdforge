@@ -94,7 +94,7 @@ mod websocket_enhanced_integration_tests {
 }
 
 /// `#[forge(ws_path = "...")]` 回归：声明式挂载路径必须由宏注册进
-/// `WebSocketRoute` 并被 `websocket::build()` 消费（此前 ws_path 被解析后
+/// `WebSocketRoute` 并被 `websocket::build` 消费（此前 ws_path 被解析后
 /// 丢弃，路由只挂在 `/{name}` 上）。
 #[cfg(feature = "websocket")]
 mod websocket_ws_path_tests {
@@ -124,7 +124,7 @@ mod websocket_ws_path_tests {
         assert_eq!(route.mount_path(), "/ws/it-declared");
     }
 
-    /// 端到端：`build()` 后的路由必须在声明的 ws_path 上完成 101 升级。
+    /// 端到端：`build` 后的路由必须在声明的 ws_path 上完成 101 升级。
     #[tokio::test]
     async fn build_serves_declared_ws_path() {
         let app = sdforge::websocket::build();

@@ -7,7 +7,7 @@
 //!   `sdforge::prost`, `sdforge::utoipa`, `sdforge::rmcp`, `sdforge::inventory`,
 //!   `sdforge::oxcache`, `sdforge::tokio_stream`) WITHOUT direct framework deps.
 //! - Public APIs of each example module.
-//! - Inventory-based registration counts via `sdforge::init_all_plugins()`.
+//! - Inventory-based registration counts via `sdforge::init_all_plugins`.
 //!
 //! Each section is gated by the corresponding `*_examples` feature flag so the
 //! file compiles under any subset of features (including `combined_examples`).
@@ -18,7 +18,7 @@
 //! private (`async fn`, not `pub`). They register with `inventory` at compile
 //! time but cannot be called directly from this integration test. For those,
 //! we verify (a) the public types they use can be constructed and serialized,
-//! and (b) `init_all_plugins()` reports non-zero registration counts proving
+//! and (b) `init_all_plugins` reports non-zero registration counts proving
 //! the inventory submissions were linked into the test binary.
 
 #![allow(clippy::needless_pass_by_value)]
@@ -32,9 +32,7 @@
 #[cfg(feature = "openapi_examples")]
 use sdforge::utoipa;
 
-// ============================================================================
 // Section 1: Re-export verification (compile-time check)
-// ============================================================================
 //
 // Verify the framework libraries re-exported by sdforge are accessible from
 // downstream code WITHOUT adding direct deps on axum/clap/tonic/prost/utoipa/
@@ -130,9 +128,7 @@ fn re_export_tokio_stream_is_accessible() {
     _assert_stream_ext::<sdforge::tokio_stream::wrappers::UnboundedReceiverStream<()>>();
 }
 
-// ============================================================================
 // Section 2: HTTP examples smoke tests (feature = "http_examples")
-// ============================================================================
 
 #[cfg(feature = "http_examples")]
 #[test]
@@ -148,7 +144,7 @@ fn http_init_all_plugins_registers_routes() {
 #[cfg(feature = "http_examples")]
 #[test]
 fn http_build_returns_router() {
-    // sdforge::http::build() collects RouteRegistration inventory into an axum Router.
+    // sdforge::http::build collects RouteRegistration inventory into an axum Router.
     let _router = sdforge::http::build();
 }
 
@@ -273,9 +269,7 @@ fn http_config_app_config_default() {
     assert_eq!(cfg.server.host, "127.0.0.1");
 }
 
-// ============================================================================
 // Section 3: MCP examples smoke tests (feature = "mcp_examples")
-// ============================================================================
 
 #[cfg(feature = "mcp_examples")]
 #[test]
@@ -283,7 +277,7 @@ fn mcp_init_all_plugins_returns_accessible_counts() {
     // The MCP example modules define types and demo functions but do not use
     // `#[forge(mcp = ...)]` to register MCP tools (the `#[forge]` calls in the
     // examples only register HTTP routes). Therefore `mcp_tools` may be 0.
-    // We verify (a) `init_all_plugins()` runs without panic, (b) the
+    // We verify (a) `init_all_plugins` runs without panic, (b) the
     // `mcp_tools` field is accessible (proving the `mcp` cfg gate is active),
     // and (c) MCP example types are constructible (covered by later tests).
     let counts = sdforge::init_all_plugins();
@@ -337,7 +331,7 @@ fn mcp_migration_2026_stateless_handler_constructs() {
     use sdforge_examples::mcp::migration_2026::{
         demo_expected_headers, demo_header_info_shape, demo_stateless_handler,
     };
-    // demo_stateless_handler constructs a StatelessServerHandler via sdforge::mcp::build().
+    // demo_stateless_handler constructs a StatelessServerHandler via sdforge::mcp::build.
     let _handler = demo_stateless_handler();
     let headers = demo_expected_headers();
     assert!(
@@ -372,9 +366,7 @@ async fn mcp_mrtr_session_manager_creates_sessions() {
     );
 }
 
-// ============================================================================
 // Section 4: WebSocket examples (feature = "websocket_examples")
-// ============================================================================
 
 #[cfg(feature = "websocket_examples")]
 #[test]
@@ -382,7 +374,7 @@ fn websocket_init_all_plugins_returns_accessible_counts() {
     // The WebSocket example modules use `#[forge(name = "websocket_basic")]`
     // which registers HTTP routes (not WebSocket-specific `WebSocketRoute`
     // inventory items). Therefore `ws_routes` may be 0. We verify (a)
-    // `init_all_plugins()` runs without panic and (b) the `ws_routes` field
+    // `init_all_plugins` runs without panic and (b) the `ws_routes` field
     // is accessible (proving the `websocket` cfg gate is active).
     let counts = sdforge::init_all_plugins();
     let _ws_routes: usize = counts.ws_routes;
@@ -444,9 +436,7 @@ fn websocket_chat_types_constructible() {
     };
 }
 
-// ============================================================================
 // Section 5: Streaming examples (feature = "streaming_examples")
-// ============================================================================
 
 #[cfg(feature = "streaming_examples")]
 #[test]
@@ -485,9 +475,7 @@ fn streaming_tokio_stream_re_export_usable() {
     _assert_ext::<sdforge::tokio_stream::wrappers::UnboundedReceiverStream<()>>();
 }
 
-// ============================================================================
 // Section 6: Security examples (feature = "security_examples")
-// ============================================================================
 
 #[cfg(feature = "security_examples")]
 #[test]
@@ -509,10 +497,10 @@ fn security_comprehensive_user_and_role_constructible() {
 #[cfg(feature = "security_examples")]
 #[tokio::test]
 async fn security_comprehensive_app_state_default_has_seed_users() {
-    // `SdForgeExampleState::default()` constructs an `SdForgeAuditLogger` whose `Default`
+    // `SdForgeExampleState::default` constructs an `SdForgeAuditLogger` whose `Default`
     // impl spins up a Tokio task (mpsc channel), requiring a runtime context.
     // Hence `#[tokio::test]`. The `users` field is a `tokio::sync::RwLock`,
-    // so we use `.read().await` (not `blocking_read()`, which panics inside
+    // so we use `.read.await` (not `blocking_read`, which panics inside
     // an async context).
     use sdforge_examples::security::comprehensive::SdForgeExampleState;
     let state = SdForgeExampleState::default();
@@ -580,9 +568,7 @@ fn security_auth_failures_response_builders() {
     let _forbid_err = demo_forbidden_api_error();
 }
 
-// ============================================================================
 // Section 7: Cache examples (feature = "cache_examples")
-// ============================================================================
 
 #[cfg(feature = "cache_examples")]
 #[test]
@@ -677,9 +663,7 @@ fn cache_computation_result_constructible() {
     };
 }
 
-// ============================================================================
 // Section 8: gRPC examples (feature = "grpc_examples")
-// ============================================================================
 
 #[cfg(feature = "grpc_examples")]
 #[test]
@@ -745,19 +729,17 @@ fn grpc_tonic_and_prost_re_exports_usable() {
 #[test]
 fn grpc_init_all_plugins_returns_accessible_counts() {
     // The gRPC example modules define types and demo functions (e.g.
-    // `create_sample_route()`, `default_server_config()`) but do not use
+    // `create_sample_route`, `default_server_config`) but do not use
     // `#[forge(grpc_method = ...)]` to register gRPC routes/handlers.
     // Therefore `grpc_routes` and `grpc_handlers` may be 0. We verify (a)
-    // `init_all_plugins()` runs without panic and (b) the cfg-gated fields
+    // `init_all_plugins` runs without panic and (b) the cfg-gated fields
     // are accessible (proving the `grpc` feature is active).
     let counts = sdforge::init_all_plugins();
     let _grpc_routes: usize = counts.grpc_routes;
     let _grpc_handlers: usize = counts.grpc_handlers;
 }
 
-// ============================================================================
 // Section 9: Logging examples (feature = "logging_examples", inklog migration)
-// ============================================================================
 
 #[cfg(feature = "logging_examples")]
 #[test]
@@ -819,9 +801,7 @@ async fn logging_relax_level_accepts_valid_level() {
     drop(manager);
 }
 
-// ============================================================================
 // Section 10: OpenAPI examples (feature = "openapi_examples")
-// ============================================================================
 
 #[cfg(feature = "openapi_examples")]
 #[test]
@@ -914,9 +894,7 @@ sdforge::inventory::submit!(sdforge::openapi::OpenApiRouteInfo::new(
     &["test", "comprehensive"]
 ));
 
-// ============================================================================
 // Section 11: CLI examples (feature = "cli_examples")
-// ============================================================================
 
 #[cfg(feature = "cli_examples")]
 #[test]
@@ -953,19 +931,17 @@ fn cli_builder_with_name_customizes_command() {
 fn cli_init_all_plugins_returns_accessible_counts() {
     // The CLI example modules define demo functions but do not use
     // `#[forge(cli = true)]` to register CLI commands. Therefore
-    // `cli_commands` may be 0. We verify (a) `init_all_plugins()` runs
+    // `cli_commands` may be 0. We verify (a) `init_all_plugins` runs
     // without panic and (b) the `cli_commands` field is accessible (proving
     // the `cli` cfg gate is active).
     let counts = sdforge::init_all_plugins();
     let _cli_commands: usize = counts.cli_commands;
 }
 
-// Note: We deliberately do NOT call CliBuilder::execute() because it calls
-// std::process::exit() which would terminate the test process.
+// Note: We deliberately do NOT call CliBuilder::execute because it calls
+// std::process::exit which would terminate the test process.
 
-// ============================================================================
 // Section 12: Docs examples (feature = "docs_examples")
-// ============================================================================
 
 #[cfg(feature = "docs_examples")]
 #[test]
@@ -995,16 +971,14 @@ fn docs_generate_cli_markdown_is_callable() {
 #[cfg(all(feature = "docs_examples", feature = "http_examples"))]
 #[test]
 fn docs_swagger_ui_router_returns_router() {
-    // swagger_ui_router() requires both `docs` and `http` features. The
+    // swagger_ui_router requires both `docs` and `http` features. The
     // `docs_examples` feature alone does not enable http, so this test is
     // additionally gated on `http_examples`. Under `combined_examples` both
     // are active.
     let _router = sdforge::swagger_ui_router();
 }
 
-// ============================================================================
 // Section 13: Combined examples (feature = "combined_examples")
-// ============================================================================
 
 #[cfg(feature = "combined_examples")]
 #[test]
@@ -1105,12 +1079,11 @@ fn combined_all_re_exports_accessible() {
 #[cfg(feature = "combined_examples")]
 #[test]
 fn combined_http_build_with_all_features() {
-    // Under combined_examples, http::build() should incorporate routes from
+    // Under combined_examples, http::build should incorporate routes from
     // all protocol example modules (http + mcp + websocket + grpc all linked).
     let _router = sdforge::http::build();
 }
 
-// ============================================================================
 // Section 14: End-to-end dispatch via #[forge(...)] from a downstream crate
 //
 // These tests prove the end-to-end dispatch works
@@ -1121,7 +1094,6 @@ fn combined_http_build_with_all_features() {
 // `SdForgeGrpcService::call`, `init_all_plugins`) picks them up — without
 // the downstream crate adding any direct deps on `sdforge-macros`,
 // `inventory`, `clap`, `tonic`, etc.
-// ============================================================================
 
 // --- Test fixture: a #[forge(cli = true)] handler defined in the test
 // (i.e. downstream) crate. The macro emits
@@ -1194,13 +1166,13 @@ async fn comprehensive_mcp_hello() -> Result<String, ApiError> {
     Ok("hello from comprehensive mcp".to_string())
 }
 
-// --- Dispatch tests -------------------------------------------------------
+// Dispatch tests
 
 #[cfg(feature = "cli_examples")]
 #[test]
 fn cli_dispatch_registers_comprehensive_echo_subcommand() {
     // The `#[forge(cli = true)]` attribute above must emit a
-    // `CliCommandRegistration` so CliBuilder::build() picks it up.
+    // `CliCommandRegistration` so CliBuilder::build picks it up.
     use sdforge::cli::CliBuilder;
     let cmd = CliBuilder::new().build();
     let echo = cmd

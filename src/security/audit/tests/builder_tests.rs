@@ -1,13 +1,11 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! Tests for `SdForgeAuditLoggerBuilder` and `SdForgeAuditLogger::builder()`.
+//! Tests for `SdForgeAuditLoggerBuilder` and `SdForgeAuditLogger::builder`.
 
 use super::super::*;
 use crate::security::{AuditResult, AuthMetadata, serialize_audit_logs};
 
-// ============================================================================
 // SdForgeAuditLoggerBuilder Tests
-// ============================================================================
 
 #[test]
 fn test_builder_new_default_values() {
@@ -65,9 +63,7 @@ async fn test_builder_build() {
     assert_eq!(logger.dropped_log_count(), 0);
 }
 
-// ============================================================================
-// SdForgeAuditLogger::builder() Tests
-// ============================================================================
+// SdForgeAuditLogger::builder Tests
 
 #[test]
 fn test_audit_logger_builder_method() {
@@ -83,12 +79,10 @@ async fn test_default_audit_logger() {
     assert_eq!(logger.max_logs_per_user, 1000);
 }
 
-// ============================================================================
-// Builder build() worker tests
+// Builder build worker tests
 //
-// SdForgeAuditLoggerBuilder::build() also spawns a worker with the same
+// SdForgeAuditLoggerBuilder::build also spawns a worker with the same
 // fallback merge logic. This test exercises the builder's worker path.
-// ============================================================================
 
 #[tokio::test]
 async fn test_builder_build_worker_merges_fallback() {

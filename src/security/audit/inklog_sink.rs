@@ -16,7 +16,7 @@ use std::pin::Pin;
 
 /// Audit sink that bridges to inklog's structured logging pipeline.
 ///
-/// Each `write()` call emits the audit log as a JSON-formatted `log::info!`
+/// Each `write` call emits the audit log as a JSON-formatted `log::info!`
 /// event. inklog's `LoggerManager` (if installed as the `log` backend)
 /// captures these events and routes them to the configured output
 /// (file, stdout, etc.).

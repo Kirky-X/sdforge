@@ -46,7 +46,7 @@ pub type HandlerFn = fn(HandlerArgs, HandlerState) -> HandlerFuture;
 ///
 /// `Value::String` yields the raw string (no quotes) — friendly for CLI
 /// output (`Hello, world!` not `"Hello, world!"`). Any other JSON type
-/// (object/array/number/bool/null) is serialized via `Value::to_string()`.
+/// (object/array/number/bool/null) is serialized via `Value::to_string`.
 #[must_use]
 pub fn extract_value(v: &Value) -> String {
     match v {
@@ -123,9 +123,7 @@ mod tests {
         let _f: HandlerFn = |_args, _state| Box::pin(async { Ok(Value::Null) });
     }
 
-    // ========================================================================
     // downcast_state
-    // ========================================================================
 
     #[test]
     fn downcast_state_none_returns_internal_error() {

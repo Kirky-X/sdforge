@@ -40,7 +40,7 @@ impl Serialize for ApiKeyVersion {
         state.serialize_field("permissions", &self.permissions)?;
         let created_nanos = self.created_at.elapsed().as_nanos() as i64;
         state.serialize_field("created_at", &created_nanos)?;
-        // 注意：对将来的 expires_at 时刻，`elapsed()` 会饱和为 0，导致持久化后
+        // 注意：对将来的 expires_at 时刻，`elapsed` 会饱和为 0，导致持久化后
         // 还原出的按键立即过期。这里改存"剩余时长"。
         let expires_nanos = self
             .expires_at
@@ -477,7 +477,7 @@ mod tests {
         assert_eq!(config.keep_versions, 3);
     }
 
-    // ===== ApiKeyCache Tests =====
+    // ApiKeyCache Tests
 
     #[test]
     fn test_api_key_cache_construction() {
@@ -657,9 +657,7 @@ mod tests {
         assert_eq!(cloned.versions.len(), 1);
     }
 
-    // ============================================================================
     // Additional coverage tests
-    // ============================================================================
 
     #[test]
     fn test_api_key_version_deserialize() {
@@ -777,12 +775,10 @@ mod tests {
         );
     }
 
-    // ============================================================================
     // Branch coverage: expired-active filter, retain path
-    // ============================================================================
 
     /// get_active_version returns None when the active version is expired,
-    /// exercising the `.filter(|v| v.is_active && !v.is_expired())` branch.
+    /// exercising the `.filter(|v| v.is_active && !v.is_expired)` branch.
     #[test]
     fn test_get_active_version_returns_none_when_active_expired() {
         let mut metadata = ApiKeyMetadata::new("key1".to_string(), None);
@@ -801,7 +797,7 @@ mod tests {
 
         std::thread::sleep(Duration::from_millis(20));
 
-        // After expiration the filter rejects the version (is_expired() true),
+        // After expiration the filter rejects the version (is_expired true),
         // so get_active_version returns None.
         assert!(metadata.get_active_version().is_none());
     }

@@ -112,9 +112,7 @@ mod http_tests {
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
-    // ============================================================================
     // Advanced HTTP Tests - Performance and Concurrency
-    // ============================================================================
 
     /// Test: HTTP request handling performance
     #[tokio::test]
@@ -134,7 +132,6 @@ mod http_tests {
 
         let start = std::time::Instant::now();
 
-        // Handle 1000 requests
         for _ in 0..1000 {
             let response = app
                 .clone()

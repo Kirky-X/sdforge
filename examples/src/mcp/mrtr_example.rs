@@ -23,9 +23,7 @@ use sdforge::mcp::mrtr::MrtrSessionManager;
 use sdforge::mcp::{InputRequiredResult, McpError};
 use sdforge::prelude::*;
 
-// ============================================================================
 // MRTR 会话管理示例
-// ============================================================================
 
 /// 演示创建 MRTR 会话
 ///
@@ -105,9 +103,7 @@ pub fn demo_session_conflict_detection(manager: &MrtrSessionManager) -> Result<(
     }
 }
 
-// ============================================================================
 // 单元测试
-// ============================================================================
 
 #[cfg(test)]
 mod tests {

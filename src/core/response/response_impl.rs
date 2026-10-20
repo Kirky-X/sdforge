@@ -74,7 +74,7 @@ where
     /// Used by the `#[forge]` macro handler: the macro `status` argument is
     /// passed here as the fallback, and an explicit `success_with_status`
     /// value already on the response takes precedence (field > macro > 200).
-    /// Only fills the field when `self.status_code.is_none()`; passing
+    /// Only fills the field when `self.status_code.is_none`; passing
     /// `None` is a no-op (leaves the field as-is).
     pub fn with_status_code_opt(mut self, code: Option<u16>) -> Self {
         if self.status_code.is_none() {

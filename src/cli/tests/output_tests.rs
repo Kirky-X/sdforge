@@ -21,7 +21,7 @@ fn parse<const N: usize>(args: [&str; N]) -> Result<clap::ArgMatches, clap::Erro
     cmd.try_get_matches_from(args)
 }
 
-/// build() 必须内建挂载 `--format` 全局开关（text|json），
+/// build 必须内建挂载 `--format` 全局开关（text|json），
 /// 下游无需自定义 GlobalArg 即得机器可读输出契约。
 #[test]
 fn build_mounts_format_flag_with_value_constraint() {

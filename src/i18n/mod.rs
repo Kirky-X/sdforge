@@ -10,15 +10,15 @@
 //! by locale-specific collation rules, and selecting the best locale from
 //! an incoming `Accept-Language` header.
 //!
-//! The message translation layer ([`t()`](crate::i18n::t),
-//! [`translate_for()`](crate::i18n::translate_for),
-//! [`translate_or_fallback()`](crate::i18n::translate_or_fallback),
-//! [`register_translation()`](crate::i18n::register_translation)) is always
+//! The message translation layer ([`t`](crate::i18n::t),
+//! [`translate_for`](crate::i18n::translate_for),
+//! [`translate_or_fallback`](crate::i18n::translate_or_fallback),
+//! [`register_translation`](crate::i18n::register_translation)) is always
 //! compiled and bundles built-in `en` / `zh` Fluent catalogs
 //! (`locales/{en,zh}/messages.ftl`). The active locale auto-detects from
 //! the environment (`SDFORGE_LANG` → `LC_ALL` → `LC_MESSAGES` → `LANG` →
 //! system locale → `en`); hosts may override any message per locale via
-//! [`register_translation()`](crate::i18n::register_translation).
+//! [`register_translation`](crate::i18n::register_translation).
 //!
 //! Enable with the `i18n` cargo feature:
 //! ```toml
@@ -41,7 +41,6 @@
 //! assert_eq!(locales, vec!["en-US", "en", "zh-CN", "zh"]);
 //! ```
 
-// ============================================================================
 // Translation registry — always compiled (no ICU4X dependency).
 //
 // Provides a global (locale, i18n_key) → translation lookup used by
@@ -54,7 +53,6 @@
 // locales via [`register_translation`]; host registrations always take
 // precedence over the built-in catalog, and the active locale defaults to
 // auto-detection (see [`detect_locale`]).
-// ============================================================================
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex, OnceLock};
@@ -86,9 +84,7 @@ static REGISTRY: LazyLock<Mutex<TranslationRegistry>> = LazyLock::new(|| {
     })
 });
 
-// ============================================================================
 // Built-in Fluent bundles (en/zh) — dbnexus catalog.rs concurrent pattern.
-// ============================================================================
 
 /// Cached concurrent Fluent bundle for the built-in English catalog
 /// (thread-safe, built once on first access).
@@ -425,7 +421,7 @@ fn lookup_translation(locale: &str, key: &str, args: &[(&str, String)]) -> Optio
 /// assert_eq!(
 ///     translate_or_fallback("Generate embedding", Some("forge.embed")),
 ///     "Generate embedding"  // fallback to default
-/// );
+///);
 /// ```
 pub fn translate_or_fallback(default: &str, i18n_key: Option<&str>) -> String {
     let key = match i18n_key {
@@ -450,9 +446,7 @@ pub fn clear_translations() {
     reg.locale.clear();
 }
 
-// ============================================================================
 // ICU4X-backed HTTP formatter — only compiled with the `i18n` feature.
-// ============================================================================
 
 #[cfg(feature = "i18n")]
 #[cfg(test)]
@@ -527,9 +521,7 @@ pub struct HttpI18nFormatter {
     collator: CollatorBorrowed<'static>,
 }
 
-// ============================================================================
 // Translation registry tests (always compiled, no ICU4X needed)
-// ============================================================================
 
 /// `REGISTRY` 的逻辑状态（locale + 翻译表）是进程级全局的，Mutex 只保证
 /// 内存安全、不隔离逻辑状态；并行 harness 下各用例互相踩踏（实测
@@ -619,7 +611,7 @@ mod translation_tests {
     fn test_set_and_get_locale() {
         let _guard = registry_guard();
         clear_translations();
-        // Before an explicit set_locale, get_locale() lazily detects the
+        // Before an explicit set_locale, get_locale lazily detects the
         // system locale; the detection chain only ever yields en or zh.
         let detected = get_locale();
         assert!(
@@ -696,9 +688,7 @@ mod translation_tests {
     }
 }
 
-// ============================================================================
 // Built-in catalog + detection chain guard tests
-// ============================================================================
 
 #[cfg(test)]
 mod builtin_catalog_tests {
@@ -958,9 +948,7 @@ mod builtin_catalog_tests {
     }
 }
 
-// ============================================================================
 // ICU4X HTTP formatter tests — only compiled with the `i18n` feature.
-// ============================================================================
 
 #[cfg(all(test, feature = "i18n"))]
 mod tests {

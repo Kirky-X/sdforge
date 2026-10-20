@@ -1,13 +1,13 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! Tests for HTTP routing: `HttpRoute`/`RouteRegistration` construction,
-//! `resolve_route_path`, `build()`/`build_with_redirect()`, inventory
+//! `resolve_route_path`, `build`/`build_with_redirect`, inventory
 //! collection, and request ID generation helpers.
 
 use super::super::*;
 use axum::routing::get;
 
-/// Test build() returns a valid Router
+/// Test build returns a valid Router
 #[test]
 fn test_build_returns_router() {
     let router = build();
@@ -15,7 +15,7 @@ fn test_build_returns_router() {
     let _ = router;
 }
 
-/// Test build_with_redirect() returns Router with middleware
+/// Test build_with_redirect returns Router with middleware
 #[test]
 fn test_build_with_redirect() {
     let router = build_with_redirect();
@@ -108,9 +108,7 @@ fn test_route_registration() {
     assert_eq!(registration.version, "v1");
 }
 
-// ============================================================================
 // get_or_generate_request_id Tests
-// ============================================================================
 
 #[test]
 fn test_get_or_generate_request_id_with_header() {
@@ -150,9 +148,7 @@ fn test_get_or_generate_request_id_with_invalid_header_value() {
     assert!(id.len() == 36);
 }
 
-// ============================================================================
 // HttpRoute Extended Tests
-// ============================================================================
 
 #[test]
 fn test_http_route_with_module_prefix() {
@@ -245,9 +241,7 @@ fn test_http_route_debug() {
     assert!(debug_str.contains("HttpRoute"));
 }
 
-// ============================================================================
 // RouteRegistration Extended Tests
-// ============================================================================
 
 #[test]
 fn test_route_registration_name_accessor() {
@@ -322,9 +316,7 @@ fn test_route_registration_create() {
     assert_eq!(route.path(), "/create");
 }
 
-// ============================================================================
 // resolve_route_path Extended Tests
-// ============================================================================
 
 #[test]
 fn test_resolve_route_path_empty_prefix() {
@@ -341,15 +333,13 @@ fn test_resolve_route_path_root_path() {
     assert_eq!(resolve_route_path("/", Some("v1")), "/v1/");
 }
 
-// ============================================================================
 // Inventory Preservation Tests (feature-gated)
-// ============================================================================
 
 #[cfg(feature = "mcp")]
 #[test]
 fn test_preserve_mcp_inventory() {
     // This test verifies the MCP inventory preservation function doesn't panic
-    // The function is called internally by build()
+    // The function is called internally by build
     preserve_mcp_inventory();
 }
 
@@ -365,9 +355,7 @@ fn test_preserve_grpc_inventory() {
     preserve_grpc_inventory();
 }
 
-// ============================================================================
-// build() function extended tests
-// ============================================================================
+// build function extended tests
 
 #[test]
 fn test_build_router_deterministic() {
@@ -375,9 +363,7 @@ fn test_build_router_deterministic() {
     let _router2 = build();
 }
 
-// ============================================================================
 // Security Headers Tests
-// ============================================================================
 
 #[test]
 fn test_apply_security_headers() {
@@ -387,14 +373,12 @@ fn test_apply_security_headers() {
     let _ = router_with_headers;
 }
 
-// ============================================================================
-// build() Extended Tests - Route Building with Various Configurations
-// ============================================================================
+// build Extended Tests - Route Building with Various Configurations
 
 #[test]
 fn test_build_with_direct_http_route_registration() {
     // Test that direct HttpRoute registrations are collected
-    // This exercises line 171-173 in build()
+    // This exercises line 171-173 in build
     let router = build();
     // Should not panic even with no registered routes
     let _ = router;
@@ -415,9 +399,7 @@ fn test_build_collects_registrations() {
     let _ = router;
 }
 
-// ============================================================================
 // RouteRegistration Extended Tests - Metadata and Edge Cases
-// ============================================================================
 
 #[test]
 fn test_route_registration_metadata() {
@@ -571,9 +553,7 @@ fn test_route_registration_copy() {
     assert_eq!(copied.name, "copy_test");
 }
 
-// ============================================================================
 // HttpRoute with Various Path Configurations
-// ============================================================================
 
 #[test]
 fn test_http_route_with_root_path() {
@@ -665,9 +645,7 @@ fn test_http_route_metadata_accessors() {
     assert!(metadata.is_streaming());
 }
 
-// ============================================================================
 // resolve_route_path Extended Edge Cases
-// ============================================================================
 
 #[test]
 fn test_resolve_route_path_deep_prefix() {
@@ -692,9 +670,7 @@ fn test_resolve_route_path_whitespace_prefix() {
     assert_eq!(result, "/ /api/users");
 }
 
-// ============================================================================
 // build_with_redirect Extended Tests
-// ============================================================================
 
 #[test]
 fn test_build_with_redirect_multiple_calls() {
@@ -707,23 +683,19 @@ fn test_build_with_redirect_multiple_calls() {
     let _ = router2;
 }
 
-// ============================================================================
 // X_REQUEST_ID Constant Tests
-// ============================================================================
 
 #[test]
 fn test_x_request_id_constant() {
     assert_eq!(X_REQUEST_ID, "x-request-id");
 }
 
-// ============================================================================
 // Inventory Collection Tests
-// ============================================================================
 
 #[test]
 fn test_inventory_http_route_collection() {
     // Verify that inventory::iter::<HttpRoute> works
-    // This exercises line 171 in build()
+    // This exercises line 171 in build
     let count = inventory::iter::<HttpRoute>().count();
     // Count may be 0 or more depending on registered routes
     let _ = count;
@@ -732,14 +704,12 @@ fn test_inventory_http_route_collection() {
 #[test]
 fn test_inventory_route_registration_collection() {
     // Verify that inventory::iter::<RouteRegistration> works
-    // This exercises line 162 in build()
+    // This exercises line 162 in build
     let count = inventory::iter::<RouteRegistration>().count();
     let _ = count;
 }
 
-// ============================================================================
-// Inventory Route Accessibility Test (covers build() route collection loop)
-// ============================================================================
+// Inventory Route Accessibility Test (covers build route collection loop)
 
 #[tokio::test]
 async fn test_build_includes_inventory_registered_route() {
@@ -761,13 +731,11 @@ async fn test_build_includes_inventory_registered_route() {
     assert_eq!(&body[..], b"coverage-test-ok");
 }
 
-// ============================================================================
 // resolve_route_path: additional edge cases
 //
 // resolve_route_path builds the full route path from a base path and an
 // optional module prefix. These tests cover the prefix-trimming and
 // base_path slicing branches.
-// ============================================================================
 
 /// Test resolve_route_path with a prefix that has no leading slash and a
 /// base path that starts with `/`, verifying the clean_prefix trim and the
@@ -779,7 +747,7 @@ fn test_resolve_route_path_prefix_no_leading_slash() {
 }
 
 /// Test resolve_route_path with an empty prefix string falls back to the
-/// base path unchanged (the `!prefix.is_empty()` guard).
+/// base path unchanged (the `!prefix.is_empty` guard).
 #[test]
 fn test_resolve_route_path_empty_prefix_string() {
     let result = resolve_route_path("/users", Some(""));
@@ -802,9 +770,7 @@ fn test_resolve_route_path_prefix_multiple_leading_slashes_trimmed() {
     assert_eq!(result, "/v2/users");
 }
 
-// ============================================================================
 // get_or_generate_request_id: edge cases
-// ============================================================================
 
 /// Test get_or_generate_request_id with an empty x-request-id header
 /// value generates a UUID (empty values must not become the request id,

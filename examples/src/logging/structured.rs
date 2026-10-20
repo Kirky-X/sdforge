@@ -13,7 +13,7 @@
 //!    —— `LoggerManager::from_file` 从 TOML 加载含**真实轮转**（大小 + 时间）
 //!    的文件 sink 配置（替换旧栈宣称却不存在的轮转）。
 //! 3. [`manager_from_builder`](crate::logging::structured::manager_from_builder)
-//!    —— `LoggerManager::builder()` 编程式构造。
+//!    —— `LoggerManager::builder` 编程式构造。
 //! 4. [`relax_level`](crate::logging::structured::relax_level) ——
 //!    `set_level` 运行时调级。
 //!
@@ -31,9 +31,7 @@ use sdforge::i18n::t;
 use sdforge::inklog::{LoggerManager, init_inklog_logger};
 use std::path::{Path, PathBuf};
 
-// =============================================================================
 // 配置文件
-// =============================================================================
 
 /// 含轮转配置的 inklog TOML：文件 sink，大小（10MB）与时间（daily）双轮转，
 /// 保留 5 个历史文件。
@@ -66,9 +64,7 @@ fn scratch_dir(name: &str) -> PathBuf {
     dir
 }
 
-// =============================================================================
 // 全局 log 后端安装（facade 零改动入口）
-// =============================================================================
 
 /// 安装 inklog 为全局 `log` 后端。
 ///
@@ -78,9 +74,7 @@ pub async fn init_global() -> Result<LoggerManager, sdforge::inklog::InklogError
     init_inklog_logger().await
 }
 
-// =============================================================================
 // from_file：含轮转配置的构造路径
-// =============================================================================
 
 /// 从含轮转配置的 TOML 构造 `LoggerManager`（真实轮转，非宣称）。
 pub async fn manager_with_rotation(
@@ -96,11 +90,9 @@ pub async fn manager_with_rotation(
     LoggerManager::from_file(&config_path).await
 }
 
-// =============================================================================
 // builder：编程式构造
-// =============================================================================
 
-/// `LoggerManager::builder()` 编程式构造（info 级 + console sink）。
+/// `LoggerManager::builder` 编程式构造（info 级 + console sink）。
 pub async fn manager_from_builder() -> Result<LoggerManager, sdforge::inklog::InklogError> {
     LoggerManager::builder()
         .level("info")
@@ -109,18 +101,14 @@ pub async fn manager_from_builder() -> Result<LoggerManager, sdforge::inklog::In
         .await
 }
 
-// =============================================================================
 // set_level：运行时调级
-// =============================================================================
 
 /// 运行时调级（全局 target）。低于新级别的记录被过滤。
 pub fn relax_level(manager: &LoggerManager) -> Result<(), sdforge::inklog::InklogError> {
     manager.set_level(None, "debug")
 }
 
-// =============================================================================
 // Main Entry Point
-// =============================================================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -153,9 +141,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// =============================================================================
 // Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests {

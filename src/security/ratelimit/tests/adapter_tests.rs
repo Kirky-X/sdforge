@@ -20,18 +20,16 @@ use crate::security::ratelimit::{LimiteronAdapter, RateLimiter};
 #[cfg(feature = "ratelimit-http")]
 use crate::security::ratelimit::HttpRequestRateLimiter;
 
-// ============================================================================
 // Construction Tests (new/default)
-// ============================================================================
 
-/// `LimiteronAdapter::new().await` returns a usable instance without panic.
+/// `LimiteronAdapter::new.await` returns a usable instance without panic.
 #[tokio::test]
 async fn new_returns_non_panic_instance() {
     let adapter = LimiteronAdapter::new().await;
     drop(adapter);
 }
 
-/// `LimiteronAdapter::default().await` behaves identically to `new().await`.
+/// `LimiteronAdapter::default.await` behaves identically to `new.await`.
 #[tokio::test]
 async fn default_matches_new_behavior() {
     let from_new = LimiteronAdapter::new().await;
@@ -40,15 +38,13 @@ async fn default_matches_new_behavior() {
     drop(from_default);
 }
 
-// ============================================================================
 // builder / with_dependencies / RateLimiter impl
-// ============================================================================
 
-/// `LimiteronAdapter::builder().build().await` constructs an instance using
-/// `default_config()` when no custom config is supplied.
+/// `LimiteronAdapter::builder.build.await` constructs an instance using
+/// `default_config` when no custom config is supplied.
 ///
-/// regression: `build()` now returns `Result<LimiteronAdapter,
-/// RateLimitError>` instead of panicking via `.expect()`. Callers must
+/// regression: `build` now returns `Result<LimiteronAdapter,
+/// RateLimitError>` instead of panicking via `.expect`. Callers must
 /// handle the error path (Rule 12: failures must be explicit).
 #[tokio::test]
 async fn builder_build_with_default_config_succeeds() {
@@ -65,9 +61,9 @@ async fn builder_build_with_default_config_succeeds() {
     );
 }
 
-/// `LimiteronAdapter::builder().build()` returns `Err` (not panic)
+/// `LimiteronAdapter::builder.build` returns `Err` (not panic)
 /// when the configured `FlowControlConfig` is invalid. We construct an
-/// invalid config with an empty `rules` vec (limiteron's `validate()`
+/// invalid config with an empty `rules` vec (limiteron's `validate`
 /// rejects it with "至少需要一个规则").
 #[tokio::test]
 async fn builder_build_returns_err_on_invalid_config() {
@@ -94,7 +90,7 @@ async fn builder_build_returns_err_on_invalid_config() {
 /// `LimiteronAdapter::with_dependencies(Arc<Governor>)` constructs an instance
 /// from a pre-built governor (mode 3: full DI).
 ///
-/// We build the governor the same way `new()` does to verify the DI path
+/// We build the governor the same way `new` does to verify the DI path
 /// accepts it and produces a working adapter.
 #[tokio::test]
 async fn with_dependencies_accepts_prebuilt_governor() {
@@ -138,7 +134,7 @@ async fn with_dependencies_accepts_prebuilt_governor() {
     );
 }
 
-/// `check("127.0.0.1").await` on a fresh adapter returns `Ok(())` because the
+/// `check("127.0.0.1").await` on a fresh adapter returns `Ok()` because the
 /// default config (TokenBucket capacity=100, refill_rate=10) allows the first
 /// request.
 ///
@@ -154,7 +150,7 @@ async fn check_allows_first_request_with_default_config() {
     );
 }
 
-/// After exhausting the token bucket, subsequent `check()` calls must return
+/// After exhausting the token bucket, subsequent `check` calls must return
 /// `Err(RateLimitError::Exceeded { .. })`.
 ///
 /// This validates the `Decision::Rejected` → `Exceeded` mapping in the
@@ -231,15 +227,13 @@ async fn check_returns_exceeded_after_capacity_exhausted() {
     );
 }
 
-// ============================================================================
 // vuln-0007: cache must be disabled in production Governor construction
-// ============================================================================
 
-/// vuln-0007: `LimiteronAdapterBuilder::build()` must disable cache.
+/// vuln-0007: `LimiteronAdapterBuilder::build` must disable cache.
 ///
 /// Without `.with_l1_cache_enabled(false)`, the Governor caches the first
 /// `Allowed` decision and returns it for all subsequent identical requests,
-/// allowing rate-limit bypass. This test verifies that `build()` produces
+/// allowing rate-limit bypass. This test verifies that `build` produces
 /// an adapter where token-bucket exhaustion is observable (i.e., cache
 /// is disabled).
 #[tokio::test]

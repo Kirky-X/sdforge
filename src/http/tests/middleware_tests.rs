@@ -26,11 +26,9 @@ use crate::config::{ApiKeySeed, AuthConfig, SdForgeConfig, ServerConfig};
 use crate::config::{AuthConfig, SdForgeConfig, ServerConfig};
 use crate::http::{X_REQUEST_ID, build_with_config};
 
-// ============================================================================
 // Request ID Middleware Execution Tests (covers lines 226-244)
 // These tests send real requests through the router to exercise the
 // middleware closure body, which is never executed by build-only tests.
-// ============================================================================
 
 #[cfg(not(feature = "context"))]
 #[tokio::test]
@@ -143,10 +141,8 @@ async fn test_request_id_middleware_non_utf8_header_generates_uuid() {
     assert_eq!(id_str.len(), 36, "should generate UUID for non-UTF8 header");
 }
 
-// ============================================================================
 // JWT Auth Middleware Execution Tests (security feature, covers lines 334-359)
 // These tests exercise the extract_auth closure body for JWT auth.
-// ============================================================================
 
 #[cfg(feature = "security")]
 fn create_test_jwt(secret: &[u8], payload: &serde_json::Value) -> String {
@@ -287,13 +283,11 @@ async fn test_jwt_auth_valid_token_returns_200() {
     assert_eq!(response.status(), axum::http::StatusCode::OK);
 }
 
-// ============================================================================
 // ApiKey Auth Middleware Execution Tests (security feature, covers lines 288-328)
 // These tests exercise the extract_auth closure body for ApiKey auth.
 // Keys declared in the config are seeded into the store by build_with_config,
 // so the success path (valid key → 200) is covered below. A key with an
 // empty permission list validates to None, so the seeded key carries one.
-// ============================================================================
 
 #[cfg(feature = "security")]
 fn build_apikey_test_router(header_name: &str, prefix: &str) -> Router {
@@ -456,7 +450,6 @@ async fn test_apikey_auth_with_x_real_ip_header() {
     assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
 }
 
-// ============================================================================
 // vuln-0001 regression tests: API key auth must use extract_client_ip
 //
 // The extract_auth closure previously read X-Forwarded-For / X-Real-IP
@@ -469,7 +462,6 @@ async fn test_apikey_auth_with_x_real_ip_header() {
 // src/security/ip_util.rs (e.g. test_extract_client_ip_non_trusted_proxy_
 // ignores_headers). These tests verify the auth middleware code path
 // functions correctly when extract_client_ip is used.
-// ============================================================================
 
 /// Verify the auth middleware handles a request with ConnectInfo from a
 /// non-trusted proxy and spoofed X-Forwarded-For / X-Real-IP headers.

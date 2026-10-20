@@ -62,11 +62,11 @@ impl SecurityHeaders {
     ///
     /// This configuration includes `'unsafe-inline'` and `'unsafe-eval'` in the
     /// Content Security Policy, which **significantly weakens XSS protection**:
-    /// - `'unsafe-eval'` allows `eval()`, `Function()`, `setTimeout("string")`
+    /// - `'unsafe-eval'` allows `eval`, `Function`, `setTimeout("string")`
     /// - `'unsafe-inline'` allows inline `<script>` and event handler attributes
     ///
     /// Use **ONLY for local development**. For production, always use
-    /// [`SecurityHeaders::strict()`] or [`SecurityHeaders::default()`].
+    /// [`SecurityHeaders::strict`] or [`SecurityHeaders::default`].
     pub fn relaxed() -> Self {
         Self {
             content_type_options: defaults::CONTENT_TYPE_OPTIONS,

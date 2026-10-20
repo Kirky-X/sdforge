@@ -19,9 +19,7 @@ mod error_handling_tests {
     #[cfg(feature = "http")]
     use tower::ServiceExt;
 
-    // ============================================================================
     // Error Type Tests
-    // ============================================================================
 
     /// Test: NotFound error returns correct HTTP status and message
     ///
@@ -151,9 +149,7 @@ mod error_handling_tests {
         assert!(sanitized.contains("Invalid input"));
     }
 
-    // ============================================================================
     // Error Conversion Tests
-    // ============================================================================
 
     /// Test: Error to HTTP status mapping for all error types
     ///
@@ -335,7 +331,6 @@ mod error_handling_tests {
     /// Verifies that source errors are properly preserved and accessible.
     #[test]
     fn test_error_chain_preservation() {
-        // Define a source error type
         #[derive(Debug)]
         struct DatabaseError(&'static str);
         impl std::fmt::Display for DatabaseError {
@@ -392,9 +387,7 @@ mod error_handling_tests {
         }
     }
 
-    // ============================================================================
     // Error Logging Tests
-    // ============================================================================
 
     /// Test: Error logging format contains required fields
     ///
@@ -428,7 +421,7 @@ mod error_handling_tests {
 
     /// Test: Error context capture includes caller information
     ///
-    /// Verifies that ErrorContext::current() captures call site information.
+    /// Verifies that ErrorContext::current captures call site information.
     #[test]
     fn test_error_context_capture() {
         // Capture context at known location
@@ -443,7 +436,7 @@ mod error_handling_tests {
         assert!(context.line.unwrap() > 0);
 
         // HIGH 修复回归：#[track_caller] 下 file/line 指向调用方（本文件）；
-        // function 无法经 track_caller 获得，诚实为 None（此前恒为 "()"）。
+        // function 无法经 track_caller 获得，诚实为 None（此前恒为 ""）。
         assert!(
             file.contains("error_handling_tests"),
             "file must point at the caller, got: {}",
@@ -499,9 +492,7 @@ mod error_handling_tests {
         }
     }
 
-    // ============================================================================
     // Error Constructor Tests
-    // ============================================================================
 
     /// Test: All error constructor methods work correctly
     ///
@@ -541,9 +532,7 @@ mod error_handling_tests {
         assert!(matches!(validation, ApiError::ValidationError { .. }));
     }
 
-    // ============================================================================
     // ServiceError Conversion Tests
-    // ============================================================================
 
     /// Test: ApiError to ServiceError conversion
     ///
@@ -594,9 +583,7 @@ mod error_handling_tests {
         assert_eq!(service_error.http_status(), 422);
     }
 
-    // ============================================================================
     // ServiceResponse Error Tests
-    // ============================================================================
 
     /// Test: ServiceResponse with error
     ///
@@ -623,9 +610,7 @@ mod error_handling_tests {
         assert!(error.details().is_some());
     }
 
-    // ============================================================================
     // Edge Case Tests
-    // ============================================================================
 
     /// Test: Error with all optional fields populated
     ///
@@ -755,7 +740,7 @@ mod error_handling_tests {
 
     /// Test: Sanitized message for all error types
     ///
-    /// Verifies that sanitized_message() works correctly for all variants.
+    /// Verifies that sanitized_message works correctly for all variants.
     #[test]
     fn test_sanitized_message_all_types() {
         // NotFound - should return full message

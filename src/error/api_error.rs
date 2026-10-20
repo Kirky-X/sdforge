@@ -272,10 +272,10 @@ impl ApiError {
     pub fn from_std_error<E: StdError + Send + Sync + 'static>(error: E) -> Self {
         // Generate a simple error_id without rand dependency.
         //
-        // Use `unwrap_or_default()` instead of `unwrap()`: if the system clock
-        // is before UNIX_EPOCH (e.g. skewed clock in containers), `unwrap()`
+        // Use `unwrap_or_default` instead of `unwrap`: if the system clock
+        // is before UNIX_EPOCH (e.g. skewed clock in containers), `unwrap`
         // would panic inside an error-handling path, masking the original
-        // error. `unwrap_or_default()` returns a zero Duration, producing the
+        // error. `unwrap_or_default` returns a zero Duration, producing the
         // error_id "0000000000000000" — a degenerate but non-fatal value.
         use std::time::{SystemTime, UNIX_EPOCH};
         let timestamp = SystemTime::now()
@@ -641,11 +641,9 @@ mod tests {
     #[error("test source error: {0}")]
     struct TestSourceError(String);
 
-    // =========================================================================
     // Constructor tests
-    // =========================================================================
 
-    /// Test validation_error() constructor produces InvalidInput with no field/value.
+    /// Test validation_error constructor produces InvalidInput with no field/value.
     #[test]
     fn test_validation_error_constructor() {
         let err = ApiError::validation_error("VALIDATION", "field is required");
@@ -681,7 +679,7 @@ mod tests {
         }
     }
 
-    /// Test not_found() constructor.
+    /// Test not_found constructor.
     #[test]
     fn test_not_found_constructor() {
         let err = ApiError::not_found("User", Some("42".to_string()));
@@ -697,7 +695,7 @@ mod tests {
         }
     }
 
-    /// Test not_found() constructor without a resource_id.
+    /// Test not_found constructor without a resource_id.
     #[test]
     fn test_not_found_constructor_no_id() {
         let err = ApiError::not_found("Session", None);
@@ -713,7 +711,7 @@ mod tests {
         }
     }
 
-    /// Test invalid_input() constructor with all fields.
+    /// Test invalid_input constructor with all fields.
     #[test]
     fn test_invalid_input_constructor_full() {
         let err = ApiError::invalid_input(
@@ -735,7 +733,7 @@ mod tests {
         }
     }
 
-    /// Test invalid_input() constructor with minimal fields.
+    /// Test invalid_input constructor with minimal fields.
     #[test]
     fn test_invalid_input_constructor_minimal() {
         let err = ApiError::invalid_input("bad value", None, None);
@@ -753,7 +751,7 @@ mod tests {
         }
     }
 
-    /// Test authentication_failed() constructor.
+    /// Test authentication_failed constructor.
     #[test]
     fn test_authentication_failed_constructor() {
         let err = ApiError::authentication_failed("expired token");
@@ -765,7 +763,7 @@ mod tests {
         }
     }
 
-    /// Test access_denied() constructor with user_id.
+    /// Test access_denied constructor with user_id.
     #[test]
     fn test_access_denied_constructor_with_user() {
         let err = ApiError::access_denied("read", Some("user-1".to_string()));
@@ -781,7 +779,7 @@ mod tests {
         }
     }
 
-    /// Test access_denied() constructor without user_id.
+    /// Test access_denied constructor without user_id.
     #[test]
     fn test_access_denied_constructor_no_user() {
         let err = ApiError::access_denied("write", None);
@@ -797,7 +795,7 @@ mod tests {
         }
     }
 
-    /// Test rate_limit_exceeded() constructor.
+    /// Test rate_limit_exceeded constructor.
     #[test]
     fn test_rate_limit_exceeded_constructor() {
         let err = ApiError::rate_limit_exceeded(100, 60);
@@ -813,7 +811,7 @@ mod tests {
         }
     }
 
-    /// Test validation() constructor.
+    /// Test validation constructor.
     #[test]
     fn test_validation_constructor() {
         let err = ApiError::validation("email", "invalid format");
@@ -826,7 +824,7 @@ mod tests {
         }
     }
 
-    /// Test internal_error() constructor.
+    /// Test internal_error constructor.
     #[test]
     fn test_internal_error_constructor() {
         let err = ApiError::internal_error("sanitized message", "err-123");
@@ -846,7 +844,7 @@ mod tests {
         }
     }
 
-    /// Test internal_with_source() constructor preserves the source error.
+    /// Test internal_with_source constructor preserves the source error.
     #[test]
     fn test_internal_with_source_constructor() {
         let source_err = TestSourceError("downstream failure".to_string());
@@ -869,7 +867,7 @@ mod tests {
         }
     }
 
-    /// Test internal_with_context() constructor stores the context.
+    /// Test internal_with_context constructor stores the context.
     #[test]
     fn test_internal_with_context_constructor() {
         let ctx = ErrorContext::new().with_extra("request_id".to_string(), "req-789".to_string());
@@ -892,7 +890,7 @@ mod tests {
         }
     }
 
-    /// Test internal_with_source_and_context() constructor stores both.
+    /// Test internal_with_source_and_context constructor stores both.
     #[test]
     fn test_internal_with_source_and_context_constructor() {
         let source_err = TestSourceError("db down".to_string());
@@ -915,7 +913,7 @@ mod tests {
         }
     }
 
-    /// Test from_std_error() constructor generates an error_id and sanitizes message.
+    /// Test from_std_error constructor generates an error_id and sanitizes message.
     #[test]
     fn test_from_std_error_constructor() {
         let source_err = TestSourceError("raw failure".to_string());
@@ -943,7 +941,7 @@ mod tests {
         }
     }
 
-    /// Test service_unavailable() constructor.
+    /// Test service_unavailable constructor.
     #[test]
     fn test_service_unavailable_constructor() {
         let err = ApiError::service_unavailable("database", Some(30));
@@ -961,7 +959,7 @@ mod tests {
         }
     }
 
-    /// Test service_unavailable() constructor without retry_after.
+    /// Test service_unavailable constructor without retry_after.
     #[test]
     fn test_service_unavailable_constructor_no_retry() {
         let err = ApiError::service_unavailable("cache", None);
@@ -979,7 +977,7 @@ mod tests {
         }
     }
 
-    /// Test service_unavailable_with_source() constructor.
+    /// Test service_unavailable_with_source constructor.
     #[test]
     fn test_service_unavailable_with_source_constructor() {
         let source_err = TestSourceError("connection refused".to_string());
@@ -1000,11 +998,9 @@ mod tests {
         }
     }
 
-    // =========================================================================
-    // category() tests
-    // =========================================================================
+    // category tests
 
-    /// Test category() returns the correct ErrorCategory for each variant.
+    /// Test category returns the correct ErrorCategory for each variant.
     #[test]
     fn test_category_all_variants() {
         assert_eq!(
@@ -1041,11 +1037,9 @@ mod tests {
         );
     }
 
-    // =========================================================================
-    // source() tests
-    // =========================================================================
+    // source tests
 
-    /// Test source() returns None for client-facing errors.
+    /// Test source returns None for client-facing errors.
     #[test]
     fn test_source_none_for_client_errors() {
         assert!(ApiError::not_found("X", None).source().is_none());
@@ -1060,14 +1054,14 @@ mod tests {
         assert!(ApiError::validation("f", "c").source().is_none());
     }
 
-    /// Test source() returns None for Internal without a source.
+    /// Test source returns None for Internal without a source.
     #[test]
     fn test_source_none_for_internal_without_source() {
         let err = ApiError::internal_error("msg", "id");
         assert!(err.source().is_none());
     }
 
-    /// Test source() returns the source for Internal with a source.
+    /// Test source returns the source for Internal with a source.
     #[test]
     fn test_source_some_for_internal_with_source() {
         let err =
@@ -1076,14 +1070,14 @@ mod tests {
         assert!(src.to_string().contains("chained"));
     }
 
-    /// Test source() returns None for ServiceUnavailable without a source.
+    /// Test source returns None for ServiceUnavailable without a source.
     #[test]
     fn test_source_none_for_service_unavailable_without_source() {
         let err = ApiError::service_unavailable("svc", None);
         assert!(err.source().is_none());
     }
 
-    /// Test source() returns the source for ServiceUnavailable with a source.
+    /// Test source returns the source for ServiceUnavailable with a source.
     #[test]
     fn test_source_some_for_service_unavailable_with_source() {
         let err = ApiError::service_unavailable_with_source(
@@ -1095,11 +1089,9 @@ mod tests {
         assert!(src.to_string().contains("timeout"));
     }
 
-    // =========================================================================
-    // sanitized_message() tests
-    // =========================================================================
+    // sanitized_message tests
 
-    /// Test sanitized_message() for client-facing errors returns the full message.
+    /// Test sanitized_message for client-facing errors returns the full message.
     #[test]
     fn test_sanitized_message_client_errors() {
         assert!(
@@ -1134,7 +1126,7 @@ mod tests {
         );
     }
 
-    /// Test sanitized_message() for Internal strips sensitive details.
+    /// Test sanitized_message for Internal strips sensitive details.
     #[test]
     fn test_sanitized_message_internal_sanitized() {
         let err = ApiError::internal_error("secret stack trace", "id");
@@ -1147,7 +1139,7 @@ mod tests {
         );
     }
 
-    /// Test sanitized_message() for ServiceUnavailable strips sensitive details.
+    /// Test sanitized_message for ServiceUnavailable strips sensitive details.
     #[test]
     fn test_sanitized_message_service_unavailable_sanitized() {
         let err = ApiError::service_unavailable("internal-db-host", None);
@@ -1161,11 +1153,9 @@ mod tests {
         );
     }
 
-    // =========================================================================
-    // to_mcp_json() tests
-    // =========================================================================
+    // to_mcp_json tests
 
-    /// Test to_mcp_json() produces valid JSON with success=false for each variant.
+    /// Test to_mcp_json produces valid JSON with success=false for each variant.
     #[test]
     fn test_to_mcp_json_all_variants() {
         let errors: Vec<(&str, ApiError)> = vec![
@@ -1211,7 +1201,7 @@ mod tests {
         }
     }
 
-    /// Test to_mcp_json() for NotFound includes the resource in the message.
+    /// Test to_mcp_json for NotFound includes the resource in the message.
     #[test]
     fn test_to_mcp_json_not_found_includes_resource() {
         let err = ApiError::not_found("Document", None);
@@ -1221,11 +1211,9 @@ mod tests {
         assert!(message.contains("Document"));
     }
 
-    // =========================================================================
-    // to_service_error() tests
-    // =========================================================================
+    // to_service_error tests
 
-    /// Test to_service_error() produces the correct code and HTTP status for each variant.
+    /// Test to_service_error produces the correct code and HTTP status for each variant.
     #[test]
     fn test_to_service_error_all_variants() {
         let cases: Vec<(&str, u16, ApiError)> = vec![
@@ -1272,7 +1260,7 @@ mod tests {
         }
     }
 
-    /// Test to_service_error() for NotFound includes resource and resource_id in details.
+    /// Test to_service_error for NotFound includes resource and resource_id in details.
     #[test]
     fn test_to_service_error_not_found_details() {
         let err = ApiError::not_found("User", Some("42".to_string()));
@@ -1282,7 +1270,7 @@ mod tests {
         assert_eq!(details["resource_id"], "42");
     }
 
-    /// Test to_service_error() for Internal includes error_id in details.
+    /// Test to_service_error for Internal includes error_id in details.
     #[test]
     fn test_to_service_error_internal_includes_error_id() {
         let err = ApiError::internal_error("msg", "err-abc");
@@ -1291,7 +1279,7 @@ mod tests {
         assert_eq!(details["error_id"], "err-abc");
     }
 
-    /// Test to_service_error() for Internal with context includes context in details.
+    /// Test to_service_error for Internal with context includes context in details.
     #[test]
     fn test_to_service_error_internal_with_context_details() {
         let ctx = ErrorContext::new().with_extra("trace_id".to_string(), "trace-123".to_string());
@@ -1304,7 +1292,7 @@ mod tests {
         );
     }
 
-    /// Test to_service_error() for ServiceUnavailable includes service and retry_after.
+    /// Test to_service_error for ServiceUnavailable includes service and retry_after.
     #[test]
     fn test_to_service_error_service_unavailable_details() {
         let err = ApiError::service_unavailable("redis", Some(30));
@@ -1314,11 +1302,9 @@ mod tests {
         assert_eq!(details["retry_after"], 30);
     }
 
-    // =========================================================================
     // From<ApiError> for ServiceError tests
-    // =========================================================================
 
-    /// Test From<ApiError> for ServiceError delegates to to_service_error().
+    /// Test From<ApiError> for ServiceError delegates to to_service_error.
     #[test]
     fn test_from_api_error_for_service_error() {
         let api_err = ApiError::not_found("User", None);
@@ -1327,9 +1313,7 @@ mod tests {
         assert_eq!(service_err.http_status(), 404);
     }
 
-    // =========================================================================
     // Display / Debug tests
-    // =========================================================================
 
     /// Test Display for each variant produces the expected message.
     #[test]
@@ -1384,9 +1368,7 @@ mod tests {
         assert!(debug.contains("User"));
     }
 
-    // =========================================================================
     // Serialize / Deserialize tests
-    // =========================================================================
 
     /// Test ApiError can be serialized and deserialized (round-trip).
     #[test]
@@ -1440,9 +1422,7 @@ mod tests {
         assert_send_sync::<ApiError>();
     }
 
-    // =========================================================================
     // From<RateLimitError> for ApiError conversion tests
-    // =========================================================================
 
     /// `RateLimitError::Exceeded` maps to `ApiError::RateLimitExceeded`
     /// preserving `limit` and `window_seconds` (with u64 → u32 cast).

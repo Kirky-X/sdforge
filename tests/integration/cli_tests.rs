@@ -3,7 +3,7 @@
 //! CLI 端到端集成测试。
 //!
 //! 验证 `#[forge(cli = true)]` 宏生成的 `CliCommandRegistration` /
-//! `CliHandlerRegistration` 能被 `CliBuilder::new().build()` 收集并构造为
+//! `CliHandlerRegistration` 能被 `CliBuilder::new.build` 收集并构造为
 //! `clap::Command`，子命令出现在 `--help` 输出中，参数按 Path/Body 规则映射。
 //!
 //! Feature requirement: run with
@@ -15,13 +15,11 @@ use sdforge::cli::CliBuilder;
 use sdforge::core::ApiError;
 use sdforge::forge;
 
-// ============================================================================
 // Test fixtures: 用 `#[forge(cli = true)]` 标注的命令。
 //
 // 宏会 emit `inventory::submit!(CliCommandRegistration { ... })` +
-// `inventory::submit!(CliHandlerRegistration { ... })`，CliBuilder::build()
+// `inventory::submit!(CliHandlerRegistration { ... })`，CliBuilder::build
 // 从 inventory 收集这些注册项构造 clap::Command。
-// ============================================================================
 
 /// Echo a greeting. `name` 无对应 path 参数，归为 Body → `--name <VALUE>`。
 #[forge(
@@ -40,11 +38,9 @@ async fn cli_test_ping() -> Result<String, ApiError> {
     Ok("pong".to_string())
 }
 
-// ============================================================================
 // Tests
-// ============================================================================
 
-/// `CliBuilder::new().build()` 必须把 `cli_test_echo` 注册为子命令，
+/// `CliBuilder::new.build` 必须把 `cli_test_echo` 注册为子命令，
 /// 子命令的 about 描述与宏参数 `description` 一致。
 #[test]
 fn test_cli_builder_includes_echo_subcommand() {

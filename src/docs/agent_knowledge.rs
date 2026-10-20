@@ -7,7 +7,7 @@
 //! CLI 子命令（含参数元数据）与 MCP 工具（`mcp` feature 启用时）。
 //!
 //! 能力清单直接读 `inventory` 注册表（`CliCommandRegistration` /
-//! `McpToolRegistration`），与 `CliBuilder::build()` / `get_mcp_tools()`
+//! `McpToolRegistration`），与 `CliBuilder::build` / `get_mcp_tools`
 //! 同源——注册即入包，无独立维护面。输出契约的数值（取值/默认/退出码）
 //! 引用 `cli::output` 的公开常量，与实现保持编译期同源；`docs` 子命令的
 //! 独立 `--format` 语义与自输出行为在 `output_contract.exceptions` 显式

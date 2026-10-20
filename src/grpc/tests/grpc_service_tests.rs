@@ -147,9 +147,7 @@ fn test_grpc_route_metadata_accessors() {
     assert!(!route.metadata.is_streaming());
 }
 
-// ============================================================================
 // gRPC Service Method Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_grpc_service_call_method() {
@@ -261,9 +259,7 @@ async fn test_grpc_service_get_info_methods_list() {
     assert!(!response.methods.is_empty());
 }
 
-// ============================================================================
 // Error Handling Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_grpc_service_call_with_invalid_json() {
@@ -307,9 +303,7 @@ async fn test_grpc_service_call_with_large_payload() {
     assert_eq!(response.data, large_data);
 }
 
-// ============================================================================
 // Metadata Validation Tests
-// ============================================================================
 
 #[test]
 fn test_grpc_route_with_streaming_metadata() {
@@ -375,9 +369,7 @@ fn test_grpc_route_metadata_cloning() {
     assert_eq!(route_cloned.metadata.name, "test");
 }
 
-// ============================================================================
 // Boundary Condition Tests
-// ============================================================================
 
 #[test]
 fn test_grpc_config_zero_timeout() {
@@ -481,9 +473,7 @@ fn test_grpc_config_boundary_values() {
     assert_eq!(config2.timeout_seconds, u64::MAX);
 }
 
-// ============================================================================
 // Server Streaming RPC Tests
-// ============================================================================
 
 #[test]
 fn test_grpc_server_streaming_multiple_messages() {
@@ -523,9 +513,7 @@ fn test_grpc_server_streaming_empty_stream() {
     assert_eq!(empty_stream.len(), 0);
 }
 
-// ============================================================================
 // ProtoBuf Encoding/Decoding Tests
-// ============================================================================
 
 #[test]
 fn test_grpc_protobuf_serialization() {
@@ -593,9 +581,7 @@ fn test_grpc_protobuf_roundtrip() {
     assert_eq!(original, deserialized);
 }
 
-// ============================================================================
 // Error Propagation Tests
-// ============================================================================
 
 #[test]
 fn test_grpc_error_propagation_server_to_client() {
@@ -653,9 +639,7 @@ async fn test_grpc_error_propagation_async() {
     }
 }
 
-// ============================================================================
 // GrpcRoute Constructor and Accessor Tests
-// ============================================================================
 
 #[test]
 fn test_grpc_route_new_basic() {
@@ -773,9 +757,7 @@ fn test_grpc_route_long_service_name() {
     assert_eq!(route.service_name.len(), 1000);
 }
 
-// ============================================================================
 // GrpcRouteRegistration Tests
-// ============================================================================
 
 #[test]
 fn test_grpc_route_registration_new() {
@@ -913,9 +895,7 @@ fn test_grpc_route_registration_clone_impl() {
     assert_eq!(registration.name(), cloned.name());
 }
 
-// ============================================================================
 // GrpcServerConfig Extended Tests
-// ============================================================================
 
 #[test]
 fn test_grpc_server_config_clone() {
@@ -1121,9 +1101,7 @@ fn test_grpc_server_config_auth_none() {
     assert!(config.auth.is_none());
 }
 
-// ============================================================================
 // SdForgeGrpcService Extended Tests
-// ============================================================================
 
 #[test]
 fn test_sd_forge_grpc_service_default_is_send_sync() {
@@ -1269,9 +1247,7 @@ async fn test_grpc_service_get_info_response_structure() {
     assert!(!response.description.is_empty());
 }
 
-// ============================================================================
 // Address Validation Extended Tests
-// ============================================================================
 
 #[test]
 fn test_address_validation_ipv6_loopback() {
@@ -1344,9 +1320,7 @@ fn test_address_validation_with_negative_port() {
     assert!(result.is_err());
 }
 
-// ============================================================================
 // CallResponse Structure Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_call_response_data_contains_method() {
@@ -1432,9 +1406,7 @@ async fn test_call_response_error_field_empty_on_success() {
     assert!(response.error.is_empty());
 }
 
-// ============================================================================
 // InfoResponse Structure Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_info_response_name_value() {
@@ -1499,9 +1471,7 @@ async fn test_info_response_description_value() {
     assert_eq!(response.description, "SdForge Multi-Protocol SDK Framework");
 }
 
-// ============================================================================
 // GrpcRoute Debug Implementation Test
-// ============================================================================
 
 #[test]
 fn test_grpc_route_debug_output() {
@@ -1522,9 +1492,7 @@ fn test_grpc_route_debug_output() {
     assert!(debug_output.contains("GrpcRoute"));
 }
 
-// ============================================================================
 // Concurrent Request Simulation Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_grpc_service_concurrent_calls() {
@@ -1609,9 +1577,7 @@ async fn test_build_server_with_config_invalid_address() {
     );
 }
 
-// ============================================================================
 // build_server / build_server_with_config Success Path Tests
-// ============================================================================
 
 /// Test build_server successfully starts serving on a valid address.
 ///
@@ -1781,14 +1747,12 @@ async fn test_build_server_with_config_minimal_positive_values() {
     }
 }
 
-// ============================================================================
 // vuln-0006 regression tests: GrpcServerConfig require_auth secure default
 //
-// GrpcServerConfig::default() previously set auth: None with no flag to
+// GrpcServerConfig::default previously set auth: None with no flag to
 // prevent starting an unauthenticated server. The fix adds require_auth
 // (default true) — build_server_with_config refuses to start when
 // require_auth is true and auth is None. build_server is deprecated.
-// ============================================================================
 
 /// Verify the default config has require_auth = true (secure default).
 #[test]

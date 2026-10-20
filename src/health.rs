@@ -18,7 +18,7 @@
 //! # Example
 //!
 //! ```ignore
-//! let config = SdForgeConfig::default();
+//! let config = SdForgeConfig::default;
 //! let router = sdforge::http::build_with_config(&config)?;
 //! // GET /healthz -> 200 {"status":"healthy",...}
 //! // GET /readyz  -> 200 {"status":"ready","checks":[...]} or 503
@@ -398,7 +398,7 @@ pub fn run_readiness_checks() -> (bool, Vec<CheckOutcome>) {
     }
 
     // Kit-style aggregate: fold its overall status into readiness. The source
-    // handle is cloned out of the lock before its `health_json()` runs.
+    // handle is cloned out of the lock before its `health_json` runs.
     let source = match health_source().read() {
         Ok(guard) => guard.clone(),
         Err(_) => {
@@ -437,7 +437,7 @@ pub fn run_readiness_checks() -> (bool, Vec<CheckOutcome>) {
     (all_healthy, outcomes)
 }
 
-/// Wrap a user probe: a panic in `check()` construction or during future
+/// Wrap a user probe: a panic in `check` construction or during future
 /// `poll` becomes `unhealthy("check panicked")`, aligned with the sync
 /// path's `catch_unwind` policy. The abandoned future is dropped once its
 /// panic is caught.
@@ -510,7 +510,7 @@ fn poll_guarded(
 /// `tokio::task::JoinSet`, and the kit health source folds in last.
 ///
 /// Every user-code path is guarded so a check's outcome can never silently
-/// disappear: `name()` is pre-fetched under `catch_unwind` before spawn (a
+/// disappear: `name` is pre-fetched under `catch_unwind` before spawn (a
 /// panicking name yields an unhealthy outcome without entering the pool),
 /// the future's construction is guarded in-task, and polls are guarded by
 /// the private `CatchProbePanic` guard future. Cancellation propagates
@@ -565,7 +565,7 @@ pub async fn run_readiness_checks_async() -> (bool, Vec<CheckOutcome>) {
     if !async_checks.is_empty() {
         let mut set = tokio::task::JoinSet::new();
         let mut async_outcomes: Vec<(usize, CheckOutcome)> = Vec::with_capacity(async_checks.len());
-        // name() 属用户代码：spawn 前以 catch_unwind 预取，panic 的检查直接
+        // name 属用户代码：spawn 前以 catch_unwind 预取，panic 的检查直接
         // 产出 unhealthy 且不进入并发池——用户代码的任何 panic 都不得让
         // 探针结果从 /readyz 结果集中消失。
         let names: Vec<Option<String>> = async_checks
@@ -605,7 +605,7 @@ pub async fn run_readiness_checks_async() -> (bool, Vec<CheckOutcome>) {
                     }
                     async_outcomes.push((idx, outcome));
                 }
-                // 任务体的 poll 段已受保护；此臂覆盖 check() 同步构造段
+                // 任务体的 poll 段已受保护；此臂覆盖 check 同步构造段
                 // panic 与取消等残余路径，兜底显性化，不让任何检查静默
                 // 消失（无法归名，以占位名呈现并排至结果末尾）。
                 Err(join_err) => {
@@ -632,7 +632,7 @@ pub async fn run_readiness_checks_async() -> (bool, Vec<CheckOutcome>) {
     }
 
     // Kit-style aggregate: mirrors the sync path — the source handle is
-    // cloned out of the lock before its `health_json()` runs.
+    // cloned out of the lock before its `health_json` runs.
     let source = match health_source().read() {
         Ok(guard) => guard.clone(),
         Err(_) => {
@@ -992,7 +992,7 @@ mod tests {
         clear_readiness_checks();
     }
 
-    /// name() panic 的检查同样必须出现在结果集中并翻红聚合：任何用户代码
+    /// name panic 的检查同样必须出现在结果集中并翻红聚合：任何用户代码
     /// 路径的 panic 都不得让探针结果消失（否则 /readyz 可对上游假性 ready）。
     struct PanickingName;
 
@@ -1045,9 +1045,7 @@ mod tests {
     }
 }
 
-// =============================================================================
 // trait-kit integration (`kit` feature): AsyncKit health report adapter.
-// =============================================================================
 /// AsyncKit 健康报告适配：将 trait-kit `AsyncKit<AsyncReady>` 的模块健康
 /// 状态映射为 `HealthDataSource`，并入聚合健康报告。
 #[cfg(feature = "kit")]

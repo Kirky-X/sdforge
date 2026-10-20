@@ -3,13 +3,13 @@
 //! 测试：`docs` 子命令处理。
 //!
 //! 仅当 `docgen` feature 启用时编译（`docgen` 隐式包含 `cli`）。
-//! 验证 `docs_subcommand_definition()` 返回的 `clap::Command` 含
+//! 验证 `docs_subcommand_definition` 返回的 `clap::Command` 含
 //! `--format` 与 `--output` 参数，且 `docs_subcommand(&matches)` 能
 //! 正确分发到 `write_docs` / `generate_docs`。
 
 use crate::cli::{docs_subcommand, docs_subcommand_definition};
 
-/// `docs_subcommand_definition()` 返回的命令必须包含 `--format` 长选项。
+/// `docs_subcommand_definition` 返回的命令必须包含 `--format` 长选项。
 #[test]
 fn test_docs_subcommand_definition_has_format_arg() {
     let cmd = docs_subcommand_definition();
@@ -37,7 +37,7 @@ fn test_docs_subcommand_definition_has_format_arg() {
     );
 }
 
-/// `docs_subcommand_definition()` 返回的命令必须包含 `--output` 长选项。
+/// `docs_subcommand_definition` 返回的命令必须包含 `--output` 长选项。
 #[test]
 fn test_docs_subcommand_definition_has_output_arg() {
     let cmd = docs_subcommand_definition();
@@ -55,7 +55,7 @@ fn test_docs_subcommand_definition_has_output_arg() {
 }
 
 /// 当提供 `--output` 时，`docs_subcommand(&matches)` 必须将文档写入
-/// 指定文件。使用 `tempfile::tempdir()` 获取隔离的临时目录，
+/// 指定文件。使用 `tempfile::tempdir` 获取隔离的临时目录，
 /// 调用 `--format openapi --output <tmp>/spec.json`，断言文件存在且非空。
 #[test]
 fn test_docs_subcommand_writes_file() {
@@ -94,7 +94,7 @@ fn test_docs_subcommand_writes_file() {
     );
 }
 
-/// 当未提供 `--output` 时，`docs_subcommand(&matches)` 必须返回 `Ok(())`，
+/// 当未提供 `--output` 时，`docs_subcommand(&matches)` 必须返回 `Ok()`，
 /// 通过 stdout 输出文档（此处不验证 stdout 内容以避免测试脆弱）。
 #[test]
 fn test_docs_subcommand_stdout_when_no_output() {
@@ -103,7 +103,6 @@ fn test_docs_subcommand_stdout_when_no_output() {
         .try_get_matches_from(["docs", "--format", "cli-markdown"])
         .expect("arg parsing failed");
 
-    // Must return Ok(()) — stdout content is not verified here
     let result = docs_subcommand(&matches);
     assert!(
         result.is_ok(),

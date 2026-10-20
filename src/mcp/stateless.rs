@@ -150,8 +150,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_stateless_handler_initialize() {
-        // Test get_info() instead of initialize() to avoid RequestContext construction.
-        // The stateless initialize() delegates to get_info()'s Implementation anyway.
+        // Test get_info instead of initialize to avoid RequestContext construction.
+        // The stateless initialize delegates to get_info's Implementation anyway.
         let handler = StatelessServerHandler::from_registry();
         let info = handler.get_info();
         assert!(!info.server_info.name.is_empty());
@@ -159,7 +159,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stateless_handler_list_tools() {
-        // Use inner.get_all_tools() to avoid RequestContext construction.
+        // Use inner.get_all_tools to avoid RequestContext construction.
         let handler = StatelessServerHandler::from_registry();
         let tools = handler.inner().get_all_tools();
         assert!(!tools.is_empty());
@@ -167,7 +167,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_stateless_handler_call_tool() {
-        // Use call_tool_internal() to avoid RequestContext construction.
+        // Use call_tool_internal to avoid RequestContext construction.
         let handler = StatelessServerHandler::from_registry();
         let result = handler
             .inner()
@@ -182,9 +182,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ============================================================================
     // ServerHandler Trait Method Tests (with RequestContext)
-    // ============================================================================
 
     /// Dummy transport error type for test transport.
     #[derive(Debug)]
@@ -412,7 +410,7 @@ mod tests {
 
     /// Test `ServerHandler::get_info` returns consistent server info.
     ///
-    /// Verifies that `get_info()` returns the same server name as `initialize()`.
+    /// Verifies that `get_info` returns the same server name as `initialize`.
     #[tokio::test]
     async fn test_stateless_get_info_consistent_with_initialize() {
         let handler = StatelessServerHandler::from_registry();

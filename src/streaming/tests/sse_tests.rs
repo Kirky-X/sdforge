@@ -123,9 +123,7 @@ async fn test_stream_to_sse_json_value_mapper() {
     assert!(results[0].contains(r#""key":"value""#));
 }
 
-// ============================================================================
 // stream_to_sse Edge Case Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_stream_to_sse_single_item() {
@@ -159,13 +157,11 @@ async fn test_stream_to_sse_error_in_mapper() {
     assert!(results[0].contains(r#""type":"error""#));
 }
 
-// ============================================================================
 // stream_to_sse normal data passthrough tests
 //
 // stream_to_sse serializes each StreamEvent<serde_json::Value> produced by
 // the mapper and emits it as an SSE "data:" line, followed by a completion
 // event when the source stream ends.
-// ============================================================================
 
 #[tokio::test]
 async fn test_stream_to_sse_normal_data_passthrough() {
@@ -189,12 +185,10 @@ async fn test_stream_to_sse_normal_data_passthrough() {
     assert_eq!(count, 3, "Should have received 3 data events");
 }
 
-// ============================================================================
 // stream_to_sse send error (receiver dropped) tests
 //
 // When the ReceiverStream is dropped before the spawned task finishes,
 // tx.send returns an error and the task breaks out of the loop (line 168).
-// ============================================================================
 
 #[tokio::test]
 async fn test_stream_to_sse_send_error_when_receiver_dropped() {
@@ -226,12 +220,10 @@ async fn test_stream_to_sse_send_error_when_receiver_dropped() {
     // executed successfully.
 }
 
-// ============================================================================
 // IntoResponse impl tests
 //
 // StreamResponse<T> implements axum's IntoResponse trait to produce an
-// SSE HTTP response. These tests cover the into_response() method.
-// ============================================================================
+// SSE HTTP response. These tests cover the into_response method.
 
 #[cfg(feature = "http")]
 #[tokio::test]
@@ -296,7 +288,6 @@ async fn test_stream_response_into_response_collects_body() {
     );
 }
 
-// ============================================================================
 // stream_to_sse completion event tests
 //
 // The `Err` branch of `serde_json::to_string(&event)` in stream_to_sse
@@ -309,7 +300,6 @@ async fn test_stream_response_into_response_collects_body() {
 //
 // The tests below verify the reachable behavior: the stream always
 // terminates with a completion event after all data events.
-// ============================================================================
 
 /// Verify that stream_to_sse always emits a completion event as the last
 /// SSE message, regardless of how many data items were in the input stream.
@@ -353,7 +343,6 @@ async fn test_stream_to_sse_always_emits_completion_event() {
     }
 }
 
-// ============================================================================
 // IntoResponse Err branch coverage test
 //
 // The `IntoResponse` impl for `StreamResponse<T>` maps `Result<T, String>`
@@ -365,7 +354,6 @@ async fn test_stream_to_sse_always_emits_completion_event() {
 // stream is never polled, so the mapper closure (and thus the Err branch)
 // never executes. This test forces the body to be consumed via
 // `axum::body::to_bytes`, exercising the Err branch end-to-end.
-// ============================================================================
 
 #[cfg(feature = "http")]
 #[tokio::test]
@@ -402,7 +390,6 @@ async fn test_stream_response_into_response_err_branch_collected() {
     );
 }
 
-// ============================================================================
 // stream_to_sse idle timeout tests
 //
 // stream_to_sse uses a `tokio::select!` with a 30-second sleep to detect an
@@ -413,7 +400,6 @@ async fn test_stream_response_into_response_err_branch_collected() {
 //
 // These tests use `tokio::time::pause` + `tokio::time::advance` to simulate
 // the 30-second wait without actually sleeping.
-// ============================================================================
 
 /// Verify that a stream which never yields an item (sender kept alive) is
 /// terminated by the 30-second idle timeout, and that an Error event

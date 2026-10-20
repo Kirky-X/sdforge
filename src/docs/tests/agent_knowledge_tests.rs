@@ -126,20 +126,18 @@ fn agent_knowledge_lists_mcp_tools() {
     }
 }
 
-// ============================================================================
 // 契约一致性锁定（审查修复）：知识包 output_contract 与 cli::output 实现
 // 同源，任一侧漂移都会在此失败。
-// ============================================================================
 
-/// output_contract 的 values/default 必须与 format_arg() 的 clap 白名单、
-/// OutputFormat::default() 完全一致（防手写副本静默漂移）。
+/// output_contract 的 values/default 必须与 format_arg 的 clap 白名单、
+/// OutputFormat::default 完全一致（防手写副本静默漂移）。
 #[test]
 fn output_contract_matches_format_arg_whitelist_and_default() {
     let raw = generate_docs(DocFormat::Agent).expect("agent knowledge must generate");
     let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
     let contract = &v["output_contract"];
 
-    // values 与 format_arg() 的 clap possible values 一致
+    // values 与 format_arg 的 clap possible values 一致
     let arg = crate::cli::output::format_arg();
     let possible = arg.get_possible_values();
     let mut whitelist: Vec<&str> = possible.iter().map(|pv| pv.get_name()).collect();
@@ -161,7 +159,7 @@ fn output_contract_matches_format_arg_whitelist_and_default() {
         "contract values must track the clap whitelist"
     );
 
-    // default_format 与 OutputFormat::default() 一致
+    // default_format 与 OutputFormat::default 一致
     let default_str = match crate::cli::output::OutputFormat::default() {
         crate::cli::output::OutputFormat::Text => "text",
         crate::cli::output::OutputFormat::Json => "json",

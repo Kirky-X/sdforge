@@ -7,8 +7,8 @@
 //!   `SdForgeAuditLogger` logging/get/clear, key rotation, total/dropped counts,
 //!   failure sanitization, trait impl, multi-user, truncation, serialization,
 //!   signing key, fallback merge, dedup, worker drain, channel/semaphore edges)
-//! - `builder_tests`: `SdForgeAuditLoggerBuilder` and `SdForgeAuditLogger::builder()`
-//!   construction, defaults, chaining, `build()`, and builder worker fallback merge
+//! - `builder_tests`: `SdForgeAuditLoggerBuilder` and `SdForgeAuditLogger::builder`
+//!   construction, defaults, chaining, `build`, and builder worker fallback merge
 
 mod audit_logger_tests;
 mod builder_tests;
@@ -17,9 +17,7 @@ use super::*;
 use crate::security::{AuditResult, AuthMetadata};
 use uuid::Uuid;
 
-// ============================================================================
 // Shared test helpers — accessible by all sub-modules via `super::`
-// ============================================================================
 
 /// Build an `AuditLog` with sensible defaults for tests.
 pub(super) fn make_test_audit_log(user_id: &str, action: &str) -> AuditLog {

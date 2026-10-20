@@ -309,7 +309,7 @@ fn test_sanitized_message() {
     assert!(msg.contains("Authentication failed"));
 }
 
-/// Test source() returns None for errors without source
+/// Test source returns None for errors without source
 #[test]
 fn test_source_returns_none_for_errors_without_source() {
     let errors = vec![
@@ -327,7 +327,7 @@ fn test_source_returns_none_for_errors_without_source() {
     }
 }
 
-/// Test source() returns Some for errors with source
+/// Test source returns Some for errors with source
 #[test]
 fn test_source_returns_some_for_errors_with_source() {
     #[derive(Debug)]
@@ -377,7 +377,7 @@ fn test_error_category_derives() {
     assert_eq!(ErrorCategory::ClientError, copied);
 }
 
-/// Test ErrorContext::new() creates empty context
+/// Test ErrorContext::new creates empty context
 #[test]
 fn test_error_context_new() {
     let ctx = ErrorContext::new();
@@ -387,11 +387,11 @@ fn test_error_context_new() {
     assert!(ctx.extra.is_empty());
 }
 
-/// Test ErrorContext::current() captures caller information
+/// Test ErrorContext::current captures caller information
 ///
 /// HIGH 修复回归：`#[track_caller]` 生效后 file/line 必须指向**调用方**
 /// （本测试文件），而非 context.rs 自身；function 字段诚实为 None
-/// （此前恒为常量 "()"）。
+/// （此前恒为常量 ""）。
 #[test]
 fn test_error_context_current() {
     let ctx = ErrorContext::current();
@@ -403,7 +403,7 @@ fn test_error_context_current() {
     );
     let line = ctx.line.expect("line must be captured");
     assert!(line > 0);
-    // 该断言位于 current() 调用之后，行号必须大于调用处上方任何行
+    // 该断言位于 current 调用之后，行号必须大于调用处上方任何行
     assert!(
         (380..=420).contains(&line),
         "line must reflect the call site, got {}",
@@ -416,7 +416,7 @@ fn test_error_context_current() {
     assert!(ctx.extra.is_empty());
 }
 
-/// Test ErrorContext::with_extra() adds extra information
+/// Test ErrorContext::with_extra adds extra information
 #[test]
 fn test_error_context_with_extra() {
     let ctx = ErrorContext::new()
@@ -457,7 +457,7 @@ fn test_error_context_serialization() {
     assert_eq!(deserialized.extra.len(), 2);
 }
 
-/// Test internal_with_context() includes context
+/// Test internal_with_context includes context
 #[test]
 fn test_internal_with_context() {
     let ctx =
@@ -486,7 +486,7 @@ fn test_internal_with_context() {
     }
 }
 
-/// Test internal_with_source_and_context() includes both
+/// Test internal_with_source_and_context includes both
 #[test]
 fn test_internal_with_source_and_context() {
     #[derive(Debug)]
@@ -529,7 +529,7 @@ fn test_internal_with_source_and_context() {
     }
 }
 
-/// Test from_std_error() creates Internal error
+/// Test from_std_error creates Internal error
 #[test]
 fn test_from_std_error() {
     #[derive(Debug)]
@@ -720,9 +720,7 @@ fn test_sdforge_error_to_service_error() {
     assert!(service_err.code == "NOT_FOUND" || service_err.code.contains("NOT_FOUND"));
 }
 
-// ========================================================================
-// to_mcp_json() comprehensive tests for all 8 ApiError variants
-// ========================================================================
+// to_mcp_json comprehensive tests for all 8 ApiError variants
 
 #[test]
 fn test_to_mcp_json_not_found() {
@@ -873,9 +871,7 @@ fn test_to_mcp_json_validation_error() {
     );
 }
 
-// ========================================================================
-// SdForgeError category()/sanitized_message() tests for security/http variants
-// ========================================================================
+// SdForgeError category/sanitized_message tests for security/http variants
 
 #[test]
 #[cfg(feature = "security")]
@@ -906,7 +902,7 @@ fn test_sdforge_error_category_config_variant() {
 fn test_sdforge_error_sanitized_message_security_variants() {
     let auth_err: SdForgeError = crate::security::AuthError::MissingAuth.into();
     let msg = auth_err.sanitized_message();
-    // The `other` branch calls to_string() on the underlying error
+    // The `other` branch calls to_string on the underlying error
     assert!(msg.contains("authorization header"));
 
     let jwt_err: SdForgeError = crate::security::JwtError::InvalidFormat.into();

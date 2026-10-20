@@ -178,7 +178,7 @@ fn structured_record_reaches_capture_sink() {
 /// 且安装后全局 `log` 级别可观测（facade 接线，`src/inklog.rs` lib 用例的
 /// 集成面对应）。
 ///
-/// 先 `shared()` 保证全局前端由共享管理器安装（其后再走
+/// 先 `shared` 保证全局前端由共享管理器安装（其后再走
 /// `init_inklog_logger` 的良性降级分支——这正是幂等语义本身）。
 #[tokio::test]
 #[serial_test::serial]
@@ -248,7 +248,7 @@ fn set_level_filters_below_new_level() {
 
 /// `from_file` 加载含轮转配置的 TOML 构造成功（真实轮换行为锚点）。
 ///
-/// 先 `shared()`：全局前端由共享管理器安装后，本用例的 `from_file` 走良性
+/// 先 `shared`：全局前端由共享管理器安装后，本用例的 `from_file` 走良性
 /// 降级分支（不影响自身构造成功性）。
 #[tokio::test]
 #[serial_test::serial]

@@ -6,7 +6,7 @@ use super::*;
 /// 根据指定格式生成文档字符串。
 ///
 /// 各变体分发到对应的生成函数：
-/// - `OpenApi` → `crate::openapi::generate_openapi_spec()` 序列化为 pretty JSON
+/// - `OpenApi` → `crate::openapi::generate_openapi_spec` 序列化为 pretty JSON
 /// - `SwaggerUi` → HTML 入口页
 /// - `CliMarkdown` → CLI 命令手册
 /// - `McpMarkdown` → MCP 工具列表（需 `mcp` feature，未启用时返回占位提示）

@@ -23,7 +23,7 @@
 //! use sdforge::axum::{Router, middleware::from_fn, routing::get};
 //!
 //! // 在路由上挂载认证中间件
-//! let protected = Router::new()
+//! let protected = Router::new
 //!     .route("/secure", get(secure_endpoint))
 //!     .layer(from_fn(auth_middleware));
 //!
@@ -33,16 +33,14 @@
 //!     path = "/secure",
 //!     method = "GET",
 //!     description = "Endpoint protected by auth middleware"
-//! )]
-//! async fn secure_endpoint() -> Result<serde_json::Value, ApiError> { Ok(serde_json::json!({})) }
+//!)]
+//! async fn secure_endpoint -> Result<serde_json::Value, ApiError> { Ok(serde_json::json!({})) }
 //! ```
 
 use sdforge::prelude::*;
 use sdforge::serde::{Deserialize, Serialize};
 
-// ============================================================================
 // 错误响应类型定义
-// ============================================================================
 
 /// 401 Unauthorized 响应体
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,9 +66,7 @@ pub struct ForbiddenResponse {
     pub required_permissions: Vec<String>,
 }
 
-// ============================================================================
 // 需要认证的端点示例
-// ============================================================================
 
 /// 管理员专用端点
 ///
@@ -109,9 +105,7 @@ async fn super_admin_only() -> Result<serde_json::Value, ApiError> {
     }))
 }
 
-// ============================================================================
 // 错误响应构造示例
-// ============================================================================
 
 /// 构造 401 Unauthorized 响应
 ///
@@ -156,9 +150,7 @@ pub fn demo_forbidden_api_error() -> ApiError {
     }
 }
 
-// ============================================================================
 // 单元测试
-// ============================================================================
 
 #[cfg(test)]
 mod tests {

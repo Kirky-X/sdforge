@@ -167,9 +167,7 @@ async fn rules_without_validate_flag_are_not_enforced() {
     assert_eq!(json["page"], 0);
 }
 
-// ============================================================================
 // gRPC 对等 —— validate 规则贯通非 HTTP 路径
-// ============================================================================
 
 #[forge(
     name = "validate_grpc_bound",
@@ -224,7 +222,7 @@ mod grpc_parity {
         assert!(resp.data.contains("50"));
     }
 
-    // ---- 其余五种规则各一个 gRPC 侧用例（le 见上） ----
+    // 其余五种规则各一个 gRPC 侧用例（le 见上）
 
     /// ge 规则：低于下限被拒。
     #[tokio::test]
@@ -237,7 +235,7 @@ mod grpc_parity {
         assert_eq!(details["field"], "size");
     }
 
-    // ---- 多参数 handler：min_length/max_length/not_blank/email ----
+    // 多参数 handler：min_length/max_length/not_blank/email
 
     #[forge(
         name = "validate_grpc_rules",
@@ -327,14 +325,12 @@ mod grpc_parity {
     }
 }
 
-// ============================================================================
 // `#[param(kind = "query", flatten)]` —— struct 查询参数扁平直提
 //
 // serde_urlencoded 只支持扁平 key=value：struct 类型 query 参数默认经
 // 信封 `Query<__ForgeQueryParams>`（字段嵌套 struct）提取必然 400。
 // `flatten` 显式 opt-in 后该参数改由独立的 `Query<ParamTy>` 直提
 // （struct 自身扁平），与信封提取的标量 query 参数互不冲突。
-// ============================================================================
 
 #[derive(Debug, serde::Deserialize)]
 struct SearchFilters {

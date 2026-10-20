@@ -62,7 +62,7 @@ mod version_routing_tests {
 
     #[test]
     fn test_versioned_route_creation() {
-        // Use MethodRouter (get()) instead of Router
+        // Use MethodRouter (get) instead of Router
         let route = VersionedRoute::new(
             "v1".to_string(),
             "/test".to_string(),

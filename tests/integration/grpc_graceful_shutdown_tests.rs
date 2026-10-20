@@ -4,7 +4,7 @@
 //!
 //! 与 HTTP 侧 `serve_with_graceful_shutdown`（axum）对齐的语义：signal
 //! future 完成后停止接受新连接、等待 in-flight 请求完成，`serve` 调用
-//! 返回 `Ok(())`。全部用例经真实网络（tonic Channel）验证，口径与
+//! 返回 `Ok()`。全部用例经真实网络（tonic Channel）验证，口径与
 //! grpc_extra_services_tests 一致。
 
 #![cfg(feature = "grpc")]

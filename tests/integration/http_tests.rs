@@ -22,9 +22,7 @@ mod http_protocol_tests {
     use serde_json::json;
     use tower::ServiceExt;
 
-    // ============================================================================
     // Test Data Structures
-    // ============================================================================
 
     /// Test data structure for JSON requests
     #[derive(Debug, Serialize, Deserialize)]
@@ -223,9 +221,7 @@ mod http_protocol_tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-    // ============================================================================
     // Path Parameters Tests
-    // ============================================================================
 
     /// Test: String path parameter extraction
     ///
@@ -348,9 +344,7 @@ mod http_protocol_tests {
         assert!(String::from_utf8_lossy(&body).contains("42"));
     }
 
-    // ============================================================================
     // Query Parameters Tests
-    // ============================================================================
 
     /// Test: Basic query parameters
     ///
@@ -487,9 +481,7 @@ mod http_protocol_tests {
         assert!(String::from_utf8_lossy(&body).contains("limit=10"));
     }
 
-    // ============================================================================
     // Request Headers Tests
-    // ============================================================================
 
     /// Test: Custom request headers
     ///
@@ -586,9 +578,7 @@ mod http_protocol_tests {
         assert!(content_type.to_str().unwrap().contains("application/json"));
     }
 
-    // ============================================================================
     // Middleware Chain Tests
-    // ============================================================================
 
     /// Test: Middleware execution order
     ///
@@ -741,9 +731,7 @@ mod http_protocol_tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-    // ============================================================================
     // HTTP Error Handling Tests
-    // ============================================================================
 
     /// Test: 400 Bad Request error
     ///
@@ -928,9 +916,7 @@ mod http_protocol_tests {
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
-    // ============================================================================
     // Request Body Handling Tests
-    // ============================================================================
 
     /// Test: JSON body parsing
     ///
@@ -1060,9 +1046,7 @@ mod http_protocol_tests {
         assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
     }
 
-    // ============================================================================
     // Additional Protocol Tests
-    // ============================================================================
 
     /// Test: HEAD request
     ///

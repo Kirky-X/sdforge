@@ -85,7 +85,7 @@ pub fn code_for_http_status(status: u16) -> &'static str {
 
 /// HTTP 状态的直读入口（热路径去重）：单次 `to_service_error` 构造。
 ///
-/// 状态真值仍是 `to_service_error().http_status()` —— 本函数只是避免调用方
+/// 状态真值仍是 `to_service_error.http_status` —— 本函数只是避免调用方
 /// 为拿一个 u16 而完整构造（含 details JSON 分配）。
 pub fn http_status_for(e: &crate::core::ApiError) -> u16 {
     e.to_service_error().http_status()
@@ -96,7 +96,7 @@ pub fn http_status_for(e: &crate::core::ApiError) -> u16 {
 ///
 /// Every protocol adapter (HTTP `IntoResponse`, gRPC status mapping, …)
 /// must derive its wire codes from here — never from a private match table.
-/// The HTTP status matches `ApiError::to_service_error().http_status`; the
+/// The HTTP status matches `ApiError::to_service_error.http_status`; the
 /// code string is derived via [`code_for_http_status`].
 pub fn mapping_for(e: &crate::core::ApiError) -> (u16, &'static str) {
     let status = http_status_for(e);
@@ -429,9 +429,7 @@ mod tests {
         }
     }
 
-    // ====================================================================
     // 跨协议错误码行为契约（HTTP 状态 ↔ gRPC 状态码对齐）
-    // ====================================================================
 
     /// ApiError 全变体样本（每变体一个代表值），供全集遍历测试复用。
     #[cfg(feature = "grpc")]

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 //! `CliBuilder` — runtime collector for `CliCommandRegistration` entries.
 //!
-//! The builder mirrors the construction pattern used by `http::build()` /
-//! `mcp::build()`: it walks `inventory::iter::<CliCommandRegistration>` and
+//! The builder mirrors the construction pattern used by `http::build` /
+//! `mcp::build`: it walks `inventory::iter::<CliCommandRegistration>` and
 //! emits a `clap::Command` tree. Each registration becomes a SubCommand of
 //! the top-level program; argument metadata is translated to clap args per
 //! `design.md`:
@@ -33,7 +33,7 @@ use crate::core::ApiError;
 ///   was injected, invocation returns `ApiError::Internal`.
 pub struct CliBuilder {
     /// Injected application state, available to handlers via downcast.
-    /// `None` when constructed via `new()`/`default()`.
+    /// `None` when constructed via `new`/`default`.
     state: Option<Arc<dyn Any + Send + Sync>>,
     /// CLI program name shown in `--help` / `--version` output.
     /// Defaults to the crate name (`env!("CARGO_PKG_NAME")`).
@@ -103,7 +103,7 @@ impl CliBuilder {
     /// [`GlobalArg::global`] is `true`, the default). This lets downstream
     /// crates add `--db`, `--config`, etc. without depending on `clap`
     /// directly — they construct a [`GlobalArg`] and sdforge translates it
-    /// to `clap::Arg` at `build()` time.
+    /// to `clap::Arg` at `build` time.
     #[must_use]
     pub fn with_global_arg(mut self, arg: GlobalArg) -> Self {
         self.global_args.push(arg);
@@ -237,8 +237,8 @@ impl CliBuilder {
     ///
     /// # Async runtime
     ///
-    /// Requires a tokio runtime — the caller's `main()` should be
-    /// `#[tokio::main] async fn main() { cli.execute().await }`.
+    /// Requires a tokio runtime — the caller's `main` should be
+    /// `#[tokio::main] async fn main { cli.execute.await }`.
     pub async fn execute(self) -> ! {
         let cmd = self.build();
         let matches = cmd.get_matches();

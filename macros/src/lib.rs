@@ -55,7 +55,7 @@ type ServiceApiArgs = Result<
 ///
 /// 输入已由 [`extract_forge_extras`](fn.extract_forge_extras) 消化结构化键
 /// （`auth(...)`/裸旗标族），此处只面对简单键值对与裸布尔键。与旧字符扫描
-/// 器（`to_string()` 后逐字符）相比的语义增量：
+/// 器（`to_string` 后逐字符）相比的语义增量：
 ///
 /// - 字符串字面量经 `syn::Lit` 解析——转义序列与原始字符串（`r"..."`）
 ///   正确展开（旧扫描器按源文本截取，转义原样残留、`r` 前缀混入值）；
@@ -281,11 +281,9 @@ const RESERVED_KEYWORDS: &[&str] = &[
     "where", "move", "as", "in", "of", "is", "Some", "None", "Ok", "Err",
 ];
 
-// =============================================================================
 // structured "extras" attributes parsed before the classic key=value
 // parser. Only new-syntax keys are consumed here; everything else passes
 // through to `parse_kv_pairs` untouched (zero breakage of existing usage).
-// =============================================================================
 
 /// New-syntax `#[forge]` attributes with structure or spans the classic
 /// string-based parser cannot represent.
@@ -4303,7 +4301,6 @@ mod macro_parsing_tests {
         );
     }
 
-    // ============================================================================
     // validate_version tests
     //
     // validate_version enforces that version strings contain only alphanumeric

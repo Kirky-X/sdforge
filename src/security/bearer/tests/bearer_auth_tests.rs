@@ -21,9 +21,7 @@ fn derived_no_special(n: usize) -> String {
     (0..n).map(|i| b"Kx7Z"[i % 4] as char).collect()
 }
 
-// ============================================================================
 // Construction & Secret Validation Tests
-// ============================================================================
 
 #[test]
 fn test_create_bearer_auth() {
@@ -80,9 +78,7 @@ fn test_generate_multiple_secrets_are_different() {
     assert_ne!(secret1, secret2);
 }
 
-// ========================================================================
 // Constructor Tests
-// ========================================================================
 
 #[test]
 fn test_bearer_auth_with_audience() {
@@ -143,9 +139,7 @@ fn test_bearer_auth_new_panics_on_invalid_secret() {
     assert!(result.is_err());
 }
 
-// ========================================================================
 // Token Validation Tests
-// ========================================================================
 
 #[test]
 fn test_validate_token_valid() {
@@ -375,9 +369,7 @@ fn test_validate_token_issuer_match() {
     assert!(auth.validate_token(&token).is_some());
 }
 
-// ========================================================================
 // Token Blacklist Tests
-// ========================================================================
 
 #[test]
 fn test_invalidate_token_blacklists() {
@@ -385,9 +377,9 @@ fn test_invalidate_token_blacklists() {
     // correctly writes to the blacklist cache and that the validate_token
     // function checks the blacklist.
     //
-    // Note: The blacklist stores elapsed().as_secs() (truncated to seconds).
-    // An entry created "just now" deserializes to Instant::now() - 0, which
-    // is slightly in the past, so the comparison `Instant::now() < past` is
+    // Note: The blacklist stores elapsed.as_secs (truncated to seconds).
+    // An entry created "just now" deserializes to Instant::now - 0, which
+    // is slightly in the past, so the comparison `Instant::now < past` is
     // false and the token passes. The blacklist only blocks when the stored
     // Instant is in the future, which happens when the entry was created
     // before the clock moved forward (e.g., cross-second boundary).
@@ -480,7 +472,7 @@ fn test_invalidate_token_direct_method() {
     // Token should be valid initially
     assert!(auth.validate_token(&token).is_some());
 
-    // Invalidate the token - this stores Instant::now() as the expiry
+    // Invalidate the token - this stores Instant::now as the expiry
     auth.invalidate_token(&token);
 
     // The blacklist entry is created, verify the key exists in cache
@@ -515,9 +507,7 @@ fn test_register_and_validate_token() {
     assert_eq!(result.unwrap().user_id(), Some("user456"));
 }
 
-// ========================================================================
 // Constant Time Comparison Tests
-// ========================================================================
 
 #[test]
 fn test_constant_time_eq_equal() {
@@ -551,9 +541,7 @@ fn test_constant_time_eq_single_byte_diff() {
     assert!(!BearerAuth::constant_time_eq(b"a", b"b"));
 }
 
-// ========================================================================
 // Base64URL Decode Tests
-// ========================================================================
 
 #[test]
 fn test_base64url_decode_valid() {
@@ -594,9 +582,7 @@ fn test_base64url_decode_empty_string() {
     assert_eq!(result.unwrap(), b"");
 }
 
-// ========================================================================
 // Edge Cases and Integration Tests
-// ========================================================================
 
 #[test]
 fn test_validate_token_with_malformed_base64() {
@@ -772,9 +758,7 @@ fn test_secret_exactly_32_chars() {
     assert!(result.is_ok());
 }
 
-// ========================================================================
 // Additional Boundary Tests (11 new tests)
-// ========================================================================
 
 #[test]
 fn test_verify_token_tampered_payload() {
@@ -1019,9 +1003,7 @@ fn test_verify_token_with_unicode_chars() {
     assert_eq!(ctx.user_id(), Some("用户123"));
 }
 
-// ========================================================================
 // Additional Coverage Tests: alg Confusion, panic paths, cleanup task
-// ========================================================================
 
 /// Verify that a JWT using `alg: "none"` is rejected (alg confusion attack).
 /// This covers the `if alg != "HS256" { return None; }` branch in verify_jwt.
@@ -1212,14 +1194,12 @@ fn test_validate_token_issuer_not_string() {
     assert!(auth.validate_token(&token).is_none());
 }
 
-// ============================================================================
 // vuln-0005 regression tests: BearerAuth::with_dependencies secret validation
 //
 // `with_dependencies` previously accepted any `Vec<u8>` secret without
 // validation, allowing callers to bypass the `try_new` complexity
 // requirements (≥32 chars + 4 character classes). These tests verify that
 // `with_dependencies` now enforces the same rules as `try_new`.
-// ============================================================================
 
 /// Build the shared caches used by `with_dependencies`.
 fn make_test_caches() -> (SharedCache, SharedCache) {

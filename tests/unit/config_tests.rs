@@ -91,9 +91,7 @@ mod config_tests {
 mod config_enhanced_tests {
     use sdforge::config::{AuthConfig, SdForgeConfig, ServerConfig};
 
-    // ============================================================================
     // ServerConfig boundary tests
-    // ============================================================================
 
     /// Test 1: Server port boundaries
     #[test]
@@ -226,9 +224,7 @@ mod config_enhanced_tests {
         assert_eq!(hostname.host, "localhost");
     }
 
-    // ============================================================================
     // AuthConfig comprehensive tests
-    // ============================================================================
 
     /// Test 4: API Key configuration variations
     #[test]
@@ -358,9 +354,7 @@ mod config_enhanced_tests {
         }
     }
 
-    // ============================================================================
     // SdForgeConfig comprehensive tests
-    // ============================================================================
 
     /// Test 7: SdForgeConfig builder pattern - all fields
     #[test]
@@ -424,9 +418,7 @@ mod config_enhanced_tests {
         assert_ne!(config1.server.host, config2.server.host);
     }
 
-    // ============================================================================
     // Configuration validation edge cases
-    // ============================================================================
 
     /// Test 10: Empty string in config fields
     #[test]

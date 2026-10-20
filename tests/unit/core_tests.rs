@@ -93,9 +93,7 @@ mod core_tests {
         assert_eq!(metadata.version(), "");
     }
 
-    // ============================================================================
     // Advanced Error Handling Tests
-    // ============================================================================
 
     /// Test: Error context with extra information
     #[test]
@@ -124,9 +122,7 @@ mod core_tests {
         assert!(value.get("resource").is_some());
     }
 
-    // ============================================================================
     // Performance and Stress Tests
-    // ============================================================================
 
     /// Test: Rapid error creation performance
     #[test]

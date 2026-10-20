@@ -7,9 +7,7 @@
 
 use crate::cli::{CliArgInfo, CliArgType, CliCommandRegistration};
 
-// ============================================================================
 // CliArgType variants + CliArgInfo field population
-// ============================================================================
 
 /// Verify the three `CliArgType` variants exist and `PartialEq` holds for
 /// each distinct variant. This is the foundational assertion —
@@ -68,7 +66,7 @@ fn test_cli_arg_info_new_with_default() {
     assert_eq!(arg.default, Some("10"));
 }
 
-/// Verify `CliArgInfo::new` is usable in a `const` context (required by ).
+/// Verify `CliArgInfo::new` is usable in a `const` context (required by).
 #[test]
 fn test_cli_arg_info_new_is_const_fn() {
     const ARG: CliArgInfo = CliArgInfo::new("id", "Resource ID", CliArgType::Path, true, None);
@@ -76,9 +74,7 @@ fn test_cli_arg_info_new_is_const_fn() {
     assert_eq!(ARG.arg_type, CliArgType::Path);
 }
 
-// ============================================================================
 // CliCommandRegistration field population
-// ============================================================================
 
 /// Verify `CliCommandRegistration::new` populates all fields and `args`
 /// defaults to an empty slice.
@@ -118,9 +114,7 @@ fn test_cli_command_registration_const_fn() {
     assert_eq!(REG.handler_fn_name, "ping_handler");
 }
 
-// ============================================================================
 // inventory collects CliCommandRegistration submissions
-// ============================================================================
 
 // Test-only registration submitted at module load time. The static
 // lifetime is required by `inventory::submit!`. Doc comments are not
@@ -141,7 +135,7 @@ inventory::submit!(
     )])
 );
 
-/// Verify that `inventory::iter::<CliCommandRegistration>()` yields the
+/// Verify that `inventory::iter::<CliCommandRegistration>` yields the
 /// statically-submitted test entry. This validates that
 /// `inventory::collect!(CliCommandRegistration)` is in effect.
 #[test]

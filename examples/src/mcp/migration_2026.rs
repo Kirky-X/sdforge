@@ -24,23 +24,19 @@
 use sdforge::mcp::{McpHeaderInfo, StatelessServerHandler};
 use sdforge::prelude::*;
 
-// ============================================================================
 // 无状态适配层示例
-// ============================================================================
 
 /// 演示 `StatelessServerHandler` 的构造
 ///
 /// `StatelessServerHandler` 实现了 `rmcp::ServerHandler` trait，
 /// 每个方法不依赖会话状态，适配 2026-07-28 规范的无状态协议模型。
 ///
-/// 构造时需传入一个 `SdForgeMcpServer`（可通过 `sdforge::mcp::build()` 获取）。
+/// 构造时需传入一个 `SdForgeMcpServer`（可通过 `sdforge::mcp::build` 获取）。
 pub fn demo_stateless_handler() -> StatelessServerHandler {
     StatelessServerHandler::new(sdforge::mcp::build())
 }
 
-// ============================================================================
 // HTTP 头协议示例
-// ============================================================================
 
 /// 演示 `Mcp-Method` 和 `Mcp-Name` 头的预期格式
 ///
@@ -64,9 +60,7 @@ pub fn demo_header_info_shape() -> McpHeaderInfo {
     }
 }
 
-// ============================================================================
 // 迁移后的工具定义示例
-// ============================================================================
 
 /// 迁移后的 MCP 工具端点
 ///
@@ -112,9 +106,7 @@ async fn discover_endpoint() -> Result<serde_json::Value, ApiError> {
     }))
 }
 
-// ============================================================================
 // 单元测试
-// ============================================================================
 
 #[cfg(test)]
 mod tests {

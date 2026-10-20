@@ -9,9 +9,7 @@
 //! `CliHandlerRegistration`. At runtime, \[`CliBuilder`\] collects the
 //! registrations and constructs a `clap::Command`.
 
-// ============================================================================
 // CliArgType + CliArgInfo
-// ============================================================================
 
 /// Classification of a CLI argument's source.
 ///
@@ -49,12 +47,10 @@ pub struct CliArgInfo {
     pub default: Option<&'static str>,
 }
 
-// ============================================================================
 // CliCommandRegistration
-// ============================================================================
 
 /// Static metadata for a CLI command, registered at compile time via
-/// `inventory::submit!` and collected by `CliBuilder::build()`.
+/// `inventory::submit!` and collected by `CliBuilder::build`.
 ///
 /// All fields are `&'static` so the registration lives in read-only memory
 /// and the struct is `Copy`. The `args` slice is built by the
@@ -83,26 +79,22 @@ pub struct CliCommandRegistration {
 
 mod cli_impl;
 
-// ============================================================================
 // inventory collect — compile-time registration of CLI commands.
-// ============================================================================
 //
 // Mirrors the registration pattern in src/http/mod.rs and src/mcp/mod.rs.
 // `inventory::collect!` declares the type as inventory-collectable; the
 // `#[forge]` macro emits `inventory::submit!` blocks at
-// call sites. At runtime, `CliBuilder::build()` iterates this
+// call sites. At runtime, `CliBuilder::build` iterates this
 // registry to construct the `clap::Command` tree.
 inventory::collect!(CliCommandRegistration);
 
-// ============================================================================
 // GlobalArg — declarative global CLI argument (avoids direct clap dep)
-// ============================================================================
 
 /// A global CLI argument that applies to all subcommands.
 ///
 /// Downstream crates construct this via the builder pattern and pass it to
 /// [`CliBuilder::with_global_arg`]. sdforge translates it into a
-/// `clap::Arg` with `global(true)` at `build()` time, so callers never
+/// `clap::Arg` with `global(true)` at `build` time, so callers never
 /// need to depend on `clap` directly.
 #[derive(Debug, Clone)]
 pub struct GlobalArg {
@@ -150,7 +142,7 @@ impl GlobalArg {
 
     /// Set the default value when the argument is omitted.
     /// Accepts `impl Into<String>` so both `&'static str` and runtime
-    /// `String` values work (e.g. `DEFAULT_DEBOUNCE_MS.to_string()`).
+    /// `String` values work (e.g. `DEFAULT_DEBOUNCE_MS.to_string`).
     #[must_use]
     pub fn default_value(mut self, default: impl Into<String>) -> Self {
         self.default_value = Some(default.into());
@@ -188,34 +180,26 @@ impl GlobalArg {
     }
 }
 
-// ============================================================================
 // CliBuilder — runtime collector → clap::Command
-// ============================================================================
 pub mod builder;
 
 pub use builder::CliBuilder;
 
-// ============================================================================
 // CLI dispatch — route ArgMatches to the registered forge handler
-// ============================================================================
 pub mod dispatch;
 pub mod output;
 
 pub use dispatch::dispatch;
 pub use output::OutputFormat;
 
-// ============================================================================
 // docs subcommand — definition + handler (docgen feature only)
-// ============================================================================
 #[cfg(feature = "docgen")]
 pub mod docs_subcommand;
 
 #[cfg(feature = "docgen")]
 pub use docs_subcommand::{docs_subcommand, docs_subcommand_definition};
 
-// ============================================================================
 // CliHandlerRegistration — closure-based handler dispatch
-// ============================================================================
 pub mod handler;
 
 pub use handler::CliHandlerRegistration;

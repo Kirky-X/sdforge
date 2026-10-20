@@ -52,17 +52,17 @@ impl ErrorContext {
     ///
     /// Uses `#[track_caller]` to capture the **caller's** file and line.
     ///
-    /// HIGH 修复：此前 `file!()/line!()` 展开于本文件，永远指向
-    /// context.rs 自身；`type_name::<()>()` 恒为 `"()"`——"调用者上下文"
+    /// HIGH 修复：此前 `file!/line!` 展开于本文件，永远指向
+    /// context.rs 自身；`type_name::<>` 恒为 `""`——"调用者上下文"
     /// 整体失效且 function 字段是常量垃圾值。调用者位置无法经
     /// `track_caller` 获得函数名，`function` 现为 `None`（诚实的缺失
-    /// 优于恒错的 `"()"`）。
+    /// 优于恒错的 `""`）。
     ///
     /// # Example
     ///
     /// ```rust
     /// use sdforge::error::ErrorContext;
-    /// let context = ErrorContext::current();
+    /// let context = ErrorContext::current;
     /// ```
     #[track_caller]
     pub fn current() -> Self {
@@ -81,9 +81,9 @@ impl ErrorContext {
     ///
     /// ```rust
     /// use sdforge::error::ErrorContext;
-    /// let context = ErrorContext::current()
-    ///     .with_extra("user_id".to_string(), "12345".to_string())
-    ///     .with_extra("action".to_string(), "delete_user".to_string());
+    /// let context = ErrorContext::current
+    ///     .with_extra("user_id".to_string, "12345".to_string)
+    ///     .with_extra("action".to_string, "delete_user".to_string);
     /// ```
     pub fn with_extra(mut self, key: String, value: String) -> Self {
         self.extra.insert(key, value);

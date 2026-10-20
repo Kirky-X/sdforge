@@ -4,7 +4,7 @@
 //!
 //! These tests exercise the end-to-end pipeline: `#[forge]` macro
 //! emits `OpenApiRouteInfo` entries (when `openapi` feature is enabled),
-//! and `generate_openapi_spec()` collects them via `inventory` to build a
+//! and `generate_openapi_spec` collects them via `inventory` to build a
 //! complete `utoipa::openapi::OpenApi` document.
 //!
 //! Feature requirement: run with `cargo test --features "http,openapi" --test openapi_tests`.
@@ -15,12 +15,10 @@ use sdforge::core::ApiError;
 use sdforge::forge;
 use sdforge::openapi::{OpenApiBuilder, generate_openapi_spec};
 
-// ============================================================================
 // Test fixtures: two `#[forge]` endpoints.
 //
 // These are compiled into the test binary, so their `OpenApiRouteInfo`
 // entries are collected by `inventory` and visible to `generate_openapi_spec`.
-// ============================================================================
 
 /// Fetch a single user by id. The path uses `:id` syntax; the macro converts
 /// it to the OpenAPI `{id}` template form.
@@ -82,9 +80,7 @@ async fn lifecycle_users() -> Result<Vec<String>, ApiError> {
     Ok(vec!["alice".to_string()])
 }
 
-// ============================================================================
 // Tests
-// ============================================================================
 
 /// The generated spec must include both registered endpoints, with the path
 /// parameter `:id` translated to the OpenAPI `{id}` template form.
@@ -110,7 +106,7 @@ fn generated_spec_contains_both_endpoints() {
 }
 
 /// The path-parameter endpoint must use the GET method operation (the
-/// `PathItem.get` field), confirming `http_method()` mapping reaches the
+/// `PathItem.get` field), confirming `http_method` mapping reaches the
 /// generated `Operation`.
 #[test]
 fn path_parameter_endpoint_uses_get_operation() {
@@ -179,7 +175,7 @@ fn custom_builder_preserves_routes_with_custom_metadata() {
     );
 }
 
-/// The default spec from `generate_openapi_spec()` must use the crate name
+/// The default spec from `generate_openapi_spec` must use the crate name
 /// and the compile-time crate version.
 #[test]
 fn default_spec_uses_crate_identity() {
@@ -216,9 +212,7 @@ fn operation_id_is_versioned_path() {
     );
 }
 
-// ============================================================================
 // requestBody + response schema emitted from #[forge] signatures.
-// ============================================================================
 
 #[test]
 fn forge_body_param_generates_request_body() {
@@ -345,9 +339,7 @@ fn i18n_key_translates_description_by_locale() {
     sdforge::i18n::set_locale("en");
 }
 
-// ============================================================================
 // 返回类型 Schema 反射（schemars optional，R6）
-// ============================================================================
 
 /// 夹具：派生 `JsonSchema` 的响应类型（schemars 由 dev-dependencies 提供，
 /// 宏发射点两态同构——反射是否生效取决于 sdforge 的 `schemars` feature）。

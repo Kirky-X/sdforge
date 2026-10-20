@@ -16,13 +16,11 @@ use crate::cli::{CliArgType, CliCommandRegistration, CliHandlerRegistration};
 use crate::prelude::ApiError;
 use sdforge_macros::forge;
 
-// ============================================================================
 // Test fixture: a forge function with `cli = true` and a path param.
 //
 // The macro should emit:
 //   1. CliCommandRegistration { name: "test_cli_macro_cmd", args: [id(Path)] }
 //   2. CliHandlerRegistration { name: "test_cli_macro_cmd", handler: fn }
-// ============================================================================
 #[forge(
     name = "test_cli_macro_cmd",
     version = "v1",
@@ -34,9 +32,7 @@ async fn test_cli_macro_cmd(id: u64) -> Result<String, ApiError> {
     Ok(format!("id={}", id))
 }
 
-// ============================================================================
 // Test fixture: a parameterless forge function with `cli = true`.
-// ============================================================================
 #[forge(name = "test_cli_macro_noargs", version = "v2", cli = true)]
 async fn test_cli_macro_noargs() -> Result<String, ApiError> {
     Ok("ok".to_string())

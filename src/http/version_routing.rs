@@ -10,7 +10,7 @@ use axum::{Router, body::Body, extract::Request, response::Response, routing::Me
 /// Versioned route structure for API version management
 ///
 /// This structure represents a single API route with its associated version.
-/// Routes are registered via `inventory::submit!` and collected by `build_version_router()`.
+/// Routes are registered via `inventory::submit!` and collected by `build_version_router`.
 #[derive(Debug, Clone)]
 pub struct VersionedRoute {
     version: String,
@@ -109,7 +109,6 @@ inventory::collect!(VersionedRoute);
 pub fn build_version_router() -> Router {
     let mut router = Router::new();
 
-    // Collect all versioned routes
     for route in inventory::iter::<VersionedRoute> {
         let path = format!("/api/{}{}", route.version(), route.path());
         router = router.route(&path, route.handler().clone());
@@ -120,7 +119,7 @@ pub fn build_version_router() -> Router {
 
 /// Version redirect middleware with deprecation support（默认配置的便捷形式）
 ///
-/// HIGH 修复：此函数此前硬编码 `VersionRouterConfig::default()`，导致
+/// HIGH 修复：此函数此前硬编码 `VersionRouterConfig::default`，导致
 /// `redirect_unknown` / `sunset_header` / `deprecated_versions` 全部是死配置。
 /// 需要自定义配置时请使用 [`VersionRedirectLayer`]。
 pub async fn version_redirect_middleware(
@@ -251,9 +250,9 @@ where
 /// ```ignore
 /// use sdforge::http::version_routing::{VersionRedirectLayer, VersionRouterConfig};
 ///
-/// let mut config = VersionRouterConfig::default();
-/// config.deprecated_versions.insert("v1".into(), "2026-12-31".into());
-/// let router = Router::new()
+/// let mut config = VersionRouterConfig::default;
+/// config.deprecated_versions.insert("v1".into, "2026-12-31".into);
+/// let router = Router::new
 ///     .route("/api/v1/users", axum::routing::get(users))
 ///     .layer(VersionRedirectLayer::new(config));
 /// ```
@@ -597,9 +596,7 @@ mod tests {
         );
     }
 
-    // ============================================================================
     // VersionedRoute Tests
-    // ============================================================================
 
     #[test]
     fn test_versioned_route_new() {
@@ -688,9 +685,7 @@ mod tests {
         assert!(debug_str.contains("v1"));
     }
 
-    // ============================================================================
     // VersionRouterConfig Tests
-    // ============================================================================
 
     #[test]
     fn test_version_router_config_default() {
@@ -737,9 +732,7 @@ mod tests {
         assert!(config.deprecated_versions.contains_key("v1"));
     }
 
-    // ============================================================================
     // build_version_router Tests
-    // ============================================================================
 
     #[test]
     fn test_build_version_router_returns_router() {
@@ -748,9 +741,7 @@ mod tests {
         let _ = router;
     }
 
-    // ============================================================================
     // find_newer_version Tests
-    // ============================================================================
 
     #[test]
     fn test_find_newer_version_basic() {
@@ -814,9 +805,7 @@ mod tests {
         assert_eq!(result, Some("v2".to_string()));
     }
 
-    // ============================================================================
     // version_redirect_middleware Extended Tests
-    // ============================================================================
 
     #[tokio::test]
     async fn test_version_redirect_with_trailing_path() {
@@ -842,7 +831,7 @@ mod tests {
         );
     }
 
-    // ===== HIGH 修复回归：配置注入 / query 保留 =====
+    // HIGH 修复回归：配置注入 / query 保留
 
     /// redirect_unknown=false 时无版本路径应放行而非重定向
     /// （此前 redirect_unknown 是死配置，永远重定向）。
@@ -1095,9 +1084,7 @@ mod tests {
         assert!(location.to_str().unwrap().starts_with("/api/v1/"));
     }
 
-    // ============================================================================
     // Deprecated Version Tests
-    // ============================================================================
 
     #[tokio::test]
     async fn test_deprecated_version_adds_headers() {
@@ -1124,9 +1111,7 @@ mod tests {
         assert!(response.headers().get("deprecation").is_none());
     }
 
-    // ============================================================================
     // Edge Cases
-    // ============================================================================
 
     #[tokio::test]
     async fn test_version_redirect_case_sensitive_version() {
@@ -1195,9 +1180,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::MOVED_PERMANENTLY);
     }
 
-    // ============================================================================
     // Additional Tests (15+ new tests)
-    // ============================================================================
 
     #[test]
     fn test_build_version_router_empty_routes() {
@@ -1246,7 +1229,7 @@ mod tests {
         // Expected path format: /api/v1/users
         assert_eq!(route.version(), "v1");
         assert_eq!(route.path(), "/users");
-        // Path format is built in build_version_router: format!("/api/{}{}", route.version(), route.path())
+        // Path format is built in build_version_router: format!("/api/{}{}", route.version, route.path)
     }
 
     #[test]
@@ -1598,7 +1581,6 @@ mod tests {
         assert!(debug.contains("/users/:id"));
     }
 
-    // ============================================================================
     // build_version_router with inventory-registered routes
     //
     // NOTE: Lines 107-108 (the for-loop body in build_version_router) cannot be
@@ -1607,21 +1589,18 @@ mod tests {
     // `String` (heap-allocated) and `MethodRouter` (not const-constructible),
     // so it cannot be used in `inventory::submit!`. The empty-routes case is
     // already covered by `test_build_version_router_empty_routes`.
-    // ============================================================================
 
-    // ============================================================================
     // Deprecation header block (lines 141-167) coverage note
     //
     // The deprecation-header logic inside `version_redirect_middleware` is
     // gated behind `if let Some(sunset_date) = config.deprecated_versions
     // .get(version_part)`. The middleware constructs its config via
-    // `VersionRouterConfig::default()`, whose `deprecated_versions` map is
+    // `VersionRouterConfig::default`, whose `deprecated_versions` map is
     // empty — so the `Some` branch can never be taken without modifying the
     // middleware signature to accept an injected config. These lines are
     // therefore unreachable from tests under the "do not modify production
     // code" constraint. The helper `find_newer_version` is exercised directly
     // below to cover the logic that *would* feed the Link header.
-    // ============================================================================
 
     /// Test find_newer_version with a single supported version returns None
     /// when the current version is the only one available.

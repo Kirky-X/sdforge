@@ -177,7 +177,7 @@ fn rate_limit_rejection_response(err: RateLimitError, locale: Option<&str>) -> R
     let mut resp = Response::new(Body::from(body));
     *resp.status_mut() = status;
     if let Some(secs) = retry_after_secs {
-        // `secs.to_string()` is a valid HTTP header value (digits only).
+        // `secs.to_string` is a valid HTTP header value (digits only).
         if let Ok(value) = secs.to_string().parse() {
             resp.headers_mut().insert("Retry-After", value);
         }

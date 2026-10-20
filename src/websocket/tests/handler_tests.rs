@@ -137,7 +137,7 @@ fn default_websocket_handler_passes_through_notification() {
     }
 }
 
-/// Test build() creates router without panic
+/// Test build creates router without panic
 #[test]
 fn build_router_creates_without_panic() {
     let router = build();
@@ -197,9 +197,7 @@ fn websocket_route_custom_handler() {
     assert_eq!(route.version(), "v2");
 }
 
-// ============================================================================
-// handle_socket() message loop tests (via TestServer WebSocket)
-// ============================================================================
+// handle_socket message loop tests (via TestServer WebSocket)
 
 /// Helper: build a test server with the websocket_upgrade handler (no auth).
 fn build_ws_test_server() -> axum_test::TestServer {
@@ -279,9 +277,7 @@ async fn handle_socket_echoes_notification_messages() {
     }
 }
 
-// ============================================================================
 // ValidatedWebSocketUpgrade FromRequest extractor tests
-// ============================================================================
 
 /// Test the extractor accepts a WebSocket upgrade when no auth is configured.
 ///

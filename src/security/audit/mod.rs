@@ -17,9 +17,7 @@ pub(crate) use audit_impl::sanitize_error_message;
 #[cfg(test)]
 pub(crate) use audit_impl::{JWT_PATTERN, PATH_PATTERN, SECRET_PATTERN};
 
-// =============================================================================
 // AuditSink trait — abstract audit log storage backend
-// =============================================================================
 
 /// Abstract audit log storage backend.
 ///
@@ -86,7 +84,7 @@ pub struct SdForgeAuditLogger {
     dropped_log_count: Arc<std::sync::atomic::AtomicU64>,
     /// Counter for total logs successfully stored (monitoring)
     total_log_count: Arc<std::sync::atomic::AtomicU64>,
-    /// 串行化对同一用户日志列表的读-改-写（log() 主写入、fallback 合并、
+    /// 串行化对同一用户日志列表的读-改-写（log 主写入、fallback 合并、
     /// worker 合并共用）。HIGH 修复：此前 get→push→set 无跨操作互斥，
     /// 同用户并发写互相覆盖导致审计日志静默丢失。
     merge_lock: Arc<std::sync::Mutex<()>>,
@@ -103,12 +101,12 @@ pub struct SdForgeAuditLogger {
 /// use sdforge::security::SdForgeAuditLogger;
 ///
 /// #[tokio::main]
-/// async fn main() {
-///     let logger = SdForgeAuditLogger::builder()
+/// async fn main {
+///     let logger = SdForgeAuditLogger::builder
 ///         .max_logs_per_user(500)
 ///         .max_concurrent_ops(50)
 ///         .queue_size(2000)
-///         .build();
+///         .build;
 ///     let _ = logger;
 /// }
 /// ```

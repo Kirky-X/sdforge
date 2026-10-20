@@ -103,13 +103,13 @@ pub const MCP_METHOD_PING: &str = "ping";
 /// use sdforge::mcp::headers::parse_mcp_headers;
 /// use http::HeaderMap;
 ///
-/// let mut headers = HeaderMap::new();
-/// headers.insert("mcp-method", "tools/call".parse().unwrap());
-/// headers.insert("mcp-name", "my_tool".parse().unwrap());
+/// let mut headers = HeaderMap::new;
+/// headers.insert("mcp-method", "tools/call".parse.unwrap);
+/// headers.insert("mcp-name", "my_tool".parse.unwrap);
 ///
-/// let info = parse_mcp_headers(&headers).unwrap();
+/// let info = parse_mcp_headers(&headers).unwrap;
 /// assert_eq!(info.method, "tools/call");
-/// assert_eq!(info.tool_name, Some("my_tool".to_string()));
+/// assert_eq!(info.tool_name, Some("my_tool".to_string));
 /// ```
 pub fn parse_mcp_headers(headers: &HeaderMap) -> Result<McpHeaderInfo, McpHeaderError> {
     let method = headers
@@ -320,7 +320,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ========================================================================
     // vuln-0004 regression tests: tool name validation
     //
     // parse_mcp_headers previously accepted any string as the Mcp-Name
@@ -328,7 +327,6 @@ mod tests {
     // characters (; ' "), control characters, and oversized names (DoS).
     // The fix adds is_valid_tool_name and rejects invalid names with
     // InvalidToolName error.
-    // ========================================================================
 
     #[test]
     fn test_vuln0004_is_valid_tool_name_accepts_simple_names() {

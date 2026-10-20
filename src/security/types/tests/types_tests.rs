@@ -34,7 +34,6 @@ fn test_audit_log_signature_generation() {
         signature: None,
     };
 
-    // Generate signature
     let secret_key: &[u8] = &derived_test_hmac_key(15);
     let signature = log.generate_signature(secret_key);
 
@@ -176,7 +175,6 @@ fn test_audit_log_signature_getter() {
     // Initially no signature
     assert!(log.signature().is_none());
 
-    // Generate signature
     let _signature = log.generate_signature(b"test-key");
 
     // Now signature should be present
@@ -184,9 +182,7 @@ fn test_audit_log_signature_getter() {
     assert!(!log.signature().unwrap().is_empty());
 }
 
-// ============================================================================
 // CacheNamespace Tests
-// ============================================================================
 
 #[test]
 fn test_cache_namespace_api_key() {
@@ -212,9 +208,7 @@ fn test_cache_namespace_idempotency() {
     assert_eq!(ns.key("idem_key_123"), "sdforge:idempotency:idem_key_123");
 }
 
-// ============================================================================
 // Serialization Roundtrip Tests
-// ============================================================================
 
 #[test]
 fn test_serialize_deserialize_permissions_roundtrip() {
@@ -264,9 +258,7 @@ fn test_deserialize_auth_context_invalid_data() {
     assert!(result.is_none());
 }
 
-// ============================================================================
 // parse_audit_log Tests
-// ============================================================================
 
 #[test]
 fn test_parse_audit_log_valid_success() {
@@ -357,9 +349,7 @@ fn test_parse_audit_log_not_an_object() {
     assert!(parse_audit_log(&value).is_none());
 }
 
-// ============================================================================
 // serialize_audit_logs / deserialize_audit_logs Roundtrip Tests
-// ============================================================================
 
 #[test]
 fn test_serialize_deserialize_audit_logs_roundtrip() {
@@ -415,9 +405,7 @@ fn test_serialize_audit_logs_empty() {
     assert_eq!(bytes, b"[]");
 }
 
-// ============================================================================
 // AuthContext Tests
-// ============================================================================
 
 #[test]
 fn test_auth_context_new() {
@@ -481,9 +469,7 @@ fn test_auth_context_accessors() {
     assert_eq!(ctx.metadata().client_ip(), Some("10.0.0.1"));
 }
 
-// ============================================================================
 // AuthMetadata Tests
-// ============================================================================
 
 #[test]
 fn test_auth_metadata_new() {
@@ -517,9 +503,7 @@ fn test_auth_metadata_default() {
     assert_eq!(meta.timestamp(), 0);
 }
 
-// ============================================================================
 // AuthExtractor Tests
-// ============================================================================
 
 #[test]
 fn test_auth_extractor_new() {
@@ -556,9 +540,7 @@ fn test_auth_extractor_into_inner() {
     assert_eq!(inner.user_id, Some("inner_user".to_string()));
 }
 
-// ============================================================================
 // JwtError Display Tests
-// ============================================================================
 
 #[test]
 fn test_jwt_error_invalid_format() {
@@ -608,9 +590,7 @@ fn test_jwt_error_is_std_error() {
     let _: &dyn std::error::Error = &err;
 }
 
-// ============================================================================
 // AuthConfigError Display Tests
-// ============================================================================
 
 #[test]
 fn test_auth_config_error_invalid_secret() {
@@ -643,9 +623,7 @@ fn test_auth_config_error_io_error() {
     assert!(msg.contains("Configuration I/O error"));
 }
 
-// ============================================================================
 // AuditResult Custom Serialize Tests
-// ============================================================================
 
 #[test]
 fn test_audit_result_serialize_success() {
@@ -701,9 +679,7 @@ fn test_audit_result_debug() {
     assert!(debug_str.contains("Success"));
 }
 
-// ============================================================================
 // AuthError Display Tests
-// ============================================================================
 
 #[test]
 fn test_auth_error_missing_auth() {
@@ -731,9 +707,7 @@ fn test_auth_error_insufficient_permissions() {
     assert!(msg.contains("admin"));
 }
 
-// ============================================================================
 // Additional CacheNamespace Tests (Copy, Clone, PartialEq, Debug)
-// ============================================================================
 
 #[test]
 fn test_cache_namespace_copy() {
@@ -765,9 +739,7 @@ fn test_cache_namespace_debug() {
     assert!(debug_str.contains("Idempotency"));
 }
 
-// ============================================================================
 // Additional Serialization Tests (Special Cases)
-// ============================================================================
 
 #[test]
 fn test_serialize_permissions_special_chars() {
@@ -787,9 +759,7 @@ fn test_deserialize_permissions_empty_data() {
     assert_eq!(result, Vec::<String>::new());
 }
 
-// ============================================================================
 // Additional AuthContext Tests (All Fields, Empty Fields)
-// ============================================================================
 
 #[test]
 fn test_auth_context_with_all_fields() {
@@ -831,9 +801,7 @@ fn test_auth_context_empty_fields() {
     assert!(!ctx.has_permission("anything"));
 }
 
-// ============================================================================
 // Additional AuthConfigError Tests
-// ============================================================================
 
 #[test]
 fn test_auth_config_error_display() {
@@ -842,9 +810,7 @@ fn test_auth_config_error_display() {
     assert_eq!(msg, "Invalid secret: test error");
 }
 
-// ============================================================================
 // Edge Case Tests for Serialization
-// ============================================================================
 
 #[test]
 fn test_serialize_auth_context_empty() {
@@ -877,9 +843,7 @@ fn test_serialize_auth_context_roundtrip() {
     assert_eq!(restored.permissions, ctx.permissions);
 }
 
-// ============================================================================
 // AuthMetadata Additional Tests
-// ============================================================================
 
 #[test]
 fn test_auth_metadata_accessors() {
@@ -895,9 +859,7 @@ fn test_auth_metadata_accessors() {
     assert_eq!(meta.timestamp(), 1234567890);
 }
 
-// ============================================================================
 // CacheNamespace Additional Tests
-// ============================================================================
 
 #[test]
 fn test_cache_namespace_key_empty_suffix() {
@@ -913,9 +875,7 @@ fn test_cache_namespace_key_special_suffix() {
     assert_eq!(key, "sdforge:bearer:valid:token/special?chars=here");
 }
 
-// ============================================================================
 // Additional Permission Tests
-// ============================================================================
 
 #[test]
 fn test_permissions_large_list() {
@@ -927,9 +887,7 @@ fn test_permissions_large_list() {
     assert_eq!(result[999], "perm_999");
 }
 
-// ============================================================================
 // deserialize_audit_logs single-object branch coverage
-// ============================================================================
 
 /// Deserialize a single JSON object (not an array) — exercises the
 /// Ok(serde_json::Value::Object(_)) branch of deserialize_audit_logs,

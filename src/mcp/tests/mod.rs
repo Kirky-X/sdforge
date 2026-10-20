@@ -21,9 +21,7 @@ use rmcp::model::{CallToolResult, ContentBlock, ErrorData as McpError};
 use serde_json::Value;
 use std::sync::Arc;
 
-// ============================================================================
 // Shared test helpers — accessible by all sub-modules via `super::`
-// ============================================================================
 
 /// Exercise all `SdForgeTool` trait methods for coverage.
 pub(super) fn exercise_all_tool_methods(tool: &dyn SdForgeTool) {
@@ -104,7 +102,7 @@ fn create_coverage_test_metadata() -> ApiMetadata {
     }
 }
 
-// Register the coverage tool in the global inventory so `get_mcp_tools()` has at
+// Register the coverage tool in the global inventory so `get_mcp_tools` has at
 // least one entry in test builds.
 inventory::submit!(McpToolRegistration::new(
     "coverage_test_tool",

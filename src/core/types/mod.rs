@@ -123,7 +123,7 @@ mod tests {
         assert_eq!(metadata, cloned);
     }
 
-    /// `annotation()` 只渲染已声明部分、分号连接，与 MCP/OpenAPI 描述
+    /// `annotation` 只渲染已声明部分、分号连接，与 MCP/OpenAPI 描述
     /// 尾注共用同一格式；全空时为空串（配合 `is_present` 不产出空括注）。
     #[test]
     fn test_lifecycle_annotation_renders_declared_parts_only() {

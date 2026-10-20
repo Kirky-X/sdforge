@@ -130,12 +130,12 @@ impl SdForgeAuditLogger {
     /// use sdforge::security::SdForgeAuditLogger;
     ///
     /// #[tokio::main]
-    /// async fn main() {
-    ///     let logger = SdForgeAuditLogger::builder()
+    /// async fn main {
+    ///     let logger = SdForgeAuditLogger::builder
     ///         .max_logs_per_user(500)
     ///         .max_concurrent_ops(50)
     ///         .queue_size(2000)
-    ///         .build();
+    ///         .build;
     ///     let _ = logger;
     /// }
     /// ```
@@ -157,20 +157,20 @@ impl SdForgeAuditLogger {
         let logs_clone = logs.clone();
         let fallback_logs_clone = fallback_logs.clone();
         let max_logs_clone = max_logs;
-        // worker 与 log() 必须共用同一把合并锁（先建后克隆）
+        // worker 与 log 必须共用同一把合并锁（先建后克隆）
         let merge_lock: Arc<std::sync::Mutex<()>> = Arc::new(std::sync::Mutex::new(()));
         let merge_lock_clone = merge_lock.clone();
         tokio::spawn(async move {
-            // Primary storage is done synchronously by log() — this worker only
+            // Primary storage is done synchronously by log — this worker only
             // handles draining the queue and merging fallback logs.
             while let Some(batch) = queue_receiver.recv().await {
                 let key = &batch.user_id;
-                // Drain the queue: primary log was already stored by log().
+                // Drain the queue: primary log was already stored by log.
                 // Just handle any fallback logs for this user.
                 if let Some(fallback_data) = fallback_logs_clone.get(key) {
                     let fallback: Vec<AuditLog> = deserialize_audit_logs(&fallback_data);
                     if !fallback.is_empty() {
-                        // 与 log() 的读改写互斥（HIGH 修复：防止并发覆盖丢日志）
+                        // 与 log 的读改写互斥（HIGH 修复：防止并发覆盖丢日志）
                         let _guard = merge_lock_clone.lock();
                         let data = logs_clone.get(key);
                         let mut logs_vec: Vec<AuditLog> = data
@@ -280,8 +280,8 @@ impl SdForgeAuditLogger {
             .clone()
             .unwrap_or_else(|| "anonymous".to_string());
 
-        // 同步写主存储：日志立即对 get_logs() 可见，不依赖异步 worker 调度。
-        // 读改写与 worker 的 fallback 合并互斥（否则并发 log() 互相覆盖、静默丢审计日志）；
+        // 同步写主存储：日志立即对 get_logs 可见，不依赖异步 worker 调度。
+        // 读改写与 worker 的 fallback 合并互斥（否则并发 log 互相覆盖、静默丢审计日志）；
         // 临界区内无 await，标准 Mutex 即可（semaphore 已把并发限制在 100 以内）。
         let key = &user_id;
         let merge_guard = self.merge_lock.lock();
@@ -298,7 +298,7 @@ impl SdForgeAuditLogger {
         self.logs.set(key, bytes);
 
         // Increment the total log counter for accurate monitoring.
-        // (Previously total_log_count() silently returned 0, hiding real activity.)
+        // (Previously total_log_count silently returned 0, hiding real activity.)
         self.total_log_count
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
@@ -368,7 +368,6 @@ impl SdForgeAuditLogger {
             }
         }
 
-        // Sort by timestamp descending
         all_logs.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
 
         all_logs
@@ -417,7 +416,7 @@ impl SdForgeAuditLogger {
     /// approximate count by checking individual known user keys.
     /// For accurate counting, use a separate counter or database query.
     pub fn total_log_count(&self) -> usize {
-        // Returns the actual count of logs successfully stored via log().
+        // Returns the actual count of logs successfully stored via log.
         // (Previously returned a hardcoded 0, hiding real audit activity.)
         self.total_log_count
             .load(std::sync::atomic::Ordering::Relaxed) as usize
@@ -454,7 +453,7 @@ impl crate::security::AuditLogger for SdForgeAuditLogger {
         let fallback_logs = self.fallback_logs.clone();
         let dropped_log_count = self.dropped_log_count.clone();
         // HIGH 修复：必须克隆原计数器——此前新建 0 值计数器，trait 路径
-        // 的日志永不计入 total_log_count()，监控指标失真。
+        // 的日志永不计入 total_log_count，监控指标失真。
         let total_log_count = self.total_log_count.clone();
         let merge_lock = self.merge_lock.clone();
 
@@ -519,7 +518,7 @@ impl SdForgeAuditLoggerBuilder {
     /// ```rust
     /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
-    /// let builder = SdForgeAuditLoggerBuilder::new();
+    /// let builder = SdForgeAuditLoggerBuilder::new;
     /// let _ = builder;
     /// ```
     pub fn new() -> Self {
@@ -551,7 +550,7 @@ impl SdForgeAuditLoggerBuilder {
     /// ```rust
     /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
-    /// let builder = SdForgeAuditLoggerBuilder::new().max_logs_per_user(500);
+    /// let builder = SdForgeAuditLoggerBuilder::new.max_logs_per_user(500);
     /// let _ = builder;
     /// ```
     pub fn max_logs_per_user(mut self, max_logs: usize) -> Self {
@@ -581,7 +580,7 @@ impl SdForgeAuditLoggerBuilder {
     /// ```rust
     /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
-    /// let builder = SdForgeAuditLoggerBuilder::new().max_concurrent_ops(50);
+    /// let builder = SdForgeAuditLoggerBuilder::new.max_concurrent_ops(50);
     /// let _ = builder;
     /// ```
     pub fn max_concurrent_ops(mut self, max_concurrent: usize) -> Self {
@@ -610,7 +609,7 @@ impl SdForgeAuditLoggerBuilder {
     /// ```rust
     /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
-    /// let builder = SdForgeAuditLoggerBuilder::new().queue_size(2000);
+    /// let builder = SdForgeAuditLoggerBuilder::new.queue_size(2000);
     /// let _ = builder;
     /// ```
     pub fn queue_size(mut self, queue_size: usize) -> Self {
@@ -637,12 +636,12 @@ impl SdForgeAuditLoggerBuilder {
     /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
     /// #[tokio::main]
-    /// async fn main() {
-    ///     let logger = SdForgeAuditLoggerBuilder::new()
+    /// async fn main {
+    ///     let logger = SdForgeAuditLoggerBuilder::new
     ///         .max_logs_per_user(500)
     ///         .max_concurrent_ops(50)
     ///         .queue_size(2000)
-    ///         .build();
+    ///         .build;
     ///     let _ = logger;
     /// }
     /// ```
@@ -663,20 +662,20 @@ impl SdForgeAuditLoggerBuilder {
         let logs_clone = logs.clone();
         let fallback_logs_clone = fallback_logs.clone();
         let max_logs_clone = self.max_logs_per_user;
-        // worker 与 log() 必须共用同一把合并锁（先建后克隆）
+        // worker 与 log 必须共用同一把合并锁（先建后克隆）
         let merge_lock: Arc<std::sync::Mutex<()>> = Arc::new(std::sync::Mutex::new(()));
         let merge_lock_clone = merge_lock.clone();
         tokio::spawn(async move {
-            // Primary storage is done synchronously by log() — this worker only
+            // Primary storage is done synchronously by log — this worker only
             // handles draining the queue and merging fallback logs.
             while let Some(batch) = queue_receiver.recv().await {
                 let key = &batch.user_id;
-                // Drain the queue: primary log was already stored by log().
+                // Drain the queue: primary log was already stored by log.
                 // Just handle any fallback logs for this user.
                 if let Some(fallback_data) = fallback_logs_clone.get(key) {
                     let fallback: Vec<AuditLog> = deserialize_audit_logs(&fallback_data);
                     if !fallback.is_empty() {
-                        // 与 log() 的读改写互斥（HIGH 修复：防止并发覆盖丢日志）
+                        // 与 log 的读改写互斥（HIGH 修复：防止并发覆盖丢日志）
                         let _guard = merge_lock_clone.lock();
                         let data = logs_clone.get(key);
                         let mut logs_vec: Vec<AuditLog> = data

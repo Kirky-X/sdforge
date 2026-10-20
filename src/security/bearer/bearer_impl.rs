@@ -15,7 +15,7 @@ impl BearerAuth {
     ///
     /// # Panics
     /// Panics if the secret is too short or doesn't meet complexity requirements
-    /// Use `try_new()` for error handling instead.
+    /// Use `try_new` for error handling instead.
     pub fn new(secret: impl Into<String>) -> Self {
         Self::try_new(secret).expect("Failed to create BearerAuth: invalid secret")
     }
@@ -164,16 +164,16 @@ impl BearerAuth {
     /// use sdforge::cache::DashMapCache;
     /// use std::sync::Arc;
     ///
-    /// let valid_tokens = Arc::new(DashMapCache::new()) as _;
-    /// let blacklisted_tokens = Arc::new(DashMapCache::new()) as _;
+    /// let valid_tokens = Arc::new(DashMapCache::new) as _;
+    /// let blacklisted_tokens = Arc::new(DashMapCache::new) as _;
     ///
     /// let auth = BearerAuth::with_dependencies(
-    ///     b"MySecureSecret123!@#ABCDEFGHIJKLM".to_vec(),
+    ///     b"MySecureSecret123!@#ABCDEFGHIJKLM".to_vec,
     ///     valid_tokens,
     ///     blacklisted_tokens,
-    ///     Some("my-api".to_string()),
-    ///     Some("my-issuer".to_string()),
-    /// )
+    ///     Some("my-api".to_string),
+    ///     Some("my-issuer".to_string),
+    ///)
     /// .expect("valid secret must pass validation");
     /// let _ = auth;
     /// ```
@@ -208,11 +208,11 @@ impl BearerAuth {
     /// ```rust
     /// use sdforge::security::BearerAuth;
     ///
-    /// let auth = BearerAuth::builder()
+    /// let auth = BearerAuth::builder
     ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLMKLMKLM")
     ///     .audience("my-api")
     ///     .issuer("my-issuer")
-    ///     .build()
+    ///     .build
     ///     .expect("Failed to build BearerAuth");
     /// let _ = auth;
     /// ```
@@ -441,8 +441,8 @@ impl BearerAuth {
     /// use sdforge::security::BearerAuth;
     ///
     /// #[tokio::main]
-    /// async fn main() {
-    ///     let auth = BearerAuth::new("MySecret123!@#$%^&*()ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    /// async fn main {
+    ///     let auth = BearerAuth::new("MySecret123!@#$%^&*ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     ///     auth.start_blacklist_cleanup(Duration::from_secs(60));
     /// }
     /// ```
@@ -466,7 +466,7 @@ impl BearerAuthBuilder {
     /// # Returns
     ///
     /// Returns a builder initialized with no configuration.
-    /// The secret must be set before calling `build()`.
+    /// The secret must be set before calling `build`.
     ///
     /// # Errors
     ///
@@ -477,7 +477,7 @@ impl BearerAuthBuilder {
     /// ```rust
     /// use sdforge::security::BearerAuthBuilder;
     ///
-    /// let builder = BearerAuthBuilder::new();
+    /// let builder = BearerAuthBuilder::new;
     /// let _ = builder;
     /// ```
     pub fn new() -> Self {
@@ -514,7 +514,7 @@ impl BearerAuthBuilder {
     /// ```rust
     /// use sdforge::security::BearerAuthBuilder;
     ///
-    /// let builder = BearerAuthBuilder::new()
+    /// let builder = BearerAuthBuilder::new
     ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM");
     /// let _ = builder;
     /// ```
@@ -546,7 +546,7 @@ impl BearerAuthBuilder {
     /// ```rust
     /// use sdforge::security::BearerAuthBuilder;
     ///
-    /// let builder = BearerAuthBuilder::new()
+    /// let builder = BearerAuthBuilder::new
     ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
     ///     .audience("my-api");
     /// let _ = builder;
@@ -579,7 +579,7 @@ impl BearerAuthBuilder {
     /// ```rust
     /// use sdforge::security::BearerAuthBuilder;
     ///
-    /// let builder = BearerAuthBuilder::new()
+    /// let builder = BearerAuthBuilder::new
     ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
     ///     .issuer("my-issuer");
     /// let _ = builder;
@@ -610,10 +610,10 @@ impl BearerAuthBuilder {
     /// ```rust
     /// use sdforge::security::BearerAuthBuilder;
     ///
-    /// let auth = BearerAuthBuilder::new()
+    /// let auth = BearerAuthBuilder::new
     ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
     ///     .audience("my-api")
-    ///     .build()
+    ///     .build
     ///     .expect("Failed to build BearerAuth");
     /// let _ = auth;
     /// ```
@@ -692,7 +692,7 @@ impl BearerAuthBuilder {
 /// ```rust
 /// use sdforge::security::{generate_secure_jwt_secret, BearerAuth};
 ///
-/// let secret = generate_secure_jwt_secret();
+/// let secret = generate_secure_jwt_secret;
 /// println!("Generated secure JWT secret: {}", secret);
 ///
 /// // Use with BearerAuth

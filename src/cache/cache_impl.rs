@@ -247,7 +247,7 @@ impl SyncCache for OxcacheSyncCache {
             Err(_) => return Vec::new(),
         };
         // oxcache backend 达容量会驱逐键，`key_index` 可能残留为超集：遍历时以
-        // `backend.exists()` 过滤并惰性清理，保证结果一致且 index 不无限增长。
+        // `backend.exists` 过滤并惰性清理，保证结果一致且 index 不无限增长。
         let mut result = Vec::new();
         let mut stale_keys = Vec::new();
         for k in idx.iter() {

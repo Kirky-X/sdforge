@@ -16,7 +16,7 @@ inventory::submit!(CliCommandRegistration::new(
     "test_handler_for_docs",
 ));
 
-/// `generate_cli_docs()` 应返回包含已注册命令名的 Markdown 字符串。
+/// `generate_cli_docs` 应返回包含已注册命令名的 Markdown 字符串。
 #[test]
 fn test_generate_cli_docs_contains_command_name() {
     let md = generate_cli_docs();

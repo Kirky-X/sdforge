@@ -164,10 +164,8 @@ async fn readyz_passes_when_all_checks_healthy() {
     sdforge::health::clear_readiness_checks();
 }
 
-// =============================================================================
 // 手动挂载公开面：`mount_probes` / `run_readiness_checks` / `route_path_taken`
 // 对库外消费方可见——手动构建 Router 的调用方自担路径冲突检查。
-// =============================================================================
 #[tokio::test]
 #[serial_test::serial]
 async fn manual_mount_helpers_are_externally_callable() {
@@ -207,10 +205,8 @@ async fn run_readiness_checks_is_externally_callable() {
     sdforge::health::clear_readiness_checks();
 }
 
-// =============================================================================
 // 自定义 ReadinessRenderer：库外消费方接管 /readyz 的状态码与包络
 // （默认注册位为空时行为与快照一致，见库内逐字节快照测试）。
-// =============================================================================
 #[tokio::test]
 #[serial_test::serial]
 async fn custom_readiness_renderer_controls_status_and_envelope() {
@@ -252,9 +248,7 @@ async fn custom_readiness_renderer_controls_status_and_envelope() {
     sdforge::health::clear_readiness_checks();
 }
 
-// =============================================================================
 // AsyncReadinessCheck：库外注册异步检查，/readyz 自动切聚合路径并翻 503。
-// =============================================================================
 #[tokio::test]
 #[serial_test::serial]
 async fn async_readiness_check_flips_readyz_to_503() {
@@ -276,9 +270,7 @@ async fn async_readiness_check_flips_readyz_to_503() {
     sdforge::health::clear_async_readiness_checks();
 }
 
-// =============================================================================
 // kit data source (kit + health features)
-// =============================================================================
 #[cfg(feature = "kit")]
 mod kit_source_e2e {
     use super::{body_json, get, jwt_config};

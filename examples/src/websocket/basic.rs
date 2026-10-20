@@ -24,7 +24,7 @@
 //!
 //! 4. **关闭连接**
 //!    ```javascript
-//!    ws.close();
+//!    ws.close;
 //!    ```
 //!
 //! ## 消息格式
@@ -54,9 +54,7 @@
 use sdforge::prelude::*;
 use sdforge::serde::{Deserialize, Serialize};
 
-// ============================================================================
 // 消息类型定义
-// ============================================================================
 
 /// WebSocket 消息结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,9 +79,7 @@ pub struct StatusUpdate {
     pub updated_at: String,
 }
 
-// ============================================================================
 // API 端点定义
-// ============================================================================
 
 /// 基础 WebSocket 端点
 ///
@@ -98,7 +94,7 @@ pub struct StatusUpdate {
 /// ```javascript
 /// const ws = new WebSocket('ws://localhost:3000/ws/basic');
 ///
-/// ws.onopen = () => {
+/// ws.onopen =  => {
 ///     console.log('Connected to WebSocket');
 ///     ws.send(JSON.stringify({
 ///         type: 'message',

@@ -91,7 +91,7 @@ pub struct ToolDto {
 /// into a single `DiscoveryResponse` that can be returned by the
 /// `server/discover` endpoint.
 ///
-/// Uses `get_all_tools()` instead of `ServerHandler::list_tools()` to avoid
+/// Uses `get_all_tools` instead of `ServerHandler::list_tools` to avoid
 /// needing a `RequestContext` (which requires a live transport connection).
 pub async fn build_discovery_response(server: &SdForgeMcpServer) -> DiscoveryResponse {
     let info = server.get_info();

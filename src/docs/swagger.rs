@@ -33,7 +33,7 @@ struct SwaggerSpecUrl(Arc<str>);
 /// 调用方可将其 merge 到主 Router：
 /// ```ignore
 /// use sdforge::docs::swagger_ui_router;
-/// let app = axum::Router::new().merge(swagger_ui_router());
+/// let app = axum::Router::new.merge(swagger_ui_router);
 /// ```
 ///
 /// # 路径冲突
@@ -50,7 +50,7 @@ pub fn swagger_ui_router() -> axum::Router {
 /// 构建仅含 Swagger UI 路由的 axum Router，spec 地址由调用方指定。
 ///
 /// 不注册 `/api-docs/openapi.json`——宿主应用自行提供 spec 端点（可以是
-/// 动态生成的、带认证的或来自独立文档服务的），Swagger UI 从
+/// 动态生成的、带认证的或来自独立文档服务），Swagger UI 从
 /// `openapi_url` 加载。
 ///
 /// # 参数
@@ -62,7 +62,7 @@ pub fn swagger_ui_router() -> axum::Router {
 /// ```ignore
 /// use sdforge::docs::swagger_ui_router_with_spec;
 /// // 宿主已在 /api-docs/openapi.json 提供自己的 spec
-/// let app = axum::Router::new()
+/// let app = axum::Router::new
 ///     .merge(swagger_ui_router_with_spec("/api-docs/openapi.json"));
 /// ```
 pub fn swagger_ui_router_with_spec(openapi_url: &str) -> axum::Router {
@@ -83,10 +83,10 @@ pub fn swagger_ui_router_with_spec(openapi_url: &str) -> axum::Router {
 /// 外部端点文档的完整 spec 的场景。
 ///
 /// ```ignore
-/// let spec = sdforge::openapi::OpenApiBuilder::new()
+/// let spec = sdforge::openapi::OpenApiBuilder::new
 ///     .title("Host API").version("1.0.0")
 ///     .merge_openapi(my_extra_spec)
-///     .build();
+///     .build;
 /// let app = sdforge::docs::swagger_ui_router_with_openapi(spec);
 /// ```
 pub fn swagger_ui_router_with_openapi(spec: OpenApi) -> axum::Router {

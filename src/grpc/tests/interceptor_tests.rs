@@ -9,9 +9,7 @@ use super::make_test_jwt;
 #[cfg(feature = "security")]
 use tonic::service::Interceptor;
 
-// ============================================================================
 // gRPC Auth Interceptor Tests
-// ============================================================================
 
 /// Test: valid token → interceptor returns Ok
 #[cfg(feature = "security")]
@@ -133,9 +131,7 @@ fn test_auth_interceptor_no_auth_configured() {
     );
 }
 
-// ============================================================================
 // Auth Interceptor Extended Tests
-// ============================================================================
 
 #[cfg(feature = "security")]
 #[test]

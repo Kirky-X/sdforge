@@ -26,9 +26,7 @@ mod security_tests {
         );
     }
 
-    // ============================================================================
     // Advanced Security Tests - Performance and Concurrency
-    // ============================================================================
 
     /// Test: API key validation performance
     #[test]
@@ -123,9 +121,7 @@ mod security_middleware_enhanced_tests {
     use sdforge::SdForgeApiKeyAuth;
     use sdforge::security::ApiKeyMetadata;
 
-    // ============================================================================
     // ApiKeyMetadata tests
-    // ============================================================================
 
     /// Test 1: ApiKeyMetadata creation with minimal params
     #[test]
@@ -183,9 +179,7 @@ mod security_middleware_enhanced_tests {
         assert!(debug_str.contains("debug-test"));
     }
 
-    // ============================================================================
     // SdForgeApiKeyAuth tests
-    // ============================================================================
 
     /// Test 6: SdForgeApiKeyAuth basic functionality
     #[test]
@@ -217,9 +211,7 @@ mod security_middleware_enhanced_tests {
         let _ = auth2.validate_key("key2", "127.0.0.1");
     }
 
-    // ============================================================================
     // Auth context tests
-    // ============================================================================
 
     /// Test 9: Auth context creation
     #[test]

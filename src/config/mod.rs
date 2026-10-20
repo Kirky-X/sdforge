@@ -8,7 +8,7 @@
 //! Configuration types are organized into submodules by functionality:
 //! - `server` - ServerConfig, TlsConfig
 //! - `auth` - AuthConfig (ApiKey, JWT, None)
-//! - `cors` - CorsConfig, build_cors_layer()
+//! - `cors` - CorsConfig, build_cors_layer
 //! - `timeout` - TimeoutConfig
 //! - `api` - ApiConfig, TracingConfig, EnvHelper
 //! - `defaults` - Default values for all configuration types
@@ -22,7 +22,7 @@ pub trait ValidateConfig {
     /// Validate the configuration
     ///
     /// # Returns
-    /// - `Ok(())` if the configuration is valid
+    /// - `Ok()` if the configuration is valid
     /// - `Err(ConfigError)` if validation fails
     fn validate(&self) -> Result<(), ConfigError>;
 }
@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn test_app_config_default() {
         let config = SdForgeConfig::default();
-        // ServerConfig::default() 现在使用 fail-safe loopback host
+        // ServerConfig::default 现在使用 fail-safe loopback host
         assert_eq!(config.server.host, "127.0.0.1");
         matches!(config.authentication, AuthConfig::None);
     }
@@ -380,7 +380,7 @@ mod tests {
     }
 
     // Fail-closed contract: with the `security` feature disabled the auth
-    // middleware cannot exist, so validate() must reject any AuthConfig
+    // middleware cannot exist, so validate must reject any AuthConfig
     // requesting authentication instead of silently accepting it.
     #[cfg(not(feature = "security"))]
     #[test]

@@ -19,9 +19,9 @@ extern crate self as sdforge;
 /// Re-export macros from sdforge-macros for convenient use
 pub use sdforge_macros::{forge, service_module, test_macro};
 
-/// Macro to implement Default::default() constructor for types
+/// Macro to implement Default::default constructor for types
 ///
-/// This macro generates both a `new()` static method and implements `Default` trait.
+/// This macro generates both a `new` static method and implements `Default` trait.
 /// Useful for simple types that can be constructed with no arguments.
 ///
 /// # Example
@@ -33,7 +33,7 @@ pub use sdforge_macros::{forge, service_module, test_macro};
 /// struct EmptyConfig;
 /// impl_default_new!(EmptyConfig);
 ///
-/// let config = EmptyConfig::new();
+/// let config = EmptyConfig::new;
 /// ```
 #[macro_export]
 macro_rules! impl_default_new {
@@ -253,7 +253,7 @@ pub use http::version_routing::{VersionRouterConfig, VersionedRoute, build_versi
 pub mod mcp;
 
 /// Re-export `rmcp` so downstream crates can use `sdforge::rmcp::ServiceExt` /
-/// `sdforge::rmcp::transport::stdio()` etc. without adding a direct `rmcp`
+/// `sdforge::rmcp::transport::stdio` etc. without adding a direct `rmcp`
 /// dependency. Only available when the `mcp` feature is enabled.
 #[cfg(feature = "mcp")]
 pub use rmcp;
@@ -559,8 +559,8 @@ macro_rules! count_if {
 /// ```ignore
 /// use sdforge::init_all_plugins;
 ///
-/// fn main() {
-///     let counts = sdforge::init_all_plugins();
+/// fn main {
+///     let counts = sdforge::init_all_plugins;
 /// }
 /// ```
 #[cfg(any(
@@ -655,8 +655,8 @@ fn count_cli_commands() -> usize {
 /// ```ignore
 /// use sdforge::init_all_plugins;
 ///
-/// fn main() {
-///     let counts = init_all_plugins();
+/// fn main {
+///     let counts = init_all_plugins;
 ///
 ///     println!("Registered:");
 ///     println!("  HTTP routes: {}", counts.routes);
@@ -719,9 +719,7 @@ mod tests {
     ))]
     use super::*;
 
-    // ============================================================================
     // init_all_plugins tests：OnceLock 缓存 inventory 迭代（幂等），#[serial] 防并发触碰全局
-    // ============================================================================
 
     #[cfg(any(
         feature = "http",
@@ -777,9 +775,7 @@ mod tests {
         assert_eq!(first.cli_commands, second.cli_commands);
     }
 
-    // ============================================================================
     // get_mcp_tools tests
-    // ============================================================================
 
     #[cfg(feature = "mcp")]
     #[test]
@@ -792,9 +788,7 @@ mod tests {
         let _ = tools.len();
     }
 
-    // ============================================================================
     // get_websocket_routes tests
-    // ============================================================================
 
     #[cfg(feature = "websocket")]
     #[test]
@@ -806,9 +800,7 @@ mod tests {
         let _ = routes.len();
     }
 
-    // ============================================================================
     // impl_default_new macro test
-    // ============================================================================
 
     #[test]
     fn test_impl_default_new_macro() {
@@ -821,17 +813,15 @@ mod tests {
         let _: EmptyConfig = config;
     }
 
-    // ============================================================================
     // impl_default_new! macro: Default trait integration
     //
-    // The macro generates both `new()` and `Default::default()`. The existing
-    // test only calls `new()`. These tests verify the generated `Default`
+    // The macro generates both `new` and `Default::default`. The existing
+    // test only calls `new`. These tests verify the generated `Default`
     // impl produces an equivalent value and that the macro can be applied to
     // multiple distinct unit structs in the same scope.
-    // ============================================================================
 
     /// Test the impl_default_new! macro generates a working Default impl
-    /// whose `default()` equals `new()`.
+    /// whose `default` equals `new`.
     #[test]
     #[allow(clippy::default_constructed_unit_structs)] // test asserts Default impl exists
     fn test_impl_default_new_macro_generates_default_trait() {
@@ -861,14 +851,12 @@ mod tests {
         let _b2 = SecondConfig::default();
     }
 
-    // ============================================================================
     // PluginCounts struct: field access under the http,cache feature set
     //
     // When only `http` and `cache` features are enabled, PluginCounts has a
     // single `routes` field (the mcp_tools/ws_routes/grpc_routes fields are
     // cfg-gated out). These tests verify the struct can be constructed and
     // its field accessed without panicking.
-    // ============================================================================
 
     /// Test PluginCounts can be constructed via init_all_plugins and the
     /// `routes` field is a non-negative usize.

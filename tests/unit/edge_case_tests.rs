@@ -17,9 +17,7 @@ mod core_edge_case_tests {
     };
     use sdforge::error::ErrorContext;
 
-    // ============================================================================
     // String Utility Edge Cases
-    // ============================================================================
 
     /// Test: Empty string inputs
     #[test]
@@ -301,9 +299,7 @@ mod core_edge_case_tests {
         assert!(result.starts_with("aaa"));
     }
 
-    // ============================================================================
     // Error Context Edge Cases
-    // ============================================================================
 
     /// Test: Error context with extensive extra data
     #[test]
@@ -340,9 +336,7 @@ mod core_edge_case_tests {
         assert_eq!(ctx.extra.get("key"), Some(&"".to_string()));
     }
 
-    // ============================================================================
     // Combined Scenarios
-    // ============================================================================
 
     /// Test: Real-world error message composition
     #[test]

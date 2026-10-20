@@ -24,21 +24,21 @@
 //! ### 1. 公开 API (允许所有来源)
 //!
 //! ```text
-//! CorsLayer::new()
+//! CorsLayer::new
 //!     .allow_origin(tower_http::cors::Any)
 //! ```
 //!
 //! ### 2. 指定来源
 //!
 //! ```text
-//! CorsLayer::new()
-//!     .allow_origin("https://example.com".parse::<AllowedOrigins>().unwrap())
+//! CorsLayer::new
+//!     .allow_origin("https://example.com".parse::<AllowedOrigins>.unwrap)
 //! ```
 //!
 //! ### 3. 带凭证的 CORS
 //!
 //! ```text
-//! CorsLayer::new()
+//! CorsLayer::new
 //!     .allow_origin("https://example.com")
 //!     .allow_credentials(true)
 //! ```
@@ -58,9 +58,7 @@
 use sdforge::i18n::t;
 use sdforge::prelude::*;
 
-// ============================================================================
 // API 端点定义
-// ============================================================================
 
 /// 公开数据端点（CORS 演示专用）
 ///

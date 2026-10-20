@@ -339,9 +339,7 @@ impl rmcp::transport::Transport<rmcp::RoleServer> for DummyTransport {
     }
 }
 
-// ============================================================================
 // Endpoint RBAC（对齐 gRPC per-method roles）
-// ============================================================================
 
 // RBAC fixture：声明 `mcp_admin` 角色的工具（inventory 全局注册，
 // 仅 security 测试构建可见；其他测试不调用该工具）。

@@ -20,7 +20,7 @@ use sdforge::core::ApiError;
 use sdforge::forge;
 use sdforge::i18n::t;
 
-/// Hello endpoint. 注册为 HTTP 路由 /api/v1/hello，会被 generate_openapi_spec()
+/// Hello endpoint. 注册为 HTTP 路由 /api/v1/hello，会被 generate_openapi_spec
 /// 收集到 OpenAPI spec 中，Swagger UI 随之展示。
 #[forge(
     name = "demo_hello",
@@ -47,9 +47,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         sdforge::init_all_plugins();
 
         // swagger_ui_router 挂载：
-        //  - /api-docs/openapi.json  → OpenAPI 3.1 JSON（动态生成）
-        //  - /swagger-ui/           → Swagger UI 首页
-        //  - /swagger-ui/*rest      → Swagger UI 静态资源
+        // - /api-docs/openapi.json → OpenAPI 3.1 JSON（动态生成）
+        // - /swagger-ui/ → Swagger UI 首页
+        // - /swagger-ui/*rest → Swagger UI 静态资源
         let app = sdforge::swagger_ui_router();
 
         // 端口可通过 SDFORGE_HTTP_PORT 环境变量覆盖（默认 8080），

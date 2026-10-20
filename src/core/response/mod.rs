@@ -215,7 +215,7 @@ mod tests {
         assert!(response.error_ref().is_none());
     }
 
-    /// Test ServiceResponse error then data() returns None.
+    /// Test ServiceResponse error then data returns None.
     #[test]
     fn test_service_response_error_has_no_data() {
         let error = ServiceError::new("ERR", "msg", 500);
@@ -223,7 +223,7 @@ mod tests {
         assert!(response.data().is_none());
     }
 
-    /// Test ServiceError http_status() returns the configured status code.
+    /// Test ServiceError http_status returns the configured status code.
     #[test]
     fn test_service_error_http_status_various_codes() {
         for status in [200u16, 400, 401, 403, 404, 422, 429, 500, 503] {
@@ -287,14 +287,12 @@ mod tests {
         assert!(debug.contains("418"));
     }
 
-    // ============================================================================
     // forge-success-status-code: status_code field + constructors
     //
     // 字段与零破坏序列化
     // success_with_status 动态构造器
     // with_status_code_opt 合并语义（字段优先）
     // status_code 访问器
-    // ============================================================================
 
     /// success("x") 序列化结果不含 status_code 键。
     #[test]
@@ -362,13 +360,13 @@ mod tests {
         assert_eq!(response.status_code(), None);
     }
 
-    /// success("x").status_code() == None。
+    /// success("x").status_code == None。
     #[test]
     fn test_status_code_accessor_none_on_success() {
         assert_eq!(ServiceResponse::success("x").status_code(), None);
     }
 
-    /// success_with_status("x", 201).status_code() == Some(201)。
+    /// success_with_status("x", 201).status_code == Some(201)。
     #[test]
     fn test_status_code_accessor_some_on_success_with_status() {
         assert_eq!(

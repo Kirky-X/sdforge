@@ -90,7 +90,7 @@ mod tests {
 
     /// Construct a minimal valid `FlowControlConfig` matching all IPs with
     /// a permissive token bucket (100 burst, 10 req/s refill). Mirrors the
-    /// `default_config()` pattern from `src/security/ratelimit/adapter.rs`.
+    /// `default_config` pattern from `src/security/ratelimit/adapter.rs`.
     fn make_minimal_config() -> FlowControlConfig {
         FlowControlConfig {
             version: "0.1.0".to_string(),
@@ -148,7 +148,7 @@ mod tests {
         );
     }
 
-    /// #3: `record` is a no-op returning `Ok()`
+    /// #3: `record` is a no-op returning `Ok`
     /// (Governor::check is atomic — check + consume together; there is no
     /// separate `record` method on `Governor`).
     #[tokio::test]
@@ -191,7 +191,7 @@ mod tests {
     /// is rejected because <1 second has elapsed (negligible refill).
     ///
     /// Note: Governor's cache is hardcoded `true` (governor.rs line 241),
-    /// independent of `CacheBackend` config. Without `clear_l1_cache()`,
+    /// independent of `CacheBackend` config. Without `clear_l1_cache`,
     /// the 2nd check returns the cached `Allowed` decision, masking the
     /// exhausted token bucket.
     #[tokio::test]

@@ -13,7 +13,7 @@ use tower::ServiceExt;
 #[cfg(feature = "http")]
 use crate::docs::swagger_ui_router;
 
-/// `swagger_ui_router()` 应返回有效的 `axum::Router`（编译通过 + 不 panic）。
+/// `swagger_ui_router` 应返回有效的 `axum::Router`（编译通过 + 不 panic）。
 #[cfg(feature = "http")]
 #[test]
 fn test_swagger_ui_router_returns_router() {
@@ -22,7 +22,7 @@ fn test_swagger_ui_router_returns_router() {
     let _router: axum::Router = router;
 }
 
-/// `swagger_ui_router()` 应挂载 `/swagger-ui/` 路径，请求该路径不应返回 404。
+/// `swagger_ui_router` 应挂载 `/swagger-ui/` 路径，请求该路径不应返回 404。
 #[cfg(feature = "http")]
 #[tokio::test]
 async fn test_swagger_ui_router_has_swagger_path() {
@@ -44,7 +44,7 @@ async fn test_swagger_ui_router_has_swagger_path() {
     );
 }
 
-/// `swagger_ui_router_with_openapi()` 应在 `/api-docs/openapi.json` 返回
+/// `swagger_ui_router_with_openapi` 应在 `/api-docs/openapi.json` 返回
 /// 调用方提供的 spec（而非动态生成的默认 spec），UI 路径保持可用。
 #[cfg(feature = "http")]
 #[tokio::test]

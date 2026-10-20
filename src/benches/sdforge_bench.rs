@@ -12,9 +12,7 @@ use std::collections::HashMap;
 use std::hint::black_box;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    // ============================================================================
     // Error Creation Benchmarks
-    // ============================================================================
 
     c.bench_function("api_error_not_found_creation", |b| {
         b.iter(|| ApiError::NotFound {
@@ -27,9 +25,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| ServiceError::new("ERR", "Error message", 500))
     });
 
-    // ============================================================================
     // Response Creation Benchmarks
-    // ============================================================================
 
     c.bench_function("service_response_success_creation", |b| {
         b.iter(|| ServiceResponse::success("test data"))
@@ -39,9 +35,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| ServiceResponse::<()>::error(ServiceError::new("ERR", "Error", 500)))
     });
 
-    // ============================================================================
     // JSON Serialization Benchmarks
-    // ============================================================================
 
     let mut group = c.benchmark_group("json_serialization");
 
@@ -76,9 +70,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     group.finish();
 
-    // ============================================================================
     // JSON Deserialization Benchmarks
-    // ============================================================================
 
     let mut group = c.benchmark_group("json_deserialization");
 
@@ -111,9 +103,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     group.finish();
 
-    // ============================================================================
     // Metadata Benchmarks
-    // ============================================================================
 
     c.bench_function("metadata_creation", |b| {
         use sdforge::core::ApiMetadata;
@@ -142,9 +132,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| metadata.clone())
     });
 
-    // ============================================================================
     // String Operations Benchmarks
-    // ============================================================================
 
     let mut group = c.benchmark_group("string_operations");
 
@@ -169,9 +157,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     group.finish();
 
-    // ============================================================================
     // HashMap Operations Benchmarks
-    // ============================================================================
 
     let mut group = c.benchmark_group("hashmap_operations");
 
@@ -200,9 +186,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     group.finish();
 
-    // ============================================================================
     // Response Generation Benchmarks
-    // ============================================================================
 
     let mut group = c.benchmark_group("response_generation");
 
@@ -226,9 +210,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     group.finish();
 
-    // ============================================================================
     // Concurrent Access Benchmarks
-    // ============================================================================
 
     c.bench_function("concurrent_metadata_access", |b| {
         use sdforge::core::ApiMetadata;
@@ -255,9 +237,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
 criterion_group!(benches, criterion_benchmark);
 
-// =============================================================================
 // Cache Benchmarks (feature = "cache")
-// =============================================================================
 
 /// Benchmark for cache operations: get/set/delete + batch + contains/clear
 #[cfg(feature = "cache")]
@@ -285,7 +265,7 @@ fn benchmark_cache_operations(c: &mut Criterion) {
         b.iter(|| cache.delete("to_delete"))
     });
 
-    // --- Batch operations ---
+    // Batch operations
 
     c.bench_function("cache_contains", |b| {
         cache.set("contains_key", b"v".to_vec());
@@ -409,9 +389,7 @@ criterion_group!(
     benchmark_cache_key_normalization,
 );
 
-// =============================================================================
 // Security Benchmarks (feature = "security")
-// =============================================================================
 
 /// Benchmark for API key validation performance.
 ///
@@ -425,7 +403,6 @@ fn benchmark_api_key_validation(c: &mut Criterion) {
     let auth = SdForgeApiKeyAuth::new();
     let api_key = "testkey1234567890abcdef";
 
-    // Add a test key
     auth.add_key(api_key.to_string(), vec!["read".to_string()]);
 
     // First-time validation (key not pre-populated in cache)
@@ -608,9 +585,7 @@ criterion_group!(
     benchmark_lru_cache,
 );
 
-// =============================================================================
 // Rate Limit Benchmarks (feature = "ratelimit")
-// =============================================================================
 
 /// Benchmark `LimiteronAdapter::check` performance.
 ///
@@ -618,7 +593,7 @@ criterion_group!(
 /// 1. `ratelimit_governor_allowed`: first check on a fresh identifier (allowed)
 /// 2. `ratelimit_governor_denied`: check after quota exhausted (denied)
 ///
-/// Uses a tokio runtime because `LimiteronAdapter::new()` and `check()` are
+/// Uses a tokio runtime because `LimiteronAdapter::new` and `check` are
 /// async. Each iteration uses a unique identifier to avoid cross-iteration
 /// state pollution on the "allowed" path; the "denied" path pre-exhausts a
 /// fixed identifier and then benches the denied check.
@@ -670,7 +645,7 @@ fn benchmark_limiteron_governor(c: &mut Criterion) {
 /// Benchmark `RateLimitMiddleware` end-to-end overhead.
 ///
 /// Measures the full middleware path (limiter check + inner service call) with
-/// a mock `RateLimiter` that always returns `Ok(())`, so the bench isolates
+/// a mock `RateLimiter` that always returns `Ok()`, so the bench isolates
 /// the middleware's own overhead (clone, async dispatch, response build).
 ///
 /// Uses `tower::Layer` + `tower::Service::call` and a tokio runtime to drive
@@ -691,7 +666,7 @@ fn benchmark_rate_limit_middleware(c: &mut Criterion) {
     use tokio::runtime::Runtime;
     use tower::{Layer, Service};
 
-    /// Mock `RateLimiter` that always approves (returns `Ok(())`).
+    /// Mock `RateLimiter` that always approves (returns `Ok()`).
     struct AlwaysAllowLimiter;
 
     impl RateLimiter for AlwaysAllowLimiter {
@@ -754,9 +729,7 @@ fn benchmark_rate_limit_middleware(c: &mut Criterion) {
 #[cfg(feature = "ratelimit")]
 criterion_group!(ratelimit_benches, benchmark_limiteron_governor,);
 
-// =============================================================================
 // HTTP Benchmarks (feature = "http")
-// =============================================================================
 
 /// Benchmark for regex caching (existing)
 #[cfg(feature = "http")]
@@ -842,9 +815,7 @@ criterion_group!(
     benchmark_http_router_construction,
 );
 
-// =============================================================================
 // MCP Benchmarks (feature = "mcp")
-// =============================================================================
 
 /// Benchmark for MCP tool registration/collection
 #[cfg(feature = "mcp")]
@@ -859,9 +830,7 @@ fn benchmark_mcp_tool_registration(c: &mut Criterion) {
 #[cfg(feature = "mcp")]
 criterion_group!(mcp_benches, benchmark_mcp_tool_registration);
 
-// =============================================================================
 // Main entry point — manual main for robust feature gating
-// =============================================================================
 
 fn main() {
     let mut criterion = Criterion::default().configure_from_args();

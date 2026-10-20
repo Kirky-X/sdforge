@@ -129,7 +129,7 @@ mod tests {
     use crate::error::ApiError;
     use crate::error::ErrorCategory;
 
-    /// Test SdForgeError::internal() constructor creates the Internal variant
+    /// Test SdForgeError::internal constructor creates the Internal variant
     /// with the provided message.
     #[test]
     fn test_internal_constructor_with_str() {
@@ -142,7 +142,7 @@ mod tests {
         }
     }
 
-    /// Test SdForgeError::internal() accepts a String as well as &str.
+    /// Test SdForgeError::internal accepts a String as well as &str.
     #[test]
     fn test_internal_constructor_with_string() {
         let msg = String::from("dynamic error");
@@ -153,49 +153,49 @@ mod tests {
         }
     }
 
-    /// Test category() for Api::NotFound returns ClientError.
+    /// Test category for Api::NotFound returns ClientError.
     #[test]
     fn test_category_api_not_found() {
         let err = SdForgeError::from(ApiError::not_found("User", None));
         assert_eq!(err.category(), ErrorCategory::ClientError);
     }
 
-    /// Test category() for Api::AuthenticationFailed returns AuthError.
+    /// Test category for Api::AuthenticationFailed returns AuthError.
     #[test]
     fn test_category_api_auth() {
         let err = SdForgeError::from(ApiError::authentication_failed("bad token"));
         assert_eq!(err.category(), ErrorCategory::AuthError);
     }
 
-    /// Test category() for Api::RateLimitExceeded returns RateLimitError.
+    /// Test category for Api::RateLimitExceeded returns RateLimitError.
     #[test]
     fn test_category_api_rate_limit() {
         let err = SdForgeError::from(ApiError::rate_limit_exceeded(100, 60));
         assert_eq!(err.category(), ErrorCategory::RateLimitError);
     }
 
-    /// Test category() for Api::Internal returns ServerError.
+    /// Test category for Api::Internal returns ServerError.
     #[test]
     fn test_category_api_internal() {
         let err = SdForgeError::from(ApiError::internal_error("boom", "err-1"));
         assert_eq!(err.category(), ErrorCategory::ServerError);
     }
 
-    /// Test category() for Api::ValidationError returns ValidationError.
+    /// Test category for Api::ValidationError returns ValidationError.
     #[test]
     fn test_category_api_validation() {
         let err = SdForgeError::from(ApiError::validation("email", "invalid"));
         assert_eq!(err.category(), ErrorCategory::ValidationError);
     }
 
-    /// Test category() for the Internal variant returns ServerError.
+    /// Test category for the Internal variant returns ServerError.
     #[test]
     fn test_category_internal() {
         let err = SdForgeError::internal("internal error");
         assert_eq!(err.category(), ErrorCategory::ServerError);
     }
 
-    /// Test category() for the Config variant (http feature) returns ClientError.
+    /// Test category for the Config variant (http feature) returns ClientError.
     #[cfg(feature = "http")]
     #[test]
     fn test_category_config() {
@@ -206,7 +206,7 @@ mod tests {
         assert_eq!(err.category(), ErrorCategory::ClientError);
     }
 
-    /// Test sanitized_message() for Api::NotFound includes the resource name
+    /// Test sanitized_message for Api::NotFound includes the resource name
     /// (client-facing errors are not sanitized).
     #[test]
     fn test_sanitized_message_api_not_found() {
@@ -215,7 +215,7 @@ mod tests {
         assert!(msg.contains("User"));
     }
 
-    /// Test sanitized_message() for Api::Internal strips sensitive details.
+    /// Test sanitized_message for Api::Internal strips sensitive details.
     #[test]
     fn test_sanitized_message_api_internal_sanitized() {
         let err = SdForgeError::from(ApiError::internal_error("secret details", "err-1"));
@@ -229,7 +229,7 @@ mod tests {
         );
     }
 
-    /// Test sanitized_message() for the Internal variant returns the sanitized
+    /// Test sanitized_message for the Internal variant returns the sanitized
     /// generic message (HIGH 修复回归：原始消息不再进外部输出).
     #[test]
     fn test_sanitized_message_internal() {
@@ -239,7 +239,7 @@ mod tests {
         assert!(!msg.contains("my internal message"));
     }
 
-    /// Test sanitized_message() for the Config variant (http feature).
+    /// Test sanitized_message for the Config variant (http feature).
     #[cfg(feature = "http")]
     #[test]
     fn test_sanitized_message_config() {
@@ -251,7 +251,7 @@ mod tests {
         assert!(msg.contains("File not found"));
     }
 
-    /// Test to_service_error() for Api::NotFound produces a 404 ServiceError.
+    /// Test to_service_error for Api::NotFound produces a 404 ServiceError.
     #[test]
     fn test_to_service_error_api_not_found() {
         let err = SdForgeError::from(ApiError::not_found("User", Some("42".to_string())));
@@ -260,7 +260,7 @@ mod tests {
         assert_eq!(service_err.http_status(), 404);
     }
 
-    /// Test to_service_error() for Api::ValidationError produces a 422 ServiceError.
+    /// Test to_service_error for Api::ValidationError produces a 422 ServiceError.
     #[test]
     fn test_to_service_error_api_validation() {
         let err = SdForgeError::from(ApiError::validation("email", "invalid format"));
@@ -269,7 +269,7 @@ mod tests {
         assert_eq!(service_err.http_status(), 422);
     }
 
-    /// Test to_service_error() for the Internal variant produces a 500
+    /// Test to_service_error for the Internal variant produces a 500
     /// ServiceError with a sanitized message (HIGH 修复回归).
     #[test]
     fn test_to_service_error_internal() {
@@ -284,7 +284,7 @@ mod tests {
         assert!(!service_err.message().contains("custom internal message"));
     }
 
-    /// Test to_service_error() for the Config variant (http feature)
+    /// Test to_service_error for the Config variant (http feature)
     /// produces a 400 ServiceError.
     #[cfg(feature = "http")]
     #[test]
@@ -383,16 +383,14 @@ mod tests {
         assert_eq!(service_err.http_status(), 403);
     }
 
-    // ============================================================================
     // Security error variant tests
     //
-    // The to_service_error() method has dedicated branches for Auth, Jwt, and
+    // The to_service_error method has dedicated branches for Auth, Jwt, and
     // AuthConfig errors (gated behind the "security" feature). These tests
     // cover those branches and verify the resulting ServiceError has the
     // correct error code, HTTP status, and JSON details.
-    // ============================================================================
 
-    /// Test to_service_error() for the Auth variant produces a 401 ServiceError
+    /// Test to_service_error for the Auth variant produces a 401 ServiceError
     /// with the AUTH_ERROR code and auth type marker.
     #[cfg(feature = "security")]
     #[test]
@@ -405,7 +403,7 @@ mod tests {
         assert_eq!(service_err.http_status(), 401);
     }
 
-    /// Test to_service_error() for the Jwt variant produces a 401 ServiceError
+    /// Test to_service_error for the Jwt variant produces a 401 ServiceError
     /// with the JWT_ERROR code and jwt type marker.
     #[cfg(feature = "security")]
     #[test]
@@ -418,7 +416,7 @@ mod tests {
         assert_eq!(service_err.http_status(), 401);
     }
 
-    /// Test to_service_error() for the AuthConfig variant produces a 500
+    /// Test to_service_error for the AuthConfig variant produces a 500
     /// ServiceError with the AUTH_CONFIG_ERROR code and auth_config type marker.
     #[cfg(feature = "security")]
     #[test]
@@ -431,7 +429,7 @@ mod tests {
         assert_eq!(service_err.http_status(), 500);
     }
 
-    /// Test category() for the Auth variant returns AuthError.
+    /// Test category for the Auth variant returns AuthError.
     #[cfg(feature = "security")]
     #[test]
     fn test_category_auth() {
@@ -440,7 +438,7 @@ mod tests {
         assert_eq!(err.category(), ErrorCategory::AuthError);
     }
 
-    /// Test category() for the Jwt variant returns AuthError.
+    /// Test category for the Jwt variant returns AuthError.
     #[cfg(feature = "security")]
     #[test]
     fn test_category_jwt() {
@@ -449,7 +447,7 @@ mod tests {
         assert_eq!(err.category(), ErrorCategory::AuthError);
     }
 
-    /// Test category() for the AuthConfig variant returns AuthError.
+    /// Test category for the AuthConfig variant returns AuthError.
     #[cfg(feature = "security")]
     #[test]
     fn test_category_auth_config() {
@@ -458,7 +456,7 @@ mod tests {
         assert_eq!(err.category(), ErrorCategory::AuthError);
     }
 
-    /// Test sanitized_message() for the Auth variant (security feature).
+    /// Test sanitized_message for the Auth variant (security feature).
     #[cfg(feature = "security")]
     #[test]
     fn test_sanitized_message_auth() {

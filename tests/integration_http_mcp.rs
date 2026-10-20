@@ -7,9 +7,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    // ============================================================================
     // Core Type Tests
-    // ============================================================================
 
     #[test]
     fn test_api_error_creation() {
@@ -82,9 +80,7 @@ mod integration_tests {
         assert_eq!(metadata1.version(), metadata2.version());
     }
 
-    // ============================================================================
     // HTTP Module Tests
-    // ============================================================================
 
     #[test]
     fn test_http_build_with_app_config() {
@@ -119,9 +115,7 @@ mod integration_tests {
         assert!(!format!("{:?}", app).is_empty());
     }
 
-    // ============================================================================
     // MCP Module Tests
-    // ============================================================================
 
     #[cfg(feature = "mcp")]
     #[tokio::test]
@@ -133,9 +127,7 @@ mod integration_tests {
         assert!(!std::ptr::eq(&server, std::ptr::null()));
     }
 
-    // ============================================================================
     // Error Handling Tests
-    // ============================================================================
 
     #[test]
     fn test_error_serialization() {
@@ -169,9 +161,7 @@ mod integration_tests {
         assert_eq!(response1.is_success(), response2.is_success());
     }
 
-    // ============================================================================
     // Cross-Protocol Consistency Tests
-    // ============================================================================
 
     #[test]
     fn test_metadata_across_protocols() {
@@ -198,9 +188,7 @@ mod integration_tests {
         assert_eq!(http_metadata.description(), mcp_metadata.description());
     }
 
-    // ============================================================================
     // Performance Tests
-    // ============================================================================
 
     #[test]
     fn test_json_performance() {
@@ -243,9 +231,7 @@ mod integration_tests {
         assert!(duration.as_millis() < 100, "Error creation should be fast");
     }
 
-    // ============================================================================
     // Memory Safety Tests
-    // ============================================================================
 
     #[test]
     fn test_large_response_handling() {
@@ -267,9 +253,7 @@ mod integration_tests {
         assert!(response.is_success());
     }
 
-    // ============================================================================
     // Concurrent Access Tests
-    // ============================================================================
 
     #[test]
     fn test_metadata_thread_safety() {

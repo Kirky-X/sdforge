@@ -15,12 +15,12 @@
 //! ```ignore
 //! use sdforge::integrations::DbGateway;
 //!
-//! let pool = dbnexus::DbPoolBuilder::new().url("sqlite::memory:").build().await?;
+//! let pool = dbnexus::DbPoolBuilder::new.url("sqlite::memory:").build.await?;
 //! let gateway = DbGateway::new(pool)
 //!     .with_session_role("admin")
 //!     .allow_table("users", &["id", "name", "age"]);
 //! let page = gateway
-//!     .query("users", &[("name".into(), "alice".into())], 1, 20)
+//!     .query("users", &[("name".into, "alice".into)], 1, 20)
 //!     .await?;
 //! ```
 

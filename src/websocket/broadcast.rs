@@ -45,7 +45,6 @@ impl ConnectionManager {
             }
         }
 
-        // Clean up failed connections
         for conn_id in failed_connections {
             self.remove_connection(&conn_id).await;
         }

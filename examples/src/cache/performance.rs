@@ -32,9 +32,7 @@ use std::time::Duration;
 pub trait Cacheable: Serialize + for<'de> Deserialize<'de> {}
 impl<T: Serialize + for<'de> Deserialize<'de>> Cacheable for T {}
 
-// =============================================================================
 // Data Models
-// =============================================================================
 
 /// Product data structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,9 +52,7 @@ pub struct ComputationResult {
     pub ttl_seconds: u64,
 }
 
-// =============================================================================
 // Cache Layers
-// =============================================================================
 
 /// Two-level cache system
 pub struct TwoLevelCache {
@@ -75,14 +71,13 @@ impl TwoLevelCache {
         }
     }
 
-    /// Get value from cache (first, then )
+    /// Get value from cache (first, then)
     pub async fn get<T: Cacheable>(&self, key: &str) -> Option<T> {
         // Try first (fastest)
         if let Some(data) = self.l1_cache.get(key) {
             return serde_json::from_slice(&data).ok();
         }
 
-        // Try
         if let Some(data) = self.l2_cache.get(key) {
             // Promote to
             self.l1_cache.set(key, data.clone());
@@ -128,9 +123,7 @@ pub struct CacheStats {
     pub l1_max_size: usize,
 }
 
-// =============================================================================
 // Cache Patterns
-// =============================================================================
 
 /// Cache-aside pattern implementation
 pub struct CacheAsidePattern {
@@ -149,14 +142,12 @@ impl CacheAsidePattern {
         Fut: std::future::Future<Output = T>,
         T: Cacheable + Clone,
     {
-        // Try cache first
         if let Some(data) = self.cache.get(key)
             && let Ok(value) = serde_json::from_slice::<T>(&data)
         {
             return value;
         }
 
-        // Compute and cache
         let value = compute_fn().await;
 
         if let Ok(serialized) = serde_json::to_vec(&value) {
@@ -190,19 +181,17 @@ impl WriteThroughPattern {
     }
 }
 
-// =============================================================================
 // API Endpoints
 //
 // NOTE: 下面的 handler 接受 `&TwoLevelCache` / `&CacheAsidePattern` 引用参数，
 // 不是有效的 axum extractor，因此不使用 `#[forge]` 宏注册为 HTTP 端点。
 // 它们作为业务逻辑示例，展示缓存模式的集成方式。
-// =============================================================================
 
 /// Get product with intelligent caching
 ///
 /// Demonstrates:
 /// - Two-level caching
-/// - Cache promotion (→ )
+/// - Cache promotion (→)
 /// - Serialization/deserialization
 async fn get_product(id: u64, cache: &TwoLevelCache) -> Result<Product, ApiError> {
     let cache_key = format!("product:{}", id);
@@ -275,7 +264,6 @@ async fn perform_expensive_computation(request: &AnalyticsRequest) -> Computatio
     // Simulate expensive computation
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Generate mock results
     ComputationResult {
         data: vec![
             format!("Metric: {}", request.metric_type),
@@ -287,9 +275,7 @@ async fn perform_expensive_computation(request: &AnalyticsRequest) -> Computatio
     }
 }
 
-// =============================================================================
 // Main Entry Point
-// =============================================================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -346,9 +332,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// =============================================================================
 // Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -450,7 +434,6 @@ mod tests {
         let cached = cache.cache.get("product:1");
         assert!(cached.is_some());
 
-        // Delete
         cache.delete("product:1").await;
         let cached = cache.cache.get("product:1");
         assert!(cached.is_none());

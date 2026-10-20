@@ -30,9 +30,7 @@ use sdforge::security::{
 use sdforge::serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-// =============================================================================
 // Data Models
-// =============================================================================
 
 /// User data structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,9 +70,7 @@ pub struct UserResponse {
     pub message: String,
 }
 
-// =============================================================================
 // Shared State
-// =============================================================================
 
 /// Application state shared across handlers
 pub struct SdForgeExampleState {
@@ -113,13 +109,11 @@ fn anonymous_context() -> AuthContext {
     AuthContext::new(None, Vec::new(), AuthMetadata::new(None, None))
 }
 
-// =============================================================================
 // API Endpoints
 //
 // NOTE: 下面的 handler 接受 `&SdForgeExampleState` 引用参数，不是有效的 axum extractor，
 // 因此不使用 `#[forge]` 宏注册为 HTTP 端点。它们作为业务逻辑示例，
 // 展示如何在真实应用中组合认证、缓存、审计等横切关注点。
-// =============================================================================
 
 /// Get user by ID with full security stack
 ///
@@ -327,9 +321,7 @@ async fn delete_user(
     Ok(ServiceResponse::success(()))
 }
 
-// =============================================================================
 // Main Entry Point
-// =============================================================================
 
 /// Initialize and start the secure API server
 #[tokio::main]
@@ -418,9 +410,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// =============================================================================
 // Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -460,7 +450,6 @@ mod tests {
         let state = SdForgeExampleState::default();
         let ctx = anonymous_context();
 
-        // Log an event
         state
             .audit_logger
             .log(

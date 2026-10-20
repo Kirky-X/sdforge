@@ -17,9 +17,7 @@ use sdforge::grpc::sdforge_v1::CallRequest;
 use sdforge::grpc::sdforge_v1::sd_forge_service_server::SdForgeService;
 use tower::ServiceExt;
 
-// ============================================================================
 // 夹具：三个端点各直返一种 ApiError，同一端点同时暴露 HTTP 与 gRPC 通道
-// ============================================================================
 
 #[forge(
     name = "contract_validation",
@@ -64,9 +62,7 @@ async fn contract_not_found() -> Result<serde_json::Value, ApiError> {
     })
 }
 
-// ============================================================================
 // 契约用例：HTTP wire 与 gRPC wire 联合断言
-// ============================================================================
 
 /// 同一错误经两条协议通道返回时：HTTP 状态码经 `grpc_code_for_http_status`
 /// 契约表恰得 gRPC 状态码，且 UnifiedError 载荷 `code` 两侧逐字节一致。

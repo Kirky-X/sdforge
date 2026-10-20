@@ -6,7 +6,7 @@
 //! evicts by **insertion order** (FIFO): when a write pushes the entry count past
 //! the capacity, the oldest inserted keys leave first. A `get` never refreshes an
 //! entry's position, so a read does not protect a key from eviction; a `set` does.
-//! `DashMapCache::new()` is bounded too — at the backend default capacity 10_000.
+//! `DashMapCache::new` is bounded too — at the backend default capacity 10_000.
 //!
 //! The example verifies:
 //! 1. the capacity bound and insertion-order eviction;

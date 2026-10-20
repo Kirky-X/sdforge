@@ -242,7 +242,7 @@ impl SdForgeApiKeyAuth {
     ///
     /// # Returns
     ///
-    /// Returns `Ok(())` if rotation succeeded, `Err(String)` on failure.
+    /// Returns `Ok()` if rotation succeeded, `Err(String)` on failure.
     pub fn rotate_key(
         &self,
         key_id: &str,
@@ -361,7 +361,7 @@ impl SdForgeApiKeyAuth {
         let store_key = CacheNamespace::ApiKey.key(&key_hash);
 
         // Always check valid_keys for constant timing.
-        // 空权限列表是合法状态（仅认证不放权）；`ok()` 只把损坏字节判为无效，
+        // 空权限列表是合法状态（仅认证不放权）；`ok` 只把损坏字节判为无效，
         // 避免把「解码失败」与「空权限」混为一谈而 fail-open。
         let perms = self
             .valid_keys
@@ -457,7 +457,7 @@ impl SdForgeApiKeyAuthBuilder {
     /// ```rust
     /// use sdforge::security::SdForgeApiKeyAuthBuilder;
     ///
-    /// let builder = SdForgeApiKeyAuthBuilder::new();
+    /// let builder = SdForgeApiKeyAuthBuilder::new;
     /// let _ = builder;
     /// ```
     pub fn new() -> Self {
@@ -490,7 +490,7 @@ impl SdForgeApiKeyAuthBuilder {
     /// ```rust
     /// use sdforge::security::SdForgeApiKeyAuthBuilder;
     ///
-    /// let auth = SdForgeApiKeyAuthBuilder::new().build();
+    /// let auth = SdForgeApiKeyAuthBuilder::new.build;
     /// let _ = auth;
     /// ```
     pub fn build(self) -> SdForgeApiKeyAuth {
@@ -633,9 +633,7 @@ mod tests {
         assert!(auth.rotation_config.is_some());
     }
 
-    // ============================================================================
     // Empty/Edge Case Tests
-    // ============================================================================
 
     #[test]
     fn test_validate_key_empty_string() {
@@ -662,9 +660,7 @@ mod tests {
         assert_eq!(perms.unwrap(), vec!["read"]);
     }
 
-    // ============================================================================
     // Special Characters Tests
-    // ============================================================================
 
     #[test]
     fn test_add_key_unicode_characters() {
@@ -707,9 +703,7 @@ mod tests {
         assert_eq!(perms.unwrap(), vec!["write"]);
     }
 
-    // ============================================================================
     // Permissions Tests
-    // ============================================================================
 
     #[test]
     fn test_add_key_duplicate_permissions() {
@@ -740,9 +734,7 @@ mod tests {
         assert!(perms.contains(&"write:posts".to_string()));
     }
 
-    // ============================================================================
     // Duplicate/Override Tests
-    // ============================================================================
 
     #[test]
     fn test_add_same_key_twice() {
@@ -767,9 +759,7 @@ mod tests {
         assert_eq!(perms, vec!["admin"]);
     }
 
-    // ============================================================================
     // Error Handling Tests
-    // ============================================================================
 
     #[test]
     fn test_rotate_key_nonexistent_key_id() {
@@ -827,9 +817,7 @@ mod tests {
         assert!(metadata.is_none());
     }
 
-    // ============================================================================
     // Builder/Default Tests
-    // ============================================================================
 
     #[test]
     fn test_default_trait() {
@@ -876,9 +864,7 @@ mod tests {
         assert!(auth.rotation_config.is_some());
     }
 
-    // ============================================================================
     // Multi-Version Tests
-    // ============================================================================
 
     #[test]
     fn test_add_multiple_key_versions_same_id() {
@@ -933,9 +919,7 @@ mod tests {
         assert_eq!(perms_v2.unwrap(), vec!["read", "write"]);
     }
 
-    // ============================================================================
     // with_dependencies Tests
-    // ============================================================================
 
     #[test]
     fn test_with_dependencies_custom_cache() {
@@ -951,9 +935,7 @@ mod tests {
         assert_eq!(perms.unwrap(), vec!["read"]);
     }
 
-    // ============================================================================
     // with_dependencies with Some(key_metadata) Tests
-    // ============================================================================
 
     /// Verify that with_dependencies uses the provided key_metadata cache
     /// instead of creating a new one (covers the unwrap_or_else Some branch,
@@ -981,9 +963,7 @@ mod tests {
         );
     }
 
-    // ============================================================================
     // rotate_key cleanup with version deletion Tests
-    // ============================================================================
 
     /// Verify that rotate_key cleans up old versions beyond keep_versions and
     /// deletes their key hashes from valid_keys (lines 258-263).
@@ -1023,9 +1003,7 @@ mod tests {
         assert_eq!(perms_v2.unwrap(), vec!["read"]);
     }
 
-    // ============================================================================
     // add_key_version with corrupted metadata Tests
-    // ============================================================================
 
     /// 安全不变量回归：metadata 损坏时 add_key_version 必须整体失败，
     /// 绝不能把 key hash 写进 valid_keys——否则产生"可认证但无法

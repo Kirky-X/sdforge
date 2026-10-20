@@ -51,9 +51,7 @@ async fn test_stream_event_complete() {
     );
 }
 
-// ============================================================================
 // StreamEvent Ping Tests
-// ============================================================================
 
 #[test]
 fn test_stream_event_ping() {
@@ -67,9 +65,7 @@ fn test_stream_event_ping() {
     }
 }
 
-// ============================================================================
 // StreamEvent Error Tests
-// ============================================================================
 
 #[test]
 fn test_stream_event_error() {
@@ -84,9 +80,7 @@ fn test_stream_event_error() {
     }
 }
 
-// ============================================================================
 // StreamEvent Data with Metadata Tests
-// ============================================================================
 
 #[test]
 fn test_stream_event_data_with_id() {
@@ -129,9 +123,7 @@ fn test_stream_event_data_serialization() {
     }
 }
 
-// ============================================================================
 // StreamResponse Single Item Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_stream_response_single() {
@@ -150,9 +142,7 @@ async fn test_stream_response_single() {
     }
 }
 
-// ============================================================================
 // StreamResponse Final Marker Tests
-// ============================================================================
 
 #[test]
 fn test_stream_response_final_marker() {
@@ -160,9 +150,7 @@ fn test_stream_response_final_marker() {
     assert!(response.is_final());
 }
 
-// ============================================================================
 // create_stream_channel Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_create_stream_channel() {
@@ -184,9 +172,7 @@ async fn test_create_stream_channel() {
     assert_eq!(item2.unwrap().unwrap(), "item2");
 }
 
-// ============================================================================
 // Stream Event Serialization Tests
-// ============================================================================
 
 #[test]
 fn test_stream_event_serialization_data() {
@@ -235,9 +221,7 @@ fn test_stream_event_serialization_complete() {
     }
 }
 
-// ============================================================================
 // Stream Event with Complex Data Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_stream_response_complex_data() {
@@ -273,9 +257,7 @@ fn test_stream_event_ping_creation() {
     }
 }
 
-// ============================================================================
 // Additional Stream Event Tests
-// ============================================================================
 
 #[test]
 fn test_stream_event_error_creation() {
@@ -289,9 +271,7 @@ fn test_stream_event_error_creation() {
     assert_eq!(error_str, "Failed to process");
 }
 
-// ============================================================================
 // Additional StreamResponse Tests
-// ============================================================================
 
 #[tokio::test]
 async fn test_stream_response_final_empty_stream() {
@@ -805,9 +785,7 @@ async fn test_stream_response_single_immediate_consumption() {
     assert_eq!(result.unwrap().unwrap(), 42);
 }
 
-// ============================================================================
-// StreamResponse new() Tests
-// ============================================================================
+// StreamResponse new Tests
 
 #[tokio::test]
 async fn test_stream_response_new_not_final() {
@@ -816,9 +794,7 @@ async fn test_stream_response_new_not_final() {
     assert!(!response.is_final());
 }
 
-// ============================================================================
 // StreamResponse Debug Tests
-// ============================================================================
 
 #[test]
 fn test_stream_response_debug() {
@@ -828,9 +804,7 @@ fn test_stream_response_debug() {
     assert!(debug_str.contains("StreamResponse"));
 }
 
-// ============================================================================
 // StreamEvent Debug Tests
-// ============================================================================
 
 #[test]
 fn test_stream_event_debug_data() {
@@ -860,9 +834,7 @@ fn test_stream_event_debug_complete() {
     assert!(debug_str.contains("Complete"));
 }
 
-// ============================================================================
 // StreamResponse Clone Tests (derive)
-// ============================================================================
 
 #[test]
 fn test_stream_response_struct_is_debug() {

@@ -66,13 +66,11 @@ mod full_feature_tests {
     }
 }
 
-// ============================================================================
 // Rate Limit Feature Tests
-// ============================================================================
 
 /// Verify the `ratelimit` feature compiles and its public API is reachable.
 ///
-/// `LimiteronAdapter::new()` is async; binding the future (without awaiting)
+/// `LimiteronAdapter::new` is async; binding the future (without awaiting)
 /// is sufficient to prove the type and constructor are exported.
 #[cfg(feature = "ratelimit")]
 #[test]

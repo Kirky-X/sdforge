@@ -17,9 +17,7 @@ use std::time::Duration;
 use sdforge::grpc::sdforge_v1::{CallRequest, sd_forge_service_client::SdForgeServiceClient};
 use sdforge::grpc::{GrpcServerConfig, build_server_with_config};
 
-// ============================================================================
 // 测试夹具
-// ============================================================================
 
 /// 探针请求/响应消息（手写 prost 消息——为测试引入 protoc 依赖不值得，
 /// 且与挂载语义无关）。
@@ -148,9 +146,7 @@ async fn probe_call(addr: SocketAddr) -> Result<tonic::Response<ProbeReply>, ton
     .await
 }
 
-// ============================================================================
 // 挂载语义用例
-// ============================================================================
 
 /// 挂载的自定义 service 在共享端口上按 `/{NAME}/*rest` 路由可达。
 #[tokio::test]
@@ -228,9 +224,7 @@ async fn no_extra_services_keeps_default_wiring() {
     assert_eq!(resp.get_ref().data, "coexist-ok");
 }
 
-// ============================================================================
 // 共享 handler（供 coexist 用例经 unary Call 调用）
-// ============================================================================
 
 fn extra_svc_coexist_handler(
     args: std::collections::HashMap<String, String>,
@@ -255,9 +249,7 @@ sdforge::inventory::submit!(sdforge::grpc::GrpcHandlerRegistration {
     successor: None,
 });
 
-// ============================================================================
 // security 组合：全局 JWT 拦截器对自定义 service 的覆盖
-// ============================================================================
 
 /// 全局认证拦截器挂在 server 级 layer 上（作用于整个 Routes），自定义
 /// service 与 SdForgeService 同受覆盖；`auth_verifier` 是 SdForgeService

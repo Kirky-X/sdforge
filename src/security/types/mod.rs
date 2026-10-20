@@ -12,9 +12,7 @@ pub use types_impl::{
     serialize_audit_logs, serialize_auth_context, serialize_permissions,
 };
 
-// =============================================================================
 // Cache Key Namespaces
-// =============================================================================
 
 /// Cache key namespaces for type-safe key generation
 ///
@@ -32,9 +30,7 @@ pub enum CacheNamespace {
     Idempotency,
 }
 
-// =============================================================================
 // Authentication Types
-// =============================================================================
 
 /// Authentication errors
 #[derive(Debug, thiserror::Error, Clone)]
@@ -88,9 +84,7 @@ pub type AuthResult<T = AuthContext> = Result<T, AuthError>;
 #[derive(Debug)]
 pub struct AuthExtractor(pub AuthContext);
 
-// =============================================================================
 // JWT & Bearer Token Types
-// =============================================================================
 
 /// JWT verification errors
 #[derive(Debug, Clone)]
@@ -149,9 +143,7 @@ pub enum AuthConfigError {
     },
 }
 
-// =============================================================================
 // Audit Types
-// =============================================================================
 
 /// Audit log entry with cryptographic signature for integrity verification
 #[derive(Debug, Clone)]

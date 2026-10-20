@@ -45,7 +45,7 @@ pub type ProtocolAuthVerifier = dyn GrpcAuthVerifier;
 ///
 /// On success the verifier returns the caller's [`AuthContext`] so callers
 /// can enforce **authorization** (RBAC roles) — the previous
-/// `Result<(), String>` shape discarded the identity and left non-HTTP
+/// `Result<, String>` shape discarded the identity and left non-HTTP
 /// transports authenticate-only.
 pub trait GrpcAuthVerifier: Send + Sync {
     /// Verify the supplied credentials; `Err` carries the rejection reason.
@@ -278,7 +278,7 @@ mod tests {
     }
 
     /// 有效 API key → Ok(AuthContext)，permissions 来自 key store
-    /// （此前 `Result<(), _>` 把身份丢弃，gRPC 无法做 RBAC）。
+    /// （此前 `Result<, _>` 把身份丢弃，gRPC 无法做 RBAC）。
     #[test]
     fn api_key_verifier_returns_auth_context_with_permissions() {
         let store = Arc::new(SdForgeApiKeyAuth::new());

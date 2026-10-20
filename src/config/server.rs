@@ -444,13 +444,11 @@ mod tests {
         );
     }
 
-    // ============================================================================
-    // validate() with Some(cors) branch 覆盖（原有用例构造 cors 却从未调用 validate）
-    // ============================================================================
+    // validate with Some(cors) branch 覆盖（原有用例构造 cors 却从未调用 validate）
 
-    /// Test ServerConfig::validate() succeeds when a valid CorsConfig is
+    /// Test ServerConfig::validate succeeds when a valid CorsConfig is
     /// present. Covers the `if let Some(ref cors)` branch with a passing
-    /// cors.validate() call.
+    /// cors.validate call.
     #[test]
     fn test_server_config_validate_with_valid_cors() {
         let config = ServerConfig {
@@ -467,8 +465,8 @@ mod tests {
         assert!(config.validate().is_ok());
     }
 
-    /// Test ServerConfig::validate() propagates the error when the CorsConfig
-    /// is invalid (empty allowed_origins). Covers the `cors.validate()?` error
+    /// Test ServerConfig::validate propagates the error when the CorsConfig
+    /// is invalid (empty allowed_origins). Covers the `cors.validate?` error
     /// propagation path via the `?` operator.
     #[test]
     fn test_server_config_validate_propagates_cors_error() {
@@ -496,9 +494,9 @@ mod tests {
         );
     }
 
-    /// Test ServerConfig::validate() propagates the error when the CorsConfig
+    /// Test ServerConfig::validate propagates the error when the CorsConfig
     /// has an invalid origin format (missing scheme). Covers the
-    /// `cors.validate()?` error propagation path for invalid origin format.
+    /// `cors.validate?` error propagation path for invalid origin format.
     #[test]
     fn test_server_config_validate_propagates_invalid_origin_error() {
         let config = ServerConfig {
@@ -556,7 +554,7 @@ mod tests {
     }
 
     /// Cover the `ValidateConfig for ServerConfig` trait impl (lines 70, 73)
-    /// which delegates to the inherent `validate()` method. Existing tests
+    /// which delegates to the inherent `validate` method. Existing tests
     /// only call the inherent method, leaving the trait impl body uncovered.
     #[test]
     fn test_validate_config_trait_for_server_config() {

@@ -25,16 +25,16 @@ pub fn get_mcp_tools() -> Vec<McpToolInstance> {
 ///
 /// This constructs a server that implements `rmcp::handler::server::ServerHandler`.
 /// To start the server, use [`serve_stdio`] for stdio transport, or
-/// `ServiceExt::serve()` on the returned server with a custom transport.
+/// `ServiceExt::serve` on the returned server with a custom transport.
 ///
 /// # Example
 ///
 /// ```rust,ignore
 /// # #[tokio::main]
-/// # async fn main() -> anyhow::Result<()> {
-/// let server = sdforge::mcp::build();
+/// # async fn main -> anyhow::Result<> {
+/// let server = sdforge::mcp::build;
 /// sdforge::mcp::serve_stdio(server).await?;
-/// # Ok(())
+/// # Ok()
 /// # }
 /// ```
 pub fn build() -> SdForgeMcpServer {
@@ -43,8 +43,8 @@ pub fn build() -> SdForgeMcpServer {
 
 /// Serve an MCP server over stdio transport.
 ///
-/// This is a convenience wrapper that encapsulates `rmcp::transport::stdio()`
-/// and `ServiceExt::serve()`, so downstream crates do not need to depend on
+/// This is a convenience wrapper that encapsulates `rmcp::transport::stdio`
+/// and `ServiceExt::serve`, so downstream crates do not need to depend on
 /// `rmcp` directly.
 ///
 /// # Authentication caveat
@@ -65,10 +65,10 @@ pub fn build() -> SdForgeMcpServer {
 ///
 /// ```rust,ignore
 /// # #[tokio::main]
-/// # async fn main() -> anyhow::Result<()> {
-/// let server = sdforge::mcp::build();
+/// # async fn main -> anyhow::Result<> {
+/// let server = sdforge::mcp::build;
 /// sdforge::mcp::serve_stdio(server).await?;
-/// # Ok(())
+/// # Ok()
 /// # }
 /// ```
 pub async fn serve_stdio(

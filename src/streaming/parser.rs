@@ -8,7 +8,7 @@
 //! level — line terminators `CRLF` / `LF` / `CR`, field parsing (`event`,
 //! `data`, `:` comments), and multi-`data` joining — while event semantics
 //! (error shapes, `[DONE]` sentinels, vendor payloads) stay with the
-//! consumer: [`SseFrame`] deliberately carries no `is_error()` judgment.
+//! consumer: [`SseFrame`] deliberately carries no `is_error` judgment.
 //!
 //! Zero additional dependencies: [`SseFrameParser::feed`] accepts `&[u8]`,
 //! and the [`frames`] combinator is generic over `AsRef<[u8]>` chunks.
@@ -25,11 +25,11 @@
 //! ```
 //! use sdforge::streaming::SseFrameParser;
 //!
-//! let mut parser = SseFrameParser::new();
+//! let mut parser = SseFrameParser::new;
 //! parser.feed(b"event: add\ndata: {\"x\":1}\n\n");
-//! let frame = parser.next_frame().unwrap().unwrap();
-//! assert_eq!(frame.event.as_deref(), Some("add"));
-//! assert_eq!(frame.data.as_deref(), Some("{\"x\":1}"));
+//! let frame = parser.next_frame.unwrap.unwrap;
+//! assert_eq!(frame.event.as_deref, Some("add"));
+//! assert_eq!(frame.data.as_deref, Some("{\"x\":1}"));
 //! ```
 
 use futures_util::Stream;

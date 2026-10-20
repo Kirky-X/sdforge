@@ -10,8 +10,8 @@
 //!
 //! ```rust,no_run
 //! # use sdforge::prelude::ApiError;
-//! async fn simple() -> Result<String, ApiError> {
-//!     Ok("Hello".to_string())
+//! async fn simple -> Result<String, ApiError> {
+//!     Ok("Hello".to_string)
 //! }
 //! ```
 //!
@@ -25,8 +25,8 @@
 //!     data: Vec<i32>,
 //! }
 //!
-//! async fn json_response() -> Result<Response, ApiError> {
-//!     Ok(Response { message: "OK".into(), data: vec![1, 2, 3] })
+//! async fn json_response -> Result<Response, ApiError> {
+//!     Ok(Response { message: "OK".into, data: vec![1, 2, 3] })
 //! }
 //! ```
 //!
@@ -35,7 +35,7 @@
 //! ```rust,no_run
 //! # use serde_json;
 //! # use sdforge::prelude::ApiError;
-//! async fn json_value() -> Result<serde_json::Value, ApiError> {
+//! async fn json_value -> Result<serde_json::Value, ApiError> {
 //!     Ok(serde_json::json!({ "key": "value" }))
 //! }
 //! ```
@@ -43,9 +43,7 @@
 use sdforge::prelude::*;
 use sdforge::serde::{Deserialize, Serialize};
 
-// ============================================================================
 // 响应类型定义
-// ============================================================================
 
 /// 标准 API 响应包装器
 ///
@@ -128,9 +126,7 @@ pub struct DataItem {
     pub enabled: bool,
 }
 
-// ============================================================================
 // API 端点定义
-// ============================================================================
 
 /// 获取单个数据项
 ///
@@ -163,7 +159,6 @@ pub struct DataItem {
     i18n_key = "example.response_building.get_item.description"
 )]
 async fn get_item(id: u64) -> Result<DataItem, ApiError> {
-    // 返回模拟数据
     Ok(DataItem {
         id,
         name: format!("Item {}", id),
@@ -394,9 +389,7 @@ async fn update_item(
     })
 }
 
-// ============================================================================
 // 自定义成功状态码（#[forge(status = ...)] + ServiceResponse::success_with_status）
-// ============================================================================
 
 /// 创建数据项（静态声明 201）
 ///

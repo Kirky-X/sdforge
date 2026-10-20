@@ -27,8 +27,8 @@
 //! async fn get_user(id: u64) -> Result<UserResponse, ApiError> {
 //!     if id == 0 {
 //!         return Err(ApiError::NotFound {
-//!             resource: "User".to_string(),
-//!             resource_id: Some("0".to_string()),
+//!             resource: "User".to_string,
+//!             resource_id: Some("0".to_string),
 //!         });
 //!     }
 //!     // ... 正常逻辑
@@ -71,9 +71,7 @@ use sdforge::prelude::*;
 use sdforge::serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-// ============================================================================
 // 自定义错误类型
-// ============================================================================
 
 /// 应用程序自定义错误类型
 ///
@@ -124,7 +122,7 @@ pub enum SdForgeExampleError {
     ///
     /// # 示例
     /// ```text
-    /// SdForgeExampleError::DatabaseError { details: "Connection timeout".into() }
+    /// SdForgeExampleError::DatabaseError { details: "Connection timeout".into }
     /// ```
     #[error(
         "{}",
@@ -167,9 +165,7 @@ impl From<SdForgeExampleError> for ApiError {
     }
 }
 
-// ============================================================================
 // 请求类型定义
-// ============================================================================
 
 /// 用户验证请求
 ///
@@ -182,9 +178,7 @@ pub struct ValidateUserRequest {
     pub email: String,
 }
 
-// ============================================================================
 // API 端点定义
-// ============================================================================
 
 /// API 元数据信息端点
 ///

@@ -14,9 +14,7 @@ mod builder_tests;
 
 use super::*;
 
-// ============================================================================
 // Shared test helpers — accessible by all sub-modules via `super::`
-// ============================================================================
 
 /// Create a valid JWT token for testing.
 ///

@@ -17,10 +17,10 @@
 //! ```rust
 //! use sdforge::websocket::{WebSocketMessage, ConnectionManager};
 //!
-//! let manager = ConnectionManager::new();
+//! let manager = ConnectionManager::new;
 //! let message = WebSocketMessage::Request {
-//!     id: "123".to_string(),
-//!     method: "get_data".to_string(),
+//!     id: "123".to_string,
+//!     method: "get_data".to_string,
 //!     params: serde_json::json!({"key": "value"}),
 //! };
 //! ```

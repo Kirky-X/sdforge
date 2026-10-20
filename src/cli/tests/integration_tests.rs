@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! `init_all_plugins` integration for CLI inventory.
 //!
-//! Verifies that `init_all_plugins()` touches the CLI inventory registrations
+//! Verifies that `init_all_plugins` touches the CLI inventory registrations
 //! (`CliCommandRegistration` / `CliHandlerRegistration`) so the linker does
 //! not strip them, and that `PluginCounts` surfaces a `cli_commands` count.
 //!
@@ -16,20 +16,18 @@ use crate::init_all_plugins;
 use crate::prelude::ApiError;
 use sdforge_macros::forge;
 
-// ============================================================================
 // Fixture: a forge function with `cli = true`.
 //
 // If `init_all_plugins` does not touch CLI inventory, the linker may strip
 // this registration and the `inventory::iter` lookups below would return
 // `None`. The fixture is intentionally distinct from the ones in
 // `macro_integration_tests` so this suite owns its own registration.
-// ============================================================================
 #[forge(name = "t010_init_cmd", version = "v1", cli = true)]
 async fn t010_init_cmd() -> Result<String, ApiError> {
     Ok("ok".to_string())
 }
 
-/// Verify `init_all_plugins()` returns a `PluginCounts` that includes a
+/// Verify `init_all_plugins` returns a `PluginCounts` that includes a
 /// `cli_commands` field, and that the CLI inventory is linked after the call.
 #[test]
 #[serial_test::serial]
@@ -60,7 +58,7 @@ fn test_init_all_plugins_registers_cli_commands() {
     let _ = handler.handler;
 }
 
-/// Verify `init_all_plugins()` is idempotent for CLI inventory: calling it
+/// Verify `init_all_plugins` is idempotent for CLI inventory: calling it
 /// twice returns the same `cli_commands` count (OnceLock caches the
 /// iteration result).
 #[test]
@@ -74,14 +72,14 @@ fn test_init_all_plugins_cli_count_is_idempotent() {
     );
 }
 
-/// Verify `init_all_plugins()` keeps working when `docgen` feature is
-/// enabled alongside `cli`, and that `CliBuilder::build()` then surfaces both
+/// Verify `init_all_plugins` keeps working when `docgen` feature is
+/// enabled alongside `cli`, and that `CliBuilder::build` then surfaces both
 /// the inventory-registered commands and the auto-injected `docs` subcommand.
 ///
 /// `docs` does not register inventory entries of its own (it is a pure
 /// function module); the only integration point with `init_all_plugins` is
 /// that the CLI inventory must remain linked so that
-/// `CliBuilder::build()` can iterate it. This test guards against accidental
+/// `CliBuilder::build` can iterate it. This test guards against accidental
 /// regressions where enabling `docs` could shadow the CLI inventory.
 #[cfg(feature = "docgen")]
 #[test]
@@ -97,7 +95,7 @@ fn test_init_all_plugins_with_docs_feature_keeps_cli_inventory() {
         counts.cli_commands
     );
 
-    // CliBuilder::build() must surface both inventory commands and the
+    // CliBuilder::build must surface both inventory commands and the
     // auto-injected docs subcommand.
     use crate::cli::CliBuilder;
     let cmd = CliBuilder::new().build();

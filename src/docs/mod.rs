@@ -36,7 +36,7 @@ pub use mcp_markdown::generate_mcp_docs;
 ///
 /// | 变体 | 输出格式 | 来源 |
 /// |------|----------|------|
-/// | `OpenApi` | OpenAPI 3.1 JSON | `openapi::generate_openapi_spec()` |
+/// | `OpenApi` | OpenAPI 3.1 JSON | `openapi::generate_openapi_spec` |
 /// | `SwaggerUi` | HTML 入口页（指向 `/swagger-ui/`） | `assets/swagger-ui/` 内嵌资产 |
 /// | `CliMarkdown` | CLI 命令手册 Markdown | `clap_markdown::help_markdown_command` |
 /// | `McpMarkdown` | MCP 工具列表 Markdown | `inventory::iter::<McpToolRegistration>` |

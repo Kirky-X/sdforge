@@ -19,9 +19,7 @@ mod security_tests {
     use sha2::Sha256;
     use std::time::Duration;
 
-    // ============================================================================
     // Test Helper Functions
-    // ============================================================================
 
     /// Helper to create auth context
     fn create_test_context(user_id: Option<&str>) -> AuthContext {
@@ -118,9 +116,7 @@ mod security_tests {
         format!("{}.{}.{}", header_b64, payload_b64, signature_b64)
     }
 
-    // ============================================================================
     // API Key Authentication Tests
-    // ============================================================================
 
     /// Test: Valid API key authentication
     ///
@@ -306,9 +302,7 @@ mod security_tests {
         assert!(!meta.versions.iter().any(|v| v.is_active));
     }
 
-    // ============================================================================
     // Bearer Token Authentication Tests
-    // ============================================================================
 
     /// Test: Bearer token builder validation
     ///
@@ -554,9 +548,7 @@ mod security_tests {
         assert!(wrong_result.is_none());
     }
 
-    // ============================================================================
     // Audit Logging Tests
-    // ============================================================================
 
     /// Test: Audit log successful request
     ///
@@ -566,7 +558,6 @@ mod security_tests {
         let logger = SdForgeAuditLogger::with_limit(100);
         let context = create_test_context(Some("user123"));
 
-        // Log a successful action
         logger
             .log(&context, "api.read", "/api/users", true, None)
             .await;
@@ -587,7 +578,6 @@ mod security_tests {
         let logger = SdForgeAuditLogger::with_limit(100);
         let context = create_test_context(Some("anonymous"));
 
-        // Log a failed authentication
         logger
             .log(
                 &context,
@@ -619,7 +609,6 @@ mod security_tests {
         let logger = SdForgeAuditLogger::with_limit(100);
         let context = create_test_context(Some("user456"));
 
-        // Log multiple actions
         logger
             .log(&context, "action1", "resource1", true, None)
             .await;
@@ -659,7 +648,6 @@ mod security_tests {
 
         let context = create_test_context(Some("builder_test_user"));
 
-        // Log some entries
         logger
             .log(&context, "test_action", "test_resource", true, None)
             .await;
@@ -724,9 +712,7 @@ mod security_tests {
         }
     }
 
-    // ============================================================================
     // Integration Tests with Real Components
-    // ============================================================================
 
     /// Test: Bearer Token with Audit Logging
     ///
@@ -735,7 +721,6 @@ mod security_tests {
     async fn test_bearer_with_audit_logging() {
         let logger = SdForgeAuditLogger::with_limit(100);
 
-        // Log the authentication attempt
         let context = create_test_context(Some("service_account"));
         logger
             .log(&context, "token.validated", "/api/service", true, None)
@@ -764,7 +749,6 @@ mod security_tests {
             let auth_result = auth.validate_key("e2e_test_key", "192.168.1.100");
             assert!(auth_result.is_some(), "Request {} auth should succeed", i);
 
-            // Log
             logger
                 .log(&context, "e2e.request", "/api/test", true, None)
                 .await;
@@ -783,11 +767,9 @@ mod security_tests {
         let logger = SdForgeAuditLogger::with_limit(100);
         let context = create_test_context(Some("unknown_user"));
 
-        // Try to validate unknown key
         let result = auth.validate_key("unknown_key_xyz", "192.168.1.100");
         assert!(result.is_none());
 
-        // Log the failed attempt
         logger
             .log(
                 &context,
@@ -803,9 +785,7 @@ mod security_tests {
         assert!(matches!(logs[0].result(), AuditResult::Failure { .. }));
     }
 
-    // ============================================================================
     // Edge Case Tests
-    // ============================================================================
 
     /// Test: Empty permissions handling
     ///
@@ -865,9 +845,7 @@ mod security_tests {
         assert_eq!(config.keep_versions, 3);
     }
 
-    // ============================================================================
     // IP Validation Tests
-    // ============================================================================
 
     /// Test: API key authentication with different client IPs
     ///
@@ -921,9 +899,7 @@ mod security_tests {
         assert!(result2.is_none());
     }
 
-    // ============================================================================
     // Advanced API Key Tests
-    // ============================================================================
 
     /// Test: API key hash consistency
     ///

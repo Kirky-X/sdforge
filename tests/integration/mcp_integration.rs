@@ -12,7 +12,7 @@ mod mcp_tests {
 
     #[tokio::test]
     async fn test_mcp_server_builds() {
-        // Just verify build() can be called without panicking
+        // Just verify build can be called without panicking
         let _server = build();
     }
 }
@@ -51,7 +51,7 @@ mod mcp_registration_tests {
 
     #[test]
     fn test_mcp_tool_registration() {
-        // Test that McpToolRegistration::new() works with the new API
+        // Test that McpToolRegistration::new works with the new API
         fn create_tool() -> Arc<dyn SdForgeTool> {
             Arc::new(TestTool)
         }
@@ -90,13 +90,11 @@ mod dual_protocol_tests {
     }
 }
 
-// ============================================================================
 // vuln-0002 regression tests: MCP argument validation
 //
 // These tests verify that `#[forge(tool_name = "...")]` generates a `Params`
 // struct with `#[serde(deny_unknown_fields)]` and that oversized payloads
 // are rejected by `call_tool_internal`.
-// ============================================================================
 
 /// Test fixture: a `#[forge]` MCP tool with a single `String` parameter.
 ///
@@ -176,14 +174,12 @@ mod vuln0002_security_tests {
     }
 }
 
-// ============================================================================
 // auth(role = ...) → MCP RBAC roles propagation
 //
 // `#[forge(tool_name = ..., auth(role = "..."))]` must carry the declared
 // roles into `McpToolRegistration`/`McpToolInstance` so
 // `SdForgeMcpServer::call_tool` can enforce them against the verified
 // `AuthContext` (feature = `security`), mirroring the gRPC roles chain.
-// ============================================================================
 
 #[cfg(all(feature = "mcp", feature = "security"))]
 #[forge(

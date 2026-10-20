@@ -50,9 +50,7 @@ mod tests {
     // `super::super::ip_util::tests` (single source of truth after the
     // ratelimit-adapter spoofing fix).
 
-    // ============================================================================
     // Auth Middleware Tests
-    // ============================================================================
     // Note: auth_middleware requires a full axum request pipeline to test
     // properly since axum::middleware::Next is not publicly constructible.
     // The middleware is tested indirectly through the http module's
@@ -107,9 +105,7 @@ mod tests {
 
     // Extract Client IP tests now live in `super::super::ip_util::tests`.
 
-    // ============================================================================
     // Auth Middleware Behavior Tests
-    // ============================================================================
 
     #[tokio::test]
     async fn test_auth_middleware_passes_with_valid_context() {
@@ -273,9 +269,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-    // ============================================================================
     // auth_middleware execution via real router (covers closure body)
-    // ============================================================================
 
     #[tokio::test]
     async fn test_auth_middleware_success_path_via_router() {

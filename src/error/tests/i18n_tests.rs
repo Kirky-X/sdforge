@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: MIT
 use crate::error::*;
 
-// ============================================================================
 // Internationalization (i18n) Tests
-// ============================================================================
 
 #[test]
 fn test_localized_error_english_default() {
@@ -13,7 +11,7 @@ fn test_localized_error_english_default() {
         resource_id: Some("123".to_string()),
     };
 
-    // English is the default (to_string())
+    // English is the default (to_string)
     assert_eq!(error.default_message(), "Resource not found: user");
 }
 
@@ -102,9 +100,7 @@ fn test_rate_limit_exceeded_localization() {
     assert!(fr_message.contains("Rate limit exceeded"));
 }
 
-// ========================================================================
-// localized_message() comprehensive tests for all locales x all variants
-// ========================================================================
+// localized_message comprehensive tests for all locales x all variants
 
 #[test]
 fn test_localized_error_zh_all_variants() {
@@ -246,7 +242,7 @@ fn test_localized_error_third_language_falls_back_to_en_all_variants() {
 
 #[test]
 fn test_localized_error_en_all_variants() {
-    // English and unknown locales fall back to default_message()
+    // English and unknown locales fall back to default_message
     let locales = vec!["en", "en-US", "en-GB"];
     for locale in locales {
         let locale = locale.to_string();
@@ -479,9 +475,7 @@ fn test_default_message_all_variants() {
     assert!(validation.default_message().contains("Validation failed"));
 }
 
-// ========================================================================
-// TranslationStore::load_from_json() tests
-// ========================================================================
+// TranslationStore::load_from_json tests
 
 #[test]
 fn test_translation_store_load_from_json() {

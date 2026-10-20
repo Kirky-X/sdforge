@@ -24,9 +24,7 @@ use tower::{Layer, Service};
 use crate::security::{HttpRequestRateLimiter, RateLimitLayer, RateLimitMiddleware};
 use crate::security::{RateLimitError, RateLimiter};
 
-// ============================================================================
 // Mocks
-// ============================================================================
 
 /// Mock `RateLimiter` whose `check` / `check_request` always return a
 /// pre-configured outcome.
@@ -103,9 +101,7 @@ impl Service<Request<Body>> for EchoService {
     }
 }
 
-// ============================================================================
 // RateLimitMiddleware behavior tests (limiter reject/allow paths)
-// ============================================================================
 
 /// When the limiter rejects (returns `Err`), the middleware must short-circuit
 /// with `StatusCode::TOO_MANY_REQUESTS` (429) and NOT call the inner service.
@@ -177,11 +173,9 @@ async fn layer_construction_accepts_arcrate_limiter() {
     // No panic, no assertion needed beyond reaching this point.
 }
 
-// ============================================================================
 // regression: 429 response must differentiate error variants and emit
 // `Retry-After` where applicable. Before the fix, every rejection collapsed
 // to a generic 429 with body "Rate limit exceeded" and no `Retry-After`.
-// ============================================================================
 
 /// Mock limiter that produces a fresh `RateLimitError` on each check via a
 /// factory closure. `RateLimitError` does not implement `Clone` (and
@@ -340,9 +334,7 @@ async fn middleware_limiteron_error_returns_500() {
     );
 }
 
-// ============================================================================
 // Layer Clone regression (axum Router::layer requires `L: Layer + Clone`)
-// ============================================================================
 
 /// `RateLimitLayer` must be `Clone` so it can mount directly via
 /// `axum::Router::layer` (which bounds the layer by `Clone`).

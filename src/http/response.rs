@@ -286,12 +286,10 @@ mod tests {
         );
     }
 
-    // ============================================================================
     // Body content verification tests
     //
     // These tests verify the actual JSON body content of responses, not just
     // status codes and headers.
-    // ============================================================================
 
     #[tokio::test]
     async fn test_build_json_response_body_content() {
@@ -435,16 +433,14 @@ mod tests {
         assert_eq!(parsed["error"]["code"], "SERIALIZATION_ERROR");
     }
 
-    // ============================================================================
     // unwrap_or_else fallback branch coverage
     //
     // The `unwrap_or_else` closures in build_json_response (line 27) and
     // build_fallback_response (line 44) are defensive fallbacks triggered when
-    // `Response::builder().body()` returns Err. This happens when the status
+    // `Response::builder.body` returns Err. This happens when the status
     // code is invalid (outside the 100..=999 range accepted by
     // `StatusCode::TryFrom<u16>`). Passing a status < 100 (e.g., 99) causes
-    // the builder to store an error internally, making `.body()` return Err.
-    // ============================================================================
+    // the builder to store an error internally, making `.body` return Err.
 
     /// Test build_json_response falls back when given an invalid status code
     /// (< 100). Covers the `unwrap_or_else(|_| build_fallback_response(...))`
@@ -456,26 +452,26 @@ mod tests {
             value: i32,
         }
 
-        // Status 99 is invalid (< 100), causing Response::builder().body() to
+        // Status 99 is invalid (< 100), causing Response::builder.body to
         // return Err, which triggers the unwrap_or_else fallback.
         let resp = build_json_response(99, &Payload { value: 42 }, "fallback for invalid status");
         // The response should still be created via the fallback path.
         // The fallback itself also receives the invalid status, so it too
-        // falls back to Response::new(Body::empty()).
+        // falls back to Response::new(Body::empty).
         // Just verify we get a Response without panic.
         let _ = resp.status();
     }
 
     /// Test build_fallback_response falls back to an empty body when given an
     /// invalid status code (< 100). Covers the
-    /// `unwrap_or_else(|_| axum::response::Response::new(Body::empty()))`
+    /// `unwrap_or_else(|_| axum::response::Response::new(Body::empty))`
     /// branch in build_fallback_response.
     #[test]
     fn test_build_fallback_response_invalid_status_triggers_empty_body() {
         // Status 99 is invalid, causing both build_json_response and
         // build_fallback_response to hit their unwrap_or_else fallbacks.
         let resp = build_fallback_response(99, "invalid status test");
-        // The final fallback is Response::new(Body::empty()), which defaults
+        // The final fallback is Response::new(Body::empty), which defaults
         // to status 200. Verify no panic occurs.
         let _ = resp.status();
     }
@@ -494,13 +490,11 @@ mod tests {
         let _ = resp.status();
     }
 
-    // ============================================================================
     // forge-success-status-code: ServiceResponse::into_response status_code 优先级
     //
     // 成功侧 status_code 字段优先
     // 错误侧不回归
     // 默认 200 零破坏
-    // ============================================================================
 
     /// success_with_status("x", 201) → HTTP 201。
     #[test]

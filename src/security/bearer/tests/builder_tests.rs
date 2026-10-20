@@ -28,9 +28,7 @@ fn test_bearer_auth_builder() {
     assert_eq!(auth.expected_issuer.as_ref().unwrap(), "my-issuer");
 }
 
-// ========================================================================
 // Builder Tests
-// ========================================================================
 
 #[test]
 fn test_bearer_auth_builder_minimal() {

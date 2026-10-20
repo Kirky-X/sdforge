@@ -23,7 +23,7 @@ use crate::error::UnifiedError;
 /// `--format` 参数在 clap 中的 arg id / long 名。
 pub const FORMAT_ARG: &str = "format";
 
-/// `--format` 的全部合法取值（单一事实源：`format_arg()` 的白名单与
+/// `--format` 的全部合法取值（单一事实源：`format_arg` 的白名单与
 /// Agent 知识包的 `output_contract.values` 都从这里派生）。
 pub const FORMAT_VALUES: [&str; 2] = ["text", "json"];
 
@@ -36,7 +36,7 @@ pub const SUCCESS_EXIT_CODE: i32 = 0;
 /// 错误退出码。
 pub const ERROR_EXIT_CODE: i32 = 1;
 
-/// `--format` 的帮助文案（`build()` 挂载时使用）。
+/// `--format` 的帮助文案（`build` 挂载时使用）。
 pub const FORMAT_HELP: &str = "Output format: text (human-readable, default) or json (machine-readable; errors as UnifiedError JSON on stdout)";
 
 /// CLI 输出模式。
@@ -52,7 +52,7 @@ pub enum OutputFormat {
 impl OutputFormat {
     /// 从顶层 `ArgMatches` 解析输出模式。
     ///
-    /// `--format` 由 `build()` 内建挂载且带 `default_value("text")`，
+    /// `--format` 由 `build` 内建挂载且带 `default_value("text")`，
     /// 缺省即 [`OutputFormat::Text`]；未知值已在 clap `value_parser` 层拒绝。
     pub fn from_matches(matches: &ArgMatches) -> Self {
         match matches.get_one::<String>(FORMAT_ARG).map(String::as_str) {
@@ -94,7 +94,7 @@ impl OutputFormat {
     }
 }
 
-/// 构造内建的 `--format` 全局 clap 参数（`build()` 挂载）。
+/// 构造内建的 `--format` 全局 clap 参数（`build` 挂载）。
 ///
 /// `global(true)` 传播到全部子命令；取值限定 `text|json`，默认 `text`。
 /// `docs` 子命令的同名 `--format`（文档格式）由 clap 的子命令作用域遮蔽，

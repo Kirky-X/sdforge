@@ -121,7 +121,7 @@ pub fn build_cors_layer(
         ));
     }
 
-    // Validate origin format: 与 CorsConfig::validate() 保持一致
+    // Validate origin format: 与 CorsConfig::validate 保持一致
     for origin in &config.allowed_origins {
         if !origin.starts_with("http://") && !origin.starts_with("https://") {
             return Err(crate::config::ConfigError::ValidationError(format!(
@@ -298,9 +298,9 @@ mod tests {
         assert!(result.unwrap_err().to_string().contains("No valid origins"));
     }
 
-    /// Cover the `after_scheme.is_empty()` branch in `build_cors_layer`
+    /// Cover the `after_scheme.is_empty` branch in `build_cors_layer`
     /// (line 75) — origin with scheme but no host (e.g. "http://").
-    /// Existing tests cover this branch in `CorsConfig::validate()` but not
+    /// Existing tests cover this branch in `CorsConfig::validate` but not
     /// in `build_cors_layer`.
     #[test]
     fn test_build_cors_layer_empty_host_rejected() {

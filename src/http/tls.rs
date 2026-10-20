@@ -49,15 +49,15 @@
 //! let tls = TlsConfig::new("cert.pem", "key.pem");
 //! let acceptor = tls_acceptor(&tls)?;
 //! let listener = tokio::net::TcpListener::bind("0.0.0.0:8443").await?;
-//! let config = TlsServeConfig::default()
-//!     .with_graceful(GracefulShutdownConfig::default());
+//! let config = TlsServeConfig::default
+//!     .with_graceful(GracefulShutdownConfig::default);
 //! serve_with_graceful_shutdown_tls(
 //!     router,
 //!     listener,
 //!     acceptor,
-//!     default_shutdown_signal(),
+//!     default_shutdown_signal,
 //!     config,
-//! ).await?;
+//!).await?;
 //! ```
 
 use std::sync::{Arc, RwLock};
@@ -524,7 +524,7 @@ impl ReloadingTls {
 /// 「何时触发」，换入仍走 rustls resolver）。监听线程建立失败或退出时
 /// 热重载能力显式丧失（记日志），任务随后退出。
 ///
-/// `shutdown` 与 serve 家族同构：`impl Future<Output = ()> + Send + 'static`
+/// `shutdown` 与 serve 家族同构：`impl Future<Output = > + Send + 'static`
 /// 的 phase-1 停机触发器（见 [`crate::http::graceful`]），触发后任务退出。
 #[cfg(feature = "tls-watch")]
 pub fn spawn_cert_watcher(
@@ -1090,7 +1090,7 @@ mod cert_watch_tests {
     }
 
     /// 覆写盘上证书为匹配新对后，监听任务的自动重载在 5s 内反映到
-    /// `end_entity_certificate()`（去抖窗口 + 重载耗时）。
+    /// `end_entity_certificate`（去抖窗口 + 重载耗时）。
     #[tokio::test]
     async fn cert_watcher_hot_reloads_on_matching_pair_overwrite() {
         let dir = tempfile::tempdir().expect("tempdir");

@@ -5,9 +5,7 @@
 //! This module provides utilities for validating request parameters and
 //! converting between different types. Requires the `http` feature.
 
-// =============================================================================
 // Security Limits - Input Size Constraints
-// =============================================================================
 
 /// Maximum request body size in bytes (10 MB)
 ///
@@ -336,9 +334,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ============================================================================
     // Custom Validator Tests
-    // ============================================================================
 
     #[test]
     fn test_custom_email_validator_valid() {
@@ -378,9 +374,7 @@ mod tests {
         assert!(result2.is_ok());
     }
 
-    // ============================================================================
     // Range Validation Tests
-    // ============================================================================
 
     #[test]
     fn test_validate_range_integer_valid() {
@@ -445,9 +439,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // ============================================================================
     // Comprehensive ValidationErrorsWrapper Tests
-    // ============================================================================
 
     #[test]
     fn test_validation_errors_wrapper_new_empty() {
@@ -494,9 +486,7 @@ mod tests {
         assert_eq!(error, cloned);
     }
 
-    // ============================================================================
     // Comprehensive Email Validation Tests
-    // ============================================================================
 
     #[test]
     fn test_validate_email_valid_with_subdomain() {
@@ -528,9 +518,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ============================================================================
     // Comprehensive Regex Validation Tests
-    // ============================================================================
 
     #[test]
     fn test_validate_regex_phone_pattern() {
@@ -574,9 +562,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    // ============================================================================
     // Comprehensive Range Validation Tests
-    // ============================================================================
 
     #[test]
     fn test_validate_range_i8() {
@@ -650,9 +636,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ============================================================================
     // Comprehensive Length Validation Tests
-    // ============================================================================
 
     #[test]
     fn test_validate_length_unicode() {
@@ -703,9 +687,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ============================================================================
     // Security Limits Validation Tests
-    // ============================================================================
 
     #[test]
     #[allow(clippy::assertions_on_constants)]
@@ -762,9 +744,7 @@ mod tests {
         assert!("password123".len() <= MAX_PASSWORD_LENGTH);
     }
 
-    // ============================================================================
     // From<ValidationErrorsWrapper> for ApiError conversion tests
-    // ============================================================================
 
     #[test]
     fn test_from_validation_errors_wrapper_with_errors() {
@@ -827,14 +807,11 @@ mod tests {
         }
     }
 
-    // ============================================================================
     // validate_or_error tests
-    // ============================================================================
 
     #[test]
     fn test_validate_or_error_success() {
         // When the validation closure succeeds, validate_or_error should
-        // return Ok(()).
         let result: Result<(), ApiError> = validators::validate_or_error(
             || Ok(()),
             || ValidationErrorsWrapper::new(vec![]).into(),
@@ -853,9 +830,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // ============================================================================
     // extract_validated 反序列化失败分支：输入 JSON 无法反序列化为 T 时走空错误包装
-    // ============================================================================
 
     /// Test extract_validated returns Err when JSON has a wrong type for a
     /// field (string where u32 is expected). Covers the

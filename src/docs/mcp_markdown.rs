@@ -14,7 +14,7 @@ use crate::mcp::McpToolRegistration;
 /// ```markdown
 /// ## {tool.name}
 ///
-/// {tool.metadata().description()}
+/// {tool.metadata.description}
 ///
 /// Version: {tool.version}
 /// ```

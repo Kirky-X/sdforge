@@ -31,18 +31,16 @@ inventory::submit!(
     ])
 );
 
-// ============================================================================
 // CliBuilder
-// ============================================================================
 
-/// `CliBuilder::new()` returns a fresh builder with no injected state.
-/// `Default::default()` must be equivalent.
+/// `CliBuilder::new` returns a fresh builder with no injected state.
+/// `Default::default` must be equivalent.
 #[test]
 fn test_builder_new_is_empty() {
     let _from_new = CliBuilder::new();
     let _from_default = CliBuilder::default();
     // Both construction paths must produce a buildable builder — exercise
-    // build() to confirm no panics on the empty/default path.
+    // build to confirm no panics on the empty/default path.
     let cmd_from_new = CliBuilder::new().build();
     let cmd_from_default = CliBuilder::default().build();
     // Both must produce a `clap::Command` with the same name (top-level
@@ -50,7 +48,7 @@ fn test_builder_new_is_empty() {
     assert_eq!(cmd_from_new.get_name(), cmd_from_default.get_name());
 }
 
-/// `CliBuilder::build()` must surface every registered
+/// `CliBuilder::build` must surface every registered
 /// `CliCommandRegistration` as a SubCommand and translate argument
 /// metadata into clap args per the design rules.
 #[test]
@@ -61,7 +59,7 @@ fn test_builder_collects_commands() {
     let sub = cmd
         .find_subcommand("builder_test_command")
         .expect("builder_test_command must be a subcommand");
-    // `get_about()` returns `Option<&StyledStr>`; flatten to a plain
+    // `get_about` returns `Option<&StyledStr>`; flatten to a plain
     // string for the assertion.
     let about_str = sub.get_about().map(|s| s.to_string()).unwrap_or_default();
     assert_eq!(about_str, "Test command for builder_tests");
@@ -86,7 +84,7 @@ fn test_builder_collects_commands() {
         limit_arg.get_long().is_some(),
         "Body arg `limit` must have a --long flag"
     );
-    // `get_default_values()` returns `&[clap::builder::OsStr]`; convert to
+    // `get_default_values` returns `&[clap::builder::OsStr]`; convert to
     // strings for the assertion.
     let defaults: Vec<String> = limit_arg
         .get_default_values()
@@ -104,12 +102,10 @@ fn test_builder_collects_commands() {
     assert!(!state_present, "State arg must not be surfaced on the CLI");
 }
 
-// ============================================================================
 // CliBuilder::with_dependencies — state injection
-// ============================================================================
 
 /// Test-only state type used to verify `with_dependencies` actually stores
-/// the supplied state and makes it retrievable (via `state()`) for handler
+/// the supplied state and makes it retrievable (via `state`) for handler
 /// invocation. Lives only in this test module.
 struct TestAppState {
     counter: u32,
@@ -118,7 +114,7 @@ struct TestAppState {
 
 /// Verify `with_dependencies(state)` stores the supplied state in the
 /// builder so that handlers can downcast it at call time. Also
-/// verifies `build()` succeeds after state injection — the framework's
+/// verifies `build` succeeds after state injection — the framework's
 /// "constructor pattern 3" (full DI).
 #[test]
 fn test_builder_with_dependencies_injects_state() {
@@ -147,11 +143,9 @@ fn test_builder_with_dependencies_injects_state() {
     let _cmd = builder.build();
 }
 
-// ============================================================================
 // CliBuilder 自动注入 docs 子命令（docgen feature）
-// ============================================================================
 
-/// 当 `docgen` feature 启用时，`CliBuilder::build()` 必须自动 append
+/// 当 `docgen` feature 启用时，`CliBuilder::build` 必须自动 append
 /// 名为 `docs` 的 SubCommand（来自 [`crate::cli::docs_subcommand`]
 /// 模块），用户无需手动注册。
 #[cfg(feature = "docgen")]
@@ -184,7 +178,7 @@ fn test_builder_includes_docs_subcommand() {
     );
 }
 
-/// 当 `docgen` feature 未启用时（仅 `cli` feature），`CliBuilder::build()`
+/// 当 `docgen` feature 未启用时（仅 `cli` feature），`CliBuilder::build`
 /// **不得**包含 `docs` 子命令——验证特性门控正确性，避免误注入。
 #[cfg(not(feature = "docgen"))]
 #[test]
@@ -196,9 +190,7 @@ fn test_builder_excludes_docs_subcommand_when_docs_disabled() {
     );
 }
 
-// ============================================================================
 // GlobalArg + CliBuilder::with_global_arg
-// ============================================================================
 
 /// `GlobalArg::new` creates a global arg with sensible defaults: `global`
 /// is `true`, `help` is empty, and `long`/`short`/`default_value` are `None`.

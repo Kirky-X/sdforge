@@ -90,7 +90,7 @@ fn test_build_tool_model_keeps_description_verbatim_without_lifecycle() {
     );
 }
 
-/// 全空 `LifecycleMeta`（`is_present() == false`）等同未注解：描述逐字
+/// 全空 `LifecycleMeta`（`is_present == false`）等同未注解：描述逐字
 /// 保留，不产出空括注。
 #[test]
 fn test_build_tool_model_ignores_empty_lifecycle() {
@@ -115,7 +115,7 @@ fn test_build_tool_model_ignores_empty_lifecycle() {
 
 #[tokio::test]
 async fn test_server_handler_list_tools() {
-    // Use get_all_tools() instead of list_tools() to avoid constructing
+    // Use get_all_tools instead of list_tools to avoid constructing
     // a RequestContext (which requires a live Peer connection).
     let server = build();
     let tools = server.get_all_tools();
@@ -124,7 +124,7 @@ async fn test_server_handler_list_tools() {
 
 #[tokio::test]
 async fn test_server_handler_call_tool_success() {
-    // Use call_tool_internal() to avoid RequestContext construction.
+    // Use call_tool_internal to avoid RequestContext construction.
     let server = build();
     let result = server.call_tool_internal("coverage_test_tool", None);
     assert!(result.is_ok());
@@ -167,16 +167,14 @@ fn test_server_get_info() {
     assert!(!info.server_info.version.is_empty());
 }
 
-// ============================================================================
 // vuln-0002: end-to-end tests for input_schema validation in call_tool_internal
-// ============================================================================
 //
 // These tests verify that `call_tool_internal` rejects arguments that violate
-// the tool's `input_schema` BEFORE the tool's `call()` method is invoked.
+// the tool's `input_schema` BEFORE the tool's `call` method is invoked.
 // This closes the gap where hand-written `SdForgeTool` implementations that
-// forgot to validate arguments in `call()` would accept arbitrary input.
+// forgot to validate arguments in `call` would accept arbitrary input.
 //
-// The test tools below intentionally do NOT validate input in `call()` — they
+// The test tools below intentionally do NOT validate input in `call` — they
 // rely entirely on the entry-point schema validation. If the entry-point
 // validation is bypassed, the tool will accept any input (simulating a
 // vulnerable hand-written tool).
@@ -189,7 +187,7 @@ mod vuln_0002_schema_validation_tests {
     use std::sync::Arc;
 
     /// A tool with a strict schema: requires `name`, allows `age`, rejects
-    /// everything else. Its `call()` does NOT validate input — it relies on
+    /// everything else. Its `call` does NOT validate input — it relies on
     /// the entry-point schema validation in `call_tool_internal`.
     fn create_strict_schema_tool() -> Arc<dyn SdForgeTool> {
         struct StrictSchemaTool;
@@ -283,7 +281,7 @@ mod vuln_0002_schema_validation_tests {
         SdForgeMcpServer::with_tools(vec![instance])
     }
 
-    // --- Strict schema tests ---
+    // Strict schema tests
 
     #[test]
     fn test_strict_schema_valid_args_pass() {
@@ -365,7 +363,7 @@ mod vuln_0002_schema_validation_tests {
         assert!(result.is_ok(), "partial but valid args should pass");
     }
 
-    // --- Empty schema tests ---
+    // Empty schema tests
 
     #[test]
     fn test_empty_schema_accepts_any_object() {
@@ -391,7 +389,7 @@ mod vuln_0002_schema_validation_tests {
         assert!(result.is_ok(), "empty schema should accept null");
     }
 
-    // --- Union type schema tests ---
+    // Union type schema tests
 
     #[test]
     fn test_union_type_schema_accepts_object() {
@@ -423,7 +421,7 @@ mod vuln_0002_schema_validation_tests {
         );
     }
 
-    // --- Defense-in-depth: tool is never invoked on invalid input ---
+    // Defense-in-depth: tool is never invoked on invalid input
 
     #[test]
     fn test_invalid_input_never_reaches_tool_call() {

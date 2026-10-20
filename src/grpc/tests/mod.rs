@@ -11,9 +11,7 @@
 mod grpc_service_tests;
 mod interceptor_tests;
 
-// ============================================================================
 // Shared test helpers — accessible by all sub-modules via `super::`
-// ============================================================================
 
 /// Generate a valid JWT for testing with the given secret and expiration timestamp
 #[cfg(feature = "security")]

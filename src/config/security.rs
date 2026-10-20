@@ -163,7 +163,7 @@ mod tests {
         assert!(headers.is_empty());
     }
 
-    /// Test headers_enabled() reflects the enable_headers flag for both the
+    /// Test headers_enabled reflects the enable_headers flag for both the
     /// default (enabled) and disabled configurations. Covers the headers_enabled
     /// accessor method.
     #[test]
@@ -248,7 +248,7 @@ mod tests {
         assert!(disabled.validate().is_ok());
     }
 
-    /// Test `SecurityConfig::default().rate_limit` is `None` when the
+    /// Test `SecurityConfig::default.rate_limit` is `None` when the
     /// `ratelimit` feature is enabled.
     ///
     /// Covers the new optional `rate_limit` field

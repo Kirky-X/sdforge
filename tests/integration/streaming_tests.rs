@@ -10,9 +10,7 @@ mod streaming_tests {
     use std::time::Duration;
     use tokio_stream::wrappers::ReceiverStream;
 
-    // ============================================================================
     // Existing Tests
-    // ============================================================================
 
     #[test]
     fn test_create_stream_channel() {
@@ -75,9 +73,7 @@ mod streaming_tests {
         assert!(json.contains("test data"));
     }
 
-    // ============================================================================
     // SSE Event Stream Tests
-    // ============================================================================
 
     /// Test basic SSE event stream functionality
     /// Verifies that a simple stream produces correct SSE formatted output
@@ -88,7 +84,6 @@ mod streaming_tests {
         let input_stream = stream::iter(vec![1i32, 2, 3, 4, 5]);
         let sse_stream = stream_to_sse(input_stream, |n| StreamEvent::data(serde_json::json!(n)));
 
-        // Collect all SSE formatted events
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
 
         let data_events: Vec<_> = results
@@ -289,9 +284,7 @@ mod streaming_tests {
         }
     }
 
-    // ============================================================================
     // Streaming Response Tests
-    // ============================================================================
 
     /// Test streaming response with multiple chunks
     /// Verifies that data can be streamed in multiple parts
@@ -307,7 +300,6 @@ mod streaming_tests {
 
         drop(tx);
 
-        // Collect all chunks
         let mut stream = response.into_stream();
         let mut received_chunks = Vec::new();
 
@@ -370,7 +362,6 @@ mod streaming_tests {
         tx.send(Ok(1)).await.unwrap();
         tx.send(Ok(2)).await.unwrap();
 
-        // Collect the sent data
         let mut stream = response.into_stream();
         let item1 = stream.next().await.unwrap().unwrap();
         let item2 = stream.next().await.unwrap().unwrap();
@@ -390,9 +381,7 @@ mod streaming_tests {
         // (This is implicit - if stream was dropped, no more items can be received)
     }
 
-    // ============================================================================
     // Streaming Error Handling Tests
-    // ============================================================================
 
     /// Test error recovery in stream
     /// Verifies that errors can be sent through the stream and handled properly
@@ -408,7 +397,6 @@ mod streaming_tests {
 
         drop(tx);
 
-        // Collect all results
         let mut stream = response.into_stream();
         let mut successes = Vec::new();
         let mut errors = Vec::new();
@@ -610,9 +598,7 @@ mod streaming_tests {
         assert_eq!(items[item_count - 1], (item_count - 1) as i32);
     }
 
-    // ============================================================================
     // Extended SSE Format Tests
-    // ============================================================================
 
     /// Test SSE event name formatting
     /// Verifies that custom event names are properly formatted in SSE output
@@ -698,9 +684,7 @@ mod streaming_tests {
         assert!(results[0].contains("timestamp"));
     }
 
-    // ============================================================================
     // Stream Channel Edge Case Tests
-    // ============================================================================
 
     /// Test channel closed behavior
     /// Verifies that stream is empty after sender is dropped
@@ -817,9 +801,7 @@ mod streaming_tests {
         assert_eq!(items.len(), total_items);
     }
 
-    // ============================================================================
     // Stream State and Lifecycle Tests
-    // ============================================================================
 
     /// Test stream with immediate data consumption
     /// Verifies that data can be consumed immediately after being sent
@@ -911,9 +893,7 @@ mod streaming_tests {
         assert_eq!(items.len(), 100);
     }
 
-    // ============================================================================
     // SSE Stream Advanced Tests
-    // ============================================================================
 
     /// Test SSE stream with very large data payload
     /// Verifies that large payloads are properly serialized without issues
@@ -1013,9 +993,7 @@ mod streaming_tests {
         }
     }
 
-    // ============================================================================
     // Error Recovery and Edge Cases Tests
-    // ============================================================================
 
     /// Test stream error at end of stream
     /// Verifies handling when error occurs as the last item
@@ -1152,9 +1130,7 @@ mod streaming_tests {
         assert!(results[0].contains("nested"));
     }
 
-    // ============================================================================
     // Performance and Stress Tests
-    // ============================================================================
 
     /// Test stream with burst of data
     /// Verifies handling of sudden burst of data items
@@ -1220,9 +1196,7 @@ mod streaming_tests {
         assert_eq!(even_numbers, vec![2, 4, 6, 8, 10]);
     }
 
-    // ============================================================================
     // Integration Scenarios Tests
-    // ============================================================================
 
     /// Test realistic streaming scenario - progress updates
     /// Simulates a file download or processing with progress updates

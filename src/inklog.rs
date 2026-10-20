@@ -9,9 +9,9 @@
 //!
 //! ## 工作原理
 //!
-//! inklog 的 `LoggerManager::with_config()` 在内部：
+//! inklog 的 `LoggerManager::with_config` 在内部：
 //! 1. 创建 `LogAdapter`（实现 `log::Log` trait）
-//! 2. 通过 `LogLogger::install()` 调用 `log::set_boxed_logger` 安装为全局 logger
+//! 2. 通过 `LogLogger::install` 调用 `log::set_boxed_logger` 安装为全局 logger
 //! 3. 调用 `log::set_max_level` 设置全局日志级别
 //!
 //! 因此 sdforge 现有的 29 处 `log::error!`/`log::warn!` 调用无需任何改动。
@@ -20,14 +20,14 @@
 //!
 //! ```ignore
 //! # #[tokio::main]
-//! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! # async fn main -> Result<, Box<dyn std::error::Error>> {
 //! // 初始化 inklog 为全局 log 后端
-//! let _manager = sdforge::inklog::init_inklog_logger().await?;
+//! let _manager = sdforge::inklog::init_inklog_logger.await?;
 //!
 //! // 此后所有 log 调用自动路由到 inklog
 //! log::warn!("cache miss for key={:?}", "user:42");
 //! log::error!("inventory Mutex poisoned: {}", "...");
-//! # Ok(())
+//! # Ok()
 //! # }
 //! ```
 //!
@@ -66,10 +66,10 @@ pub use ::inklog::{InklogConfig, InklogError, LogRecord, LogSink, LoggerManager}
 ///
 /// ```ignore
 /// # #[tokio::main]
-/// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let _manager = sdforge::inklog::init_inklog_logger().await?;
+/// # async fn main -> Result<, Box<dyn std::error::Error>> {
+/// let _manager = sdforge::inklog::init_inklog_logger.await?;
 /// log::info!("logs now route through inklog");
-/// # Ok(())
+/// # Ok()
 /// # }
 /// ```
 pub async fn init_inklog_logger() -> Result<LoggerManager, InklogError> {
@@ -80,10 +80,8 @@ pub async fn init_inklog_logger() -> Result<LoggerManager, InklogError> {
 mod tests {
     use super::*;
 
-    // ========================================================================
     // init_inklog_logger 测试：安装成功、级别生效、log:: 不 panic
     // （全局 logger 进程级单例，故 #[serial]）
-    // ========================================================================
 
     /// 验证 init_inklog_logger 成功返回 LoggerManager。
     ///
@@ -104,7 +102,7 @@ mod tests {
     /// 验证初始化后全局 log 级别不再是 Off。
     ///
     /// inklog 的 LogLogger::install 调用 log::set_max_level(Info)。
-    /// 在任何 logger 安装前，log::max_level() 返回 Off。初始化后
+    /// 在任何 logger 安装前，log::max_level 返回 Off。初始化后
     /// 必须为非 Off —— 这证明 inklog 的 install 路径被执行。
     #[tokio::test]
     #[serial_test::serial]

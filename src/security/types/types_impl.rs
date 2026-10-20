@@ -18,9 +18,7 @@ impl CacheNamespace {
     }
 }
 
-// =============================================================================
 // Serialization Helpers for Cache Storage
-// =============================================================================
 
 /// Serialize a list of permissions (`Vec<String>`) to bytes
 pub fn serialize_permissions(perms: &[String]) -> Vec<u8> {
@@ -374,7 +372,6 @@ impl AuditLog {
             }
         );
 
-        // Compute expected signature
         let mut mac =
             HmacSha256::new_from_slice(secret_key).expect("HMAC can take key of any size");
         mac.update(canonical.as_bytes());

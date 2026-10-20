@@ -12,9 +12,7 @@ use sdforge::grpc::sdforge_v1::sd_forge_service_server::SdForgeService;
 use sdforge::security::SdForgeApiKeyAuth;
 use sdforge::security::grpc_auth::{ApiKeyVerifier, BearerVerifier};
 
-// =============================================================================
 // gRPC interceptor
-// =============================================================================
 
 #[sdforge::forge(
     name = "grpc_auth_ping",
@@ -135,9 +133,7 @@ fn mint_jwt(secret: &str) -> String {
     format!("{signing_input}.{sig_b64}")
 }
 
-// =============================================================================
 // WebSocket handshake auth
-// =============================================================================
 
 mod ws_handshake {
     use super::*;

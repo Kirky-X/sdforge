@@ -15,7 +15,7 @@
 //! sdforge already defines a `RateLimiter` trait at
 //! `src/security/ratelimit/mod.rs` (gated by the `ratelimit` feature). That
 //! trait is identifier-based (it has a `check(&str)` method and returns
-//! `Result<(), RateLimitError>`). The HTTP-specific `check_request` method
+//! `Result<, RateLimitError>`). The HTTP-specific `check_request` method
 //! lives in the separate `HttpRequestRateLimiter` trait (gated by
 //! `ratelimit-http`). `ForgeRateLimiter` is a distinct, simpler abstraction
 //! for the kit integration domain: it is key-based
@@ -206,7 +206,7 @@ mod tests {
     }
 
     /// #2: `record` method returns
-    /// `Pin<Box<dyn Future<Output = Result<(), ForgeError>> + Send + 'a>>`.
+    /// `Pin<Box<dyn Future<Output = Result<, ForgeError>> + Send + 'a>>`.
     #[tokio::test]
     async fn forge_rate_limiter_record_returns_pin_box_future() {
         let limiter = MockForgeRateLimiter { allow: true };

@@ -25,9 +25,7 @@ async fn trace_me() -> serde_json::Value {
     serde_json::json!({"traced": true})
 }
 
-// =============================================================================
 // Mock collector: captures OTLP POST bodies.
-// =============================================================================
 
 #[derive(Default)]
 struct Collector {

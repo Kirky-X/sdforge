@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: MIT
 //! CLI dispatch — routes a `clap::ArgMatches` to the matching forge handler.
 //!
-//! This module closes the dispatch loop opened by `CliBuilder::build()`:
-//! build() materializes a `clap::Command` from inventory, the user-supplied
-//! `main()` runs `get_matches()` to produce `ArgMatches`, and `dispatch()`
+//! This module closes the dispatch loop opened by `CliBuilder::build`:
+//! build materializes a `clap::Command` from inventory, the user-supplied
+//! `main` runs `get_matches` to produce `ArgMatches`, and `dispatch`
 //! finds the matching `CliHandlerRegistration`, builds the `HandlerArgs`
 //! from subcommand matches, and invokes the handler.
 //!

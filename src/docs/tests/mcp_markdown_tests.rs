@@ -53,7 +53,7 @@ inventory::submit!(McpToolRegistration::new(
     create_test_mcp_metadata_for_docs,
 ));
 
-/// `generate_mcp_docs()` 应返回包含已注册工具名的 Markdown 字符串。
+/// `generate_mcp_docs` 应返回包含已注册工具名的 Markdown 字符串。
 #[test]
 fn test_generate_mcp_docs_contains_tool_name() {
     let md = generate_mcp_docs();
@@ -69,7 +69,7 @@ fn test_generate_mcp_docs_contains_tool_name() {
     );
 }
 
-/// `generate_mcp_docs()` 应包含工具的描述（从 metadata 获取）。
+/// `generate_mcp_docs` 应包含工具的描述（从 metadata 获取）。
 #[test]
 fn test_generate_mcp_docs_contains_description() {
     let md = generate_mcp_docs();

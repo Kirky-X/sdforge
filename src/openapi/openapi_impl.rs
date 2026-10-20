@@ -472,7 +472,7 @@ impl OpenApiBuilder {
         Self::default()
     }
 
-    /// Append an externally built spec. `build()` merges it after the
+    /// Append an externally built spec. `build` merges it after the
     /// inventory collection, in chain order; on the same path+method the
     /// external operation replaces the inventory-generated one. The
     /// extra's own `info`/`servers` do not participate in the merge.

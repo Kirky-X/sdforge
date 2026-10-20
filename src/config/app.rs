@@ -152,10 +152,10 @@ impl SdForgeConfigBuilder {
 
     /// Build SdForgeConfig with validation
     ///
-    /// `timeout` 缺省时回退到 `TimeoutConfig::default()`，
-    /// 与 `SdForgeConfig::default()` 的行为保持一致。
+    /// `timeout` 缺省时回退到 `TimeoutConfig::default`，
+    /// 与 `SdForgeConfig::default` 的行为保持一致。
     /// 原代码 `timeout: self.timeout` 在调用方未设置时产生 `None`，
-    /// 而 `Default` 产生 `Some(TimeoutConfig::default())`，
+    /// 而 `Default` 产生 `Some(TimeoutConfig::default)`，
     /// 导致两条构造路径语义不一致，下游 `if let Some(timeout)` 检查可能跳过验证。
     pub fn build(self) -> Result<SdForgeConfig, crate::config::ConfigError> {
         let config = SdForgeConfig {
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn test_app_config_default() {
         let config = SdForgeConfig::default();
-        // ServerConfig::default() 现在使用 fail-safe 常量
+        // ServerConfig::default 现在使用 fail-safe 常量
         assert_eq!(config.server.host, "127.0.0.1"); // fail-safe loopback
         assert_eq!(config.server.port, 8080);
 
@@ -201,7 +201,7 @@ mod tests {
             })
             .build();
 
-        // With validation feature, build() returns Result
+        // With validation feature, build returns Result
         let config = result.expect("Failed to build config");
 
         assert_eq!(config.server.host, "127.0.0.1");
@@ -209,7 +209,7 @@ mod tests {
     }
 
     /// Cover the `ValidateConfig for SdForgeConfig` trait impl (lines 50, 54)
-    /// which delegates to the inherent `validate()` method. Existing tests
+    /// which delegates to the inherent `validate` method. Existing tests
     /// only call the inherent method, leaving the trait impl body uncovered.
     #[test]
     fn test_validate_config_trait_for_app_config() {

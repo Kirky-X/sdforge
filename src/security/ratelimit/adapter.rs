@@ -7,7 +7,7 @@
 //! an `Arc` (shared ownership, dependency-injected).
 //!
 //! See `design.md` D3 for the rationale behind the construction pattern
-//! (async `new()` / `default()` + sync `with_dependencies`).
+//! (async `new` / `default` + sync `with_dependencies`).
 //!
 //! # Feature gating
 //!
@@ -39,14 +39,14 @@ use super::{RateLimitError, RateLimiter};
 /// Production [`RateLimiter`] backed by a [`limiteron::Governor`].
 ///
 /// Holds an `Arc<Governor>` so the same governor can be shared across
-/// handlers/threads. The governor is constructed via `Governor::builder()`
+/// handlers/threads. The governor is constructed via `Governor::builder`
 /// with a minimal valid config (see \[`default_config`\]) or injected directly
 /// via [`Self::with_dependencies`].
 ///
 /// # Why no `Default` impl?
 ///
-/// `Governor::new()` is async and panics with `FlowControlConfig::default()`
-/// (empty `rules` fails validation). We provide [`Self::default()`] (an async
+/// `Governor::new` is async and panics with `FlowControlConfig::default`
+/// (empty `rules` fails validation). We provide [`Self::default`] (an async
 /// fn) that uses \[`default_config`\] instead.
 pub struct LimiteronAdapter {
     /// Shared governor instance. `Arc` because `Governor` is shared across
@@ -56,8 +56,8 @@ pub struct LimiteronAdapter {
 
 /// Construct a minimal valid `FlowControlConfig` for out-of-the-box usage.
 ///
-/// `FlowControlConfig::default()` has an empty `rules` vec, which fails
-/// `validate()` with "至少需要一个规则" (and `Governor::new()` panics on this).
+/// `FlowControlConfig::default` has an empty `rules` vec, which fails
+/// `validate` with "至少需要一个规则" (and `Governor::new` panics on this).
 /// This helper provides one permissive rule: match all IPs (`0.0.0.0/0`)
 /// with a token bucket (100 burst, 10 req/s refill) and default `Reject`
 /// action on exceed.
@@ -110,7 +110,7 @@ fn extract_identifier(req: &Request<Body>) -> String {
 impl LimiteronAdapter {
     /// Out-of-the-box construction (mode 1).
     ///
-    /// Internally uses `Governor::builder()` with \[`default_config`\] and
+    /// Internally uses `Governor::builder` with \[`default_config`\] and
     /// in-memory storage. The default rule is permissive (100 req burst,
     /// 10 req/s refill, match all IPs) — suitable for tests and getting
     /// started. Production should inject a custom config via
@@ -131,7 +131,7 @@ impl LimiteronAdapter {
         }
     }
 
-    /// Async equivalent of `Default::default()` (mode 1 alternative).
+    /// Async equivalent of `Default::default` (mode 1 alternative).
     ///
     /// Provided because `Governor` construction is async, so we cannot
     /// implement the sync `Default` trait.
@@ -152,7 +152,7 @@ impl LimiteronAdapter {
     /// Accepts an already-constructed `Arc<Governor>`, bypassing
     /// `Governor::with_dependencies` (which requires `DashMap` — forbidden
     /// in sdforge direct code). Use this when you need a custom governor
-    /// configuration that `new()` or `builder()` cannot express.
+    /// configuration that `new` or `builder` cannot express.
     pub fn with_dependencies(governor: Arc<Governor>) -> Self {
         Self { governor }
     }
@@ -165,7 +165,7 @@ impl RateLimiter for LimiteronAdapter {
     ) -> Pin<Box<dyn Future<Output = Result<(), RateLimitError>> + Send + 'a>> {
         Box::pin(async move {
             let mut ctx = RequestContext::new();
-            // limiteron's `IpExtractor::extract()` and `MatchCondition::Ip`
+            // limiteron's `IpExtractor::extract` and `MatchCondition::Ip`
             // both read `context.client_ip` (not `context.ip`). We treat the
             // incoming `identifier` as a client IP, which matches the default
             // config's `Matcher::Ip { ip_ranges: ["0.0.0.0/0"] }`.

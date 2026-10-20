@@ -4,8 +4,8 @@
 //!
 //! 本示例展示 SDForge 配置管理的三种使用模式：
 //!
-//! 1. **开箱即用** — `SdForgeConfig::default()`
-//! 2. **Builder 模式** — `SdForgeConfig::builder().server(...).build()`
+//! 1. **开箱即用** — `SdForgeConfig::default`
+//! 2. **Builder 模式** — `SdForgeConfig::builder.server(...).build`
 //! 3. **序列化/反序列化** — 通过 serde 持久化配置
 //!
 //! ## 运行方式
@@ -24,13 +24,11 @@ use sdforge::config::{
 };
 use sdforge::i18n::t;
 
-// =============================================================================
 // 模式 1: 开箱即用 — 默认配置
-// =============================================================================
 
 /// 使用默认值创建应用配置。
 ///
-/// `SdForgeConfig::default()` 提供合理的默认值：
+/// `SdForgeConfig::default` 提供合理的默认值：
 /// - server: `127.0.0.1:8080`, 30s 请求超时
 /// - authentication: `AuthConfig::None`
 /// - timeout: 默认 30s 超时 + 上传/导出路由特殊超时
@@ -38,9 +36,7 @@ pub fn default_config() -> SdForgeConfig {
     SdForgeConfig::default()
 }
 
-// =============================================================================
 // 模式 2: Builder 模式 — 自定义配置
-// =============================================================================
 
 /// 使用 Builder 模式构建自定义配置。
 ///
@@ -80,9 +76,7 @@ pub fn build_custom_config() -> SdForgeConfig {
         .expect("config build failed")
 }
 
-// =============================================================================
 // 模式 3: 序列化/反序列化
-// =============================================================================
 
 /// 将配置序列化为 JSON 字符串。
 ///
@@ -96,9 +90,7 @@ pub fn deserialize_config(json: &str) -> Result<SdForgeConfig, String> {
     serde_json::from_str(json).map_err(|e| e.to_string())
 }
 
-// =============================================================================
 // 子配置示例
-// =============================================================================
 
 /// 演示 `ServerConfig` 的构建和验证。
 pub fn demo_server_config() -> ServerConfig {
@@ -163,9 +155,7 @@ pub fn demo_helper_configs() {
     println!("  EnvHelper: environment={}", env.environment);
 }
 
-// =============================================================================
 // Main Entry Point
-// =============================================================================
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -315,9 +305,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// =============================================================================
 // Tests
-// =============================================================================
 
 #[cfg(test)]
 mod tests {
@@ -326,7 +314,7 @@ mod tests {
     #[test]
     fn test_default_config_has_server() {
         let config = default_config();
-        // ServerConfig::default() 现在使用 fail-safe 常量
+        // ServerConfig::default 现在使用 fail-safe 常量
         assert_eq!(
             config.server.host, "127.0.0.1",
             "default host is fail-safe loopback"

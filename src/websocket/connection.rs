@@ -83,12 +83,12 @@ pub struct ConnectionManager {
 /// use sdforge::websocket::WebSocketConfig;
 /// use sdforge::security::BearerAuth;
 ///
-/// let auth = BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ").ok();
+/// let auth = BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ").ok;
 /// let config = WebSocketConfig {
 ///     auth,
 ///     max_message_size: 1_048_576,
 ///     #[cfg(feature = "ratelimit")]
-///     rate_limit: limiteron::config::FlowControlConfig::default(),
+///     rate_limit: limiteron::config::FlowControlConfig::default,
 /// };
 /// ```
 #[derive(Clone)]

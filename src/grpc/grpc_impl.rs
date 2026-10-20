@@ -347,7 +347,7 @@ impl SdForgeGrpcService {
 impl SdForgeGrpcService {
     /// 凭据验证（`call` 与 `call_stream` 共用）：配置了拦截器时验证
     /// Bearer/API-key 凭据，成功后保留身份供 RBAC 检查（此前
-    /// `Result<(), _>` 把身份丢弃，gRPC 只能认证不能授权）。走
+    /// `Result<, _>` 把身份丢弃，gRPC 只能认证不能授权）。走
     /// verify_async：ApiKeyVerifier 恒定时间防御会 sleep OS 线程，不能
     /// 阻塞 tokio worker（与 MCP call_tool 门同一通路）。
     #[cfg(feature = "security")]
@@ -643,9 +643,9 @@ impl SdForgeGrpcService {
             Ok(Ok(value)) => {
                 // smart extract_value (String → raw, others → JSON)
                 // forge-success-status-code 优先级链 —
-                //   ServiceResponse.status_code 字段（动态入口）
-                //   > 宏 #[forge(status = <code>)] 参数（静态入口，default_status）
-                //   > 200（零破坏默认）
+                // ServiceResponse.status_code 字段（动态入口）
+                // > 宏 #[forge(status = <code>)] 参数（静态入口，default_status）
+                // > 200（零破坏默认）
                 // extract_status_code 仅在序列化输出含 `success` 字段且带
                 // `status_code` 时返回 Some（避免裸类型误判）；否则用
                 // default_status fallback；两者皆无则 200。
@@ -692,7 +692,7 @@ impl SdForgeGrpcService {
                 // 镜像为成功响应 metadata（deprecation / sunset /
                 // successor-version），未注解端点无注入开销。
                 let mut grpc_response = Response::new(response);
-                // is_empty() 短路：全仓库未声明生命周期时免去逐请求的
+                // is_empty 短路：全仓库未声明生命周期时免去逐请求的
                 // 哈希查找（与 HTTP 侧 unannotated-no-layer 契约对齐）。
                 let lifecycles = self.lifecycles();
                 if !lifecycles.is_empty()
@@ -880,7 +880,7 @@ impl SdForgeService for SdForgeGrpcService {
                     // 端点生命周期镜像为流式响应的（外层）metadata，
                     // 客户端在首个流项前即可读取——与 unary 同契约。
                     let mut response = Response::new(Box::pin(stream) as Self::CallStreamStream);
-                    // is_empty() 短路：与 unary 路径同理由。
+                    // is_empty 短路：与 unary 路径同理由。
                     let lifecycles = self.stream_lifecycles();
                     if !lifecycles.is_empty()
                         && let Some(&(deprecated, sunset, successor)) =
@@ -1087,7 +1087,7 @@ pub async fn build_server_with_config(
 ///
 /// Semantics mirror the HTTP side (`axum` `with_graceful_shutdown`): when
 /// `signal` completes, the server stops accepting new connections and waits
-/// for in-flight requests to finish before returning `Ok(())`. Passing a
+/// for in-flight requests to finish before returning `Ok()`. Passing a
 /// future that never completes keeps the server running indefinitely.
 ///
 /// The assembly chain (auth interceptor, concurrency/timeout/keepalive,

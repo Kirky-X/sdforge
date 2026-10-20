@@ -69,9 +69,7 @@
 use sdforge::prelude::*;
 use sdforge::serde::{Deserialize, Serialize};
 
-// ============================================================================
 // 流事件类型定义
-// ============================================================================
 
 /// 流式事件结构
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -98,9 +96,7 @@ pub struct ProgressUpdate {
     pub message: String,
 }
 
-// ============================================================================
 // API 端点定义
-// ============================================================================
 
 /// SSE 流式事件端点
 ///
@@ -211,7 +207,7 @@ async fn event_stream() -> Result<String, ApiError> {
 ///
 /// eventSource.addEventListener('complete', (event) => {
 ///     console.log('Task completed!');
-///     eventSource.close();
+///     eventSource.close;
 /// });
 /// ```
 #[forge(

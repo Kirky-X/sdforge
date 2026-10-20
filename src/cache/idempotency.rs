@@ -7,14 +7,14 @@
 //! path. It tracks each (scope, key) pair through a three-state lifecycle:
 //!
 //! ```text
-//! begin() ──► Execute (claim InFlight) ──► complete() ──► Done ──► Replay
+//! begin ──► Execute (claim InFlight) ──► complete ──► Done ──► Replay
 //!              │                               (failure: abort)
 //!              └── already InFlight ──► InFlight
 //!              └── already Done ──────► Replay(cached)
 //! ```
 //!
 //! TTL is enforced lazily at read time (`SyncCache` has no expiry); expired
-//! records are treated as absent and removed on sight. `begin()` serializes
+//! records are treated as absent and removed on sight. `begin` serializes
 //! claim/complete through an internal mutex because the `SyncCache` trait
 //! has no compare-and-swap — this makes claim atomic per store instance.
 
