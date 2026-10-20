@@ -30,22 +30,15 @@ inventory = { version = "0.3", default-features = false }
 
 # 异步依赖
 tokio = { version = "1.53", default-features = false, features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
-# 仅用 StreamExt/Stream/SinkExt/stream::{iter,unfold}（均属 std/alloc 面）；
-# async-await 与 async-await-macro 提供的 join!/select!/poll!/pending! 宏全仓
-# 零使用（仓内 select! 均为 tokio::select!），显式关掉以剪掉 futures-macro
+# futures-util：仅用 Stream/Sink 面；关闭 async-await 宏以剪掉 futures-macro
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio-stream = { version = "0.1", default-features = false }
 
 # 工具依赖
 uuid = { version = "1.28", default-features = false, features = ["std", "v4"] }
-# clock 提供 Utc::now()；serde 未声明——生产面用 chrono 处一律取
-# .timestamp()/to_rfc3339()（i64/String），无 chrono 类型进入公共签名或
-# 序列化面，chrono 亦未 re-export（下游自带 chrono 时自行决定其 serde）
+# chrono 仅取时间戳/RFC3339 字符串，无类型进入公共签名或序列化面
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
-# unicode：src/core/validation.rs 与 regex_cache 编译调用方传入的任意
-# pattern（#[param(pattern = ...)]），`\p{...}`/Unicode 感知的 \w \d \s 与
-# (?i) 折叠属用户可见语义，必须显式声明——此前靠 oxcache 的 regex 声明
-# 顺带点亮，oxcache 收窄特性即静默降级为 ASCII 语义
+# regex unicode 必须显式声明：pattern 属用户可见语义，收窄会静默降级为 ASCII
 regex = { version = "1.13", default-features = false, features = ["std", "perf", "unicode"] }
 validator = { version = "0.21", default-features = false, features = ["derive"] }
 once_cell = { version = "1.21", default-features = false, features = ["std"] }
@@ -58,23 +51,13 @@ rand = { version = "0.10", default-features = false, features = ["std", "std_rng
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 base64 = { version = "0.23", default-features = false, features = ["std", "alloc"] }
 
-# 配置依赖 - sdforge 生产面只用 toml::de::Error 类型（AuthConfigError::ParseError
-# 载荷），本包不声明 parse/display；但 security 构建里上游 limiteron 仍以默认
-# 特性引入 toml（parse/serde/std/display，limiteron 0.3.0-rc.6 的
-# [dependencies.toml] 未关默认特性），故「不启用 parse/display」只在 sdforge
-# 声明层成立。仓内 from_str 调用全在测试内，测试所需特性由 [dev-dependencies]
-# 显式声明，不依赖 limiteron 的默认特性供给
+# 配置依赖 - sdforge 生产面只用 toml::de::Error 类型（AuthConfigError::ParseError 载荷），本包不声明 parse/display
 toml = { version = "1.1", default-features = false }
 
-# 缓存依赖 - oxcache 0.5 用 minimal feature 提供内存后端 + 序列化 + tracing；
-# byte-weight 仅追加 moka/sync 特性位（byte-weight = ["dep:moka", "moka/sync"]，
-# minimal 已含 memory 即 dep:moka），不新增依赖 crate——正则编译缓存的字节预算
-# 容量（ByteWeightCache）所需
+# oxcache minimal + byte-weight（复用 moka，不新增依赖）
 oxcache = { version = "0.5.0-rc.9", default-features = false, features = ["minimal", "byte-weight"] }
 
-# TLS 证书热重载监听 - confers watch feature 提供去抖文件监听（FsWatcher），
-# 仅 tls-watch feature 门控（默认构建不引入）；confers 主 crate 无 sdforge
-# 依赖，无环
+# confers/watch：去抖文件监听，仅 tls-watch 门控；无环
 confers = { version = "0.6.0-rc.11", default-features = false, features = ["watch"] }
 
 # 数据库网关 - dbnexus 0.6 embedded（sqlite）+ sql-parser：数据 API 网关的
@@ -102,21 +85,14 @@ limiteron = { version = "0.3.0-rc.6", default-features = false }
 # OpenAPI 依赖
 utoipa = { version = "6.0", default-features = false, features = ["macros"] }
 
-# JSON Schema 反射依赖 - schemars 1.2 提供 JsonSchema derive 与 schema 生成
-# （返回类型 Schema 反射：derive JsonSchema 的返回类型产出精确 response schema）
-# std：HashMap/HashSet/Path(Buf)/IpAddr/SystemTime 等 std 类型 impl 由该 feature
-# 门控（schemars 自身默认集）；下游 DTO 含这类字段时缺它即编译失败，且随 mcp
-# 关闭（rmcp 会顺带打开 schemars/default）而暴露，故显式声明
+# schemars：derive JsonSchema 产出精确 response schema；std 支持常用 std 类型
 schemars = { version = "1.2", default-features = false, features = ["derive", "std"] }
 
 # CLI 依赖 - clap 4.6 提供命令行解析（derive feature 用于过程宏派生）
 # string feature 启用 Str: From<String>，支持运行时配置程序名
 clap = { version = "4.6", default-features = false, features = ["std", "derive", "help", "usage", "error-context", "suggestions", "string"] }
 
-# Swagger UI 交互式文档的静态资产自 vendor 于 assets/swagger-ui/
-#（include_bytes! 编译期内嵌，见 src/docs/swagger_assets.rs 与资产 NOTICE；
-# 升级经 scripts/update_swagger_ui.sh），不依赖 utoipa-swagger-ui——后者
-# 锁定被 crates.io yank 的 zip ^8.6，致下游解析断裂
+# Swagger UI 静态资产内嵌 assets/swagger-ui/（include_bytes!）
 
 # CLI Markdown 文档依赖 - clap-markdown 0.1 从 clap::Command 生成 Markdown 命令手册
 clap-markdown = { version = "0.1", default-features = false }
@@ -128,26 +104,17 @@ rustls-pki-types = { version = "1.15", default-features = false, features = ["st
 hyper = { version = "1.12", default-features = false, features = ["http1", "http2", "server"] }
 hyper-util = { version = "0.1", default-features = false, features = ["server-auto", "tokio"] }
 
-# 其他依赖
-# simd-json 的 runtime-detection：x86 上运行时探测 avx2/sse4.2 的 SIMD 分派。
-# 关默认特性后只剩 serde_impl 会静默落到 Native 回退实现（上游 README 明确：
-# 关掉它需同时 RUSTFLAGS="-C target-cpu=native" 才有加速），故显式补回，
-# 使普通可移植构建仍兑现 simd-json 特性承诺的加速语义
+# 其他依赖：simd-json 的 runtime-detection：x86 上运行时探测 avx2/sse4.2 的 SIMD 分派
 simd-json = { version = "0.18", default-features = false, features = ["serde_impl", "runtime-detection"] }
 
 # 系统语言探测 - i18n 检测链尾段（SDFORGE_LANG → LC_ALL → LC_MESSAGES → LANG → sys-locale → en）
 sys-locale = { version = "0.3", default-features = false }
 
-# Fluent 本地化 - 内建 en/zh 目录经 concurrent FluentBundle 双束解析（unify-rust-i18n）；
-# 翻译注册表常驻编译，故无条件依赖（同 dbnexus/limiteron/trait-kit 口径）
-# 两者 default feature 集为空，显式关闭仅为统一口径（Rule 6）
+# Fluent en/zh 双束常驻编译，无条件依赖（与 dbnexus/limiteron 同口径）
 fluent-bundle = { version = "0.16", default-features = false }
 unic-langid = { version = "0.9", default-features = false }
 
-# 开发依赖
-# tempfile 的 getrandom（上游默认集）：文件名随机性失败重试时从系统熵重播种
-# 的缓解项由该特性门控（tempfile README「Denial of Service」小节），关掉只剩
-# 6 字符默认随机度且不再重播种；getrandom 已在依赖树中（rand 引入），零新增
+# tempfile getrandom：失败重试时从系统熵重播种，关闭只剩固定随机度
 tempfile = { version = "3.27", default-features = false, features = ["getrandom"] }
 serial_test = { version = "4.0", default-features = false }
 axum-test = { version = "21", default-features = false, features = ["ws"] }
@@ -164,9 +131,7 @@ proptest = { version = "1.12", default-features = false, features = ["std", "all
 name = "sdforge"
 version.workspace = true
 edition.workspace = true
-# The `examples/` directory is the sdforge-examples member crate; the
-# root package must not auto-discover member example files (they use direct
-# oxcache/dbnexus deps that only the member declares).
+# examples/ 为独立成员 crate，根包不得自动发现其示例（依赖仅成员声明）
 autoexamples = false
 rust-version.workspace = true
 authors.workspace = true
@@ -183,9 +148,7 @@ workspace = true
 [lib]
 path = "src/lib.rs"
 
-# Performance verification examples — require `cache` feature for SyncCache.
-# Declared with required-features so `cargo test --features http --workspace`
-# does not attempt to compile them without the cache feature enabled.
+# 性能验证示例需 cache 特性（SyncCache），用 required-features 显式声明
 [[example]]
 name = "perf_regex_cache"
 required-features = ["cache"]
@@ -301,20 +264,13 @@ simd-json = { workspace = true, optional = true }
 # Rate limiting dependencies - limiteron 0.2.1 提供统一流控
 limiteron = { workspace = true, optional = true }
 
-# trait-kit integration (optional, feature-gated via `kit`).
-# trait-kit 0.5 is published to crates.io.
-# Mirrors dbnexus's pattern.
-# default-features = false (Rule 6) — only the `async` feature is pulled in.
+# trait-kit 集成（kit feature），已发布 crates.io
 trait-kit = { version = "0.5.0-rc.10", default-features = false, features = ["async"], optional = true }
 
-# inklog 结构化日志集成 (optional, feature-gated by `inklog`).
-# 纯 crates.io 版本依赖（rc.2 已发布）。
-# default-features = false (Rule 6) — only core logging is pulled in.
+# inklog 结构化日志集成 (optional, feature-gated by `inklog`).纯 crates.io 版本依赖（rc.2 已发布）
 inklog = { version = "0.3.0-rc.10", default-features = false, optional = true }
 
-# ICU4X internationalization (optional, feature-gated via `i18n`).
-# icu 2.2 provides locale-aware number/date/plural/collation formatting +
-# Accept-Language HTTP header parsing for HTTP responses.
+# ICU4X（i18n feature）：数字/日期/复数/排序格式化 + Accept-Language 解析
 icu = { version = "2.3", default-features = false, features = ["compiled_data"], optional = true }
 # writeable 默认 feature 为 alloc（write_to_string 需要），显式声明同一集合
 writeable = { version = "0.6", default-features = false, features = ["alloc"], optional = true }
@@ -322,34 +278,21 @@ writeable = { version = "0.6", default-features = false, features = ["alloc"], o
 # without the feature the chain stops at the POSIX env variables).
 sys-locale = { workspace = true, optional = true }
 
-# Fluent message resolution for the built-in en/zh catalogs — the translation
-# registry (t()/translate_for()/register_translation) is always compiled, so
-# these are unconditional (not feature-gated).
+# Fluent en/zh 解析（翻译注册表常驻编译）
 fluent-bundle = { workspace = true }
 unic-langid = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
-# tests/integration/inklog_bridge_tests.rs 用 tracing 宏发射结构化事件：
-# inklog subscriber 的 extra async sender 只由 tracing 路径喂给（log facade
-# 无结构化字段），捕获 sink 经此验证结构化记录形态
+# inklog_bridge 测试：验证 tracing 结构化事件经订阅器落盘
 tracing = { version = "0.1", default-features = false, features = ["std", "attributes"] }
-# src/security/ratelimit/dist.rs 熔断测试用 MockClock 推进时间（test-clock
-# feature 提供），与 [dependencies] 的 optional limiteron 统一特性——
-# ratelimit feature 开启时合并为同一 crate 实例；未开启时测试不引用该面
+# dist 熔断测试用 MockClock（test-clock）+ 与 ratelimit 共享 limiteron 实例
 limiteron = { workspace = true, features = ["test-clock"] }
-# src/config/security.rs 的 TOML 契约测试用 toml::from_str（toml 1.1 中由
-# parse+serde 门控，见 src/lib.rs:182-184；std 一并启用以保持标准库构建路径）。
-# 该测试门控为 cfg(all(test, feature = "http", feature = "ratelimit"))，而
-# ratelimit → limiteron 已用默认特性打开同一集合，故本条目今日非承重；显式
-# 声明是让契约测试不依赖上游 limiteron 的特性供给（limiteron 若关默认特性，
-# 本条目即成为唯一供给）
+# TOML 契约测试用 toml::from_str（parse+serde+std）
 toml = { workspace = true, features = ["parse", "serde", "std"] }
 # 反射两态集成测试的 derive 依赖（dev-only，不影响发布面）
 schemars = { workspace = true }
-# 资产审计自证测试：NOTICE.md 的 SHA-256 表↔assets/swagger-ui/ 文件字节复验
-# （swagger_assets.rs 测试）。sha2 0.11 已是本 crate 可选依赖（etag/security
-# 门控），此处仅为测试面在所有 feature 组合下可见，[dependencies] 零变化
+# 资产审计：NOTICE.md SHA-256 与 swagger-ui 字节复验（仅测试面）
 sha2 = { workspace = true }
 tokio-stream = { workspace = true }
 once_cell = { workspace = true }
@@ -377,9 +320,7 @@ http = [
     "dep:once_cell",
     "dep:validator",
     "dep:uuid",
-    # regex_cache（http/security 下无条件编译）用 oxcache ByteWeightCache；
-    # http 不蕴含 cache 特性，显式 dep:oxcache 使本特性单独启用时 oxcache 必在依赖面
-    # （cache 特性经 `oxcache/minimal` 隐式激活可选依赖，见下文）
+    # regex_cache 用 oxcache ByteWeightCache；http 不蕴含 cache，故显式 dep:oxcache
     "dep:oxcache",
 ]
 
@@ -387,17 +328,13 @@ http = [
 # http crate needed for MCP 2026-07-28 stateless HTTP header parsing (Mcp-Method/Mcp-Name)
 mcp = ["dep:rmcp", "dep:inventory", "dep:anyhow", "dep:http"]
 
-# Streaming 特性
-# 独立于 http：核心只用 tokio + tokio-stream + futures-util + chrono
-# impl IntoResponse 已有 #[cfg(feature = "http")] 门控
+# streaming：独立于 http，仅 tokio/tokio-stream/futures-util
 streaming = ["dep:tokio", "dep:tokio-stream", "dep:futures-util", "dep:chrono"]
 
 # Timestamp 特性
 timestamp = ["dep:chrono"]
 
-# Rate limiting 特性 - 纯限流核心（不依赖 http）
-# 仅包含 RateLimiter trait（check 方法）+ LimiteronAdapter + RateLimitError
-# 不依赖 axum/tower，可在非 HTTP 环境（如 gRPC/CLI）中使用
+# ratelimit 核心：RateLimiter + LimiteronAdapter，不依赖 axum/tower
 ratelimit = [
     "dep:limiteron",
     "limiteron/ban-manager",
@@ -405,9 +342,7 @@ ratelimit = [
     "limiteron/circuit-breaker",
 ]
 
-# HTTP 限流中间件 - Tower middleware + check_request 方法
-# 依赖 http（axum/tower）和 ratelimit（核心 trait）
-# 启用后提供 RateLimitLayer/RateLimitMiddleware/HttpRequestRateLimiter
+# ratelimit-http：Tower 中间件 + check_request（依赖 http + ratelimit）
 ratelimit-http = [
     "http",
     "ratelimit",
@@ -429,9 +364,7 @@ security = [
     "cache",
     "dep:hex",
     "dep:base64",
-    # toml 的唯一生产消费者是 security 门控的 AuthConfigError::ParseError
-    # （src/security/types/mod.rs），故挂在 security 而非 http 上：
-    # 仅开 http 的构建不再编译 toml/toml_parser/winnow
+    # toml 仅被 security 下的 AuthConfigError 使用，故挂 security 而非 http
     "dep:toml",
     "ratelimit-http",
     "dep:oxcache",
@@ -447,13 +380,7 @@ grpc = ["dep:tonic", "dep:prost", "dep:tonic-prost", "dep:inventory", "dep:futur
 # gRPC TLS 特性 - 只做 ServerTlsConfig 接线暴露，证书加载由调用方负责
 grpc-tls = ["grpc", "tonic/tls-aws-lc", "tonic/transport"]
 
-# HTTP TLS 终止特性 - rustls（aws-lc-rs provider，与 grpc-tls 同栈）在进程内
-# 终止 TLS：证书/密钥 PEM 加载 + ALPN + 可选 ReloadingTls 热重载；停机编排
-# 与 graceful 收尾共享（run_stop_phase）。与 grpc-tls（tonic ServerTlsConfig
-# 接线）实现独立。h2 能力由 hyper(http2) + hyper-util server-auto 提供，
-# 不经 axum/http2——明文 axum::serve 路径的行为面不受本特性影响。
-# 不直接并入 `full`（TLS 终止为部署面选项，与 grpc-tls 同口径按需启用）；
-# tls-watch 蕴含 serve-tls，启用 tls-watch 即传递开启本特性。
+# serve-tls：rustls 进程内 TLS（PEM + ALPN + 可选热重载）
 serve-tls = [
     "http",
     "graceful",
@@ -464,19 +391,14 @@ serve-tls = [
     "dep:hyper-util",
 ]
 
-# TLS 证书热重载监听特性 - confers FsWatcher 去抖监听 cert/key 文件变化，
-# 驱动 ReloadingTls::reload_async 自动重载。服务于 serve-tls 之上的薄层，
-# 并入 full（默认构建依赖树不变，需显式启用）。
+# tls-watch：confers FsWatcher 监听证书变化并自动重载，并入 full
 tls-watch = ["serve-tls", "dep:confers"]
 
 # OpenAPI 特性 - 自动生成 OpenAPI 3.1 规范
 # 独立于 http：openapi 模块只用 utoipa + inventory + serde_json
 openapi = ["dep:utoipa", "dep:inventory"]
 
-# 分布式限流 - limiteron distributed 计数后端（InMemoryDistributedLimiter 为
-# 单实例/mock 参考实现；lua-script 带 RedisDistributedLimiter 的 Lua 原子窗口
-# 脚本面——limiteron/lua-script 蕴含 oxcache/lua/redis，多副本共享后端即全局
-# 一致配额）
+# distributed：limiteron 分布式计数（lua-script → Redis 原子窗口）
 ratelimit-dist = ["ratelimit", "limiteron/distributed", "limiteron/lua-script"]
 
 # oxcache Redis L2 - RedisBackend 同步面接入 SyncCache（跨副本共享缓存层，
@@ -487,19 +409,14 @@ cache-l2 = ["cache", "oxcache/redis"]
 # 的池化/权限/RLS 语义；独立于 http，端点暴露按需组合）
 db-integration = ["dep:dbnexus"]
 
-# 返回类型 Schema 反射特性 - schemars 1.2 驱动：宏为 derive JsonSchema 的
-# 返回类型发射精确 response schema 提供器，未派生类型静默降级到粗粒度映射。
-# 蕴含 openapi：精确 schema 只在 OpenAPI 输出中消费。
+# schema-reflect：schemars 为返回值发射精确 response schema
 schemars = ["openapi", "dep:schemars"]
 
 # CLI 特性 - clap 集成，与 HTTP/MCP 并列的第三种服务入口
 # 独立于 http：cli 模块只用 clap + inventory + crate::core::ApiError
 cli = ["dep:clap", "dep:inventory"]
 
-# Docgen 特性 - 统一文档输出（Swagger UI + CLI/MCP Markdown）
-# 依赖 openapi（复用 OpenAPI 生成）+ clap-markdown + cli（docs 子命令需要 CLI 框架）；
-# Swagger UI 静态资产经 include_bytes! 自 vendor 内嵌（assets/swagger-ui/，见
-# scripts/update_swagger_ui.sh），不再依赖 utoipa-swagger-ui
+# docgen：Swagger UI + CLI/MCP Markdown（依赖 openapi + cli）
 docgen = ["openapi", "dep:clap-markdown", "cli"]
 # 兼容别名：旧 feature 名 docs 转发到 docgen（正名迁移，避免与 docs.rs 文档构建歧义）
 docs = ["docgen"]
@@ -560,41 +477,18 @@ tokio = ["dep:tokio"]
 # SIMD JSON 特性 - 使用 SIMD 加速的 JSON 序列化/反序列化
 simd-json = ["dep:simd-json"]
 
-# trait-kit 0.3 AsyncKit integration (SdforgeModule). Two-layer feature
-# gating mirrors dbnexus's pattern:
-#   - `limiteron-integration`: pulls in `dep:limiteron` only — enough for
-#     `LimiteronForgeAdapter` (which wraps `limiteron::Governor` directly).
-#   - `kit`: full integration — adds `dep:trait-kit` (with `async` feature)
-#     and `limiteron/kit` (so `limiteron::integrations::kit::LimiteronModule`
-#     is visible to `SdforgeModule::dependencies()` and `build()`).
-# `limiteron/kit` is required because `LimiteronModule` is gated behind
-# limiteron's `kit` feature. default-features = false (Rule 6).
+# trait-kit 0.3 AsyncKit integration (SdforgeModule).
 limiteron-integration = ["dep:limiteron"]
-# `trait-kit/health`: AsyncKit::health_report() powers the /readyz
-# kit data source (health::kit_source::KitHealthSource).
-# `trait-kit/lifecycle`: AsyncKit::shutdown_async() phased teardown
-# runs as phase 3 of serve_with_graceful_shutdown.
-# `oxcache/kit`: limiteron's LimiteronModule depends
-# on oxcache's OxcacheModule — activate it so the kit graph resolves.
+# trait-kit health 供 /readyz，lifecycle 供分阶段收尾
 kit = ["dep:trait-kit", "trait-kit/health", "trait-kit/lifecycle", "limiteron-integration", "limiteron/kit", "oxcache/kit"]
 
-# inklog 结构化日志集成 — 将裸 log 输出桥接到 inklog LoggerManager。
-# 启用后通过 init_inklog_logger() 安装 inklog 为全局 log 后端，
-# 现有 log::error!/log::warn! 等调用自动路由到 inklog 管道。
+# inklog 结构化日志集成 — 将裸 log 输出桥接到 inklog LoggerManager
 inklog = ["dep:inklog"]
 
-# ICU4X-backed internationalization: locale-aware HTTP error messages,
-# number/timestamp formatting, plural rules, header collation, and
-# Accept-Language header parsing via the `icu` crate (ICU4X 2.x).
-# sys-locale completes the locale detection chain (env vars → system locale).
-# The bundled en/zh FTL catalogs and the translation registry itself are
-# always compiled and do not require this feature.
+# ICU4X：本地化错误消息、时间格式、复数与 Accept-Language 解析
 i18n = ["dep:icu", "dep:writeable", "dep:sys-locale"]
 
-# Full 特性 — 全量运行时特性集（25 项）。
-# 刻意排除 simd-json / kit / limiteron-integration：三者均为可选重依赖
-# （SIMD 加速 JSON、trait-kit 模块图集成、限流集成基座），收益依赖特定
-# 部署环境，按需单独启用，避免 full 拖入非必要编译成本。
+# full：全量运行时特性集；排除 simd-json/kit/limiteron-integration 等重依赖
 full = [
     "http",
     "mcp",
@@ -624,10 +518,7 @@ full = [
     "tls-watch",
 ]
 
-# build 脚本依赖无法随 feature 条件化（cargo 限制），故保持无条件声明；
-# 未启用 grpc 时它们只参与 build.rs 编译、不执行 protoc 代码生成。
-# 仅 tonic-prost-build 被 build.rs 直接调用（tonic-build 是其传递依赖，
-# 代码生成产物不引用），不再重复声明直接依赖。
+# build 脚本依赖无法随 feature 条件化；仅 tonic-prost-build 被 build.rs 调用
 [build-dependencies]
 tonic-prost-build = { version = "0.14", default-features = false }
 
@@ -815,9 +706,7 @@ required-features = ["docgen"]
 name = "macro_tests"
 path = "tests/macros/macro_tests.rs"
 
-# health probe e2e — /healthz /readyz bypass auth in build_with_config.
-# Requires `security`: the fixture configures Jwt auth, and the fail-closed
-# contract rejects an AuthConfig when the auth middleware does not exist.
+# health probe e2e：/healthz /readyz 绕过认证；需 security（fixture 配 JWT）
 [[test]]
 name = "health_probes_tests"
 path = "tests/integration/health_probes_tests.rs"
@@ -893,12 +782,7 @@ required-features = ["serve-tls"]
 name = "test_target_inventory_tests"
 path = "tests/integration/test_target_inventory_tests.rs"
 
-# ============================================================================
-# 测试目标显式注册
-# ============================================================================
-# e2e_advanced 迁入 tests/e2e/ 目录承载（e2e_* 不得裸放顶层）；迁入子目录后
-# 脱离 Cargo 自动发现范围，不注册则 178 个测试静默消失。文件内每个 mod 独立
-# #[cfg(feature = ...)] 门控，任意 feature 子集可编译，无需 required-features。
+# 测试目标显式注册：e2e_advanced 迁入 tests/e2e/ 目录承载（e2e_* 不得裸放顶层）；迁入子目录后脱离 Cargo 自动发现范围，不注册则 178 个测试静默消失
 [[test]]
 name = "e2e_advanced"
 path = "tests/e2e/e2e_advanced.rs"
