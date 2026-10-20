@@ -10,15 +10,7 @@ keywords = ["examples", "sdforge", "http", "mcp"]
 categories = ["web-programming", "development-tools"]
 publish = false
 
-# `#[forge]` 宏向本 crate 发射 `#[cfg(feature = "…")]` 门控，引用的是
-# sdforge 的 feature 名（http/mcp/grpc/cli/websocket/openapi/security/lifecycle），
-# 而非本 crate 的 `*_examples` 开关。除 `lifecycle` 外这些名字已由下方
-# 别名层 feature 定义（cargo 视为已知 cfg）；此处登记宏发射全集作为
-# 自解释白名单，取代裸 `#![allow(unexpected_cfgs)]` 属性
-# （src/lib.rs 与 main.rs 中的同名属性已删）。
-# 注：workspace 的 [workspace.lints] 目前为空，故本表以本地 lints 取代
-# `lints.workspace = true`（cargo 不允许两者共存）；workspace lints
-# 未来新增条目时需同步至此。
+# `#[forge]` 发射的 cfg 引用 sdforge 的 feature 名，而非本 crate 的 *_examples
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(feature, values("http", "mcp", "grpc", "cli", "websocket", "openapi", "security", "lifecycle", "docgen"))'] }
 
@@ -32,13 +24,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 # log facade：logging 示例演示 `log::info!` 等调用经 inklog 桥零改动路由
 log = { workspace = true }
-# Note: `inventory`, `axum`, `clap`, `rmcp`, `tonic`, `prost` are
-# re-exported by sdforge (sdforge::inventory, sdforge::axum, sdforge::clap,
-# sdforge::rmcp, sdforge::tonic, sdforge::prost). Downstream
-# crates must NOT add direct dependencies on these framework libraries.
-# Exception: `utoipa` — when this crate enables sdforge's `openapi` feature,
-# the `#[forge]` macro emits `#[cfg_attr(feature = "openapi", utoipa::path(...))]`,
-# which requires `utoipa` to be resolvable in the current crate.
+# inventory/axum/clap/rmcp/tonic/prost 均由 sdforge re-export
 utoipa = { workspace = true }
 oxcache = { workspace = true, optional = true }
 # 经 workspace 继承（同 oxcache）：自研依赖定值只需改根清单一处，
@@ -47,10 +33,7 @@ dbnexus = { workspace = true, optional = true }
 
 [features]
 default = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "idempotency_examples", "cache_examples", "grpc_examples", "logging_examples", "openapi_examples", "cli_examples", "docs_examples", "combined_examples"]
-# `*_examples` features are the user-facing toggle (kept for backward
-# compatibility). Each enables both the sdforge feature AND the local
-# alias feature (e.g. `cli`) so that `#[cfg(feature = "cli")]` emitted by
-# `#[forge(cli = true)]` macro resolves to true in this downstream crate.
+# `*_examples` features are the user-facing toggle (kept for backward compatibility).
 http_examples = ["http"]
 mcp_examples = ["mcp"]
 websocket_examples = ["websocket"]
@@ -71,32 +54,17 @@ combined_examples = ["http_examples", "mcp_examples", "websocket_examples",
 oxcache_admin_example = ["http_examples", "cache_examples", "dep:oxcache"]
 dbnexus_gateway_example = ["http_examples", "dep:dbnexus"]
 
-# sdforge feature aliases — each enables the corresponding sdforge feature.
-# The `#[forge]` macro generates `#[cfg(feature = "cli")]` /
-# `#[cfg(feature = "mcp")]` / `#[cfg(feature = "grpc")]` /
-# `#[cfg(feature = "websocket")]` gates that check the *current* crate's
-# features. Without these aliases, downstream crates would need to add
-# `cli = ["sdforge/cli"]` etc. manually.
+# sdforge 特性别名：转发到对应 sdforge feature，供示例 cfg 对齐
 http = ["sdforge/http"]
 mcp = ["sdforge/mcp"]
 websocket = ["sdforge/websocket"]
 streaming = ["sdforge/streaming"]
-# `security` enables `ratelimit` locally so that `#[cfg(feature = "ratelimit")]`
-# gates in example code align with sdforge's `security → ratelimit-http →
-# ratelimit` feature chain (fixes GrpcServerConfig.rate_limiter field mismatch).
+# security 本地同时启用 ratelimit，对齐 sdforge 的 security → ratelimit 链
 security = ["sdforge/security", "ratelimit"]
 cache = ["sdforge/cache"]
 idempotency = ["sdforge/idempotency"]
 grpc = ["sdforge/grpc"]
-# `grpc_tls` gates the `GrpcServerConfig.tls` field in example code the same
-# way sdforge's `grpc-tls` gates the field itself — gating both sides on the
-# same alias keeps every combination closed (field present ⇔ literal sets
-# it); omitting the field hits E0063 whenever `sdforge/grpc-tls` is on
-# through workspace feature unification (e.g. `--all-features`). Bypassing
-# this alias and enabling `sdforge/grpc-tls` directly on sdforge-examples
-# (e.g. `cargo check -p sdforge-examples --features sdforge/grpc-tls`) is an
-# unsupported combination by design — the field then exists while the
-# literal omits it. The only supported gate is this crate's `grpc_tls`.
+# grpc_tls：与 sdforge grpc-tls 同门控，保证任意组合下字段存在性一致
 grpc_tls = ["sdforge/grpc-tls"]
 # logging（自研结构化日志栈）已在 0.5.0-rc 期删除；structured 示例
 # 迁移到 inklog LoggerManager，本别名层 feature 转指 sdforge/inklog
@@ -106,9 +74,7 @@ cli = ["sdforge/cli"]
 docgen = ["sdforge/docgen"]
 # 兼容别名：旧 feature 名 docs 转发到 docgen（随主仓正名迁移）
 docs = ["docgen"]
-# ratelimit alias — enables sdforge's pure rate-limit core (no http dep).
-# Required so that `#[cfg(feature = "ratelimit")]` in example code matches
-# sdforge's `GrpcServerConfig.rate_limiter` field gate.
+# ratelimit 别名：启用 sdforge 纯限流核心（无 http），对齐字段门控
 ratelimit = ["sdforge/ratelimit"]
 
 [[example]]
