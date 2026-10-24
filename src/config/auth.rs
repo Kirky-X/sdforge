@@ -6,10 +6,17 @@
 
 use serde::{Deserialize, Serialize};
 
+/// 通用凭据头名清单（任何认证方式都可能出现）。
+///
+/// 供"缓存键无身份维度"的共享缓存识别带凭据请求：请求携带其中任一头即
+/// 视为携带凭据，不得进入共享缓存。
+pub const DEFAULT_CREDENTIAL_HEADER_NAMES: [&str; 3] =
+    ["authorization", "x-api-key", "proxy-authorization"];
+
 /// ApiKey 认证的种子键条目。
 ///
 /// 此前 `AuthConfig::ApiKey` 只携带 header/prefix，无任何键材料，
-/// `build_with_config` 会创建空 key store → 整条 API 被 401 锁死且无播种途径。
+/// `build_with_config_ext` 会创建空 key store → 整条 API 被 401 锁死且无播种途径。
 ///
 /// # Security
 ///
@@ -63,6 +70,14 @@ pub enum AuthConfig {
     Jwt {
         /// JWT secret key
         secret: String,
+        /// 期望的 `aud`（受众）声明。配置后，令牌缺少该声明或取值不符一律
+        /// 拒绝——共用同一 secret 的其它签发方签出的令牌不得在本服务使用
+        /// （令牌替换防御）。缺省为 `None`（不校验）。
+        #[serde(default)]
+        audience: Option<String>,
+        /// 期望的 `iss`（签发方）声明。语义同 `audience`。
+        #[serde(default)]
+        issuer: Option<String>,
     },
     /// No authentication
     #[serde(rename = "none")]
@@ -83,7 +98,7 @@ impl std::fmt::Debug for AuthConfig {
                 .field("prefix", prefix)
                 .field("keys", keys)
                 .finish(),
-            AuthConfig::Jwt { secret } => f
+            AuthConfig::Jwt { secret, .. } => f
                 .debug_struct("AuthConfig::Jwt")
                 .field("secret", &"[REDACTED]")
                 .field("secret_len", &secret.len())
@@ -94,6 +109,30 @@ impl std::fmt::Debug for AuthConfig {
 }
 
 impl AuthConfig {
+    /// 携带凭据的头名清单。
+    ///
+    /// 通用凭据头（`authorization` / `x-api-key` / `proxy-authorization`）恒在
+    /// 清单内；ApiKey 认证使用的自定义头名（配置面为自由文本）也必须在内
+    /// ——否则该头携带的凭据不被识别，无身份维度的共享缓存会把带凭据的
+    /// 响应体按 URL 共享给全体调用者。
+    pub fn credential_header_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = DEFAULT_CREDENTIAL_HEADER_NAMES
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect();
+        if let AuthConfig::ApiKey { header_name, .. } = self {
+            let header_name = header_name.trim();
+            if !header_name.is_empty()
+                && !names
+                    .iter()
+                    .any(|name| name.eq_ignore_ascii_case(header_name))
+            {
+                names.push(header_name.to_string());
+            }
+        }
+        names
+    }
+
     /// Fail-closed feature contract check: when authentication is requested
     /// (ApiKey/Jwt) but the `security` feature is disabled, the auth
     /// middleware does not exist and the config would be silently ignored —
@@ -139,7 +178,25 @@ impl AuthConfig {
                     ));
                 }
             }
-            AuthConfig::Jwt { secret } => {
+            AuthConfig::Jwt {
+                secret,
+                audience,
+                issuer,
+            } => {
+                // 空串的 aud/iss 恒等于"不校验"（`Some("")` 会匹配空串声明），
+                // 配置面必须拒绝。
+                if audience.as_ref().is_some_and(|a| a.is_empty()) {
+                    return Err(crate::config::ConfigError::ValidationError(
+                        "JWT audience cannot be empty: an empty audience matches tokens with                          an empty aud claim"
+                            .into(),
+                    ));
+                }
+                if issuer.as_ref().is_some_and(|i| i.is_empty()) {
+                    return Err(crate::config::ConfigError::ValidationError(
+                        "JWT issuer cannot be empty: an empty issuer matches tokens with an                          empty iss claim"
+                            .into(),
+                    ));
+                }
                 if secret.is_empty() {
                     return Err(crate::config::ConfigError::ValidationError(
                         "JWT secret cannot be empty".into(),
@@ -213,7 +270,7 @@ mod tests {
         let json = r#"{"type": "jwt", "secret": "super-secret-key"}"#;
         let config: AuthConfig = serde_json::from_str(json).unwrap();
         match config {
-            AuthConfig::Jwt { secret } => {
+            AuthConfig::Jwt { secret, .. } => {
                 assert_eq!(secret, "super-secret-key");
             }
             _ => panic!("Expected Jwt variant"),
@@ -269,6 +326,8 @@ mod tests {
     fn test_auth_config_validate_jwt() {
         let config = AuthConfig::Jwt {
             secret: "this_is_a_strong_secret_key_1234567890".to_string(), // 32+ chars
+            audience: None,
+            issuer: None,
         };
         assert!(config.validate().is_ok());
     }
@@ -301,12 +360,14 @@ mod tests {
     fn test_auth_config_jwt_serialization() {
         let config = AuthConfig::Jwt {
             secret: "my-secret-key".to_string(),
+            audience: None,
+            issuer: None,
         };
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("jwt"));
         let deserialized: AuthConfig = serde_json::from_str(&json).unwrap();
         match deserialized {
-            AuthConfig::Jwt { secret } => {
+            AuthConfig::Jwt { secret, .. } => {
                 assert_eq!(secret, "my-secret-key");
             }
             _ => panic!("Expected Jwt variant"),
@@ -339,6 +400,8 @@ mod tests {
     fn test_jwt_validate_empty_secret() {
         let config = AuthConfig::Jwt {
             secret: "".to_string(),
+            audience: None,
+            issuer: None,
         };
         let result = config.validate();
         assert!(result.is_err());
@@ -351,6 +414,8 @@ mod tests {
     fn test_jwt_validate_short_secret_rejected() {
         let config = AuthConfig::Jwt {
             secret: "short".to_string(),
+            audience: None,
+            issuer: None,
         };
         // 短 secret 现在被拒绝（之前只是 warn 后接受）
         let result = config.validate();
@@ -380,6 +445,8 @@ mod tests {
         for weak_secret in weak_secrets {
             let config = AuthConfig::Jwt {
                 secret: weak_secret.to_string(),
+                audience: None,
+                issuer: None,
             };
             let result = config.validate();
             assert!(
@@ -410,6 +477,8 @@ mod tests {
         for strong_secret in strong_secrets {
             let config = AuthConfig::Jwt {
                 secret: strong_secret.to_string(),
+                audience: None,
+                issuer: None,
             };
             let result = config.validate();
             assert!(
@@ -439,6 +508,8 @@ mod tests {
     fn test_debug_redacts_secrets() {
         let jwt = AuthConfig::Jwt {
             secret: "super-secret-value-1234567890".to_string(),
+            audience: None,
+            issuer: None,
         };
         let debug = format!("{:?}", jwt);
         assert!(

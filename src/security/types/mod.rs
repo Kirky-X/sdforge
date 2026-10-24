@@ -22,9 +22,9 @@ pub use types_impl::{
 pub enum CacheNamespace {
     /// API Key storage: `sdforge:apikey:{key_hash}`
     ApiKey,
-    /// Bearer token blacklist: `sdforge:bearer:blacklist:{token}`
+    /// Bearer token blacklist: `sdforge:bearer:blacklist:{token_hash}`
     BearerBlacklist,
-    /// Bearer token valid cache: `sdforge:bearer:valid:{token}`
+    /// Bearer token valid cache: `sdforge:bearer:valid:{token_hash}`
     BearerValid,
     /// Idempotency key cache: `sdforge:idempotency:{key}`
     Idempotency,

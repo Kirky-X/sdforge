@@ -171,7 +171,8 @@ fn test_validate_token_no_sub_no_permissions() {
     let auth = BearerAuth::new(secret);
 
     let payload = serde_json::json!({
-        "iat": chrono::Utc::now().timestamp()
+        "iat": chrono::Utc::now().timestamp(),
+        "exp": chrono::Utc::now().timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -413,10 +414,84 @@ fn test_invalidate_token_blacklists() {
     // Use invalidate_token to blacklist
     auth.invalidate_token(&token);
 
-    let key = CacheNamespace::BearerBlacklist.key(&token);
+    let key = BearerAuth::token_cache_key(CacheNamespace::BearerBlacklist, &token);
     assert!(blacklisted_tokens.get(&key).is_some());
     assert!(auth.blacklisted_tokens.contains(&key));
     assert!(blacklisted_tokens.contains(&key));
+}
+
+/// 签名段的另一种 base64url 表达：末位字符只贡献 2 个有效位，同组的字符
+/// 解出完全相同的签名字节。
+fn alternate_signature_encoding(token: &str) -> String {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut parts: Vec<String> = token.split('.').map(str::to_string).collect();
+    let signature = parts.last_mut().expect("three-part token");
+    let last = *signature.as_bytes().last().expect("non-empty signature");
+    let index = ALPHABET
+        .iter()
+        .position(|c| *c == last)
+        .expect("signature is base64url");
+    // 末位字符只有低 2 位参与字节计算（其余被丢弃）：翻转最低位即得
+    // 同一签名字节的另一种表达。
+    let replacement = index ^ 1;
+    let last_index = signature.len() - 1;
+    signature.replace_range(
+        last_index..last_index + 1,
+        &String::from(ALPHABET[replacement] as char),
+    );
+    parts.join(".")
+}
+
+#[test]
+fn test_blacklist_blocks_alternate_signature_encoding() {
+    // 同一签名的另一种 base64url 表达必须命中同一条黑名单记录：
+    // 黑名单键取签名字节的哈希，而非原始令牌串。
+    let secret = &derived_test_secret(33);
+    let auth = BearerAuth::new(secret);
+
+    let payload = serde_json::json!({
+        "sub": "user123",
+        "iat": chrono::Utc::now().timestamp(),
+        "exp": chrono::Utc::now().timestamp() + 3600
+    });
+
+    let token = create_test_jwt(secret.as_bytes(), &payload);
+    let alternate = alternate_signature_encoding(&token);
+    assert_ne!(alternate, token);
+
+    // 变体解出同一签名字节 → 验签通过
+    assert!(auth.validate_token(&alternate).is_some());
+
+    // 吊销原令牌后，变体必须同样被拒绝
+    auth.invalidate_token(&token);
+    assert!(auth.validate_token(&token).is_none());
+    assert!(
+        auth.validate_token(&alternate).is_none(),
+        "an alternate encoding of a revoked token must stay revoked"
+    );
+}
+
+#[test]
+fn test_signature_with_whitespace_is_rejected() {
+    // 签名段插入空白：解码必须拒绝（此前空白被跳过，签名仍能通过验签）。
+    let secret = &derived_test_secret(33);
+    let auth = BearerAuth::new(secret);
+
+    let payload = serde_json::json!({
+        "sub": "user123",
+        "iat": chrono::Utc::now().timestamp(),
+        "exp": chrono::Utc::now().timestamp() + 3600
+    });
+
+    let token = create_test_jwt(secret.as_bytes(), &payload);
+    let parts: Vec<&str> = token.split('.').collect();
+    for separator in [" ", "\t", "\n", "\r"] {
+        let tampered = format!("{}.{}.{separator}{}", parts[0], parts[1], parts[2]);
+        assert!(
+            auth.validate_token(&tampered).is_none(),
+            "whitespace in the signature segment must be rejected: {separator:?}"
+        );
+    }
 }
 
 #[test]
@@ -476,7 +551,7 @@ fn test_invalidate_token_direct_method() {
     auth.invalidate_token(&token);
 
     // The blacklist entry is created, verify the key exists in cache
-    let blacklist_key = CacheNamespace::BearerBlacklist.key(&token);
+    let blacklist_key = BearerAuth::token_cache_key(CacheNamespace::BearerBlacklist, &token);
     assert!(auth.blacklisted_tokens.get(&blacklist_key).is_some());
 }
 
@@ -553,18 +628,20 @@ fn test_base64url_decode_valid() {
 
 #[test]
 fn test_base64url_decode_with_periods() {
-    // Should skip period separators
+    // '.' 不属于 base64url 字母表：必须拒绝（否则同一签名字节可有多种表达）
     let result = BearerAuth::base64url_decode("SGVs.bG8");
-    assert!(result.is_some());
-    assert_eq!(result.unwrap(), b"Hello");
+    assert!(result.is_none(), "period separators must be rejected");
 }
 
 #[test]
 fn test_base64url_decode_with_whitespace() {
-    // Should skip whitespace
-    let result = BearerAuth::base64url_decode("SGVs\nbG8");
-    assert!(result.is_some());
-    assert_eq!(result.unwrap(), b"Hello");
+    // 空白不属于 base64url 字母表：必须拒绝（此前被静默跳过）
+    for input in ["SGVs\nbG8", "SGVs bG8", "SGVs\tbG8", "SGVs\r\nbG8"] {
+        assert!(
+            BearerAuth::base64url_decode(input).is_none(),
+            "whitespace must be rejected: {input:?}"
+        );
+    }
 }
 
 #[test]
@@ -651,7 +728,7 @@ fn test_clone_shares_state() {
 
     // Clone shares the same internal Arc<DashMapCache>, so blacklist entry
     // should be visible. Verify the cache key was written.
-    let blacklist_key = CacheNamespace::BearerBlacklist.key(&token);
+    let blacklist_key = BearerAuth::token_cache_key(CacheNamespace::BearerBlacklist, &token);
     assert!(auth_clone.blacklisted_tokens.get(&blacklist_key).is_some());
 }
 
@@ -692,7 +769,7 @@ fn test_try_new_returns_correct_errors() {
 
 #[test]
 fn test_validate_token_no_exp_claim() {
-    // Token without exp claim should still be valid
+    // 无 exp 的令牌必须被拒绝：缺失即等于"永不过期"，泄露后长期可用。
     let secret = &derived_test_secret(33);
     let auth = BearerAuth::new(secret);
 
@@ -703,7 +780,7 @@ fn test_validate_token_no_exp_claim() {
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
-    assert!(auth.validate_token(&token).is_some());
+    assert!(auth.validate_token(&token).is_none());
 }
 
 #[test]
@@ -843,7 +920,7 @@ fn test_verify_blacklisted_token_rejected() {
 
     auth.invalidate_token(&token);
 
-    let key = CacheNamespace::BearerBlacklist.key(&token);
+    let key = BearerAuth::token_cache_key(CacheNamespace::BearerBlacklist, &token);
     assert!(blacklisted_tokens.get(&key).is_some());
     assert!(auth.blacklisted_tokens.contains(&key));
     assert!(blacklisted_tokens.contains(&key));
@@ -869,7 +946,7 @@ fn test_blacklist_nonexistent_token() {
     // Original token should still be valid
     assert!(auth.validate_token(&token).is_some());
 
-    let key = CacheNamespace::BearerBlacklist.key(nonexistent_token);
+    let key = BearerAuth::token_cache_key(CacheNamespace::BearerBlacklist, nonexistent_token);
     assert!(auth.blacklisted_tokens.get(&key).is_some());
 }
 

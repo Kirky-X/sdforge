@@ -97,7 +97,10 @@ pub(crate) fn sanitize_error_message(message: &str) -> String {
 
     const MAX_SANITIZED_LENGTH: usize = 500;
     if result.len() > MAX_SANITIZED_LENGTH {
-        result.truncate(MAX_SANITIZED_LENGTH);
+        // 按字符边界截断：`String::truncate` 在字节索引不是字符边界时 panic，
+        // 而错误消息常含用户可控的多字节文本（CJK/emoji）；
+        // `floor_char_boundary` 给出不超过上限的最大字符边界。
+        result.truncate(result.floor_char_boundary(MAX_SANITIZED_LENGTH));
         result.push_str("...[TRUNCATED]");
     }
 
@@ -518,7 +521,7 @@ impl SdForgeAuditLoggerBuilder {
     /// ```rust
     /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
-    /// let builder = SdForgeAuditLoggerBuilder::new;
+    /// let builder = SdForgeAuditLoggerBuilder::new();
     /// let _ = builder;
     /// ```
     pub fn new() -> Self {
@@ -550,7 +553,7 @@ impl SdForgeAuditLoggerBuilder {
     /// ```rust
     /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
-    /// let builder = SdForgeAuditLoggerBuilder::new.max_logs_per_user(500);
+    /// let builder = SdForgeAuditLoggerBuilder::new().max_logs_per_user(500);
     /// let _ = builder;
     /// ```
     pub fn max_logs_per_user(mut self, max_logs: usize) -> Self {
@@ -580,7 +583,7 @@ impl SdForgeAuditLoggerBuilder {
     /// ```rust
     /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
-    /// let builder = SdForgeAuditLoggerBuilder::new.max_concurrent_ops(50);
+    /// let builder = SdForgeAuditLoggerBuilder::new().max_concurrent_ops(50);
     /// let _ = builder;
     /// ```
     pub fn max_concurrent_ops(mut self, max_concurrent: usize) -> Self {
@@ -609,7 +612,7 @@ impl SdForgeAuditLoggerBuilder {
     /// ```rust
     /// use sdforge::security::SdForgeAuditLoggerBuilder;
     ///
-    /// let builder = SdForgeAuditLoggerBuilder::new.queue_size(2000);
+    /// let builder = SdForgeAuditLoggerBuilder::new().queue_size(2000);
     /// let _ = builder;
     /// ```
     pub fn queue_size(mut self, queue_size: usize) -> Self {
@@ -637,11 +640,11 @@ impl SdForgeAuditLoggerBuilder {
     ///
     /// #[tokio::main]
     /// async fn main {
-    ///     let logger = SdForgeAuditLoggerBuilder::new
+    ///     let logger = SdForgeAuditLoggerBuilder::new()
     ///         .max_logs_per_user(500)
     ///         .max_concurrent_ops(50)
     ///         .queue_size(2000)
-    ///         .build;
+    ///         .build();
     ///     let _ = logger;
     /// }
     /// ```

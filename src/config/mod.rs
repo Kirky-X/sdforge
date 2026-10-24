@@ -42,7 +42,7 @@ pub mod defaults;
 // Re-export all configuration types
 pub use api::{ApiConfig, EnvHelper, TracingConfig};
 pub use app::{SdForgeConfig, SdForgeConfigBuilder};
-pub use auth::{ApiKeySeed, AuthConfig};
+pub use auth::{ApiKeySeed, AuthConfig, DEFAULT_CREDENTIAL_HEADER_NAMES};
 pub use cache::CacheConfig;
 pub use cors::{CorsConfig, build_cors_layer};
 pub use security::SecurityConfig;
@@ -147,6 +147,8 @@ mod tests {
             server: ServerConfig::default(),
             authentication: AuthConfig::Jwt {
                 secret: "test".to_string(),
+                audience: None,
+                issuer: None,
             },
             timeout: None,
             #[cfg(feature = "cache")]
@@ -156,7 +158,7 @@ mod tests {
         };
         // Just verify we can create the config
         match &config.authentication {
-            AuthConfig::Jwt { secret } => {
+            AuthConfig::Jwt { secret, .. } => {
                 assert_eq!(secret, "test");
             }
             _ => panic!("Expected Jwt auth config"),
@@ -257,6 +259,8 @@ mod tests {
             },
             authentication: AuthConfig::Jwt {
                 secret: "test-secret".to_string(),
+                audience: None,
+                issuer: None,
             },
             timeout: Some(TimeoutConfig::default()),
             #[cfg(feature = "cache")]
@@ -388,6 +392,8 @@ mod tests {
         let jwt = SdForgeConfig {
             authentication: AuthConfig::Jwt {
                 secret: "this_is_a_strong_secret_key_1234567890".to_string(),
+                audience: None,
+                issuer: None,
             },
             ..SdForgeConfig::default()
         };

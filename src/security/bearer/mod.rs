@@ -78,17 +78,17 @@ impl std::fmt::Debug for BearerAuth {
 /// use sdforge::security::BearerAuth;
 ///
 /// // Basic usage with secret only
-/// let auth = BearerAuth::builder
+/// let auth = BearerAuth::builder()
 ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
-///     .build
+///     .build()
 ///     .expect("Failed to build BearerAuth");
 ///
 /// // With audience and issuer validation
-/// let auth = BearerAuth::builder
+/// let auth = BearerAuth::builder()
 ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
 ///     .audience("my-api")
 ///     .issuer("my-issuer")
-///     .build
+///     .build()
 ///     .expect("Failed to build BearerAuth");
 /// let _ = auth;
 /// ```

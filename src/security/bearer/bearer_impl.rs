@@ -119,8 +119,14 @@ impl BearerAuth {
     }
 
     /// Internal helper to set audience on an existing validated instance
-    fn with_audience_inner(mut self, expected_audience: impl Into<String>) -> Self {
+    pub(crate) fn with_audience_inner(mut self, expected_audience: impl Into<String>) -> Self {
         self.expected_audience = Some(expected_audience.into());
+        self
+    }
+
+    /// Internal helper to set issuer on an existing validated instance
+    pub(crate) fn with_issuer_inner(mut self, expected_issuer: impl Into<String>) -> Self {
+        self.expected_issuer = Some(expected_issuer.into());
         self
     }
 
@@ -164,15 +170,15 @@ impl BearerAuth {
     /// use sdforge::cache::DashMapCache;
     /// use std::sync::Arc;
     ///
-    /// let valid_tokens = Arc::new(DashMapCache::new) as _;
-    /// let blacklisted_tokens = Arc::new(DashMapCache::new) as _;
+    /// let valid_tokens = Arc::new(DashMapCache::new()) as _;
+    /// let blacklisted_tokens = Arc::new(DashMapCache::new()) as _;
     ///
     /// let auth = BearerAuth::with_dependencies(
-    ///     b"MySecureSecret123!@#ABCDEFGHIJKLM".to_vec,
+    ///     b"MySecureSecret123!@#ABCDEFGHIJKLM".to_vec(),
     ///     valid_tokens,
     ///     blacklisted_tokens,
-    ///     Some("my-api".to_string),
-    ///     Some("my-issuer".to_string),
+    ///     Some("my-api".to_string()),
+    ///     Some("my-issuer".to_string()),
     ///)
     /// .expect("valid secret must pass validation");
     /// let _ = auth;
@@ -208,11 +214,11 @@ impl BearerAuth {
     /// ```rust
     /// use sdforge::security::BearerAuth;
     ///
-    /// let auth = BearerAuth::builder
+    /// let auth = BearerAuth::builder()
     ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLMKLMKLM")
     ///     .audience("my-api")
     ///     .issuer("my-issuer")
-    ///     .build
+    ///     .build()
     ///     .expect("Failed to build BearerAuth");
     /// let _ = auth;
     /// ```
@@ -234,6 +240,10 @@ impl BearerAuth {
     /// 64 个索引，其余 192 个字节的表值恰为 0（合法值 'A'），任何非法字符
     /// 都被静默解码为 0 而非拒绝。现在以 0xFF 哨兵初始化，遇非法字符返回
     /// None——注入字符无法再被无声接受（fail-closed）。
+    ///
+    /// 进一步收紧：只接受 RFC 4648 base64url 字母表（`A-Za-z0-9-_`，无填充）。
+    /// 此前解码会跳过 `.` 与空白字符，于是同一签名字节可由多种字符串表达；
+    /// 令牌黑名单以凭据标识为键，被吊销的令牌换个写法即可绕过吊销。
     pub(crate) fn base64url_decode(input: &str) -> Option<Vec<u8>> {
         const INVALID: u8 = 0xFF;
         let mut table = [INVALID; 256];
@@ -249,13 +259,7 @@ impl BearerAuth {
         let mut bits = 0i32;
 
         for c in input.bytes() {
-            if c == b'.' {
-                continue; // Skip period separators
-            }
-            if c == b' ' || c == b'\n' || c == b'\r' || c == b'\t' {
-                continue; // Skip whitespace
-            }
-
+            // `.` 与空白都不在 base64url 字母表内：与其它非法字符同样拒绝。
             let val = *table.get(c as usize)?;
             if val == INVALID {
                 // 非法 base64url 字符：拒绝而不是当作 'A' 解码
@@ -273,12 +277,50 @@ impl BearerAuth {
         Some(result)
     }
 
+    /// 凭据的规范标识：签名段**解码后**字节的 SHA-256（十六进制）。
+    ///
+    /// base64url 允许同一签名字节由多个不同字符串表达（末位字符的未用位），
+    /// 因此令牌缓存键不能取原始令牌串——否则被吊销的令牌换个编码就查不到
+    /// 黑名单记录。签名段被 HMAC 覆盖，其字节唯一标识被签名的内容。
+    pub(crate) fn token_fingerprint(token: &str) -> Option<String> {
+        use sha2::Digest;
+
+        let mut parts = token.split('.');
+        let _header = parts.next()?;
+        let _payload = parts.next()?;
+        let signature = parts.next()?;
+        if parts.next().is_some() {
+            return None; // 不是三段式 JWT
+        }
+
+        let signature_bytes = Self::base64url_decode(signature)?;
+        let mut hasher = Sha256::new();
+        hasher.update(&signature_bytes);
+        Some(hex::encode(hasher.finalize()))
+    }
+
+    /// 令牌缓存键：`{namespace}:{sha256(签名字节)}`。
+    ///
+    /// 令牌本体只作为哈希输入，绝不进入缓存键——共享后端（如 Redis）的键
+    /// 空间里不得出现可直接使用的凭据。无法解析为三段式 JWT 时退化为
+    /// 令牌串的哈希（该令牌本就无法通过验签）。
+    pub(crate) fn token_cache_key(namespace: CacheNamespace, token: &str) -> String {
+        use sha2::Digest;
+
+        let digest = Self::token_fingerprint(token).unwrap_or_else(|| {
+            let mut hasher = Sha256::new();
+            hasher.update(token.as_bytes());
+            hex::encode(hasher.finalize())
+        });
+        namespace.key(&digest)
+    }
+
     /// Parse JWT token and verify signature with full claim validation
     ///
     /// Security checks:
     /// 1. Validates token structure (3 parts)
     /// 2. Verifies HMAC-SHA256 signature
-    /// 3. Validates `exp` (expiration) claim
+    /// 3. Validates `exp` (expiration) claim — **required**（缺失即拒绝）
     /// 4. Validates `aud` (audience) claim if configured (prevents token substitution)
     /// 5. Validates `iss` (issuer) claim if configured (validates token origin)
     ///
@@ -320,9 +362,9 @@ impl BearerAuth {
             return None;
         }
 
-        if let Some(exp) = payload_value.get("exp").and_then(|v| v.as_i64())
-            && chrono::Utc::now().timestamp() > exp
-        {
+        // `exp` 必须存在且未过期：缺失即等于"永不过期"，泄露的令牌将长期可用。
+        let exp = payload_value.get("exp").and_then(|v| v.as_i64())?;
+        if chrono::Utc::now().timestamp() > exp {
             return None; // Token expired
         }
 
@@ -380,7 +422,9 @@ impl BearerAuth {
         // Check if token is blacklisted — presence of the key means blocked unconditionally.
         // The token's natural expiry is verified separately via verify_jwt below, so
         // expired tokens are rejected regardless of blacklist state.
-        let blacklist_key = CacheNamespace::BearerBlacklist.key(token);
+        // 键取凭据的规范标识（签名字节的哈希）而非原始令牌串：同一签名的
+        // 不同 base64url 表达必须命中同一条黑名单记录。
+        let blacklist_key = Self::token_cache_key(CacheNamespace::BearerBlacklist, token);
         if self.blacklisted_tokens.get(&blacklist_key).is_some() {
             return None; // Token is blacklisted
         }
@@ -411,14 +455,14 @@ impl BearerAuth {
 
     /// Register a token (for session management)
     pub fn register_token(&self, token: String, context: AuthContext) {
-        let key = CacheNamespace::BearerValid.key(&token);
+        let key = Self::token_cache_key(CacheNamespace::BearerValid, &token);
         self.valid_tokens
             .set(&key, serialize_auth_context(&context));
     }
 
     /// Invalidate a token (for logout)
     pub fn invalidate_token(&self, token: &str) {
-        let key = CacheNamespace::BearerBlacklist.key(token);
+        let key = Self::token_cache_key(CacheNamespace::BearerBlacklist, token);
         // Store a marker byte; presence of the key means the token is blacklisted.
         // The token's natural expiry (verified in validate_token via verify_jwt)
         // ensures expired tokens are rejected regardless of blacklist state.
@@ -514,7 +558,7 @@ impl BearerAuthBuilder {
     /// ```rust
     /// use sdforge::security::BearerAuthBuilder;
     ///
-    /// let builder = BearerAuthBuilder::new
+    /// let builder = BearerAuthBuilder::new()
     ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM");
     /// let _ = builder;
     /// ```
@@ -546,7 +590,7 @@ impl BearerAuthBuilder {
     /// ```rust
     /// use sdforge::security::BearerAuthBuilder;
     ///
-    /// let builder = BearerAuthBuilder::new
+    /// let builder = BearerAuthBuilder::new()
     ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
     ///     .audience("my-api");
     /// let _ = builder;
@@ -579,7 +623,7 @@ impl BearerAuthBuilder {
     /// ```rust
     /// use sdforge::security::BearerAuthBuilder;
     ///
-    /// let builder = BearerAuthBuilder::new
+    /// let builder = BearerAuthBuilder::new()
     ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
     ///     .issuer("my-issuer");
     /// let _ = builder;
@@ -610,10 +654,10 @@ impl BearerAuthBuilder {
     /// ```rust
     /// use sdforge::security::BearerAuthBuilder;
     ///
-    /// let auth = BearerAuthBuilder::new
+    /// let auth = BearerAuthBuilder::new()
     ///     .secret("MySecureSecret123!@#ABCDEFGHIJKLM")
     ///     .audience("my-api")
-    ///     .build
+    ///     .build()
     ///     .expect("Failed to build BearerAuth");
     /// let _ = auth;
     /// ```
@@ -692,7 +736,7 @@ impl BearerAuthBuilder {
 /// ```rust
 /// use sdforge::security::{generate_secure_jwt_secret, BearerAuth};
 ///
-/// let secret = generate_secure_jwt_secret;
+/// let secret = generate_secure_jwt_secret();
 /// println!("Generated secure JWT secret: {}", secret);
 ///
 /// // Use with BearerAuth

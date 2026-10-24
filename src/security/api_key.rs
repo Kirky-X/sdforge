@@ -490,7 +490,7 @@ impl SdForgeApiKeyAuthBuilder {
     /// ```rust
     /// use sdforge::security::SdForgeApiKeyAuthBuilder;
     ///
-    /// let auth = SdForgeApiKeyAuthBuilder::new.build;
+    /// let auth = SdForgeApiKeyAuthBuilder::new().build();
     /// let _ = auth;
     /// ```
     pub fn build(self) -> SdForgeApiKeyAuth {

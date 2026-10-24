@@ -69,10 +69,7 @@ const MAX_MASKED_PAYLOAD_BYTES: usize = 64 * 1024;
 #[must_use]
 pub fn mask(text: &str) -> String {
     let truncated = if text.len() > MAX_MASKED_PAYLOAD_BYTES {
-        let mut cut = MAX_MASKED_PAYLOAD_BYTES;
-        while !text.is_char_boundary(cut) {
-            cut -= 1;
-        }
+        let cut = text.floor_char_boundary(MAX_MASKED_PAYLOAD_BYTES);
         let dropped = text.len() - cut;
         format!(
             "{}\n…[truncated {dropped} bytes before masking]",

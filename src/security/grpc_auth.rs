@@ -109,7 +109,22 @@ pub fn make_verifier(config: &AuthConfig) -> Result<Arc<dyn GrpcAuthVerifier>, A
         AuthConfig::None => Err(AuthConfigError::InvalidSecret(
             "authentication is disabled (AuthConfig::None); nothing to enforce".to_string(),
         )),
-        AuthConfig::Jwt { secret } => Ok(Arc::new(BearerVerifier::from_secret(secret.clone())?)),
+        AuthConfig::Jwt {
+            secret,
+            audience,
+            issuer,
+        } => {
+            let verifier = BearerVerifier::from_secret(secret.clone())?;
+            let verifier = match audience {
+                Some(audience) => verifier.with_audience(audience),
+                None => verifier,
+            };
+            let verifier = match issuer {
+                Some(issuer) => verifier.with_issuer(issuer),
+                None => verifier,
+            };
+            Ok(Arc::new(verifier))
+        }
         AuthConfig::ApiKey {
             header_name: _,
             prefix,
@@ -133,12 +148,20 @@ pub fn make_verifier(config: &AuthConfig) -> Result<Arc<dyn GrpcAuthVerifier>, A
 /// the HTTP middleware).
 pub struct BearerVerifier {
     auth: BearerAuth,
+    /// 期望的 `aud` 声明（None = 不校验）。
+    audience: Option<String>,
+    /// 期望的 `iss` 声明（None = 不校验）。
+    issuer: Option<String>,
 }
 
 impl BearerVerifier {
     /// Build from a configured `BearerAuth`.
     pub fn new(auth: BearerAuth) -> Self {
-        Self { auth }
+        Self {
+            auth,
+            audience: None,
+            issuer: None,
+        }
     }
 
     /// Build from a JWT secret (complexity-validated like the HTTP config).
@@ -147,7 +170,25 @@ impl BearerVerifier {
     ) -> Result<Self, crate::security::AuthConfigError> {
         Ok(Self {
             auth: BearerAuth::try_new(secret)?,
+            audience: None,
+            issuer: None,
         })
+    }
+}
+
+impl BearerVerifier {
+    /// Require the `aud` claim to equal `audience` (token-substitution defense).
+    #[must_use]
+    pub fn with_audience(mut self, audience: impl Into<String>) -> Self {
+        self.audience = Some(audience.into());
+        self
+    }
+
+    /// Require the `iss` claim to equal `issuer`.
+    #[must_use]
+    pub fn with_issuer(mut self, issuer: impl Into<String>) -> Self {
+        self.issuer = Some(issuer.into());
+        self
     }
 }
 
@@ -161,10 +202,71 @@ impl GrpcAuthVerifier for BearerVerifier {
             .and_then(|v| v.strip_prefix("Bearer "))
             .filter(|t| !t.is_empty())
             .ok_or_else(|| "missing bearer token".to_string())?;
-        self.auth
+        let context = self
+            .auth
             .validate_token(token)
-            .ok_or_else(|| "invalid bearer token".to_string())
+            .ok_or_else(|| "invalid bearer token".to_string())?;
+        // 声明的 aud/iss 复核（令牌替换防御）：与 HTTP 装配路径同口径。
+        if let Some(expected) = &self.audience
+            && !token_has_claim(token, "aud", expected)
+        {
+            return Err("invalid bearer token".to_string());
+        }
+        if let Some(expected) = &self.issuer
+            && !token_has_claim(token, "iss", expected)
+        {
+            return Err("invalid bearer token".to_string());
+        }
+        Ok(context)
     }
+}
+
+/// 检查令牌载荷的 `claim` 是否等于 `expected`。
+///
+/// 载荷经 `BearerAuth::validate_token` 验签通过，但该路径不暴露 claim；
+/// 这里重新解码载荷做等值比较（值相同即可，签名已在上一步验过）。
+fn token_has_claim(token: &str, claim: &str, expected: &str) -> bool {
+    let Some(payload) = token.split('.').nth(1) else {
+        return false;
+    };
+    let Ok(bytes) = decode_base64url_payload(payload) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
+        return false;
+    };
+    value
+        .get(claim)
+        .and_then(|v| v.as_str())
+        .is_some_and(|v| v == expected)
+}
+
+/// base64url 解码（仅用于读取已验签令牌的载荷声明）。
+fn decode_base64url_payload(input: &str) -> Result<Vec<u8>, ()> {
+    const INVALID: u8 = 0xFF;
+    let mut table = [INVALID; 256];
+    for (i, b) in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+        .iter()
+        .enumerate()
+    {
+        table[*b as usize] = i as u8;
+    }
+    let mut result = Vec::with_capacity(input.len() * 3 / 4);
+    let mut buffer = 0u32;
+    let mut bits = 0i32;
+    for c in input.bytes() {
+        let val = *table.get(c as usize).ok_or(())?;
+        if val == INVALID {
+            return Err(());
+        }
+        buffer = (buffer << 6) | (val as u32);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            result.push((buffer >> bits) as u8);
+        }
+    }
+    Ok(result)
 }
 
 /// API-key verifier backed by [`SdForgeApiKeyAuth`] (same key store as the HTTP
@@ -347,6 +449,8 @@ mod tests {
         let jwt = make_verifier(&AuthConfig::Jwt {
             // 测试用假密钥，非真实凭据
             secret: "Make-Verifier-Secret-Key-0123456789".to_string(), // pragma: allowlist secret
+            audience: None,
+            issuer: None,
         })
         .expect("jwt config must build a bearer verifier");
         assert!(jwt.verify(Some("Bearer junk"), None).is_err());

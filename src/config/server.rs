@@ -18,7 +18,7 @@ pub struct ServerConfig {
     pub request_timeout_secs: u64,
     /// Maximum request body size in bytes (default 10 MiB)
     ///
-    /// HIGH 修复：此前 10MB 上限硬编码在 `http::build_with_config` 中，
+    /// HIGH 修复：此前 10MB 上限硬编码在 `http::build_with_config_inner` 中，
     /// 配置结构无对应字段，运维无法调整上传上限。
     pub max_body_size: usize,
     /// CORS configuration

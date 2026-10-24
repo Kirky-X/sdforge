@@ -75,6 +75,80 @@ fn test_sanitize_error_message_truncation() {
 }
 
 #[test]
+fn test_sanitize_error_message_truncates_on_char_boundary() {
+    // 回归：按字节 truncate 会在多字节字符中间 panic（错误消息常含用户
+    // 可控的 CJK/emoji 文本），截断必须落在字符边界上。
+    for filler in [498usize, 499] {
+        let message = format!("{}中", "a".repeat(filler));
+        let sanitized = sanitize_error_message(&message);
+        assert!(
+            sanitized.ends_with("...[TRUNCATED]"),
+            "message of {filler} ASCII bytes + one CJK char must be truncated"
+        );
+        assert!(sanitized.len() <= 520);
+        // 截断后的前缀必须是合法 UTF-8（未 panic 即成立），且不含半个字符
+        assert!(sanitized.starts_with(&"a".repeat(filler)));
+    }
+}
+
+#[test]
+fn test_sanitize_error_message_boundary_at_max_length() {
+    // 回归：截断条件是严格的 `len() > 500`，恰好 500 字节的消息不得被截断。
+    let exact = format!("{}中", "a".repeat(497)); // 497 + 3 = 500 字节
+    let sanitized = sanitize_error_message(&exact);
+    assert_eq!(sanitized, exact, "500 字节整的消息不应被截断");
+    assert!(!sanitized.contains("...[TRUNCATED]"));
+    assert_eq!(sanitized.len(), 500);
+
+    // 回归：501 字节时截断点必须落在多字节字符末尾而非字符之前，
+    // 预算内的多字节字符必须完整保留。
+    let over = format!("{}中x", "a".repeat(497)); // 497 + 3 + 1 = 501 字节
+    let sanitized = sanitize_error_message(&over);
+    assert!(
+        sanitized.starts_with(&format!("{}中", "a".repeat(497))),
+        "截断点应落在字符末尾而非字符之前"
+    );
+    assert!(sanitized.ends_with("...[TRUNCATED]"));
+    assert!(sanitized.len() <= 520);
+}
+
+/// 截断点语义：必须是「不超过 500 字节的最长合法 UTF-8 前缀」的末尾。
+///
+/// 少截会丢掉预算内放得下的字符，多截会超出字节预算（字节索引落在字符
+/// 中间时 `String::truncate` 直接 panic）。这里独立重算期望前缀，不复用被
+/// 测实现的边界计算。
+#[test]
+fn test_sanitize_error_message_truncates_at_maximal_utf8_prefix() {
+    let message = "你😀é漢a".repeat(80); // 每轮 13 字节，总长 1040 字节
+    let sanitized = sanitize_error_message(&message);
+
+    // 独立重算：逐字符累加字节，直到下一个字符会超出 500 字节预算。
+    let mut expected = String::new();
+    let mut first_dropped = 0usize;
+    for ch in message.chars() {
+        if expected.len() + ch.len_utf8() > 500 {
+            first_dropped = ch.len_utf8();
+            break;
+        }
+        expected.push(ch);
+    }
+    assert!(first_dropped > 0, "消息应超出 500 字节预算");
+    assert_eq!(
+        sanitized,
+        format!("{expected}...[TRUNCATED]"),
+        "截断点必须是预算内的最长合法 UTF-8 前缀"
+    );
+    // 前缀用满预算且不超预算：既没有丢弃放得下的字符，也没有塞进放不下的。
+    assert!(
+        expected.len() <= 500 && expected.len() + first_dropped > 500,
+        "前缀应贴住预算上界：{} + {} > 500",
+        expected.len(),
+        first_dropped
+    );
+    assert!(sanitized.len() <= 520, "总长超限：{}", sanitized.len());
+}
+
+#[test]
 fn test_global_regex_patterns_are_initialized() {
     assert!(JWT_PATTERN.is_match("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxw"));
     assert!(SECRET_PATTERN.is_match("password=secret123"));

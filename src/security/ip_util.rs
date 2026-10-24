@@ -30,7 +30,15 @@ use axum::http::Request;
 pub fn extract_client_ip(req: &Request<Body>) -> Option<String> {
     use axum::extract::connect_info::ConnectInfo;
 
-    let trusted_proxies = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "127.0.0.1"];
+    // 可信代理必须写成 CIDR：is_ip_in_range 要求 "网段/掩码" 形状，裸 IP
+    // 永远匹配失败（本机反代的 X-Forwarded-For 会被丢弃，所有流量塌缩成
+    // 同一个 client IP）。
+    let trusted_proxies = [
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "127.0.0.1/32",
+    ];
 
     // Get the direct TCP peer IP first. This is the only unspoofable source.
     let direct_ip = req
@@ -349,6 +357,23 @@ mod tests {
 
         let ip = extract_client_ip(&req);
         assert_eq!(ip, Some("203.0.113.5".to_string()));
+    }
+
+    #[test]
+    fn test_extract_client_ip_loopback_proxy_trusts_x_forwarded_for() {
+        // 本机反代（127.0.0.1）必须被识别为可信代理：可信代理列表写成裸 IP
+        // 时 is_ip_in_range 恒不匹配，X-Forwarded-For 会被丢弃，全部流量塌缩
+        // 成同一个 client IP（限流退化为单桶、审计无法区分来源）。
+        use axum::extract::connect_info::ConnectInfo;
+        use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+
+        let mut req = Request::new(Body::empty());
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        req.extensions_mut().insert(ConnectInfo(addr));
+        req.headers_mut()
+            .insert("X-Forwarded-For", "203.0.113.7".parse().unwrap());
+
+        assert_eq!(extract_client_ip(&req), Some("203.0.113.7".to_string()));
     }
 
     #[test]
