@@ -36,6 +36,123 @@
 
 ## [Unreleased]
 
+### 安全 (Security)
+
+- **合并路由绕过彻底闭合（破坏性 API 变更）**：移除公开入口 `http::build_with_config` 与 `http::build_with_config_rate_limited`——它们返回"已套安全中间件栈的 Router"且不带路由并入参数，下游往返回值 merge 应用路由即绕过鉴权/限流/安全头。配置化装配只剩 ext 系列：`build_with_config_ext(base, config)`（同步）与 `build_with_config_ext_rate_limited(base, config)`（异步，限流实际生效点），一律先并路由再套栈。仍调用旧入口的下游编译失败，属预期破坏
+- **JWT 吊销绕过**：base64url 解码器不再跳过 `.` 与空白字符（只接受 RFC 4648
+  base64url 字母表），且黑名单/有效令牌缓存键改用**签名字节解码后的 SHA-256**
+  而非原始令牌串——同一签名的不同 base64url 表达（末位字符的未用位）此前可
+  绕过登出吊销；共享缓存后端（Redis）也不再出现明文令牌键
+- **JWT 有效期**：`exp` 声明改为必需（缺失即拒绝），此前无 `exp` 的令牌永久有效
+- **JWT aud/iss 可配置**：`AuthConfig::Jwt` 新增可选 `audience` / `issuer`
+  （`#[serde(default)]`，旧配置文件不受影响），声明后令牌缺该声明或取值不符
+  即拒绝（防令牌替换）；HTTP 装配路径与 gRPC/MCP 校验器同口径生效
+- **响应缓存跨用户泄露**：`ResponseCacheLayer` 对携带 `Authorization` /
+  `x-api-key` 的请求完全绕过缓存（缓存键无身份维度）；缓存键只对 path 做
+  大小写归一，query 原样保留（此前 `?ID=1` 与 `?id=1` 归并为同一条目）
+- **响应缓存内存放大**：可缓存响应体上限 1 MiB（`with_max_cacheable_body_bytes`
+  可调），超限原样透传；此前以 `usize::MAX` 无限制整读响应体并在缓存中再存一份
+- **合并路由绕过鉴权**：新增 `http::build_with_config_ext(base, config)`——先并入
+  调用方路由再叠中间件（axum 的 `Router::layer` 只作用于调用它之前已注册的路由，
+  之后 merge 进来的路由此前绕过鉴权与安全头）
+- **WebSocket 握手鉴权不可达**：新增 `websocket::build_with_config(config)`，
+  可注入带 JWT / API key 校验的 `WebSocketConfig`（此前只有用默认配置的 `build()`）
+- **gRPC 自定义 service 无鉴权**：传输层拦截器同时接受 `auth_verifier`（协议无关
+  校验器），`extra_services` 挂载的自定义 service 与框架 service 共用同一套凭据
+  校验；启动门禁 `require_auth` 亦认可 `auth_verifier`（此前仅配 API key 的应用被迫
+  关闭 `require_auth`，正是拦截器退化为空操作的条件）
+- **幂等键跨主体重放**：幂等作用域由「路由模式」扩展为「路由模式 + 已认证主体」，
+  两个主体复用同一 `Idempotency-Key` 不再共享记录（此前后者的响应体被回放给前者，
+  且后者的写操作被静默吞掉）
+- **错误消息截断 panic**：脱敏后的错误消息按字符边界截断（此前按字节 `truncate`，
+  第 500 字节落在多字节字符中间时 panic）
+- **错误上下文外泄**：`ApiError::Internal` 的 `message` 与 `context` 不再参与序列化，
+  `ServiceError.details` 不再下发 `ErrorContext`（此前 500 响应体带出源码文件路径与行号）
+- **可信代理网段**：本机反代网段由裸 IP `127.0.0.1` 改为 `127.0.0.1/32`
+  （裸 IP 永不匹配 CIDR 判定，本机反代的 `X-Forwarded-For` 此前被丢弃）
+- **安全响应头配置生效**：`SecurityConfig` 的 8 个响应头与 `enable_headers` 开关
+  真正被 HTTP 构建路径消费（此前配置面完全未被读取）
+- **数据网关安全默认**：`DbGateway` 默认会话角色改为非 admin（`sdforge_gateway`），
+  并新增服务端侧强制归属谓词 `with_required_filter`（此前默认 admin 等于默认关闭
+  库侧行级安全）
+- **OTel 导出资源耗尽**：导出连接/读写加超时、响应体读取加 64 KiB 上限、span 缓冲
+  设 1 万条上限（丢弃最旧），此前采集端（或明文中间人）可让导出线程长期阻塞、
+  进程内存无界增长
+- **OTel 导出阻塞 worker**：周期导出改由 `tokio::task::spawn_blocking` 承载
+  （同步 `TcpStream` I/O 不再占住 tokio worker 线程），并新增 30s 单次导出**总**
+  时限——此前 5s 只是单次读写的空闲超时，采集端每次吐 1 字节即可让读循环无限续命
+- **OTel 总时限未覆盖连接与写入**：单次导出的总时限改为从导出入口起算，覆盖地址
+  解析、连接、请求写入与读响应全过程（DNS 解析置于独立线程并按剩余预算卡住，
+  请求改为分片写、写前查预算）；此前总时限在 `connect` 之后才起算，连接与写入
+  完全不受约束，采集端不可达时一次导出可远超总时限
+- **OTel 导出失败丢批次**：导出失败（传输错误、状态行畸形）或采集端返回非 2xx 时，
+  本批次 span 回填缓冲头部等待下一轮重试（缓冲仍有 1 万条上限，溢出淘汰最旧）；
+  此前批次随 `take_spans()` 一并丢弃，采集端停滞时 span 持续静默丢失
+- **OTel 非 2xx 静默通过**：周期导出新增状态码判定，采集端返回非 2xx 时按状态码
+  告警（此前 `Ok(Ok(_))` 丢弃状态码，采集端 500 既不告警也不重试）
+- **OTel 缓冲淘汰搬移整个缓冲**：span 缓冲改用 `VecDeque`，满缓冲淘汰最旧改为
+  O(1) 出队；此前每次 `finish_span` 都在全局锁内整体前移近万个元素（每请求搬移
+  约 1.4 MB）
+- **响应缓存大响应变 500**：超限响应改为**流式透传**（已缓冲前缀 + 剩余流拼回一个
+  流式响应体），不再缓冲到硬上限后丢弃响应体并返回 500；>32 MiB 的正常响应
+  （下载/大列表/代理转发）恢复为完整送达。同时按 `Content-Length` 预判，超限
+  响应完全不缓冲
+- **响应缓存丢失响应头**：缓存条目新增响应头（`[status][magic][headers][body]`），
+  命中与回源两条路径都还原原头（content-type 等）；逐跳头（`connection` /
+  `transfer-encoding` 等）与 `content-length` 不随条目回放
+- **响应缓存 Set-Cookie 泄露**：带 `Set-Cookie` 的响应不再进共享缓存（cookie 属
+  调用方私有，回放给他人即泄露）
+- **响应缓存自定义凭据头**：凭据头名不再写死，新增
+  `ResponseCacheLayer::with_credential_header_names` / `with_credential_headers` 与
+  `AuthConfig::credential_header_names()`——API key 用自定义头名（如
+  `X-Tenant-Key`）鉴权时，此前该头不被识别为"带凭据"，其响应体仍按 URL 共享给
+  全体调用者
+- **库侧隔离不生效**：新增 `db-permission` 特性（蕴含 `dbnexus/permission`），
+  `DbGateway::with_session_role` 的会话角色由此被 dbnexus 逐表权限检查真正强制
+  执行（fail-closed）；未开启时该调用是空操作，现显式告警（此前静默声称隔离生效）
+
+### 变更 (Changed)
+
+- **探针路径归属显式化**：内置探针（`/healthz`、`/readyz`）与 `/metrics` 端点的
+  占用检查只扫 inventory 注册的路由——同名路径由 inventory 路由接管，内置挂载
+  跳过；调用方 `base` 声明的同名路径不在检查范围内（axum 不提供路由枚举接口，
+  框架无从得知），两者同时存在时构建期 panic（axum `Overlapping method route`）。
+  此前文档只描述了 inventory 一侧，调用方无从预判该 panic
+- **限流装配点显式化**：`http::build_with_config` 不再声称装配限流（限流器是异步
+  构造的）；新增异步入口 `http::build_with_config_rate_limited(&config).await`，
+  `[security.rate_limit]` 由此真正生效（限流在鉴权之外，探针与 `/metrics` 除外）
+- **并入路由与限流不再互斥**：新增异步入口
+  `http::build_with_config_ext_rate_limited(base, &config).await`——既并入调用方
+  路由（受鉴权/限流/安全头保护）又装上限流层；此前"并入路由"的入口不装限流、
+  "装限流"的入口不接受调用方路由，生产应用只能二选一
+- **`build_with_config` 语义收窄**：其返回的 router 只承载框架自带路由；自带路由
+  的宿主须改用 `build_with_config_ext(base, &config)`（文档与用户指南已同步），
+  否则 merge 进来的路由仍会绕过鉴权
+- **错误码词表统一**：`ApiError::code()` 成为机器码的唯一派生入口（HTTP 响应体、
+  gRPC `Status::details`、`ServiceError::code()`、MCP 输出共用同一词表）。**破坏性**：
+  `ServiceError::code()` 与 MCP `error.code` 的取值由 `INVALID_INPUT` /
+  `AUTHENTICATION_FAILED` / `ACCESS_DENIED` / `RATE_LIMIT_EXCEEDED` /
+  `QUOTA_EXHAUSTED` / `INTERNAL_ERROR` / `SERVICE_UNAVAILABLE` /
+  `VALIDATION_ERROR` 改为与 HTTP 载荷一致的 `BAD_REQUEST` / `UNAUTHORIZED` /
+  `FORBIDDEN` / `TOO_MANY_REQUESTS` / `INTERNAL` / `UNAVAILABLE` /
+  `UNPROCESSABLE_ENTITY`（HTTP 响应体与 gRPC details 的取值不变）
+- **错误码词表统一（同批覆盖 `SdForgeError` 面）**：`SdForgeError::to_service_error()`
+  不再自带变体专属码，同样按 HTTP 状态取自上述词表——**破坏性**：
+  `AUTH_ERROR` / `JWT_ERROR` → `UNAUTHORIZED`、`AUTH_CONFIG_ERROR` → `INTERNAL`、
+  `CONFIG_ERROR` → `BAD_REQUEST`、`INTERNAL_ERROR` → `INTERNAL`。同一 HTTP 状态
+  不再因错误来源不同而出现两个 wire 码；变体区分改由 `details.type`
+  （`auth` / `jwt` / `auth_config` / `config` / `internal`）承载
+- **`AuthConfig::Jwt` 新增 `audience` / `issuer` 字段**（可选，serde 缺省为 `None`）：
+  穷尽匹配该变体的下游代码需补 `..`
+- **`DbGateway` 默认会话角色变更**：由 `admin` 改为 `sdforge_gateway`；需要旧行为的
+  应用显式 `with_session_role("admin")`
+- **WebSocket 消息体积上限生效**：`WebSocketConfig::max_message_size`（默认 1 MiB）
+  此前是惰性字段——消息循环与解析函数都比对编译期常量 `MAX_MESSAGE_SIZE`，配置值从不
+  参与判定。现由升级提取器从 `SdForgeState::config` 取值并透传到消息循环：超过配置
+  上限的文本帧断开连接（此前只有超过 1 MiB 才断开）。把上限调小的应用行为随之改变
+  （此前不生效）；上限调大时不再被常量提前切断。同时新增
+  `parse_websocket_message_with_limit(text, limit)`，按调用方给定上限解析消息
+
 ## [0.5.0-rc.9] - 2026-10-19
 
 ### 变更 (Changed)

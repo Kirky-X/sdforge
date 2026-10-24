@@ -210,8 +210,8 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>cache</code></td><td>oxcache 内存缓存（独立于 http）</td><td>❌</td></tr>
   <tr><td><code>cache-l2</code></td><td>oxcache Redis L2 缓存（跨副本共享缓存层，蕴含 cache；故障固有 fail-open：读 miss/写跳过）</td><td>❌</td></tr>
   <tr><td><code>idempotency</code></td><td>幂等重放防护（<code>Idempotency-Key</code> HTTP 中间件 + gRPC metadata 路径；依赖 http + cache）</td><td>❌</td></tr>
-  <tr><td><code>health</code></td><td><code>/healthz</code> <code>/readyz</code> 健康探针（<code>build_with_config</code> 自动挂载，bypass 认证）</td><td>❌</td></tr>
-  <tr><td><code>metrics</code></td><td>Prometheus 文本格式 <code>/metrics</code> 端点（请求计数、延迟直方图、状态码分布；自研轻量渲染）</td><td>❌</td></tr>
+  <tr><td><code>health</code></td><td><code>/healthz</code> <code>/readyz</code> 健康探针（<code>build_with_config_ext</code> 自动挂载，bypass 认证；inventory 注册的同名路由优先，<code>base</code> 声明的同名路径会在构建期 panic）</td><td>❌</td></tr>
+  <tr><td><code>metrics</code></td><td>Prometheus 文本格式 <code>/metrics</code> 端点（请求计数、延迟直方图、状态码分布；自研轻量渲染；inventory 注册的同名路由优先，<code>base</code> 声明的同名路径会在构建期 panic）</td><td>❌</td></tr>
   <tr><td><code>graceful</code></td><td>优雅停机（SIGTERM/SIGINT：停止接新、排空在途、三阶段关闭）</td><td>❌</td></tr>
   <tr><td><code>serve-tls</code></td><td>HTTP TLS 终止（rustls aws-lc-rs：证书/密钥 PEM 加载、ALPN 可配置、<code>ReloadingTls</code> 热重载；每请求注入 <code>ConnectInfo</code>，握手/头读取超时护栏，停机编排与 graceful 共享收尾。与 gRPC 侧 <code>grpc-tls</code> 文档互链、实现独立）</td><td>❌</td></tr>
   <tr><td><code>tls-watch</code></td><td>TLS 证书去抖监听自动热重载（confers <code>FsWatcher</code> 监听 cert/key 文件变化驱动 <code>reload_async</code>；蕴含 <code>serve-tls</code>，重载失败保留旧证书）</td><td>❌</td></tr>
@@ -360,7 +360,7 @@ SDForge 由两个 crate 组成：`macros/sdforge-macros` 负责解析 `#[forge]`
 
 ### 🔄 核心执行路径
 
-以 HTTP 请求热路径为例：请求经中间件栈（认证 → 限流 → 安全头 / CORS）进入版本路由匹配 `/api/{version}`，由 forge handler 在统一 handler 契约（`HandlerArgs` + `HandlerState`）中执行业务逻辑，经 `ServiceResponse` 响应管道输出 JSON；MCP、gRPC、CLI 入口复用同一批 handler 与响应契约，中间件栈顺序、版本路由与响应管道由 `http::build()` / `build_with_config()` 装配。完整时序图与数据流见 [架构文档](docs/ARCHITECTURE.md#-数据流)。
+以 HTTP 请求热路径为例：请求经中间件栈（限流 → 认证 → 安全头 / CORS）进入版本路由匹配 `/api/{version}`，由 forge handler 在统一 handler 契约（`HandlerArgs` + `HandlerState`）中执行业务逻辑，经 `ServiceResponse` 响应管道输出 JSON；MCP、gRPC、CLI 入口复用同一批 handler 与响应契约，中间件栈顺序、版本路由与响应管道由 `http::build()` / `build_with_config()` 装配。完整时序图与数据流见 [架构文档](docs/ARCHITECTURE.md#-数据流)。
 
 
 ### 🌐 一份注解，五种协议

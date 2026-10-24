@@ -131,7 +131,7 @@ flowchart LR
 
 ### 请求期（以 HTTP 为例）
 
-7. 请求进入中间件栈：认证（`auth_middleware`，API Key / JWT Bearer）→ 限流（`RateLimitLayer`，基于 `ConnectInfo` 提取的 TCP 对端 IP）→ 安全头 / CORS / 超时
+7. 请求进入中间件栈：限流（`RateLimitLayer`，基于 `ConnectInfo` 提取的 TCP 对端 IP；由 `http::build_with_config_ext_rate_limited` 装配）→ 认证（`auth_middleware`，API Key / JWT Bearer）→ 安全头 / CORS / 超时
 8. 版本路由匹配 `/api/{version}`，将请求分发到目标 handler；宏生成的提取器把路径/查询参数反序列化为函数参数
 9. 统一 handler 契约执行：`HandlerArgs`（extractor 构造）+ `HandlerState`（`downcast_state` 注入）→ 业务函数 → `Result<T, ApiError>`
 10. 响应管道：`ServiceResponse` 封装（显式 `status` / `success_with_status`）→ 可选 timestamp / i18n 处理 → JSON 输出
@@ -159,9 +159,9 @@ sequenceDiagram
 
 - **认证**：`security` feature 提供 API Key（版本管理、LRU 缓存、显式播种 `ApiKeySeed`、空库 fail-loud、过期反向索引强制）与 JWT Bearer（HMAC-SHA256 验签，`MIN_SECRET_LENGTH=32` 强制密钥长度）
 - **fail-safe 默认值**：`ServerConfig` 默认绑定 `127.0.0.1`（而非 `0.0.0.0`）；CORS 校验同时检查 scheme 与 host，`"http://"` 这类仅 scheme 的 origin 被拒绝
-- **不可伪造的客户端 IP**：无 `ConnectInfo` 时不信任 `X-Forwarded-For` / `X-Real-IP`，直接返回 `None`，由调用方安全兜底；IP 限流/封禁只能基于 TCP 对端地址
+- **不可伪造的客户端 IP**：无 `ConnectInfo` 时不信任 `X-Forwarded-For` / `X-Real-IP`，直接返回 `None`，由调用方安全兜底；IP 限流/封禁只能基于 TCP 对端地址（可信代理网段写成 CIDR，裸 IP 不会被误判为可信）
 - **审计**：`AuditLogger` 记录安全事件，支持 HMAC-SHA256 签名防篡改；密钥轮换动作有审计日志
-- **错误脱敏**：`ApiError::Internal.message` 清洗后输出（不含路径/堆栈），`error_id` 供日志侧关联；`ErrorContext` 仅在服务端保留
+- **错误脱敏**：`ApiError::Internal.message` 清洗后输出（不含路径/堆栈），`error_id` 供日志侧关联；`ErrorContext`（含编译期源码路径/行号）仅在服务端保留——直接序列化 `ApiError` 也不带出内部消息与上下文
 - **输入防御**：MCP 工具 `input_schema` 的 required / unknown-field 校验；MCP 与 gRPC 载荷 1 MiB 上限；并发安全模式（Mutex/RwLock 中毒感知、缓存一致性锁序、usize 下溢防护）经系统化审计修复
 - **供应链**：`cargo-audit` + `cargo-deny`（`deny.toml` 策略）+ Dependabot + CodeQL；发布前强制 tiangang SAST（0 CRITICAL）与 diting 审查（无 HIGH）
 

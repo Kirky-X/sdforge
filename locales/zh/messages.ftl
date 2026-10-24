@@ -11,6 +11,8 @@
 # --- HTTP / 安全 ---------------------------------------------------------------
 http-unauthorized = 未授权
 http-route-not-found = 路由未找到
+http-security-header-invalid-name = 安全响应头名称非法 { $name }: { $error }
+http-security-header-invalid-value = 安全响应头取值非法 { $name }: { $error }
 
 # --- 限流（HTTP 拒绝响应体） -----------------------------------------------------
 ratelimit-exceeded = 速率限制已超出
@@ -120,6 +122,8 @@ ratelimit-dist-backend-unavailable = 分布式限流器后端不可用，按失�
 # --- otel 导出器 ----------------------------------------------------------------------------------
 otel-span-flush-failed = otel：span 刷新失败：{ $error }
 otel-metrics-flush-failed = otel：metrics 刷新失败：{ $error }
+otel-span-flush-http-error = otel：span 刷新被采集端拒绝，HTTP 状态码 { $status }
+otel-metrics-flush-http-error = otel：metrics 刷新被采集端拒绝，HTTP 状态码 { $status }
 otel-export-deadline-exceeded = 导出截止时间已超
 otel-resolve-failed = 解析失败：{ $error }
 otel-connect-failed = 连接失败：{ $error }

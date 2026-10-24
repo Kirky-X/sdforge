@@ -134,12 +134,12 @@ async fn search(
 
 | 类型/函数 | 说明 |
 |-----------|------|
-| `SdForgeConfig` / `SdForgeConfigBuilder` | 应用配置聚合根与 Builder（含 `security` / `cache` 字段与 `build_rate_limiter()` 自动装配） |
+| `SdForgeConfig` / `SdForgeConfigBuilder` | 应用配置聚合根与 Builder（含 `security` / `cache` 字段与 `build_rate_limiter()` 限流器构造——装配点见 `http::build_with_config_ext_rate_limited`） |
 | `ServerConfig` / `TlsConfig` / `TimeoutConfig` | 监听（默认 `127.0.0.1:8080`、30s 超时）、TLS（`cert_path`/`key_path`/`alpn_protocols`，ALPN 缺省 `["h2", "http/1.1"]`）、超时 |
 | `ApiConfig` / `TracingConfig` / `EnvHelper` | API 行为（路由前缀、默认版本）、追踪配置、运行环境名称辅助（`environment` 字段） |
-| `AuthConfig` / `ApiKeySeed` | 认证配置与 API Key 播种 |
+| `AuthConfig` / `ApiKeySeed` | 认证配置与 API Key 播种（`AuthConfig::Jwt { secret, audience, issuer }`：`audience` / `issuer` 配置后令牌缺该声明或取值不符即拒绝） |
 | `CacheConfig` | 缓存配置（`enabled`、`default_ttl_secs`、`max_items`、`track_stats`） |
-| `SecurityConfig` / `defaults` | 安全响应头配置（CSP、X-Frame-Options 等）与集中默认值（`MIN_SECRET_LENGTH=32` 等） |
+| `SecurityConfig` / `defaults` | 安全响应头配置（CSP、X-Frame-Options 等；`enable_headers=false` 时不下发任何安全头）与集中默认值（`MIN_SECRET_LENGTH=32` 等） |
 | `CorsConfig` / `build_cors_layer` | CORS 配置与层构建（校验非法 origin） |
 | `ConfigError` | 配置错误类型（实现 `ValidateConfig` 的类型另有 `validate()`） |
 
@@ -148,7 +148,8 @@ HTTP 构建入口 `sdforge::http`（`http` feature）：
 | 函数/类型 | 说明 |
 |-----------|------|
 | `build() -> Router` | 从 inventory 注册项构建 Axum Router（开箱即用） |
-| `build_with_config(&SdForgeConfig) -> Result<Router, ConfigError>` | 按配置构建（自动装配中间件与 health/metrics 探针） |
+| `build_with_config_ext(Router, &SdForgeConfig) -> Result<Router, ConfigError>` | 按配置构建的唯一配置化入口：先把调用方路由并入再叠中间件——axum 的 `Router::layer` 只作用于调用它之前已注册的路由，先套栈后 merge 的路由会绕过鉴权，故不提供"先套栈"入口（自动装配中间件与 health/metrics 探针；**不装配限流层**）。探针路径归属：inventory 注册的同名路由优先（内置挂载跳过），调用方 `base` 声明的同名路径不在检查范围内（axum 无路由枚举接口），冲突时构建期 panic（axum `Overlapping method route`） |
+| `build_with_config_ext_rate_limited(Router, &SdForgeConfig) -> Result<Router, ConfigError>`（`ratelimit-http`） | 异步入口：既并入调用方路由（受鉴权/限流/安全头保护）又装上限流层（`security.rate_limit` 的实际生效点，限流在鉴权之外、探针与 `/metrics` 之外）——此前"并入路由"与"装限流"两个诉求互斥；探针路径归属与 panic 条件同 `build_with_config_ext` |
 | `build_with_redirect() -> Router` | 含重定向行为的构建 |
 | `build_json_response` / `build_fallback_response` | JSON 响应与兜底响应构造 |
 | `HttpRoute` / `RouteRegistration` | 路由描述与 inventory 注册项 |
@@ -221,6 +222,16 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 语义约定：400 = 语法畸形/缺参/解析失败（`InvalidInput`）；422 = 语义约束违反
 （`ValidationError` 及 `#[forge(validate)]` 违规，错误体含 `errors` 数组）。
 
+**单一词表**：本表是框架唯一的机器错误码词表。`ApiError::code()` 是其唯一
+派生入口，HTTP 响应体（`UnifiedError`）、gRPC `Status::details`、
+`ServiceError::code()` 与 MCP 输出（`to_mcp_json`）对同一错误给出同一个码
+（`unified` 单元测试 `every_surface_reports_the_same_machine_code` 钉死）。
+`SdForgeError` 的非 `Api` 变体同样从本表取值（`Auth` / `Jwt` → `UNAUTHORIZED`，
+`AuthConfig` / `Internal` → `INTERNAL`，`Config` → `BAD_REQUEST`），错误子类型
+由错误体的 `details.type` 承载（`auth` / `jwt` / `auth_config` / `config` /
+`internal`），不另立机器码。
+`ErrorCategory`（`error::context`）是监控用的粗分类，不是 wire 词表。
+
 跨协议口径：gRPC 无与 HTTP 422 对应的原生状态码，400/422 在 gRPC 侧统一落
 `invalid_argument`，语义区分由 HTTP 状态码与载荷 `code` 字段（gRPC 侧经
 `Status::details` 携带）承载；幂等在途 409 → `already_exists`；契约表未登记
@@ -242,19 +253,33 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 
 `Api(ApiError)`、`Auth(AuthError)`、`Jwt(JwtError)`、`AuthConfig(AuthConfigError)`、`Config(ConfigError)`、`Internal(String)`；配套 `SdForgeResult<T>` 别名。
 
+`SdForgeError::to_service_error()` 的机器码与 HTTP 状态同源（经
+`error::unified::code_for_http_status` 派生），与上表同一词表：
+
+| 变体 | 状态 | `code` | `details.type` |
+|------|------|--------|----------------|
+| `Api` | 随 `ApiError` | 随 `ApiError` | 随 `ApiError` |
+| `Auth` | 401 | `UNAUTHORIZED` | `auth` |
+| `Jwt` | 401 | `UNAUTHORIZED` | `jwt` |
+| `AuthConfig` | 500 | `INTERNAL` | `auth_config` |
+| `Config` | 400 | `BAD_REQUEST` | `config` |
+| `Internal` | 500 | `INTERNAL` | `internal` |
+
+`Auth` / `Jwt` / `AuthConfig` 需 `security` 特性，`Config` 需 `http` 特性。
+
 ## 🚪 特性门控 API
 
 | Feature | 模块 | 主要 API |
 |---------|------|----------|
-| `http` | `sdforge::http` / `config` / `axum`（facade）/ `rbac` | `build`、`build_with_config`、`build_with_redirect`、`RouteRegistration`、`validate_email` / `validate_length`、`require_role`（配合 `#[forge(auth(role = "..."))]`）；axum/tower/tower-http re-export |
+| `http` | `sdforge::http` / `config` / `axum`（facade）/ `rbac` | `build`、`build_with_config`、`build_with_config_ext`、`build_with_redirect`、`RouteRegistration`、`validate_email` / `validate_length`、`require_role`（配合 `#[forge(auth(role = "..."))]`）；axum/tower/tower-http re-export |
 | `mcp` | `sdforge::mcp` | `SdForgeMcpServer`、`StatelessServerHandler`、`McpToolInstance` / `McpToolRegistration`、`build()`、`get_mcp_tools()`、`serve_stdio()`、`parse_mcp_headers` / `McpHeaderInfo`、`InputRequiredResult`、`MrtrSession`（会话管理器 `MrtrSessionManager` 不在根导出，需经 `sdforge::mcp::mrtr::MrtrSessionManager` 访问）、`cache_semantics`；`rmcp` / `anyhow` re-export |
 | `grpc` | `sdforge::grpc` | `SdForgeGrpcService`（`Call` / `CallStream` / `GetInfo`；`CallStream` 需另启 `streaming`）、`GrpcServerConfig`（`state: Option<Arc<dyn Any + Send + Sync>>`、`require_auth`（默认 `true`）、`auth`（`security` 下为 `Option<BearerAuth>`，未启用时降级为 `Option<()>`）、`rate_limiter`、`extra_services: Vec<ExtraServiceMount>`（自定义 tonic service 同端口挂载回调；`Clone` 共享同一回调列表）、`max_connections`（默认 1000）、`timeout_seconds`（默认 30 秒）、`http2_keepalive_interval` / `http2_keepalive_timeout`（`None` = tonic 默认）、`tls`（`grpc-tls`，`Option<tonic::transport::ServerTlsConfig>`）、`idempotency_store` / `idempotency_ttl_secs`（默认 86400） / `idempotency_inflight_ttl_secs`（默认 30）（`idempotency`））、`build_server_with_config(addr, config)`、`build_server_with_graceful_shutdown(addr, config, signal)`（`signal: Future<Output = ()>`）、`build_server(addr)`（**已弃用**，见下方注记）、`GrpcRoute`、`CallRequest` / `CallResponse` / `InfoRequest` / `InfoResponse`、`SdForgeServiceServer`、`GrpcHandlerRegistration` / `GrpcStreamHandlerRegistration`（`streaming`）；`tonic` / `prost` re-export |
-| `websocket` | `sdforge::websocket` | `WebSocketRoute` / `WebSocketHandler`、`websocket_upgrade` / `ValidatedWebSocketUpgrade`、`ConnectionManager`、`WebSocketConfig` / `WebSocketConnection` / `WebSocketMessage`、`parse_websocket_message` |
+| `websocket` | `sdforge::websocket` | `WebSocketRoute` / `WebSocketHandler`、`websocket_upgrade` / `ValidatedWebSocketUpgrade`、`ConnectionManager`、`WebSocketConfig` / `WebSocketConnection` / `WebSocketMessage`、`parse_websocket_message` / `parse_websocket_message_with_limit`（后者按调用方给定的字节上限判定消息大小）、`build` / `build_with_config`（后者可注入带鉴权的 `WebSocketConfig`，握手校验 JWT / API key） |
 | `streaming` | `sdforge::streaming` | `StreamEvent`、`StreamResponse`、`stream_to_sse`、`create_stream_channel`、`SseFrame` / `SseFrameParser` / `SseStreamError` / `frames`（入站 SSE 帧解析：WHATWG 分帧、`with_limits` 内存上限、零额外依赖）（`grpc_method` + `stream = true` 组合映射到 gRPC `CallStream`，见 `grpc` 行）；`tokio_stream` re-export |
 | `ratelimit-dist` | `sdforge::security::ratelimit::dist` | `DistributedRateLimiter`（泛型 limiteron `DistributedLimiter` 后端：`InMemoryDistributedLimiter` 单实例/`RedisDistributedLimiter` 多副本）、`DistributedRateLimitConfig`（含适配层熔断 `with_circuit_failure_threshold`/`with_circuit_open_duration`：连续后端错误打开、打开期不经后端直接按策略裁决、半开探测恢复）、`BackendFailurePolicy`（fail-open 默认/fail-close） |
 | `cache-l2` | `sdforge::cache::l2` | `RedisL2Cache`（oxcache `RedisBackend` 同步面 → `SyncCache`，仅多线程 runtime；异步面 `get_async`/`set_async`/`delete_async`/`contains_async` 供异步中间件热路径）、`RedisL2CacheConfig`（AUTH/TLS 连接串——Debug 输出掩码凭据、键前缀、默认 TTL）、`CacheL2Error` |
 | `security` / `ratelimit` / `ratelimit-http` | `sdforge::security` | 认证：`ApiKeyAuth`、`BearerAuth(+Builder)`、`SdForgeApiKeyAuth(+Builder)`、`AuthContext`、`AuthExtractor`、`auth_middleware`；审计：`AuditLogger` / `SdForgeAuditLogger(+Builder)`、`AuditLog` / `AuditResult`、`AuditSink`；限流：`RateLimiter` trait、`LimiteronAdapter`、`RateLimitLayer`（`ratelimit-http`） |
-| `cache` | `sdforge::cache` | `Cache` / `CacheKey`、`SyncCache` / `SharedCache`、`DashMapCache`（`OxcacheSyncCache` 别名）、`ResponseCacheLayer` / `ResponseCacheMiddleware`（另需 `http`）；`oxcache` re-export |
+| `cache` | `sdforge::cache` | `Cache` / `CacheKey`、`SyncCache` / `SharedCache`、`DashMapCache`（`OxcacheSyncCache` 别名）、`ResponseCacheLayer` / `ResponseCacheMiddleware` / `DEFAULT_MAX_CACHEABLE_BODY_BYTES` / `DEFAULT_CREDENTIAL_HEADER_NAMES`（另需 `http`；键 = 归一化 path + 原样 query；携带凭据的请求不进缓存，凭据头名经 `ResponseCacheLayer::with_credential_header_names` / `with_credential_headers` 或 `AuthConfig::credential_header_names()` 配置；超过可缓存上限的响应流式透传；带 `Set-Cookie` 的响应不进缓存）；`oxcache` re-export |
 | `openapi` | `sdforge::openapi` | `generate_openapi_spec()`、`OpenApiBuilder`（`title` / `version` / `description` / `build`）、`OpenApiRouteInfo` / `OpenApiPathParam`；`utoipa` re-export |
 | `schemars` | `sdforge::openapi`（反射 API） | `SchemaProbe::probe`、`PreciseSchema` / `FallbackSchema`（派生 `JsonSchema` 的返回类型产出字段级精确 response schema，未派生静默降级；蕴含 `openapi`） |
 | `cli` | `sdforge::cli` | `CliBuilder`（`new`、`with_dependencies`、`with_name`、`with_global_arg`、`build -> clap::Command`、`execute -> !`）、`dispatch`、`GlobalArg`、`CliCommandRegistration` / `CliHandlerRegistration`；`clap` re-export |
@@ -268,7 +293,7 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 | `otel` | `sdforge::otel` | `start_span` / `with_attr` / `finish_span` / `take_spans`、`OtelConfig`（OTLP/HTTP JSON 导出） |
 | `inklog` | `sdforge::inklog` / `sdforge::forge::log` | `init_inklog_logger()`：将 `log` 调用桥接到 inklog 结构化管道；`#[forge::log]` 声明日志属性宏（`args`/`result`/`err_detail`/`level` 参数，DataMasker 脱敏 + 64 KiB 截断、级别守卫惰性渲染、`unsafe` 限定传播、`log_attr::mask`/`render_enter`/`render_exit` 可独立复用） |
 | `i18n` | `sdforge::i18n` | `HttpI18nFormatter`（ICU4X 本地化格式化）、`I18nError`、`locale_from_accept_language` / `locale_from_headers`（请求语言解析）、`scope_request_locale` / `request_locale`（请求级 locale 作用域，`t()` 优先消费） |
-| `limiteron-integration` / `kit` / `db-integration` | `sdforge::integrations` | trait-kit AsyncKit 集成（`SdforgeModule`）、`LimiteronForgeAdapter`、dbnexus 数据 API 网关（`DbGateway`：`allow_table` + `query(GatewayQuery)` 白名单只读面、`GatewayQuery::all/filter/paging`） |
+| `limiteron-integration` / `kit` / `db-integration` / `db-permission` | `sdforge::integrations` | trait-kit AsyncKit 集成（`SdforgeModule`）、`LimiteronForgeAdapter`、dbnexus 数据 API 网关（`DbGateway`：`allow_table` + `query(GatewayQuery)` 白名单只读面、`GatewayQuery::all/filter/paging`、`with_session_role` 会话角色——仅在 `db-permission`（蕴含 `dbnexus/permission`）下被 dbnexus 逐表权限检查强制执行，否则只提供白名单与强制归属谓词隔离并显式告警） |
 
 > 无独立模块的能力：`validate`（`#[forge(validate)]` + `#[param(...)]`，属性表见 [`#[param]` 参数属性](#param-参数属性)）、`paginate`（`#[forge(paginate)]`）、`etag`（GET 强 ETag + 304）、`graceful`（优雅停机）、`timestamp`（响应时间戳）、`simd-json`（SIMD JSON 路径）经宏旗标或构建配置生效。
 >

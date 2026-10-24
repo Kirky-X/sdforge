@@ -102,11 +102,25 @@ async fn main() {
 
 ```rust
 use sdforge::config::SdForgeConfig;
-use sdforge::http::build_with_config;
+use sdforge::http::build_with_config_ext;
+use axum::Router;
 
 let config = SdForgeConfig::default();
-let app = build_with_config(&config)?;
+// 应用自己的路由必须先并入，再叠中间件栈
+let app = build_with_config_ext(Router::new(), &config)?;
 ```
+
+> **应用路由必须经 `build_with_config_ext` 并入**：axum 的 `Router::layer` 只作用于
+> 调用它之前已注册的路由。sdforge 不提供"先套栈后 merge"的装配入口——往已叠
+> 中间件栈的 Router 里 `merge` 应用路由，会让这些路由绕过整条中间件栈（鉴权、
+> 限流、安全头全无），等于对外开一组无鉴权接口。
+
+> **探针路径归属**：内置探针（`/healthz`、`/readyz`）与 `/metrics` 端点在
+> `health` / `metrics` feature 开启时自动挂载。挂载前的占用检查只扫 inventory
+> 注册的路由——同名路径由 inventory 路由接管，内置挂载跳过；但调用方 `base`
+> 声明的同名路径不在检查范围内（axum 不提供路由枚举接口，框架无从得知），
+> 两者同时存在时构建期 panic：axum `Overlapping method route`。`base` 要占用
+> 这些路径，只能改用其他路径，或不启用对应 feature。
 
 ### TOML 配置文件
 
@@ -149,6 +163,25 @@ default_ttl_secs = 600
 max_items = 5000
 track_stats = true
 ```
+
+> **限流装配点**：装配入口统一为"先并路由再套栈"的 ext 系列——axum 的
+> `Router::layer` 只作用于调用它之前已注册的路由，先套栈后 merge 的路由会绕过
+> 整条中间件栈，因此不存在"先套栈"入口。`security.rate_limit` 的限流器由
+> limiteron 异步构造，同步入口装不上：要让限流真正生效，用
+> `http::build_with_config_ext_rate_limited(base, &config).await?`；
+> 它在鉴权层之外安装限流层（未认证洪水先被限流），探针与 `/metrics` 不受影响。
+>
+> ```rust
+> let router = sdforge::http::build_with_config_ext_rate_limited(base, &config).await?;
+> ```
+>
+> **只要框架自带路由且不限流**：用同步入口 `http::build_with_config_ext(Router::new(), &config)?`。
+> 两个诉求（并入路由 / 装限流）此前互斥（并入路由的入口不装限流，装限流的入口
+> 不接受调用方路由），现已由 ext 系列统一。
+>
+> ```rust
+> let router = sdforge::http::build_with_config_ext_rate_limited(app_routes, &config).await?;
+> ```
 
 ## 🔧 进阶用法
 
@@ -343,6 +376,7 @@ serve_with_graceful_shutdown_tls(
 
 - **SSE**（`streaming` feature）：`StreamEvent` / `StreamResponse` / `stream_to_sse` / `create_stream_channel`。流内建空闲心跳：源静默时每 10s 发送 `: keep-alive` 注释帧（客户端忽略）防中间层按空闲切断；数据帧重置心跳计时，源 30s 静默仍以 error 事件 + `complete` 终止
 - **WebSocket**（`websocket` feature，需 `http` + `streaming`）：`websocket_upgrade`、`WebSocketHandler`、`ConnectionManager`、`WebSocketConfig`；`#[forge(ws_path = "...")]` 声明挂载路径（`websocket::build()` 消费），未声明时挂载于 `/{name}`
+- **WebSocket 装配**：`websocket::build()` 用默认配置装配（握手不校验凭据）；`websocket::build_with_config(config)` 注入自定义 `WebSocketConfig`，其中 `auth`（JWT）/ `api_key_auth`（API key）在升级前校验凭据，无凭据或凭据无效返回 401。`WebSocketConfig::max_message_size`（默认 1 MiB）是消息体积上限：超过上限的文本帧直接断开连接；`parse_websocket_message_with_limit(text, limit)` 按给定上限解析消息
 
 ### 缓存
 

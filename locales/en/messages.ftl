@@ -13,6 +13,8 @@
 # --- HTTP / security ---------------------------------------------------------
 http-unauthorized = Unauthorized
 http-route-not-found = Route not found
+http-security-header-invalid-name = Invalid security header name { $name }: { $error }
+http-security-header-invalid-value = Invalid security header value for { $name }: { $error }
 
 # --- Rate limiting (HTTP rejection bodies) -----------------------------------
 ratelimit-exceeded = Rate limit exceeded
@@ -122,6 +124,8 @@ ratelimit-dist-backend-unavailable = distributed rate limiter backend unavailabl
 # --- otel exporter -----------------------------------------------------------------------
 otel-span-flush-failed = otel: span flush failed: { $error }
 otel-metrics-flush-failed = otel: metrics flush failed: { $error }
+otel-span-flush-http-error = otel: span flush rejected with HTTP status { $status }
+otel-metrics-flush-http-error = otel: metrics flush rejected with HTTP status { $status }
 otel-export-deadline-exceeded = export deadline exceeded
 otel-resolve-failed = resolve failed: { $error }
 otel-connect-failed = connect failed: { $error }
