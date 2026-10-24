@@ -845,6 +845,108 @@ mod builtin_catalog_tests {
         );
     }
 
+    /// 守卫：otel 导出器、审计签名与 sdk 子命令的文案在双语两侧都必须渲染出
+    /// 预期文本（canonical mirror：en 值与构造点内嵌的规范串逐字一致）。
+    #[test]
+    fn test_otel_audit_and_sdk_keys_render_in_both_locales() {
+        let _guard = registry_guard();
+        clear_translations();
+        let cases: &[(&str, &[(&str, &str)], &str, &str)] = &[
+            (
+                "otel-export-deadline-exceeded",
+                &[],
+                "export deadline exceeded",
+                "导出截止时间已超",
+            ),
+            (
+                "otel-resolve-failed",
+                &[("error", "boom")],
+                "resolve failed: boom",
+                "解析失败：boom",
+            ),
+            (
+                "otel-connect-failed",
+                &[("error", "refused")],
+                "connect failed: refused",
+                "连接失败：refused",
+            ),
+            (
+                "otel-endpoint-must-be-http",
+                &[],
+                "otel endpoint must be http:// in MVP",
+                "MVP 阶段 otel 端点必须以 http:// 开头",
+            ),
+            (
+                "otel-response-exceeds-byte-cap",
+                &[],
+                "export response exceeded the byte cap",
+                "导出响应超出字节上限",
+            ),
+            (
+                "otel-read-failed",
+                &[("error", "eof")],
+                "read failed: eof",
+                "读取失败：eof",
+            ),
+            (
+                "otel-malformed-response",
+                &[],
+                "malformed response",
+                "响应格式错误",
+            ),
+            (
+                "otel-write-failed",
+                &[("error", "reset")],
+                "write failed: reset",
+                "写入失败：reset",
+            ),
+            (
+                "audit-no-signature-present",
+                &[],
+                "No signature present",
+                "无签名",
+            ),
+            (
+                "cli-sdk-about",
+                &[],
+                "Generate client SDKs from the registered routes",
+                "从已注册路由生成客户端 SDK",
+            ),
+            (
+                "cli-sdk-lang-help",
+                &[],
+                "SDK target language",
+                "SDK 目标语言",
+            ),
+            (
+                "cli-sdk-output-dir-help",
+                &[],
+                "Output directory (defaults to current directory)",
+                "输出目录（默认为当前目录）",
+            ),
+            (
+                "cli-sdk-reqwest-help",
+                &[],
+                "Rust output: append the cfg(reqwest) ReqwestTransport impl",
+                "Rust 产物：追加 cfg(reqwest) 的 ReqwestTransport 实现",
+            ),
+        ];
+        for (key, args, expected_en, expected_zh) in cases {
+            let args: Vec<(&str, String)> =
+                args.iter().map(|(k, v)| (*k, (*v).to_string())).collect();
+            assert_eq!(
+                translate_for("en", key, &args),
+                *expected_en,
+                "en catalog entry for '{key}' diverged"
+            );
+            assert_eq!(
+                translate_for("zh", key, &args),
+                *expected_zh,
+                "zh catalog entry for '{key}' diverged"
+            );
+        }
+    }
+
     /// 守卫：缺失 key 回退到 key 本身（translate_for / t），未知语言回退 en 束。
     #[test]
     fn test_missing_key_and_unknown_locale_fallback() {

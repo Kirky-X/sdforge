@@ -65,6 +65,10 @@ cli-format-help = Output format: text (human-readable, default) or json (machine
 cli-error-prefix = error: { $message }
 cli-auth-failure = error: authentication failed: { $reason }
 cli-sdk-generated = generated { $count } sdk file(s): { $files }
+cli-sdk-about = Generate client SDKs from the registered routes
+cli-sdk-lang-help = SDK target language
+cli-sdk-output-dir-help = Output directory (defaults to current directory)
+cli-sdk-reqwest-help = Rust output: append the cfg(reqwest) ReqwestTransport impl
 
 # --- OpenAPI info ----------------------------------------------------------------
 openapi-info-title = SDForge API
@@ -77,6 +81,7 @@ auth-verifier-worker-failed = auth verifier worker failed: { $error }
 audit-signing-key-empty = ⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY is empty. Audit logs will not be signed.
 audit-signing-key-missing = ⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY not set. Audit logs will not be signed.{"\u000A"}   For production, set this environment variable to a secure random value (min 32 bytes).{"\u000A"}   Example: export SDFORGE_AUDIT_SIGNING_KEY=$(openssl rand -hex 32)
 audit-no-tokio-runtime = [AuditLogger] WARNING: no tokio runtime available, audit log dropped for action={ $action }
+audit-no-signature-present = No signature present
 
 # --- TLS handshake logging ---------------------------------------------------------
 tls-handshake-failed = TLS handshake failed: { $error }
@@ -117,6 +122,14 @@ ratelimit-dist-backend-unavailable = distributed rate limiter backend unavailabl
 # --- otel exporter -----------------------------------------------------------------------
 otel-span-flush-failed = otel: span flush failed: { $error }
 otel-metrics-flush-failed = otel: metrics flush failed: { $error }
+otel-export-deadline-exceeded = export deadline exceeded
+otel-resolve-failed = resolve failed: { $error }
+otel-connect-failed = connect failed: { $error }
+otel-endpoint-must-be-http = otel endpoint must be http:// in MVP
+otel-response-exceeds-byte-cap = export response exceeded the byte cap
+otel-read-failed = read failed: { $error }
+otel-malformed-response = malformed response
+otel-write-failed = write failed: { $error }
 
 # --- docs (Swagger UI routing) -------------------------------------------------------------
 docs-openapi-serialize-failed = OpenAPI spec serialize failed: { $error }

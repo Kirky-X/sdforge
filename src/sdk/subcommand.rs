@@ -25,25 +25,37 @@ const TS_FILE: &str = "sdforge_client.ts";
 /// 构造 `sdk` 子命令的 `clap::Command` 定义。
 pub fn sdk_subcommand_definition() -> clap::Command {
     clap::Command::new("sdk")
-        .about("Generate client SDKs from the registered routes")
+        .about(crate::i18n::translate_or_fallback(
+            "Generate client SDKs from the registered routes",
+            Some("cli-sdk-about"),
+        ))
         .arg(
             clap::Arg::new("lang")
                 .long("lang")
                 .value_parser(clap::builder::PossibleValuesParser::new(SDK_LANG_VALUES))
                 .default_value("all")
-                .help("SDK target language"),
+                .help(crate::i18n::translate_or_fallback(
+                    "SDK target language",
+                    Some("cli-sdk-lang-help"),
+                )),
         )
         .arg(
             clap::Arg::new("output-dir")
                 .long("output-dir")
                 .value_parser(clap::value_parser!(PathBuf))
-                .help("Output directory (defaults to current directory)"),
+                .help(crate::i18n::translate_or_fallback(
+                    "Output directory (defaults to current directory)",
+                    Some("cli-sdk-output-dir-help"),
+                )),
         )
         .arg(
             clap::Arg::new("reqwest")
                 .long("reqwest")
                 .action(clap::ArgAction::SetTrue)
-                .help("Rust output: append the cfg(reqwest) ReqwestTransport impl"),
+                .help(crate::i18n::translate_or_fallback(
+                    "Rust output: append the cfg(reqwest) ReqwestTransport impl",
+                    Some("cli-sdk-reqwest-help"),
+                )),
         )
 }
 

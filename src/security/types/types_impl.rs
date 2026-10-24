@@ -350,13 +350,16 @@ impl AuditLog {
     ///     Err(_) => println!("No signature present"),
     /// }
     /// ```
-    pub fn verify_signature(&self, secret_key: &[u8]) -> Result<bool, &'static str> {
+    pub fn verify_signature(&self, secret_key: &[u8]) -> Result<bool, String> {
         use hmac::{Hmac, KeyInit, Mac};
         use sha2::Sha256;
 
         type HmacSha256 = Hmac<Sha256>;
 
-        let stored_sig = self.signature.as_ref().ok_or("No signature present")?;
+        let stored_sig = self
+            .signature
+            .as_ref()
+            .ok_or_else(|| crate::i18n::t("audit-no-signature-present", &[]))?;
 
         // Recreate canonical string
         let canonical = format!(

@@ -63,6 +63,10 @@ cli-format-help = 输出格式：text（人类可读，默认）或 json（机�
 cli-error-prefix = 错误：{ $message }
 cli-auth-failure = 错误：认证失败：{ $reason }
 cli-sdk-generated = 已生成 { $count } 个 SDK 文件：{ $files }
+cli-sdk-about = 从已注册路由生成客户端 SDK
+cli-sdk-lang-help = SDK 目标语言
+cli-sdk-output-dir-help = 输出目录（默认为当前目录）
+cli-sdk-reqwest-help = Rust 产物：追加 cfg(reqwest) 的 ReqwestTransport 实现
 
 # --- OpenAPI 信息 ---------------------------------------------------------------------
 openapi-info-title = SDForge API
@@ -75,6 +79,7 @@ auth-verifier-worker-failed = 认证验证器工作线程失败：{ $error }
 audit-signing-key-empty = ⚠️  警告：SDFORGE_AUDIT_SIGNING_KEY 为空，审计日志将不会签名。
 audit-signing-key-missing = ⚠️  警告：未设置 SDFORGE_AUDIT_SIGNING_KEY，审计日志将不会签名。{"\u000A"}   生产环境请将此环境变量设置为安全的随机值（至少 32 字节）。{"\u000A"}   示例：export SDFORGE_AUDIT_SIGNING_KEY=$(openssl rand -hex 32)
 audit-no-tokio-runtime = [AuditLogger] 警告：无 tokio 运行时，审计日志已丢弃，action={ $action }
+audit-no-signature-present = 无签名
 
 # --- TLS 握手日志 -------------------------------------------------------------------------
 tls-handshake-failed = TLS 握手失败：{ $error }
@@ -115,6 +120,14 @@ ratelimit-dist-backend-unavailable = 分布式限流器后端不可用，按失�
 # --- otel 导出器 ----------------------------------------------------------------------------------
 otel-span-flush-failed = otel：span 刷新失败：{ $error }
 otel-metrics-flush-failed = otel：metrics 刷新失败：{ $error }
+otel-export-deadline-exceeded = 导出截止时间已超
+otel-resolve-failed = 解析失败：{ $error }
+otel-connect-failed = 连接失败：{ $error }
+otel-endpoint-must-be-http = MVP 阶段 otel 端点必须以 http:// 开头
+otel-response-exceeds-byte-cap = 导出响应超出字节上限
+otel-read-failed = 读取失败：{ $error }
+otel-malformed-response = 响应格式错误
+otel-write-failed = 写入失败：{ $error }
 
 # --- 文档（Swagger UI 路由） --------------------------------------------------------------------------
 docs-openapi-serialize-failed = OpenAPI 规范序列化失败：{ $error }
