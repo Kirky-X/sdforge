@@ -152,6 +152,10 @@ pub struct GrpcServerConfig {
     /// 路由形态为 `/{S::NAME}/*rest`（tonic 0.14 axum 路由）：自定义
     /// service 的 NAME 不得与 `sdforge.v1.SdForgeService` 冲突，冲突在
     /// 装配期 panic（fail-loud），不做静默改名。
+    ///
+    /// 鉴权：传输层拦截器在装配 `auth`（JWT）或 `auth_verifier`
+    /// （协议无关校验器）时对**全部** service 生效——自定义 service 与
+    /// 框架 service 共用同一个拦截器层。未配置任何鉴权时它们不被保护。
     pub extra_services: Vec<ExtraServiceMount>,
 }
 
@@ -160,6 +164,10 @@ pub struct GrpcServerConfig {
 #[derive(Clone)]
 pub(crate) struct AuthGrpcInterceptor {
     auth: Option<crate::security::BearerAuth>,
+    /// 协议无关校验器（`GrpcAuthVerifier`）。装配后同时覆盖框架 service 与
+    /// `extra_services` 挂载的自定义 service——此前传输层拦截器只认
+    /// `config.auth`（JWT），仅配 API key 时自定义 service 完全无鉴权。
+    verifier: Option<std::sync::Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
 }
 
 #[cfg(test)]

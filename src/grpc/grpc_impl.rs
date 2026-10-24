@@ -1132,8 +1132,10 @@ where
     // vuln-0006: refuse to start an unauthenticated server when require_auth is true.
     // This check runs after address validation (so invalid addresses still report
     // the address error) but before any server binding (so it fails fast).
+    // `auth_verifier`（协议无关校验器）同样算作"已配置鉴权"——否则用 API key
+    // 的应用被迫关掉 require_auth，而那正是传输层拦截器变成空操作的条件。
     #[cfg(feature = "security")]
-    if config.require_auth && config.auth.is_none() {
+    if config.require_auth && config.auth.is_none() && config.auth_verifier.is_none() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             "gRPC server requires authentication but no auth configured \
@@ -1164,7 +1166,8 @@ where
 
     #[cfg(feature = "security")]
     let mut builder = {
-        let auth_interceptor = make_auth_interceptor(config.auth.clone());
+        let auth_interceptor =
+            make_auth_interceptor(config.auth.clone(), config.auth_verifier.clone());
         Server::builder().layer(tonic::service::InterceptorLayer::new(auth_interceptor))
     };
     #[cfg(not(feature = "security"))]
@@ -1240,16 +1243,42 @@ impl Default for GrpcServerConfig {
 }
 
 /// Create a gRPC authentication interceptor from an optional BearerAuth config.
+///
+/// `verifier`（协议无关校验器）优先：它同时覆盖 JWT 与 API key，且对
+/// `extra_services` 挂载的自定义 service 同样生效——仅配 `config.auth`
+/// 时自定义 service 只受 JWT 拦截器保护。
 #[cfg(all(feature = "grpc", feature = "security"))]
 pub(crate) fn make_auth_interceptor(
     auth: Option<crate::security::BearerAuth>,
+    verifier: Option<std::sync::Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
 ) -> AuthGrpcInterceptor {
-    AuthGrpcInterceptor { auth }
+    AuthGrpcInterceptor { auth, verifier }
 }
 
 #[cfg(all(feature = "grpc", feature = "security"))]
 impl tonic::service::Interceptor for AuthGrpcInterceptor {
     fn call(&mut self, req: tonic::Request<()>) -> Result<tonic::Request<()>, Status> {
+        // 协议无关校验器优先：同一套凭据校验同时覆盖框架 service 与
+        // extra_services 挂载的自定义 service。
+        if let Some(ref verifier) = self.verifier {
+            let authorization = req
+                .metadata()
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .map(String::from);
+            let api_key = req
+                .metadata()
+                .get("x-api-key")
+                .and_then(|v| v.to_str().ok())
+                .map(String::from);
+            return match verifier.verify(authorization.as_deref(), api_key.as_deref()) {
+                Ok(_) => Ok(req),
+                // 校验器的 Err 载荷是固定短语（见 GrpcAuthVerifier 的契约），
+                // 不含凭据材料。
+                Err(reason) => Err(Status::unauthenticated(reason)),
+            };
+        }
+
         let Some(ref bearer_auth) = self.auth else {
             return Ok(req);
         };
