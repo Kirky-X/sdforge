@@ -24,7 +24,7 @@ use crate::config::SecurityConfig;
 use crate::config::{ApiKeySeed, AuthConfig, SdForgeConfig, ServerConfig};
 #[cfg(not(feature = "security"))]
 use crate::config::{AuthConfig, SdForgeConfig, ServerConfig};
-use crate::http::{X_REQUEST_ID, build_with_config};
+use crate::http::{X_REQUEST_ID, build_with_config_ext};
 
 // Request ID Middleware Execution Tests (covers lines 226-244)
 // These tests send real requests through the router to exercise the
@@ -48,7 +48,7 @@ async fn test_request_id_middleware_generates_uuid_when_absent() {
         #[cfg(feature = "security")]
         security: SecurityConfig::default(),
     };
-    let router = build_with_config(&config).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &config).unwrap();
     let response = tower::ServiceExt::oneshot(
         router,
         axum::http::Request::builder()
@@ -85,7 +85,7 @@ async fn test_request_id_middleware_preserves_custom_id() {
         #[cfg(feature = "security")]
         security: SecurityConfig::default(),
     };
-    let router = build_with_config(&config).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &config).unwrap();
     let response = tower::ServiceExt::oneshot(
         router,
         axum::http::Request::builder()
@@ -120,7 +120,7 @@ async fn test_request_id_middleware_non_utf8_header_generates_uuid() {
         #[cfg(feature = "security")]
         security: SecurityConfig::default(),
     };
-    let router = build_with_config(&config).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &config).unwrap();
     let response = tower::ServiceExt::oneshot(
         router,
         axum::http::Request::builder()
@@ -177,11 +177,13 @@ fn build_jwt_test_router(secret: &str) -> Router {
         },
         authentication: AuthConfig::Jwt {
             secret: secret.to_string(),
+            audience: None,
+            issuer: None,
         },
         timeout: None,
         ..Default::default()
     };
-    build_with_config(&config).unwrap()
+    build_with_config_ext(axum::Router::new(), &config).unwrap()
 }
 
 #[cfg(feature = "security")]
@@ -285,7 +287,7 @@ async fn test_jwt_auth_valid_token_returns_200() {
 
 // ApiKey Auth Middleware Execution Tests (security feature, covers lines 288-328)
 // These tests exercise the extract_auth closure body for ApiKey auth.
-// Keys declared in the config are seeded into the store by build_with_config,
+// Keys declared in the config are seeded into the store by build_with_config_ext,
 // so the success path (valid key → 200) is covered below. A key with an
 // empty permission list validates to None, so the seeded key carries one.
 
@@ -310,7 +312,7 @@ fn build_apikey_test_router(header_name: &str, prefix: &str) -> Router {
         timeout: None,
         ..Default::default()
     };
-    build_with_config(&config).unwrap()
+    build_with_config_ext(axum::Router::new(), &config).unwrap()
 }
 
 #[cfg(feature = "security")]

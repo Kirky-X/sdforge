@@ -29,6 +29,42 @@ pub const IDEMPOTENCY_SKIPPED_HEADER: &str = "idempotency-skipped";
 /// 正常业务响应远低于此；上限判定用配置的 `max_response_bytes`。
 pub const IDEMPOTENCY_HARD_CAP: usize = 32 * 1024 * 1024;
 
+/// 幂等作用域 = 路由模式 + 主体标识。
+///
+/// 主体维度不可省：`Idempotency-Key` 由客户端自选，两个不同主体复用同一个
+/// key 时不得共享同一条记录（否则后者的响应体会被回放给前者，且后者的写
+/// 操作被静默吞掉）。
+pub(crate) fn idempotency_scope(route: &str, principal: &str) -> String {
+    format!("{route}:{principal}")
+}
+
+/// 幂等作用域中的主体标识。
+///
+/// 认证中间件早于幂等中间件执行（鉴权层后施加 → 更外层），故
+/// `AuthContext` 已在 request extensions 中。未开启鉴权时退化为客户端 IP
+/// （可用时）或 `anonymous`。
+fn request_principal(
+    #[cfg_attr(
+        not(any(feature = "security", feature = "ratelimit-http")),
+        allow(unused_variables)
+    )]
+    req: &axum::extract::Request,
+) -> String {
+    #[cfg(feature = "security")]
+    if let Some(ctx) = req.extensions().get::<crate::security::AuthContext>()
+        && let Some(user_id) = ctx.user_id()
+    {
+        return user_id.to_string();
+    }
+
+    #[cfg(any(feature = "security", feature = "ratelimit-http"))]
+    if let Some(ip) = crate::security::extract_client_ip(req) {
+        return ip;
+    }
+
+    "anonymous".to_string()
+}
+
 /// Build the idempotency middleware for `axum::middleware::from_fn`.
 pub async fn idempotency_middleware(
     store: Arc<IdempotencyStore>,
@@ -59,11 +95,14 @@ pub async fn idempotency_middleware(
     // 故正常请求都走上一分支。兜底值不用常量 "unmatched"：那会把所有未匹配请求
     // （以及任何使 MatchedPath 缺失的上游行为变化）并入同一 scope，使同一 key 跨
     // 端点互相重放——属可预防的隐患面，改用请求 URI 路径保持端点隔离。
-    let scope = req
+    let route = req
         .extensions()
         .get::<axum::extract::MatchedPath>()
         .map(|p| p.as_str().to_string())
         .unwrap_or_else(|| req.uri().path().to_string());
+    // scope 还必须绑定已认证主体：Idempotency-Key 由客户端自选，两个不同主体
+    // 复用同一个 key 时，后者的响应体会被回放给前者，且后者的写操作被静默吞掉。
+    let scope = idempotency_scope(&route, &request_principal(&req));
 
     match store.begin(&scope, &key, inflight_ttl_secs) {
         IdempotencyOutcome::Replay {
@@ -359,7 +398,7 @@ mod idempotency_middleware_tests {
         let store = Arc::new(IdempotencyStore::new());
         // 先手工 claim（等价于并发中的另一路请求正在执行），使中间件命中 InFlight。
         assert!(matches!(
-            store.begin("/x", "busy-key", 30),
+            store.begin(&idempotency_scope("/x", "anonymous"), "busy-key", 30),
             IdempotencyOutcome::Execute
         ));
         let hits = Arc::new(AtomicUsize::new(0));
@@ -638,7 +677,14 @@ mod idempotency_middleware_tests {
     async fn replay_with_unparsable_cached_status_falls_back_to_ok() {
         // 缓存条目状态码非法（历史数据/外部写入）时重放不得 panic，回退 200。
         let store = Arc::new(IdempotencyStore::new());
-        store.complete("/x", "bad-status", 1_000, None, b"body".to_vec(), 60);
+        store.complete(
+            &idempotency_scope("/x", "anonymous"),
+            "bad-status",
+            1_000,
+            None,
+            b"body".to_vec(),
+            60,
+        );
         let hits = Arc::new(AtomicUsize::new(0));
         let resp = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
             .oneshot(req(Method::POST, "/x", Some("bad-status")))
@@ -658,6 +704,110 @@ mod idempotency_middleware_tests {
             "replay must fall back to JSON when content_type is missing"
         );
         assert_eq!(body_text(resp).await, "body");
+    }
+
+    /// 构造带已认证主体的请求（生产链路由鉴权中间件注入 `AuthContext`）。
+    #[cfg(feature = "security")]
+    fn req_as(method: Method, uri: &str, key: Option<&str>, user_id: &str) -> Request<Body> {
+        let mut request = req(method, uri, key);
+        request
+            .extensions_mut()
+            .insert(crate::security::AuthContext::new(
+                Some(user_id.to_string()),
+                vec!["read".to_string()],
+                crate::security::AuthMetadata::default(),
+            ));
+        request
+    }
+
+    /// 同一 `Idempotency-Key` 打到两个不同主体：不得共享响应——第二个主体
+    /// 的写操作不得被静默吞掉，响应体也不得回放给另一个主体。
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn same_key_from_different_principals_does_not_replay() {
+        let store = Arc::new(IdempotencyStore::new());
+        let hits = Arc::new(AtomicUsize::new(0));
+
+        let first = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+            .oneshot(req_as(Method::POST, "/x", Some("shared-key"), "user-a"))
+            .await
+            .unwrap();
+        assert_eq!(replayed(&first).as_deref(), Some("executed"));
+
+        let second = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+            .oneshot(req_as(Method::POST, "/x", Some("shared-key"), "user-b"))
+            .await
+            .unwrap();
+        assert_eq!(
+            replayed(&second).as_deref(),
+            Some("executed"),
+            "a different principal must not replay the first principal's response"
+        );
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            2,
+            "both principals must reach the handler"
+        );
+    }
+
+    /// 同一主体的同一 key 仍然重放（主体隔离不得误伤正常重放）。
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn same_key_from_same_principal_replays() {
+        let store = Arc::new(IdempotencyStore::new());
+        let hits = Arc::new(AtomicUsize::new(0));
+
+        let first = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+            .oneshot(req_as(Method::POST, "/x", Some("own-key"), "user-a"))
+            .await
+            .unwrap();
+        assert_eq!(replayed(&first).as_deref(), Some("executed"));
+
+        let second = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits))
+            .oneshot(req_as(Method::POST, "/x", Some("own-key"), "user-a"))
+            .await
+            .unwrap();
+        assert_eq!(
+            replayed(&second).as_deref(),
+            Some("true"),
+            "the same principal must still get the replayed response"
+        );
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
+    }
+
+    /// 两个主体并发使用同一 key：两条请求各自执行，不得出现"在途冲突"
+    /// （409）或互相重放。
+    #[cfg(feature = "security")]
+    #[tokio::test]
+    async fn concurrent_same_key_from_different_principals_both_execute() {
+        let store = Arc::new(IdempotencyStore::new());
+        let hits = Arc::new(AtomicUsize::new(0));
+
+        let app_a = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits));
+        let app_b = app_ok(state(Arc::clone(&store), 4096), Arc::clone(&hits));
+        let (resp_a, resp_b) = tokio::join!(
+            app_a.oneshot(req_as(Method::POST, "/x", Some("race-key"), "user-a")),
+            app_b.oneshot(req_as(Method::POST, "/x", Some("race-key"), "user-b")),
+        );
+        let resp_a = resp_a.unwrap();
+        let resp_b = resp_b.unwrap();
+        assert_eq!(
+            resp_a.status(),
+            StatusCode::OK,
+            "the first principal must not be rejected"
+        );
+        assert_eq!(
+            resp_b.status(),
+            StatusCode::OK,
+            "a concurrent request from another principal must not be rejected as in-flight"
+        );
+        assert_eq!(replayed(&resp_a).as_deref(), Some("executed"));
+        assert_eq!(replayed(&resp_b).as_deref(), Some("executed"));
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            2,
+            "both principals must reach the handler"
+        );
     }
 }
 

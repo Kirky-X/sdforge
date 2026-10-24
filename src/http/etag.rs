@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! ETag / conditional requests.
 //!
-//! With the `etag` feature, `build_with_config` installs
+//! With the `etag` feature, `build_with_config_ext` installs
 //! [`etag_middleware`]: successful (2xx) GET responses get a strong ETag
 //! (SHA-256 of the body, quoted per RFC 7232); a follow-up GET carrying
 //! `If-None-Match` that matches the current ETag (or `*`) short-circuits to

@@ -368,7 +368,8 @@ fn test_build_router_deterministic() {
 #[test]
 fn test_apply_security_headers() {
     let router = Router::new();
-    let router_with_headers = apply_security_headers(router);
+    let router_with_headers =
+        apply_security_headers(router, &crate::config::SecurityConfig::default());
     // Just verify it doesn't panic
     let _ = router_with_headers;
 }

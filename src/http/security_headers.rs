@@ -145,6 +145,54 @@ impl SecurityHeaders {
     }
 }
 
+/// Apply the configured security headers to a router.
+///
+/// `SecurityConfig::enable_headers = false` means "no security headers at
+/// all" — the layer is not installed, so the escape hatch really works.
+/// Otherwise every header from [`crate::config::SecurityConfig::get_headers`]
+/// is applied with the configured value; a value that is not a legal HTTP
+/// header value is skipped (logged) instead of panicking.
+pub fn apply_configured_headers(router: Router, config: &crate::config::SecurityConfig) -> Router {
+    if !config.enable_headers {
+        return router;
+    }
+
+    let mut router = router;
+    for (name, value) in config.get_headers() {
+        let header_name = match HeaderName::from_bytes(name.as_bytes()) {
+            Ok(name) => name,
+            Err(e) => {
+                log::warn!(
+                    "{}",
+                    crate::i18n::t(
+                        "http-security-header-invalid-name",
+                        &[("name", name.to_string()), ("error", e.to_string())]
+                    )
+                );
+                continue;
+            }
+        };
+        let header_value = match HeaderValue::from_str(value) {
+            Ok(value) => value,
+            Err(e) => {
+                log::warn!(
+                    "{}",
+                    crate::i18n::t(
+                        "http-security-header-invalid-value",
+                        &[("name", name.to_string()), ("error", e.to_string())]
+                    )
+                );
+                continue;
+            }
+        };
+        router = router.layer(SetResponseHeaderLayer::overriding(
+            header_name,
+            header_value,
+        ));
+    }
+    router
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
