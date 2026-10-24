@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! Built-in health probes.
 //!
-//! `build_with_config` auto-mounts `/healthz` (liveness) and `/readyz`
+//! `build_with_config_ext` auto-mounts `/healthz` (liveness) and `/readyz`
 //! (readiness) **after** the auth/rate-limit/security layers, so probes
 //! bypass authentication by construction.
 //!
@@ -18,8 +18,8 @@
 //! # Example
 //!
 //! ```ignore
-//! let config = SdForgeConfig::default;
-//! let router = sdforge::http::build_with_config(&config)?;
+//! let config = sdforge::config::SdForgeConfig::default();
+//! let router = sdforge::http::build_with_config_ext(sdforge::axum::Router::new(), &config)?;
 //! // GET /healthz -> 200 {"status":"healthy",...}
 //! // GET /readyz  -> 200 {"status":"ready","checks":[...]} or 503
 //! ```
@@ -698,8 +698,13 @@ pub async fn readyz_handler() -> Response {
     active_readiness_renderer().render(all_healthy, checks)
 }
 
-/// Mount `/healthz` and `/readyz` on `router`, skipping any path already
-/// claimed by a user route (avoids axum duplicate-route panics).
+/// Mount `/healthz` and `/readyz` on `router`, skipping paths already claimed
+/// by inventory-registered routes.
+///
+/// The claim check ([`crate::http::route_path_taken`]) scans inventory
+/// registrations only, so a path owned by a router the caller merges in stays
+/// invisible here: the built-in probe is still mounted on the merged router
+/// and axum rejects the duplicate route.
 pub fn mount_probes(router: axum::Router) -> axum::Router {
     let mut router = router;
     if !crate::http::route_path_taken("/healthz") {

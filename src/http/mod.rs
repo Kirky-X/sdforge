@@ -44,8 +44,10 @@ mod http_impl;
 pub mod idempotency;
 pub mod lifecycle;
 #[cfg(feature = "ratelimit-http")]
+pub use http_impl::build_with_config_ext_rate_limited;
+#[cfg(feature = "ratelimit-http")]
 pub use http_impl::rate_limit_layer;
-pub use http_impl::{build, build_with_config, build_with_redirect};
+pub use http_impl::{build, build_with_config_ext, build_with_redirect};
 pub use lifecycle::{inject_lifecycle_headers, lifecycle_layer_maybe};
 
 #[cfg(feature = "serve-tls")]
@@ -72,7 +74,7 @@ pub(crate) use http_impl::preserve_websocket_inventory;
 #[cfg(test)]
 pub(crate) use http_impl::{apply_security_headers, get_or_generate_request_id};
 // Health probes & metrics endpoints resolve module-prefixed paths
-// when scanning for collisions with user routes.
+// when scanning for collisions with inventory-registered routes.
 #[cfg(test)]
 pub(crate) use http_impl::resolve_route_path;
 #[cfg(any(feature = "health", feature = "metrics"))]

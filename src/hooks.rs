@@ -3,7 +3,7 @@
 //! Processor pre/post hook pipeline.
 //!
 //! Middleware-style hooks around every HTTP request handled by
-//! `build_with_config`: `install_hooks` registers one process-global
+//! `build_with_config_ext`: `install_hooks` registers one process-global
 //! `RequestHooks` implementation; the pipeline invokes `before` when the
 //! request enters and `after` when the response leaves (with the final
 //! status). Hooks are protocol-agnostic by construction and composed with the
@@ -70,7 +70,7 @@ pub fn installed() -> Option<Arc<dyn RequestHooks>> {
     GLOBAL_HOOKS.get().cloned()
 }
 
-/// The hook pipeline middleware (installed by `build_with_config` when hooks
+/// The hook pipeline middleware (installed by `build_with_config_ext` when hooks
 /// are registered).
 pub async fn hooks_middleware(
     req: axum::http::Request<axum::body::Body>,

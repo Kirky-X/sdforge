@@ -114,7 +114,7 @@ static GLOBAL_REGEX_CACHE: Lazy<RegexCache> = Lazy::new(RegexCache::new);
 /// ```
 /// use sdforge::core::regex_cache::get_regex;
 ///
-/// let regex = get_regex(r"^\d{3}-\d{3}-\d{4}$").unwrap;
+/// let regex = get_regex(r"^\d{3}-\d{3}-\d{4}$").unwrap();
 /// assert!(regex.is_match("123-456-7890"));
 /// ```
 pub fn get_regex(pattern: &str) -> Result<Arc<Regex>, regex::Error> {

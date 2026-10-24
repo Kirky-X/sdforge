@@ -33,7 +33,9 @@ struct SwaggerSpecUrl(Arc<str>);
 /// 调用方可将其 merge 到主 Router：
 /// ```ignore
 /// use sdforge::docs::swagger_ui_router;
-/// let app = axum::Router::new.merge(swagger_ui_router);
+/// use sdforge::http::build_with_config_ext;
+/// // 路由先并入再叠中间件栈：装配必须走 build_with_config_ext（先并路由再套栈）
+/// let app = build_with_config_ext(axum::Router::new().merge(swagger_ui_router), &config)?;
 /// ```
 ///
 /// # 路径冲突
@@ -61,9 +63,12 @@ pub fn swagger_ui_router() -> axum::Router {
 ///
 /// ```ignore
 /// use sdforge::docs::swagger_ui_router_with_spec;
+/// use sdforge::http::build_with_config_ext;
 /// // 宿主已在 /api-docs/openapi.json 提供自己的 spec
-/// let app = axum::Router::new
-///     .merge(swagger_ui_router_with_spec("/api-docs/openapi.json"));
+/// let app = build_with_config_ext(
+///     axum::Router::new().merge(swagger_ui_router_with_spec("/api-docs/openapi.json")),
+///     &config,
+/// )?;
 /// ```
 pub fn swagger_ui_router_with_spec(openapi_url: &str) -> axum::Router {
     // Extension 承载 spec 地址，供 initializer 请求期注入。

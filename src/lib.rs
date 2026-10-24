@@ -212,12 +212,12 @@ pub mod integrations;
 pub mod http;
 
 /// Built-in health probes (`/healthz`, `/readyz`) — auto-mounted by
-/// `build_with_config` when the `health` feature is enabled.
+/// `build_with_config_ext` when the `health` feature is enabled.
 #[cfg(feature = "health")]
 pub mod health;
 
 /// Prometheus metrics (`/metrics`, RED request metrics) — auto-installed by
-/// `build_with_config` when the `metrics` feature is enabled.
+/// `build_with_config_ext` when the `metrics` feature is enabled.
 #[cfg(feature = "metrics")]
 pub mod metrics;
 
@@ -317,8 +317,8 @@ pub mod config;
 
 #[cfg(feature = "http")]
 pub use config::{
-    ApiConfig, AuthConfig, ConfigError, CorsConfig, EnvHelper, SdForgeConfig, ServerConfig,
-    TlsConfig, TracingConfig,
+    ApiConfig, AuthConfig, ConfigError, CorsConfig, DEFAULT_CREDENTIAL_HEADER_NAMES, EnvHelper,
+    SdForgeConfig, ServerConfig, TlsConfig, TracingConfig,
 };
 
 /// 直接透传 oxcache 库（缓存功能由 oxcache 统一提供）

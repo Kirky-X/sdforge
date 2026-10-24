@@ -5,7 +5,7 @@
 //! A `RequestContext` (request_id + trace_id + start time) is generated per
 //! request and carried across protocol boundaries via `tokio::task_local`:
 //!
-//! - **HTTP** — `context_middleware` (auto-installed by `build_with_config`)
+//! - **HTTP** — `context_middleware` (auto-installed by `build_with_config_ext`)
 //!   resolves/creates ids from `X-Request-Id` / `X-Trace-Id` / W3C
 //!   `traceparent`, wraps the rest of the call chain, and echoes both ids on
 //!   the response.

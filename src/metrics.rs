@@ -5,12 +5,13 @@
 //! Lightweight, self-rendered Prometheus text format (no `prometheus` crate
 //! dependency — keeps the trimming philosophy). With the `metrics` feature:
 //!
-//! - `build_with_config` auto-installs a request-recording middleware
+//! - `build_with_config_ext` auto-installs a request-recording middleware
 //!   (request count, latency histogram, status distribution per route
 //!   template via `MatchedPath` — no cardinality explosion from concrete
 //!   paths), and
 //! - mounts `GET /metrics` **after** the auth layer (bypasses authentication,
-//!   same mechanism as the built-in probes), unless a user route claims it.
+//!   same mechanism as the built-in probes), unless an inventory-registered
+//!   route claims it.
 //!
 //! Exported series (RED method):
 //!
@@ -157,7 +158,7 @@ impl MetricsRegistry {
 
 static GLOBAL_REGISTRY: OnceLock<Arc<MetricsRegistry>> = OnceLock::new();
 
-/// The process-global registry used by `build_with_config`'s middleware.
+/// The process-global registry used by `build_with_config_ext`'s middleware.
 pub fn global_registry() -> Arc<MetricsRegistry> {
     GLOBAL_REGISTRY
         .get_or_init(|| Arc::new(MetricsRegistry::new()))
@@ -181,7 +182,13 @@ pub async fn metrics_handler() -> impl IntoResponse {
     )
 }
 
-/// Mount `GET /metrics` unless a user route already claims the path.
+/// Mount `GET /metrics` unless an inventory-registered route already claims
+/// the path.
+///
+/// The claim check ([`crate::http::route_path_taken`]) scans inventory
+/// registrations only, so a `/metrics` path owned by a router the caller
+/// merges in stays invisible here: the built-in endpoint is still mounted on
+/// the merged router and axum rejects the duplicate route.
 pub(crate) fn mount_metrics(router: axum::Router) -> axum::Router {
     if !crate::http::route_path_taken("/metrics") {
         router.route("/metrics", axum::routing::get(metrics_handler))
@@ -190,7 +197,7 @@ pub(crate) fn mount_metrics(router: axum::Router) -> axum::Router {
     }
 }
 
-/// Request-recording middleware factory (installed by `build_with_config`).
+/// Request-recording middleware factory (installed by `build_with_config_ext`).
 ///
 /// Route label uses the matched route template ([`axum::extract::MatchedPath`])
 /// so wildcard/path-param routes do not explode cardinality; unmatched
@@ -309,8 +316,11 @@ mod tests {
     #[serial_test::serial]
     async fn metrics_endpoint_serves_prometheus_text() {
         global_registry().reset();
-        let router =
-            crate::http::build_with_config(&crate::config::SdForgeConfig::default()).unwrap();
+        let router = crate::http::build_with_config_ext(
+            axum::Router::new(),
+            &crate::config::SdForgeConfig::default(),
+        )
+        .unwrap();
         // generate some traffic through an inventory route? /metrics itself is skipped;
         // just verify the endpoint content type + format header lines.
         let resp = router

@@ -94,14 +94,19 @@ pub(crate) fn resolve_route_path(base_path: &str, module_prefix: Option<&str>) -
     }
 }
 
-pub(crate) fn apply_security_headers(router: Router) -> Router {
-    SecurityHeaders::default().apply(router)
+pub(crate) fn apply_security_headers(
+    router: Router,
+    config: &crate::config::SecurityConfig,
+) -> Router {
+    crate::http::security_headers::apply_configured_headers(router, config)
 }
 
-/// True when a route already occupies `path` (module-prefix resolved).
+/// True when an inventory-registered route already occupies `path`
+/// (module-prefix resolved).
 ///
-/// Built-in probe/metrics mounting skips paths already claimed by
-/// user routes to avoid axum duplicate-route panics.
+/// Built-in probe/metrics mounting skips such paths to avoid axum
+/// duplicate-route panics. Paths owned by a router the caller merges in are
+/// not visible here — axum exposes no way to enumerate a router's routes.
 // 消费方：health 探针挂载、metrics 挂载、health 门控测试——
 // 两 feature 皆关时无消费方，不参与编译。
 #[cfg(any(feature = "health", feature = "metrics"))]
@@ -165,7 +170,7 @@ pub(crate) fn preserve_grpc_inventory() {
 ///
 /// # Note
 /// This is the simplest router building function. For production use,
-/// consider using `build_with_config` for middleware support.
+/// consider using `build_with_config_ext` for middleware support.
 pub fn build() -> Router {
     // Force inventory collection to prevent linker optimization
     // Using inline(never) functions to ensure symbols are preserved
@@ -306,27 +311,116 @@ async fn request_locale_middleware(
 ///
 /// 与 [`build`] 一样，此便捷函数**不挂载任何安全/配置中间件**（无 CORS、
 /// security headers、body limit、timeout、auth）。仅版本重定向中间件会
-/// 被叠加。生产用途请使用 [`build_with_config`]。
+/// 被叠加。生产用途请使用 [`build_with_config_ext`]（先并路由再套中间件栈）。
 pub fn build_with_redirect() -> Router {
     let router = build();
     router.layer(axum::middleware::from_fn(version_redirect_middleware))
 }
 
-/// Build HTTP router with configuration
+/// Build HTTP router with configuration, merging application routes first.
 ///
-/// This function builds a router with configuration-driven middleware and settings.
-/// Applies CORS, authentication, rate limiting, and logging based on the provided config.
+/// The only configuration-driven HTTP entry point: the caller's router is
+/// merged **before** the middleware stack is applied. axum's `Router::layer`
+/// only wraps routes registered before it, so a router that already carries
+/// the stack cannot accept later merges without bypassing authentication,
+/// rate limiting and security headers — no such entry point is exposed.
 ///
 /// # Arguments
+/// * `base` - application routes to merge into the framework router
 /// * `config` - The application configuration
 ///
 /// # Returns
 /// A configured Axum router with all middleware applied
 ///
-/// # Note
-/// This is the recommended function for production use. It applies security headers,
-/// CORS, rate limiting, compression, and timeout middleware based on the config.
-pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router, ConfigError> {
+/// # Panics
+/// Panics if `base` defines its own fallback (`Router::fallback`): axum
+/// refuses to merge two routers that both carry a fallback, and the framework
+/// router installs the unified not-found fallback.
+///
+/// Panics if `base` claims a built-in probe path with the same method while no
+/// inventory registration claims that path — `GET /healthz` or `GET /readyz`
+/// with the `health` feature, `GET /metrics` with the `metrics` feature. The
+/// probe mounting skips inventory-claimed paths only, and axum cannot
+/// enumerate the routes of a merged router, so axum rejects the duplicate
+/// route at build time ("Overlapping method route").
+pub fn build_with_config_ext(
+    base: Router,
+    config: &crate::config::SdForgeConfig,
+) -> Result<Router, ConfigError> {
+    build_with_config_inner(base, config, None)
+}
+
+/// Build HTTP router with configuration, merging application routes first
+/// **and** installing the configured rate limiter.
+///
+/// Combines [`build_with_config_ext`] (application routes merged before the
+/// middleware stack is applied, so they receive authentication, rate limiting
+/// and security headers) with the asynchronous `security.rate_limit` limiter
+/// build and install. This is the entry point for applications that have
+/// their own routes *and* rely on the configured rate limit.
+///
+/// # Arguments
+/// * `base` - application routes to merge into the framework router
+/// * `config` - The application configuration
+///
+/// # Returns
+/// A configured Axum router with all middleware applied, including the
+/// rate limiter when `security.rate_limit` is set.
+///
+/// # Errors
+/// Returns a [`ConfigError::ValidationError`] when the limiteron
+/// configuration fails to build.
+///
+/// # Panics
+/// Panics under the same conditions as [`build_with_config_ext`] (own
+/// fallback, or a built-in probe path claimed with the same method).
+#[cfg(feature = "ratelimit-http")]
+pub async fn build_with_config_ext_rate_limited(
+    base: Router,
+    config: &crate::config::SdForgeConfig,
+) -> Result<Router, ConfigError> {
+    let limiter = build_rate_limiter(config).await?;
+    build_with_config_inner(base, config, limiter)
+}
+
+/// Build the configured HTTP rate limiter, if any.
+///
+/// The limiter is constructed asynchronously (`limiteron::Governor`), so it
+/// cannot be built inside the synchronous router builders.
+#[cfg(feature = "ratelimit-http")]
+async fn build_rate_limiter(
+    config: &crate::config::SdForgeConfig,
+) -> Result<Option<std::sync::Arc<dyn crate::security::HttpRequestRateLimiter>>, ConfigError> {
+    use std::sync::Arc;
+
+    let limiter = config
+        .build_rate_limiter()
+        .await
+        .map_err(|e| ConfigError::ValidationError(e.to_string()))?;
+    Ok(
+        limiter
+            .map(|adapter| Arc::new(adapter) as Arc<dyn crate::security::HttpRequestRateLimiter>),
+    )
+}
+
+/// Rate-limiter argument of [`build_with_config_inner`].
+///
+/// Without the `ratelimit-http` feature there is no HTTP limiter to install,
+/// so the argument degenerates to an empty optional.
+#[cfg(feature = "ratelimit-http")]
+type RateLimiterArg = Option<std::sync::Arc<dyn crate::security::HttpRequestRateLimiter>>;
+#[cfg(not(feature = "ratelimit-http"))]
+type RateLimiterArg = Option<()>;
+
+/// Shared body of the `build_with_config*` entry points.
+///
+/// `base` is merged before any layer is applied so that application routes
+/// receive the same middleware stack as the framework routes.
+fn build_with_config_inner(
+    base: Router,
+    config: &crate::config::SdForgeConfig,
+    #[allow(unused_variables)] rate_limiter: RateLimiterArg,
+) -> Result<Router, ConfigError> {
     #[cfg(feature = "security")]
     use std::sync::Arc;
 
@@ -341,7 +435,9 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
     #[cfg(not(feature = "security"))]
     config.authentication.require_security_feature()?;
 
-    let mut router = build();
+    // 应用路由在叠层之前并入：axum 的 `Router::layer` 只作用于调用它之前
+    // 已注册的路由，之后 merge 进来的路由将绕过整条中间件栈（含鉴权）。
+    let mut router = build().merge(base);
 
     // request metrics middleware (count / latency / status per route
     // template). Installed early so every route from build is measured;
@@ -450,7 +546,16 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
         router = router.layer(cors_layer);
     }
 
-    router = apply_security_headers(router);
+    // 安全响应头：配置面在 `security` feature 下才挂在 SdForgeConfig 上；
+    // feature 关闭时用严格默认值（与开启时的默认配置一致）。
+    #[cfg(feature = "security")]
+    {
+        router = apply_security_headers(router, &config.security);
+    }
+    #[cfg(not(feature = "security"))]
+    {
+        router = apply_security_headers(router, &crate::config::SecurityConfig::default());
+    }
 
     #[cfg(feature = "security")]
     {
@@ -525,14 +630,26 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
                 };
             let middleware = auth_middleware(auth_clone, extract_auth);
             router = router.layer(axum::middleware::from_fn(middleware));
-        } else if let AuthConfig::Jwt { secret, .. } = auth_config {
+        } else if let AuthConfig::Jwt {
+            secret,
+            audience,
+            issuer,
+        } = auth_config
+        {
             // 使用 try_new 而非 new：AuthConfig::validate() 接受的 secret（仅长度+弱词校验）
             // 可能不满足 BearerAuth 的强复杂度要求，`new` 会在启动时 panic；
             // 改为返回构建错误，由调用方处理而非崩溃。
-            let auth = Arc::new(
-                BearerAuth::try_new(secret)
-                    .map_err(|e| ConfigError::ValidationError(e.to_string()))?,
-            );
+            let mut auth = BearerAuth::try_new(secret)
+                .map_err(|e| ConfigError::ValidationError(e.to_string()))?;
+            // 声明的 aud/iss 透传给校验器：不配置即不校验，配置后令牌缺该
+            // 声明或取值不符一律拒绝（防令牌替换）。
+            if let Some(audience) = audience {
+                auth = auth.with_audience_inner(audience.clone());
+            }
+            if let Some(issuer) = issuer {
+                auth = auth.with_issuer_inner(issuer.clone());
+            }
+            let auth = Arc::new(auth);
             let auth_clone = auth.clone();
             let extract_auth =
                 move |req: &axum::http::Request<Body>| -> Result<AuthContext, AuthError> {
@@ -567,6 +684,13 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
         // None is handled by doing nothing
     }
 
+    // 限流层：装在鉴权层之外（更早执行），故未认证的洪泛也会被限流；
+    // 探针与 /metrics 在其后挂载，不受限流影响。
+    #[cfg(feature = "ratelimit-http")]
+    if let Some(limiter) = rate_limiter {
+        router = router.layer(rate_limit_layer(limiter));
+    }
+
     // 请求级语言作用域：在认证层之外再包一层，使认证拒绝（401）、路由处理器
     // 内 RBAC 拒绝等所有 i18n::t 文案随 Accept-Language 变化（进程 locale
     // 仅作回退）。
@@ -578,7 +702,9 @@ pub fn build_with_config(config: &crate::config::SdForgeConfig) -> Result<Router
     // mount /healthz + /readyz AFTER the auth layer — axum layers only
     // apply to routes registered before them, so probes added here bypass
     // authentication/rate-limiting by construction. Paths already claimed by
-    // user routes are skipped (prevents duplicate-route panics).
+    // inventory-registered routes are skipped (prevents duplicate-route
+    // panics); a path claimed by the merged-in `base` router is not visible
+    // to that check and collides with the built-in probe.
     #[cfg(feature = "health")]
     {
         router = crate::health::mount_probes(router);

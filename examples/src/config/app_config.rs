@@ -117,6 +117,8 @@ pub fn demo_auth_configs() -> Vec<AuthConfig> {
         },
         AuthConfig::Jwt {
             secret: "a-very-long-and-secure-jwt-secret-key-32+chars!".to_string(),
+            audience: None,
+            issuer: None,
         },
     ]
 }

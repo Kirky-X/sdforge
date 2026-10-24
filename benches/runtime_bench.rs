@@ -541,7 +541,8 @@ fn bench_middleware_tiers(c: &mut Criterion) {
 
     // T0：恒装层（RequestBodyLimit + Compression + Timeout + 安全响应头）。
     #[cfg_attr(not(feature = "security"), allow(unused_mut))]
-    let mut base_router = sdforge::http::build_with_config(&base_config()).unwrap();
+    let mut base_router =
+        sdforge::http::build_with_config_ext(axum::Router::new(), &base_config()).unwrap();
     group.bench_function("t0_base_config", |b| {
         b.iter(|| call_ping(&rt, &mut base_router));
     });
@@ -560,7 +561,8 @@ fn bench_middleware_tiers(c: &mut Criterion) {
                 permissions: vec!["bench".to_string()],
             }],
         };
-        let mut router = sdforge::http::build_with_config(&config).unwrap();
+        let mut router =
+            sdforge::http::build_with_config_ext(axum::Router::new(), &config).unwrap();
         group.bench_function("t1_auth_api_key", |b| {
             b.iter(|| authed_ping(&rt, &mut router));
         });
@@ -569,7 +571,8 @@ fn bench_middleware_tiers(c: &mut Criterion) {
     // T2：+ ETag 条件请求中间件。
     #[cfg(feature = "etag")]
     {
-        let mut router = sdforge::http::build_with_config(&base_config()).unwrap();
+        let mut router =
+            sdforge::http::build_with_config_ext(axum::Router::new(), &base_config()).unwrap();
         group.bench_function("t2_etag", |b| {
             b.iter(|| call_ping(&rt, &mut router));
         });
@@ -578,7 +581,8 @@ fn bench_middleware_tiers(c: &mut Criterion) {
     // T3：+ 指标中间件。
     #[cfg(feature = "metrics")]
     {
-        let mut router = sdforge::http::build_with_config(&base_config()).unwrap();
+        let mut router =
+            sdforge::http::build_with_config_ext(axum::Router::new(), &base_config()).unwrap();
         group.bench_function("t3_metrics", |b| {
             b.iter(|| call_ping(&rt, &mut router));
         });
@@ -587,7 +591,8 @@ fn bench_middleware_tiers(c: &mut Criterion) {
     // T4：+ context 中间件（request_id + trace_id task-local）。
     #[cfg(feature = "context")]
     {
-        let mut router = sdforge::http::build_with_config(&base_config()).unwrap();
+        let mut router =
+            sdforge::http::build_with_config_ext(axum::Router::new(), &base_config()).unwrap();
         group.bench_function("t4_context", |b| {
             b.iter(|| call_ping(&rt, &mut router));
         });
@@ -601,7 +606,8 @@ fn bench_middleware_tiers(c: &mut Criterion) {
             allowed_methods: vec!["GET".to_string()],
             allowed_headers: vec!["content-type".to_string()],
         });
-        let mut router = sdforge::http::build_with_config(&config).unwrap();
+        let mut router =
+            sdforge::http::build_with_config_ext(axum::Router::new(), &config).unwrap();
         group.bench_function("t5_cors", |b| {
             b.iter(|| call_ping(&rt, &mut router));
         });
@@ -633,7 +639,8 @@ fn bench_middleware_tiers(c: &mut Criterion) {
             allowed_headers: vec!["content-type".to_string()],
         });
         config.server.idempotency.enabled = true;
-        let mut router = sdforge::http::build_with_config(&config).unwrap();
+        let mut router =
+            sdforge::http::build_with_config_ext(axum::Router::new(), &config).unwrap();
         group.bench_function("t6_all_layers", |b| {
             b.iter(|| authed_ping(&rt, &mut router));
         });
