@@ -320,6 +320,9 @@ http = [
     "dep:once_cell",
     "dep:validator",
     "dep:uuid",
+    # 响应缓存中间件按块读取响应体并在超限时流式透传（futures-util 的
+    # Stream 面）；http 蕴含 cache，故此处显式 dep:futures-util
+    "dep:futures-util",
     # regex_cache 用 oxcache ByteWeightCache；http 不蕴含 cache，故显式 dep:oxcache
     "dep:oxcache",
 ]
@@ -408,6 +411,12 @@ cache-l2 = ["cache", "oxcache/redis"]
 # dbnexus 数据 API 网关 - 白名单只读数据面（DbGateway，衔接 dbnexus DbPool
 # 的池化/权限/RLS 语义；独立于 http，端点暴露按需组合）
 db-integration = ["dep:dbnexus"]
+
+# 库侧隔离真正生效：开启 dbnexus 的 permission 特性，逐表权限检查对非 admin
+# 会话角色生效（fail-closed：宿主必须配置 dbnexus 权限，否则网关查询被拒）。
+# 未开启时 dbnexus 侧的逐表权限检查整块被编译掉，会话角色不产生任何强制
+# 效果——此时 DbGateway 只提供白名单与强制归属谓词隔离。
+db-permission = ["db-integration", "dbnexus/permission"]
 
 # schema-reflect：schemars 为返回值发射精确 response schema
 schemars = ["openapi", "dep:schemars"]
