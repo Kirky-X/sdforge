@@ -780,7 +780,9 @@ fn benchmark_http_router_construction(c: &mut Criterion) {
     };
 
     c.bench_function("http_router_build_with_config_none_auth", |b| {
-        b.iter(|| sdforge::http::build_with_config(black_box(&config)))
+        b.iter(|| {
+            sdforge::http::build_with_config_ext(black_box(axum::Router::new()), black_box(&config))
+        })
     });
 
     let config_cors = SdForgeConfig {
@@ -804,7 +806,12 @@ fn benchmark_http_router_construction(c: &mut Criterion) {
     };
 
     c.bench_function("http_router_build_with_config_cors", |b| {
-        b.iter(|| sdforge::http::build_with_config(black_box(&config_cors)))
+        b.iter(|| {
+            sdforge::http::build_with_config_ext(
+                black_box(axum::Router::new()),
+                black_box(&config_cors),
+            )
+        })
     });
 }
 

@@ -13,7 +13,7 @@ use serde::Serialize;
 ///
 /// # Arguments
 ///
-/// * `code` - Error code identifier (e.g., "NOT_FOUND", "VALIDATION_ERROR")
+/// * `code` - Error code identifier (e.g., "NOT_FOUND", "UNPROCESSABLE_ENTITY")
 /// * `message` - Human-readable error message
 ///
 /// # Returns
@@ -199,6 +199,41 @@ mod tests {
         assert_eq!(parsed["success"], false);
         assert_eq!(parsed["error"]["code"], "NOT_FOUND");
         assert_eq!(parsed["error"]["message"], "Resource not found");
+    }
+
+    /// 文档示例中的错误码必须出自框架词表。
+    ///
+    /// `error_response` 的 `code` 参数由调用方传入，文档示例是调用方选码的
+    /// 依据——示例若回退到旧词表，调用方就会发一个框架其他面永不产出的码。
+    #[test]
+    fn test_documented_example_codes_come_from_the_framework_vocabulary() {
+        let source = include_str!("json.rs");
+        let doc_line = source
+            .lines()
+            .find(|line| line.contains("Error code identifier (e.g.,"))
+            .expect("the `code` argument documentation must exist");
+        let examples: Vec<&str> = doc_line.split('"').skip(1).step_by(2).collect();
+        assert!(
+            !examples.is_empty(),
+            "the documentation must quote at least one example code"
+        );
+        let vocabulary = [
+            crate::error::unified::code_for_http_status(400),
+            crate::error::unified::code_for_http_status(401),
+            crate::error::unified::code_for_http_status(403),
+            crate::error::unified::code_for_http_status(404),
+            crate::error::unified::code_for_http_status(409),
+            crate::error::unified::code_for_http_status(422),
+            crate::error::unified::code_for_http_status(429),
+            crate::error::unified::code_for_http_status(500),
+            crate::error::unified::code_for_http_status(503),
+        ];
+        for example in examples {
+            assert!(
+                vocabulary.contains(&example),
+                "documented example code `{example}` is not produced by the framework vocabulary"
+            );
+        }
     }
 
     #[test]

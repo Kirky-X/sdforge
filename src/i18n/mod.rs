@@ -849,9 +849,10 @@ mod builtin_catalog_tests {
     /// 预期文本（canonical mirror：en 值与构造点内嵌的规范串逐字一致）。
     #[test]
     fn test_otel_audit_and_sdk_keys_render_in_both_locales() {
+        type LocaleCase<'a> = (&'a str, &'a [(&'a str, &'a str)], &'a str, &'a str);
         let _guard = registry_guard();
         clear_translations();
-        let cases: &[(&str, &[(&str, &str)], &str, &str)] = &[
+        let cases: &[LocaleCase] = &[
             (
                 "otel-export-deadline-exceeded",
                 &[],
