@@ -215,14 +215,14 @@ fn test_to_mcp_json() {
         reason: "bad token".to_string(),
     };
     let json = auth_failed.to_mcp_json();
-    assert!(json.contains("AUTHENTICATION_FAILED"));
+    assert!(json.contains("UNAUTHORIZED"));
 
     let validation = ApiError::ValidationError {
         field: "name".to_string(),
         constraint: "required".to_string(),
     };
     let json = validation.to_mcp_json();
-    assert!(json.contains("VALIDATION_ERROR"));
+    assert!(json.contains("UNPROCESSABLE_ENTITY"));
 }
 
 /// Test ApiError serialization
@@ -750,7 +750,7 @@ fn test_to_mcp_json_invalid_input() {
     let json = error.to_mcp_json();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
-    assert_eq!(parsed["error"]["code"], "INVALID_INPUT");
+    assert_eq!(parsed["error"]["code"], "BAD_REQUEST");
     assert_eq!(parsed["error"]["message"], "bad value");
 }
 
@@ -762,7 +762,7 @@ fn test_to_mcp_json_authentication_failed() {
     let json = error.to_mcp_json();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
-    assert_eq!(parsed["error"]["code"], "AUTHENTICATION_FAILED");
+    assert_eq!(parsed["error"]["code"], "UNAUTHORIZED");
     assert!(
         parsed["error"]["message"]
             .as_str()
@@ -780,7 +780,7 @@ fn test_to_mcp_json_access_denied() {
     let json = error.to_mcp_json();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
-    assert_eq!(parsed["error"]["code"], "ACCESS_DENIED");
+    assert_eq!(parsed["error"]["code"], "FORBIDDEN");
     assert!(
         parsed["error"]["message"]
             .as_str()
@@ -798,7 +798,7 @@ fn test_to_mcp_json_rate_limit_exceeded() {
     let json = error.to_mcp_json();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
-    assert_eq!(parsed["error"]["code"], "RATE_LIMIT_EXCEEDED");
+    assert_eq!(parsed["error"]["code"], "TOO_MANY_REQUESTS");
     // Message goes through the i18n registry; assert against the explicit-en
     // catalog entry so the test is independent of the ambient locale.
     assert_eq!(
@@ -818,7 +818,7 @@ fn test_to_mcp_json_internal() {
     let json = error.to_mcp_json();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
-    assert_eq!(parsed["error"]["code"], "INTERNAL_ERROR");
+    assert_eq!(parsed["error"]["code"], "INTERNAL");
     // HIGH 修复回归：MCP 输出与 sanitized_message 一致地脱敏，
     // 不得把原始内部消息泄漏到外部协议。
     assert_eq!(
@@ -838,7 +838,7 @@ fn test_to_mcp_json_service_unavailable() {
     let json = error.to_mcp_json();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
-    assert_eq!(parsed["error"]["code"], "SERVICE_UNAVAILABLE");
+    assert_eq!(parsed["error"]["code"], "UNAVAILABLE");
     assert!(
         parsed["error"]["message"]
             .as_str()
@@ -856,7 +856,7 @@ fn test_to_mcp_json_validation_error() {
     let json = error.to_mcp_json();
     let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
     assert_eq!(parsed["success"], false);
-    assert_eq!(parsed["error"]["code"], "VALIDATION_ERROR");
+    assert_eq!(parsed["error"]["code"], "UNPROCESSABLE_ENTITY");
     assert!(
         parsed["error"]["message"]
             .as_str()
@@ -943,13 +943,13 @@ fn test_sdforge_error_to_service_error_all_api_variants() {
 
     let expected_codes = [
         "NOT_FOUND",
-        "INVALID_INPUT",
-        "AUTHENTICATION_FAILED",
-        "ACCESS_DENIED",
-        "RATE_LIMIT_EXCEEDED",
-        "INTERNAL_ERROR",
-        "SERVICE_UNAVAILABLE",
-        "VALIDATION_ERROR",
+        "BAD_REQUEST",
+        "UNAUTHORIZED",
+        "FORBIDDEN",
+        "TOO_MANY_REQUESTS",
+        "INTERNAL",
+        "UNAVAILABLE",
+        "UNPROCESSABLE_ENTITY",
     ];
 
     for (err, expected_code) in errors.into_iter().zip(expected_codes.iter()) {
@@ -967,7 +967,7 @@ fn test_sdforge_error_to_service_error_all_api_variants() {
 fn test_sdforge_error_to_service_error_internal_string() {
     let err = SdForgeError::internal("custom internal failure");
     let service_err = err.to_service_error();
-    assert_eq!(service_err.code, "INTERNAL_ERROR");
+    assert_eq!(service_err.code, "INTERNAL");
 }
 
 #[test]
@@ -979,31 +979,31 @@ fn test_api_error_to_service_error_from_all_variants() {
 
     let invalid = ApiError::invalid_input("bad", Some("email".into()), None);
     let svc: ServiceError = invalid.into();
-    assert_eq!(svc.code, "INVALID_INPUT");
+    assert_eq!(svc.code, "BAD_REQUEST");
 
     let auth = ApiError::authentication_failed("bad token");
     let svc: ServiceError = auth.into();
-    assert_eq!(svc.code, "AUTHENTICATION_FAILED");
+    assert_eq!(svc.code, "UNAUTHORIZED");
 
     let access = ApiError::access_denied("admin", Some("u1".into()));
     let svc: ServiceError = access.into();
-    assert_eq!(svc.code, "ACCESS_DENIED");
+    assert_eq!(svc.code, "FORBIDDEN");
 
     let rate = ApiError::rate_limit_exceeded(100, 60);
     let svc: ServiceError = rate.into();
-    assert_eq!(svc.code, "RATE_LIMIT_EXCEEDED");
+    assert_eq!(svc.code, "TOO_MANY_REQUESTS");
 
     let internal = ApiError::internal_error("db fail", "ERR001");
     let svc: ServiceError = internal.into();
-    assert_eq!(svc.code, "INTERNAL_ERROR");
+    assert_eq!(svc.code, "INTERNAL");
 
     let unavail = ApiError::service_unavailable("db", Some(30));
     let svc: ServiceError = unavail.into();
-    assert_eq!(svc.code, "SERVICE_UNAVAILABLE");
+    assert_eq!(svc.code, "UNAVAILABLE");
 
     let validation = ApiError::validation("email", "required");
     let svc: ServiceError = validation.into();
-    assert_eq!(svc.code, "VALIDATION_ERROR");
+    assert_eq!(svc.code, "UNPROCESSABLE_ENTITY");
 }
 
 /// HIGH 修复回归：QuotaExhausted 现在是独立变体，不再把 `used` 塞进
@@ -1029,11 +1029,28 @@ fn test_quota_exhausted_preserves_quota_semantics() {
 
     // MCP 输出带配额语义
     let json = err.to_mcp_json();
-    assert!(json.contains("QUOTA_EXHAUSTED"), "json: {}", json);
+    assert!(json.contains("TOO_MANY_REQUESTS"), "json: {}", json);
     assert!(json.contains("850"), "json must carry used: {}", json);
 
     // HTTP 输出 429 且 details 携带 used/total
     let svc = err.to_service_error();
     assert_eq!(svc.http_status, 429);
-    assert_eq!(svc.code, "QUOTA_EXHAUSTED");
+    assert_eq!(svc.code, "TOO_MANY_REQUESTS");
+}
+
+/// 同一 HTTP 状态只能有一个机器码。
+///
+/// `ApiError::Internal` 与 `SdForgeError::Internal` 是两条独立的错误来源，
+/// 但都映射到 HTTP 500——两者必须给出同一个码（`INTERNAL`），否则同一个状态
+/// 在 wire 上会出现两个码，调用方无法按码分派。
+#[test]
+fn test_http_500_has_one_machine_code_across_error_faces() {
+    let from_api = ApiError::internal_error("db fail", "ERR500").to_service_error();
+    let from_sdforge = SdForgeError::internal("db fail").to_service_error();
+
+    assert_eq!(from_api.http_status, 500);
+    assert_eq!(from_sdforge.http_status, 500);
+    assert_eq!(from_api.code, "INTERNAL");
+    assert_eq!(from_sdforge.code, from_api.code);
+    assert_eq!(from_api.code, code_for_http_status(500));
 }

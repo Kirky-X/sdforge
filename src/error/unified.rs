@@ -9,7 +9,7 @@
 //! per-protocol status mapping table.
 //!
 //! ```json
-//! {"code":"INVALID_INPUT","message":"...","trace_id":"trace-...","field":"age"}
+//! {"code":"BAD_REQUEST","message":"...","trace_id":"trace-...","field":"age"}
 //! ```
 
 use serde::Serialize;
@@ -17,7 +17,7 @@ use serde::Serialize;
 /// Unified, protocol-neutral error payload.
 #[derive(Debug, Clone, Serialize)]
 pub struct UnifiedError {
-    /// Stable machine-readable error code (e.g. `INVALID_INPUT`).
+    /// Stable machine-readable error code (e.g. `BAD_REQUEST`).
     pub code: String,
     /// Human-readable message.
     pub message: String,
@@ -65,9 +65,13 @@ pub fn current_trace_id() -> Option<String> {
     }
 }
 
-/// Default error-code mapping per [`crate::error::api_error::ApiError`]
-/// category (HTTP status → code). Shared by protocol adapters so one table
-/// drives every protocol's payload.
+/// Default error-code mapping per HTTP status (status → code).
+///
+/// This is the **single error-code vocabulary** of the framework: the
+/// machine-readable code of an [`crate::core::ApiError`] is derived from it
+/// (see [`crate::core::ApiError::code`]), and every protocol surface — HTTP
+/// body, gRPC `Status::details`, `ServiceError`, MCP output — uses that one
+/// code for the same error.
 pub fn code_for_http_status(status: u16) -> &'static str {
     match status {
         400 => "BAD_REQUEST",
@@ -88,7 +92,7 @@ pub fn code_for_http_status(status: u16) -> &'static str {
 /// 状态真值仍是 `to_service_error.http_status` —— 本函数只是避免调用方
 /// 为拿一个 u16 而完整构造（含 details JSON 分配）。
 pub fn http_status_for(e: &crate::core::ApiError) -> u16 {
-    e.to_service_error().http_status()
+    e.http_status()
 }
 
 /// **Single source of truth** mapping an [`crate::core::ApiError`] to its
@@ -96,18 +100,16 @@ pub fn http_status_for(e: &crate::core::ApiError) -> u16 {
 ///
 /// Every protocol adapter (HTTP `IntoResponse`, gRPC status mapping, …)
 /// must derive its wire codes from here — never from a private match table.
-/// The HTTP status matches `ApiError::to_service_error.http_status`; the
-/// code string is derived via [`code_for_http_status`].
+/// The status is [`ApiError::http_status`]; the code is [`ApiError::code`],
+/// i.e. the same vocabulary the other protocol surfaces use.
 pub fn mapping_for(e: &crate::core::ApiError) -> (u16, &'static str) {
-    let status = http_status_for(e);
-    (status, code_for_http_status(status))
+    (e.http_status(), e.code())
 }
 
 impl From<&crate::core::ApiError> for UnifiedError {
     fn from(e: &crate::core::ApiError) -> Self {
-        // 单次构造：status/code/message 全部取自同一个 ServiceError。
+        // 单次构造：status/code/message 全部取自同一个 ApiError 事实来源。
         let svc = e.to_service_error();
-        let status = svc.http_status();
         let message = svc.message().to_string();
         let field = match e {
             crate::core::ApiError::InvalidInput { field: Some(f), .. }
@@ -115,7 +117,7 @@ impl From<&crate::core::ApiError> for UnifiedError {
             _ => None,
         };
         Self {
-            code: code_for_http_status(status).to_string(),
+            code: e.code().to_string(),
             message,
             trace_id: current_trace_id(),
             field,
@@ -189,6 +191,7 @@ pub use http_render::to_response as render_http;
 mod tests {
     use super::*;
     use crate::core::ApiError;
+    use crate::error::SdForgeError;
 
     /// http_status_for / mapping_for / to_service_error 三方一致。
     #[test]
@@ -572,6 +575,135 @@ mod tests {
             assert_eq!(mapping_for(&e), (status, code));
             assert_eq!(grpc_code_for(&e), grpc);
         }
+    }
+
+    /// 单一词表不变量：同一个错误在任何协议面上都得到同一个机器码。
+    ///
+    /// `ApiError::code()`（HTTP body / gRPC details / ServiceError / MCP 的
+    /// 共同来源）、`code_for_http_status(http_status)` 与 `to_service_error`
+    /// 携带的 code 必须逐字节一致——任一侧单独改词表即红灯。
+    /// `SdForgeError` 的各变体（含 `Api` 之外的鉴权/配置/内部变体）同样从本
+    /// 词表取码：同一 HTTP 状态不得因错误来源不同而给出两个 wire 码。
+    #[test]
+    fn every_surface_reports_the_same_machine_code() {
+        for e in [
+            ApiError::NotFound {
+                resource: "x".into(),
+                resource_id: None,
+            },
+            ApiError::InvalidInput {
+                message: "x".into(),
+                field: None,
+                value: None,
+            },
+            ApiError::ValidationError {
+                field: "f".into(),
+                constraint: "c".into(),
+            },
+            ApiError::AuthenticationFailed { reason: "x".into() },
+            ApiError::AccessDenied {
+                permission: "p".into(),
+                user_id: None,
+            },
+            ApiError::RateLimitExceeded {
+                limit: 1,
+                window_seconds: 1,
+            },
+            ApiError::QuotaExhausted { used: 1, total: 2 },
+            ApiError::ServiceUnavailable {
+                service: "s".into(),
+                retry_after: None,
+                source: None,
+            },
+            ApiError::Internal {
+                message: "x".into(),
+                error_id: "e".into(),
+                source: None,
+                context: None,
+            },
+        ] {
+            let code = e.code();
+            assert_eq!(
+                code,
+                code_for_http_status(e.http_status()),
+                "code/status table drift for {e:?}"
+            );
+            assert_eq!(
+                code,
+                e.to_service_error().code(),
+                "ServiceError code drift for {e:?}"
+            );
+            assert_eq!(code, mapping_for(&e).1, "mapping_for drift for {e:?}");
+            assert_eq!(
+                code,
+                UnifiedError::from(&e).code,
+                "UnifiedError code drift for {e:?}"
+            );
+            let mcp = serde_json::from_str::<serde_json::Value>(&e.to_mcp_json()).unwrap();
+            assert_eq!(mcp["error"]["code"], code, "MCP code drift for {e:?}");
+        }
+
+        // `SdForgeError` 的各变体（含 `Api` 之外的鉴权/配置/内部变体）同样从本
+        // 词表取码：同一 HTTP 状态不得因错误来源不同而给出两个 wire 码，
+        // 变体区分由 `details.type` 承载。
+        let mut sdforge_cases: Vec<SdForgeError> =
+            vec![SdForgeError::from(ApiError::not_found("x", None))];
+        #[cfg(feature = "security")]
+        sdforge_cases.push(SdForgeError::from(crate::security::AuthError::InvalidToken));
+        #[cfg(feature = "security")]
+        sdforge_cases.push(SdForgeError::from(crate::security::JwtError::Expired));
+        #[cfg(feature = "security")]
+        sdforge_cases.push(SdForgeError::from(
+            crate::security::AuthConfigError::SecretTooShort { length: 10 },
+        ));
+        #[cfg(feature = "http")]
+        sdforge_cases.push(SdForgeError::from(
+            crate::config::ConfigError::FileNotFound {
+                path: "/missing".to_string(),
+            },
+        ));
+        sdforge_cases.push(SdForgeError::internal("boom"));
+
+        for e in sdforge_cases {
+            let svc = e.to_service_error();
+            assert_eq!(
+                svc.code(),
+                code_for_http_status(svc.http_status()),
+                "SdForgeError code drift for {e:?}"
+            );
+        }
+    }
+
+    /// 字段文档里的示例码必须出自本词表。
+    ///
+    /// 文档示例是协议适配器实现者选码的唯一依据——示例一旦回退到旧词表
+    /// （`INVALID_INPUT` 等），实现者就会照着发一个框架任何面都不会产出的码。
+    #[test]
+    fn doc_example_code_comes_from_the_vocabulary() {
+        let source = include_str!("unified.rs");
+        let doc_line = source
+            .lines()
+            .find(|line| line.contains("Stable machine-readable error code (e.g."))
+            .expect("the `code` field documentation must exist");
+        let example = doc_line
+            .split('`')
+            .nth(1)
+            .expect("the documentation must quote the example code");
+        let vocabulary = [
+            code_for_http_status(400),
+            code_for_http_status(401),
+            code_for_http_status(403),
+            code_for_http_status(404),
+            code_for_http_status(409),
+            code_for_http_status(422),
+            code_for_http_status(429),
+            code_for_http_status(500),
+            code_for_http_status(503),
+        ];
+        assert!(
+            vocabulary.contains(&example),
+            "documented example code `{example}` is not produced by the framework vocabulary"
+        );
     }
 
     #[test]

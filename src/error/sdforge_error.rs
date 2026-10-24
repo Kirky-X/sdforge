@@ -77,44 +77,65 @@ impl SdForgeError {
         }
     }
 
+    /// Build a `ServiceError` whose machine code is derived from the HTTP
+    /// status through the framework's single error-code vocabulary.
+    ///
+    /// Deriving the code from the same status it is sent with keeps status
+    /// and code from drifting apart — the invariant
+    /// `code == code_for_http_status(status)` holds by construction.
+    fn service_error_for_status(
+        status: u16,
+        message: impl Into<String>,
+        details: serde_json::Value,
+    ) -> ServiceError {
+        ServiceError::with_details(
+            crate::error::unified::code_for_http_status(status),
+            message,
+            details,
+            status,
+        )
+    }
+
     /// Convert to ServiceError for HTTP response
+    ///
+    /// The machine code is derived from the HTTP status via the framework's
+    /// single error-code vocabulary
+    /// ([`crate::error::unified::code_for_http_status`]), exactly like the
+    /// `Api` branch — one status always yields one wire code. The error
+    /// sub-type is carried by `details.type` (`auth` / `jwt` /
+    /// `auth_config` / `config` / `internal`), not by the code.
     pub fn to_service_error(&self) -> ServiceError {
         match self {
             SdForgeError::Api(err) => err.to_service_error(),
             #[cfg(feature = "security")]
-            SdForgeError::Auth(e) => ServiceError::with_details(
-                "AUTH_ERROR",
+            SdForgeError::Auth(e) => Self::service_error_for_status(
+                401,
                 e.to_string(),
                 serde_json::json!({ "type": "auth" }),
-                401,
             ),
             #[cfg(feature = "security")]
-            SdForgeError::Jwt(e) => ServiceError::with_details(
-                "JWT_ERROR",
+            SdForgeError::Jwt(e) => Self::service_error_for_status(
+                401,
                 e.to_string(),
                 serde_json::json!({ "type": "jwt" }),
-                401,
             ),
             #[cfg(feature = "security")]
-            SdForgeError::AuthConfig(e) => ServiceError::with_details(
-                "AUTH_CONFIG_ERROR",
+            SdForgeError::AuthConfig(e) => Self::service_error_for_status(
+                500,
                 e.to_string(),
                 serde_json::json!({ "type": "auth_config" }),
-                500,
             ),
             #[cfg(feature = "http")]
-            SdForgeError::Config(e) => ServiceError::with_details(
-                "CONFIG_ERROR",
+            SdForgeError::Config(e) => Self::service_error_for_status(
+                400,
                 e.to_string(),
                 serde_json::json!({ "type": "config" }),
-                400,
             ),
-            SdForgeError::Internal(_) => ServiceError::with_details(
-                "INTERNAL_ERROR",
+            SdForgeError::Internal(_) => Self::service_error_for_status(
+                500,
                 // HIGH 修复：与 sanitized_message 一致地脱敏，原始消息不进 HTTP 响应体
                 "An internal error occurred. Please try again later.".to_string(),
                 serde_json::json!({ "type": "internal" }),
-                500,
             ),
         }
     }
@@ -265,7 +286,7 @@ mod tests {
     fn test_to_service_error_api_validation() {
         let err = SdForgeError::from(ApiError::validation("email", "invalid format"));
         let service_err = err.to_service_error();
-        assert_eq!(service_err.code(), "VALIDATION_ERROR");
+        assert_eq!(service_err.code(), "UNPROCESSABLE_ENTITY");
         assert_eq!(service_err.http_status(), 422);
     }
 
@@ -275,7 +296,7 @@ mod tests {
     fn test_to_service_error_internal() {
         let err = SdForgeError::internal("custom internal message");
         let service_err = err.to_service_error();
-        assert_eq!(service_err.code(), "INTERNAL_ERROR");
+        assert_eq!(service_err.code(), "INTERNAL");
         assert_eq!(service_err.http_status(), 500);
         assert_eq!(
             service_err.message(),
@@ -294,8 +315,47 @@ mod tests {
         };
         let err = SdForgeError::from(config_err);
         let service_err = err.to_service_error();
-        assert_eq!(service_err.code(), "CONFIG_ERROR");
+        assert_eq!(service_err.code(), "BAD_REQUEST");
         assert_eq!(service_err.http_status(), 400);
+        assert_eq!(service_err.details().unwrap()["type"], "config");
+    }
+
+    /// Every `SdForgeError` variant must report the machine code that the
+    /// shared vocabulary assigns to its HTTP status — one status, one code.
+    ///
+    /// The non-`Api` variants used to emit their own literals
+    /// (`INTERNAL_ERROR`, `AUTH_ERROR`, `JWT_ERROR`, `AUTH_CONFIG_ERROR`,
+    /// `CONFIG_ERROR`), so the same HTTP status carried two different wire
+    /// codes depending on which variant produced it. Asserting the
+    /// invariant per variant pins status and code together.
+    #[test]
+    fn test_service_error_code_matches_shared_vocabulary() {
+        let mut cases: Vec<SdForgeError> =
+            vec![SdForgeError::from(ApiError::not_found("User", None))];
+        #[cfg(feature = "security")]
+        cases.push(SdForgeError::from(crate::security::AuthError::InvalidToken));
+        #[cfg(feature = "security")]
+        cases.push(SdForgeError::from(crate::security::JwtError::Expired));
+        #[cfg(feature = "security")]
+        cases.push(SdForgeError::from(
+            crate::security::AuthConfigError::SecretTooShort { length: 10 },
+        ));
+        #[cfg(feature = "http")]
+        cases.push(SdForgeError::from(
+            crate::config::ConfigError::FileNotFound {
+                path: "/missing".to_string(),
+            },
+        ));
+        cases.push(SdForgeError::internal("boom"));
+
+        for err in cases {
+            let service_err = err.to_service_error();
+            assert_eq!(
+                service_err.code(),
+                crate::error::unified::code_for_http_status(service_err.http_status()),
+                "wire code drift for {err:?}"
+            );
+        }
     }
 
     /// Test From<ApiError> conversion produces the Api variant.
@@ -379,7 +439,7 @@ mod tests {
         let api_err = ApiError::access_denied("read", Some("user-1".to_string()));
         let sdforge_err: SdForgeError = api_err.into();
         let service_err = sdforge_err.to_service_error();
-        assert_eq!(service_err.code(), "ACCESS_DENIED");
+        assert_eq!(service_err.code(), "FORBIDDEN");
         assert_eq!(service_err.http_status(), 403);
     }
 
@@ -391,7 +451,7 @@ mod tests {
     // correct error code, HTTP status, and JSON details.
 
     /// Test to_service_error for the Auth variant produces a 401 ServiceError
-    /// with the AUTH_ERROR code and auth type marker.
+    /// with the vocabulary code and the auth type marker.
     #[cfg(feature = "security")]
     #[test]
     fn test_to_service_error_auth() {
@@ -399,12 +459,13 @@ mod tests {
         let auth_err = AuthError::InvalidToken;
         let sdforge_err: SdForgeError = auth_err.into();
         let service_err = sdforge_err.to_service_error();
-        assert_eq!(service_err.code(), "AUTH_ERROR");
+        assert_eq!(service_err.code(), "UNAUTHORIZED");
         assert_eq!(service_err.http_status(), 401);
+        assert_eq!(service_err.details().unwrap()["type"], "auth");
     }
 
     /// Test to_service_error for the Jwt variant produces a 401 ServiceError
-    /// with the JWT_ERROR code and jwt type marker.
+    /// with the vocabulary code and the jwt type marker.
     #[cfg(feature = "security")]
     #[test]
     fn test_to_service_error_jwt() {
@@ -412,12 +473,13 @@ mod tests {
         let jwt_err = JwtError::Expired;
         let sdforge_err: SdForgeError = jwt_err.into();
         let service_err = sdforge_err.to_service_error();
-        assert_eq!(service_err.code(), "JWT_ERROR");
+        assert_eq!(service_err.code(), "UNAUTHORIZED");
         assert_eq!(service_err.http_status(), 401);
+        assert_eq!(service_err.details().unwrap()["type"], "jwt");
     }
 
     /// Test to_service_error for the AuthConfig variant produces a 500
-    /// ServiceError with the AUTH_CONFIG_ERROR code and auth_config type marker.
+    /// ServiceError with the vocabulary code and the auth_config type marker.
     #[cfg(feature = "security")]
     #[test]
     fn test_to_service_error_auth_config() {
@@ -425,8 +487,9 @@ mod tests {
         let config_err = AuthConfigError::SecretTooShort { length: 10 };
         let sdforge_err: SdForgeError = config_err.into();
         let service_err = sdforge_err.to_service_error();
-        assert_eq!(service_err.code(), "AUTH_CONFIG_ERROR");
+        assert_eq!(service_err.code(), "INTERNAL");
         assert_eq!(service_err.http_status(), 500);
+        assert_eq!(service_err.details().unwrap()["type"], "auth_config");
     }
 
     /// Test category for the Auth variant returns AuthError.

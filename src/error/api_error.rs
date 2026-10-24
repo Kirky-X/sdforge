@@ -81,6 +81,11 @@ pub enum ApiError {
     #[error("Internal server error")]
     Internal {
         /// Sanitized error message (never contains sensitive data like paths, stack traces, or internal error details)
+        ///
+        /// 不参与序列化：直接 `serde_json::to_value(err)` 的调用方不得拿到
+        /// 内部消息（脱敏只在 `security` feature 下生效，且字段可被直接
+        /// 构造绕过）。完整消息留在 Debug/日志里。
+        #[serde(skip)]
         message: String,
         /// A unique identifier for this error (for debugging)
         error_id: String,
@@ -89,6 +94,10 @@ pub enum ApiError {
         #[serde(skip)]
         source: Option<Box<dyn StdError + Send + Sync>>,
         /// Optional context information
+        ///
+        /// 不参与序列化：`ErrorContext` 带编译期源码文件路径与行号，
+        /// 只应留在服务端日志。
+        #[serde(skip)]
         context: Option<Box<ErrorContext>>,
     },
 
@@ -116,6 +125,33 @@ pub enum ApiError {
 }
 
 impl ApiError {
+    /// HTTP 状态码（单一事实来源）。
+    ///
+    /// 与机器码 [`Self::code`] 同源：`code` 经本状态码派生，两者不可能各自
+    /// 漂移。
+    pub fn http_status(&self) -> u16 {
+        match self {
+            ApiError::NotFound { .. } => 404,
+            ApiError::InvalidInput { .. } => 400,
+            ApiError::ValidationError { .. } => 422,
+            ApiError::AuthenticationFailed { .. } => 401,
+            ApiError::AccessDenied { .. } => 403,
+            ApiError::RateLimitExceeded { .. } | ApiError::QuotaExhausted { .. } => 429,
+            ApiError::Internal { .. } => 500,
+            ApiError::ServiceUnavailable { .. } => 503,
+        }
+    }
+
+    /// 机器可读错误码（跨协议唯一词表）。
+    ///
+    /// HTTP 响应体（`UnifiedError`）、gRPC `Status::details`、`ServiceError`
+    /// 与 MCP 输出全部取自本方法——同一错误在任何协议上都是同一个码。
+    /// 取值由 [`crate::error::unified::code_for_http_status`] 派生，与
+    /// 已发布的跨协议契约表一致。
+    pub fn code(&self) -> &'static str {
+        crate::error::unified::code_for_http_status(self.http_status())
+    }
+
     /// Create a validation error
     pub fn validation_error(_code: impl Into<String>, message: impl Into<String>) -> Self {
         Self::InvalidInput {
@@ -393,53 +429,34 @@ impl ApiError {
     /// caller-supplied message through verbatim (no framework text to
     /// translate).
     pub fn to_mcp_json(&self) -> String {
-        let (code, message) = match self {
-            ApiError::NotFound { resource, .. } => (
-                "NOT_FOUND",
-                crate::i18n::t("api-error-not-found", &[("resource", resource.clone())]),
+        let code = self.code();
+        let message = match self {
+            ApiError::NotFound { resource, .. } => {
+                crate::i18n::t("api-error-not-found", &[("resource", resource.clone())])
+            }
+            ApiError::InvalidInput { message, .. } => message.clone(),
+            ApiError::AuthenticationFailed { reason } => {
+                crate::i18n::t("api-error-auth-failed", &[("reason", reason.clone())])
+            }
+            ApiError::AccessDenied { permission, .. } => crate::i18n::t(
+                "api-error-access-denied",
+                &[("permission", permission.clone())],
             ),
-            ApiError::InvalidInput { message, .. } => ("INVALID_INPUT", message.clone()),
-            ApiError::AuthenticationFailed { reason } => (
-                "AUTHENTICATION_FAILED",
-                crate::i18n::t("api-error-auth-failed", &[("reason", reason.clone())]),
-            ),
-            ApiError::AccessDenied { permission, .. } => (
-                "ACCESS_DENIED",
-                crate::i18n::t(
-                    "api-error-access-denied",
-                    &[("permission", permission.clone())],
-                ),
-            ),
-            ApiError::RateLimitExceeded { .. } => (
-                "RATE_LIMIT_EXCEEDED",
-                crate::i18n::t("ratelimit-exceeded", &[]),
-            ),
+            ApiError::RateLimitExceeded { .. } => crate::i18n::t("ratelimit-exceeded", &[]),
             // HIGH 修复：Internal 的 MCP 输出与 sanitized_message 一致地脱敏，
             // 不再把原始内部消息（可能含主机名/路径/SQL 等）泄漏到外部协议。
-            ApiError::Internal { .. } => (
-                "INTERNAL_ERROR",
-                crate::i18n::t("api-error-internal-generic", &[]),
+            ApiError::Internal { .. } => crate::i18n::t("api-error-internal-generic", &[]),
+            ApiError::QuotaExhausted { used, total } => crate::i18n::t(
+                "api-error-quota-exhausted",
+                &[("used", used.to_string()), ("total", total.to_string())],
             ),
-            ApiError::QuotaExhausted { used, total } => (
-                "QUOTA_EXHAUSTED",
-                crate::i18n::t(
-                    "api-error-quota-exhausted",
-                    &[("used", used.to_string()), ("total", total.to_string())],
-                ),
+            ApiError::ServiceUnavailable { service, .. } => crate::i18n::t(
+                "api-error-service-unavailable",
+                &[("service", service.clone())],
             ),
-            ApiError::ServiceUnavailable { service, .. } => (
-                "SERVICE_UNAVAILABLE",
-                crate::i18n::t(
-                    "api-error-service-unavailable",
-                    &[("service", service.clone())],
-                ),
-            ),
-            ApiError::ValidationError { field, constraint } => (
-                "VALIDATION_ERROR",
-                crate::i18n::t(
-                    "core-validation-failed",
-                    &[("field", field.clone()), ("constraint", constraint.clone())],
-                ),
+            ApiError::ValidationError { field, constraint } => crate::i18n::t(
+                "core-validation-failed",
+                &[("field", field.clone()), ("constraint", constraint.clone())],
             ),
         };
 
@@ -468,104 +485,103 @@ impl ApiError {
     /// catalogs; keys shared with [`crate::error::LocalizedError`]), so the
     /// HTTP response body follows the active locale.
     pub fn to_service_error(&self) -> ServiceError {
+        // 机器码与状态码同源（`Self::code` / `Self::http_status`）：ServiceError
+        // 与 UnifiedError / gRPC details / MCP 输出共享同一套词表。
+        let code = self.code();
+        let status = self.http_status();
         match self {
             ApiError::NotFound {
                 resource,
                 resource_id,
             } => ServiceError::with_details(
-                "NOT_FOUND",
+                code,
                 crate::i18n::t("api-error-not-found", &[("resource", resource.clone())]),
                 serde_json::json!({ "resource": resource, "resource_id": resource_id }),
-                404,
+                status,
             ),
             ApiError::InvalidInput {
                 message,
                 field,
                 value,
             } => ServiceError::with_details(
-                "INVALID_INPUT",
+                code,
                 message.clone(),
                 serde_json::json!({ "field": field, "value": value }),
-                400,
+                status,
             ),
             ApiError::AuthenticationFailed { reason } => ServiceError::with_details(
-                "AUTHENTICATION_FAILED",
+                code,
                 crate::i18n::t("api-error-auth-failed", &[("reason", reason.clone())]),
                 serde_json::json!({ "reason": reason }),
-                401,
+                status,
             ),
             ApiError::AccessDenied {
                 permission,
                 user_id,
             } => ServiceError::with_details(
-                "ACCESS_DENIED",
+                code,
                 crate::i18n::t(
                     "api-error-access-denied",
                     &[("permission", permission.clone())],
                 ),
                 serde_json::json!({ "permission": permission, "user_id": user_id }),
-                403,
+                status,
             ),
             ApiError::RateLimitExceeded {
                 limit,
                 window_seconds,
             } => ServiceError::with_details(
-                "RATE_LIMIT_EXCEEDED",
+                code,
                 crate::i18n::t("ratelimit-exceeded", &[]),
                 serde_json::json!({ "limit": limit, "window_seconds": window_seconds }),
-                429,
+                status,
             ),
             ApiError::QuotaExhausted { used, total } => ServiceError::with_details(
-                "QUOTA_EXHAUSTED",
+                code,
                 crate::i18n::t(
                     "api-error-quota-exhausted",
                     &[("used", used.to_string()), ("total", total.to_string())],
                 ),
                 serde_json::json!({ "used": used, "total": total }),
-                429,
+                status,
             ),
             ApiError::Internal {
                 message: _,
                 error_id,
                 source: _,
-                context,
+                context: _,
             } => {
+                #[cfg_attr(not(feature = "timestamp"), allow(unused_mut))]
                 let mut details = serde_json::json!({ "error_id": error_id });
                 #[cfg(feature = "timestamp")]
                 {
                     details["timestamp"] = serde_json::json!(chrono::Utc::now().timestamp());
                 }
-                if let Some(ctx) = context {
-                    details["context"] = serde_json::to_value(ctx).unwrap_or(serde_json::json!({}));
-                }
+                // `ErrorContext`（编译期源码路径/行号/`extra`）只进服务端日志，
+                // 不得随 HTTP 响应体下发。
                 // 收尾：与 sanitized_message / to_mcp_json 三轨统一 ——
                 // 即使调用方绕过构造器以字面量构造 Internal（未过构造期脱敏），
                 // HTTP 响应体也绝不携带原始内部消息。完整消息仍留在 Debug/日志。
-                ServiceError::with_details(
-                    "INTERNAL_ERROR",
-                    Self::sanitized_message(self),
-                    details,
-                    500,
-                )
+                ServiceError::with_details(code, Self::sanitized_message(self), details, status)
             }
             ApiError::ServiceUnavailable {
                 service,
                 retry_after,
                 source: _,
             } => ServiceError::with_details(
-                "SERVICE_UNAVAILABLE",
+                code,
                 crate::i18n::t(
                     "api-error-service-unavailable",
                     &[("service", service.clone())],
                 ),
                 serde_json::json!({ "service": service, "retry_after": retry_after }),
-                503,
+                status,
             ),
             ApiError::ValidationError { field, constraint } => ServiceError::with_details(
-                "VALIDATION_ERROR",
+                code,
                 crate::i18n::t("api-error-validation-field", &[("field", field.clone())]),
                 serde_json::json!({ "field": field, "constraint": constraint }),
-                422,
+                status,
             ),
         }
     }
@@ -1156,23 +1172,19 @@ mod tests {
     // to_mcp_json tests
 
     /// Test to_mcp_json produces valid JSON with success=false for each variant.
+    ///
+    /// 机器码与 HTTP 响应体 / gRPC details 共用同一词表（`ApiError::code`）。
     #[test]
     fn test_to_mcp_json_all_variants() {
         let errors: Vec<(&str, ApiError)> = vec![
             ("NOT_FOUND", ApiError::not_found("User", None)),
-            ("INVALID_INPUT", ApiError::invalid_input("msg", None, None)),
-            (
-                "AUTHENTICATION_FAILED",
-                ApiError::authentication_failed("r"),
-            ),
-            ("ACCESS_DENIED", ApiError::access_denied("p", None)),
-            ("RATE_LIMIT_EXCEEDED", ApiError::rate_limit_exceeded(1, 1)),
-            ("INTERNAL_ERROR", ApiError::internal_error("m", "id")),
-            (
-                "SERVICE_UNAVAILABLE",
-                ApiError::service_unavailable("svc", None),
-            ),
-            ("VALIDATION_ERROR", ApiError::validation("f", "c")),
+            ("BAD_REQUEST", ApiError::invalid_input("msg", None, None)),
+            ("UNAUTHORIZED", ApiError::authentication_failed("r")),
+            ("FORBIDDEN", ApiError::access_denied("p", None)),
+            ("TOO_MANY_REQUESTS", ApiError::rate_limit_exceeded(1, 1)),
+            ("INTERNAL", ApiError::internal_error("m", "id")),
+            ("UNAVAILABLE", ApiError::service_unavailable("svc", None)),
+            ("UNPROCESSABLE_ENTITY", ApiError::validation("f", "c")),
         ];
 
         for (expected_code, err) in errors {
@@ -1214,33 +1226,27 @@ mod tests {
     // to_service_error tests
 
     /// Test to_service_error produces the correct code and HTTP status for each variant.
+    ///
+    /// 机器码与 HTTP 响应体 / gRPC details / MCP 输出共用同一词表。
     #[test]
     fn test_to_service_error_all_variants() {
         let cases: Vec<(&str, u16, ApiError)> = vec![
             ("NOT_FOUND", 404, ApiError::not_found("X", None)),
+            ("BAD_REQUEST", 400, ApiError::invalid_input("m", None, None)),
+            ("UNAUTHORIZED", 401, ApiError::authentication_failed("r")),
+            ("FORBIDDEN", 403, ApiError::access_denied("p", None)),
             (
-                "INVALID_INPUT",
-                400,
-                ApiError::invalid_input("m", None, None),
-            ),
-            (
-                "AUTHENTICATION_FAILED",
-                401,
-                ApiError::authentication_failed("r"),
-            ),
-            ("ACCESS_DENIED", 403, ApiError::access_denied("p", None)),
-            (
-                "RATE_LIMIT_EXCEEDED",
+                "TOO_MANY_REQUESTS",
                 429,
                 ApiError::rate_limit_exceeded(1, 1),
             ),
-            ("INTERNAL_ERROR", 500, ApiError::internal_error("m", "id")),
+            ("INTERNAL", 500, ApiError::internal_error("m", "id")),
             (
-                "SERVICE_UNAVAILABLE",
+                "UNAVAILABLE",
                 503,
                 ApiError::service_unavailable("svc", None),
             ),
-            ("VALIDATION_ERROR", 422, ApiError::validation("f", "c")),
+            ("UNPROCESSABLE_ENTITY", 422, ApiError::validation("f", "c")),
         ];
 
         for (expected_code, expected_status, err) in cases {
@@ -1279,7 +1285,9 @@ mod tests {
         assert_eq!(details["error_id"], "err-abc");
     }
 
-    /// Test to_service_error for Internal with context includes context in details.
+    /// Test to_service_error for Internal keeps the context out of the wire
+    /// payload: `ErrorContext` carries the compile-time source path/line and
+    /// must stay server-side.
     #[test]
     fn test_to_service_error_internal_with_context_details() {
         let ctx = ErrorContext::new().with_extra("trace_id".to_string(), "trace-123".to_string());
@@ -1287,9 +1295,67 @@ mod tests {
         let service_err = err.to_service_error();
         let details = service_err.details().expect("details should be present");
         assert!(
-            details.get("context").is_some(),
-            "context should be in details"
+            details.get("context").is_none(),
+            "the error context must not reach the response payload"
         );
+        assert!(
+            details.get("trace_id").is_none(),
+            "the context extra keys must not reach the response payload"
+        );
+        assert_eq!(details["error_id"], "id");
+    }
+
+    /// 直接序列化 ApiError 不得带出内部消息与源码上下文。
+    #[test]
+    fn test_serde_skips_internal_message_and_context() {
+        let ctx = ErrorContext::current();
+        let err = ApiError::internal_with_context(
+            "postgres://user:pass@10.0.0.5:5432/app",
+            "err-ctx",
+            ctx,
+        );
+        let json = serde_json::to_string(&err).expect("serialization should succeed");
+        assert!(
+            !json.contains("postgres://"),
+            "the internal message must not be serialized: {json}"
+        );
+        assert!(
+            !json.contains(".rs"),
+            "the source file path must not be serialized: {json}"
+        );
+        assert!(
+            json.contains("err-ctx"),
+            "the error id stays available for correlation: {json}"
+        );
+    }
+
+    /// 解码端同样不得接受外来载荷里的内部消息与上下文。
+    ///
+    /// `#[serde(skip)]` 同时关闭序列化与反序列化：解码时这两个字段取默认值，
+    /// 外来载荷无法把消息/源码上下文注入会进入 Debug 与日志的字段。
+    #[test]
+    fn test_serde_decode_ignores_foreign_internal_message_and_context() {
+        let payload = r#"{"type":"Internal","error_id":"e1","message":"INJECTED","context":{"file":"x.rs","line":7}}"#;
+        let err: ApiError = serde_json::from_str(payload).expect("decoding should succeed");
+        match err {
+            ApiError::Internal {
+                message,
+                error_id,
+                context,
+                ..
+            } => {
+                assert_eq!(error_id, "e1");
+                assert!(
+                    message.is_empty(),
+                    "an external payload must not inject the internal message: {message:?}"
+                );
+                assert!(
+                    context.is_none(),
+                    "an external payload must not inject the error context"
+                );
+            }
+            other => panic!("expected the Internal variant, got {other:?}"),
+        }
     }
 
     /// Test to_service_error for ServiceUnavailable includes service and retry_after.

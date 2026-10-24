@@ -7,6 +7,13 @@ use std::collections::HashMap;
 ///
 /// This enum categorizes errors to enable proper error handling strategies,
 /// monitoring, and user-facing error messages.
+///
+/// It is a **coarse monitoring classification**, not the wire error-code
+/// vocabulary: the machine-readable code a client sees comes from
+/// [`crate::error::ApiError::code`] (shared by the HTTP body, gRPC
+/// `Status::details`, `ServiceError` and the MCP output). The category
+/// deliberately groups several codes together (e.g. `ClientError` covers both
+/// `BAD_REQUEST` and `NOT_FOUND`) and is therefore never sent to clients.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ErrorCategory {
     /// Client errors (4xx) - request was malformed or invalid
@@ -81,9 +88,9 @@ impl ErrorContext {
     ///
     /// ```rust
     /// use sdforge::error::ErrorContext;
-    /// let context = ErrorContext::current
-    ///     .with_extra("user_id".to_string, "12345".to_string)
-    ///     .with_extra("action".to_string, "delete_user".to_string);
+    /// let context = ErrorContext::current()
+    ///     .with_extra("user_id".to_string(), "12345".to_string())
+    ///     .with_extra("action".to_string(), "delete_user".to_string());
     /// ```
     pub fn with_extra(mut self, key: String, value: String) -> Self {
         self.extra.insert(key, value);
