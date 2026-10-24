@@ -10,7 +10,7 @@
 #![cfg(all(feature = "http", feature = "security"))]
 
 use sdforge::config::{ApiKeySeed, AuthConfig, SdForgeConfig, ServerConfig};
-use sdforge::http::build_with_config;
+use sdforge::http::build_with_config_ext;
 
 #[sdforge::forge(
     name = "admin_stats",
@@ -65,7 +65,7 @@ fn apikey_config(admin_key: &str, viewer_key: &str) -> SdForgeConfig {
 
 async fn get_with_key(uri: &str, key: Option<&str>) -> axum::http::Response<axum::body::Body> {
     let config = apikey_config("admin-secret-key-1", "viewer-secret-key-2");
-    let mut router = build_with_config(&config).unwrap();
+    let mut router = build_with_config_ext(axum::Router::new(), &config).unwrap();
     let mut builder = axum::http::Request::builder().uri(uri);
     if let Some(k) = key {
         builder = builder.header("x-api-key", format!("sk_{k}"));
@@ -135,7 +135,7 @@ async fn empty_permission_seed_authenticates_but_fails_role_check_with_403() {
     };
 
     let call = |uri: &str| {
-        let mut router = build_with_config(&config).unwrap();
+        let mut router = build_with_config_ext(axum::Router::new(), &config).unwrap();
         let uri = uri.to_string();
         async move {
             tower::Service::call(

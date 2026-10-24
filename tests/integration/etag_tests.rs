@@ -1,8 +1,8 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! e2e: ETag / conditional requests through `build_with_config`.
+//! e2e: ETag / conditional requests through `build_with_config_ext`.
 //!
-//! Routes are declared via `#[forge]` (inventory) so the `build_with_config`
+//! Routes are declared via `#[forge]` (inventory) so the `build_with_config_ext`
 //! middleware stack applies to them (axum layers only affect routes
 //! registered before them).
 
@@ -10,7 +10,7 @@
 
 use axum::body::Body;
 use sdforge::forge;
-use sdforge::http::build_with_config;
+use sdforge::http::build_with_config_ext;
 use tower::ServiceExt;
 
 #[forge(
@@ -50,7 +50,7 @@ async fn large_report() -> String {
 
 fn app() -> axum::Router {
     let config = sdforge::config::SdForgeConfig::default();
-    build_with_config(&config).unwrap()
+    build_with_config_ext(axum::Router::new(), &config).unwrap()
 }
 
 async fn send(method: &str, uri: &str, if_none_match: Option<&str>) -> axum::http::Response<Body> {

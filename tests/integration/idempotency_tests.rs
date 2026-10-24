@@ -10,7 +10,7 @@
 use axum::body::Body;
 use sdforge::config::{IdempotencyConfig, SdForgeConfig, ServerConfig};
 use sdforge::forge;
-use sdforge::http::build_with_config;
+use sdforge::http::build_with_config_ext;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use tower::ServiceExt;
@@ -72,7 +72,7 @@ async fn post(
 #[serial_test::serial]
 async fn duplicate_key_replays_cached_response() {
     EXEC_COUNT.store(0, Ordering::SeqCst);
-    let router = build_with_config(&idem_config()).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &idem_config()).unwrap();
 
     let first = post(router.clone(), "/api/v1/payments", Some("dup-1"), "100").await;
     assert_eq!(first.status(), 200);
@@ -105,7 +105,7 @@ async fn duplicate_key_replays_cached_response() {
 #[serial_test::serial]
 async fn request_without_key_passes_through_every_time() {
     EXEC_COUNT.store(0, Ordering::SeqCst);
-    let router = build_with_config(&idem_config()).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &idem_config()).unwrap();
     for _ in 0..2 {
         let resp = post(router.clone(), "/api/v1/payments", None, "7").await;
         assert_eq!(resp.status(), 200);
@@ -124,7 +124,7 @@ async fn disabled_config_leaves_behavior_unchanged() {
     EXEC_COUNT.store(0, Ordering::SeqCst);
     let mut cfg = idem_config();
     cfg.server.idempotency.enabled = false;
-    let router = build_with_config(&cfg).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &cfg).unwrap();
     for _ in 0..2 {
         let resp = post(router.clone(), "/api/v1/payments", Some("dup-2"), "5").await;
         assert_eq!(resp.status(), 200);
@@ -150,7 +150,7 @@ async fn oversized_response_passes_through_intact() {
     let mut cfg = idem_config();
     cfg.server.idempotency.enabled = true;
     cfg.server.idempotency.max_response_bytes = 64; // 故意压到极小
-    let router = build_with_config(&cfg).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &cfg).unwrap();
 
     let resp = post(router.clone(), "/api/v1/blob", Some("over-1"), "{}").await;
     assert_eq!(
@@ -186,13 +186,15 @@ async fn http_in_flight_returns_409_with_header() {
     // HTTP 层在途并发 —— 注入 store 并预占 InFlight claim，
     // 同 key POST 得到 409 + Idempotency-Replayed: in-flight。
     let store = Arc::new(sdforge::cache::IdempotencyStore::new());
+    // 幂等作用域 = 路由模式 + 主体标识（未认证请求的主体为 `anonymous`），
+    // 两个主体复用同一 key 不共享记录。
     assert_eq!(
-        store.begin("/api/v1/payments", "inflight-http", 30),
+        store.begin("/api/v1/payments:anonymous", "inflight-http", 30),
         sdforge::cache::IdempotencyOutcome::Execute
     );
     let mut cfg = idem_config();
     cfg.server.idempotency.store = Some(store);
-    let router = build_with_config(&cfg).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &cfg).unwrap();
 
     let resp = post(router, "/api/v1/payments", Some("inflight-http"), "1").await;
     assert_eq!(resp.status(), 409);

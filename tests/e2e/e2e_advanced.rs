@@ -252,6 +252,8 @@ mod config_advanced {
     fn test_config_jwt_empty_secret_rejected() {
         let config = AuthConfig::Jwt {
             secret: "".to_string(),
+            audience: None,
+            issuer: None,
         };
         let result = config.validate();
         assert!(result.is_err());
@@ -262,6 +264,8 @@ mod config_advanced {
     fn test_config_jwt_short_secret_rejected() {
         let config = AuthConfig::Jwt {
             secret: "short".to_string(),
+            audience: None,
+            issuer: None,
         };
         let result = config.validate();
         assert!(result.is_err());
@@ -278,6 +282,8 @@ mod config_advanced {
         // So this 32-char string is NOT a weak word — it should be accepted.
         let config = AuthConfig::Jwt {
             secret: weak.clone(),
+            audience: None,
+            issuer: None,
         };
         assert!(config.validate().is_ok());
     }
@@ -288,7 +294,11 @@ mod config_advanced {
         // an exact lowercase match, so only the literal words are rejected.
         // Use a long string that lowercases to exactly "password".
         let weak = "PASSWORD".to_string();
-        let config = AuthConfig::Jwt { secret: weak };
+        let config = AuthConfig::Jwt {
+            secret: weak,
+            audience: None,
+            issuer: None,
+        };
         let result = config.validate();
         // "PASSWORD" lowercases to "password" — should be rejected as weak.
         assert!(result.is_err());
@@ -604,29 +614,21 @@ mod error_advanced {
     fn test_error_to_service_error_status_codes() {
         let cases: Vec<(&str, u16, ApiError)> = vec![
             ("NOT_FOUND", 404, ApiError::not_found("X", None)),
+            ("BAD_REQUEST", 400, ApiError::invalid_input("m", None, None)),
+            ("UNAUTHORIZED", 401, ApiError::authentication_failed("r")),
+            ("FORBIDDEN", 403, ApiError::access_denied("p", None)),
             (
-                "INVALID_INPUT",
-                400,
-                ApiError::invalid_input("m", None, None),
-            ),
-            (
-                "AUTHENTICATION_FAILED",
-                401,
-                ApiError::authentication_failed("r"),
-            ),
-            ("ACCESS_DENIED", 403, ApiError::access_denied("p", None)),
-            (
-                "RATE_LIMIT_EXCEEDED",
+                "TOO_MANY_REQUESTS",
                 429,
                 ApiError::rate_limit_exceeded(1, 1),
             ),
-            ("INTERNAL_ERROR", 500, ApiError::internal_error("m", "id")),
+            ("INTERNAL", 500, ApiError::internal_error("m", "id")),
             (
-                "SERVICE_UNAVAILABLE",
+                "UNAVAILABLE",
                 503,
                 ApiError::service_unavailable("svc", None),
             ),
-            ("VALIDATION_ERROR", 422, ApiError::validation("f", "c")),
+            ("UNPROCESSABLE_ENTITY", 422, ApiError::validation("f", "c")),
         ];
         for (code, status, err) in cases {
             let svc = err.to_service_error();
@@ -720,19 +722,13 @@ mod error_advanced {
     fn test_error_to_mcp_json_all_variants_valid_json() {
         let errors: Vec<(&str, ApiError)> = vec![
             ("NOT_FOUND", ApiError::not_found("User", None)),
-            ("INVALID_INPUT", ApiError::invalid_input("msg", None, None)),
-            (
-                "AUTHENTICATION_FAILED",
-                ApiError::authentication_failed("r"),
-            ),
-            ("ACCESS_DENIED", ApiError::access_denied("p", None)),
-            ("RATE_LIMIT_EXCEEDED", ApiError::rate_limit_exceeded(1, 1)),
-            ("INTERNAL_ERROR", ApiError::internal_error("m", "id")),
-            (
-                "SERVICE_UNAVAILABLE",
-                ApiError::service_unavailable("svc", None),
-            ),
-            ("VALIDATION_ERROR", ApiError::validation("f", "c")),
+            ("BAD_REQUEST", ApiError::invalid_input("msg", None, None)),
+            ("UNAUTHORIZED", ApiError::authentication_failed("r")),
+            ("FORBIDDEN", ApiError::access_denied("p", None)),
+            ("TOO_MANY_REQUESTS", ApiError::rate_limit_exceeded(1, 1)),
+            ("INTERNAL", ApiError::internal_error("m", "id")),
+            ("UNAVAILABLE", ApiError::service_unavailable("svc", None)),
+            ("UNPROCESSABLE_ENTITY", ApiError::validation("f", "c")),
         ];
         for (code, err) in errors {
             let json = err.to_mcp_json();
@@ -1771,7 +1767,7 @@ mod cross_module_advanced {
         use sdforge::core::ServiceError;
         let api_err = ApiError::authentication_failed("bad token");
         let svc: ServiceError = api_err.into();
-        assert_eq!(svc.code(), "AUTHENTICATION_FAILED");
+        assert_eq!(svc.code(), "UNAUTHORIZED");
         assert_eq!(svc.http_status(), 401);
     }
 
@@ -1785,20 +1781,12 @@ mod cross_module_advanced {
         let svc = err.to_service_error();
         let details = svc.details().expect("details should be present");
         assert_eq!(details["error_id"], "err-ctx");
-        // Context is serialized into details as a JSON object with nested `extra`.
-        let context_value = details
-            .get("context")
-            .expect("context should be in details");
-        let context_obj = context_value
-            .as_object()
-            .expect("context should be a JSON object");
-        // ErrorContext serializes with file/line/function/extra fields.
-        let extra = context_obj
-            .get("extra")
-            .and_then(|v| v.as_object())
-            .expect("extra should be a JSON object in context");
-        assert_eq!(extra.get("trace_id"), Some(&serde_json::json!("trace-123")));
-        assert_eq!(extra.get("span_id"), Some(&serde_json::json!("span-456")));
+        // ErrorContext 带编译期源码路径/行号与 `extra`（可能含用户标识），
+        // 只进服务端日志，不得随响应体下发。
+        assert!(
+            details.get("context").is_none(),
+            "the error context must stay server-side: {details}"
+        );
     }
 }
 

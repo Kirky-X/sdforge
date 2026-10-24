@@ -17,44 +17,56 @@ use tokio::sync::OnceCell;
 use tower::ServiceExt;
 
 static GATEWAY: OnceCell<DbGateway> = OnceCell::const_new();
+static POOL: OnceCell<dbnexus::DbPool> = OnceCell::const_new();
 static CLEANUP_DIR: OnceLock<String> = OnceLock::new();
+
+/// 共享的 sqlite 文件库（池化连接各自拿到独立内存库会使表不可见——示例
+/// e2e 同源教训，故用临时目录文件库 + 测试结束清理）。
+async fn pool() -> &'static dbnexus::DbPool {
+    POOL.get_or_init(|| async {
+        let dir = std::env::temp_dir().join(format!("sdforge-gw-lib-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let db_path = dir.join("gateway.db");
+        let _ = std::fs::remove_file(&db_path);
+        let _ = CLEANUP_DIR.set(dir.to_string_lossy().to_string());
+
+        let pool = dbnexus::DbPoolBuilder::new()
+            .url(format!("sqlite://{}?mode=rwc", db_path.display()).as_str())
+            .build()
+            .await
+            .expect("sqlite pool");
+        let session = pool.get_session("admin").await.expect("admin session");
+        session
+            .execute_raw_ddl(
+                "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)",
+            )
+            .await
+            .expect("create table");
+        session
+            .execute_raw_ddl("CREATE TABLE IF NOT EXISTS secrets (payload TEXT)")
+            .await
+            .expect("create secrets table");
+        session
+            .execute_raw("INSERT INTO secrets (payload) VALUES ('TOPSECRET')")
+            .await
+            .expect("seed secret");
+        for (name, age) in [("alice", 30), ("bob", 41), ("carol", 25)] {
+            session
+                .execute_raw(&format!(
+                    "INSERT INTO users (name, age) VALUES ('{name}', {age})"
+                ))
+                .await
+                .expect("seed row");
+        }
+        pool
+    })
+    .await
+}
 
 async fn gateway() -> &'static DbGateway {
     GATEWAY
         .get_or_init(|| async {
-            // 文件库：池化连接各自拿到独立内存库会使表不可见（示例 e2e 同
-            // 源教训），临时目录文件库 + 测试结束清理。
-            let dir = std::env::temp_dir().join(format!("sdforge-gw-lib-{}", std::process::id()));
-            let _ = std::fs::create_dir_all(&dir);
-            let db_path = dir.join("gateway.db");
-            let _ = std::fs::remove_file(&db_path);
-            let _ = CLEANUP_DIR.set(dir.to_string_lossy().to_string());
-
-            let pool = dbnexus::DbPoolBuilder::new()
-                .url(format!("sqlite://{}?mode=rwc", db_path.display()).as_str())
-                .build()
-                .await
-                .expect("sqlite pool");
-            let session = pool.get_session("admin").await.expect("admin session");
-            session
-                .execute_raw_ddl("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)")
-                .await
-                .expect("create table");
-            session
-                .execute_raw_ddl("CREATE TABLE IF NOT EXISTS secrets (payload TEXT)")
-                .await
-                .expect("create secrets table");
-            session
-                .execute_raw("INSERT INTO secrets (payload) VALUES ('TOPSECRET')")
-                .await
-                .expect("seed secret");
-            for (name, age) in [("alice", 30), ("bob", 41), ("carol", 25)] {
-                session
-                    .execute_raw(&format!("INSERT INTO users (name, age) VALUES ('{name}', {age})"))
-                    .await
-                    .expect("seed row");
-            }
-            DbGateway::new(pool)
+            DbGateway::new(pool().await.clone())
                 .with_session_role("admin")
                 .allow_table("users", &["id", "name", "age"])
         })
@@ -149,8 +161,99 @@ async fn non_whitelisted_column_is_rejected() {
     );
 }
 
-/// 注入面：过滤值经转义成为字面量。非 DDL 载荷按字面量执行（查不到行、
-/// 表完好）；含 DDL 关键字的载荷被 dbnexus 权限层直接拒绝（关键词即使在
+/// 强制归属谓词：服务端配置的列条件与调用方过滤 AND 连接，调用方无法
+/// 放宽（白名单只约束表/列，不提供行级隔离）。
+#[tokio::test]
+async fn required_filter_is_enforced_and_not_overridable() {
+    let gw = DbGateway::new(pool().await.clone())
+        .with_session_role("admin")
+        .with_required_filter("name", "alice")
+        .allow_table("users", &["id", "name", "age"]);
+
+    // 无调用方过滤：谓词把结果收敛到归属行。
+    let json = gw.query(GatewayQuery::all("users")).await.expect("query");
+    let rows = json["rows"].as_array().expect("rows array");
+    assert_eq!(
+        rows.len(),
+        1,
+        "the required filter must narrow the result: {json}"
+    );
+    assert_eq!(rows[0]["name"], "alice");
+
+    // 调用方过滤与谓词 AND：越权取值拿不到行。
+    let json = gw
+        .query(GatewayQuery::all("users").filter("name", "bob"))
+        .await
+        .expect("query");
+    let rows = json["rows"].as_array().expect("rows array");
+    assert!(
+        rows.is_empty(),
+        "the caller filter must not widen the required filter: {json}"
+    );
+}
+
+/// 强制谓词列不在白名单 → 查询显式失败（fail-closed），不静默放行。
+#[tokio::test]
+async fn required_filter_column_must_be_whitelisted() {
+    let gw = DbGateway::new(pool().await.clone())
+        .with_session_role("admin")
+        .with_required_filter("age", "30")
+        .allow_table("users", &["id", "name"]);
+
+    let err = gw
+        .query(GatewayQuery::all("users"))
+        .await
+        .expect_err("a required filter outside the allowlist must fail");
+    assert!(
+        matches!(err, sdforge::core::ApiError::InvalidInput { .. }),
+        "required filter column outside the allowlist → invalid input: {err}"
+    );
+}
+
+/// 会话角色的强制效果取决于 dbnexus 的 `permission` 特性是否编译进来。
+///
+/// 未开启（仅 `db-integration`）时 dbnexus 的逐表权限检查整块被编译掉，
+/// 非 admin 会话角色不被强制执行——网关的隔离面只有白名单与强制谓词。
+/// 该事实必须被测试钉住：否则"角色已设置"会被误读成"角色已生效"。
+#[cfg(not(feature = "db-permission"))]
+#[tokio::test]
+async fn session_role_is_not_enforced_without_dbnexus_permission() {
+    let gw = DbGateway::new(pool().await.clone())
+        .with_session_role("sdforge_gateway")
+        .allow_table("users", &["id", "name", "age"]);
+
+    let json = gw
+        .query(GatewayQuery::all("users"))
+        .await
+        .expect("without dbnexus permission the role is not enforced");
+    let rows = json["rows"].as_array().expect("rows array");
+    assert_eq!(
+        rows.len(),
+        3,
+        "the session role does not restrict anything without dbnexus permission: {json}"
+    );
+}
+
+/// 开启 `db-permission` 后，非 admin 会话角色的查询必须经 dbnexus 逐表
+/// 权限检查，且未配置权限时 fail-closed（拒绝而非放行）。
+#[cfg(feature = "db-permission")]
+#[tokio::test]
+async fn session_role_is_enforced_with_dbnexus_permission() {
+    let gw = DbGateway::new(pool().await.clone())
+        .with_session_role("sdforge_gateway")
+        .allow_table("users", &["id", "name", "age"]);
+
+    let err = gw
+        .query(GatewayQuery::all("users"))
+        .await
+        .expect_err("a non-admin role without permissions must be denied");
+    assert!(
+        matches!(err, sdforge::core::ApiError::Internal { .. }),
+        "the dbnexus permission denial must surface as an error: {err}"
+    );
+}
+
+/// 注入面：过滤值经转义成为字面量。非 DDL 载荷按字面量执行（查不到行、/// 表完好）；含 DDL 关键字的载荷被 dbnexus 权限层直接拒绝（关键词即使在
 /// 字面量内也触发守卫）——两条路径都不可达注入。
 #[tokio::test]
 async fn filter_injection_payload_is_neutralized() {

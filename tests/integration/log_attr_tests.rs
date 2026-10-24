@@ -396,6 +396,34 @@ fn mask_rule_multi_token_values_snake_keys_and_embedded_word_guard() {
     );
 }
 
+/// 掩码前截断（64 KiB 上限）必须落在字符边界上：跨过上限的多字节字符
+/// 整体丢弃，不得切半；报告的丢弃字节数必须与实际丢弃量一致。
+#[test]
+#[serial_test::serial]
+fn mask_truncation_lands_on_char_boundary_and_reports_dropped_bytes() {
+    // 65534 个 ASCII 字节 + 一个 3 字节 CJK 字符（跨越 65536 上限）
+    // + 10 个 ASCII 字节，总长 65547 字节。
+    let text = format!("{}中{}", "x".repeat(65534), "y".repeat(10));
+    let masked = sdforge::log_attr::mask(&text);
+
+    // 截断点落在 CJK 字符之前（65534 字节），丢弃量为 65547 - 65534 = 13。
+    let dropped = text.len() - 65534;
+    assert_eq!(dropped, 13, "测试载荷长度应与预算一致");
+    assert!(
+        masked.contains(&format!("…[truncated {dropped} bytes before masking]")),
+        "截断提示应报告实际丢弃字节数: {masked}"
+    );
+    assert_eq!(
+        masked.matches('x').count(),
+        65534,
+        "预算内的字符必须完整保留"
+    );
+    assert!(
+        !masked.contains('中'),
+        "跨越上限的 CJK 字符必须整体丢弃: {masked}"
+    );
+}
+
 /// 级别守卫（惰性载荷）：目标级别被全局 max_level 过滤时，载荷闭包不执行
 /// ——info 生产配置下 debug 进入日志不再为每次调用白付参数捕获与掩码渲染。
 #[test]

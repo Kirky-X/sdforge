@@ -75,10 +75,12 @@ mod config_tests {
     fn test_auth_config_jwt() {
         let config = AuthConfig::Jwt {
             secret: "secret_key".to_string(),
+            audience: None,
+            issuer: None,
         };
 
         match config {
-            AuthConfig::Jwt { secret } => {
+            AuthConfig::Jwt { secret, .. } => {
                 assert_eq!(secret, "secret_key");
             }
             _ => panic!("Expected Jwt config"),
@@ -280,9 +282,11 @@ mod config_enhanced_tests {
         // Simple secret
         let simple = AuthConfig::Jwt {
             secret: "simple_secret".to_string(),
+            audience: None,
+            issuer: None,
         };
         match &simple {
-            AuthConfig::Jwt { secret } => {
+            AuthConfig::Jwt { secret, .. } => {
                 assert_eq!(secret, "simple_secret");
             }
             _ => panic!("Expected Jwt"),
@@ -291,9 +295,11 @@ mod config_enhanced_tests {
         // Complex secret with special characters
         let complex = AuthConfig::Jwt {
             secret: "complex-secret_with.special@chars!".to_string(),
+            audience: None,
+            issuer: None,
         };
         match &complex {
-            AuthConfig::Jwt { secret } => {
+            AuthConfig::Jwt { secret, .. } => {
                 assert_eq!(secret, "complex-secret_with.special@chars!");
             }
             _ => panic!("Expected Jwt"),
@@ -303,9 +309,11 @@ mod config_enhanced_tests {
         let long_secret = "a".repeat(256);
         let long = AuthConfig::Jwt {
             secret: long_secret.clone(),
+            audience: None,
+            issuer: None,
         };
         match &long {
-            AuthConfig::Jwt { secret } => {
+            AuthConfig::Jwt { secret, .. } => {
                 assert_eq!(secret.len(), 256);
             }
             _ => panic!("Expected Jwt"),
@@ -343,11 +351,13 @@ mod config_enhanced_tests {
 
         let jwt = AuthConfig::Jwt {
             secret: "secret".to_string(),
+            audience: None,
+            issuer: None,
         };
         let jwt_cloned = jwt.clone();
 
         match (&jwt, &jwt_cloned) {
-            (AuthConfig::Jwt { secret: s1 }, AuthConfig::Jwt { secret: s2 }) => {
+            (AuthConfig::Jwt { secret: s1, .. }, AuthConfig::Jwt { secret: s2, .. }) => {
                 assert_eq!(s1, s2);
             }
             _ => panic!("Expected Jwt"),
@@ -442,9 +452,11 @@ mod config_enhanced_tests {
 
         let jwt_empty = AuthConfig::Jwt {
             secret: "".to_string(),
+            audience: None,
+            issuer: None,
         };
         match &jwt_empty {
-            AuthConfig::Jwt { secret } => {
+            AuthConfig::Jwt { secret, .. } => {
                 assert_eq!(secret, "");
             }
             _ => panic!("Expected Jwt"),
@@ -473,9 +485,11 @@ mod config_enhanced_tests {
 
         let jwt_unicode = AuthConfig::Jwt {
             secret: "秘密キー🔑".to_string(),
+            audience: None,
+            issuer: None,
         };
         match &jwt_unicode {
-            AuthConfig::Jwt { secret } => {
+            AuthConfig::Jwt { secret, .. } => {
                 assert_eq!(secret, "秘密キー🔑");
             }
             _ => panic!("Expected Jwt"),

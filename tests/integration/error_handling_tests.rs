@@ -307,22 +307,22 @@ mod error_handling_tests {
         // Test AuthenticationFailed -> MCP
         let auth_failed = ApiError::authentication_failed("Invalid token");
         let mcp_json = auth_failed.to_mcp_json();
-        assert!(mcp_json.contains("AUTHENTICATION_FAILED"));
+        assert!(mcp_json.contains("UNAUTHORIZED"));
 
         // Test RateLimitExceeded -> MCP
         let rate_limit = ApiError::rate_limit_exceeded(100, 60);
         let mcp_json = rate_limit.to_mcp_json();
-        assert!(mcp_json.contains("RATE_LIMIT_EXCEEDED"));
+        assert!(mcp_json.contains("TOO_MANY_REQUESTS"));
 
         // Test Internal -> MCP
         let internal = ApiError::internal_error("Server error", "ERR001");
         let mcp_json = internal.to_mcp_json();
-        assert!(mcp_json.contains("INTERNAL_ERROR"));
+        assert!(mcp_json.contains("\"code\":\"INTERNAL\""));
 
         // Test ValidationError -> MCP
         let validation = ApiError::validation("email", "required");
         let mcp_json = validation.to_mcp_json();
-        assert!(mcp_json.contains("VALIDATION_ERROR"));
+        assert!(mcp_json.contains("UNPROCESSABLE_ENTITY"));
         assert!(mcp_json.contains("email"));
     }
 
@@ -549,37 +549,37 @@ mod error_handling_tests {
         // Test InvalidInput conversion
         let api_error = ApiError::invalid_input("Invalid email", Some("email".into()), None);
         let service_error: ServiceError = api_error.into();
-        assert_eq!(service_error.code(), "INVALID_INPUT");
+        assert_eq!(service_error.code(), "BAD_REQUEST");
         assert_eq!(service_error.http_status(), 400);
 
         // Test AuthenticationFailed conversion
         let api_error = ApiError::authentication_failed("Token expired");
         let service_error: ServiceError = api_error.into();
-        assert_eq!(service_error.code(), "AUTHENTICATION_FAILED");
+        assert_eq!(service_error.code(), "UNAUTHORIZED");
         assert_eq!(service_error.http_status(), 401);
 
         // Test AccessDenied conversion
         let api_error = ApiError::access_denied("admin", Some("user1".into()));
         let service_error: ServiceError = api_error.into();
-        assert_eq!(service_error.code(), "ACCESS_DENIED");
+        assert_eq!(service_error.code(), "FORBIDDEN");
         assert_eq!(service_error.http_status(), 403);
 
         // Test RateLimitExceeded conversion
         let api_error = ApiError::rate_limit_exceeded(100, 60);
         let service_error: ServiceError = api_error.into();
-        assert_eq!(service_error.code(), "RATE_LIMIT_EXCEEDED");
+        assert_eq!(service_error.code(), "TOO_MANY_REQUESTS");
         assert_eq!(service_error.http_status(), 429);
 
         // Test Internal conversion
         let api_error = ApiError::internal_error("Internal error", "ERR001");
         let service_error: ServiceError = api_error.into();
-        assert_eq!(service_error.code(), "INTERNAL_ERROR");
+        assert_eq!(service_error.code(), "INTERNAL");
         assert_eq!(service_error.http_status(), 500);
 
         // Test ValidationError conversion
         let api_error = ApiError::validation("email", "required");
         let service_error: ServiceError = api_error.into();
-        assert_eq!(service_error.code(), "VALIDATION_ERROR");
+        assert_eq!(service_error.code(), "UNPROCESSABLE_ENTITY");
         assert_eq!(service_error.http_status(), 422);
     }
 
@@ -645,8 +645,11 @@ mod error_handling_tests {
 
         let json = serde_json::to_string(&error).expect("Should serialize");
         assert!(json.contains("ERR_ALL_FIELDS"));
-        assert!(json.contains("key1"));
-        assert!(json.contains("value1"));
+        // 内部消息与 ErrorContext（源码路径/行号/`extra` 里的业务标识）不
+        // 参与序列化——只留在服务端日志。
+        assert!(!json.contains("Detailed error message"));
+        assert!(!json.contains("key1"));
+        assert!(!json.contains("value1"));
     }
 
     /// Test: Error serialization roundtrip

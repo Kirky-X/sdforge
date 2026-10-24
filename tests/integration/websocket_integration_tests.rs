@@ -151,3 +151,125 @@ mod websocket_ws_path_tests {
         );
     }
 }
+
+/// `build_with_config` 装配回归：此前该入口没有任何测试守护——配置是否真的
+/// 交给 `SdForgeState::with_config`、state 是否真的挂到路由上，任一处回归
+/// 都不会被捕获（握手鉴权随之静默失效）。用例落在集成测试二进制内：该二进制
+/// 已通过 `#[forge(ws_path)]` 注册了真实 ws 路由，`build_with_config` 才有
+/// 可服务的路径。
+#[cfg(all(feature = "websocket", feature = "security"))]
+mod websocket_build_with_config_tests {
+    use sdforge::security::BearerAuth;
+    use sdforge::websocket::WebSocketConfig;
+
+    const SECRET: &str = "ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const WS_PATH: &str = "/ws/it-declared";
+
+    /// 用带 JWT 校验的配置装配路由（`build_with_config` 的核心入口）。
+    fn app_with_auth() -> axum::Router {
+        sdforge::websocket::build_with_config(WebSocketConfig {
+            auth: Some(BearerAuth::try_new(SECRET).expect("valid secret")),
+            ..Default::default()
+        })
+    }
+
+    /// 在随机端口起服务并发起一次 ws 握手，返回响应首部文本。
+    async fn handshake_head(app: axum::Router, headers: &[(&str, &str)]) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let _ = sdforge::axum::serve(listener, app).await;
+        });
+
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut sock = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let mut req = format!(
+            "GET {WS_PATH} HTTP/1.1\r\nHost: {addr}\r\nUpgrade: websocket\r\n\
+             Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\
+             Sec-WebSocket-Version: 13\r\n"
+        );
+        for (k, v) in headers {
+            req.push_str(&format!("{k}: {v}\r\n"));
+        }
+        req.push_str("\r\n");
+        sock.write_all(req.as_bytes()).await.unwrap();
+
+        // 读到状态行结束为止，避免单次 read 只拿到半截响应。
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 1024];
+        loop {
+            let n = sock.read(&mut chunk).await.unwrap();
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&chunk[..n]);
+            if buf.windows(2).any(|w| w == b"\r\n") {
+                break;
+            }
+        }
+        String::from_utf8_lossy(&buf).to_string()
+    }
+
+    /// 最小 HS256 JWT 签发器（校验口径与 HTTP 中间件一致：alg 必须 HS256、
+    /// `exp` 必填）。
+    fn mint_jwt(secret: &str) -> String {
+        use base64::Engine;
+        use hmac::{Hmac, KeyInit, Mac};
+        use sha2::Sha256;
+
+        let header = serde_json::json!({"alg": "HS256", "typ": "JWT"});
+        let header_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(serde_json::to_string(&header).unwrap());
+        let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(
+            serde_json::to_string(
+                &serde_json::json!({"sub": "ws-build-test", "exp": 9999999999u64}),
+            )
+            .unwrap(),
+        );
+        let signing_input = format!("{header_b64}.{payload_b64}");
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
+        mac.update(signing_input.as_bytes());
+        let sig_b64 =
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(mac.finalize().into_bytes());
+        format!("{signing_input}.{sig_b64}")
+    }
+
+    /// 配置的 JWT 校验必须作用于 `build_with_config` 挂载的路由：无凭据 → 401。
+    #[tokio::test]
+    async fn build_with_config_rejects_handshake_without_credentials() {
+        let head = handshake_head(app_with_auth(), &[]).await;
+        assert!(
+            head.starts_with("HTTP/1.1 401"),
+            "handshake without credentials must be rejected: {head:?}"
+        );
+    }
+
+    /// 错误令牌同样被拒（证明配置真的抵达校验路径，而非被忽略）。
+    #[tokio::test]
+    async fn build_with_config_rejects_handshake_with_invalid_bearer() {
+        let head = handshake_head(
+            app_with_auth(),
+            &[("authorization", "Bearer bogus.token.here")],
+        )
+        .await;
+        assert!(
+            head.starts_with("HTTP/1.1 401"),
+            "handshake with an invalid bearer must be rejected: {head:?}"
+        );
+    }
+
+    /// 有效令牌必须放行到 101（证明配置与路由都装配到位）。
+    #[tokio::test]
+    async fn build_with_config_accepts_handshake_with_valid_bearer() {
+        let token = mint_jwt(SECRET);
+        let head = handshake_head(
+            app_with_auth(),
+            &[("authorization", &format!("Bearer {token}"))],
+        )
+        .await;
+        assert!(
+            head.starts_with("HTTP/1.1 101"),
+            "handshake with a valid bearer must upgrade: {head:?}"
+        );
+    }
+}

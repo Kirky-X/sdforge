@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! e2e: built-in health probes.
 //!
-//! `build_with_config` auto-mounts `/healthz` and `/readyz` **after** the
+//! `build_with_config_ext` auto-mounts `/healthz` and `/readyz` **after** the
 //! auth middleware, so probes bypass authentication while normal routes
 //! still require credentials. Readiness folds in registered readiness
 //! checks and (with the `kit` feature) the trait-kit health aggregate.
@@ -14,7 +14,7 @@
 
 use axum::body::Body;
 use sdforge::config::{AuthConfig, SdForgeConfig, ServerConfig};
-use sdforge::http::build_with_config;
+use sdforge::http::build_with_config_ext;
 
 // A user route registered through inventory, used to prove that global auth
 // still applies to ordinary endpoints while probes bypass it.
@@ -67,6 +67,8 @@ fn jwt_config() -> SdForgeConfig {
         },
         authentication: AuthConfig::Jwt {
             secret: "Test-Secret-That-Is-Long-Enough-For-Bearer-Auth-0123456789".to_string(),
+            audience: None,
+            issuer: None,
         },
         timeout: None,
         ..Default::default()
@@ -98,7 +100,7 @@ async fn body_json(resp: axum::http::Response<Body>) -> serde_json::Value {
 async fn healthz_bypasses_auth() {
     sdforge::health::clear_readiness_checks();
     sdforge::health::clear_health_source();
-    let router = build_with_config(&jwt_config()).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &jwt_config()).unwrap();
 
     // Probe: 200 without any Authorization header.
     let resp = get(router.clone(), "/healthz").await;
@@ -126,7 +128,7 @@ async fn healthz_bypasses_auth() {
 async fn readyz_bypasses_auth_and_defaults_ready() {
     sdforge::health::clear_readiness_checks();
     sdforge::health::clear_health_source();
-    let router = build_with_config(&jwt_config()).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &jwt_config()).unwrap();
     let resp = get(router, "/readyz").await;
     assert_eq!(resp.status(), axum::http::StatusCode::OK);
     let json = body_json(resp).await;
@@ -141,7 +143,7 @@ async fn readyz_reports_failing_check_as_503() {
     sdforge::health::register_readiness_check_fn("cache", || {
         sdforge::health::CheckOutcome::unhealthy("cache", "connection refused")
     });
-    let router = build_with_config(&jwt_config()).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &jwt_config()).unwrap();
     let resp = get(router, "/readyz").await;
     assert_eq!(resp.status(), axum::http::StatusCode::SERVICE_UNAVAILABLE);
     let json = body_json(resp).await;
@@ -158,7 +160,7 @@ async fn readyz_passes_when_all_checks_healthy() {
     sdforge::health::register_readiness_check_fn("cache", || {
         sdforge::health::CheckOutcome::healthy("cache")
     });
-    let router = build_with_config(&jwt_config()).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &jwt_config()).unwrap();
     let resp = get(router, "/readyz").await;
     assert_eq!(resp.status(), axum::http::StatusCode::OK);
     sdforge::health::clear_readiness_checks();
@@ -238,7 +240,7 @@ async fn custom_readiness_renderer_controls_status_and_envelope() {
     });
     sdforge::health::register_readiness_renderer(std::sync::Arc::new(AlwaysReady));
 
-    let router = build_with_config(&jwt_config()).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &jwt_config()).unwrap();
     let resp = get(router, "/readyz").await;
     assert_eq!(resp.status(), axum::http::StatusCode::OK);
     let json = body_json(resp).await;
@@ -259,7 +261,7 @@ async fn async_readiness_check_flips_readyz_to_503() {
         sdforge::health::CheckOutcome::unhealthy("cache-async", "connection refused")
     });
 
-    let router = build_with_config(&jwt_config()).unwrap();
+    let router = build_with_config_ext(axum::Router::new(), &jwt_config()).unwrap();
     let resp = get(router, "/readyz").await;
     assert_eq!(resp.status(), axum::http::StatusCode::SERVICE_UNAVAILABLE);
     let json = body_json(resp).await;
@@ -274,7 +276,7 @@ async fn async_readiness_check_flips_readyz_to_503() {
 #[cfg(feature = "kit")]
 mod kit_source_e2e {
     use super::{body_json, get, jwt_config};
-    use sdforge::http::build_with_config;
+    use sdforge::http::build_with_config_ext;
     use std::sync::Arc;
     use trait_kit::AsyncKit;
 
@@ -288,7 +290,7 @@ mod kit_source_e2e {
         let ready = Arc::new(kit.build().await.expect("kit builds"));
         sdforge::health::kit_source::register_kit_health_source(ready);
 
-        let router = build_with_config(&jwt_config()).unwrap();
+        let router = build_with_config_ext(axum::Router::new(), &jwt_config()).unwrap();
         let resp = get(router, "/readyz").await;
         assert_eq!(resp.status(), axum::http::StatusCode::OK);
         let json = body_json(resp).await;

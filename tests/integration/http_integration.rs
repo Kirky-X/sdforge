@@ -390,7 +390,7 @@ mod http_error_body_locale_tests {
                 permissions: vec!["read".to_string()],
             }],
         };
-        let router = sdforge::http::build_with_config(&config).unwrap();
+        let router = sdforge::http::build_with_config_ext(axum::Router::new(), &config).unwrap();
 
         let resp = router
             .clone()
