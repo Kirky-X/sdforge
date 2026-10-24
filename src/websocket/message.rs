@@ -73,6 +73,9 @@ pub enum WebSocketMessage {
 
 /// Parse and validate a WebSocket message from JSON text
 ///
+/// Enforces the default [`MAX_MESSAGE_SIZE`] byte cap; use
+/// [`parse_websocket_message_with_limit`] to enforce a caller-supplied cap.
+///
 /// # Security
 ///
 /// This function provides security measures:
@@ -88,12 +91,29 @@ pub enum WebSocketMessage {
 /// - Nesting depth exceeds limit
 /// - Message is not a valid WebSocketMessage variant
 pub fn parse_websocket_message(text: &str) -> Result<WebSocketMessage, String> {
+    parse_websocket_message_with_limit(text, MAX_MESSAGE_SIZE)
+}
+
+/// Parse and validate a WebSocket message from JSON text with an explicit
+/// maximum message size.
+///
+/// `max_message_size` is the byte cap applied to the raw text; a longer
+/// message is rejected before any JSON parsing happens.
+///
+/// # Errors
+///
+/// Same as [`parse_websocket_message`], except that the size limit is
+/// `max_message_size` instead of [`MAX_MESSAGE_SIZE`].
+pub fn parse_websocket_message_with_limit(
+    text: &str,
+    max_message_size: usize,
+) -> Result<WebSocketMessage, String> {
     // First, check basic size limit
-    if text.len() > MAX_MESSAGE_SIZE {
+    if text.len() > max_message_size {
         return Err(format!(
             "Message too large: {} bytes (max: {} bytes)",
             text.len(),
-            MAX_MESSAGE_SIZE
+            max_message_size
         ));
     }
 
@@ -293,6 +313,39 @@ mod tests {
         })
         .to_string();
         assert!(parse_websocket_message(&json).is_ok());
+    }
+
+    /// `parse_websocket_message_with_limit` 必须按传入上限判定大小，而不是固定
+    /// 使用 `MAX_MESSAGE_SIZE`——默认入口是它的常量上限特例。
+    #[test]
+    fn parse_websocket_message_with_limit_honors_given_limit() {
+        let json = serde_json::json!({
+            "type": "request",
+            "id": "1",
+            "method": "m",
+            "params": {}
+        })
+        .to_string();
+
+        // 上限恰好等于消息长度：放行
+        assert!(
+            parse_websocket_message_with_limit(&json, json.len()).is_ok(),
+            "a message of exactly the limit must be accepted"
+        );
+        // 上限小于消息长度：拒绝
+        let err = parse_websocket_message_with_limit(&json, json.len() - 1).unwrap_err();
+        assert!(
+            err.contains("too large"),
+            "a message over the given limit must be rejected, got: {err}"
+        );
+
+        // 上限高于常量时不再按常量截断：越界文本进入 JSON 解析阶段。
+        let oversized = "x".repeat(MAX_MESSAGE_SIZE + 1);
+        let err = parse_websocket_message_with_limit(&oversized, MAX_MESSAGE_SIZE * 2).unwrap_err();
+        assert!(
+            !err.contains("too large"),
+            "the size gate must follow the given limit, got: {err}"
+        );
     }
 
     /// calculate_json_depth with unmatched closing braces — the

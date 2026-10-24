@@ -120,6 +120,12 @@ pub struct WebSocketConfig {
     /// Migrated out of the deleted `RateLimitConfig` (the old 4-field config
     /// struct). Kept as a top-level field because `FlowControlConfig` does not
     /// model message-size limits.
+    ///
+    /// Enforced by the message loop: a text frame longer than this value
+    /// closes the connection. The limit is read from `SdForgeState::config`
+    /// when the upgrade extractor resolves the application state; when no
+    /// state is reachable [`MAX_MESSAGE_SIZE`](crate::websocket::MAX_MESSAGE_SIZE)
+    /// applies.
     pub max_message_size: usize,
     /// Flow-control configuration (limiteron).
     ///

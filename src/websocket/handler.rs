@@ -28,8 +28,8 @@ use futures_util::StreamExt;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crate::websocket::{ConnectionManager, SdForgeState};
-use crate::websocket::{MAX_MESSAGE_SIZE, WebSocketMessage, parse_websocket_message};
+use crate::websocket::{ConnectionManager, SdForgeState, WebSocketConfig};
+use crate::websocket::{MAX_MESSAGE_SIZE, WebSocketMessage, parse_websocket_message_with_limit};
 
 use crate::core::ApiMetadata;
 
@@ -161,6 +161,9 @@ pub struct ValidatedWebSocketUpgrade {
     /// 该路由对应的自定义消息处理器；由 `build` 链路注入。
     /// 为 `None` 时回退到 `DefaultWebSocketHandler`。
     handler: Option<Arc<dyn WebSocketHandler>>,
+    /// 消息体积上限（字节），取自 `SdForgeState::config.max_message_size`；
+    /// state 不可达时回退 [`MAX_MESSAGE_SIZE`]。
+    max_message_size: usize,
 }
 
 impl ValidatedWebSocketUpgrade {
@@ -176,8 +179,10 @@ impl IntoResponse for ValidatedWebSocketUpgrade {
         let handler = self
             .handler
             .unwrap_or_else(|| Arc::new(DefaultWebSocketHandler));
-        self.ws
-            .on_upgrade(move |socket| handle_socket(socket, self.manager.clone(), handler))
+        let max_message_size = self.max_message_size;
+        self.ws.on_upgrade(move |socket| {
+            handle_socket(socket, self.manager.clone(), handler, max_message_size)
+        })
     }
 }
 
@@ -252,6 +257,13 @@ where
             .await
             .map_err(|_| StatusCode::BAD_REQUEST)?;
 
+        // 消息体积上限随配置生效：state 可达时取 `max_message_size`，
+        // 否则回退默认上限。
+        let max_message_size = app_state
+            .as_ref()
+            .map(|s| s.config.max_message_size)
+            .unwrap_or(MAX_MESSAGE_SIZE);
+
         let manager = app_state
             .map(|s| s.manager.clone())
             .unwrap_or_else(|| Arc::new(ConnectionManager::new()));
@@ -260,6 +272,7 @@ where
             ws,
             manager,
             handler: None,
+            max_message_size,
         })
     }
 }
@@ -277,17 +290,22 @@ async fn handle_socket(
     socket: WebSocket,
     manager: Arc<ConnectionManager>,
     handler: Arc<dyn WebSocketHandler>,
+    max_message_size: usize,
 ) {
     // adopt/create a request context for this connection's lifetime so
     // logs emitted from the message loop carry correlation ids.
     #[cfg(feature = "context")]
     {
         let ctx = crate::context::current_or_new();
-        crate::context::scope(ctx, handle_socket_inner(socket, manager, handler)).await
+        crate::context::scope(
+            ctx,
+            handle_socket_inner(socket, manager, handler, max_message_size),
+        )
+        .await
     }
     #[cfg(not(feature = "context"))]
     {
-        handle_socket_inner(socket, manager, handler).await;
+        handle_socket_inner(socket, manager, handler, max_message_size).await;
     }
 }
 
@@ -295,6 +313,7 @@ async fn handle_socket_inner(
     socket: WebSocket,
     manager: Arc<ConnectionManager>,
     handler: Arc<dyn WebSocketHandler>,
+    max_message_size: usize,
 ) {
     let conn_id = uuid::Uuid::new_v4().to_string();
     let (conn, mut receiver) = WebSocketConnection::new(conn_id.clone());
@@ -356,7 +375,7 @@ async fn handle_socket_inner(
         match result {
             Ok(msg) => {
                 if let Ok(text) = msg.to_text() {
-                    if text.len() > MAX_MESSAGE_SIZE {
+                    if text.len() > max_message_size {
                         // Close connection immediately to prevent DoS。
                         // 连接清理由 ConnectionGuard 的 Drop 兜底；abort forwarder
                         // 释放 sink 半边，socket 随之整体丢弃断开。
@@ -364,7 +383,7 @@ async fn handle_socket_inner(
                         return;
                     }
 
-                    match parse_websocket_message(text) {
+                    match parse_websocket_message_with_limit(text, max_message_size) {
                         Ok(ws_msg) => {
                             // 使用该连接路由绑定的自定义 handler；
                             // 未注入时回退到 DefaultWebSocketHandler。
@@ -408,9 +427,32 @@ use crate::websocket::WebSocketConnection;
 /// # Returns
 /// A configured Axum Router ready to handle WebSocket connections
 pub fn build() -> Router {
+    build_with_config(WebSocketConfig::default())
+}
+
+/// Build WebSocket router with an explicit [`WebSocketConfig`].
+///
+/// [`build`] uses the default configuration, whose `auth` / `api_key_auth`
+/// are `None` — the handshake then accepts every connection. This entry point
+/// lets the caller inject a configuration that enforces JWT or API-key
+/// authentication on the upgrade request.
+///
+/// # Examples
+///
+/// ```ignore
+/// use sdforge::websocket::{WebSocketConfig, build_with_config};
+/// use sdforge::security::BearerAuth;
+///
+/// let config = WebSocketConfig {
+///     auth: Some(BearerAuth::try_new("ValidSecret123!ABCDEFGHIJKLMNOPQRSTUVWXYZ")?),
+///     ..Default::default()
+/// };
+/// let router = build_with_config(config);
+/// ```
+pub fn build_with_config(config: WebSocketConfig) -> Router {
     let mut router = Router::new();
     let manager = Arc::new(ConnectionManager::new());
-    let state = Arc::new(SdForgeState::new(manager));
+    let state = Arc::new(SdForgeState::with_config(config, manager));
 
     for route in inventory::iter::<WebSocketRoute> {
         // Declared `ws_path` wins; registrations without one mount at
@@ -475,6 +517,99 @@ mod tests {
                     text
                 );
             }
+        }
+    }
+
+    /// `max_message_size` 接线回归（上限调小）：配置此前完全不生效——消息循环
+    /// 只比对编译期常量 `MAX_MESSAGE_SIZE`，把上限调小的应用得不到任何保护。
+    /// 修复后超过配置值的帧必须关闭连接（而非回一条解析错误）。
+    #[tokio::test]
+    async fn configured_max_message_size_closes_oversized_frame() {
+        let manager = Arc::new(ConnectionManager::new());
+        let state = Arc::new(SdForgeState::with_config(
+            WebSocketConfig {
+                max_message_size: 64,
+                ..Default::default()
+            },
+            manager.clone(),
+        ));
+        let app = Router::new()
+            .route("/ws", axum::routing::get(websocket_upgrade))
+            .layer(axum::Extension(state));
+        let server = axum_test::TestServer::builder().http_transport().build(app);
+
+        let mut ws = server.get_websocket("/ws").await.into_websocket().await;
+        tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
+        assert_eq!(manager.connection_count().await, 1);
+
+        // 65 字节远小于常量上限 1 MiB：只有配置值真正接线时才会被拒绝。
+        ws.send_text(&"x".repeat(65)).await;
+
+        // 超限帧关闭连接，连接条目随之被清理。
+        let cleaned = tokio::time::timeout(tokio::time::Duration::from_secs(2), async {
+            while manager.connection_count().await > 0 {
+                tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+            }
+        })
+        .await;
+        assert!(
+            cleaned.is_ok(),
+            "configured max_message_size must close the connection on an oversized frame"
+        );
+
+        // 连接已关闭：即便收到残留文本，也不应是解析错误响应（配置被忽略时的旧行为）。
+        let receive_result = tokio::time::timeout(
+            tokio::time::Duration::from_millis(500),
+            AssertUnwindSafe(ws.receive_text()).catch_unwind(),
+        )
+        .await;
+        if let Ok(Ok(text)) = receive_result {
+            let parsed: Result<WebSocketMessage, _> = serde_json::from_str(&text);
+            assert!(
+                !matches!(parsed, Ok(WebSocketMessage::Error { .. })),
+                "oversized frame must not be answered with an error message, got: {}",
+                text
+            );
+        }
+    }
+
+    /// `max_message_size` 接线回归（上限调大）：配置值高于默认上限时，消息循环
+    /// 不得再被编译期常量提前切断——常量比较必须让位于配置值。
+    #[tokio::test]
+    async fn configured_max_message_size_above_default_allows_larger_frame() {
+        let state = Arc::new(SdForgeState::with_config(
+            WebSocketConfig {
+                max_message_size: MAX_MESSAGE_SIZE * 4,
+                ..Default::default()
+            },
+            Arc::new(ConnectionManager::new()),
+        ));
+        let app = Router::new()
+            .route("/ws", axum::routing::get(websocket_upgrade))
+            .layer(axum::Extension(state));
+        let server = axum_test::TestServer::builder().http_transport().build(app);
+
+        let mut ws = server.get_websocket("/ws").await.into_websocket().await;
+
+        // 载荷超过常量上限 1 MiB，但低于配置上限：必须被正常处理并回响应。
+        let payload = serde_json::json!({
+            "type": "request",
+            "id": "big-1",
+            "method": "big",
+            "params": { "blob": "y".repeat(MAX_MESSAGE_SIZE + 1024) },
+        })
+        .to_string();
+        assert!(
+            payload.len() > MAX_MESSAGE_SIZE,
+            "payload must exceed the default limit to be meaningful"
+        );
+
+        ws.send_text(&payload).await;
+
+        let response: WebSocketMessage = ws.receive_json().await;
+        match response {
+            WebSocketMessage::Response { id, .. } => assert_eq!(id, "big-1"),
+            other => panic!("Expected Response for an allowed oversized frame, got {other:?}"),
         }
     }
 

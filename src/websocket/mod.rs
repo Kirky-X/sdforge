@@ -56,10 +56,10 @@ mod tests;
 pub use connection::{ConnectionManager, SdForgeState, WebSocketConfig, WebSocketConnection};
 pub use handler::{
     BoxFuture, DefaultWebSocketHandler, ValidatedWebSocketUpgrade, WebSocketHandler,
-    WebSocketRoute, build, websocket_upgrade,
+    WebSocketRoute, build, build_with_config, websocket_upgrade,
 };
 // `MAX_STRING_LENGTH` 现已由 `parse_websocket_message` 强制执行，随正常 API 导出。
 pub use message::{
     MAX_JSON_DEPTH, MAX_MESSAGE_SIZE, MAX_STRING_LENGTH, WebSocketMessage, calculate_value_depth,
-    parse_websocket_message,
+    parse_websocket_message, parse_websocket_message_with_limit,
 };
