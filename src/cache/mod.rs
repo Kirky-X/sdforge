@@ -62,7 +62,9 @@ pub(crate) use cache_impl::matches_pattern;
 #[cfg(feature = "http")]
 mod response_cache;
 #[cfg(feature = "http")]
-pub use response_cache::{ResponseCacheLayer, ResponseCacheMiddleware};
+pub use response_cache::{
+    DEFAULT_MAX_CACHEABLE_BODY_BYTES, ResponseCacheLayer, ResponseCacheMiddleware,
+};
 
 // 同步缓存 Trait（用于 security 模块等需要同步操作的场景）
 
