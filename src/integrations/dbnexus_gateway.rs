@@ -10,6 +10,16 @@
 //! 端到端见 `tests/integration/dbnexus_gateway_tests.rs` 与
 //! `dbnexus_gateway` 示例）。
 //!
+//! # 库侧隔离（会话角色）与 feature 的关系
+//!
+//! dbnexus 的逐表权限检查整块编译在 `permission` 特性之后：只开
+//! `db-integration` 时，dbnexus 侧的权限/RLS 通道不存在，
+//! [`DbGateway::with_session_role`] 设置的会话角色**不被强制执行**——此时
+//! 网关的隔离面只有白名单与强制归属谓词。开启 sdforge 的 `db-permission`
+//! 特性（蕴含 `dbnexus/permission`）后，会话角色才真正生效：非 admin
+//! 角色的每次查询都经 dbnexus 逐表权限检查，且检查 fail-closed——宿主必须
+//! 同时配置 dbnexus 的权限，否则网关查询被拒。
+//!
 //! # Example
 //!
 //! ```ignore
@@ -18,9 +28,10 @@
 //! let pool = dbnexus::DbPoolBuilder::new.url("sqlite::memory:").build.await?;
 //! let gateway = DbGateway::new(pool)
 //!     .with_session_role("admin")
+//!     .with_required_filter("tenant_id", "tenant-42")
 //!     .allow_table("users", &["id", "name", "age"]);
 //! let page = gateway
-//!     .query("users", &[("name".into, "alice".into)], 1, 20)
+//!     .query("users", &[("name".into(), "alice".into())], 1, 20)
 //!     .await?;
 //! ```
 
@@ -29,6 +40,30 @@ use std::collections::BTreeMap;
 use dbnexus::DbPool;
 
 use crate::core::ApiError;
+
+/// 库侧隔离未生效时的告警只打一次（网关通常按进程构造一次，但调用方也
+/// 可能在请求路径上反复构造）。
+#[cfg(not(feature = "db-permission"))]
+static ROLE_NOT_ENFORCED_WARNED: std::sync::Once = std::sync::Once::new();
+
+/// dbnexus 未启用 `permission` 特性时，会话角色不被强制执行——显式告警，
+/// 不得让调用方误以为库侧隔离已经生效。
+#[cfg(not(feature = "db-permission"))]
+fn warn_if_session_role_not_enforced() {
+    ROLE_NOT_ENFORCED_WARNED.call_once(|| {
+        log::warn!(
+            "DbGateway session role is not enforced: dbnexus was built without its \
+             `permission` feature, so the per-table permission checks are compiled out. \
+             Enable the sdforge `db-permission` feature (and configure dbnexus permissions) \
+             for library-side isolation; until then only the allowlist and the required \
+             ownership filters apply."
+        );
+    });
+}
+
+/// 库侧隔离已生效（dbnexus `permission` 特性在编译面内）：无需告警。
+#[cfg(feature = "db-permission")]
+fn warn_if_session_role_not_enforced() {}
 
 /// 白名单网关：表 → 可访问列集合。
 ///
@@ -40,7 +75,20 @@ pub struct DbGateway {
     pool: DbPool,
     allowlist: BTreeMap<String, Vec<String>>,
     session_role: String,
+    /// 强制归属谓词（服务端配置，调用方不可覆盖）：与请求方过滤 AND 连接。
+    required_filters: Vec<(String, String)>,
 }
+
+/// 默认会话角色（非 admin）。
+///
+/// dbnexus 侧 `is_admin = (role == admin_role)`，admin 通道明确跳过行级
+/// 安全（RLS）注入与逐表权限校验。网关默认取非 admin 角色，使"库侧有
+/// RLS/权限配置"这一隔离手段在默认装配下真正生效；需要旧行为（显式
+/// admin）的应用用 [`DbGateway::with_session_role`] 声明。
+///
+/// 注意：dbnexus 侧的逐表权限检查编译在 `permission` 特性之后——只开
+/// `db-integration` 时该检查不存在，会话角色不被强制执行（见模块文档）。
+pub const DEFAULT_SESSION_ROLE: &str = "sdforge_gateway";
 
 /// 一次白名单只读查询的参数（经 [`GatewayQuery::all`] 构造后链式附加
 /// 过滤/分页）。
@@ -85,21 +133,50 @@ impl<'a> GatewayQuery<'a> {
 }
 
 impl DbGateway {
-    /// 以连接池构造（会话角色默认 `admin`——dbnexus 无权限文件时的安全
-    /// 默认角色；生产建议在 dbnexus 侧配置权限文件后用最小权限角色）。
+    /// 以连接池构造。
+    ///
+    /// 会话角色默认 [`DEFAULT_SESSION_ROLE`]（非 admin）：dbnexus 的 admin
+    /// 通道跳过行级安全注入与逐表权限校验，默认取 admin 等于默认关掉库侧
+    /// 隔离。需要旧行为的应用显式
+    /// [`with_session_role("admin")`](Self::with_session_role)。
     #[must_use]
     pub fn new(pool: DbPool) -> Self {
+        warn_if_session_role_not_enforced();
         Self {
             pool,
             allowlist: BTreeMap::new(),
-            session_role: "admin".to_string(),
+            session_role: DEFAULT_SESSION_ROLE.to_string(),
+            required_filters: Vec::new(),
         }
     }
 
     /// 设置会话角色（dbnexus 权限/RLS 侧的执行身份）。
+    ///
+    /// 角色只有在 dbnexus 的 `permission` 特性编译进来时才被强制执行
+    /// （sdforge 侧由 `db-permission` 特性开启）。未开启时该调用是空操作，
+    /// 且会显式告警——库侧隔离面此时只有白名单与强制归属谓词。
     #[must_use]
     pub fn with_session_role(mut self, role: impl Into<String>) -> Self {
         self.session_role = role.into();
+        warn_if_session_role_not_enforced();
+        self
+    }
+
+    /// 追加强制归属谓词（服务端配置，调用方不可覆盖）。
+    ///
+    /// 白名单只约束"能查哪些表/列"，不提供行级隔离：没有强制谓词时，
+    /// 任一能触达该网关的调用方都能读到白名单表的全量行。归属谓词由
+    /// 服务端配置（典型是租户/属主列），与调用方传入的过滤条件 AND 连接，
+    /// 因此调用方既无法绕过也无法放宽它。
+    ///
+    /// 谓词列必须在对应表的白名单内，否则查询显式失败（fail-closed）。
+    #[must_use]
+    pub fn with_required_filter(
+        mut self,
+        column: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
+        self.required_filters.push((column.into(), value.into()));
         self
     }
 
@@ -188,6 +265,25 @@ impl DbGateway {
                 return Err(ApiError::InvalidInput {
                     message: format!(
                         "column '{column}' is not whitelisted for table '{}'",
+                        req.table
+                    ),
+                    field: Some("column".to_string()),
+                    value: None,
+                });
+            }
+            Self::validate_identifier("column", column)?;
+            Self::ensure_literal_safe(value)?;
+            where_clause.push_str(&format!(
+                " AND {column} = '{}'",
+                Self::escape_literal(value)
+            ));
+        }
+        // 强制归属谓词：服务端配置，与调用方过滤 AND 连接（调用方无法覆盖）。
+        for (column, value) in &self.required_filters {
+            if !columns.contains(column) {
+                return Err(ApiError::InvalidInput {
+                    message: format!(
+                        "required filter column '{column}' is not whitelisted for table '{}'",
                         req.table
                     ),
                     field: Some("column".to_string()),
