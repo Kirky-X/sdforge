@@ -50,11 +50,11 @@ impl CorsConfig {
 
 /// 解析 `allowed_methods` 配置为 [`tower_http::cors::AllowMethods`]。
 ///
-/// - 空列表 → `Any`（向后兼容：修复前实现硬编码 Any）
+/// - 空列表 → `Any`（向后兼容：旧实现硬编码 Any）
 /// - 包含 `*` 或 `any`（大小写不敏感）→ `Any`
 /// - 其余按 HTTP method 名精确解析，非法条目报错（fail-closed）
 ///
-/// HIGH 修复：此前 `allowed_methods` 配置被完全忽略，`build_cors_layer`
+/// 此前 `allowed_methods` 配置被完全忽略，`build_cors_layer`
 /// 硬编码 `.allow_methods(Any)`。
 fn parse_allowed_methods(
     methods: &[String],
@@ -107,8 +107,8 @@ fn parse_allowed_headers(
 
 /// Build CORS layer from configuration
 ///
-/// HIGH 修复：`allowed_methods` / `allowed_headers` 配置现已生效。
-/// 空列表保持修复前的宽松行为（Any）；显式列表精确生效。
+/// `allowed_methods` / `allowed_headers` 配置现已生效。
+/// 空列表保持宽松行为（Any）；显式列表精确生效。
 pub fn build_cors_layer(
     config: &CorsConfig,
 ) -> Result<tower_http::cors::CorsLayer, crate::config::ConfigError> {

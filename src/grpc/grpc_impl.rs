@@ -22,7 +22,7 @@ use futures_util::StreamExt;
 
 /// gRPC 参数载荷大小上限（与 MCP `MAX_ARGUMENTS_SIZE_BYTES` 对齐，1 MiB）。
 ///
-/// vuln-0002 补强：gRPC `call` 路径此前跳过 MCP 的 schema/大小校验，
+/// gRPC `call` 路径此前跳过 MCP 的 schema/大小校验，
 /// 攻击者可通过 `parameters`/`data` 推送超大载荷触发 DoS。
 /// 此处施加与 MCP 一致的大小上限作为纵深防御。
 const MAX_GRPC_ARGUMENTS_SIZE_BYTES: usize = 0x10_0000;
@@ -58,7 +58,7 @@ pub struct SdForgeGrpcService {
     body_params: OnceLock<HashMap<&'static str, Option<&'static str>>>,
     /// Lazy-built `method -> roles` lookup table (endpoint RBAC).
     roles: OnceLock<HashMap<&'static str, &'static [&'static str]>>,
-    /// Lazy-built `method -> macro-level status` lookup table (fix).
+    /// Lazy-built `method -> macro-level status` lookup table.
     /// Carries the `#[forge(status = <code>)]` argument into the gRPC layer
     /// so `call`'s success path can apply the priority chain:
     /// `ServiceResponse.status_code` > `default_status` > 200.
@@ -89,7 +89,7 @@ pub struct SdForgeGrpcService {
     /// feature = `streaming`）。
     #[cfg(feature = "streaming")]
     stream_lifecycles: OnceLock<HashMap<&'static str, GrpcLifecycle>>,
-    /// Optional rate limiter (vuln-0006). When `Some`, each `call` request
+    /// Optional rate limiter. When `Some`, each `call` request
     /// is checked against the limiter using the client's remote address.
     #[cfg(feature = "ratelimit")]
     rate_limiter: Option<std::sync::Arc<dyn crate::security::ratelimit::RateLimiter>>,
@@ -180,7 +180,7 @@ impl SdForgeGrpcService {
     }
 
     /// Construct a service with injected application state and rate limiter
-    /// (vuln-0006). Used by `build_server_with_config` when `ratelimit`
+    /// Used by `build_server_with_config` when `ratelimit`
     /// feature is enabled to pass `GrpcServerConfig.rate_limiter` through.
     #[cfg(feature = "ratelimit")]
     #[must_use]
@@ -248,7 +248,7 @@ impl SdForgeGrpcService {
     }
 
     /// Build (or reuse) the `method -> default_status` cache from inventory
-    /// (fix). Carries the macro-level `#[forge(status = <code>)]`
+    /// Carries the macro-level `#[forge(status = <code>)]`
     /// argument so the gRPC success path can mirror the HTTP success code.
     #[must_use]
     fn default_statuses(&self) -> &HashMap<&'static str, Option<u16>> {
@@ -416,7 +416,7 @@ impl SdForgeGrpcService {
         }
     }
 
-    /// 载荷上限校验（`call` 与 `call_stream` 共用；vuln-0002 补强）：
+    /// 载荷上限校验（`call` 与 `call_stream` 共用）：
     /// parameters + data 总大小超限即拒绝，防止超大载荷 DoS。
     fn ensure_payload_size(req: &CallRequest) -> Result<(), Status> {
         let payload_size = req.parameters.values().map(|v| v.len()).sum::<usize>() + req.data.len();
@@ -567,7 +567,7 @@ impl SdForgeGrpcService {
 
         let req = request.into_inner();
 
-        // vuln-0002 补强：gRPC 路径此前跳过 MCP 的大小校验。
+        // gRPC 路径此前跳过 MCP 的大小校验。
         // 在 handler 调用前对 parameters + data 总大小设上限，防止超大载荷 DoS。
         Self::ensure_payload_size(&req)?;
 
@@ -703,7 +703,7 @@ impl SdForgeGrpcService {
                 Ok(grpc_response)
             }
             Ok(Err(e)) => {
-                // business error → 真实 gRPC Status（vuln-SIMPL-002 修复）：统一映射表落到
+                // business error → 真实 gRPC Status：统一映射表落到
                 // tonic::Code，details 携带 UnifiedError JSON；此前 success:false 的 ok 响应
                 // 会让标准客户端与监控/重试策略对这批错误失明。
                 let unified = crate::error::unified::UnifiedError::from(&e);
@@ -1044,7 +1044,7 @@ impl GrpcRoute {
     note = "use build_server_with_config with auth configured; build_server starts an unauthenticated server"
 )]
 pub async fn build_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> {
-    // Security fix: Validate address format before parsing to prevent information disclosure
+    // Validate address format before parsing to prevent information disclosure
     let addr = match addr.parse::<std::net::SocketAddr>() {
         Ok(addr) => addr,
         Err(e) => {
@@ -1070,7 +1070,7 @@ pub async fn build_server(addr: &str) -> Result<(), Box<dyn std::error::Error>> 
 /// When `config.auth` is `Some`, all gRPC requests must include a valid JWT bearer token
 /// in the `authorization` metadata header. Invalid tokens result in `UNAUTHENTICATED` status.
 ///
-/// # Security (vuln-0006)
+/// # Security
 ///
 /// When `config.require_auth` is `true` (the default) and `config.auth` is `None`,
 /// this function refuses to start, preventing accidental deployment of an
@@ -1093,7 +1093,7 @@ pub async fn build_server_with_config(
 /// The assembly chain (auth interceptor, concurrency/timeout/keepalive,
 /// TLS, `extra_services`) is identical to [`build_server_with_config`].
 ///
-/// # Security (vuln-0006)
+/// # Security
 ///
 /// Same fail-fast rule as [`build_server_with_config`]: refuses to start
 /// when `require_auth` is `true` and no `auth` is configured.
@@ -1118,7 +1118,7 @@ async fn build_server_inner<F>(
 where
     F: std::future::Future<Output = ()>,
 {
-    // Security fix: Validate address format before parsing to prevent information disclosure
+    // Validate address format before parsing to prevent information disclosure
     let addr = match addr.parse::<std::net::SocketAddr>() {
         Ok(addr) => addr,
         Err(e) => {
@@ -1129,7 +1129,7 @@ where
         }
     };
 
-    // vuln-0006: refuse to start an unauthenticated server when require_auth is true.
+    // Refuse to start an unauthenticated server when require_auth is true.
     // This check runs after address validation (so invalid addresses still report
     // the address error) but before any server binding (so it fails fast).
     // `auth_verifier`（协议无关校验器）同样算作"已配置鉴权"——否则用 API key
@@ -1144,7 +1144,7 @@ where
     }
     // pass `config.state` into the service so handlers with State
     // parameters can downcast it at call time.
-    // vuln-0006: pass `config.rate_limiter` when `ratelimit` feature is enabled.
+    // Pass `config.rate_limiter` when `ratelimit` feature is enabled.
     #[cfg(feature = "ratelimit")]
     let service =
         SdForgeGrpcService::with_state_and_rate_limiter(config.state, config.rate_limiter);
@@ -1222,7 +1222,7 @@ impl Default for GrpcServerConfig {
         Self {
             max_connections: 1000,
             timeout_seconds: 30,
-            require_auth: true, // vuln-0006: secure default
+            require_auth: true, // secure default
             auth: None,
             auth_verifier: None,
             state: None,
@@ -2089,7 +2089,7 @@ mod tests {
     }
 
     // ========================================================================
-    // vuln-0006: gRPC rate limiting tests
+    // gRPC rate limiting tests
     // ========================================================================
     #[cfg(feature = "ratelimit")]
     mod vuln_0006_ratelimit_tests {
@@ -2165,7 +2165,7 @@ mod tests {
 
         #[tokio::test]
         async fn call_with_allowing_limiter_proceeds_normally() {
-            // vuln-0006: rate limiter that allows → call should succeed.
+            // Rate limiter that allows → call should succeed.
             let limiter: Arc<dyn RateLimiter> = Arc::new(AlwaysAllowLimiter);
             let service = SdForgeGrpcService::with_state_and_rate_limiter(None, Some(limiter));
             let mut params = HashMap::new();
@@ -2182,7 +2182,7 @@ mod tests {
 
         #[tokio::test]
         async fn call_with_rejecting_limiter_returns_resource_exhausted() {
-            // vuln-0006: rate limiter that rejects → Status::resource_exhausted.
+            // Rate limiter that rejects → Status::resource_exhausted.
             // The handler must NOT be invoked (rate limit check is before dispatch).
             let limiter: Arc<dyn RateLimiter> = Arc::new(AlwaysRejectLimiter);
             let service = SdForgeGrpcService::with_state_and_rate_limiter(None, Some(limiter));
@@ -2207,7 +2207,7 @@ mod tests {
 
         #[tokio::test]
         async fn call_with_rate_limiter_invokes_check_once_per_call() {
-            // vuln-0006: verify the limiter is actually called exactly once
+            // Verify the limiter is actually called exactly once
             // per gRPC call (not zero times due to a bug, not multiple times).
             let limiter = Arc::new(CountingLimiter {
                 count: AtomicU32::new(0),
@@ -2232,7 +2232,7 @@ mod tests {
 
         #[tokio::test]
         async fn call_with_banned_limiter_returns_resource_exhausted() {
-            // vuln-0006: banned identifier → ResourceExhausted with ban reason.
+            // Banned identifier → ResourceExhausted with ban reason.
             struct AlwaysBannedLimiter;
             impl RateLimiter for AlwaysBannedLimiter {
                 fn check<'a>(
@@ -2265,7 +2265,7 @@ mod tests {
 
         #[test]
         fn default_config_has_no_rate_limiter() {
-            // vuln-0006: default GrpcServerConfig.rate_limiter is None
+            // Default GrpcServerConfig.rate_limiter is None
             // (opt-in, backward compatible).
             let config = GrpcServerConfig::default();
             assert!(

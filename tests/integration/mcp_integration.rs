@@ -90,7 +90,7 @@ mod dual_protocol_tests {
     }
 }
 
-// vuln-0002 regression tests: MCP argument validation
+// Regression tests: MCP argument validation
 //
 // These tests verify that `#[forge(tool_name = "...")]` generates a `Params`
 // struct with `#[serde(deny_unknown_fields)]` and that oversized payloads
@@ -141,7 +141,7 @@ mod vuln0002_security_tests {
 
     /// Verify that an unknown field is rejected (deny_unknown_fields).
     ///
-    /// vuln-0002: the macro-generated `Params` struct must include
+    /// The macro-generated `Params` struct must include
     /// `#[serde(deny_unknown_fields)]` so clients cannot smuggle extra fields
     /// past the declared schema.
     #[test]

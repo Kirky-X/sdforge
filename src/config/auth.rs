@@ -22,7 +22,7 @@ pub const DEFAULT_CREDENTIAL_HEADER_NAMES: [&str; 3] =
 ///
 /// `Serialize`/`Deserialize` 保留：配置文件的合法持久化路径依赖它们。
 /// `Debug` 为手动实现——key 恒以 `[REDACTED]` 形式输出，防止一次
-/// `{:?}` 日志泄漏密钥材料（HIGH 修复：此前 derive(Debug) 明文打印）。
+/// `{:?}` 日志泄漏密钥材料（此前 derive(Debug) 明文打印）。
 #[derive(Clone, Serialize, Deserialize, PartialEq)]
 pub struct ApiKeySeed {
     /// API key 明文（构建时以哈希形式写入 key store，不落盘）
@@ -48,7 +48,7 @@ impl std::fmt::Debug for ApiKeySeed {
 ///
 /// `Debug` 为手动实现：`Jwt::secret` 与 `ApiKey::keys[].key` 恒以
 /// `[REDACTED]` 输出。序列化行为不变（配置文件持久化仍明文落盘，请
-/// 通过文件权限保护配置）。（HIGH 修复：此前 derive(Debug) 明文打印密钥）
+/// 通过文件权限保护配置）。（此前 derive(Debug) 明文打印密钥）
 #[derive(Clone, Serialize, Deserialize, Default)]
 #[serde(tag = "type")]
 #[non_exhaustive]

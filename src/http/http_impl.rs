@@ -84,7 +84,7 @@ pub(crate) fn resolve_route_path(base_path: &str, module_prefix: Option<&str>) -
     match module_prefix {
         Some(prefix) if !prefix.is_empty() => {
             let clean_prefix = prefix.trim_start_matches('/');
-            // HIGH 修复（#38）：防御性切片——此前 `base_path[1..]` 假定首字符
+            // 防御性切片——此前 `base_path[1..]` 假定首字符
             // 必为 '/'，空串会越界 panic、多字节首字符会 panic（非 char
             // boundary）、无前导斜杠会静默丢首字符。改用 strip_prefix 语义。
             let path_without_slash = base_path.strip_prefix('/').unwrap_or(base_path);
@@ -353,7 +353,7 @@ async fn request_locale_middleware(
 /// # Note
 /// Use this when you want automatic version fallback for unversioned API requests.
 ///
-/// # Security Warning（HIGH 修复 #147，补充文档警示）
+/// # Security Warning
 ///
 /// 与 [`build`] 一样，此便捷函数**不挂载任何安全/配置中间件**（无 CORS、
 /// security headers、body limit、timeout、auth）。仅版本重定向中间件会
@@ -544,7 +544,7 @@ fn build_with_config_inner(
         ));
     }
 
-    // Apply global body limit（HIGH 修复：来自 ServerConfig::max_body_size，
+    // Apply global body limit（来自 ServerConfig::max_body_size，
     // 此前硬编码 10MB 且配置结构无对应字段，运维无法调整）
     router = router.layer(tower_http::limit::RequestBodyLimitLayer::new(
         config.server.max_body_size,
@@ -645,13 +645,13 @@ fn build_with_config_inner(
                         None => return Err(AuthError::MissingAuth),
                     };
 
-                    // Use trusted-proxy-aware IP extraction (vuln-0001 fix):
+                    // Use trusted-proxy-aware IP extraction:
                     // direct header reads allow IP spoofing; extract_client_ip
                     // only trusts X-Forwarded-For / X-Real-IP from trusted proxies.
                     let client_ip = crate::security::extract_client_ip(req)
                         .unwrap_or_else(|| "unknown".to_string());
 
-                    // Security fix: Validate prefix is not empty before checking
+                    // Validate prefix is not empty before checking
                     // This prevents authentication bypass when prefix is empty
                     if prefix.is_empty() {
                         return Err(AuthError::MissingAuth);

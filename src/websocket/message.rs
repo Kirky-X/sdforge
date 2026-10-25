@@ -117,7 +117,7 @@ pub fn parse_websocket_message_with_limit(
         ));
     }
 
-    // Security fix: Use serde_json's streaming parser to parse and validate depth
+    // Use serde_json's streaming parser to parse and validate depth
     // This provides more accurate depth checking than manual bracket counting
     use serde_json::Deserializer;
 
@@ -268,7 +268,7 @@ mod tests {
         assert_eq!(depth, 0);
     }
 
-    /// 安全回归（HIGH 修复）：纯空容器深嵌套不得绕过 MAX_JSON_DEPTH——
+    /// 安全回归：纯空容器深嵌套不得绕过 MAX_JSON_DEPTH——
     /// 此前空容器链深度算成 0，17 层以上 `[[[…]]]` 畅通无阻。
     #[test]
     fn parse_websocket_message_rejects_deep_empty_containers() {

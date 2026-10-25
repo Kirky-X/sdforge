@@ -452,11 +452,11 @@ async fn test_apikey_auth_with_x_real_ip_header() {
     assert_eq!(response.status(), axum::http::StatusCode::UNAUTHORIZED);
 }
 
-// vuln-0001 regression tests: API key auth must use extract_client_ip
+// Regression tests: API key auth must use extract_client_ip
 //
 // The extract_auth closure previously read X-Forwarded-For / X-Real-IP
 // headers directly, allowing an attacker to spoof these headers to bypass
-// IP-based checks. The fix routes IP extraction through
+// IP-based checks. IP extraction routes through
 // extract_client_ip, which only trusts forwarded headers from trusted
 // reverse proxies (private IP ranges).
 //
@@ -467,7 +467,7 @@ async fn test_apikey_auth_with_x_real_ip_header() {
 
 /// Verify the auth middleware handles a request with ConnectInfo from a
 /// non-trusted proxy and spoofed X-Forwarded-For / X-Real-IP headers.
-/// With the fix, extract_client_ip ignores the spoofed headers
+/// extract_client_ip ignores the spoofed headers
 /// (8.8.8.8 is not a trusted proxy) and returns the direct connection IP.
 /// The auth result (401 for unregistered key) is unchanged, but the code
 /// path through extract_client_ip must not panic or misbehave.

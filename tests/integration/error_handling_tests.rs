@@ -435,7 +435,7 @@ mod error_handling_tests {
         assert!(context.line.is_some());
         assert!(context.line.unwrap() > 0);
 
-        // HIGH 修复回归：#[track_caller] 下 file/line 指向调用方（本文件）；
+        // 回归：#[track_caller] 下 file/line 指向调用方（本文件）；
         // function 无法经 track_caller 获得，诚实为 None（此前恒为 ""）。
         assert!(
             file.contains("error_handling_tests"),

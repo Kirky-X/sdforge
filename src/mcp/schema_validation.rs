@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! Lightweight JSON Schema validation for MCP tool arguments (vuln-0002).
+//! Lightweight JSON Schema validation for MCP tool arguments.
 //!
 //! This module provides a minimal, dependency-free JSON Schema validator that
 //! covers the security-critical keywords most relevant to MCP tool argument
@@ -24,7 +24,7 @@
 //! `call` implementation via `serde` deserialization (which macros-generated
 //! tools already do via `#[serde(deny_unknown_fields)]`).
 //!
-//! # vuln-0002 context
+//! # Context
 //!
 //! Before this validator, `call_tool_internal` only checked payload size and
 //! tool existence. The `input_schema` was used solely for documentation
@@ -385,7 +385,7 @@ mod tests {
         assert!(validate_arguments(&schema, &json!(null)).is_ok());
     }
 
-    // additionalProperties: false without properties (security fix)
+    // additionalProperties: false without properties
 
     #[test]
     fn test_additional_properties_false_without_properties_rejects_non_empty() {

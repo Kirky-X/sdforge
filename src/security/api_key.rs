@@ -122,7 +122,7 @@ impl SdForgeApiKeyAuth {
     /// suitable for use as `user_id` in audit logs and AuthContext without
     /// exposing the raw API key to logs or responses.
     ///
-    /// # Note（#333 设计说明）
+    /// # Note（设计说明）
     ///
     /// 64-bit 截断是**有意的隐私取舍**：该标识符仅用于审计归属/日志关联，
     /// 不参与认证决策，也非防碰撞唯一键。认证完全基于完整 SHA256 哈希查找。
@@ -289,7 +289,7 @@ impl SdForgeApiKeyAuth {
                 .filter(|hash| !metadata.versions.iter().any(|v| &v.key_hash == hash))
                 .collect()
         } else {
-            // 无 rotation_config：轮换即完全替换——旧版本立即失活（安全修复：
+            // 无 rotation_config：轮换即完全替换——旧版本立即失活（
             // 此前旧 hash 在无配置路径下从不清理，旧 key 永久可用）。
             let new_idx = metadata.versions.len() - 1;
             let hashes = metadata.versions[..new_idx]
@@ -1007,7 +1007,7 @@ mod tests {
 
     /// 安全不变量回归：metadata 损坏时 add_key_version 必须整体失败，
     /// 绝不能把 key hash 写进 valid_keys——否则产生"可认证但无法
-    /// revoke/rotate"的孤儿 key（此前版本会静默注册，已修复）。
+    /// revoke/rotate"的孤儿 key。
     #[test]
     fn test_add_key_version_rejects_corrupted_metadata() {
         let auth = SdForgeApiKeyAuth::new();

@@ -319,7 +319,7 @@ async fn handle_socket_inner(
     let (conn, mut receiver) = WebSocketConnection::new(conn_id.clone());
     manager.add_connection(conn_id.clone(), conn.clone()).await;
 
-    // RAII 清理（HIGH 修复）：此前超大消息路径 close 后直接 return，跳过函数
+    // RAII 清理：此前超大消息路径 close 后直接 return，跳过函数
     // 末尾唯一的 remove_connection，且无任何 Drop 兜底——连接条目在
     // ConnectionManager 中永久泄漏，可被远程滥用为连接表耗尽 DoS。
     // Guard 保证所有退出路径（超大消息早退、客户端断开、任务被取消）都清理。
@@ -343,7 +343,7 @@ async fn handle_socket_inner(
         manager: manager.clone(),
     };
 
-    // 广播修复（HIGH）：此前 `WebSocketConnection::new` 返回的 receiver 被
+    // 此前 `WebSocketConnection::new` 返回的 receiver 被
     // 直接丢弃且无处 spawn，manager 注册的所有连接都是死通道——broadcast
     // 对真实连接必然失败并将其误删。现在所有出站消息统一经通道投递，由
     // forwarder 任务序列化并写回 socket；请求/响应也走同一路径。
@@ -353,10 +353,16 @@ async fn handle_socket_inner(
             let json = serde_json::to_string(&msg).unwrap_or_else(|_| {
                 serde_json::to_string(&WebSocketMessage::Error {
                     id: String::new(),
-                    error: "Internal serialization error".to_string(),
+                    error: crate::i18n::t("websocket-serialization-error", &[]),
                 })
                 .unwrap_or_else(|_| {
-                    r#"{"type":"error","id":"","error":"Internal error"}"#.to_string()
+                    // 末位兜底：键序固定为 type/id/error，不随 serde_json
+                    // 的键序特性漂移；文案经 JSON 转义后嵌入。
+                    let message = crate::i18n::t("websocket-internal-error", &[]);
+                    format!(
+                        r#"{{"type":"error","id":"","error":{}}}"#,
+                        serde_json::to_string(&message).unwrap_or_else(|_| "\"\"".to_string())
+                    )
                 })
             });
             if sink

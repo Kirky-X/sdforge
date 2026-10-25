@@ -339,7 +339,7 @@ fn i18n_key_translates_description_by_locale() {
     sdforge::i18n::set_locale("en");
 }
 
-// 返回类型 Schema 反射（schemars optional，R6）
+// 返回类型 Schema 反射（schemars optional）
 
 /// 夹具：派生 `JsonSchema` 的响应类型（schemars 由 dev-dependencies 提供，
 /// 宏发射点两态同构——反射是否生效取决于 sdforge 的 `schemars` feature）。

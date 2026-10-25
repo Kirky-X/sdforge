@@ -414,7 +414,7 @@ impl SdForgeMcpServer {
         name: &str,
         arguments: Option<serde_json::Value>,
     ) -> Result<CallToolResult, ErrorData> {
-        // vuln-0002: reject oversized argument payloads before any dispatch.
+        // Reject oversized argument payloads before any dispatch.
         // A serialization failure must not fail open (size 0 would bypass the
         // cap): it is surfaced as invalid_params instead.
         if let Some(ref args) = arguments {
@@ -433,14 +433,14 @@ impl SdForgeMcpServer {
             }
         }
 
-        // vuln-0002: do not leak the registered tool list in the error
+        // Do not leak the registered tool list in the error
         // message — a generic "tool not found" is sufficient for clients
         // while denying an attacker an inventory enumeration vector.
         let instance = self
             .find_tool(name)
             .ok_or_else(|| ErrorData::invalid_params(format!("tool not found: {}", name), None))?;
 
-        // vuln-0002: validate arguments against the tool's input_schema before
+        // Validate arguments against the tool's input_schema before
         // dispatch. Closes the gap where hand-written `SdForgeTool` impls that
         // forgot to validate arguments in `call()` would accept arbitrary input.
         // Macros-generated tools already enforce `#[serde(deny_unknown_fields)]`,
@@ -709,7 +709,7 @@ mod tests {
     ///
     /// Verifies the error path: `call_tool_internal` returns `ErrorData::invalid_params`
     /// with a generic "tool not found" message. The message must NOT leak the
-    /// registered tool list (vuln-0002: information disclosure defense).
+    /// registered tool list (information disclosure defense).
     #[tokio::test]
     async fn test_server_handler_call_tool_nonexistent() {
         let server = SdForgeMcpServer::new();
@@ -729,7 +729,7 @@ mod tests {
             "Error message should contain 'not found', got: {}",
             error.message
         );
-        // vuln-0002: error message MUST NOT enumerate registered tools.
+        // Error message MUST NOT enumerate registered tools.
         assert!(
             !error.message.contains("coverage_test_tool"),
             "Error message must not leak registered tool names, got: {}",
@@ -782,7 +782,7 @@ mod tests {
     }
 
     // ========================================================================
-    // vuln-0002 security tests: argument size limit + non-disclosure
+    // Security tests: argument size limit + non-disclosure
     // ========================================================================
 
     /// Verify `call_tool_internal` rejects argument payloads larger than
@@ -822,7 +822,7 @@ mod tests {
     }
 
     /// Verify `call_tool_internal` returns a generic `tool not found` error
-    /// and does NOT enumerate registered tool names (vuln-0002 fix).
+    /// and does NOT enumerate registered tool names.
     #[test]
     fn test_call_tool_internal_does_not_leak_tool_list() {
         let server = SdForgeMcpServer::new();

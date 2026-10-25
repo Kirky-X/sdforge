@@ -64,7 +64,7 @@ pub enum ApiError {
 
     /// Quota exhausted（配额用尽）
     ///
-    /// HIGH 修复：此前 `QuotaExhausted { used, total }` 被映射到
+    /// 此前 `QuotaExhausted { used, total }` 被映射到
     /// `RateLimitExceeded` 并把 `used` 塞进 `window_seconds`（语义错误，
     /// 客户端会按错误的秒数退避；design.md D8 已知 tech debt）。
     /// 现在作为独立变体承载配额语义。
@@ -196,10 +196,10 @@ impl ApiError {
         }
     }
 
-    /// HIGH 修复（#298）：Internal 消息构造期强制脱敏。
+    /// Internal 消息构造期强制脱敏。
     ///
     /// 脱敏器位于 `security::audit`（依赖 regex，仅在 `feature = "security"`
-    /// 下编译）；该 feature 关闭时退化为原样存储——与引入本修复前的行为
+    /// 下编译）；该 feature 关闭时退化为原样存储——与未启用脱敏时的行为
     /// 一致，且不影响任何 feature 组合的可编译性。
     #[allow(unused_variables)]
     fn sanitize_internal_message(message: String) -> String {
@@ -223,7 +223,7 @@ impl ApiError {
     /// * `error_id` - A unique identifier for debugging
     pub fn internal_error(message: impl Into<String>, error_id: impl Into<String>) -> Self {
         Self::Internal {
-            // HIGH 修复（#298）：文档声称 "sanitized" 但无强制——现在在
+            // 文档声称 "sanitized" 但无强制——现在在
             // 构造入口强制执行（JWT/密钥/信用卡/SSN/路径脱敏 + 500 字符截断）
             message: Self::sanitize_internal_message(message.into()),
             error_id: error_id.into(),
@@ -443,7 +443,7 @@ impl ApiError {
                 &[("permission", permission.clone())],
             ),
             ApiError::RateLimitExceeded { .. } => crate::i18n::t("ratelimit-exceeded", &[]),
-            // HIGH 修复：Internal 的 MCP 输出与 sanitized_message 一致地脱敏，
+            // Internal 的 MCP 输出与 sanitized_message 一致地脱敏，
             // 不再把原始内部消息（可能含主机名/路径/SQL 等）泄漏到外部协议。
             ApiError::Internal { .. } => crate::i18n::t("api-error-internal-generic", &[]),
             ApiError::QuotaExhausted { used, total } => crate::i18n::t(
@@ -471,7 +471,7 @@ impl ApiError {
             "error": error
         }))
         .unwrap_or_else(|_| {
-            // HIGH 修复：fallback 必须转义 message，防止引号/反斜杠
+            // fallback 必须转义 message，防止引号/反斜杠
             // 破坏 JSON 结构（此前 format! 直接内插原始字符串）。
             let escaped = serde_json::to_string(&message).unwrap_or_else(|_| "\"\"".into());
             format!(r#"{{"success":false,"error":{{"code":"{code}","message":{escaped}}}}}"#)
@@ -1316,7 +1316,7 @@ mod tests {
     fn test_serde_skips_internal_message_and_context() {
         let ctx = ErrorContext::current();
         let err = ApiError::internal_with_context(
-            "postgres://user:pass@10.0.0.5:5432/app",
+            "postgres://user:pass@10.0.0.5:5432/app", // pragma: allowlist secret（测试夹具假凭据，验证脱敏）
             "err-ctx",
             ctx,
         );

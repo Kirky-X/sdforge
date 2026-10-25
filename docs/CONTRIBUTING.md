@@ -192,8 +192,8 @@ cargo audit
 
 任何 tag 发布或 release 前，必须完成以下审查流程：
 
-1. **tiangang SAST 扫描** — 0 个 CRITICAL 漏洞才允许继续
-2. **diting 代码审查** — 无 HIGH 级别问题才允许打 tag
+1. **SAST 安全扫描** — 0 个 CRITICAL 漏洞才允许继续
+2. **代码质量审查** — 无 HIGH 级别问题才允许打 tag
 3. 审查结果必须贴出输出证据，禁止默认通过
 4. 审查失败时修复问题后重新走完整流程，不得跳过
 
@@ -202,6 +202,6 @@ cargo audit
 - **禁止使用 `--no-verify` 跳过** pre-commit hooks
 - **禁止 `git push --force` 到 main/master 分支**
 - pre-commit 包含 `no-commit-to-branch`（`args: ['--branch', 'master']`：本仓工作流在 main 上提交，故仅保护 `master` 分支，main 不受该钩子限制；提交仍推荐创建 feature 分支）
-- 代码质量工具是项目强制门禁：**diting**（简化/架构/性能审查）、**tiangang**（SAST 安全扫描，发布前强制）、**kueiku**（bug 分析/根因分析/FMEA）
+- 代码质量工具是项目强制门禁：**代码质量审查**（简化/架构/性能审查）、**SAST 安全扫描**（发布前强制）、**kueiku**（bug 分析/根因分析/FMEA）
 - 提交即代表你同意你的贡献将基于 [MIT](../LICENSE) 许可证授权
 - 有任何疑问，欢迎提一个带 `question` 标签的 [Issue](https://github.com/Kirky-X/sdforge/issues)

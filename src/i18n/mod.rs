@@ -430,7 +430,7 @@ pub fn translate_or_fallback(default: &str, i18n_key: Option<&str>) -> String {
     };
     // locale 快照（get_locale）与查表（lookup_translation）各自持锁完成，
     // 锁不跨调用持有：set_locale 在两者之间变更 locale 的影响与单次
-    // 查表语义一致，无 TOCTOU 危害（此前两次独立加锁的修复说明保留）。
+    // 查表语义一致，无 TOCTOU 危害（此前两次独立加锁）。
     let locale = get_locale();
     lookup_translation(&locale, key, &[]).unwrap_or_else(|| default.to_string())
 }
@@ -930,6 +930,68 @@ mod builtin_catalog_tests {
                 &[],
                 "Rust output: append the cfg(reqwest) ReqwestTransport impl",
                 "Rust 产物：追加 cfg(reqwest) 的 ReqwestTransport 实现",
+            ),
+        ];
+        for (key, args, expected_en, expected_zh) in cases {
+            let args: Vec<(&str, String)> =
+                args.iter().map(|(k, v)| (*k, (*v).to_string())).collect();
+            assert_eq!(
+                translate_for("en", key, &args),
+                *expected_en,
+                "en catalog entry for '{key}' diverged"
+            );
+            assert_eq!(
+                translate_for("zh", key, &args),
+                *expected_zh,
+                "zh catalog entry for '{key}' diverged"
+            );
+        }
+    }
+
+    /// 守卫：SSE 协议帧、websocket 协议帧与通用内部错误脱敏文案在双语两侧
+    /// 都必须渲染出预期文本（canonical mirror：en 值与协议帧的规范英文串
+    /// 逐字一致）。
+    #[test]
+    fn test_sse_websocket_and_internal_generic_keys_render_in_both_locales() {
+        type LocaleCase<'a> = (&'a str, &'a [(&'a str, &'a str)], &'a str, &'a str);
+        let _guard = registry_guard();
+        clear_translations();
+        let cases: &[LocaleCase] = &[
+            (
+                "sse-serialization-error",
+                &[("error", "boom")],
+                "Serialization error: boom",
+                "序列化失败: boom",
+            ),
+            (
+                "sse-serialization-failed",
+                &[],
+                "Serialization failed",
+                "序列化失败",
+            ),
+            (
+                "sse-idle-timeout",
+                &[("seconds", "30")],
+                "Stream closed due to 30s idle timeout",
+                "流因 30 秒空闲超时而关闭",
+            ),
+            (
+                "websocket-serialization-error",
+                &[],
+                "Internal serialization error",
+                "内部序列化错误",
+            ),
+            (
+                "websocket-internal-error",
+                &[],
+                "Internal error",
+                "内部错误",
+            ),
+            (
+                "api-error-internal-generic",
+                &[],
+                "An internal error occurred. Please try again later.",
+                "发生内部错误，请稍后重试。",
             ),
         ];
         for (key, args, expected_en, expected_zh) in cases {

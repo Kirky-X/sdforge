@@ -18,7 +18,7 @@
 //! # 查看帮助
 //! cargo run --example basic_cli --features cli -- --help
 //!
-//! # echo 命令（--name 为必需参数）—— 输出 `Hello, world!`（无引号，验证 H3 智能提取）
+//! # echo 命令（--name 为必需参数）—— 输出 `Hello, world!`（无引号，验证智能提取）
 //! cargo run --example basic_cli --features cli -- echo --name world
 //!
 //! # greet 命令（--greeting 为必需参数）

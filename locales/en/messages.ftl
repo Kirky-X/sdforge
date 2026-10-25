@@ -37,6 +37,11 @@ sse-invalid-utf8 = SSE frame is not valid UTF-8: { $error }
 sse-limit-exceeded = SSE stream exceeded configured limit ({ $size } bytes)
 sse-upstream-error = upstream stream error: { $error }
 
+# --- streaming::SSE protocol frames (client-visible) -------------------------
+sse-serialization-error = Serialization error: { $error }
+sse-serialization-failed = Serialization failed
+sse-idle-timeout = Stream closed due to { $seconds }s idle timeout
+
 # --- docs (Swagger UI entry page) ---------------------------------------------
 docs-swagger-title = SDForge API Docs
 docs-swagger-redirecting = Redirecting to <a href="{ $url }">Swagger UI</a>...
@@ -149,6 +154,10 @@ websocket-connections-lock-poisoned-add = websocket connections lock poisoned; a
 websocket-connections-lock-poisoned-remove = websocket connections lock poisoned; remove_connection skipped
 websocket-connections-lock-poisoned-get = websocket connections lock poisoned; get_connection returned None
 websocket-auth-not-configured = WebSocket handshake accepts unauthenticated connections: neither auth nor api_key_auth is configured
+
+# --- websocket protocol frames (client-visible) ----------------------------------------------
+websocket-serialization-error = Internal serialization error
+websocket-internal-error = Internal error
 
 
 # --- inventory bootstrap ----------------------------------------------------------------------

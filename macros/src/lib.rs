@@ -1966,7 +1966,7 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     // 生成的查询结构体定义（无 Query 参数时为空）。`::serde::` 要求用户 crate 直接依赖
     // serde —— 与 Json body 参数类型需要 derive(Deserialize) 的既有要求一致。
     //
-    // 安全说明（回归修复）：信封字段**不加 flatten**。flatten 与 serde_urlencoded
+    // 安全说明：信封字段**不加 flatten**。flatten 与 serde_urlencoded
     // 组合会把所有标量字段静默提取为 None（Content 缓冲丢值）——budget/max_distance
     // 等过滤参数静默失效属 fail-open。struct 类型查询参数的扁平提取改由
     // `#[param(kind = "query", flatten)]` 显式 opt-in：该参数直接生成

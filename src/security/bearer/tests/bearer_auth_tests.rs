@@ -646,7 +646,7 @@ fn test_base64url_decode_with_whitespace() {
 
 #[test]
 fn test_base64url_decode_non_ascii_chars() {
-    // HIGH 修复回归（#344）：非 ASCII 字节不属于 base64url 字母表，
+    // 非 ASCII 字节不属于 base64url 字母表，
     // 必须被拒绝（此前查找表未初始化项为 0，被静默当作 'A' 解码）。
     let result = BearerAuth::base64url_decode("\u{0080}");
     assert!(result.is_none(), "non-ASCII bytes must be rejected");
@@ -1271,7 +1271,7 @@ fn test_validate_token_issuer_not_string() {
     assert!(auth.validate_token(&token).is_none());
 }
 
-// vuln-0005 regression tests: BearerAuth::with_dependencies secret validation
+// Regression tests: BearerAuth::with_dependencies secret validation
 //
 // `with_dependencies` previously accepted any `Vec<u8>` secret without
 // validation, allowing callers to bypass the `try_new` complexity
@@ -1449,7 +1449,7 @@ fn test_vuln0005_with_dependencies_accepts_exactly_32_bytes() {
     );
 }
 
-/// HIGH 修复回归：builder 拒绝空 audience/issuer——`Some("")` 会匹配
+/// builder 拒绝空 audience/issuer——`Some("")` 会匹配
 /// 令牌中空串 claim，使校验形同虚设（fail-closed）。
 #[test]
 fn test_builder_rejects_empty_audience_and_issuer() {
@@ -1485,7 +1485,7 @@ fn test_builder_rejects_empty_audience_and_issuer() {
     );
 }
 
-/// HIGH 修复回归（#344）：base64url 解码必须拒绝非法字符——此前查找表
+/// base64url 解码必须拒绝非法字符——此前查找表
 /// 以 0 初始化，任何非法字节都被静默当作 'A'（值 0）解码。
 #[test]
 fn test_base64url_decode_rejects_invalid_characters() {

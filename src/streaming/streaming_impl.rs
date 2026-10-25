@@ -136,16 +136,21 @@ where
 
                     let event = mapper(item);
 
-                    // Security fix: Handle serialization errors properly instead of silently failing
+                    // Handle serialization errors properly instead of silently failing
                     // Log the error and send an error event to the client
                     let data = match serde_json::to_string(&event) {
                         Ok(data) => data,
                         Err(e) => {
-                            serde_json::to_string(&StreamEvent::<()>::error(format!(
-                                "Serialization error: {}",
-                                e
+                            serde_json::to_string(&StreamEvent::<()>::error(crate::i18n::t(
+                                "sse-serialization-error",
+                                &[("error", e.to_string())],
                             )))
-                            .unwrap_or_else(|_| r#"{"error":"Serialization failed"}"#.to_string())
+                            .unwrap_or_else(|_| {
+                                serde_json::json!({
+                                    "error": crate::i18n::t("sse-serialization-failed", &[])
+                                })
+                                .to_string()
+                            })
                         }
                     };
                     let sse = format!("data: {}\n\n", data);
@@ -164,8 +169,10 @@ where
         // If the stream was terminated by the idle timeout, emit an Error
         // event so clients can distinguish timeout from normal completion.
         if timed_out {
-            let timeout_event =
-                StreamEvent::<()>::error("Stream closed due to 30s idle timeout".to_string());
+            let timeout_event = StreamEvent::<()>::error(crate::i18n::t(
+                "sse-idle-timeout",
+                &[("seconds", idle_window.as_secs().to_string())],
+            ));
             if let Ok(payload) = serde_json::to_string(&timeout_event) {
                 let _ = tx.send(Ok(format!("data: {}\n\n", payload))).await;
             }

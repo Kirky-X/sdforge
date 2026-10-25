@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MIT
 //! gRPC 自定义 service 挂载点（`GrpcServerConfig.extra_services`）集成测试。
 //!
-//! P2-B：应用自有 tonic service（消费方自建 proto 生成的 server）与
+//! 应用自有 tonic service（消费方自建 proto 生成的 server）与
 //! `SdForgeService` 同端口共存。全部用例经真实网络（tonic Channel）走
 //! `build_server_with_config` 装配路径——挂载接线只存在于该函数内部，
 //! `serve_with_incoming` 式的绕行测不到目标行为。
@@ -106,7 +106,7 @@ async fn spawn_configured_server(config: GrpcServerConfig) -> SocketAddr {
 fn probe_config(hits: Arc<Mutex<Vec<String>>>) -> GrpcServerConfig {
     let probe = Arc::new(ProbeService { hits });
     GrpcServerConfig {
-        // require_auth fail-safe（vuln-0006）是面向部署的安全约束；本套测试
+        // require_auth fail-safe 是面向部署的安全约束；本套测试
         // 关注挂载路由语义而非认证面，显式声明走 dev/test 路径（与既有
         // serve_with_incoming 绕行测试同口径）。认证语义由 security_gate 用例
         // 单独验证（配置真实 auth）。

@@ -227,9 +227,9 @@ async fn check_returns_exceeded_after_capacity_exhausted() {
     );
 }
 
-// vuln-0007: cache must be disabled in production Governor construction
+// Cache must be disabled in production Governor construction
 
-/// vuln-0007: `LimiteronAdapterBuilder::build` must disable cache.
+/// `LimiteronAdapterBuilder::build` must disable cache.
 ///
 /// Without `.with_l1_cache_enabled(false)`, the Governor caches the first
 /// `Allowed` decision and returns it for all subsequent identical requests,
@@ -265,8 +265,8 @@ async fn test_vuln0007_build_disables_l1_cache() {
         .await
         .expect("tight config must be valid");
 
-    // Fire 5 rapid requests. With cache disabled (fix), at most 2 allowed
-    // (1 capacity + ~1 refill). With cache enabled (bug), all 5 cached
+    // Fire 5 rapid requests. With cache disabled, at most 2 allowed
+    // (1 capacity + ~1 refill). With cache enabled, all 5 cached
     // as Allowed -> 0 rejections.
     let mut rejections = 0;
     for _ in 0..5 {
@@ -283,7 +283,7 @@ async fn test_vuln0007_build_disables_l1_cache() {
     );
 }
 
-/// vuln-0007: `LimiteronAdapter::new()` must disable cache.
+/// `LimiteronAdapter::new()` must disable cache.
 ///
 /// Same vulnerability as `build()` — `new()` constructs a Governor without
 /// `.with_l1_cache_enabled(false)`, allowing rate-limit bypass via cached
@@ -368,10 +368,10 @@ async fn check_request_falls_back_to_unknown_identifier() {
 /// spoofed value. This prevents bypassing rate limits by rotating the
 /// spoofed header.
 ///
-/// We verify the fix by configuring a rule that only allows `8.8.8.8` once
+/// We verify by configuring a rule that only allows `8.8.8.8` once
 /// (capacity=1) and then sending two requests with the same spoofed header
 /// but expecting both to hit the same `8.8.8.8` bucket → second must be
-/// rejected. Before the fix, the spoofed header would have been trusted,
+/// rejected. Previously, the spoofed header would have been trusted,
 /// allowing unlimited requests because each spoofed IP would get its own
 /// bucket.
 #[cfg(feature = "ratelimit-http")]
@@ -415,7 +415,7 @@ async fn check_request_ignores_spoofed_x_forwarded_for_from_non_trusted_source()
     let adapter = LimiteronAdapter::with_dependencies(Arc::new(governor));
 
     // Direct connection from 8.8.8.8 (non-trusted, public IP) with a spoofed
-    // X-Forwarded-For. The fix must extract 8.8.8.8 (direct IP), not 1.2.3.4.
+    // X-Forwarded-For. Must extract 8.8.8.8 (direct IP), not 1.2.3.4.
     let mut req1 = Request::builder()
         .body(Body::empty())
         .expect("request build");

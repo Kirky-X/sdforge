@@ -35,7 +35,7 @@ pub struct BearerAuth {
 
 impl Drop for BearerAuth {
     fn drop(&mut self) {
-        // HIGH 修复（加固）：销毁前以 volatile 写擦除密钥材料，防止密钥
+        // 销毁前以 volatile 写擦除密钥材料，防止密钥
         // 残留在已释放内存中被后续转储/扫描读取。volatile 防止编译器把
         // 死存储优化掉；写后加 fence 确保顺序。等价于 zeroize crate 的
         // 核心语义，避免引入新依赖。

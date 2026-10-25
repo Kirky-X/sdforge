@@ -48,7 +48,7 @@ impl BearerAuth {
     ///
     /// Shared by `try_new` and `with_dependencies` so that the DI entry point
     /// cannot be used to bypass the complexity requirements enforced by the
-    /// regular constructors (vuln-0005).
+    /// regular constructors.
     ///
     /// Rules:
     /// - At least 32 bytes long
@@ -161,7 +161,7 @@ impl BearerAuth {
     /// at least 32 bytes, valid UTF-8, and containing at least one uppercase
     /// letter, one lowercase letter, one digit, and one special character.
     /// This closes the DI bypass that previously allowed callers to skip
-    /// validation (vuln-0005).
+    /// validation.
     ///
     /// # Examples
     ///
@@ -236,7 +236,7 @@ impl BearerAuth {
 
     /// Base64url decode (JWT uses URL-safe base64)
     ///
-    /// HIGH 修复（#344）：严格解码。此前查找表以 0 初始化且合法字符只覆盖
+    /// 严格解码。此前查找表以 0 初始化且合法字符只覆盖
     /// 64 个索引，其余 192 个字节的表值恰为 0（合法值 'A'），任何非法字符
     /// 都被静默解码为 0 而非拒绝。现在以 0xFF 哨兵初始化，遇非法字符返回
     /// None——注入字符无法再被无声接受（fail-closed）。
@@ -368,7 +368,7 @@ impl BearerAuth {
             return None; // Token expired
         }
 
-        // Security fix: Validate iat (issued at) claim to prevent usage of future tokens
+        // Validate iat (issued at) claim to prevent usage of future tokens
         // This prevents replay attacks with tokens that have valid signatures but haven't been issued yet
         if let Some(iat) = payload_value.get("iat").and_then(|v| v.as_i64()) {
             let now = chrono::Utc::now().timestamp();
@@ -379,7 +379,7 @@ impl BearerAuth {
             }
         }
 
-        // Security fix: Validate nbf (not before) claim to prevent usage of tokens that aren't yet valid
+        // Validate nbf (not before) claim to prevent usage of tokens that aren't yet valid
         if let Some(nbf) = payload_value.get("nbf").and_then(|v| v.as_i64())
             && chrono::Utc::now().timestamp() < nbf
         {
@@ -672,7 +672,7 @@ impl BearerAuthBuilder {
             });
         }
 
-        // HIGH 修复：audience/issuer 空串校验——`Some("")` 会匹配令牌中
+        // audience/issuer 空串校验——`Some("")` 会匹配令牌中
         // `aud: ""`/`iss: ""` 的空串 claim，等于校验形同虚设（fail-closed）。
         if self.audience.as_ref().is_some_and(|a| a.is_empty()) {
             return Err(AuthConfigError::InvalidSecret(

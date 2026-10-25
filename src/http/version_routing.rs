@@ -70,7 +70,7 @@ pub struct VersionRouterConfig {
     pub default_version: String,
     /// Supported versions
     ///
-    /// # Note（#217 设计说明）
+    /// # Note（设计说明）
     ///
     /// 该字段仅用于计算 `Link: successor-version` 响应头。**版本合法性
     /// 门控委托给路由注册**：未注册版本的请求最终由 axum 返回 404，
@@ -119,7 +119,7 @@ pub fn build_version_router() -> Router {
 
 /// Version redirect middleware with deprecation support（默认配置的便捷形式）
 ///
-/// HIGH 修复：此函数此前硬编码 `VersionRouterConfig::default`，导致
+/// 此函数此前硬编码 `VersionRouterConfig::default`，导致
 /// `redirect_unknown` / `sunset_header` / `deprecated_versions` 全部是死配置。
 /// 需要自定义配置时请使用 [`VersionRedirectLayer`]。
 pub async fn version_redirect_middleware(
@@ -143,7 +143,7 @@ where
     F: FnOnce(Request<Body>) -> Fut,
     Fut: std::future::Future<Output = Response>,
 {
-    // 保留 query string（HIGH 修复：此前仅取 path，/api/test?foo=bar 重定向
+    // 保留 query string（此前仅取 path，/api/test?foo=bar 重定向
     // 后 query 静默丢失）
     let (path, query) = match req.uri().path_and_query() {
         Some(pq) => {
@@ -243,7 +243,7 @@ where
     next(req).await
 }
 
-/// 可配置的版本重定向层（HIGH 修复：配置注入入口）
+/// 可配置的版本重定向层（配置注入入口）
 ///
 /// # Examples
 ///
@@ -831,7 +831,7 @@ mod tests {
         );
     }
 
-    // HIGH 修复回归：配置注入 / query 保留
+    // 回归：配置注入 / query 保留
 
     /// redirect_unknown=false 时无版本路径应放行而非重定向
     /// （此前 redirect_unknown 是死配置，永远重定向）。

@@ -390,7 +390,7 @@ impl MrtrSessionManager {
 
     /// Get a session by ID.
     ///
-    /// HIGH 修复：锁中毒不再静默吞掉（与其他方法的 internal_error 传播策略
+    /// 锁中毒不再静默吞掉（与其他方法的 internal_error 传播策略
     /// 对齐），改为记录告警后返回 None，使毒化可被运维观测。
     pub fn get_session(&self, session_id: &str) -> Option<SessionState> {
         match self.sessions.lock() {
@@ -404,7 +404,7 @@ impl MrtrSessionManager {
 
     /// Clean up expired (timed-out) sessions.
     ///
-    /// HIGH 修复：终态会话（Completed/Cancelled）此前永不驱逐——它们不满足
+    /// 终态会话（Completed/Cancelled）此前永不驱逐——它们不满足
     /// `state == Pending` 条件，随时间积累到 MAX_MRTR_SESSIONS 后
     /// `create_session` 永久失败（活性缺陷）。现在终态会话同样按超时窗口
     /// 老化淘汰。
@@ -649,7 +649,7 @@ mod tests {
         assert_eq!(manager.session_count(), 0);
     }
 
-    /// HIGH 修复回归：终态会话（Completed/Cancelled）必须随超时窗口老化
+    /// 终态会话（Completed/Cancelled）必须随超时窗口老化
     /// 淘汰——此前永不驱逐，积累到 MAX_MRTR_SESSIONS 后 create_session
     /// 永久失败（活性缺陷）。
     #[test]
@@ -1058,7 +1058,7 @@ mod tests {
         assert_eq!(count, 0, "poisoned mutex should yield count 0");
     }
 
-    // vuln-0003 regression tests: MRTR resume_session payload limits
+    // Regression tests: MRTR resume_session payload limits
     //
     // resume_session previously accepted any `serde_json::Value` without
     // bounding payload size or nesting depth, allowing a client to crash

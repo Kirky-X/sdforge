@@ -84,7 +84,7 @@ pub struct GrpcServerConfig {
     pub max_connections: usize,
     /// Request timeout in seconds
     pub timeout_seconds: u64,
-    /// Whether authentication is required to start the server (vuln-0006).
+    /// Whether authentication is required to start the server.
     ///
     /// Defaults to `true` (secure default). When `true`, `build_server_with_config`
     /// refuses to start if `auth` is `None`, preventing accidental deployment of
@@ -96,7 +96,7 @@ pub struct GrpcServerConfig {
     #[cfg(feature = "security")]
     pub auth: Option<crate::security::BearerAuth>,
     /// `security` 关闭时的空壳（恒 `None`）——字段恒存在，结构体字面量
-    /// 跨 feature 形态稳定（ws-R14 复核修复）。
+    /// 跨 feature 形态稳定。
     #[cfg(not(feature = "security"))]
     pub auth: Option<()>,
     /// Optional application state injected into `SdForgeGrpcService`.
@@ -113,14 +113,14 @@ pub struct GrpcServerConfig {
     /// `security` 关闭时的空壳（恒 `None`）。
     #[cfg(not(feature = "security"))]
     pub auth_verifier: Option<()>,
-    /// Optional rate limiter for gRPC requests (vuln-0006).
+    /// Optional rate limiter for gRPC requests.
     ///
     /// When `Some`, each incoming gRPC `call`/`get_info` request is checked
     /// against the rate limiter using the client's remote address as the
     /// identifier.
     /// Requests that exceed the limit are rejected with
     /// `Status::resource_exhausted`. This closes the DoS vector identified
-    /// in vuln-0006 (gRPC had no rate limiting while HTTP had).
+    /// (gRPC had no rate limiting while HTTP had).
     ///
     /// # Feature availability
     ///

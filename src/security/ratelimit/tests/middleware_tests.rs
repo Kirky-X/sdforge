@@ -174,7 +174,7 @@ async fn layer_construction_accepts_arcrate_limiter() {
 }
 
 // regression: 429 response must differentiate error variants and emit
-// `Retry-After` where applicable. Before the fix, every rejection collapsed
+// `Retry-After` where applicable. Previously, every rejection collapsed
 // to a generic 429 with body "Rate limit exceeded" and no `Retry-After`.
 
 /// Mock limiter that produces a fresh `RateLimitError` on each check via a

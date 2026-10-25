@@ -260,7 +260,7 @@ impl ApiKeyMetadata {
         self.versions
             .retain(|v| !v.is_expired() || active_idx == Some(last_idx));
 
-        // 回归（HIGH 修复）：retain 裁剪后重算 active_version_index。原索引可能
+        // 回归：retain 裁剪后重算 active_version_index。原索引可能
         // 指向已删除位置，或指向残留的失活版本，导致 get_active_version 返回
         // 错误结果。优先按版本名找回；找不到则提升最新的有效版本。
         self.active_version_index = active_version_name

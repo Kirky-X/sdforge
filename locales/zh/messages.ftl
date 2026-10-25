@@ -35,6 +35,11 @@ sse-invalid-utf8 = SSE 帧不是有效的 UTF-8: { $error }
 sse-limit-exceeded = SSE 流已超出配置上限 ({ $size } 字节)
 sse-upstream-error = 上游流错误: { $error }
 
+# --- streaming::SSE 协议帧（客户端可见） -----------------------------------------------------
+sse-serialization-error = 序列化失败: { $error }
+sse-serialization-failed = 序列化失败
+sse-idle-timeout = 流因 { $seconds } 秒空闲超时而关闭
+
 # --- 文档（Swagger UI 入口页） ----------------------------------------------------
 docs-swagger-title = SDForge API 文档
 docs-swagger-redirecting = 正在跳转到 <a href="{ $url }">Swagger UI</a>...
@@ -147,6 +152,10 @@ websocket-connections-lock-poisoned-add = websocket 连接锁已中毒；add_con
 websocket-connections-lock-poisoned-remove = websocket 连接锁已中毒；remove_connection 已跳过
 websocket-connections-lock-poisoned-get = websocket 连接锁已中毒；get_connection 返回 None
 websocket-auth-not-configured = WebSocket 握手放行未认证连接：未配置 auth 与 api_key_auth
+
+# --- websocket 协议帧（客户端可见） -------------------------------------------------------------------------------------
+websocket-serialization-error = 内部序列化错误
+websocket-internal-error = 内部错误
 
 
 # --- inventory 引导 --------------------------------------------------------------------------------------

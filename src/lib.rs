@@ -496,8 +496,7 @@ pub use docs::swagger_ui_router_with_openapi;
 // `inventory::submit!` 块）后返回条数。Poison-aware：Mutex 中毒时降级返回
 // 0 而非连锁 panic，避免 init_all_plugins 永久失效。
 // fn 随自身协议 feature 存在，调用点经 `count_if!` 在 feature 关闭时归 0——
-// PluginCounts 字段恒存在，任意 feature 组合下结构体字面量/打印形态稳定
-// （ws-R14 复核修复）。
+// PluginCounts 字段恒存在，任意 feature 组合下结构体字面量/打印形态稳定。
 
 /// Generate a per-protocol inventory counter (compiled only under its feature).
 macro_rules! inventory_counter {
@@ -675,7 +674,7 @@ fn count_cli_commands() -> usize {
 /// - `routes`: HTTP route count (0 without `http`)
 /// - `mcp_tools` / `ws_routes` / `grpc_routes` / `grpc_handlers` /
 ///   `cli_commands`: 对应协议 feature 关闭时恒 `0`——字段恒存在，结构体
-///   字面量/打印在任意 feature 组合下形态稳定（ws-R14 复核修复：此前
+///   字面量/打印在任意 feature 组合下形态稳定（此前
 ///   cfg 门控字段使跨 feature 的消费代码形态漂移）。
 #[cfg(any(
     feature = "http",

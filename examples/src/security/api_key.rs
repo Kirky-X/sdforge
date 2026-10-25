@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! # ⚠️ SECURITY DEMO ONLY（HIGH 修复 #225-228 加注）
+//! # ⚠️ SECURITY DEMO ONLY
 //!
 //! 本示例中的 `api_key_protected` / `bearer_protected` / `multi_auth` /
 //! `refresh_token` 端点是**演示桩**：它们不读取任何认证头，直接返回

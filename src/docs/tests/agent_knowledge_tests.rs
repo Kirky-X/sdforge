@@ -126,7 +126,7 @@ fn agent_knowledge_lists_mcp_tools() {
     }
 }
 
-// 契约一致性锁定（审查修复）：知识包 output_contract 与 cli::output 实现
+// 契约一致性锁定：知识包 output_contract 与 cli::output 实现
 // 同源，任一侧漂移都会在此失败。
 
 /// output_contract 的 values/default 必须与 format_arg 的 clap 白名单、

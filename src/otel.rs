@@ -322,6 +322,34 @@ fn connect_with_resolver<F>(
 where
     F: FnOnce(&str, u16, Instant) -> Result<Vec<std::net::SocketAddr>, String>,
 {
+    connect_with_resolver_and_connector(
+        host,
+        port,
+        deadline,
+        io_timeout,
+        resolve,
+        std::net::TcpStream::connect_timeout,
+    )
+}
+
+/// [`connect_with_resolver`] with an injectable connector.
+///
+/// The connector is a parameter so the deadline accounting can be exercised
+/// without depending on a real unreachable address: a full-tunnel VPN or a
+/// transparent proxy answers connections to every address, so no reserved
+/// range stays unreachable in such an environment.
+fn connect_with_resolver_and_connector<F, C>(
+    host: &str,
+    port: u16,
+    deadline: Instant,
+    io_timeout: std::time::Duration,
+    resolve: F,
+    mut connect: C,
+) -> Result<std::net::TcpStream, String>
+where
+    F: FnOnce(&str, u16, Instant) -> Result<Vec<std::net::SocketAddr>, String>,
+    C: FnMut(&std::net::SocketAddr, std::time::Duration) -> std::io::Result<std::net::TcpStream>,
+{
     let addrs = resolve(host, port, deadline)?;
     if addrs.is_empty() {
         return Err(crate::i18n::t(
@@ -337,7 +365,7 @@ where
             return Err(export_deadline_err());
         }
         let timeout = remaining.min(io_timeout);
-        match std::net::TcpStream::connect_timeout(&addr, timeout) {
+        match connect(&addr, timeout) {
             Ok(stream) => {
                 let stream = stream;
                 stream
@@ -906,7 +934,12 @@ mod tests {
         let deadline = started + Duration::from_secs(1);
         // 解析耗掉 700ms 后才返回一个不可路由地址：连接阶段只应拿到剩余的
         // 300ms，而不是重新拿到整份 1s 预算。
-        let err = connect_with_resolver(
+        // The connect phase uses an injected connector that simulates a
+        // connection hanging until its timeout: a real unreachable address
+        // gets answered under a full-tunnel VPN / transparent proxy (the
+        // connect then succeeds at once), which would no longer exercise
+        // the "remaining budget exhausted" path.
+        let err = connect_with_resolver_and_connector(
             "collector.invalid",
             4318,
             deadline,
@@ -914,6 +947,13 @@ mod tests {
             |_host, _port, _deadline| {
                 std::thread::sleep(Duration::from_millis(700));
                 Ok(vec![std::net::SocketAddr::from(([192, 0, 2, 1], 4318))])
+            },
+            |_addr, timeout| {
+                std::thread::sleep(timeout);
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "simulated connect timeout",
+                ))
             },
         )
         .expect_err("the export must fail once the total deadline is reached");

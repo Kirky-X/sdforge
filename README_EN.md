@@ -443,7 +443,7 @@ The design rationale for authentication (API Key / JWT Bearer with enforced key 
 
 ### 🔍 Supply chain security
 
-CI security gates are always on: `cargo deny check` ([deny.toml](deny.toml) policy) + `cargo audit`, together with CodeQL, Dependabot, and pre-commit secret scanning (detect-secrets); releases additionally require the tiangang SAST and diting review gates — see the release process in the [Contributing Guide](docs/CONTRIBUTING.md).
+CI security gates are always on: `cargo deny check` ([deny.toml](deny.toml) policy) + `cargo audit`, together with CodeQL, Dependabot, and pre-commit secret scanning (detect-secrets); releases additionally require the SAST scan and code review gates — see the release process in the [Contributing Guide](docs/CONTRIBUTING.md).
 
 ---
 

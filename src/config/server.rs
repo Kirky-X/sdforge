@@ -18,7 +18,7 @@ pub struct ServerConfig {
     pub request_timeout_secs: u64,
     /// Maximum request body size in bytes (default 10 MiB)
     ///
-    /// HIGH 修复：此前 10MB 上限硬编码在 `http::build_with_config_inner` 中，
+    /// 此前 10MB 上限硬编码在 `http::build_with_config_inner` 中，
     /// 配置结构无对应字段，运维无法调整上传上限。
     pub max_body_size: usize,
     /// CORS configuration
@@ -44,7 +44,7 @@ pub struct IdempotencyConfig {
     /// 完成响应的重放窗口（秒，默认 86400 = 24h）。
     pub ttl_secs: i64,
     /// 在途 claim 的阻塞上限（秒，默认 30）——handler 崩溃后同 key 重试
-    /// 需等待该窗口；此前硬编码 30（复查 配置化）。
+    /// 需等待该窗口；此前硬编码 30（现已配置化）。
     #[serde(default)]
     pub inflight_ttl_secs: i64,
     /// 超过该大小的响应不缓存（默认 1 MiB）。

@@ -59,7 +59,7 @@ impl ErrorContext {
     ///
     /// Uses `#[track_caller]` to capture the **caller's** file and line.
     ///
-    /// HIGH 修复：此前 `file!/line!` 展开于本文件，永远指向
+    /// 此前 `file!/line!` 展开于本文件，永远指向
     /// context.rs 自身；`type_name::<>` 恒为 `""`——"调用者上下文"
     /// 整体失效且 function 字段是常量垃圾值。调用者位置无法经
     /// `track_caller` 获得函数名，`function` 现为 `None`（诚实的缺失

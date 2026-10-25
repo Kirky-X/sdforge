@@ -1,6 +1,6 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
-//! Regular expression compilation and caching optimization (PERF-005)
+//! Regular expression compilation and caching optimization
 //!
 //! This module provides:
 //! - Thread-safe regex cache with byte-weight budget (moka TinyLFU eviction)

@@ -163,7 +163,7 @@ sequenceDiagram
 - **审计**：`AuditLogger` 记录安全事件，支持 HMAC-SHA256 签名防篡改；密钥轮换动作有审计日志
 - **错误脱敏**：`ApiError::Internal.message` 清洗后输出（不含路径/堆栈），`error_id` 供日志侧关联；`ErrorContext`（含编译期源码路径/行号）仅在服务端保留——直接序列化 `ApiError` 也不带出内部消息与上下文
 - **输入防御**：MCP 工具 `input_schema` 的 required / unknown-field 校验；MCP 与 gRPC 载荷 1 MiB 上限；并发安全模式（Mutex/RwLock 中毒感知、缓存一致性锁序、usize 下溢防护）经系统化审计修复
-- **供应链**：`cargo-audit` + `cargo-deny`（`deny.toml` 策略）+ Dependabot + CodeQL；发布前强制 tiangang SAST（0 CRITICAL）与 diting 审查（无 HIGH）
+- **供应链**：`cargo-audit` + `cargo-deny`（`deny.toml` 策略）+ Dependabot + CodeQL；发布前强制 SAST 扫描（0 CRITICAL）与代码审查（无 HIGH）
 
 漏洞报告流程与安全最佳实践详见[安全文档](SECURITY.md)。
 

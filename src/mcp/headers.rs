@@ -58,7 +58,7 @@ pub enum McpHeaderError {
     MissingToolName,
     /// The method value is not a valid MCP method.
     InvalidMethod(String),
-    /// The `Mcp-Name` header value is not a valid tool name (vuln-0004).
+    /// The `Mcp-Name` header value is not a valid tool name.
     InvalidToolName(String),
 }
 
@@ -129,7 +129,7 @@ pub fn parse_mcp_headers(headers: &HeaderMap) -> Result<McpHeaderInfo, McpHeader
                 .and_then(|v: &http::HeaderValue| v.to_str().ok())
                 .ok_or(McpHeaderError::MissingToolName)?
                 .to_string();
-            // vuln-0004: validate tool name to prevent path traversal,
+            // Validate tool name to prevent path traversal,
             // injection, control characters, and DoS via oversized names.
             if !is_valid_tool_name(&tool_name) {
                 return Err(McpHeaderError::InvalidToolName(tool_name));
@@ -157,7 +157,7 @@ pub fn is_valid_method(method: &str) -> bool {
 /// memory and log storage to prevent DoS.
 pub const MAX_TOOL_NAME_LEN: usize = 128;
 
-/// Check if a tool name is valid for the `Mcp-Name` header (vuln-0004).
+/// Check if a tool name is valid for the `Mcp-Name` header.
 ///
 /// A valid tool name:
 /// - Is 1–128 characters long (prevents empty names and DoS via oversized names)
@@ -320,12 +320,12 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // vuln-0004 regression tests: tool name validation
+    // Regression tests: tool name validation
     //
     // parse_mcp_headers previously accepted any string as the Mcp-Name
     // header value, allowing path traversal (../etc/passwd), injection
     // characters (; ' "), control characters, and oversized names (DoS).
-    // The fix adds is_valid_tool_name and rejects invalid names with
+    // Adds is_valid_tool_name and rejects invalid names with
     // InvalidToolName error.
 
     #[test]

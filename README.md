@@ -448,7 +448,7 @@ build.rs 生成的 protobuf 代码写入 `OUT_DIR`，不再落源树；`llvm-cov
 
 ### 🔍 供应链安全
 
-CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `cargo audit`，配合 CodeQL、Dependabot 与 pre-commit 密钥扫描（detect-secrets）；发布前另设 tiangang SAST 与 diting 审查门槛，见 [贡献指南](docs/CONTRIBUTING.md) 发布流程。
+CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `cargo audit`，配合 CodeQL、Dependabot 与 pre-commit 密钥扫描（detect-secrets）；发布前另设 SAST 扫描与代码审查门槛，见 [贡献指南](docs/CONTRIBUTING.md) 发布流程。
 
 ---
 

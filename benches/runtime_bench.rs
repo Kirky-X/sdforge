@@ -553,7 +553,7 @@ fn bench_middleware_tiers(c: &mut Criterion) {
         let mut config = base_config();
         config.authentication = AuthConfig::ApiKey {
             header_name: "x-api-key".to_string(),
-            // 前缀必须非空：认证层对空前缀 fail-closed（防认证绕过的安全修复）。
+            // 前缀必须非空：认证层对空前缀 fail-closed（防认证绕过）。
             prefix: "bench-".to_string(),
             keys: vec![ApiKeySeed {
                 key: "bench-key".to_string(),

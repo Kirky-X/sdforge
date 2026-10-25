@@ -16,7 +16,7 @@ use crate::websocket::WebSocketMessage;
 impl ConnectionManager {
     /// Broadcast a message to all connections (optimized with Arc)
     ///
-    /// Security fix: Handle broadcast errors properly and clean up failed connections.
+    /// Handle broadcast errors properly and clean up failed connections.
     /// Connections whose receiver has been dropped are removed from the manager
     /// so subsequent broadcasts do not repeatedly attempt to deliver to dead channels.
     pub async fn broadcast(&self, message: &Arc<WebSocketMessage>) {

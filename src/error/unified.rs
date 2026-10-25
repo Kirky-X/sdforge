@@ -5,7 +5,7 @@
 //! All protocol error responses share one structure — error code, message,
 //! and the ambient request `trace_id` (from the request context when the
 //! `context` feature is on). This collapses the historical HTTP-400 vs
-//! gRPC-422 divergence (SIMPL-001) onto a single payload shape with a
+//! gRPC-422 divergence onto a single payload shape with a
 //! per-protocol status mapping table.
 //!
 //! ```json

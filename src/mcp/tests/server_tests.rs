@@ -167,7 +167,7 @@ fn test_server_get_info() {
     assert!(!info.server_info.version.is_empty());
 }
 
-// vuln-0002: end-to-end tests for input_schema validation in call_tool_internal
+// End-to-end tests for input_schema validation in call_tool_internal
 //
 // These tests verify that `call_tool_internal` rejects arguments that violate
 // the tool's `input_schema` BEFORE the tool's `call` method is invoked.

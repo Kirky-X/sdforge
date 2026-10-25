@@ -175,7 +175,7 @@ impl SyncCache for OxcacheSyncCache {
                             &[("key", format!("{key:?}")), ("error", e.to_string())]
                         )
                     ); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
-                    // 契约修复：删除失败 = 键未被删除，必须返回 false，
+                    // 删除失败 = 键未被删除，必须返回 false，
                     // 不能把 `existed` 当作删除成功（此前违反 trait 契约）。
                     return false;
                 }
@@ -193,7 +193,7 @@ impl SyncCache for OxcacheSyncCache {
                         &[("key", format!("{key:?}")), ("error", e.to_string())]
                     )
                 ); // codeql[rust/cleartext-logging]: cache key 非敏感，仅运维排查
-                // 契约修复：删除失败返回 false（键仍存在），调用方不得误以为已删除。
+                // 删除失败返回 false（键仍存在），调用方不得误以为已删除。
                 return false;
             }
             idx.remove(key);

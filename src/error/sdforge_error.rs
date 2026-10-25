@@ -63,15 +63,15 @@ impl SdForgeError {
 
     /// Get a sanitized error message for external display
     ///
-    /// HIGH 修复：`Internal` 此前原样返回内部消息（与 `ApiError::Internal`
+    /// `Internal` 此前原样返回内部消息（与 `ApiError::Internal`
     /// 的脱敏行为矛盾），原始消息可能含主机名/连接串等并进入外部输出。
     /// 现在统一返回通用脱敏文案；完整细节仍留在 Display/Debug（日志）中。
+    /// 脱敏文案取自内建目录（键 `api-error-internal-generic`），随活动
+    /// locale 变化；与 `ApiError::sanitized_message` 同一约定。
     pub fn sanitized_message(&self) -> String {
         match self {
             SdForgeError::Api(err) => err.sanitized_message(),
-            SdForgeError::Internal(_) => {
-                "An internal error occurred. Please try again later.".to_string()
-            }
+            SdForgeError::Internal(_) => crate::i18n::t("api-error-internal-generic", &[]),
             #[cfg(any(feature = "http", feature = "security"))]
             other => other.to_string(),
         }
@@ -133,8 +133,8 @@ impl SdForgeError {
             ),
             SdForgeError::Internal(_) => Self::service_error_for_status(
                 500,
-                // HIGH 修复：与 sanitized_message 一致地脱敏，原始消息不进 HTTP 响应体
-                "An internal error occurred. Please try again later.".to_string(),
+                // 与 sanitized_message 一致地脱敏，原始消息不进 HTTP 响应体
+                crate::i18n::t("api-error-internal-generic", &[]),
                 serde_json::json!({ "type": "internal" }),
             ),
         }
@@ -251,7 +251,7 @@ mod tests {
     }
 
     /// Test sanitized_message for the Internal variant returns the sanitized
-    /// generic message (HIGH 修复回归：原始消息不再进外部输出).
+    /// generic message (原始消息不再进外部输出).
     #[test]
     fn test_sanitized_message_internal() {
         let err = SdForgeError::internal("my internal message");
@@ -291,7 +291,7 @@ mod tests {
     }
 
     /// Test to_service_error for the Internal variant produces a 500
-    /// ServiceError with a sanitized message (HIGH 修复回归).
+    /// ServiceError with a sanitized message.
     #[test]
     fn test_to_service_error_internal() {
         let err = SdForgeError::internal("custom internal message");
