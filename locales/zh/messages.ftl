@@ -146,6 +146,7 @@ websocket-connections-lock-poisoned-broadcast = websocket 连接锁已中毒；�
 websocket-connections-lock-poisoned-add = websocket 连接锁已中毒；add_connection 已跳过
 websocket-connections-lock-poisoned-remove = websocket 连接锁已中毒；remove_connection 已跳过
 websocket-connections-lock-poisoned-get = websocket 连接锁已中毒；get_connection 返回 None
+websocket-auth-not-configured = WebSocket 握手放行未认证连接：未配置 auth 与 api_key_auth
 
 
 # --- inventory 引导 --------------------------------------------------------------------------------------

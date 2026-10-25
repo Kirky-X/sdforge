@@ -416,6 +416,20 @@ async fn handle_socket_inner(
 
 use crate::websocket::WebSocketConnection;
 
+/// 握手未配置认证时的告警只打一次（路由器通常按进程构造一次，但调用方
+/// 也可能在请求路径上反复构造）。
+#[cfg(feature = "security")]
+static WS_UNAUTHENTICATED_WARNED: std::sync::Once = std::sync::Once::new();
+
+/// WebSocket 握手未配置任何认证凭据时对所有连接放行——显式告警，不得让
+/// 调用方误以为握手已受保护。
+#[cfg(feature = "security")]
+fn warn_unauthenticated_handshake() {
+    WS_UNAUTHENTICATED_WARNED.call_once(|| {
+        log::warn!("{}", crate::i18n::t("websocket-auth-not-configured", &[]));
+    });
+}
+
 /// Build WebSocket router with default connection manager
 ///
 /// This function collects all WebSocket routes registered via `inventory::submit!`
@@ -426,6 +440,10 @@ use crate::websocket::WebSocketConnection;
 ///
 /// # Returns
 /// A configured Axum Router ready to handle WebSocket connections
+///
+/// # Note
+/// The default configuration carries no credential validator, so the handshake
+/// accepts every connection; building without authentication logs a warning.
 pub fn build() -> Router {
     build_with_config(WebSocketConfig::default())
 }
@@ -450,6 +468,11 @@ pub fn build() -> Router {
 /// let router = build_with_config(config);
 /// ```
 pub fn build_with_config(config: WebSocketConfig) -> Router {
+    #[cfg(feature = "security")]
+    if config.auth.is_none() && config.api_key_auth.is_none() {
+        warn_unauthenticated_handshake();
+    }
+
     let mut router = Router::new();
     let manager = Arc::new(ConnectionManager::new());
     let state = Arc::new(SdForgeState::with_config(config, manager));

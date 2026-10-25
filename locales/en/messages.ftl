@@ -148,6 +148,7 @@ websocket-connections-lock-poisoned-broadcast = websocket connections lock poiso
 websocket-connections-lock-poisoned-add = websocket connections lock poisoned; add_connection skipped
 websocket-connections-lock-poisoned-remove = websocket connections lock poisoned; remove_connection skipped
 websocket-connections-lock-poisoned-get = websocket connections lock poisoned; get_connection returned None
+websocket-auth-not-configured = WebSocket handshake accepts unauthenticated connections: neither auth nor api_key_auth is configured
 
 
 # --- inventory bootstrap ----------------------------------------------------------------------
