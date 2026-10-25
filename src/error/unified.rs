@@ -11,6 +11,10 @@
 //! ```json
 //! {"code":"BAD_REQUEST","message":"...","trace_id":"trace-...","field":"age"}
 //! ```
+//!
+//! 同一状态码下可能有多种错误（429 的速率超限与配额用尽共享状态码与机器码
+//! `TOO_MANY_REQUESTS`）。自由文本 `message` 是本地化文案、不构成契约，故
+//! 这类错误另带机器可读的 `details`（见 [`UnifiedError::details`]）。
 
 use serde::Serialize;
 
@@ -27,6 +31,14 @@ pub struct UnifiedError {
     /// Offending field for validation-type errors.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub field: Option<String>,
+    /// Machine-readable details for errors that share one status code and one
+    /// machine code — e.g. 429 `RateLimitExceeded` vs `QuotaExhausted`.
+    ///
+    /// `details.type` 取 `ApiError` 变体名（与 `ApiError` 自身的 serde 判
+    /// 别名一致），不本地化；只有需要区分的变体才带此字段，其余错误载荷
+    /// 形状不变。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details: Option<serde_json::Value>,
 }
 
 impl UnifiedError {
@@ -37,6 +49,7 @@ impl UnifiedError {
             message: message.into(),
             trace_id: current_trace_id(),
             field: None,
+            details: None,
         }
     }
 
@@ -121,7 +134,33 @@ impl From<&crate::core::ApiError> for UnifiedError {
             message,
             trace_id: current_trace_id(),
             field,
+            details: shared_status_details(e),
         }
+    }
+}
+
+/// 429 家族的判别细节。
+///
+/// 速率超限与配额用尽共享状态码 429 与机器码 `TOO_MANY_REQUESTS`——客户端
+/// 需据此决定退避重试还是停止重试，但 `message` 是本地化文案、不构成契约，
+/// 故另给机器可读的 `details.type`（`ApiError` 变体名）与各自的计数字段。
+pub(crate) fn shared_status_details(e: &crate::core::ApiError) -> Option<serde_json::Value> {
+    use crate::core::ApiError;
+    match e {
+        ApiError::RateLimitExceeded {
+            limit,
+            window_seconds,
+        } => Some(serde_json::json!({
+            "type": "RateLimitExceeded",
+            "limit": limit,
+            "window_seconds": window_seconds,
+        })),
+        ApiError::QuotaExhausted { used, total } => Some(serde_json::json!({
+            "type": "QuotaExhausted",
+            "used": used,
+            "total": total,
+        })),
+        _ => None,
     }
 }
 
@@ -358,6 +397,49 @@ mod tests {
             "internal message must be sanitized, got: {}",
             u.message
         );
+    }
+
+    /// 429 家族共享状态码与机器码：载荷须带机器可读的判别细节，客户端
+    /// 才能区分「退避重试」（速率超限）与「停止重试」（配额用尽）。
+    #[test]
+    fn rate_limit_family_carries_machine_readable_discriminator() {
+        let rate = ApiError::RateLimitExceeded {
+            limit: 10,
+            window_seconds: 60,
+        };
+        let quota = ApiError::QuotaExhausted { used: 1, total: 2 };
+
+        // 状态码与机器码仍同源同值——区分位不另立错误码。
+        assert_eq!(mapping_for(&rate), mapping_for(&quota));
+
+        let u = UnifiedError::from(&rate);
+        let details = u.details.as_ref().expect("rate limit details");
+        assert_eq!(details["type"], "RateLimitExceeded");
+        assert_eq!(details["limit"], 10);
+        assert_eq!(details["window_seconds"], 60);
+
+        let u = UnifiedError::from(&quota);
+        let details = u.details.as_ref().expect("quota details");
+        assert_eq!(details["type"], "QuotaExhausted");
+        assert_eq!(details["used"], 1);
+        assert_eq!(details["total"], 2);
+
+        // 判别位随载荷下发，客户端不必解析本地化文案。
+        let json = u.to_json();
+        assert_eq!(json["code"], "TOO_MANY_REQUESTS");
+        assert_eq!(json["details"]["type"], "QuotaExhausted");
+    }
+
+    /// 不需要区分的错误不带 `details` 字段：载荷形状保持不变。
+    #[test]
+    fn errors_without_shared_status_carry_no_details() {
+        let not_found = ApiError::NotFound {
+            resource: "x".into(),
+            resource_id: None,
+        };
+        let u = UnifiedError::from(&not_found);
+        assert!(u.details.is_none());
+        assert!(u.to_json().get("details").is_none());
     }
 
     #[cfg(feature = "grpc")]

@@ -460,9 +460,15 @@ impl ApiError {
             ),
         };
 
+        // 429 家族共享状态码与机器码，MCP 输出与 HTTP/gRPC 载荷同样带
+        // 机器可读的判别细节（见 `error::unified::shared_status_details`）。
+        let mut error = serde_json::json!({ "code": code, "message": message });
+        if let Some(details) = crate::error::unified::shared_status_details(self) {
+            error["details"] = details;
+        }
         serde_json::to_string(&serde_json::json!({
             "success": false,
-            "error": { "code": code, "message": message }
+            "error": error
         }))
         .unwrap_or_else(|_| {
             // HIGH 修复：fallback 必须转义 message，防止引号/反斜杠

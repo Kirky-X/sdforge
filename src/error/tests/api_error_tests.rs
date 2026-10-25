@@ -1031,6 +1031,11 @@ fn test_quota_exhausted_preserves_quota_semantics() {
     let json = err.to_mcp_json();
     assert!(json.contains("TOO_MANY_REQUESTS"), "json: {}", json);
     assert!(json.contains("850"), "json must carry used: {}", json);
+    // 429 家族的判别位随 MCP 输出下发：客户端据此区分退避重试与停止重试。
+    let parsed: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+    assert_eq!(parsed["error"]["details"]["type"], "QuotaExhausted");
+    assert_eq!(parsed["error"]["details"]["used"], 850);
+    assert_eq!(parsed["error"]["details"]["total"], 1000);
 
     // HTTP 输出 429 且 details 携带 used/total
     let svc = err.to_service_error();
