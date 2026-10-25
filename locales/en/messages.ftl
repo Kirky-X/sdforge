@@ -13,6 +13,7 @@
 # --- HTTP / security ---------------------------------------------------------
 http-unauthorized = Unauthorized
 http-route-not-found = Route not found
+http-builtin-route-skipped = Built-in route { $path } was skipped: the merged router already serves this path, so the caller's route takes precedence
 http-security-header-invalid-name = Invalid security header name { $name }: { $error }
 http-security-header-invalid-value = Invalid security header value for { $name }: { $error }
 
@@ -147,6 +148,7 @@ websocket-connections-lock-poisoned-broadcast = websocket connections lock poiso
 websocket-connections-lock-poisoned-add = websocket connections lock poisoned; add_connection skipped
 websocket-connections-lock-poisoned-remove = websocket connections lock poisoned; remove_connection skipped
 websocket-connections-lock-poisoned-get = websocket connections lock poisoned; get_connection returned None
+
 
 # --- inventory bootstrap ----------------------------------------------------------------------
 inventory-mutex-poisoned = inventory Mutex poisoned: { $error }

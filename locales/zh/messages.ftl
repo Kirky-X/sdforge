@@ -11,6 +11,7 @@
 # --- HTTP / 安全 ---------------------------------------------------------------
 http-unauthorized = 未授权
 http-route-not-found = 路由未找到
+http-builtin-route-skipped = 内建路由 { $path } 已跳过: 合并后的路由器已占用该路径，以调用方路由为准
 http-security-header-invalid-name = 安全响应头名称非法 { $name }: { $error }
 http-security-header-invalid-value = 安全响应头取值非法 { $name }: { $error }
 
@@ -145,6 +146,7 @@ websocket-connections-lock-poisoned-broadcast = websocket 连接锁已中毒；�
 websocket-connections-lock-poisoned-add = websocket 连接锁已中毒；add_connection 已跳过
 websocket-connections-lock-poisoned-remove = websocket 连接锁已中毒；remove_connection 已跳过
 websocket-connections-lock-poisoned-get = websocket 连接锁已中毒；get_connection 返回 None
+
 
 # --- inventory 引导 --------------------------------------------------------------------------------------
 inventory-mutex-poisoned = inventory Mutex 已中毒：{ $error }

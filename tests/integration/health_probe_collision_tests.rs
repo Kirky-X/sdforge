@@ -4,10 +4,10 @@
 //! takes precedence — `build_with_config_ext` skips the built-in probe instead
 //! of panicking on a duplicate route.
 //!
-//! The precedence check only scans inventory registrations
-//! (`http::route_path_taken`), so a path claimed by the caller's `base`
-//! router is invisible to it: the built-in probe is still mounted and axum
-//! rejects the duplicate route.
+//! The precedence check covers both inventory registrations
+//! (`http::route_path_taken`) and the router the caller merges in
+//! (`http::router_path_taken`), so a path claimed by the caller's `base`
+//! router also lets the caller's route win.
 //!
 //! Isolated in its own test binary because `inventory::submit!` registers
 //! process-wide and would leak the shadow route into sibling tests.
@@ -67,14 +67,6 @@ fn test_config() -> SdForgeConfig {
     }
 }
 
-fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
-    payload
-        .downcast_ref::<String>()
-        .cloned()
-        .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
-        .unwrap_or_default()
-}
-
 #[tokio::test]
 async fn user_route_takes_precedence_over_builtin_healthz() {
     let config = test_config();
@@ -93,26 +85,50 @@ async fn user_route_takes_precedence_over_builtin_healthz() {
     assert_eq!(resp.status(), axum::http::StatusCode::IM_A_TEAPOT);
 }
 
-/// `route_path_taken` only scans inventory registrations, so a path claimed
-/// by the caller's `base` router is not detected: the built-in probe is still
-/// mounted on the merged router and axum rejects the duplicate route.
+/// A path claimed by the caller's `base` router is invisible to the inventory
+/// scan: the built-in probe must still yield to the caller instead of letting
+/// axum reject the duplicate route at build time ("Overlapping method route").
 #[tokio::test]
-async fn base_claiming_readyz_panics_with_overlapping_method_route() {
+async fn base_claiming_readyz_wins_over_builtin_probe() {
     let config = test_config();
     let base = axum::Router::new().route(
         "/readyz",
         axum::routing::get(|| async { (axum::http::StatusCode::IM_A_TEAPOT, "user-owned readyz") }),
     );
-    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        build_with_config_ext(base, &config)
-    }));
-    let payload = match outcome {
-        Ok(_) => panic!("base-claimed /readyz must not silently win over the built-in probe"),
-        Err(payload) => payload,
-    };
-    let msg = panic_message(payload.as_ref());
-    assert!(
-        msg.contains("Overlapping method route"),
-        "unexpected panic message: {msg}"
+    let router = build_with_config_ext(base, &config).unwrap(); // must not panic
+    use tower::ServiceExt;
+    let resp = router
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/readyz")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), axum::http::StatusCode::IM_A_TEAPOT);
+}
+
+/// Skipping the claimed path must not take the other probe down with it.
+#[tokio::test]
+async fn base_claiming_readyz_keeps_builtin_healthz() {
+    let config = test_config();
+    let base = axum::Router::new().route(
+        "/readyz",
+        axum::routing::get(|| async { (axum::http::StatusCode::IM_A_TEAPOT, "user-owned readyz") }),
     );
+    let router = build_with_config_ext(base, &config).unwrap();
+    use tower::ServiceExt;
+    let resp = router
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/healthz")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // `/healthz` is claimed by the shadow inventory route, so it answers with
+    // the user-owned handler rather than the built-in probe.
+    assert_eq!(resp.status(), axum::http::StatusCode::IM_A_TEAPOT);
 }

@@ -79,6 +79,9 @@ pub(crate) use http_impl::{apply_security_headers, get_or_generate_request_id};
 pub(crate) use http_impl::resolve_route_path;
 #[cfg(any(feature = "health", feature = "metrics"))]
 pub use http_impl::route_path_taken;
+// 内建探针/metrics 挂载入口：判定调用方合并进来的路由器是否已占用该路径。
+#[cfg(any(feature = "health", feature = "metrics"))]
+pub(crate) use http_impl::mount_builtin_route;
 
 /// Request ID header name
 // 非 context 态由 request-id 中间件消费（调用点在 not(context) 门内），

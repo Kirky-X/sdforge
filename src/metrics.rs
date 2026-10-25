@@ -182,19 +182,14 @@ pub async fn metrics_handler() -> impl IntoResponse {
     )
 }
 
-/// Mount `GET /metrics` unless an inventory-registered route already claims
-/// the path.
+/// Mount `GET /metrics` unless the path is already served.
 ///
-/// The claim check ([`crate::http::route_path_taken`]) scans inventory
-/// registrations only, so a `/metrics` path owned by a router the caller
-/// merges in stays invisible here: the built-in endpoint is still mounted on
-/// the merged router and axum rejects the duplicate route.
+/// The claim check ([`crate::http::mount_builtin_route`]) skips
+/// inventory-registered routes and the router the caller merged in, so a
+/// caller-owned `/metrics` wins instead of colliding with the built-in
+/// endpoint.
 pub(crate) fn mount_metrics(router: axum::Router) -> axum::Router {
-    if !crate::http::route_path_taken("/metrics") {
-        router.route("/metrics", axum::routing::get(metrics_handler))
-    } else {
-        router
-    }
+    crate::http::mount_builtin_route(router, "/metrics", axum::routing::get(metrics_handler))
 }
 
 /// Request-recording middleware factory (installed by `build_with_config_ext`).

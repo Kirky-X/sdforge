@@ -106,7 +106,8 @@ pub(crate) fn apply_security_headers(
 ///
 /// Built-in probe/metrics mounting skips such paths to avoid axum
 /// duplicate-route panics. Paths owned by a router the caller merges in are
-/// not visible here — axum exposes no way to enumerate a router's routes.
+/// not visible here — axum exposes no way to enumerate a router's routes;
+/// [`router_path_taken`] covers that gap.
 // 消费方：health 探针挂载、metrics 挂载、health 门控测试——
 // 两 feature 皆关时无消费方，不参与编译。
 #[cfg(any(feature = "health", feature = "metrics"))]
@@ -131,6 +132,51 @@ pub fn route_path_taken(path: &str) -> bool {
         }
     }
     taken
+}
+
+/// True when `router` already serves `GET path`.
+///
+/// axum 的 `Router` 不提供路由枚举 API（只有 `has_routes`），无法在注册前
+/// 读出已注册的路径；这里用「试注册」判定：在路由器副本上注册一条 GET
+/// 路由，与既有 GET 路由重叠时 axum 会 panic（"Overlapping method route"），
+/// 据此认定该路径已被占用。试注册期间临时静音 panic hook，避免 axum 内部
+/// panic 的噪声落到 stderr。
+#[cfg(any(feature = "health", feature = "metrics"))]
+pub(crate) fn router_path_taken(router: &Router, path: &str) -> bool {
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let probe = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        router.clone().route(path, axum::routing::get(|| async {}))
+    }));
+    std::panic::set_hook(previous);
+    probe.is_err()
+}
+
+/// Mount a built-in route at `path` unless the path is already served.
+///
+/// Two kinds of owners are skipped, both letting the caller's route win —
+/// mounting a duplicate path would make axum panic at build time
+/// ("Overlapping method route"):
+///
+/// * inventory-registered routes ([`route_path_taken`]);
+/// * the router the caller merged in ([`router_path_taken`]).
+#[cfg(any(feature = "health", feature = "metrics"))]
+pub(crate) fn mount_builtin_route(
+    router: Router,
+    path: &'static str,
+    handler: axum::routing::MethodRouter,
+) -> Router {
+    if route_path_taken(path) {
+        return router;
+    }
+    if router_path_taken(&router, path) {
+        log::warn!(
+            "{}",
+            crate::i18n::t("http-builtin-route-skipped", &[("path", path.to_string())])
+        );
+        return router;
+    }
+    router.route(path, handler)
 }
 
 /// Prevent linker from optimizing away inventory registrations
@@ -337,12 +383,10 @@ pub fn build_with_redirect() -> Router {
 /// refuses to merge two routers that both carry a fallback, and the framework
 /// router installs the unified not-found fallback.
 ///
-/// Panics if `base` claims a built-in probe path with the same method while no
-/// inventory registration claims that path — `GET /healthz` or `GET /readyz`
-/// with the `health` feature, `GET /metrics` with the `metrics` feature. The
-/// probe mounting skips inventory-claimed paths only, and axum cannot
-/// enumerate the routes of a merged router, so axum rejects the duplicate
-/// route at build time ("Overlapping method route").
+/// A `base` that claims a built-in probe path (`GET /healthz` or `GET /readyz`
+/// with the `health` feature, `GET /metrics` with the `metrics` feature) does
+/// not panic: the caller's route takes precedence and the built-in probe is
+/// skipped with a warning.
 pub fn build_with_config_ext(
     base: Router,
     config: &crate::config::SdForgeConfig,
@@ -373,7 +417,7 @@ pub fn build_with_config_ext(
 ///
 /// # Panics
 /// Panics under the same conditions as [`build_with_config_ext`] (own
-/// fallback, or a built-in probe path claimed with the same method).
+/// fallback).
 #[cfg(feature = "ratelimit-http")]
 pub async fn build_with_config_ext_rate_limited(
     base: Router,

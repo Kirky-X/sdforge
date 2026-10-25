@@ -699,20 +699,15 @@ pub async fn readyz_handler() -> Response {
 }
 
 /// Mount `/healthz` and `/readyz` on `router`, skipping paths already claimed
-/// by inventory-registered routes.
+/// by inventory-registered routes or by the router the caller merged in.
 ///
-/// The claim check ([`crate::http::route_path_taken`]) scans inventory
-/// registrations only, so a path owned by a router the caller merges in stays
-/// invisible here: the built-in probe is still mounted on the merged router
-/// and axum rejects the duplicate route.
+/// 占用判定见 [`crate::http::mount_builtin_route`]：调用方路由优先，内建
+/// 探针让位——重复挂载会让 axum 在构建期 panic。
 pub fn mount_probes(router: axum::Router) -> axum::Router {
-    let mut router = router;
-    if !crate::http::route_path_taken("/healthz") {
-        router = router.route("/healthz", axum::routing::get(healthz_handler));
-    }
-    if !crate::http::route_path_taken("/readyz") {
-        router = router.route("/readyz", axum::routing::get(readyz_handler));
-    }
+    let mut router =
+        crate::http::mount_builtin_route(router, "/healthz", axum::routing::get(healthz_handler));
+    router =
+        crate::http::mount_builtin_route(router, "/readyz", axum::routing::get(readyz_handler));
     router
 }
 
