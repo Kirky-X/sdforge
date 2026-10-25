@@ -22,18 +22,17 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
-# log facade：logging 示例演示 `log::info!` 等调用经 inklog 桥零改动路由
+# logging 示例演示 log::info! 经 inklog 桥零改动路由
 log = { workspace = true }
 # inventory/axum/clap/rmcp/tonic/prost 均由 sdforge re-export
 utoipa = { workspace = true }
 oxcache = { workspace = true, optional = true }
-# 经 workspace 继承（同 oxcache）：自研依赖定值只需改根清单一处，
-# 避免成员内联版本号漏改而漂移
+# 经 workspace 继承：自研依赖定值只需改根清单一处，避免成员内联版本漏改漂移
 dbnexus = { workspace = true, optional = true }
 
 [features]
 default = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "idempotency_examples", "cache_examples", "grpc_examples", "logging_examples", "openapi_examples", "cli_examples", "docs_examples", "combined_examples"]
-# `*_examples` features are the user-facing toggle (kept for backward compatibility).
+# *_examples 为用户开关（向后兼容保留）
 http_examples = ["http"]
 mcp_examples = ["mcp"]
 websocket_examples = ["websocket"]
@@ -46,11 +45,7 @@ logging_examples = ["logging"]
 openapi_examples = ["openapi", "http_examples"]
 cli_examples = ["cli"]
 docs_examples = ["docgen"]
-combined_examples = ["http_examples", "mcp_examples", "websocket_examples",
-                     "streaming_examples", "security_examples", "cache_examples",
-                     "grpc_examples", "logging_examples", "openapi_examples",
-                     "cli_examples", "docs_examples"]
-# Ecosystem examples
+combined_examples = ["http_examples", "mcp_examples", "websocket_examples", "streaming_examples", "security_examples", "cache_examples", "grpc_examples", "logging_examples", "openapi_examples", "cli_examples", "docs_examples"]
 oxcache_admin_example = ["http_examples", "cache_examples", "dep:oxcache"]
 dbnexus_gateway_example = ["http_examples", "dep:dbnexus"]
 
@@ -59,22 +54,21 @@ http = ["sdforge/http"]
 mcp = ["sdforge/mcp"]
 websocket = ["sdforge/websocket"]
 streaming = ["sdforge/streaming"]
-# security 本地同时启用 ratelimit，对齐 sdforge 的 security → ratelimit 链
+# 对齐 sdforge 的 security → ratelimit 链
 security = ["sdforge/security", "ratelimit"]
 cache = ["sdforge/cache"]
 idempotency = ["sdforge/idempotency"]
 grpc = ["sdforge/grpc"]
-# grpc_tls：与 sdforge grpc-tls 同门控，保证任意组合下字段存在性一致
+# 与 sdforge grpc-tls 同门控
 grpc_tls = ["sdforge/grpc-tls"]
-# logging（自研结构化日志栈）已在 0.5.0-rc 期删除；structured 示例
-# 迁移到 inklog LoggerManager，本别名层 feature 转指 sdforge/inklog
+# logging 自研日志栈已删除；structured 示例迁移到 inklog，本别名转指 sdforge/inklog
 logging = ["sdforge/inklog"]
 openapi = ["sdforge/openapi"]
 cli = ["sdforge/cli"]
 docgen = ["sdforge/docgen"]
-# 兼容别名：旧 feature 名 docs 转发到 docgen（随主仓正名迁移）
+# 兼容别名：旧名 docs 转发到 docgen
 docs = ["docgen"]
-# ratelimit 别名：启用 sdforge 纯限流核心（无 http），对齐字段门控
+# 启用 sdforge 纯限流核心（无 http）
 ratelimit = ["sdforge/ratelimit"]
 
 [[example]]
