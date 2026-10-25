@@ -110,14 +110,32 @@
 - **库侧隔离不生效**：新增 `db-permission` 特性（蕴含 `dbnexus/permission`），
   `DbGateway::with_session_role` 的会话角色由此被 dbnexus 逐表权限检查真正强制
   执行（fail-closed）；未开启时该调用是空操作，现显式告警（此前静默声称隔离生效）
+- **WebSocket 握手无认证配置不再静默**：未配置 `auth` 与 `api_key_auth` 时握手放行
+  所有连接，此前没有任何提示；现在构建路由器时告警一次（新增消息键
+  `websocket-auth-not-configured`），不得让调用方误以为握手已受保护。默认行为不变
+  （仍不强制认证），需强制认证的宿主用 `websocket::build_with_config` 注入凭据校验器
+
+### 修复 (Fixed)
+
+- **内建探针与调用方路由同名不再 panic**：调用方 `base` 声明 `GET /healthz` /
+  `GET /readyz`（或 `GET /metrics`）时，框架此前仍挂载同名内建路由，axum 在构建期
+  panic（`Overlapping method route`）——现在调用方路由优先，内建探针跳过并告警
+  （占用判定以「试注册」完成：axum 不提供路由枚举接口）；其余内建探针不受影响
 
 ### 变更 (Changed)
 
 - **探针路径归属显式化**：内置探针（`/healthz`、`/readyz`）与 `/metrics` 端点的
-  占用检查只扫 inventory 注册的路由——同名路径由 inventory 路由接管，内置挂载
-  跳过；调用方 `base` 声明的同名路径不在检查范围内（axum 不提供路由枚举接口，
-  框架无从得知），两者同时存在时构建期 panic（axum `Overlapping method route`）。
-  此前文档只描述了 inventory 一侧，调用方无从预判该 panic
+  占用检查覆盖两个来源——inventory 注册的路由与调用方 `base` 声明的同名路径：
+  同名路径由调用方接管，内置挂载跳过并告警（axum 不提供路由枚举接口，框架以
+  「试注册」判定占用）；此前调用方 `base` 声明的同名路径不在检查范围内，两者
+  同时存在时构建期 panic（axum `Overlapping method route`）
+- **429 家族给出机器可读的判别位**：速率超限（`RateLimitExceeded`）与配额用尽
+  （`QuotaExhausted`）共享状态码 429 与机器码 `TOO_MANY_REQUESTS`，此前只能靠本地化
+  文案区分（文案不构成契约）——HTTP 响应体、gRPC `Status::details` 与 MCP 输出现统一
+  带 `details.type`（`RateLimitExceeded` / `QuotaExhausted`）与各自的计数字段，与
+  `SdForgeError` 面的 `details.type` 约定一致；状态码与机器码不变（仍是一状态一码）。
+  `UnifiedError` 因此新增公开字段 `details`（`None` 时不序列化，载荷形状不变）；
+  以结构体字面量构造 `UnifiedError` 的下游需补该字段
 - **限流装配点显式化**：`http::build_with_config` 不再声称装配限流（限流器是异步
   构造的）；新增异步入口 `http::build_with_config_rate_limited(&config).await`，
   `[security.rate_limit]` 由此真正生效（限流在鉴权之外，探针与 `/metrics` 除外）

@@ -201,7 +201,7 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 - `grpc_code_for(&ApiError) -> tonic::Code`（feature = `grpc`）：同一 `ApiError` → gRPC 状态码
 - `grpc_code_for_http_status(u16) -> tonic::Code`（feature = `grpc`）：**跨协议行为契约表**，HTTP 状态 → gRPC 状态码的对齐轴（与 `code_for_http_status` 同行集）
 - `code_for_http_status(u16) -> &'static str`：HTTP 状态 → 机器错误码
-- `UnifiedError`：跨协议错误载荷 `{code, message, trace_id?, field?}`，HTTP body 与 gRPC `Status::details` 共享同一形状
+- `UnifiedError`：跨协议错误载荷 `{code, message, trace_id?, field?, details?}`，HTTP body 与 gRPC `Status::details` 共享同一形状；`details` 只在需要区分同状态码错误时出现（如 429 的 `RateLimitExceeded` / `QuotaExhausted`），`details.type` 取错误变体名（不本地化）
 
 **错误码行为契约表**（同一 `ApiError` 在两条协议 wire 上的取值；由
 `error_code_contract_tests` wire 级测试与 `unified` 单元测试全集 JOIN
@@ -221,6 +221,9 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 
 语义约定：400 = 语法畸形/缺参/解析失败（`InvalidInput`）；422 = 语义约束违反
 （`ValidationError` 及 `#[forge(validate)]` 违规，错误体含 `errors` 数组）。
+
+429 家族的变体区分由载荷 `details.type` 承载（`RateLimitExceeded` / `QuotaExhausted`），
+状态码与机器码仍是一状态一码：客户端据此决定退避重试还是停止重试，不解析本地化文案。
 
 **单一词表**：本表是框架唯一的机器错误码词表。`ApiError::code()` 是其唯一
 派生入口，HTTP 响应体（`UnifiedError`）、gRPC `Status::details`、
