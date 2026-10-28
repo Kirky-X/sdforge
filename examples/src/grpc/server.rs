@@ -25,7 +25,6 @@
 
 //! 参考型演示模块（未接线为 bin 目标）：handler 与辅助函数仅供文档阅读，
 //! 编译为库模块时允许保留未调用项。
-#![allow(dead_code)]
 
 use sdforge::core::ApiMetadata;
 #[allow(deprecated)]
@@ -170,6 +169,8 @@ pub async fn start_with_config(
 
 // Main Entry Point
 
+// 模板演示入口：lib 目标不编译为 binary main，供复制到 bin 使用。
+#[allow(dead_code)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🚀 SDForge gRPC Example");

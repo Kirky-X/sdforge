@@ -20,7 +20,6 @@
 
 // 参考型演示模块：handler/main 仅供文档阅读与 cargo run 演示，
 // lib target 下无调用方属预期，整体放行。
-#![allow(dead_code)]
 
 use sdforge::cache::{DashMapCache, SyncCache};
 use sdforge::prelude::*;
@@ -105,6 +104,8 @@ impl Default for SdForgeExampleState {
 /// Build an anonymous auth context for audit logging when no user context exists.
 ///
 /// Real applications would derive this from the authenticated request.
+// 仅被下方未注册端点的示例 handler（见 NOTE）调用。
+#[allow(dead_code)]
 fn anonymous_context() -> AuthContext {
     AuthContext::new(None, Vec::new(), AuthMetadata::new(None, None))
 }
@@ -122,6 +123,8 @@ fn anonymous_context() -> AuthContext {
 /// - Input validation
 /// - Audit logging
 /// - Caching
+// 业务逻辑示例（见上方 NOTE）：&SdForgeExampleState 非 axum extractor，不注册端点，无调用方。
+#[allow(dead_code)]
 async fn get_user(id: u64, state: &SdForgeExampleState) -> Result<UserResponse, ApiError> {
     let cache_key = format!("user:{}", id);
     if let Some(cached) = state.cache.get(&cache_key) {
@@ -199,6 +202,8 @@ async fn get_user(id: u64, state: &SdForgeExampleState) -> Result<UserResponse, 
 /// - Password strength checking
 /// - Duplicate detection
 /// - Audit logging with signature
+// 业务逻辑示例（见上方 NOTE）：不注册端点，无调用方。
+#[allow(dead_code)]
 async fn create_user(
     request: CreateUserRequest,
     state: &SdForgeExampleState,
@@ -280,6 +285,8 @@ async fn create_user(
 /// - Resource deletion
 /// - Cache invalidation
 /// - Critical action auditing
+// 业务逻辑示例（见上方 NOTE）：不注册端点，无调用方。
+#[allow(dead_code)]
 async fn delete_user(
     id: u64,
     state: &SdForgeExampleState,
@@ -324,6 +331,8 @@ async fn delete_user(
 // Main Entry Point
 
 /// Initialize and start the secure API server
+// 模板演示入口：lib 目标不编译为 binary main，供复制到 bin 使用。
+#[allow(dead_code)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🔐 SDForge Comprehensive Security Example");

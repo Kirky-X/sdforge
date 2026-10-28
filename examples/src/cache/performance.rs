@@ -17,7 +17,6 @@
 //! ```
 // 与 app_config/grpc server 等示例文件同惯例:业务 handler 展示集成方式,
 // 不接入 axum 路由,lib target 下按 crate 惯例整体放行 dead_code。
-#![allow(dead_code)]
 
 use sdforge::cache::{DashMapCache, SyncCache};
 use sdforge::prelude::*;
@@ -193,6 +192,8 @@ impl WriteThroughPattern {
 /// - Two-level caching
 /// - Cache promotion (→)
 /// - Serialization/deserialization
+// 业务逻辑示例（见上方 NOTE）：&TwoLevelCache 非 axum extractor，不注册端点，无调用方。
+#[allow(dead_code)]
 async fn get_product(id: u64, cache: &TwoLevelCache) -> Result<Product, ApiError> {
     let cache_key = format!("product:{}", id);
 
@@ -211,6 +212,8 @@ async fn get_product(id: u64, cache: &TwoLevelCache) -> Result<Product, ApiError
 }
 
 /// Simulated database fetch (expensive operation)
+// 业务逻辑示例：仅被上方未注册端点的 get_product 调用。
+#[allow(dead_code)]
 async fn fetch_product_from_database(id: u64) -> Result<Product, ApiError> {
     // Simulate database delay
     tokio::time::sleep(Duration::from_millis(100)).await;
@@ -230,6 +233,8 @@ async fn fetch_product_from_database(id: u64) -> Result<Product, ApiError> {
 /// - Cache-aside pattern
 /// - TTL-based caching
 /// - Expensive computation avoidance
+// 业务逻辑示例（见上方 NOTE）：&CacheAsidePattern 非 axum extractor，不注册端点，无调用方。
+#[allow(dead_code)]
 async fn compute_analytics(
     request: AnalyticsRequest,
     cache_pattern: &CacheAsidePattern,
@@ -260,6 +265,8 @@ pub struct AnalyticsRequest {
 }
 
 /// Perform expensive computation (simulated)
+// 业务逻辑示例：仅被上方未注册端点的 compute_analytics 调用。
+#[allow(dead_code)]
 async fn perform_expensive_computation(request: &AnalyticsRequest) -> ComputationResult {
     // Simulate expensive computation
     tokio::time::sleep(Duration::from_millis(500)).await;
@@ -277,6 +284,8 @@ async fn perform_expensive_computation(request: &AnalyticsRequest) -> Computatio
 
 // Main Entry Point
 
+// 模板演示入口：lib 目标不编译为 binary main，供复制到 bin 使用。
+#[allow(dead_code)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("⚡ SDForge Caching and Performance Example");

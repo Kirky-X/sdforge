@@ -25,7 +25,6 @@
 
 //! 参考型演示模块（未接线为 bin 目标）：handler 与辅助函数仅供文档阅读，
 //! 编译为库模块时允许保留未调用项。
-#![allow(dead_code)]
 
 use sdforge::i18n::t;
 use sdforge::inklog::{LoggerManager, init_inklog_logger};
@@ -54,6 +53,8 @@ keep_files = 5
 }
 
 /// 进程内唯一的临时目录（示例/测试用，不引入 tempfile 依赖）。
+// 测试（下方 cfg(test)）与模板 main 调用；check 非 test 态调用链经模板 main 判死。
+#[allow(dead_code)]
 fn scratch_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
         "sdforge-logging-example-{}-{}",
@@ -110,6 +111,8 @@ pub fn relax_level(manager: &LoggerManager) -> Result<(), sdforge::inklog::Inklo
 
 // Main Entry Point
 
+// 模板演示入口：lib 目标不编译为 binary main，供复制到 bin 使用。
+#[allow(dead_code)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", t("example-logging-title", &[]));
