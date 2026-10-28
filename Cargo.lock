@@ -2615,8 +2615,6 @@ dependencies = [
 [[package]]
 name = "inklog"
 version = "0.3.0-rc.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff319d72f10c1394f967dc7af3f2ca0355b46fe15a53acdfaaa67da5e5933ec9"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -2626,11 +2624,8 @@ dependencies = [
  "confers",
  "crossbeam-channel",
  "dirs",
- "fancy-regex",
- "futures",
  "ipnet",
  "is-terminal",
- "limiteron",
  "log",
  "nix",
  "owo-colors",
@@ -2647,6 +2642,7 @@ dependencies = [
  "toml",
  "tracing",
  "tracing-subscriber",
+ "trait-kit",
  "zeroize",
 ]
 
@@ -5493,12 +5489,16 @@ dependencies = [
 
 [[package]]
 name = "trait-kit"
-version = "0.5.0-rc.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3a15bc3746335eca355dad106884f3f938f66d8ce423f936911465ab4fdec1f"
+version = "0.5.0-rc.11"
 dependencies = [
+ "aho-corasick",
+ "fancy-regex",
  "fluent-bundle",
  "log",
+ "regex",
+ "serde_json",
+ "toml",
+ "tracing",
  "unic-langid",
 ]
 
