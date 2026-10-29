@@ -230,7 +230,10 @@ static CANCEL_PRODUCED: std::sync::LazyLock<std::sync::atomic::AtomicUsize> =
 async fn e2e_client_disconnect_stops_producer_within_bounds() {
     use std::sync::atomic::Ordering;
 
-    // 专用 handler：产出 256 项，每项后递增计数器。
+    // 专用 handler：产出 200_000 项，每项后递增计数器。总量必须显著
+    // 大于 HTTP/2 流控缓冲窗口（默认 64KB 量级，此处约数 MB）——否则
+    // 生产者会在客户端断开被感知前把全部产出塞进缓冲，背压从不介入，
+    // 「断开即停产」断言退化为负载竞速（CI 高负载下实测复现）。
     #[sdforge::forge(
         name = "e2e_stream_cancellable",
         version = "v1",
@@ -244,7 +247,7 @@ async fn e2e_client_disconnect_stops_producer_within_bounds() {
     {
         let (tx, response) = create_stream_channel::<String>(2);
         tokio::spawn(async move {
-            for i in 0..256u32 {
+            for i in 0..200_000u32 {
                 if tx.send(Ok(format!("tick-{i}"))).await.is_err() {
                     break; // 客户端断开 → 生产者及时退出
                 }
@@ -269,7 +272,7 @@ async fn e2e_client_disconnect_stops_producer_within_bounds() {
     drop(stream);
     drop(client);
 
-    // 生产者必须在有限时间内退出（远小于 256 项全部产出的量级）。
+    // 生产者必须在有限时间内退出（远小于 200_000 项全部产出的量级）。
     let deadline = std::time::Instant::now() + Duration::from_secs(3);
     while std::time::Instant::now() < deadline {
         tokio::time::sleep(Duration::from_millis(20)).await;
@@ -285,7 +288,7 @@ async fn e2e_client_disconnect_stops_producer_within_bounds() {
     // channel 容量上或已因断开退出）。
     let observed = CANCEL_PRODUCED.load(Ordering::SeqCst);
     assert!(
-        observed < 256,
-        "producer must stop (or block) after client disconnect; produced {observed}/256"
+        observed < 200_000,
+        "producer must stop (or block) after client disconnect; produced {observed}/200000"
     );
 }
