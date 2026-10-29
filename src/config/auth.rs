@@ -186,16 +186,16 @@ impl AuthConfig {
                 // 空串的 aud/iss 恒等于"不校验"（`Some("")` 会匹配空串声明），
                 // 配置面必须拒绝。
                 if audience.as_ref().is_some_and(|a| a.is_empty()) {
-                    return Err(crate::config::ConfigError::ValidationError(
-                        "JWT audience cannot be empty: an empty audience matches tokens with                          an empty aud claim"
-                            .into(),
-                    ));
+                    return Err(crate::config::ConfigError::ValidationError(crate::i18n::t(
+                        "config-auth-jwt-audience-empty",
+                        &[],
+                    )));
                 }
                 if issuer.as_ref().is_some_and(|i| i.is_empty()) {
-                    return Err(crate::config::ConfigError::ValidationError(
-                        "JWT issuer cannot be empty: an empty issuer matches tokens with an                          empty iss claim"
-                            .into(),
-                    ));
+                    return Err(crate::config::ConfigError::ValidationError(crate::i18n::t(
+                        "config-auth-jwt-issuer-empty",
+                        &[],
+                    )));
                 }
                 if secret.is_empty() {
                     return Err(crate::config::ConfigError::ValidationError(

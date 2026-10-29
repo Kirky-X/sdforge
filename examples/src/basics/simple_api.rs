@@ -41,8 +41,8 @@
 //!     tool_name = "get_hello",
 //!     description = "返回问候语"
 //!)]
-//! async fn get_hello -> Result<String, ApiError> {
-//!     Ok("Hello, World!".to_string)
+//! async fn get_hello() -> Result<String, ApiError> {
+//!     Ok("Hello, World!".to_string())
 //! }
 //! ```
 //!

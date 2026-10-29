@@ -1,10 +1,15 @@
 # SDForge Configuration Example
+#
+# SdForgeConfig recognizes only [server] / [authentication] / [timeout] /
+# [security] / [cache] sections (unknown keys are silently ignored), so every
+# section below is read by the framework.
 
 # Server Configuration
 [server]
 host = "0.0.0.0"
 port = 3000
 request_timeout_secs = 30
+# max_body_size = 10485760  # request body limit in bytes (default 10 MiB)
 
 # CORS Configuration (optional)
 [server.cors]
@@ -12,29 +17,41 @@ allowed_origins = ["http://localhost:3000", "https://example.com"]
 allowed_methods = ["GET", "POST", "PUT", "DELETE", "PATCH"]
 allowed_headers = ["Content-Type", "Authorization", "X-API-Key"]
 
-# Database Configuration
-[database]
-connection_string = "${DATABASE_URL}"
-max_connections = 10
-
 # Authentication Configuration
-# Supports: jwt, api_key, oauth2 (oauth2 not yet implemented)
+# Variants: jwt / api_key / none
 [authentication]
 type = "jwt"
 secret = "${JWT_SECRET}"
 
-# Alternative: API Key Authentication
-# [authentication]
-# type = "api_key"
-# header_name = "X-API-Key"
-# prefix = "Key "
+# Alternative: API Key Authentication (seeded keys required — an empty
+# key store fails the build instead of silently 401-locking every route)
+# [[authentication.keys]]
+# key = "replace-with-a-real-api-key"
+# permissions = []  # empty = authenticated but no permissions
 
-# Rate Limiting Configuration (optional)
-[rate_limit]
-requests = 100
-window_seconds = 60
+# Rate Limiting Configuration (optional; `security` feature. The limiteron
+# FlowControlConfig value is assembled by build_with_config_ext_rate_limited)
+[security.rate_limit]
+version = "1.0"
 
-# Logging Configuration
-[logging]
-level = "info"
-format = "json"
+[security.rate_limit.global]
+storage = "memory"
+cache = "memory"
+metrics = "prometheus"
+
+[[security.rate_limit.rules]]
+id = "http_default"
+name = "HTTP default rate limit"
+priority = 100
+
+[[security.rate_limit.rules.matchers]]
+type = "User"
+user_ids = ["*"]
+
+[[security.rate_limit.rules.limiters]]
+type = "TokenBucket"
+capacity = 100    # burst capacity
+refill_rate = 2   # tokens refilled per second (~120 requests/min steady state)
+
+[security.rate_limit.rules.action]
+on_exceed = "reject"

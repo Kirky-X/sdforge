@@ -10,8 +10,8 @@
 //!
 //! ```rust,no_run
 //! # use sdforge::prelude::ApiError;
-//! async fn simple -> Result<String, ApiError> {
-//!     Ok("Hello".to_string)
+//! async fn simple() -> Result<String, ApiError> {
+//!     Ok("Hello".to_string())
 //! }
 //! ```
 //!
@@ -25,8 +25,8 @@
 //!     data: Vec<i32>,
 //! }
 //!
-//! async fn json_response -> Result<Response, ApiError> {
-//!     Ok(Response { message: "OK".into, data: vec![1, 2, 3] })
+//! async fn json_response() -> Result<Response, ApiError> {
+//!     Ok(Response { message: "OK".into(), data: vec![1, 2, 3] })
 //! }
 //! ```
 //!
@@ -35,7 +35,7 @@
 //! ```rust,no_run
 //! # use serde_json;
 //! # use sdforge::prelude::ApiError;
-//! async fn json_value -> Result<serde_json::Value, ApiError> {
+//! async fn json_value() -> Result<serde_json::Value, ApiError> {
 //!     Ok(serde_json::json!({ "key": "value" }))
 //! }
 //! ```

@@ -179,7 +179,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 | HTTP + MCP 双协议 | `["http", "mcp"]` | 同一份代码双入口 |
 | 全量运行时特性 | `["full"]` | 全部协议与能力（26 项，含 `idempotency` 与部署面 HTTP TLS `serve-tls`/`tls-watch`；不含 gRPC 侧 `grpc-tls` 与 `simd-json`/`kit`/`limiteron-integration`/`schemars`/`ratelimit-dist`/`cache-l2`/`db-integration`/`sdk` 可选重依赖与 opt-in 面） |
 
-`grpc`、`websocket`、`streaming`、`openapi`、`cli`、`cache` 均可独立于 `http` 启用，任意组合。
+`grpc`、`streaming`、`openapi`、`cli`、`cache` 均可独立于 `http` 启用，任意组合；`websocket` 依赖 `http` + `streaming`。
 
 ---
 
@@ -210,8 +210,8 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>cache</code></td><td>oxcache 内存缓存（独立于 http）</td><td>❌</td></tr>
   <tr><td><code>cache-l2</code></td><td>oxcache Redis L2 缓存（跨副本共享缓存层，蕴含 cache；故障固有 fail-open：读 miss/写跳过）</td><td>❌</td></tr>
   <tr><td><code>idempotency</code></td><td>幂等重放防护（<code>Idempotency-Key</code> HTTP 中间件 + gRPC metadata 路径；依赖 http + cache）</td><td>❌</td></tr>
-  <tr><td><code>health</code></td><td><code>/healthz</code> <code>/readyz</code> 健康探针（<code>build_with_config_ext</code> 自动挂载，bypass 认证；inventory 注册的同名路由优先，<code>base</code> 声明的同名路径会在构建期 panic）</td><td>❌</td></tr>
-  <tr><td><code>metrics</code></td><td>Prometheus 文本格式 <code>/metrics</code> 端点（请求计数、延迟直方图、状态码分布；自研轻量渲染；inventory 注册的同名路由优先，<code>base</code> 声明的同名路径会在构建期 panic）</td><td>❌</td></tr>
+  <tr><td><code>health</code></td><td><code>/healthz</code> <code>/readyz</code> 健康探针（<code>build_with_config_ext</code> 自动挂载，bypass 认证；inventory 注册或 <code>base</code> 声明的同名路由优先，内置探针跳过并告警，不 panic）</td><td>❌</td></tr>
+  <tr><td><code>metrics</code></td><td>Prometheus 文本格式 <code>/metrics</code> 端点（请求计数、延迟直方图、状态码分布；自研轻量渲染；inventory 注册或 <code>base</code> 声明的同名路由优先，内置端点跳过并告警，不 panic）</td><td>❌</td></tr>
   <tr><td><code>graceful</code></td><td>优雅停机（SIGTERM/SIGINT：停止接新、排空在途、三阶段关闭）</td><td>❌</td></tr>
   <tr><td><code>serve-tls</code></td><td>HTTP TLS 终止（rustls aws-lc-rs：证书/密钥 PEM 加载、ALPN 可配置、<code>ReloadingTls</code> 热重载；每请求注入 <code>ConnectInfo</code>，握手/头读取超时护栏，停机编排与 graceful 共享收尾。与 gRPC 侧 <code>grpc-tls</code> 文档互链、实现独立）</td><td>❌</td></tr>
   <tr><td><code>tls-watch</code></td><td>TLS 证书去抖监听自动热重载（confers <code>FsWatcher</code> 监听 cert/key 文件变化驱动 <code>reload_async</code>；蕴含 <code>serve-tls</code>，重载失败保留旧证书）</td><td>❌</td></tr>
@@ -360,7 +360,7 @@ SDForge 由两个 crate 组成：`macros/sdforge-macros` 负责解析 `#[forge]`
 
 ### 🔄 核心执行路径
 
-以 HTTP 请求热路径为例：请求经中间件栈（限流 → 认证 → 安全头 / CORS）进入版本路由匹配 `/api/{version}`，由 forge handler 在统一 handler 契约（`HandlerArgs` + `HandlerState`）中执行业务逻辑，经 `ServiceResponse` 响应管道输出 JSON；MCP、gRPC、CLI 入口复用同一批 handler 与响应契约，中间件栈顺序、版本路由与响应管道由 `http::build()` / `build_with_config()` 装配。完整时序图与数据流见 [架构文档](docs/ARCHITECTURE.md#-数据流)。
+以 HTTP 请求热路径为例：请求经中间件栈（限流 → 认证 → 安全头 / CORS）进入版本路由匹配 `/api/{version}`，由 forge handler 在统一 handler 契约（`HandlerArgs` + `HandlerState`）中执行业务逻辑，经 `ServiceResponse` 响应管道输出 JSON；MCP、gRPC、CLI 入口复用同一批 handler 与响应契约，中间件栈顺序、版本路由与响应管道由 `http::build()` / `build_with_config_ext()` 装配。完整时序图与数据流见 [架构文档](docs/ARCHITECTURE.md#-数据流)。
 
 
 ### 🌐 一份注解，五种协议
@@ -480,7 +480,10 @@ CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `
 
 详见 [CHANGELOG.md](docs/CHANGELOG.md)。最近版本要点：
 
-- **[0.5.0-rc.8]** (2026-10-06)：MCP 认证贯通 call_tool 与 CLI 入口、`AuthConfig` 无 security 特性时 fail-closed；多协议契约对齐——Idempotency-Key 重放防护、RBAC/认证贯通 gRPC、统一错误映射、参数校验统一 422；异步健康检查与 `ReadinessRenderer` 渲染端口；OpenAPI 外部 spec 合并与 Swagger UI vendored 化（构建期零网络）；知识包 CLI（`--format json`/`docs --format agent`）；graceful 排空后钩子；三轮安全审查修复
+- **[0.5.0-rc.9]** (2026-10-19)：Swagger UI 托管自 vendor 化（移除 utoipa-swagger-ui，解除 docgen 下游依赖解析断裂；内嵌资产 4.11 MiB → 1.87 MiB）；发布依赖传播（oxcache / confers / dbnexus / trait-kit / inklog 提升，`sdforge-macros` 自钉同步 rc.9）
+- **[0.5.0-rc.8]** (2026-10-10)：WebSocket `build()` state 注入失效与 `#[forge(ws_path)]` 被忽略修复；API key 空权限种子、SSE 心跳、HTTP 错误体随 `Accept-Language` 的请求级 locale 作用域；新增 `tls-watch` 特性；`logging` 特性与自研 `StructuredLogger` 栈删除（迁移至 inklog）
+- **[0.5.0-rc.7]** (2026-10-08)：streaming 入站 SSE 帧解析器；`docs` feature 正名 `docgen`（旧名保留兼容别名）
+- **[0.5.0-rc.6]** (2026-10-06)：MCP 认证贯通 call_tool 与 CLI 入口、`AuthConfig` 无 security 特性时 fail-closed；多协议契约对齐——Idempotency-Key 重放防护、RBAC/认证贯通 gRPC 与 MCP、统一错误映射、参数校验统一 422；gRPC 业务错误返回真实 Status；CLI 机器可读输出契约与 Agent 知识包（`--format json` / `docs --format agent`）
 - **[0.5.0-rc.5]** (2026-09-21)：维护性发布——`forge` status=204/304 无 body 响应、validator crate re-export、Swagger UI 自定义 spec 地址、i18n 整改、命名统一 `SdForge` 前缀、跨仓 path 依赖改走 crates.io 与工程加固
 - **[0.5.0-rc.4]** (2026-09-14，含原 rc.3 批次)：`ResponseCacheLayer` 响应缓存中间件、`SdForgeConfig` security/cache 字段、`AuditSink` 审计存储抽象与 `InklogAuditSink`（0.5.0-rc.3 版本号跳过未发布，内容随本版发布）
 - **[0.5.0-rc.2]** (2026-09-07)：`#[forge(status = <code>)]` 自定义成功状态码、`i18n_key` 参数与翻译注册表、rmcp 2.2 → 3.2

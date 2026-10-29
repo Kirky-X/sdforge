@@ -116,11 +116,11 @@ let app = build_with_config_ext(Router::new(), &config)?;
 > 限流、安全头全无），等于对外开一组无鉴权接口。
 
 > **探针路径归属**：内置探针（`/healthz`、`/readyz`）与 `/metrics` 端点在
-> `health` / `metrics` feature 开启时自动挂载。挂载前的占用检查只扫 inventory
-> 注册的路由——同名路径由 inventory 路由接管，内置挂载跳过；但调用方 `base`
-> 声明的同名路径不在检查范围内（axum 不提供路由枚举接口，框架无从得知），
-> 两者同时存在时构建期 panic：axum `Overlapping method route`。`base` 要占用
-> 这些路径，只能改用其他路径，或不启用对应 feature。
+> `health` / `metrics` feature 开启时自动挂载。挂载前的占用检查同时覆盖两个
+> 来源——inventory 注册的路由与调用方 `base` 声明的同名路径：同名路径由调用方
+> 接管，内置挂载跳过并告警（占用判定以「试注册」完成，axum 不提供路由枚举
+> 接口），不再构建期 panic。`base` 需要自管探针时可直接声明同名路径，内置
+> 探针自动让位。
 
 ### TOML 配置文件
 
@@ -143,7 +143,6 @@ metrics = "prometheus"  # prometheus | statsd | none
 id = "http_default"
 name = "HTTP 默认限流"
 priority = 100
-enabled = true
 
 [[security.rate_limit.rules.matchers]]
 type = "User"
@@ -359,7 +358,7 @@ serve_with_graceful_shutdown_tls(
 
 ### MCP 集成
 
-- **无状态协议**：`StatelessServerHandler` 实现 `rmcp::ServerHandler`；HTTP 头协议由 `parse_mcp_headers` 解析 `Mcp-Method` / `Mcp-Name`（缺失返回 400）
+- **无状态协议**：`StatelessServerHandler` 实现 `rmcp::ServerHandler`；HTTP 头协议由 `parse_mcp_headers` 解析 `Mcp-Method` / `Mcp-Name`（缺失时返回 `McpHeaderError`，HTTP 状态映射由下游传输适配层自行实现，如映射为 400）
 - **stdio 服务**：`mcp::serve_stdio()` 封装 `rmcp::ServiceExt` + stdio 传输
 - **MRTR 多轮往返**：`MrtrSessionManager` 管理会话，工具通过 `InputRequiredResult` 挂起等待补充输入，300 秒超时自动取消
 - **缓存语义**：`cache_semantics` 模块处理 `ttlMs` / `cacheScope`（`global` / `request`）
@@ -384,7 +383,7 @@ serve_with_graceful_shutdown_tls(
 
 ### 国际化与日志
 
-- **i18n**：翻译注册表（`register_translation` / `set_locale` / `translate_or_fallback`）始终可用；`i18n` feature 额外提供 ICU4X 的 `HttpI18nFormatter`（本地化数字/日期/复数格式化与 Accept-Language 解析）。HTTP 错误体随请求 `Accept-Language` 选择语言（`build_with_config` 的请求级 locale 作用域 + 未匹配路由 404 统一错误体 + 限流拒绝体逐请求本地化），进程 locale 仅作回退
+- **i18n**：翻译注册表（`register_translation` / `set_locale` / `translate_or_fallback`）始终可用；`i18n` feature 额外提供 ICU4X 的 `HttpI18nFormatter`（本地化数字/日期/复数格式化与 Accept-Language 解析）。HTTP 错误体随请求 `Accept-Language` 选择语言（`build_with_config_ext` 的请求级 locale 作用域 + 未匹配路由 404 统一错误体 + 限流拒绝体逐请求本地化），进程 locale 仅作回退
 - **日志**：`inklog` feature 将裸 `log` 调用桥接到 inklog `LoggerManager` 结构化管道（`init_inklog_logger()`；0.5.0-rc 起承接已删除的自研 `StructuredLogger` 栈，结构化日志唯一入口，含真实轮转），并启用 `#[forge::log]` 声明日志属性宏（进入/退出/耗时/错误 + DataMasker 脱敏；feature 关闭时使用该宏在编译期显性报错）
 - **`#[forge::log]` 边界与语义**：`unsafe fn` 的 `unsafe` 限定原样传播到壳函数（调用方仍需 unsafe 块履行安全契约，宏不会把 unsafe fn 包装成安全函数）；壳函数不捕获 panic/任务取消——函数体 panic 或 async 任务被取消时不会产生 `fn_exit` 记录（需要失败可见性的调用方应在函数体内显式捕获，或在调用方监测 JoinHandle）；**不支持 trait impl 内的方法**（宏会在同一 impl 块内追加隐藏内部函数，trait impl 不允许额外成员）；`const`/变参在宏展开点 fail-loud 拒绝。载荷惰性渲染：目标日志级别被全局 max_level 过滤时，参数捕获与掩码渲染不执行（info 生产配置下 debug 进入日志零额外分配成本）；超过 64 KiB 的载荷在掩码前截断（inklog DataMasker 对 >1 MiB 输入会整体跳过掩码，壳层截断保证敏感值永不以明文入日志）；凭证键值对规则覆盖引号键形态（`"password":"hunter2"` 与 `password=hunter2` 同样被掩码）
 
@@ -467,7 +466,7 @@ let l2 = RedisL2Cache::connect(&RedisL2CacheConfig::new(redis_url).with_default_
 | 服务启动后外部无法访问 | `ServerConfig` 默认绑定 `127.0.0.1`，生产环境需显式配置 host |
 | 短 JWT 密钥被拒绝 | v0.3.0 起强制 `MIN_SECRET_LENGTH=32`，更换强密钥 |
 | IP 限流/封禁不生效 | 未配置 `ConnectInfo`；v0.4.4 起无 `ConnectInfo` 时不再信任 `X-Forwarded-For` / `X-Real-IP` |
-| MCP 请求返回 400 | 无状态协议要求请求头 `Mcp-Method` / `Mcp-Name`，缺失即 400（2026-07-28 规范行为） |
+| MCP 请求因缺头被拒 | 无状态协议要求请求头 `Mcp-Method` / `Mcp-Name`；`parse_mcp_headers` 缺失时返回 `McpHeaderError`，HTTP 400 响应由下游传输适配层自行映射（框架不内建该映射） |
 | gRPC 服务器拒绝启动并提示 authentication | 启用 `security` 时 `GrpcServerConfig.require_auth` 默认 `true`，需配置 `auth`（开发环境可显式置 `false`） |
 | 端口冲突 | `lsof -i :3000` 查找占用进程后更换端口或结束进程 |
 | 需要定位性能问题 | `cargo bench --bench runtime_bench --features http` 对照[性能基线](PERFORMANCE.md)；编译期成本对照[编译期门控基准](benchmarks/VS_SERVER_LESS.md) |

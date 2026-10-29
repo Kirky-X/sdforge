@@ -179,7 +179,7 @@ cargo run --example basic_cli --features cli -- echo --name world
 | HTTP + MCP dual protocol | `["http", "mcp"]` | One codebase, two entrypoints |
 | Full runtime features | `["full"]` | All protocols and capabilities (26 features, incl. `idempotency` and deployment-surface HTTP TLS `serve-tls`/`tls-watch`; excludes the gRPC-side `grpc-tls` and the optional heavy deps / opt-ins `simd-json`/`kit`/`limiteron-integration`/`schemars`/`ratelimit-dist`/`cache-l2`/`db-integration`/`sdk`) |
 
-`grpc`, `websocket`, `streaming`, `openapi`, `cli`, and `cache` can all be enabled independently of `http`, in any combination.
+`grpc`, `streaming`, `openapi`, `cli`, and `cache` can all be enabled independently of `http`, in any combination (`websocket` requires `http` + `streaming`).
 
 ---
 
@@ -210,7 +210,7 @@ cargo run --example basic_cli --features cli -- echo --name world
   <tr><td><code>cache</code></td><td>oxcache in-memory cache (independent of http)</td><td>❌</td></tr>
   <tr><td><code>cache-l2</code></td><td>oxcache Redis L2 cache (cross-replica shared cache layer, implies cache; inherently fail-open on failure: read miss / write skip)</td><td>❌</td></tr>
   <tr><td><code>idempotency</code></td><td>Idempotent replay protection (<code>Idempotency-Key</code> HTTP middleware + gRPC metadata path; requires http + cache)</td><td>❌</td></tr>
-  <tr><td><code>health</code></td><td><code>/healthz</code> and <code>/readyz</code> probes (auto-mounted by <code>build_with_config</code>, auth bypassed)</td><td>❌</td></tr>
+  <tr><td><code>health</code></td><td><code>/healthz</code> and <code>/readyz</code> probes (auto-mounted by <code>build_with_config_ext</code>, auth bypassed; a same-named route from inventory or the caller's <code>base</code> wins and the built-in probe is skipped with a warning — no panic)</td><td>❌</td></tr>
   <tr><td><code>metrics</code></td><td>Prometheus text-format <code>/metrics</code> endpoint (request counts, latency histograms, status code distribution; lightweight in-house renderer)</td><td>❌</td></tr>
   <tr><td><code>graceful</code></td><td>Graceful shutdown (SIGTERM/SIGINT: stop accepting, drain in-flight, phased teardown)</td><td>❌</td></tr>
   <tr><td><code>serve-tls</code></td><td>HTTP TLS termination (rustls aws-lc-rs: PEM cert/key loading, configurable ALPN, <code>ReloadingTls</code> hot reload; per-request <code>ConnectInfo</code> injection, handshake/header-read timeout guards, shutdown choreography sharing graceful's stop phase. Doc-cross-linked with the gRPC-side <code>grpc-tls</code> but implemented independently)</td><td>❌</td></tr>
@@ -354,7 +354,7 @@ The five design principles — compile-time protocol selection, the inventory re
 
 ### 🔄 Core Execution Path
 
-Taking the HTTP request hot path as an example: a request passes the middleware stack (authentication → rate limiting → security headers / CORS), the version router matches `/api/{version}`, the forge handler runs the business logic under the unified handler contract (`HandlerArgs` + `HandlerState`), and the `ServiceResponse` pipeline emits the JSON response; the MCP, gRPC, and CLI entrypoints reuse the same handlers and response contract, with middleware order, version routing, and the response pipeline assembled by `http::build()` / `build_with_config()`. The full sequence diagram and data flow are in the [Architecture document](docs/ARCHITECTURE.md#-数据流).
+Taking the HTTP request hot path as an example: a request passes the middleware stack (rate limiting → authentication → security headers / CORS), the version router matches `/api/{version}`, the forge handler runs the business logic under the unified handler contract (`HandlerArgs` + `HandlerState`), and the `ServiceResponse` pipeline emits the JSON response; the MCP, gRPC, and CLI entrypoints reuse the same handlers and response contract, with middleware order, version routing, and the response pipeline assembled by `http::build()` / `build_with_config_ext()`. The full sequence diagram and data flow are in the [Architecture document](docs/ARCHITECTURE.md#-数据流).
 
 
 ### 🌐 One Annotation, Five Protocols
@@ -475,7 +475,10 @@ Contributions are welcome! Development environment setup (toolchain, protoc, lef
 
 See [CHANGELOG.md](docs/CHANGELOG.md). Highlights of recent releases:
 
-- **[0.5.0-rc.8]** (2026-10-06): MCP auth propagation across call_tool and CLI entry, `AuthConfig` fail-closed without the security feature; multi-protocol contract parity — Idempotency-Key replay protection, RBAC/auth across gRPC, unified error mapping, validation unified to 422; async health checks and the `ReadinessRenderer` port; external OpenAPI spec merging and vendored Swagger UI (zero network at build time); knowledge-pack CLI (`--format json` / `docs --format agent`); post-drain graceful hooks; three rounds of security review fixes
+- **[0.5.0-rc.9]** (2026-10-19): Self-vendored Swagger UI serving (removed utoipa-swagger-ui, unblocking `docgen` downstream dependency resolution; embedded assets 4.11 MiB → 1.87 MiB); release dependency propagation (oxcache / confers / dbnexus / trait-kit / inklog bumps, `sdforge-macros` self-pinned to rc.9)
+- **[0.5.0-rc.8]** (2026-10-10): Fixed WebSocket `build()` state injection and ignored `#[forge(ws_path)]`; API key empty-permission seeds, SSE keep-alive, request-scoped locale for HTTP error bodies (follows `Accept-Language`); new `tls-watch` feature; removed the `logging` feature and the in-house `StructuredLogger` stack (migrated to inklog)
+- **[0.5.0-rc.7]** (2026-10-08): Inbound SSE frame parser for streaming; `docs` feature renamed `docgen` (legacy name kept as a compat alias)
+- **[0.5.0-rc.6]** (2026-10-06): MCP auth propagation across call_tool and CLI entry, `AuthConfig` fail-closed without the security feature; multi-protocol contract parity — Idempotency-Key replay protection, RBAC/auth across gRPC and MCP, unified error mapping, validation unified to 422; gRPC business errors return real Status; machine-readable CLI output contract and Agent knowledge pack (`--format json` / `docs --format agent`)
 - **[0.5.0-rc.5]** (2026-09-21): Maintenance release — `forge` status=204/304 bodyless responses, validator crate re-export, custom Swagger UI spec URL, i18n overhaul, `SdForge` naming unification, cross-repo path deps moved to crates.io and hardening
 - **[0.5.0-rc.4]** (2026-09-14, including the original rc.3 batch): `ResponseCacheLayer` response caching middleware, `SdForgeConfig` security/cache fields, `AuditSink` abstraction and `InklogAuditSink` (version 0.5.0-rc.3 was skipped and never published; its content shipped with this release)
 - **[0.5.0-rc.2]** (2026-09-07): `#[forge(status = <code>)]` custom success status codes, `i18n_key` parameter and translation registry, rmcp 2.2 → 3.2

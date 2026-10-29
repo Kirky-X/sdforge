@@ -701,7 +701,7 @@ pub async fn readyz_handler() -> Response {
 /// Mount `/healthz` and `/readyz` on `router`, skipping paths already claimed
 /// by inventory-registered routes or by the router the caller merged in.
 ///
-/// 占用判定见 [`crate::http::mount_builtin_route`]：调用方路由优先，内建
+/// 占用判定见 `crate::http::mount_builtin_route`：调用方路由优先，内建
 /// 探针让位——重复挂载会让 axum 在构建期 panic。
 pub fn mount_probes(router: axum::Router) -> axum::Router {
     let mut router =

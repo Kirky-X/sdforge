@@ -4,7 +4,7 @@
 //!
 //! This crate provides the runtime types and service builders for the SDForge framework.
 
-#![doc(html_root_url = "https://docs.rs/sdforge/0.5.0-rc.6")]
+#![doc(html_root_url = "https://docs.rs/sdforge/0.5.0-rc.10")]
 #![warn(missing_docs)]
 
 // Allow macro-generated code (which references `sdforge::cli::...`,
@@ -33,7 +33,7 @@ pub use sdforge_macros::{forge, service_module, test_macro};
 /// struct EmptyConfig;
 /// impl_default_new!(EmptyConfig);
 ///
-/// let config = EmptyConfig::new;
+/// let config = EmptyConfig::new();
 /// ```
 #[macro_export]
 macro_rules! impl_default_new {

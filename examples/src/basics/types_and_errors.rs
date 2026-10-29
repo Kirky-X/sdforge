@@ -27,8 +27,8 @@
 //! async fn get_user(id: u64) -> Result<UserResponse, ApiError> {
 //!     if id == 0 {
 //!         return Err(ApiError::NotFound {
-//!             resource: "User".to_string,
-//!             resource_id: Some("0".to_string),
+//!             resource: "User".to_string(),
+//!             resource_id: Some("0".to_string()),
 //!         });
 //!     }
 //!     // ... 正常逻辑

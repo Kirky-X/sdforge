@@ -28,7 +28,7 @@
 //!
 //! ```text
 //! // 配置 CORS
-//! let cors = CorsLayer::new
+//! let cors = CorsLayer::new()
 //!     .allow_origin("https://example.com")
 //!     .allow_methods([Method::GET, Method::POST]);
 //!

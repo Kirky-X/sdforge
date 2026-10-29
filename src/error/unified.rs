@@ -113,7 +113,8 @@ pub fn http_status_for(e: &crate::core::ApiError) -> u16 {
 ///
 /// Every protocol adapter (HTTP `IntoResponse`, gRPC status mapping, …)
 /// must derive its wire codes from here — never from a private match table.
-/// The status is [`ApiError::http_status`]; the code is [`ApiError::code`],
+/// The status is [`crate::core::ApiError::http_status`]; the code is
+/// [`crate::core::ApiError::code`],
 /// i.e. the same vocabulary the other protocol surfaces use.
 pub fn mapping_for(e: &crate::core::ApiError) -> (u16, &'static str) {
     (e.http_status(), e.code())

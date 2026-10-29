@@ -84,6 +84,11 @@ openapi-info-title = SDForge API
 # --- gRPC / MCP authentication worker --------------------------------------------
 auth-worker-failed = authentication worker failed
 auth-verifier-worker-failed = auth verifier worker failed: { $error }
+auth-bearer-token-invalid = invalid bearer token
+
+# --- config auth validation (load-time ConfigError) -------------------------------
+config-auth-jwt-audience-empty = JWT audience cannot be empty: an empty audience matches tokens with an empty aud claim
+config-auth-jwt-issuer-empty = JWT issuer cannot be empty: an empty issuer matches tokens with an empty iss claim
 
 # --- audit logging ----------------------------------------------------------------
 audit-signing-key-empty = ⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY is empty. Audit logs will not be signed.
@@ -115,6 +120,11 @@ cache-backend-clear-failed = cache backend clear failed: { $error }
 cache-stat-unparsed = cache stat { $key } value { $value } could not be parsed as u64 or f64; dropped
 cache-stat-parsed-float = cache stat { $key } parsed as f64={ $value } converted to u64={ $converted }
 cache-l2-op-failed = redis L2 cache { $op } failed (degrading to miss/skip): { $error }
+cache-response-read-failed = response cache read failed
+
+# --- dbnexus gateway (db-integration) ------------------------------------------------
+dbnexus-gateway-session-role-not-enforced = DbGateway session role is not enforced: dbnexus was built without its `permission` feature, so the per-table permission checks are compiled out. Enable the sdforge `db-permission` feature (and configure dbnexus permissions) for library-side isolation; until then only the allowlist and the required ownership filters apply.
+dbnexus-gateway-required-filter-not-whitelisted = required filter column '{ $column }' is not whitelisted for table '{ $table }'
 
 # --- health readiness -----------------------------------------------------------------
 health-async-readiness-lock-poisoned-sync = async readiness checks lock poisoned; falling back to sync path

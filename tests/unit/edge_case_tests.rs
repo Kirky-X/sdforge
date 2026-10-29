@@ -66,6 +66,9 @@ mod core_edge_case_tests {
     /// Test: Not found with various resources
     #[test]
     fn test_format_not_found_edge_cases() {
+        // 断言的是英文契约文案，而实际输出跟随进程语言、宿主语言不可控：
+        // 统一先钉 en（模块内各 format_* 用例同此）。
+        sdforge::i18n::set_locale("en");
         // Output follows the active locale; expectations use the explicit-en
         // catalog entry so the test is independent of the ambient locale.
         // Empty resource
@@ -99,6 +102,7 @@ mod core_edge_case_tests {
     /// Test: Validation error formatting
     #[test]
     fn test_format_validation_error_edge_cases() {
+        sdforge::i18n::set_locale("en");
         // Empty field and constraint
         let result = format_validation_error("", "");
         assert_eq!(
@@ -124,6 +128,7 @@ mod core_edge_case_tests {
     /// Test: Empty error messages
     #[test]
     fn test_format_empty_error_edge_cases() {
+        sdforge::i18n::set_locale("en");
         // Output follows the active locale; expectations use the explicit-en
         // catalog entry so the test is independent of the ambient locale.
         // Empty field name
@@ -157,6 +162,7 @@ mod core_edge_case_tests {
     /// Test: Invalid format errors
     #[test]
     fn test_format_invalid_error_edge_cases() {
+        sdforge::i18n::set_locale("en");
         // Empty field and format
         let result = format_invalid_error("", "");
         assert_eq!(
@@ -179,6 +185,7 @@ mod core_edge_case_tests {
     /// Test: Range errors with boundary values
     #[test]
     fn test_format_range_error_edge_cases() {
+        sdforge::i18n::set_locale("en");
         // Zero range
         let result = format_range_error("age", 0, 0);
         assert_eq!(

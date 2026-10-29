@@ -88,10 +88,10 @@ pub fn swagger_ui_router_with_spec(openapi_url: &str) -> axum::Router {
 /// 外部端点文档的完整 spec 的场景。
 ///
 /// ```ignore
-/// let spec = sdforge::openapi::OpenApiBuilder::new
+/// let spec = sdforge::openapi::OpenApiBuilder::new()
 ///     .title("Host API").version("1.0.0")
 ///     .merge_openapi(my_extra_spec)
-///     .build;
+///     .build();
 /// let app = sdforge::docs::swagger_ui_router_with_openapi(spec);
 /// ```
 pub fn swagger_ui_router_with_openapi(spec: OpenApi) -> axum::Router {

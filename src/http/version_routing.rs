@@ -250,9 +250,9 @@ where
 /// ```ignore
 /// use sdforge::http::version_routing::{VersionRedirectLayer, VersionRouterConfig};
 ///
-/// let mut config = VersionRouterConfig::default;
-/// config.deprecated_versions.insert("v1".into, "2026-12-31".into);
-/// let router = Router::new
+/// let mut config = VersionRouterConfig::default();
+/// config.deprecated_versions.insert("v1".into(), "2026-12-31".into());
+/// let router = Router::new()
 ///     .route("/api/v1/users", axum::routing::get(users))
 ///     .layer(VersionRedirectLayer::new(config));
 /// ```

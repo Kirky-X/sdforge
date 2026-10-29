@@ -22,8 +22,8 @@
 //! ```rust,no_run
 //! use sdforge::openapi::generate_openapi_spec;
 //!
-//! let spec = generate_openapi_spec;
-//! let json = serde_json::to_string_pretty(&spec).unwrap;
+//! let spec = generate_openapi_spec();
+//! let json = serde_json::to_string_pretty(&spec).unwrap();
 //! println!("{json}");
 //! ```
 //!
@@ -32,11 +32,11 @@
 //! ```rust,no_run
 //! use sdforge::openapi::OpenApiBuilder;
 //!
-//! let spec = OpenApiBuilder::new
+//! let spec = OpenApiBuilder::new()
 //!     .title("My Service")
 //!     .version("2.0.0")
 //!     .description("User-facing API")
-//!     .build;
+//!     .build();
 //! ```
 
 use sdforge::openapi::{OpenApiBuilder, OpenApiRouteInfo, generate_openapi_spec};

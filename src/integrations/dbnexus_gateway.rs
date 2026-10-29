@@ -52,11 +52,8 @@ static ROLE_NOT_ENFORCED_WARNED: std::sync::Once = std::sync::Once::new();
 fn warn_if_session_role_not_enforced() {
     ROLE_NOT_ENFORCED_WARNED.call_once(|| {
         log::warn!(
-            "DbGateway session role is not enforced: dbnexus was built without its \
-             `permission` feature, so the per-table permission checks are compiled out. \
-             Enable the sdforge `db-permission` feature (and configure dbnexus permissions) \
-             for library-side isolation; until then only the allowlist and the required \
-             ownership filters apply."
+            "{}",
+            crate::i18n::t("dbnexus-gateway-session-role-not-enforced", &[])
         );
     });
 }
@@ -282,9 +279,9 @@ impl DbGateway {
         for (column, value) in &self.required_filters {
             if !columns.contains(column) {
                 return Err(ApiError::InvalidInput {
-                    message: format!(
-                        "required filter column '{column}' is not whitelisted for table '{}'",
-                        req.table
+                    message: crate::i18n::t(
+                        "dbnexus-gateway-required-filter-not-whitelisted",
+                        &[("column", column.clone()), ("table", req.table.to_string())],
                     ),
                     field: Some("column".to_string()),
                     value: None,

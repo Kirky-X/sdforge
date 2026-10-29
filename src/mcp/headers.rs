@@ -107,7 +107,7 @@ pub const MCP_METHOD_PING: &str = "ping";
 /// headers.insert("mcp-method", "tools/call".parse.unwrap);
 /// headers.insert("mcp-name", "my_tool".parse.unwrap);
 ///
-/// let info = parse_mcp_headers(&headers).unwrap;
+/// let info = parse_mcp_headers(&headers).unwrap();
 /// assert_eq!(info.method, "tools/call");
 /// assert_eq!(info.tool_name, Some("my_tool".to_string));
 /// ```

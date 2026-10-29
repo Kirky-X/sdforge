@@ -201,7 +201,7 @@ cargo audit
 
 - **禁止使用 `--no-verify` 跳过** pre-commit hooks
 - **禁止 `git push --force` 到 main/master 分支**
-- pre-commit 包含 `no-commit-to-branch`（`args: ['--branch', 'master']`：本仓工作流在 main 上提交，故仅保护 `master` 分支，main 不受该钩子限制；提交仍推荐创建 feature 分支）
+- pre-commit **不设** `no-commit-to-branch` 钩子：本仓工作流为 main 直提，该钩子只保护 `master`，保留不会生效、只会造成「有护栏」的误解（见 `.pre-commit-config.yaml` 内注释）
 - 代码质量工具是项目强制门禁：**代码质量审查**（简化/架构/性能审查）、**SAST 安全扫描**（发布前强制）、**kueiku**（bug 分析/根因分析/FMEA）
 - 提交即代表你同意你的贡献将基于 [MIT](../LICENSE) 许可证授权
 - 有任何疑问，欢迎提一个带 `question` 标签的 [Issue](https://github.com/Kirky-X/sdforge/issues)

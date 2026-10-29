@@ -505,7 +505,10 @@ where
                     BufferedBody::Unreadable => {
                         return Ok(Response::builder()
                             .status(StatusCode::INTERNAL_SERVER_ERROR)
-                            .body(Body::from("response cache read failed"))
+                            .body(Body::from(crate::i18n::t(
+                                "cache-response-read-failed",
+                                &[],
+                            )))
                             .unwrap());
                     }
                 }

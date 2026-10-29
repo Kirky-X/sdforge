@@ -26,6 +26,9 @@ mod error_handling_tests {
     /// Verifies that ApiError::NotFound is properly created and maps to HTTP 404.
     #[test]
     fn test_api_error_not_found() {
+        // sanitized_message/to_string 跟随进程语言，而宿主语言不可控；
+        // 英文契约断言统一先钉 en（不影响下方显式 localized_message 用例）。
+        sdforge::i18n::set_locale("en");
         let error = ApiError::NotFound {
             resource: "user".to_string(),
             resource_id: Some("12345".to_string()),
@@ -47,6 +50,7 @@ mod error_handling_tests {
     /// Verifies that ApiError::ValidationError captures field and constraint information.
     #[test]
     fn test_api_error_validation() {
+        sdforge::i18n::set_locale("en");
         let error = ApiError::ValidationError {
             field: "email".to_string(),
             constraint: "must be valid email format".to_string(),
@@ -88,6 +92,7 @@ mod error_handling_tests {
     /// Verifies that ApiError::RateLimitExceeded includes rate limit details.
     #[test]
     fn test_api_error_rate_limit() {
+        sdforge::i18n::set_locale("en");
         let error = ApiError::RateLimitExceeded {
             limit: 100,
             window_seconds: 60,
@@ -108,6 +113,7 @@ mod error_handling_tests {
     /// Verifies that ApiError::Internal does not leak internal details.
     #[test]
     fn test_api_error_internal() {
+        sdforge::i18n::set_locale("en");
         let error = ApiError::Internal {
             message: "Database connection failed: host=localhost port=5432".to_string(),
             error_id: "ERR001".to_string(),
@@ -297,6 +303,7 @@ mod error_handling_tests {
     /// Verifies that ApiError correctly converts to MCP-compatible JSON format.
     #[test]
     fn test_error_to_mcp_response_conversion() {
+        sdforge::i18n::set_locale("en");
         // Test NotFound -> MCP
         let not_found = ApiError::not_found("user", Some("123".into()));
         let mcp_json = not_found.to_mcp_json();
@@ -746,6 +753,7 @@ mod error_handling_tests {
     /// Verifies that sanitized_message works correctly for all variants.
     #[test]
     fn test_sanitized_message_all_types() {
+        sdforge::i18n::set_locale("en");
         // NotFound - should return full message
         let msg = ApiError::not_found("user", None).sanitized_message();
         assert!(msg.contains("user"));

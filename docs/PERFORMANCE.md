@@ -73,9 +73,9 @@ cargo bench --bench runtime_bench --features http,security,etag,metrics,context,
 
 `i18n_translation/*`：`translate_or_fallback` 为控制面路径（MCP 工具列表 / CLI help / OpenAPI 每路由 / gRPC GetInfo），非请求热路径。回退 ~45 ns、满表（1e4 宿主注册项）命中 ~70 ns——锁开销线性、千级路由的 OpenAPI 生成（每路由 2 次临界区）总量微秒级，无回归风险。记录日期 2026-09-30。
 
-## ⚙️ 中间件栈分档（`build_with_config`）
+## ⚙️ 中间件栈分档（`build_with_config_ext`）
 
-`middleware_tiers/*` 直调 `build_with_config` 产物的 Router（`Service::call` GET `/api/v1/bench/ping`，含完整中间件链）。复现命令与特性集：`cargo bench --bench runtime_bench --features http,security,etag,metrics,context,idempotency -- "middleware_tiers"`（t1/t6 需 security、t2 需 etag、t3 需 metrics、t4 需 context、t6 需 idempotency；cors 为纯 config 档非特性）。下表对应 2026-09-30 单次完整运行；同机批间方差带宽约 **±10%**（复跑对比实测 t1 213→204 µs、t0 8.6→5.2 µs 属不同 harness 口径，见下），重跑后表值小幅浮动属正常：
+`middleware_tiers/*` 直调 `build_with_config_ext` 产物的 Router（`Service::call` GET `/api/v1/bench/ping`，含完整中间件链）。复现命令与特性集：`cargo bench --bench runtime_bench --features http,security,etag,metrics,context,idempotency -- "middleware_tiers"`（t1/t6 需 security、t2 需 etag、t3 需 metrics、t4 需 context、t6 需 idempotency；cors 为纯 config 档非特性）。下表对应 2026-09-30 单次完整运行；同机批间方差带宽约 **±10%**（复跑对比实测 t1 213→204 µs、t0 8.6→5.2 µs 属不同 harness 口径，见下），重跑后表值小幅浮动属正常：
 
 | 分档 | 叠加项 | 相对 T0 增量 |
 |------|--------|--------------|
@@ -87,7 +87,7 @@ cargo bench --bench runtime_bench --features http,security,etag,metrics,context,
 | t5_cors | + CORS | +1.6 µs |
 | t6_all | t1+etag+metrics+context+cors+idempotency(enabled) | ~221 µs（auth 恒时延迟主导；其余增量被淹没） |
 
-**口径与免责**：① 直调 `Service::call`（不含网络/传输层），增量数字反映中间件链本身；tokio runtime 于组级外提（每迭代仅 `block_on`，无构建常数）；② t1/t6 的 ~200 µs 量级来自 ApiKey 恒时验证延迟（防时序攻击的固定 sleep），并非逐层线性叠加成本——JWT/OAuth2 分档未测（恒时延迟同源，量级参考 t1）；③ HTTP 侧限流由调用方以 `rate_limit_layer` 自装（不在 `build_with_config` 装配面内），无分档；④ idempotency 分档为 GET 透行开销（带 `Idempotency-Key` 的写请求另有缓存写入成本，未覆盖）；⑤ 单机数据（WSL2），供回归参照不作绝对容量承诺。
+**口径与免责**：① 直调 `Service::call`（不含网络/传输层），增量数字反映中间件链本身；tokio runtime 于组级外提（每迭代仅 `block_on`，无构建常数）；② t1/t6 的 ~200 µs 量级来自 ApiKey 恒时验证延迟（防时序攻击的固定 sleep），并非逐层线性叠加成本——JWT/OAuth2 分档未测（恒时延迟同源，量级参考 t1）；③ HTTP 侧限流由调用方以 `rate_limit_layer` 自装（不在 `build_with_config_ext` 装配面内，限流经 `build_with_config_ext_rate_limited` 装配），无分档；④ idempotency 分档为 GET 透行开销（带 `Idempotency-Key` 的写请求另有缓存写入成本，未覆盖）；⑤ 单机数据（WSL2），供回归参照不作绝对容量承诺。
 
 ## 🧩 HandlerArgs 参数装配
 
@@ -106,7 +106,7 @@ gRPC / CLI 统一处理入口共享的参数装配（`HandlerArgs` String map �
 ## 🚧 基线外开销
 
 - **宏展开编译期**：编译期成本见[编译期门控基准](benchmarks/VS_SERVER_LESS.md)，`http` only 相比 `full` 省约 47% 编译时间；该口径明确不计入运行时基线。
-- ~~**全中间件栈（`build_with_config`）**~~：已于 2026-09-30 收口——`middleware_tiers/*` 分档基准见 [基线汇总](#-基线汇总) 与下方 [中间件栈分档](#️-中间件栈分档build_with_config)。
+- ~~**全中间件栈（`build_with_config_ext`）**~~：已于 2026-09-30 收口——`middleware_tiers/*` 分档基准见 [基线汇总](#-基线汇总) 与下方 [中间件栈分档](#️-中间件栈分档build_with_config_ext)。
 
 ## ✅ 回归门禁
 

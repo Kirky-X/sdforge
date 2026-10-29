@@ -82,6 +82,11 @@ openapi-info-title = SDForge API
 # --- gRPC / MCP 认证工作线程 -------------------------------------------------------------
 auth-worker-failed = 认证工作线程失败
 auth-verifier-worker-failed = 认证验证器工作线程失败：{ $error }
+auth-bearer-token-invalid = 无效的 Bearer Token
+
+# --- 配置鉴权校验（加载期 ConfigError） ------------------------------------------------------
+config-auth-jwt-audience-empty = JWT audience 不能为空：空 audience 会匹配 aud 声明为空的令牌
+config-auth-jwt-issuer-empty = JWT issuer 不能为空：空 issuer 会匹配 iss 声明为空的令牌
 
 # --- 审计日志 ---------------------------------------------------------------------------
 audit-signing-key-empty = ⚠️  警告：SDFORGE_AUDIT_SIGNING_KEY 为空，审计日志将不会签名。
@@ -113,6 +118,11 @@ cache-backend-clear-failed = 缓存后端清空失败：{ $error }
 cache-stat-unparsed = 缓存统计项 { $key } 的值 { $value } 无法解析为 u64 或 f64，已丢弃
 cache-stat-parsed-float = 缓存统计项 { $key } 解析为 f64={ $value }，转换为 u64={ $converted }
 cache-l2-op-failed = redis L2 缓存 { $op } 失败（降级为 miss/skip）：{ $error }
+cache-response-read-failed = 响应缓存读取失败
+
+# --- dbnexus 网关（db-integration） ----------------------------------------------------------
+dbnexus-gateway-session-role-not-enforced = DbGateway 会话角色未被强制执行：dbnexus 构建时未启用其 `permission` 特性，逐表权限检查已被编译剔除。请开启 sdforge 的 `db-permission` 特性（并配置 dbnexus 权限）以获得库侧隔离；在此之前，隔离面仅剩白名单与强制归属谓词。
+dbnexus-gateway-required-filter-not-whitelisted = 强制归属谓词列 '{ $column }' 不在表 '{ $table }' 的白名单内
 
 # --- 健康就绪 ---------------------------------------------------------------------------------
 health-async-readiness-lock-poisoned-sync = 异步就绪检查锁已中毒；回退到同步路径

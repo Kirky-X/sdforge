@@ -491,6 +491,8 @@ mod error_advanced {
 
     #[test]
     fn test_error_from_std_error_generates_id_and_sanitizes() {
+        // sanitized_message 跟随进程语言，宿主语言不可控；英文契约断言先钉 en。
+        sdforge::i18n::set_locale("en");
         let source = DownstreamError("sensitive db connection string".to_string());
         let err = ApiError::from_std_error(source);
         match err {
@@ -566,6 +568,7 @@ mod error_advanced {
 
     #[test]
     fn test_error_sanitized_message_internal_strips_details() {
+        sdforge::i18n::set_locale("en");
         let err = ApiError::internal_error("secret stack trace with paths /etc/passwd", "id");
         let msg = err.sanitized_message();
         assert!(!msg.contains("secret"));
@@ -575,6 +578,7 @@ mod error_advanced {
 
     #[test]
     fn test_error_sanitized_message_service_unavailable_strips_service() {
+        sdforge::i18n::set_locale("en");
         let err = ApiError::service_unavailable("internal-db-host:5432", Some(30));
         let msg = err.sanitized_message();
         assert!(!msg.contains("internal-db-host:5432"));

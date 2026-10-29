@@ -210,12 +210,12 @@ impl GrpcAuthVerifier for BearerVerifier {
         if let Some(expected) = &self.audience
             && !token_has_claim(token, "aud", expected)
         {
-            return Err("invalid bearer token".to_string());
+            return Err(crate::i18n::t("auth-bearer-token-invalid", &[]));
         }
         if let Some(expected) = &self.issuer
             && !token_has_claim(token, "iss", expected)
         {
-            return Err("invalid bearer token".to_string());
+            return Err(crate::i18n::t("auth-bearer-token-invalid", &[]));
         }
         Ok(context)
     }
@@ -245,7 +245,7 @@ fn token_has_claim(token: &str, claim: &str, expected: &str) -> bool {
 fn decode_base64url_payload(input: &str) -> Result<Vec<u8>, ()> {
     const INVALID: u8 = 0xFF;
     let mut table = [INVALID; 256];
-    for (i, b) in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+    for (i, b) in b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_" // pragma: allowlist secret（base64url 标准字母表，非凭据）
         .iter()
         .enumerate()
     {

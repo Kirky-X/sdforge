@@ -206,29 +206,15 @@ pub fn register_translation(locale: &str, key: &str, value: &str) {
         .insert((locale.to_string(), key.to_string()), value.to_string());
 }
 
-/// Set the active locale for translation lookups.
-///
-/// The explicit locale set here always wins over auto-detection and stays
-/// active until [`clear_translations`] resets it. Protocol consumption
-/// points call [`translate_or_fallback`] which uses this locale to
-/// resolve i18n keys.
-pub fn set_locale(locale: &str) {
-    let mut reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
-    reg.locale = locale.to_string();
-}
+// Locale resolution (active-locale cache + host detection chain) lives in
+// `locale`; the public surface is re-exported unchanged below.
+mod locale;
 
-/// Get the currently active locale.
-///
-/// When [`set_locale`] has not been called yet, the system locale is
-/// detected once via [`detect_locale`] and cached in the registry
-/// (explicit `set_locale` calls always win over the cached detection).
-pub fn get_locale() -> String {
-    let mut reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
-    if reg.locale.is_empty() {
-        reg.locale = detect_locale();
-    }
-    reg.locale.clone()
-}
+#[cfg(test)]
+use locale::detect_from;
+#[cfg(feature = "i18n")]
+use locale::normalize_lang;
+pub use locale::{detect_locale, get_locale, set_locale};
 
 // Request-scoped locale override (task-local).
 //
@@ -260,78 +246,6 @@ pub fn request_locale() -> Option<String> {
 #[cfg(feature = "tokio")]
 pub async fn scope_request_locale<F: std::future::Future>(locale: String, fut: F) -> F::Output {
     REQUEST_LOCALE.scope(locale, fut).await
-}
-
-/// Detect the system locale via the ordered fallback chain.
-///
-/// 1. `SDFORGE_LANG` (project override variable)
-/// 2. `LC_ALL` → `LC_MESSAGES` → `LANG` (POSIX chain)
-/// 3. `sys-locale` system detection (only with the `i18n` cargo feature)
-/// 4. `"en"` ultimate fallback
-///
-/// Every candidate is normalized by `normalize_lang`; unsupported or
-/// malformed values fall through to the next link, so the result is always
-/// `"en"` or `"zh"` (the two bundled catalog languages).
-pub fn detect_locale() -> String {
-    #[cfg(feature = "i18n")]
-    {
-        detect_from(
-            |key| std::env::var(key).ok(),
-            sys_locale::get_locale().as_deref(),
-        )
-    }
-    #[cfg(not(feature = "i18n"))]
-    {
-        detect_from(|key| std::env::var(key).ok(), None)
-    }
-}
-
-/// Pure locale-chain resolver: resolve `get_env` lookups plus an optional
-/// system locale into `"en"` / `"zh"`.
-///
-/// Extracted from [`detect_locale`] so the chain order and normalization
-/// rules can be unit-tested without mutating process environment variables.
-fn detect_from(get_env: impl Fn(&str) -> Option<String>, sys_locale: Option<&str>) -> String {
-    // 1. Project override variable
-    if let Some(lang) = get_env("SDFORGE_LANG")
-        && let Some(normalized) = normalize_lang(&lang)
-    {
-        return normalized;
-    }
-    // 2. Explicit POSIX chain (sys-locale reads these too on Unix; reading
-    //    them explicitly keeps Windows / edge environments deterministic).
-    for key in ["LC_ALL", "LC_MESSAGES", "LANG"] {
-        if let Some(lang) = get_env(key)
-            && let Some(normalized) = normalize_lang(&lang)
-        {
-            return normalized;
-        }
-    }
-    // 3. sys-locale system detection
-    if let Some(lang) = sys_locale
-        && let Some(normalized) = normalize_lang(lang)
-    {
-        return normalized;
-    }
-    // 4. Ultimate fallback
-    "en".to_string()
-}
-
-/// Normalize a raw locale string (`"zh_CN.UTF-8"`, `"en-US"`, `"C"`, …)
-/// into `"en"` / `"zh"`, or `None` when unsupported (the chain continues).
-fn normalize_lang(raw: &str) -> Option<String> {
-    let stripped = raw.split('@').next()?.trim();
-    let stripped = stripped.split('.').next()?.trim();
-    let normalized = stripped.replace('_', "-");
-    // "C" / "POSIX" / empty mean "unspecified" — continue down the chain.
-    if normalized.is_empty() || matches!(normalized.as_str(), "C" | "POSIX") {
-        return None;
-    }
-    match normalized.split('-').next()?.to_ascii_lowercase().as_str() {
-        "zh" => Some("zh".to_string()),
-        "en" => Some("en".to_string()),
-        _ => None,
-    }
 }
 
 /// Translate a framework i18n key for the **active** locale.
@@ -787,6 +701,35 @@ mod builtin_catalog_tests {
                     ("category", "Other".to_string()),
                 ],
             ),
+            ("auth-bearer-token-invalid", "invalid bearer token", &[]),
+            (
+                "config-auth-jwt-audience-empty",
+                "JWT audience cannot be empty: an empty audience matches tokens with an empty aud claim",
+                &[],
+            ),
+            (
+                "config-auth-jwt-issuer-empty",
+                "JWT issuer cannot be empty: an empty issuer matches tokens with an empty iss claim",
+                &[],
+            ),
+            (
+                "cache-response-read-failed",
+                "response cache read failed",
+                &[],
+            ),
+            (
+                "dbnexus-gateway-session-role-not-enforced",
+                "DbGateway session role is not enforced: dbnexus was built without its `permission` feature, so the per-table permission checks are compiled out. Enable the sdforge `db-permission` feature (and configure dbnexus permissions) for library-side isolation; until then only the allowlist and the required ownership filters apply.",
+                &[],
+            ),
+            (
+                "dbnexus-gateway-required-filter-not-whitelisted",
+                "required filter column 'tenant_id' is not whitelisted for table 'users'",
+                &[
+                    ("column", "tenant_id".to_string()),
+                    ("table", "users".to_string()),
+                ],
+            ),
         ];
         for (key, expected, args) in cases {
             let args: Vec<(&str, String)> = args.to_vec();
@@ -842,6 +785,37 @@ mod builtin_catalog_tests {
                 ]
             ),
             "HTTP 404: 2 个错误 (Other)"
+        );
+        assert_eq!(
+            translate_for("zh", "auth-bearer-token-invalid", &[]),
+            "无效的 Bearer Token"
+        );
+        assert_eq!(
+            translate_for("zh", "config-auth-jwt-audience-empty", &[]),
+            "JWT audience 不能为空：空 audience 会匹配 aud 声明为空的令牌"
+        );
+        assert_eq!(
+            translate_for("zh", "config-auth-jwt-issuer-empty", &[]),
+            "JWT issuer 不能为空：空 issuer 会匹配 iss 声明为空的令牌"
+        );
+        assert_eq!(
+            translate_for("zh", "cache-response-read-failed", &[]),
+            "响应缓存读取失败"
+        );
+        assert_eq!(
+            translate_for("zh", "dbnexus-gateway-session-role-not-enforced", &[]),
+            "DbGateway 会话角色未被强制执行：dbnexus 构建时未启用其 `permission` 特性，逐表权限检查已被编译剔除。请开启 sdforge 的 `db-permission` 特性（并配置 dbnexus 权限）以获得库侧隔离；在此之前，隔离面仅剩白名单与强制归属谓词。"
+        );
+        assert_eq!(
+            translate_for(
+                "zh",
+                "dbnexus-gateway-required-filter-not-whitelisted",
+                &[
+                    ("column", "tenant_id".to_string()),
+                    ("table", "users".to_string())
+                ]
+            ),
+            "强制归属谓词列 'tenant_id' 不在表 'users' 的白名单内"
         );
     }
 
@@ -1092,24 +1066,6 @@ mod builtin_catalog_tests {
         assert_eq!(detect_from(env_of(&[]), None), "en");
         assert_eq!(detect_from(env_of(&[]), Some("en-US")), "en");
         assert_eq!(detect_from(env_of(&[]), Some("ja_JP.UTF-8")), "en");
-    }
-
-    /// normalize_lang 归一化规则（zh* → zh；C/POSIX/畸形 → None；仅 en/zh）。
-    #[test]
-    fn test_normalize_lang() {
-        assert_eq!(normalize_lang("zh_CN.UTF-8"), Some("zh".to_string()));
-        assert_eq!(normalize_lang("zh-TW"), Some("zh".to_string()));
-        assert_eq!(
-            normalize_lang("zh-Hans-SG@calendar=x"),
-            Some("zh".to_string())
-        );
-        assert_eq!(normalize_lang("en_US.UTF-8"), Some("en".to_string()));
-        assert_eq!(normalize_lang("EN"), Some("en".to_string()));
-        assert_eq!(normalize_lang("C"), None);
-        assert_eq!(normalize_lang("C.UTF-8"), None);
-        assert_eq!(normalize_lang("POSIX"), None);
-        assert_eq!(normalize_lang(""), None);
-        assert_eq!(normalize_lang("fr_FR"), None);
     }
 }
 

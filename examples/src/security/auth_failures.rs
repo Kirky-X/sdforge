@@ -23,7 +23,7 @@
 //! use sdforge::axum::{Router, middleware::from_fn, routing::get};
 //!
 //! // 在路由上挂载认证中间件
-//! let protected = Router::new
+//! let protected = Router::new()
 //!     .route("/secure", get(secure_endpoint))
 //!     .layer(from_fn(auth_middleware));
 //!
@@ -34,7 +34,7 @@
 //!     method = "GET",
 //!     description = "Endpoint protected by auth middleware"
 //!)]
-//! async fn secure_endpoint -> Result<serde_json::Value, ApiError> { Ok(serde_json::json!({})) }
+//! async fn secure_endpoint() -> Result<serde_json::Value, ApiError> { Ok(serde_json::json!({})) }
 //! ```
 
 use sdforge::prelude::*;

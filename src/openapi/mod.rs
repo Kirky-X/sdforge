@@ -17,11 +17,11 @@
 //! let spec = generate_openapi_spec;
 //!
 //! // Customized spec
-//! let spec = OpenApiBuilder::new
+//! let spec = OpenApiBuilder::new()
 //!     .title("My Service")
 //!     .version("2.0.0")
 //!     .description("User-facing API")
-//!     .build;
+//!     .build();
 //! ```
 //!
 //! # Feature Flag

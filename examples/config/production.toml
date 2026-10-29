@@ -1,4 +1,7 @@
 # SDForge Configuration - Production Example
+#
+# SdForgeConfig recognizes only [server] / [authentication] / [timeout] /
+# [security] / [cache] sections (unknown keys are silently ignored).
 
 # Server Configuration
 [server]
@@ -24,12 +27,29 @@ key_path = "/etc/sdforge/tls/key.pem"
 type = "jwt"
 secret = "CHANGE_THIS_TO_A_STRONG_RANDOM_SECRET"
 
-# Rate Limiting Configuration
-[rate_limit]
-requests = 1000
-window_seconds = 60
+# Rate Limiting Configuration (`security` feature; the limiteron
+# FlowControlConfig value is assembled by build_with_config_ext_rate_limited)
+[security.rate_limit]
+version = "1.0"
 
-# Logging Configuration
-[logging]
-level = "warn"
-format = "json"
+[security.rate_limit.global]
+storage = "memory"
+cache = "memory"
+metrics = "prometheus"
+
+[[security.rate_limit.rules]]
+id = "http_default"
+name = "HTTP default rate limit"
+priority = 100
+
+[[security.rate_limit.rules.matchers]]
+type = "User"
+user_ids = ["*"]
+
+[[security.rate_limit.rules.limiters]]
+type = "TokenBucket"
+capacity = 1000   # burst capacity
+refill_rate = 17  # tokens refilled per second (~1000 requests/min steady state)
+
+[security.rate_limit.rules.action]
+on_exceed = "reject"

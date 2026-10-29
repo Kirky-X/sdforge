@@ -23,11 +23,11 @@ axum = { version = "0.8", default-features = false, features = ["http1", "json",
 tower = { version = "0.5", default-features = false, features = ["log", "util", "timeout", "limit", "load-shed"] }
 tower-http = { version = "0.7", default-features = false, features = ["cors", "limit", "timeout", "set-header", "compression-gzip", "compression-deflate"] }
 inventory = { version = "0.3", default-features = false }
-tokio = { version = "1.53", default-features = false, features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+tokio = { version = "1.54", default-features = false, features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
 # 仅用 Stream/Sink 面；关闭 async-await 宏以剪掉 futures-macro
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio-stream = { version = "0.1", default-features = false }
-uuid = { version = "1.28", default-features = false, features = ["std", "v4"] }
+uuid = { version = "1.29", default-features = false, features = ["std", "v4"] }
 # 仅取时间戳/RFC3339 字符串，无类型进入公共签名或序列化面
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 # unicode 必须显式声明：pattern 属用户可见语义，收窄会静默降级为 ASCII
@@ -45,7 +45,8 @@ toml = { version = "1.1", default-features = false }
 # minimal + byte-weight（复用 moka，不新增依赖）
 oxcache = { version = "0.5.0-rc.9", default-features = false, features = ["minimal", "byte-weight"] }
 # confers/watch：去抖文件监听，仅 tls-watch 门控；无环
-confers = { version = "0.6.0-rc.11", default-features = false, features = ["watch"] }
+# rc.12 修复 macOS FSEvents Create 吞后续 Modify/Remove 与 TMPDIR symlink 聋化（tls-watch 热重载依赖此修复）
+confers = { version = "0.6.0-rc.12", default-features = false, features = ["watch"] }
 # 数据库网关：dbnexus embedded（sqlite）+ sql-parser，供数据 API 网关的池化/解析面（db-integration feature）
 dbnexus = { version = "0.6.0-rc.10", default-features = false, features = ["embedded", "sql-parser"] }
 # limiteron DistributedLimiter trait 的 mock/适配实现用（trait 以 async_trait 声明，显式声明供实现侧使用）
@@ -72,7 +73,7 @@ rustls-pki-types = { version = "1.15", default-features = false, features = ["st
 hyper = { version = "1.12", default-features = false, features = ["http1", "http2", "server"] }
 hyper-util = { version = "0.1", default-features = false, features = ["server-auto", "tokio"] }
 # simd-json：x86 上运行时探测 avx2/sse4.2 的 SIMD 派发
-simd-json = { version = "0.18", default-features = false, features = ["serde_impl", "runtime-detection"] }
+simd-json = { version = "0.19", default-features = false, features = ["serde_impl", "runtime-detection"] }
 # i18n 检测链尾段（SDFORGE_LANG → LC_ALL → LC_MESSAGES → LANG → sys-locale → en）
 sys-locale = { version = "0.3", default-features = false }
 # Fluent en/zh 双束常驻编译，无条件依赖（与 dbnexus/limiteron 同口径）
@@ -150,7 +151,7 @@ inventory = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 axum-extra = { workspace = true, optional = true }
 # rmcp：transport-io 启用 serve_stdio() 所需的 transport::stdio
-rmcp = { version = "3.5", default-features = false, features = ["server", "transport-io"], optional = true }
+rmcp = { version = "3.8", default-features = false, features = ["server", "transport-io"], optional = true }
 anyhow = { version = "1.0", default-features = false, features = ["std"], optional = true }
 tokio-stream = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }
@@ -198,9 +199,9 @@ limiteron = { workspace = true, optional = true }
 # trait-kit 集成（kit feature）
 trait-kit = { version = "0.5.0-rc.11", default-features = false, features = ["async"], optional = true }
 # inklog 结构化日志集成（inklog feature）
-inklog = { version = "0.3.0-rc.10", default-features = false, optional = true }
+inklog = { version = "0.3.0-rc.11", default-features = false, optional = true }
 # ICU4X：数字/日期/复数/排序格式化 + Accept-Language 解析（i18n feature）
-icu = { version = "2.3", default-features = false, features = ["compiled_data"], optional = true }
+icu = { version = "2.4", default-features = false, features = ["compiled_data"], optional = true }
 # writeable 默认 feature 为 alloc（write_to_string 需要），显式声明同一集合
 writeable = { version = "0.6", default-features = false, features = ["alloc"], optional = true }
 # i18n 检测链尾段（关闭 feature 时链止于 POSIX 环境变量）
@@ -292,7 +293,7 @@ metrics = ["http", "tokio"]
 graceful = ["http", "tokio", "tokio?/signal"]
 # context：request_id/trace_id 生成与跨协议注入（HTTP/MCP/gRPC/WS），tokio task_local 承载
 context = ["tokio"]
-# validate：#[forge(validate)] + #[param(ge/le/...)] 校验规则，400 带字段级错误
+# validate：#[forge(validate)] + #[param(ge/le/...)] 校验规则，422 带字段级错误（rc.6 起 400→422，见 CHANGELOG）
 validate = ["http", "tokio"]
 # paginate：#[forge(paginate)] 自动 page/size 查询参数与 {items,total,next} 响应包装
 paginate = ["http", "tokio"]

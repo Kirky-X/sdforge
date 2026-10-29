@@ -16,8 +16,8 @@
 //!
 //! ```ignore
 //! sdforge::otel::install(sdforge::otel::OtelConfig {
-//!     endpoint: "http://127.0.0.1:4318".into,
-//!     service_name: "my-service".into,
+//!     endpoint: "http://127.0.0.1:4318".into(),
+//!     service_name: "my-service".into(),
 //!     ..Default::default
 //! });
 //! ```
@@ -450,7 +450,7 @@ fn resolve_addrs_with_timeout(
 /// Dependency-free HTTP/1.1 POST of a JSON body (MVP: no TLS).
 /// Returns the response status code, or an error string.
 ///
-/// The whole exchange is bounded by [`EXPORT_DEADLINE_SECS`]: the collector
+/// The whole exchange is bounded by `EXPORT_DEADLINE_SECS`: the collector
 /// may dribble bytes out one at a time, and the per-read idle timeout alone
 /// would let such a peer keep the export alive indefinitely. The deadline is
 /// measured from the start of the export, so address resolution, connect and
@@ -627,7 +627,7 @@ fn write_all_with_deadline(
 ///
 /// 传输失败（连接/写入失败、状态行畸形）时批次回填缓冲，下一轮重试；采集端
 /// 返回非 2xx 同样表示导出失败：状态码照常返回给调用方，批次一并回填。
-/// 回填后缓冲仍受 [`MAX_BUFFERED_SPANS`] 约束，溢出时淘汰最旧的 span。
+/// 回填后缓冲仍受 `MAX_BUFFERED_SPANS` 约束，溢出时淘汰最旧的 span。
 pub fn flush_spans(config: &OtelConfig) -> Result<u16, String> {
     let spans = take_spans();
     if spans.is_empty() {

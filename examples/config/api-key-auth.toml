@@ -1,4 +1,7 @@
 # SDForge Configuration - API Key Authentication Example
+#
+# SdForgeConfig recognizes only [server] / [authentication] / [timeout] /
+# [security] / [cache] sections (unknown keys are silently ignored).
 
 # Server Configuration
 [server]
@@ -6,18 +9,15 @@ host = "127.0.0.1"
 port = 8080
 request_timeout_secs = 15
 
-# Database Configuration
-[database]
-connection_string = "sqlite:///data.db"
-max_connections = 5
-
 # Authentication Configuration - API Key
+# Seeded keys are required: building with an empty key store fails the
+# build instead of silently 401-locking every route. The plaintext key is
+# hashed into the key store at build time.
 [authentication]
 type = "api_key"
 header_name = "X-API-Key"
 prefix = "Key "
 
-# Logging Configuration
-[logging]
-level = "debug"
-format = "pretty"
+[[authentication.keys]]
+key = "replace-with-a-real-api-key"
+permissions = []  # empty = authenticated but no permissions

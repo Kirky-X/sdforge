@@ -44,8 +44,8 @@
 //!     name = "http_only",
 //!     tool_name = ...  // 不指定 tool_name
 //!)]
-//! async fn http_only -> Result<String, ApiError> {
-//!     Ok("HTTP only".to_string)
+//! async fn http_only() -> Result<String, ApiError> {
+//!     Ok("HTTP only".to_string())
 //! }
 //! ```
 //!

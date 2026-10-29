@@ -107,7 +107,7 @@ pub(crate) fn apply_security_headers(
 /// Built-in probe/metrics mounting skips such paths to avoid axum
 /// duplicate-route panics. Paths owned by a router the caller merges in are
 /// not visible here — axum exposes no way to enumerate a router's routes;
-/// [`router_path_taken`] covers that gap.
+/// `router_path_taken` covers that gap.
 // 消费方：health 探针挂载、metrics 挂载、health 门控测试——
 // 两 feature 皆关时无消费方，不参与编译。
 #[cfg(any(feature = "health", feature = "metrics"))]
@@ -745,10 +745,11 @@ fn build_with_config_inner(
 
     // mount /healthz + /readyz AFTER the auth layer — axum layers only
     // apply to routes registered before them, so probes added here bypass
-    // authentication/rate-limiting by construction. Paths already claimed by
-    // inventory-registered routes are skipped (prevents duplicate-route
-    // panics); a path claimed by the merged-in `base` router is not visible
-    // to that check and collides with the built-in probe.
+    // authentication/rate-limiting by construction. A probe path already
+    // claimed — by an inventory-registered route or by the merged-in `base`
+    // router (mount_builtin_route checks both: route_path_taken plus a
+    // trial-insert router_path_taken) — is skipped to avoid duplicate-route
+    // panics.
     #[cfg(feature = "health")]
     {
         router = crate::health::mount_probes(router);

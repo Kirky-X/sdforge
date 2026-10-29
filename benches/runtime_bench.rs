@@ -479,13 +479,13 @@ fn bench_simd_json(c: &mut Criterion) {
 #[cfg(not(feature = "simd-json"))]
 fn bench_simd_json(_: &mut Criterion) {}
 
-/// `build_with_config` 逐中间件累加分档（审查欠账收口）：每档一个
+/// `build_with_config_ext` 逐中间件累加分档（审查欠账收口）：每档一个
 /// Router，`Service::call` GET /api/v1/bench/ping 的完整请求处理耗时。
-/// 分档按 `build_with_config` 实际装配面（body-limit / compression /
+/// 分档按 `build_with_config_ext` 实际装配面（body-limit / compression /
 /// timeout / security-headers 恒装；auth/etag/metrics/context/cors/
 /// idempotency 按 feature + config 门控逐级叠加），feature 未启用时该
 /// 分档不编译（cfg 各自独立）。HTTP 侧限流由调用方以 `rate_limit_layer`
-/// 自装（不在 build_with_config 装配面内），故不设限流分档。
+/// 自装（不在 build_with_config_ext 装配面内），故不设限流分档。
 fn bench_middleware_tiers(c: &mut Criterion) {
     #[cfg(feature = "security")]
     use sdforge::config::ApiKeySeed;

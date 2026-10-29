@@ -25,11 +25,11 @@
 //! ```
 //! use sdforge::streaming::SseFrameParser;
 //!
-//! let mut parser = SseFrameParser::new;
+//! let mut parser = SseFrameParser::new();
 //! parser.feed(b"event: add\ndata: {\"x\":1}\n\n");
-//! let frame = parser.next_frame.unwrap.unwrap;
-//! assert_eq!(frame.event.as_deref, Some("add"));
-//! assert_eq!(frame.data.as_deref, Some("{\"x\":1}"));
+//! let frame = parser.next_frame().unwrap().unwrap();
+//! assert_eq!(frame.event.as_deref(), Some("add"));
+//! assert_eq!(frame.data.as_deref(), Some("{\"x\":1}"));
 //! ```
 
 use futures_util::Stream;

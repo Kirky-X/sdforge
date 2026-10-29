@@ -52,7 +52,8 @@ pub fn demo_expected_headers() -> Vec<(&'static str, &'static str)> {
 /// 演示 `McpHeaderInfo` 的字段结构
 ///
 /// `parse_mcp_headers` 解析请求头后返回此结构。缺失头时返回
-/// `400 Bad Request`，与 2026-07-28 规范一致。
+/// `McpHeaderError`；HTTP 状态（如 400）由下游传输适配层自行映射，
+/// 框架不内建该映射。
 pub fn demo_header_info_shape() -> McpHeaderInfo {
     McpHeaderInfo {
         method: "tools/call".to_string(),
