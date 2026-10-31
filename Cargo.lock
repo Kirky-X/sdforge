@@ -831,7 +831,7 @@ dependencies = [
  "notify-debouncer-full",
  "regex",
  "serde",
- "serde-saphyr",
+ "serde-saphyr 1.3.0",
  "serde_json",
  "serde_path_to_error",
  "sys-locale",
@@ -1188,9 +1188,9 @@ checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 
 [[package]]
 name = "dbnexus"
-version = "0.6.0-rc.10"
+version = "0.6.0-rc.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41fdef94a19dabce0a7dd574f379c632b0d60cb8bad22dba12d314208e629ac6"
+checksum = "b4b142440ae73e9bc622ac33932592b619886c4fc702ad812f649fb33c7284c9"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -1205,7 +1205,7 @@ dependencies = [
  "regex",
  "sea-orm",
  "serde",
- "serde-saphyr",
+ "serde-saphyr 2.0.0",
  "serde_json",
  "sqlparser",
  "sys-locale",
@@ -1220,9 +1220,9 @@ dependencies = [
 
 [[package]]
 name = "dbnexus-limiter-port"
-version = "0.6.0-rc.10"
+version = "0.6.0-rc.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4a28977a381877c3994e9596f9690bcbc2ca2949372d732c702915f41c60c06"
+checksum = "075dbfb44e1d05e8ebe7bd0877d2e0f1026ca3d4bea031c3233061eb4dedfeae"
 dependencies = [
  "async-trait",
 ]
@@ -1851,6 +1851,16 @@ name = "granit-parser"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e20f99e46474f56bd905c56e817ebddcf377a611f94c53ac4649e4d3fa3c0cd0"
+dependencies = [
+ "arraydeque",
+ "smallvec",
+]
+
+[[package]]
+name = "granit-parser"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da55feca5d1625466bae068f9fd4b87892caeae70c3fe671ddb0f50d41aebf37"
 dependencies = [
  "arraydeque",
  "smallvec",
@@ -2886,9 +2896,9 @@ dependencies = [
 
 [[package]]
 name = "limiteron"
-version = "0.3.0-rc.8"
+version = "0.3.0-rc.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6579be122ec691fc3423b4a92739fd103f4bae9a2c3733374f993f1152b12400"
+checksum = "bff979dde4d04a0ddb04b496d5002c73f82f96b595668ab9988c72a14e456c3b"
 dependencies = [
  "ahash",
  "async-trait",
@@ -2904,7 +2914,7 @@ dependencies = [
  "redis",
  "secrecy",
  "serde",
- "serde-saphyr",
+ "serde-saphyr 1.3.0",
  "serde_json",
  "sys-locale",
  "thiserror",
@@ -3279,9 +3289,9 @@ checksum = "13c45bb4a6ae1280ec0803b1ef9d3455eb50f01efbbe1447ab020f1d54fba9d8"
 
 [[package]]
 name = "oxcache"
-version = "0.5.0-rc.11"
+version = "0.5.0-rc.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e7692b7941fc7bd70021726c9fc0840c82a483e5d03eedfb625f21934a5a9d6"
+checksum = "41f58d435b2d2848ba0e04cb31be9c7c00fd33cc60d6b60fb52083d57dc646de"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3828,9 +3838,9 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "1.7.1"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed5b98ae99461e02895c3a96a25dbe4d852a3d5e5b815d31d5d9e4b5344d99e9"
+checksum = "db7f3d75b5a3301746bff39a767bf4c5c42506b08513527308b3875bfb64a031"
 dependencies = [
  "arc-swap",
  "arcstr",
@@ -4501,7 +4511,24 @@ dependencies = [
  "annotate-snippets",
  "base64 0.23.1",
  "encoding_rs_io",
- "granit-parser",
+ "granit-parser 1.3.0",
+ "nohash-hasher",
+ "num-traits",
+ "serde_core",
+ "smallvec",
+ "zmij",
+]
+
+[[package]]
+name = "serde-saphyr"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a253edfdea34032da21af84e16fcc94f4c7a6ba237f9f3bc2dbf43cea8535c44"
+dependencies = [
+ "annotate-snippets",
+ "base64 0.23.1",
+ "encoding_rs_io",
+ "granit-parser 2.0.0",
  "nohash-hasher",
  "num-traits",
  "serde_core",
@@ -5497,9 +5524,9 @@ dependencies = [
 
 [[package]]
 name = "trait-kit"
-version = "0.5.0-rc.11"
+version = "0.5.0-rc.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af81efe05c217a17c4a09a5faeb3e8d202639e49781a0a3b1c5969d636e12e70"
+checksum = "0a9fa4c077e939f17a6f0bda0fc720ef1af104636f7da4ef2d5d29de9cd200ac"
 dependencies = [
  "fluent-bundle",
  "log",
