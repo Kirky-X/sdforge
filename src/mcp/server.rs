@@ -481,14 +481,12 @@ impl ServerHandler for SdForgeMcpServer {
             .await?;
 
         let tools = self.get_all_tools();
-        Ok(ListToolsResult {
-            meta: None,
-            next_cursor: None,
-            tools,
-            result_type: None,
-            ttl_ms: None,
-            cache_scope: None,
-        })
+        // `with_all_items` 把 `result_type` 初始化为 `Some(ResultType::COMPLETE)`：
+        // 协议 2026-07-28 要求每个 result 都带 `resultType`，而 rmcp 的
+        // `fill_missing_cache_hints` 只补 `ttlMs`/`cacheScope`、不补
+        // `resultType`。手工构造时把 `result_type` 写死为 `None` 会让新版
+        // 客户端判定响应不合规；rmcp 会自行对旧版 peer 剥离该字段。
+        Ok(ListToolsResult::with_all_items(tools))
     }
 
     async fn call_tool(
