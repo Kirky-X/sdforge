@@ -11,6 +11,8 @@
 <summary>📑 目录</summary>
 
 - [Unreleased](#unreleased)
+- [0.5.0-rc.11](#050-rc11---2026-11-12)
+- [0.5.0-rc.10](#050-rc10---2026-11-01)
 - [0.5.0-rc.9](#050-rc9---2026-10-19)
 - [0.5.0-rc.7](#050-rc7---2026-10-08)
 - [0.5.0-rc.6](#050-rc6---2026-10-06)
@@ -35,6 +37,30 @@
 </details>
 
 ## [Unreleased]
+
+## [0.5.0-rc.11] - 2026-11-12
+
+### 新增 (Added)
+
+- **i18n 桥接 trait-kit `I18nManager`（`kit` feature）**：`kit` 开启时宿主翻译面接入
+  trait-kit 进程级注册面——`register_translation` 直写 trait-kit 注册覆盖层（kit 模块经
+  自身 `tr()` 可见宿主覆盖）、`clear_translations` 直通清理两侧存储、`translate_for` /
+  `t` 终局回退委托 `I18nManager::translate`（kit 侧注册的键经 sdforge API 可达）。行为
+  契约：sdforge 注册表保持权威存储——trait-kit 按 zh/en 桶归一 locale 而 sdforge 按
+  精确 `(locale, key)` 键控，完全委托会塌缩非中英语言的注册隔离；两侧皆未命中仍回
+  key 本身，`kit` 开关两态输出字节一致；占位符在桥接层规范化（`{ $name }` ↔ `{$name}`，
+  纯规范化不改渲染输出）。`kit` 关闭时行为与此前完全一致
+- trait-kit 依赖 `0.5.0-rc.12` → `0.5.0-rc.13`（rc.13 新增 `I18nManager` 宿主注册面，
+  本桥接的依赖前提）
+
+### 变更 (Changed)
+
+- CI：taiki-e/install-action v2.88.0 → v2.89.1
+
+## [0.5.0-rc.10] - 2026-11-01
+
+> 注：rc.10 发布时未同步本文件，条目于此补记（以提交记录为准；下列「安全」「修复」
+> 「变更」各节为发布前积累的变更）。
 
 ### 安全 (Security)
 
@@ -170,6 +196,18 @@
   上限的文本帧断开连接（此前只有超过 1 MiB 才断开）。把上限调小的应用行为随之改变
   （此前不生效）；上限调大时不再被常量提前切断。同时新增
   `parse_websocket_message_with_limit(text, limit)`，按调用方给定上限解析消息
+
+### 修复 (Fixed)（补记）
+
+- **MCP `list_tools` 协议合规**：改用 `with_all_items` 构造结果——`result_type` 必须
+  初始化为 `COMPLETE`（MCP 2026-07-28 协议合规），此前手工构造写死 `None` 被新版
+  客户端判不合规
+
+### 变更 (Changed)（补记）
+
+- **依赖钉版更新**：trait-kit `0.5.0-rc.10` → `rc.12`（中间经 rc.11 承载 masking）、
+  oxcache → `0.5.0-rc.12`、dbnexus → `0.6.0-rc.11`、limiteron → `0.3.0-rc.10`、
+  inklog → `0.3.0-rc.12`、ctutils → `0.4.4`（RUSTSEC-2026-0385）
 
 ## [0.5.0-rc.9] - 2026-10-19
 
