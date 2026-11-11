@@ -14,8 +14,10 @@
 /release
 **/*.rs.bk
 
-# Cargo 本地覆盖(.cargo/config.toml 等机器特定配置)
-.cargo/
+# Cargo 本地覆盖(.cargo/config.toml 等机器特定配置)；audit.toml 属
+# 仓库策略(推送门禁豁免,与 deny.toml 同一治理口径)，反例外入库
+.cargo/*
+!.cargo/audit.toml
 
 # --- Code coverage ---
 coverage/

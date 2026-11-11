@@ -150,8 +150,9 @@ tower-http = { workspace = true, optional = true }
 inventory = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 axum-extra = { workspace = true, optional = true }
-# rmcp：transport-io 启用 serve_stdio() 所需的 transport::stdio
-rmcp = { version = "3.8", default-features = false, features = ["server", "transport-io"], optional = true }
+# rmcp：transport-io 启用 serve_stdio() 所需的 transport::stdio；3.9.0 修复
+# RUSTSEC-2026-0462（Streamable HTTP 客户端响应体无限缓冲）
+rmcp = { version = "3.9", default-features = false, features = ["server", "transport-io"], optional = true }
 anyhow = { version = "1.0", default-features = false, features = ["std"], optional = true }
 tokio-stream = { workspace = true, optional = true }
 futures-util = { workspace = true, optional = true }

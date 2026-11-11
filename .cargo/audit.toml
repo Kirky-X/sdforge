@@ -1,0 +1,14 @@
+# cargo-audit 配置 — 推送期安全门禁（lefthook pre-push）。
+# 豁免须附原因与解除条件；与 deny.toml 的 [advisories].ignore 同一治理口径。
+
+[advisories]
+ignore = [
+    # RUSTSEC-2026-0459（2026-10-30 入库，medium 6.8）：libsqlite3-sys 0.37.0
+    # 携带 C SQLite CVE-2026-119375，经 dbnexus(embedded) → sqlx-sqlite 0.9.0
+    # 传入；sqlx-sqlite 0.9.0 对 libsqlite3-sys 的 req 封顶 <0.38.0，修复版
+    # 0.39.0 在当前依赖图内不可达（cargo deny 同口径不报：该链仅在
+    # db-integration feature 下进入目标图）。源头升级（sqlx-sqlite 或 dbnexus
+    # 换绑）归 dbnexus 仓裁决；此处随行豁免直至上游迁移完成（同 deny.toml
+    # 对 RUSTSEC-2024-0449 的处置）。
+    "RUSTSEC-2026-0459",
+]
