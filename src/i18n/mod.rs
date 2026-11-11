@@ -53,6 +53,11 @@
 // locales via [`register_translation`]; host registrations always take
 // precedence over the built-in catalog, and the active locale defaults to
 // auto-detection (see [`detect_locale`]).
+//
+// With the `kit` feature the registry additionally bridges to the trait-kit
+// `I18nManager` (registration write-through + terminal-fallback lookup
+// delegation) — see the "trait-kit i18n bridge" section below for the
+// storage-split rationale and the placeholder canonicalization rules.
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex, OnceLock};
@@ -184,6 +189,78 @@ fn format_template(template: &str, args: &[(&str, String)]) -> String {
     out
 }
 
+// trait-kit i18n bridge (`kit` feature).
+//
+// When the `kit` feature is enabled, the host translation surface
+// ([`register_translation`] / [`translate_for`] / [`clear_translations`])
+// bridges to the trait-kit `I18nManager` (rc.13+ host-registration API):
+//
+// - **Storage write-through**: every host registration is written to the
+//   sdforge registry (exact `(locale, key)` keying — the authoritative store
+//   for sdforge lookups) *and* mirrored into trait-kit's process-level
+//   registered-translations overlay, so kit modules translating through
+//   trait-kit's own `tr()` see host overrides. `clear_translations` clears
+//   both stores.
+// - **Lookup delegation**: `translate_for`'s terminal fallback (the point
+//   where the bare key would be returned) delegates to
+//   `I18nManager::translate` when `kit` is on — translations registered by
+//   kit-side code surface through the sdforge API. trait-kit itself falls
+//   back to the bare key on a total miss, so output stays byte-identical
+//   for keys unknown to both stores.
+//
+// The sdforge registry stays authoritative because the two stores key
+// differently: sdforge keys by the exact locale string (`"de"` / `"fr"` are
+// distinct), while trait-kit normalizes locales into `zh` / `en` buckets.
+// Delegating sdforge's own lookups to trait-kit storage would therefore
+// collapse distinct locales onto one bucket and change observable behavior;
+// the write-through + terminal-fallback split delegates everything that
+// *can* be delegated without changing any output.
+//
+// Placeholder syntax is canonicalized at the boundary
+// ([`host_to_kit_template`]): sdforge host templates document the spaced
+// `{ $name }` form, trait-kit's registered layer the compact `{$name}` form;
+// both engines accept either, so the conversion is normalization-only and
+// cannot alter rendered output.
+
+/// Canonicalize a host template for the trait-kit registered store:
+/// placeholder braces `{ $name }` (spaced) become `{$name}` (compact).
+///
+/// Non-placeholder braces (`{name}` without `$`, `{{literal}}`) and unknown
+/// placeholders pass through untouched. Pure string rewriting — compiled in
+/// both feature states' test builds so the conversion is unit-tested
+/// everywhere (production builds only need it with `kit` on).
+#[cfg(any(feature = "kit", test))]
+fn host_to_kit_template(template: &str) -> String {
+    if !template.contains('{') {
+        return template.to_string();
+    }
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        let Some(close_rel) = rest[open..].find('}') else {
+            break;
+        };
+        let inner = rest[open + 1..open + close_rel].trim();
+        match inner.strip_prefix('$').map(str::trim) {
+            Some(name) if !name.is_empty() => {
+                // Placeholder: re-emit in the compact `{$name}` canonical form.
+                out.push_str(&rest[..open]);
+                out.push_str("{$");
+                out.push_str(name);
+                out.push('}');
+                rest = &rest[open + close_rel + 1..];
+            }
+            _ => {
+                // Not a placeholder: keep the brace, keep scanning.
+                out.push_str(&rest[..open + 1]);
+                rest = &rest[open + 1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
 /// Register a translation for a specific locale and i18n key.
 ///
 /// Call this at application startup to populate the translation table.
@@ -201,9 +278,23 @@ fn format_template(template: &str, args: &[(&str, String)]) -> String {
 /// set_locale("zh-CN");
 /// ```
 pub fn register_translation(locale: &str, key: &str, value: &str) {
-    let mut reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
-    reg.translations
-        .insert((locale.to_string(), key.to_string()), value.to_string());
+    {
+        let mut reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+        reg.translations
+            .insert((locale.to_string(), key.to_string()), value.to_string());
+    }
+    // `kit` bridge: mirror the registration into trait-kit's overlay (see the
+    // bridge section above for the storage-split rationale). The sdforge
+    // registry guard is released first — lock order is always
+    // sdforge REGISTRY → trait-kit REGISTERED_TRANSLATIONS, never reversed.
+    #[cfg(feature = "kit")]
+    {
+        trait_kit::i18n::I18nManager::register_translation(
+            locale,
+            key,
+            &host_to_kit_template(value),
+        );
+    }
 }
 
 // Locale resolution (active-locale cache + host detection chain) lives in
@@ -293,11 +384,38 @@ pub fn locale_from_headers(headers: &axum::http::HeaderMap) -> Option<String> {
 /// active locale. Useful for per-request language selection (e.g. from an
 /// `Accept-Language` header) and for deterministic testing.
 ///
-/// Falls back to the built-in English catalog, then to `key` itself.
+/// Falls back to the built-in English catalog, then to `key` itself. With
+/// the `kit` feature the terminal fallback delegates to the trait-kit
+/// `I18nManager` (kit-side registrations surface here; a total miss still
+/// returns `key` itself, byte-identical to the non-kit build).
 pub fn translate_for(locale: &str, key: &str, args: &[(&str, String)]) -> String {
     lookup_translation(locale, key, args)
         .or_else(|| lookup_translation("en", key, args))
-        .unwrap_or_else(|| key.to_string())
+        .unwrap_or_else(|| terminal_fallback(key, args))
+}
+
+/// Terminal fallback of [`translate_for`]: what to return when the sdforge
+/// layers (host registry + built-in catalog, both locales) all miss.
+///
+/// - `kit` off: the bare key (the pre-bridge behavior).
+/// - `kit` on: delegate to trait-kit's `I18nManager` — translations
+///   registered kit-side (or trait-kit's own built-in messages) surface
+///   through the sdforge API; trait-kit returns the bare key on a total
+///   miss, so unknown keys behave identically in both feature states.
+fn terminal_fallback(key: &str, args: &[(&str, String)]) -> String {
+    #[cfg(feature = "kit")]
+    {
+        let kit_args: Vec<(&str, &str)> = args
+            .iter()
+            .map(|(name, value)| (*name, value.as_str()))
+            .collect();
+        trait_kit::i18n::I18nManager::init().translate(key, &kit_args)
+    }
+    #[cfg(not(feature = "kit"))]
+    {
+        let _ = args;
+        key.to_string()
+    }
 }
 
 /// Look up `key` for `locale` (host registrations first, then the built-in
@@ -354,10 +472,18 @@ pub fn translate_or_fallback(default: &str, i18n_key: Option<&str>) -> String {
 /// The built-in en/zh catalog is reloaded lazily from the embedded FTL
 /// constants and is never removed, so framework messages keep translating
 /// after a clear. Primarily useful for testing.
+///
+/// With the `kit` feature the trait-kit registered-translations overlay is
+/// cleared as well (the write-through mirror of [`register_translation`]);
+/// trait-kit's own global locale is owned by trait-kit and untouched.
 pub fn clear_translations() {
-    let mut reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
-    reg.translations.clear();
-    reg.locale.clear();
+    {
+        let mut reg = REGISTRY.lock().unwrap_or_else(|e| e.into_inner());
+        reg.translations.clear();
+        reg.locale.clear();
+    }
+    #[cfg(feature = "kit")]
+    trait_kit::i18n::I18nManager::clear_registered_translations();
 }
 
 // ICU4X-backed HTTP formatter — only compiled with the `i18n` feature.
@@ -588,6 +714,103 @@ mod translation_tests {
         );
     }
 
+    /// Host-template 占位符契约（kit on/off 两态一致）。
+    ///
+    /// `kit` feature 开启时，`register_translation` / `translate_for` /
+    /// `clear_translations` 桥接到 trait-kit `I18nManager`（注册直写 +
+    /// 终局回退委托），占位符语法在桥接层规范化；本组用例把宿主模板的
+    /// 替换语义钉死为字节级一致——两态下断言完全相同，桥接层不得改变
+    /// 任何输出。
+    #[test]
+    fn test_host_placeholder_substitution() {
+        let _guard = registry_guard();
+        clear_translations();
+        register_translation("en", "greet", "Hello { $name }");
+        assert_eq!(
+            translate_for("en", "greet", &[("name", "World".to_string())]),
+            "Hello World"
+        );
+        // 无参数：模板原样返回（含原始空格）。
+        assert_eq!(translate_for("en", "greet", &[]), "Hello { $name }");
+        clear_translations();
+    }
+
+    /// 未带 `$` 前缀的花括号不是占位符：逐字透传，不替换。
+    #[test]
+    fn test_host_placeholder_without_dollar_passthrough() {
+        let _guard = registry_guard();
+        clear_translations();
+        register_translation("en", "literal", "lit {name} tail");
+        assert_eq!(
+            translate_for("en", "literal", &[("name", "X".to_string())]),
+            "lit {name} tail"
+        );
+        clear_translations();
+    }
+
+    /// 参数表里没有对应实参的占位符：保留原始 `{ $x }` 文本。
+    #[test]
+    fn test_host_placeholder_missing_arg_kept() {
+        let _guard = registry_guard();
+        clear_translations();
+        register_translation("en", "partial", "A { $x } B");
+        assert_eq!(
+            translate_for("en", "partial", &[("y", "1".to_string())]),
+            "A { $x } B"
+        );
+        clear_translations();
+    }
+
+    /// 逐 (locale, key) 独立注册：注册语言互不串扰（桥接存储保持同一键控）。
+    #[test]
+    fn test_host_registration_per_locale_isolation() {
+        let _guard = registry_guard();
+        clear_translations();
+        register_translation("de", "k", "DE-Wert");
+        register_translation("fr", "k", "valeur FR");
+        assert_eq!(translate_for("de", "k", &[]), "DE-Wert");
+        assert_eq!(translate_for("fr", "k", &[]), "valeur FR");
+        clear_translations();
+        assert_eq!(translate_for("de", "k", &[]), "k");
+        clear_translations();
+    }
+
+    /// 桥接占位符规范化（纯函数，两态常驻编译）：`{ $name }` → `{$name}`。
+    ///
+    /// 只动占位符花括号；无 `$` 前缀的花括号、未知占位符、已紧凑形态
+    /// 均原样保留；转换是规范化而非语义变更（两引擎本就同语义）。
+    #[test]
+    fn test_host_to_kit_template_canonicalizes_placeholders() {
+        // 稀疏形态 → 紧凑形态（多种内部空白）。
+        assert_eq!(host_to_kit_template("Hello { $name }"), "Hello {$name}");
+        assert_eq!(host_to_kit_template("{$a} { $b }"), "{$a} {$b}");
+        assert_eq!(host_to_kit_template("{  $x  }"), "{$x}");
+        // 非占位符花括号：逐字透传。
+        assert_eq!(host_to_kit_template("lit {name} tail"), "lit {name} tail");
+        assert_eq!(host_to_kit_template("no braces"), "no braces");
+        // 未知占位符同样是占位符形态：同样规范化（替换语义由实参表决定）。
+        assert_eq!(host_to_kit_template("A { $x } B"), "A {$x} B");
+        // 悬置开括号：尾部原样保留。
+        assert_eq!(host_to_kit_template("a { b"), "a { b");
+        // 空占位符 `{ $ }`：`$` 后无名字，按非占位符透传。
+        assert_eq!(host_to_kit_template("{ $ }"), "{ $ }");
+        // 规范化幂等。
+        let once = host_to_kit_template("Hello { $name }");
+        assert_eq!(host_to_kit_template(&once), once);
+    }
+
+    /// 桥接规范化与宿主替换语义的正交性：转换后的模板经宿主
+    /// `format_template` 渲染，输出与原模板完全一致（两态同源保证）。
+    #[test]
+    fn test_host_to_kit_template_preserves_rendering() {
+        let args = &[("name", "World".to_string())][..];
+        let template = "Hello { $name }";
+        assert_eq!(
+            format_template(&host_to_kit_template(template), args),
+            format_template(template, args),
+        );
+    }
+
     /// 守卫：内建键经 translate_or_fallback 亦可达（显式 set_locale 后确定性断言）。
     #[test]
     fn test_builtin_key_via_translate_or_fallback() {
@@ -598,6 +821,85 @@ mod translation_tests {
             translate_or_fallback("DEFAULT", Some("http-unauthorized")),
             "Unauthorized"
         );
+        clear_translations();
+    }
+}
+
+// trait-kit bridge tests — only compiled with the `kit` feature (the state
+// where the bridge code paths exist).
+
+/// 桥接行为契约（仅 kit 态编译）：与 translation_tests 的双态契约互补，
+/// 此处验证桥接自身的三个新增面——注册直写、清理直通、终局回退委托。
+#[cfg(all(test, feature = "kit"))]
+mod kit_bridge_tests {
+    use super::*;
+    use trait_kit::i18n::I18nManager;
+
+    /// 注册直写：sdforge `register_translation` 后，trait-kit 侧经自身
+    /// 查询链可读到同一模板并渲染出字节一致的结果（`{ $name }` ↔ `{$name}`
+    /// 规范化不得改变渲染输出）。
+    #[test]
+    fn kit_write_through_makes_host_registrations_visible_to_trait_kit() {
+        let _guard = registry_guard();
+        clear_translations();
+        register_translation("en", "bridge-greet", "Hello { $who }");
+        // kit 侧自带注册覆盖层查询（注册[en] 命中）。
+        assert_eq!(
+            I18nManager::init().translate("bridge-greet", &[("who", "kit")]),
+            "Hello kit"
+        );
+        // 无实参：模板原样返回（与宿主态 `test_host_placeholder_substitution`
+        // 同一语义，桥接规范化不引入差异）。
+        assert_eq!(
+            I18nManager::init().translate("bridge-greet", &[]),
+            "Hello {$who}"
+        );
+        clear_translations();
+        // 清理直通：trait-kit 侧注册层同步清空，回落 key 本身。
+        assert_eq!(
+            I18nManager::init().translate("bridge-greet", &[]),
+            "bridge-greet"
+        );
+    }
+
+    /// 终局回退委托：kit 侧注册的键经 sdforge `translate_for` 可达——
+    /// sdforge 两层（宿主注册 + 内建目录、双 locale）未命中时委托
+    /// trait-kit 查询链；两侧都未命中仍回 key 本身。
+    #[test]
+    fn kit_side_registrations_surface_through_translate_for() {
+        let _guard = registry_guard();
+        clear_translations();
+        // 直接注册进 trait-kit（模拟 kit 模块自己的注册面）。
+        I18nManager::register_translation("en", "kit-only", "from kit { $x }");
+        // fr 非内建 locale：宿主/内建两层必然未命中 → 走 kit 委托（en 桶）。
+        assert_eq!(
+            translate_for("fr", "kit-only", &[("x", "1".to_string())]),
+            "from kit 1"
+        );
+        // 两侧皆未知：仍回 key 本身（与无 kit 态字节一致）。
+        assert_eq!(
+            translate_for("fr", "no-such-anywhere", &[]),
+            "no-such-anywhere"
+        );
+        clear_translations();
+        // 清理后委托层不再命中。
+        assert_eq!(translate_for("fr", "kit-only", &[]), "kit-only");
+    }
+
+    /// 桥接不改内建层：sdforge 内建键在 kit 态仍由 sdforge 目录解析
+    /// （委托只发生在终局回退，内建命中优先于 kit 查询链）。
+    #[test]
+    fn kit_bridge_keeps_builtin_catalog_authoritative() {
+        let _guard = registry_guard();
+        clear_translations();
+        assert_eq!(
+            translate_for("en", "http-unauthorized", &[]),
+            "Unauthorized"
+        );
+        assert_eq!(translate_for("zh", "http-unauthorized", &[]), "未授权");
+        // 宿主注册仍覆盖内建（kit 态不降级宿主优先级）。
+        register_translation("en", "http-unauthorized", "OVERRIDDEN");
+        assert_eq!(translate_for("en", "http-unauthorized", &[]), "OVERRIDDEN");
         clear_translations();
     }
 }
