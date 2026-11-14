@@ -153,7 +153,16 @@ jobs:
       - name: Get version from tag
         id: version
         run: |
-          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          # tag 触发：取 REF_NAME（vX.Y.Z）；workflow_dispatch：REF_NAME 是
+          # 分支名（refs/heads/main 当 tag 名会被 GitHub pre_receive 拒绝，
+          # 2026-11-14 run 43579204764 实证）→ 改从 workspace manifest 取
+          # 版本并合成 v 前缀 tag 名（与 tag 触发路径的既有约束一致）。
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG_NAME="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="$(grep -m1 '^version' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')"
+            TAG_NAME="v${VERSION}"
+          fi
           VERSION="${TAG_NAME#v}"
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
