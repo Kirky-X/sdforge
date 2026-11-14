@@ -11,6 +11,7 @@
 <summary>📑 目录</summary>
 
 - [Unreleased](#unreleased)
+- [0.5.1](#051---2026-11-15)
 - [0.5.0](#050---2026-11-14)
 - [0.5.0-rc.11](#050-rc11---2026-11-12)
 - [0.5.0-rc.10](#050-rc10---2026-11-01)
@@ -36,6 +37,15 @@
 - [0.1.0](#010---2026-01-19)
 
 </details>
+
+## [0.5.1] - 2026-11-15
+
+### 变更 (Changed)
+
+- **dbnexus 集成由 `embedded` 切换为 0.6.1 的 `embedded-runtime`**（嵌入式运行时，不含捆绑的
+  sqlite 后端）：解除解析闭包被钉 `libsqlite3-sys <0.38`（RUSTSEC-2026-0459 消费侧）。sdforge
+  源码无任何 sqlite 编译依赖（唯一出现为 dbnexus_gateway 文档注释示例），公开 8 下游无一激活
+  `db-integration`（实证）。**使用 `db-integration` 且需 sqlite 的下游须显式启用 `dbnexus/sqlite`**。
 
 ## [Unreleased]
 
