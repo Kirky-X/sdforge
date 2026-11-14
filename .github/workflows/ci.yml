@@ -90,8 +90,12 @@ jobs:
       # 默认特性在同一解析里打开 sdforge 的几乎全部特性（workspace feature
       # 统一），9 个组合退化为同一份构建产物，矩阵形同虚设。examples /
       # macros 的测试由 test-workspace 作业以 --all-features 覆盖。
+      # 用 --manifest-path 而非 -p sdforge：limiteron 0.3.0 的 dev-dependency
+      # 钉了 registry sdforge 0.5.0-rc.11（断环上游侧），解析图同时存在
+      # workspace 与 registry 两个同名包，`-p sdforge` 规格歧义（0.5.0 进
+      # registry 后连 `sdforge@0.5.0` 也会歧义）；manifest-path 恒选根包。
       - name: Run tests with features ${{ matrix.features }}
-        run: cargo test -p sdforge --features "${{ matrix.features }}"
+        run: cargo test --manifest-path Cargo.toml --features "${{ matrix.features }}"
 
   test-workspace:
     name: Test (workspace, all features)
