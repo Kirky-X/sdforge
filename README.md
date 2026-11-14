@@ -112,7 +112,7 @@ cargo add sdforge
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5.0-rc.9", features = ["http"] }
+sdforge = { version = "0.5", features = ["http"] }
 ```
 
 </details>
@@ -480,6 +480,7 @@ CI 安全门禁常开：`cargo deny check`（[deny.toml](deny.toml) 策略）+ `
 
 详见 [CHANGELOG.md](docs/CHANGELOG.md)。最近版本要点：
 
+- **[0.5.0]** (2026-11-14)：0.5.0 正式版定版（自 rc.2 起累计功能面见各 rc 章节）；自研依赖收敛 stable minor 精度（confers/trait-kit/oxcache/dbnexus/inklog/limiteron）；rmcp 3.9 修复 RUSTSEC-2026-0462
 - **[0.5.0-rc.9]** (2026-10-19)：Swagger UI 托管自 vendor 化（移除 utoipa-swagger-ui，解除 docgen 下游依赖解析断裂；内嵌资产 4.11 MiB → 1.87 MiB）；发布依赖传播（oxcache / confers / dbnexus / trait-kit / inklog 提升，`sdforge-macros` 自钉同步 rc.9）
 - **[0.5.0-rc.8]** (2026-10-10)：WebSocket `build()` state 注入失效与 `#[forge(ws_path)]` 被忽略修复；API key 空权限种子、SSE 心跳、HTTP 错误体随 `Accept-Language` 的请求级 locale 作用域；新增 `tls-watch` 特性；`logging` 特性与自研 `StructuredLogger` 栈删除（迁移至 inklog）
 - **[0.5.0-rc.7]** (2026-10-08)：streaming 入站 SSE 帧解析器；`docs` feature 正名 `docgen`（旧名保留兼容别名）

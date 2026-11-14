@@ -112,7 +112,7 @@ Or add it to your `Cargo.toml` manually:
 
 ```toml
 [dependencies]
-sdforge = { version = "0.5.0-rc.9", features = ["http"] }
+sdforge = { version = "0.5", features = ["http"] }
 ```
 
 </details>
@@ -475,6 +475,7 @@ Contributions are welcome! Development environment setup (toolchain, protoc, lef
 
 See [CHANGELOG.md](docs/CHANGELOG.md). Highlights of recent releases:
 
+- **[0.5.0]** (2026-11-14): 0.5.0 stable release (cumulative feature set since rc.2, see rc sections); self-built dependencies converged to stable minor precision (confers/trait-kit/oxcache/dbnexus/inklog/limiteron); rmcp 3.9 fixes RUSTSEC-2026-0462
 - **[0.5.0-rc.9]** (2026-10-19): Self-vendored Swagger UI serving (removed utoipa-swagger-ui, unblocking `docgen` downstream dependency resolution; embedded assets 4.11 MiB → 1.87 MiB); release dependency propagation (oxcache / confers / dbnexus / trait-kit / inklog bumps, `sdforge-macros` self-pinned to rc.9)
 - **[0.5.0-rc.8]** (2026-10-10): Fixed WebSocket `build()` state injection and ignored `#[forge(ws_path)]`; API key empty-permission seeds, SSE keep-alive, request-scoped locale for HTTP error bodies (follows `Accept-Language`); new `tls-watch` feature; removed the `logging` feature and the in-house `StructuredLogger` stack (migrated to inklog)
 - **[0.5.0-rc.7]** (2026-10-08): Inbound SSE frame parser for streaming; `docs` feature renamed `docgen` (legacy name kept as a compat alias)

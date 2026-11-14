@@ -11,6 +11,7 @@
 <summary>📑 目录</summary>
 
 - [Unreleased](#unreleased)
+- [0.5.0](#050---2026-11-14)
 - [0.5.0-rc.11](#050-rc11---2026-11-12)
 - [0.5.0-rc.10](#050-rc10---2026-11-01)
 - [0.5.0-rc.9](#050-rc9---2026-10-19)
@@ -37,6 +38,27 @@
 </details>
 
 ## [Unreleased]
+
+## [0.5.0] - 2026-11-14
+
+### 变更 (Changed)
+
+- **0.5.0 正式版定版**：自 rc.2 起的累计功能面定版为 stable，内容明细见各 rc 章节
+- 自研依赖收敛至 stable minor 精度（此前钉 rc 全版本号）：confers `0.6.0-rc.12`→`0.6`、
+  trait-kit `0.5.0-rc.13`→`0.5`、oxcache `0.5.0-rc.12`→`0.5`、dbnexus `0.6.0-rc.11`→`0.6`、
+  inklog `0.3.0-rc.12`→`0.3`、limiteron `0.3.0-rc.10`→`0.3`（六库 0.x.0 正式版均已发布）
+- 内部 path 依赖 version req 同步 `0.5.0`：`sdforge-macros`（根包 dependencies/dev-dependencies）
+  与示例 crate 对 `sdforge` 的 req——预发布 req 不匹配正式版，bump 时必须同步
+- 依赖刷新（cargo update）：rmcp 3.9.0→3.10.0、tonic/tonic-prost/tonic-prost-build
+  0.14.9 等传递升级随行
+- README 中英文版依赖用法示例 `0.5.0-rc.9`→`0.5`
+
+### 安全 (Security)
+
+- rmcp 3.8→3.9（修复 RUSTSEC-2026-0462：Streamable HTTP 客户端响应体无限缓冲）
+  ——随 rc.11 后 CI Security 作业修复进入本版；新增 `.cargo/audit.toml` 豁免
+  RUSTSEC-2026-0459（libsqlite3-sys 经 dbnexus→sqlx-sqlite 传入，修复版在图内不可达，
+  源头升级归 dbnexus 仓）
 
 ## [0.5.0-rc.11] - 2026-11-12
 
