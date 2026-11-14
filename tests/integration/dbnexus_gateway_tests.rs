@@ -6,9 +6,11 @@
 //! 性，故用临时目录文件库）+ `#[forge]` 路由经 oneshot 全链路，覆盖：
 //! 白名单放行/拒绝、等值过滤、分页夹紧、过滤值注入面中性化。
 //!
-//! Feature requirement: `cargo test --features "db-integration,http" --test dbnexus_gateway_tests`.
+//! Feature requirement: `cargo test --features "db-sqlite,http" --test dbnexus_gateway_tests`.
+//!（0.5.1 起需 `db-sqlite`：dbnexus 集成默认走 embedded-runtime 无 sqlite 驱动，
+//! 本套件用 sqlite 文件库，故显式带上 `dbnexus/sqlite` 驱动特性）
 
-#![cfg(all(feature = "db-integration", feature = "http"))]
+#![cfg(all(feature = "db-sqlite", feature = "http"))]
 
 use sdforge::forge;
 use sdforge::integrations::{DbGateway, GatewayQuery};

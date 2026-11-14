@@ -273,6 +273,9 @@ ratelimit-dist = ["ratelimit", "limiteron/distributed", "limiteron/lua-script"]
 cache-l2 = ["cache", "oxcache/redis"]
 # db-integration：dbnexus 数据 API 网关——白名单只读数据面（DbGateway；独立于 http，端点暴露按需组合）
 db-integration = ["dep:dbnexus"]
+# db-sqlite = db-integration + dbnexus/sqlite 驱动：0.5.1 起 dbnexus 集成切
+# embedded-runtime（无 sqlite），集成测试与需 sqlite 文件库的网关用户显式启用
+db-sqlite = ["db-integration", "dbnexus/sqlite"]
 # db-permission：开启 dbnexus permission，逐表权限检查对非 admin 会话角色生效（fail-closed）；未开启时权限检查整块编译掉，仅剩白名单与归属谓词隔离
 db-permission = ["db-integration", "dbnexus/permission"]
 # schemars：为返回值发射精确 response schema
