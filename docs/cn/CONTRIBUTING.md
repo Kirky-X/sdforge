@@ -185,7 +185,7 @@ cargo audit
 2. **变更影响公开 API 时更新文档**，适用时更新 CHANGELOG
 3. **确保 pre-commit hooks 通过** — 所有检查必须绿色
 4. **确保 CI 通过** — `cargo fmt --check`、`cargo clippy --all-features -- -D warnings`、`cargo test --all-features`
-5. **提交 PR** — 使用 [.github/PULL_REQUEST_TEMPLATE.md](../.github/PULL_REQUEST_TEMPLATE.md) 模板，包含清晰的变更说明，关联相关 issue
+5. **提交 PR** — 使用 [.github/PULL_REQUEST_TEMPLATE.md](../../.github/PULL_REQUEST_TEMPLATE.md) 模板，包含清晰的变更说明，关联相关 issue
 6. **代码审查** — 至少一名审查者批准后合并
 
 ### 发布流程
@@ -203,5 +203,5 @@ cargo audit
 - **禁止 `git push --force` 到 main/master 分支**
 - pre-commit **不设** `no-commit-to-branch` 钩子：本仓工作流为 main 直提，该钩子只保护 `master`，保留不会生效、只会造成「有护栏」的误解（见 `.pre-commit-config.yaml` 内注释）
 - 代码质量工具是项目强制门禁：**代码质量审查**（简化/架构/性能审查）、**SAST 安全扫描**（发布前强制）、**kueiku**（bug 分析/根因分析/FMEA）
-- 提交即代表你同意你的贡献将基于 [MIT](../LICENSE) 许可证授权
+- 提交即代表你同意你的贡献将基于 [MIT](../../LICENSE) 许可证授权
 - 有任何疑问，欢迎提一个带 `question` 标签的 [Issue](https://github.com/Kirky-X/sdforge/issues)

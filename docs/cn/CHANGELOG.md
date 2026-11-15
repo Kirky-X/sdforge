@@ -924,7 +924,7 @@
   成本；守卫测试以副作用闭包证明闭包未执行（进程级 max_level 全局态用例
   串行）。
 - **DataMasker 凭证规则漏引号键 + 大载荷旁路（MEDIUM 安全）**：凭证 KV 规
-  则不匹配 `"password":"hunter2"` 等引号键形态——pattern 允许键被 `"?`
+  则不匹配 `"password":"hunter2"` 等引号键形态——pattern 允许键被 `"?` <!-- pragma: allowlist secret -->
   包裹；inklog DataMasker 对 >1 MiB 输入整体跳过掩码（原文直出）——壳层
   在掩码前截断至 64 KiB（截断点外内容整体丢弃，不以明文出现），掩码面单
   测锁定引号形态与截断行为。
