@@ -14,6 +14,7 @@
 - [进阶用法](#-进阶用法)
 - [最佳实践](#-最佳实践)
 - [故障排查](#️-故障排查)
+- [示例](#-示例)
 
 </details>
 
@@ -37,7 +38,7 @@ SDForge 的核心思路是：**一份函数注解，多协议消费**。你只�
 cargo add sdforge
 ```
 
-版本固定的 `Cargo.toml` 写法与「`default = []` 需按需显式启用协议特性」的说明见 [README · 快速开始](../README.md#-快速开始)。
+版本固定的 `Cargo.toml` 写法与「`default = []` 需按需显式启用协议特性」的说明见 [README · 快速开始](../README_CN.md#-快速开始)。
 
 ### 定义第一个 API
 
@@ -124,7 +125,7 @@ let app = build_with_config_ext(Router::new(), &config)?;
 
 ### TOML 配置文件
 
-SDForge 使用自包含的 TOML 配置（无需外部配置中心）。示例配置见仓库 `examples/config/`（完整清单见 [README · 示例](../README.md#-示例)）。
+SDForge 使用自包含的 TOML 配置（无需外部配置中心）。示例配置见仓库 `examples/config/`（完整清单见本文 [示例](#-示例) 一节）。
 
 限流与缓存配置示例：
 
@@ -352,7 +353,7 @@ serve_with_graceful_shutdown_tls(
 
 ### CLI 应用
 
-启用 `cli` feature 后，`#[forge(cli = true)]` 注册命令；`CliBuilder::execute()` 一站式完成构建/解析/分发/输出/退出。最小可运行示例见 [README 快速开始](../README.md#-最小可运行示例)（源码 `examples/basic_cli.rs`）。
+启用 `cli` feature 后，`#[forge(cli = true)]` 注册命令；`CliBuilder::execute()` 一站式完成构建/解析/分发/输出/退出。最小可运行示例见 [README 快速开始](../README_CN.md#-最小可运行示例)（源码 `examples/basic_cli.rs`）。
 
 返回 `Value::String` 时输出原始串（不带引号），其他类型输出 JSON。`CliBuilder` 还支持 `with_dependencies()`（注入状态）、`with_name()`（程序名）与 `with_global_arg()`（全局参数）。
 
@@ -471,3 +472,72 @@ let l2 = RedisL2Cache::connect(&RedisL2CacheConfig::new(redis_url).with_default_
 | 端口冲突 | `lsof -i :3000` 查找占用进程后更换端口或结束进程 |
 | 需要定位性能问题 | `cargo bench --bench runtime_bench --features http` 对照[性能基线](PERFORMANCE.md)；编译期成本对照[编译期门控基准](VS_SERVER_LESS.md) |
 | 其他问题 | 查阅 [API 参考](API_REFERENCE.md) 与 [架构文档](ARCHITECTURE.md)，或在 [Issues](https://github.com/Kirky-X/sdforge/issues) 提问 |
+
+## 💻 示例
+
+### 根包示例（`cargo run --example`）
+
+<details>
+<summary>📋 表格</summary>
+
+| 示例 | 所需特性 | 说明 |
+|------|----------|------|
+| `basic_cli` | `cli` | `#[forge(cli = true)]` + `CliBuilder::execute()` 一站式 CLI |
+| `swagger_demo` | `docgen` + `http` | Swagger UI 路由 + OpenAPI JSON + axum serve |
+| `perf_regex_cache` | `cache` | 缓存键通配模式匹配验证（`find_keys_by_pattern`：`*` / `?` 正确性与单次全量扫描成本） |
+| `perf_lru_eviction` | `cache` | 容量驱逐验证（`with_capacity` 的 FIFO 插入序驱逐：最旧键先出、读不续期 / 写续期） |
+| `perf_prefix_index` | `cache` | 前缀索引性能验证 |
+| `perf_batch_ops` | `cache` | 批量操作性能验证 |
+
+</details>
+
+<details>
+<summary>📄 代码 · bash</summary>
+
+```bash
+cargo run --example basic_cli --features cli -- echo --name world
+cargo run --example swagger_demo --features "docgen http"
+cargo run --example perf_regex_cache --features cache
+```
+
+</details>
+
+### 综合示例库（workspace 成员 `sdforge-examples`，`examples/src/`）
+
+<details>
+<summary>📋 表格</summary>
+
+| 模块 | 内容 |
+|------|------|
+| `basics/` | 简单 API、响应构建、类型与错误处理 |
+| `http/` | 路由（路径参数、查询参数）、中间件（CORS） |
+| `mcp/` | 工具定义与注册、MCP 2026-07-28 迁移、MRTR 会话 |
+| `security/` | API Key 认证、认证失败场景、完整安全栈 |
+| `cache/` | 高级缓存模式与性能验证 |
+| `config/` | 配置管理（`app_config.rs`） |
+| `streaming/` | SSE 流式响应 |
+| `websocket/` | 基础用法与聊天室 |
+| `grpc/` | gRPC 服务端 |
+| `logging/` | 结构化日志（inklog LoggerManager：全局安装 / from_file 轮转 / builder / set_level） |
+| `openapi/` | OpenAPI 规范生成（`OpenApiBuilder`、`generate_openapi_spec`） |
+| `combined/` | 多特性组合完整示例（`full_example.rs`） |
+
+</details>
+
+### 生态集成示例（`sdforge-examples` 成员示例）
+
+| 示例 | 启用特性 | 说明 |
+|------|----------|------|
+| `oxcache_admin` | `oxcache_admin_example` | 经 `BackendRegistry` 暴露 oxcache 管理端点 |
+| `dbnexus_gateway` | `dbnexus_gateway_example` | 白名单表上的只读数据 API 网关（sqlite 内存库） |
+
+<details>
+<summary>📄 代码 · bash</summary>
+
+```bash
+cargo run -p sdforge-examples --example oxcache_admin --features oxcache_admin_example
+```
+
+</details>
+
+示例配置文件位于 `examples/config/`（`default.toml`、`minimal.toml`、`production.toml`、`api-key-auth.toml`）。
