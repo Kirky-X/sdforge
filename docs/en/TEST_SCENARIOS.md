@@ -6,12 +6,12 @@ This document pins down SDForge's test pyramid baseline, test target inventory, 
 
 | Layer | Carrier | Count baseline |
 |------|----------|----------|
-| L1 lib unit tests | `#[cfg(test)]` in `src/**`: sdforge 2134 / sdforge-macros 85 / sdforge-examples 41 | 2260 passed |
-| L2 integration tests | Main crate `tests/` 49 targets (integration/ 40 + unit/ 5 + top-level 2: integration_http_mcp, sdk_snapshots + macros/macro_tests 1 + e2e 1: e2e_advanced, whose 157 count toward L3) + sdforge-macros crate `tests/` 2 targets (macro_compile/trybuild) + sdforge-examples crate `tests/` 3 targets (comprehensive_features, dbnexus_gateway_e2e, oxcache_admin_e2e) | 679 passed |
+| L1 lib unit tests | `#[cfg(test)]` in `src/**`: sdforge 2205 / sdforge-macros 85 / sdforge-examples 41 | 2331 passed |
+| L2 integration tests | Main crate `tests/` 49 targets (integration/ 40 + unit/ 5 + top-level 2: integration_http_mcp, sdk_snapshots + macros/macro_tests 1 + e2e 1: e2e_advanced, whose 157 count toward L3) + sdforge-macros crate `tests/` 2 targets (macro_compile/trybuild) + sdforge-examples crate `tests/` 3 targets (comprehensive_features, dbnexus_gateway_e2e, oxcache_admin_e2e) | 688 passed |
 | L3 E2E scenarios | `tests/e2e/` (single target e2e_advanced, 11 domains) | 157 passed |
-| L4 Doc-tests | sdforge 23 + sdforge-examples 5 | 28 passed + 43 ignored |
+| L4 Doc-tests | sdforge 23 + sdforge-examples 5 | 28 passed + 45 ignored |
 
-Full results (`--all-features --workspace`, measured 2026-10-11): **3124 passed / 0 failed / 71 ignored** (ignored = grpc_tests 28 environment-gated + Doc-tests 43 doc-example-gated).
+Full results (`--all-features --workspace`, measured 2026-11-16): **3204 passed / 0 failed / 73 ignored** (ignored = grpc_tests 28 environment-gated + Doc-tests 45 doc-example-gated).
 
 ## 🎯 Test Target Inventory
 
@@ -42,7 +42,7 @@ tests/e2e/e2e_advanced.rs (scenario highlights taken from the public APIs declar
 
 | Combination | Coverage | Result |
 |------|------|------|
-| `--all-features --workspace` (full scope) | All 59 producing targets | 3124 passed / 0 failed / 71 ignored |
+| `--all-features --workspace` (full scope) | All 59 producing targets | 3204 passed / 0 failed / 73 ignored |
 | Seven-feature subset `http,security,cache,inklog,i18n,ratelimit,openapi` | e2e_advanced 11 domains | 157 passed / 0 failed |
 | trybuild | Macro compile-failure diagnostic cases | 2 passed |
 
@@ -61,9 +61,9 @@ The 59 producing targets = main crate 49 + sdforge-macros tests 2 + sdforge-exam
 
 ## ℹ️ Counting Scope and Ignored Items
 
-- **Counting scope**: the full 3124 sums the `cargo test` output of each test target; empty targets with `0 passed; 0 failed` are not counted as producing targets.
+- **Counting scope**: the full 3204 sums the `cargo test` output of each test target; empty targets with `0 passed; 0 failed` are not counted as producing targets.
 - **grpc_tests 28 ignored**: upstream `#[ignore]` marks real network binding `127.0.0.1:0`, which hangs in CI / sandbox environments — environment gating, not a defect, and retained as such.
-- **Doc-tests 43 ignored**: doc examples depend on their run context and are skipped by gating.
+- **Doc-tests 45 ignored**: doc examples depend on their run context and are skipped by gating (sdforge 43 + sdforge-macros 2).
 - **cargo-deny license verification**: four members (sdforge / sdforge-macros / limiteron / oxcache) declare licenses via license-file in `deny.toml` (a form cargo-deny does not recognize), pinned via clarify to MIT hash 0xfb13e7ad; the license-file path resolves relative to the clarified crate's manifest directory (sdforge-macros sits in the `macros/` subdirectory and uses `../LICENSE` to step up one level). Advisories / bans / sources checks all pass.
 
 ## 🧪 Test Strategy Matrix and Commands
@@ -118,4 +118,4 @@ The build.rs-generated protobuf code goes to `OUT_DIR` and no longer enters the 
 
 ### Test scale
 
-About **3,181** test functions (`src/` 2,180 + `tests/` 785 + `macros/` 92 + `examples/` 124; via `grep -rEc '#\[(tokio::)?test\b' --include='*.rs'`, measured 2026-10-11).
+About **3,262** test functions (`src/` 2,251 + `tests/` 795 + `macros/` 92 + `examples/` 124; via `grep -rEc '#\[(tokio::)?test\b' --include='*.rs'`, measured 2026-11-16).

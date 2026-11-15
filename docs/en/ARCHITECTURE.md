@@ -9,7 +9,7 @@ This document describes SDForge's design principles, system architecture, module
 
 - [Overview](#-overview)
 - [Design Principles](#-design-principles)
-- [System Architecture](#️-system-architecture)
+- [System Architecture](#-system-architecture)
 - [Module Breakdown](#-module-breakdown)
 - [Data Flow](#-data-flow)
 - [Security Design](#-security-design)

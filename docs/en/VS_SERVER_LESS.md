@@ -9,9 +9,9 @@ This report quantifies the difference between SDForge's two delivery modes — c
 
 - [Overview](#-overview)
 - [Methodology](#-methodology)
-- [Benchmark Environment](#️-benchmark-environment)
+- [Benchmark Environment](#-benchmark-environment)
 - [Dependency Scale Comparison](#-dependency-scale-comparison)
-- [Compile Time Comparison](#️-compile-time-comparison)
+- [Compile Time Comparison](#-compile-time-comparison)
 - [Binary / Artifact Size Comparison](#-binary--artifact-size-comparison)
 - [Analysis](#-analysis)
 - [Conclusion](#-conclusion)

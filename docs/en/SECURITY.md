@@ -9,7 +9,7 @@ This document describes SDForge's security support policy, vulnerability reporti
 
 - [Supported Versions and Maintenance Policy](#-supported-versions-and-maintenance-policy)
 - [Vulnerability Reporting Process](#-vulnerability-reporting-process)
-- [Security Design Overview](#️-security-design-overview)
+- [Security Design Overview](#-security-design-overview)
 - [Security Best Practices](#-security-best-practices)
 
 </details>

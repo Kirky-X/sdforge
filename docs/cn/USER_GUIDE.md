@@ -10,10 +10,10 @@
 - [简介](#-简介)
 - [快速开始](#-快速开始)
 - [核心概念](#-核心概念)
-- [配置](#️-配置)
+- [配置](#-配置)
 - [进阶用法](#-进阶用法)
 - [最佳实践](#-最佳实践)
-- [故障排查](#️-故障排查)
+- [故障排查](#-故障排查)
 - [示例](#-示例)
 
 </details>
@@ -38,7 +38,7 @@ SDForge 的核心思路是：**一份函数注解，多协议消费**。你只�
 cargo add sdforge
 ```
 
-版本固定的 `Cargo.toml` 写法与「`default = []` 需按需显式启用协议特性」的说明见 [README · 快速开始](../README_CN.md#-快速开始)。
+版本固定的 `Cargo.toml` 写法与「`default = []` 需按需显式启用协议特性」的说明见 [README · 快速开始](../../README_CN.md#-快速开始)。
 
 ### 定义第一个 API
 
@@ -97,7 +97,7 @@ async fn main() {
 
 ### 配置类型
 
-配置模块（`sdforge::config`，需 `http` feature）提供 `SdForgeConfig` / `ServerConfig` / `ApiConfig` / `AuthConfig` / `CorsConfig` / `TlsConfig` / `TracingConfig` / `CacheConfig` / `SecurityConfig` / `EnvHelper` / `ConfigError` 等类型；各类型的用途与默认值见 [API 参考](API_REFERENCE.md#️-配置扩展-api) 的配置模块一节。
+配置模块（`sdforge::config`，需 `http` feature）提供 `SdForgeConfig` / `ServerConfig` / `ApiConfig` / `AuthConfig` / `CorsConfig` / `TlsConfig` / `TracingConfig` / `CacheConfig` / `SecurityConfig` / `EnvHelper` / `ConfigError` 等类型；各类型的用途与默认值见 [API 参考](API_REFERENCE.md#-配置扩展-api) 的配置模块一节。
 
 ### 使用配置构建
 
@@ -353,7 +353,7 @@ serve_with_graceful_shutdown_tls(
 
 ### CLI 应用
 
-启用 `cli` feature 后，`#[forge(cli = true)]` 注册命令；`CliBuilder::execute()` 一站式完成构建/解析/分发/输出/退出。最小可运行示例见 [README 快速开始](../README_CN.md#-最小可运行示例)（源码 `examples/basic_cli.rs`）。
+启用 `cli` feature 后，`#[forge(cli = true)]` 注册命令；`CliBuilder::execute()` 一站式完成构建/解析/分发/输出/退出。最小可运行示例见 [README 快速开始](../../README_CN.md#-最小可运行示例)（源码 `examples/basic_cli.rs`）。
 
 返回 `Value::String` 时输出原始串（不带引号），其他类型输出 JSON。`CliBuilder` 还支持 `with_dependencies()`（注入状态）、`with_name()`（程序名）与 `with_global_arg()`（全局参数）。
 

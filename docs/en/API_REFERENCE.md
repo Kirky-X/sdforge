@@ -9,7 +9,7 @@ This document summarizes SDForge's public API based on the public interfaces in 
 
 - [Overview](#-overview)
 - [Core API](#-core-api)
-- [Configuration/Extension API](#️-configurationextension-api)
+- [Configuration/Extension API](#-configurationextension-api)
 - [Error Types](#-error-types)
 - [Feature-Gated API](#-feature-gated-api)
 - [Usage Examples](#-usage-examples)
@@ -407,6 +407,8 @@ Minimum requirements:
   <tr><td><code>simd-json</code></td><td>SIMD-accelerated JSON serialization/deserialization</td><td>❌</td></tr>
   <tr><td><code>limiteron-integration</code></td><td>Pulls in the limiteron dependency (foundation for kit integration)</td><td>❌</td></tr>
   <tr><td><code>db-integration</code></td><td>dbnexus data API gateway (the <code>DbGateway</code> whitelisted read-only data plane: table/column whitelists + filter-value escaping + server-side page clamping; independent of http)</td><td>❌</td></tr>
+  <tr><td><code>db-sqlite</code></td><td><code>db-integration</code> + the dbnexus/sqlite driver (since 0.5.1 the dbnexus integration uses <code>embedded-runtime</code> without sqlite; gateway users needing a sqlite file database enable this explicitly)</td><td>❌</td></tr>
+  <tr><td><code>db-permission</code></td><td>Enables dbnexus permission: per-table permission checks apply to non-admin session roles (fail-closed); with the feature off the permission checks compile away entirely, leaving only whitelist and ownership-predicate isolation</td><td>❌</td></tr>
   <tr><td><code>kit</code></td><td>trait-kit AsyncKit integration (SdforgeModule graph)</td><td>❌</td></tr>
   <tr><td><code>tokio</code></td><td>Internal feature: enables the tokio dependency (pulled in automatically by other features)</td><td>❌</td></tr>
   <tr><td><code>full</code></td><td>All runtime features (26: http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/timestamp/openapi/cli/docgen/inklog/i18n/idempotency/serve-tls/tls-watch; excludes the gRPC-side <code>grpc-tls</code> and the optional heavy deps / opt-in surface <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code>/<code>schemars</code>/<code>ratelimit-dist</code>/<code>cache-l2</code>/<code>db-integration</code>/<code>sdk</code>)</td><td>❌</td></tr>
@@ -417,7 +419,7 @@ Minimum requirements:
 <details>
 <summary>🔗 Feature dependency relations</summary>
 
-- Independent of `http`: `mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `inklog` / `i18n` / `simd-json` / `limiteron-integration` / `db-integration` / `schemars` / `ratelimit-dist`
+- Independent of `http`: `mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `inklog` / `i18n` / `simd-json` / `limiteron-integration` / `db-integration` (with derived `db-sqlite` / `db-permission`) / `schemars` / `ratelimit-dist`
 - **check-cfg snippet for downstream mirrored features** (macro-emitted code is gated on the downstream crate's same-named
   features; see the `[lints]` whitelist pattern in examples): add to the downstream `Cargo.toml`
   `[lints.rust] unexpected_cfgs = { level = "allow", check-cfg =

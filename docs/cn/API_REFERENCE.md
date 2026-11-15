@@ -9,7 +9,7 @@
 
 - [概述](#-概述)
 - [核心 API](#-核心-api)
-- [配置/扩展 API](#️-配置扩展-api)
+- [配置/扩展 API](#-配置扩展-api)
 - [错误类型](#-错误类型)
 - [特性门控 API](#-特性门控-api)
 - [使用示例](#-使用示例)
@@ -344,7 +344,7 @@ let spec = OpenApiBuilder::new()
 
 ### CLI 一站式入口
 
-`#[forge(cli = true)]` 注解与 `CliBuilder::execute()`（返回 `!`，内部 exit(0/1)）的最小示例见 [README 快速开始](../README_CN.md#-最小可运行示例)，CLI 进阶用法见 [用户指南](USER_GUIDE.md#cli-应用)。
+`#[forge(cli = true)]` 注解与 `CliBuilder::execute()`（返回 `!`，内部 exit(0/1)）的最小示例见 [README 快速开始](../../README_CN.md#-最小可运行示例)，CLI 进阶用法见 [用户指南](USER_GUIDE.md#cli-应用)。
 
 更多示例见仓库 `examples/`（完整清单与运行方式见 [用户指南 · 示例](USER_GUIDE.md#-示例)）。
 
@@ -408,6 +408,8 @@ let spec = OpenApiBuilder::new()
   <tr><td><code>simd-json</code></td><td>SIMD 加速 JSON 序列化/反序列化</td><td>❌</td></tr>
   <tr><td><code>limiteron-integration</code></td><td>引入 limiteron 依赖（kit 集成基座）</td><td>❌</td></tr>
   <tr><td><code>db-integration</code></td><td>dbnexus 数据 API 网关（<code>DbGateway</code> 白名单只读数据面：表/列白名单 + 过滤值转义 + 服务端分页夹紧，独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>db-sqlite</code></td><td><code>db-integration</code> + dbnexus/sqlite 驱动（0.5.1 起 dbnexus 集成切 <code>embedded-runtime</code>，默认不含 sqlite；需 sqlite 文件库的网关用户显式启用）</td><td>❌</td></tr>
+  <tr><td><code>db-permission</code></td><td>开启 dbnexus permission：逐表权限检查对非 admin 会话角色生效（fail-closed）；未开启时权限检查整块编译掉，仅剩白名单与归属谓词隔离</td><td>❌</td></tr>
   <tr><td><code>kit</code></td><td>trait-kit AsyncKit 集成（SdforgeModule 模块图）</td><td>❌</td></tr>
   <tr><td><code>tokio</code></td><td>内部特性：启用 tokio 依赖（随其他特性自动引入）</td><td>❌</td></tr>
   <tr><td><code>full</code></td><td>全部运行时特性（26 项：http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/timestamp/openapi/cli/docgen/inklog/i18n/idempotency/serve-tls/tls-watch；不含 gRPC 侧 <code>grpc-tls</code> 与 <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code>/<code>schemars</code>/<code>ratelimit-dist</code>/<code>cache-l2</code>/<code>db-integration</code>/<code>sdk</code> 可选重依赖与 opt-in 面）</td><td>❌</td></tr>
@@ -418,7 +420,7 @@ let spec = OpenApiBuilder::new()
 <details>
 <summary>🔗 特性依赖关系</summary>
 
-- 独立于 `http`：`mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `inklog` / `i18n` / `simd-json` / `limiteron-integration` / `db-integration` / `schemars` / `ratelimit-dist`
+- 独立于 `http`：`mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `inklog` / `i18n` / `simd-json` / `limiteron-integration` / `db-integration`（含 `db-sqlite` / `db-permission` 派生） / `schemars` / `ratelimit-dist`
 - **下游镜像 feature 的 check-cfg 片段**（宏发射代码按下游 crate 的同名
   feature 门控，见 examples 的 `[lints]` 白名单范式）：下游 `Cargo.toml`
   加 `[lints.rust] unexpected_cfgs = { level = "allow", check-cfg =

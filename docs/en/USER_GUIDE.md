@@ -10,10 +10,10 @@ This guide targets SDForge users and covers the full path from installation, cor
 - [Introduction](#-introduction)
 - [Quick Start](#-quick-start)
 - [Core Concepts](#-core-concepts)
-- [Configuration](#️-configuration)
+- [Configuration](#-configuration)
 - [Advanced Usage](#-advanced-usage)
 - [Best Practices](#-best-practices)
-- [Troubleshooting](#️-troubleshooting)
+- [Troubleshooting](#-troubleshooting)
 - [Examples](#-examples)
 
 </details>
@@ -97,7 +97,7 @@ Handlers for all protocols follow the `fn(HandlerArgs, HandlerState) -> HandlerF
 
 ### Configuration types
 
-The configuration module (`sdforge::config`, requires the `http` feature) provides `SdForgeConfig` / `ServerConfig` / `ApiConfig` / `AuthConfig` / `CorsConfig` / `TlsConfig` / `TracingConfig` / `CacheConfig` / `SecurityConfig` / `EnvHelper` / `ConfigError` and more; for each type's purpose and defaults see the configuration module section of the [API reference](API_REFERENCE.md#️-configurationextension-api).
+The configuration module (`sdforge::config`, requires the `http` feature) provides `SdForgeConfig` / `ServerConfig` / `ApiConfig` / `AuthConfig` / `CorsConfig` / `TlsConfig` / `TracingConfig` / `CacheConfig` / `SecurityConfig` / `EnvHelper` / `ConfigError` and more; for each type's purpose and defaults see the configuration module section of the [API reference](API_REFERENCE.md#-configurationextension-api).
 
 ### Building with configuration
 

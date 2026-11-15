@@ -106,7 +106,7 @@ Corresponds to baselines `serialize_nested_object` / `deserialize_nested_object`
 ## 🚧 Out-of-Baseline Overheads
 
 - **Macro-expansion compile time**: see the [compile-time gating benchmarks](VS_SERVER_LESS.md) for compile-time costs; `http` only saves about 47% compile time versus `full`; this scope is explicitly excluded from the runtime baselines.
-- ~~**Full middleware stack (`build_with_config_ext`)**~~: closed out on 2026-09-30 — the `middleware_tiers/*` tier benchmarks are in the [baseline summary](#-baseline-summary) and the [middleware stack tiers](#️-middleware-stack-tiersbuild_with_config_ext) section below.
+- ~~**Full middleware stack (`build_with_config_ext`)**~~: closed out on 2026-09-30 — the `middleware_tiers/*` tier benchmarks are in the [baseline summary](#-baseline-summary) and the [middleware stack tiers](#-middleware-stack-tiers-build_with_config_ext) section below.
 
 ## ✅ Regression Gates
 
