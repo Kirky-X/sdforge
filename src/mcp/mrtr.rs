@@ -444,14 +444,26 @@ impl MrtrSessionManager {
     }
 }
 
-/// Generate a unique session ID.
+/// Process-wide monotonic sequence for session IDs.
+///
+/// Nanosecond timestamps alone collide when two IDs are generated within the
+/// same clock tick (observed under parallel test load); two sessions sharing
+/// an ID would overwrite each other in [`MrtrSessionManager`]. Relaxed
+/// ordering suffices: the counter only needs to differ per call, not to be
+/// ordered across threads.
+static SESSION_ID_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Generate a unique session ID (`mrtr-{nanos}-{seq}`): the process-wide
+/// sequence guarantees uniqueness across same-tick calls, the timestamp keeps
+/// IDs roughly sortable.
 pub fn generate_session_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    format!("mrtr-{}", nanos)
+    let seq = SESSION_ID_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("mrtr-{nanos}-{seq}")
 }
 
 #[cfg(test)]

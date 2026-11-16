@@ -233,6 +233,8 @@ tempfile = { workspace = true }
 serial_test = { workspace = true }
 axum-test = { workspace = true }
 reqwest = { workspace = true, features = ["rustls", "http2"] }
+# MCP Streamable HTTP e2e：真实 rmcp 客户端（mcp-http 挂载的往返验证；dev-only 不进发布面）
+rmcp = { version = "3.9", default-features = false, features = ["client", "transport-streamable-http-client-reqwest"] }
 rcgen = { version = "0.14", default-features = false, features = ["pem", "aws_lc_rs"] }
 criterion = { workspace = true }
 proptest = { workspace = true }
@@ -244,6 +246,9 @@ default = []
 http = ["dep:axum", "dep:tower", "dep:tower-http", "dep:inventory", "tokio", "dep:axum-extra", "dep:regex", "dep:once_cell", "dep:validator", "dep:uuid", "dep:futures-util", "dep:oxcache"]
 # MCP（官方 rmcp SDK；http 供 MCP 2026-07-28 stateless 头解析 Mcp-Method/Mcp-Name）
 mcp = ["dep:rmcp", "dep:inventory", "dep:anyhow", "dep:http"]
+# MCP Streamable HTTP（rmcp server-side-http）：/mcp 挂载 rmcp 的 StreamableHttpService。
+# 下游经 `sdforge::rmcp` 再导出取全部类型，无需直连 rmcp（版本随 sdforge 统一，类型合一）
+mcp-http = ["mcp", "rmcp/transport-streamable-http-server"]
 # streaming：独立于 http，仅 tokio/tokio-stream/futures-util
 streaming = ["dep:tokio", "dep:tokio-stream", "dep:futures-util", "dep:chrono"]
 timestamp = ["dep:chrono"]
@@ -325,7 +330,7 @@ inklog = ["dep:inklog"]
 # i18n：ICU4X 本地化错误消息、时间格式、复数与 Accept-Language 解析
 i18n = ["dep:icu", "dep:writeable", "dep:sys-locale"]
 # full：全量运行时特性集；排除 simd-json/kit/limiteron-integration 等重依赖
-full = ["http", "mcp", "streaming", "timestamp", "security", "cache", "health", "metrics", "graceful", "context", "websocket", "grpc", "validate", "paginate", "etag", "hooks", "lifecycle", "otel", "openapi", "cli", "docgen", "inklog", "i18n", "idempotency", "serve-tls", "tls-watch"]
+full = ["http", "mcp", "mcp-http", "streaming", "timestamp", "security", "cache", "health", "metrics", "graceful", "context", "websocket", "grpc", "validate", "paginate", "etag", "hooks", "lifecycle", "otel", "openapi", "cli", "docgen", "inklog", "i18n", "idempotency", "serve-tls", "tls-watch"]
 
 # build 脚本依赖无法随 feature 条件化；仅 tonic-prost-build 被 build.rs 调用
 [build-dependencies]
@@ -588,6 +593,18 @@ path = "tests/integration/test_target_inventory_tests.rs"
 [[test]]
 name = "e2e_advanced"
 path = "tests/e2e/e2e_advanced.rs"
+
+# 宏生成 stateful MCP 工具端到端（#[state]+tool_name → with_state 真调用/显性失败）
+[[test]]
+name = "mcp_stateful_macro"
+path = "tests/mcp_stateful_macro.rs"
+required-features = ["mcp"]
+
+# Streamable HTTP 挂载端到端（mcp-http：rmcp server-side HTTP；类型全经 sdforge::rmcp 解析）
+[[test]]
+name = "mcp_streamable_http"
+path = "tests/mcp_streamable_http.rs"
+required-features = ["http", "mcp-http"]
 
 
 [profile.release]
