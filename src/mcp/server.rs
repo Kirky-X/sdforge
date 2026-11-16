@@ -18,6 +18,7 @@ use rmcp::service::RequestContext;
 use crate::security::grpc_auth::GrpcAuthVerifier;
 
 use crate::mcp::McpToolInstance;
+use crate::mcp::ToolCallContext;
 use crate::mcp::get_mcp_tools;
 use crate::mcp::value_to_json_object_arc;
 
@@ -116,6 +117,10 @@ pub struct SdForgeMcpServer {
     /// Mirrors `GrpcServerConfig.auth_verifier` wiring for the MCP dimension.
     #[cfg(feature = "security")]
     pub(crate) auth_verifier: Option<std::sync::Arc<dyn GrpcAuthVerifier>>,
+    /// Optional application state (mirrors the gRPC `with_state` wiring):
+    /// injected via [`SdForgeMcpServer::with_state`], recovered by tools
+    /// through `ToolCallContext::state` + `core::downcast_state`.
+    pub(crate) state: crate::core::HandlerState,
 }
 
 impl Default for SdForgeMcpServer {
@@ -152,6 +157,7 @@ impl SdForgeMcpServer {
             server_version: version,
             #[cfg(feature = "security")]
             auth_verifier: None,
+            state: None,
         }
     }
 
@@ -163,6 +169,7 @@ impl SdForgeMcpServer {
             server_version: "0.2.0".to_string(),
             #[cfg(feature = "security")]
             auth_verifier: None,
+            state: None,
         }
     }
 
@@ -183,6 +190,7 @@ impl SdForgeMcpServer {
             server_version: version,
             #[cfg(feature = "security")]
             auth_verifier: None,
+            state: None,
         }
     }
 
@@ -207,6 +215,21 @@ impl SdForgeMcpServer {
     #[must_use]
     pub fn with_auth_verifier(mut self, verifier: std::sync::Arc<dyn GrpcAuthVerifier>) -> Self {
         self.auth_verifier = Some(verifier);
+        self
+    }
+
+    /// Attach application state, mirroring the gRPC `with_state` wiring.
+    ///
+    /// The state becomes available to every tool through
+    /// `ToolCallContext::state` (received by `SdForgeTool::call_with_ctx`);
+    /// tools recover the concrete type via `crate::core::downcast_state`.
+    /// Tools that declare `#[state]` and are registered via
+    /// `#[forge(tool_name = ...)]` **require** this wiring: without it,
+    /// their MCP dispatch fails with an explicit `state_missing` error
+    /// (fail-explicit, mirroring the gRPC dimension).
+    #[must_use]
+    pub fn with_state(mut self, state: std::sync::Arc<dyn std::any::Any + Send + Sync>) -> Self {
+        self.state = Some(state);
         self
     }
 
@@ -291,7 +314,16 @@ impl SdForgeMcpServer {
             ));
         }
 
-        self.call_tool_scoped(name, arguments)
+        // Fail-closed sync path: no credentials channel (see doc above), so
+        // the context carries application state only — identity stays out.
+        let tool_ctx = ToolCallContext {
+            state: self.state.clone(),
+            #[cfg(feature = "security")]
+            auth: None,
+            #[cfg(feature = "security")]
+            credentials: None,
+        };
+        self.call_tool_scoped(name, arguments, &tool_ctx)
     }
 
     /// Call a tool with explicitly supplied credentials (feature =
@@ -320,7 +352,12 @@ impl SdForgeMcpServer {
     ) -> Result<CallToolResult, ErrorData> {
         let auth_ctx = self.enforce_auth(Some(credentials)).await?;
         self.enforce_rbac(name, &auth_ctx)?;
-        self.call_tool_scoped(name, arguments)
+        let tool_ctx = ToolCallContext {
+            state: self.state.clone(),
+            auth: auth_ctx,
+            credentials: Some(credentials.clone()),
+        };
+        self.call_tool_scoped(name, arguments, &tool_ctx)
     }
 
     /// Context-scoped tool dispatch shared by the authenticated protocol
@@ -331,15 +368,16 @@ impl SdForgeMcpServer {
         &self,
         name: &str,
         arguments: Option<serde_json::Value>,
+        tool_ctx: &ToolCallContext,
     ) -> Result<CallToolResult, ErrorData> {
         #[cfg(feature = "context")]
         {
             let ctx = crate::context::current_or_new();
-            crate::context::scope_sync(ctx, || self.call_tool_inner(name, arguments))
+            crate::context::scope_sync(ctx, || self.call_tool_inner(name, arguments, tool_ctx))
         }
         #[cfg(not(feature = "context"))]
         {
-            self.call_tool_inner(name, arguments)
+            self.call_tool_inner(name, arguments, tool_ctx)
         }
     }
 
@@ -413,6 +451,7 @@ impl SdForgeMcpServer {
         &self,
         name: &str,
         arguments: Option<serde_json::Value>,
+        tool_ctx: &ToolCallContext,
     ) -> Result<CallToolResult, ErrorData> {
         // Reject oversized argument payloads before any dispatch.
         // A serialization failure must not fail open (size 0 would bypass the
@@ -451,7 +490,7 @@ impl SdForgeMcpServer {
             super::schema_validation::validate_arguments(&schema, args)?;
         }
 
-        instance.tool().call(arguments)
+        instance.tool().call_with_ctx(arguments, tool_ctx)
     }
 }
 
@@ -500,6 +539,8 @@ impl ServerHandler for SdForgeMcpServer {
         // extensions (absent credentials count as missing and are rejected).
         // 成功后保留身份供 endpoint RBAC 检查（对齐 gRPC call_with_context）。
         #[cfg(feature = "security")]
+        let credentials = context.extensions.get::<McpCredentials>().cloned();
+        #[cfg(feature = "security")]
         let auth_ctx = self
             .enforce_auth(context.extensions.get::<McpCredentials>())
             .await?;
@@ -516,7 +557,14 @@ impl ServerHandler for SdForgeMcpServer {
 
         // request.arguments is Option<JsonObject> (Map<String, Value>); convert to Value.
         let arguments = request.arguments.map(serde_json::Value::Object);
-        self.call_tool_scoped(name, arguments)
+        let tool_ctx = ToolCallContext {
+            state: self.state.clone(),
+            #[cfg(feature = "security")]
+            auth: auth_ctx,
+            #[cfg(feature = "security")]
+            credentials,
+        };
+        self.call_tool_scoped(name, arguments, &tool_ctx)
             .map(CallToolResponse::Complete)
     }
 }

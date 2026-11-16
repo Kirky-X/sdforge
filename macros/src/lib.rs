@@ -2812,9 +2812,15 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     let mcp_code = if let Some(ref tool_name) = tool_name {
         // Check if any parameter is State or Extension type - MCP tools cannot use state injection
         let mcp_role_lits: Vec<&str> = extras.auth_roles.iter().map(String::as_str).collect();
-        let has_state_param = params
+        // `#[state]` endpoints dispatch for real via `call_with_ctx`; only
+        // `Extension` params keep the unsupported stub (no MCP injection source).
+        let has_extension_param = params
             .iter()
-            .any(|p| matches!(p.param_kind, ParamKind::State | ParamKind::Extension));
+            .any(|p| matches!(p.param_kind, ParamKind::Extension));
+        let state_params: Vec<&ParamInfo> = params
+            .iter()
+            .filter(|p| matches!(p.param_kind, ParamKind::State))
+            .collect();
 
         // Filter out State and Extension parameters for MCP tool generation
         let mcp_params: Vec<_> = params
@@ -2855,12 +2861,179 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
             }
         };
 
-        // Only generate MCP tool if no State parameters (State requires HTTP Extension injection)
-        let mcp_tool_impl = if has_state_param {
-            // MCP tools with State parameters are not supported - generate a stub that returns error
+        // Compile-time validation (mirrors handler_closure_pre_call): `#[state]`
+        // must be `Arc<T>` so the runtime `Any` downcast can recover the type.
+        for p in &state_params {
+            if extract_arc_inner_type(&p.ty).is_none() {
+                return syn::Error::new(
+                    fn_name.span(),
+                    "State parameters must be of the form `Arc<T>` to support safe downcast",
+                )
+                .to_compile_error()
+                .into();
+            }
+        }
+
+        // State args recovered from ToolCallContext via downcast_state
+        // (mirrors the unified-closure extraction); non-`Arc<T>` rejected above.
+        let mcp_state_extractions = state_params.iter().map(|p| {
+            let pname = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+            let pty = &p.ty;
+            let inner_ty = extract_arc_inner_type(pty).expect("validated Arc<T> above");
+            quote! {
+                let #pname: #pty = match sdforge::core::downcast_state::<#inner_ty>(ctx.state()) {
+                    Ok(s) => s,
+                    // Surface as a handler `ApiError` (the serialization tail
+                    // renders its JSON, carrying the machine-readable
+                    // `error_id` — e.g. `forge.state_missing`) instead of
+                    // the lossy Display mapping.
+                    Err(api_err) => return Ok(Err(api_err)),
+                };
+            }
+        });
+
+        // Call args preserve declaration order (State + Path/Body interleaved
+        // as the user wrote them, mirroring call_idents); deserialized params
+        // are accessed via `params.X`.
+        let mcp_state_call_args: Vec<proc_macro2::TokenStream> = params
+            .iter()
+            .filter_map(|p| {
+                if matches!(p.param_kind, ParamKind::State) {
+                    let pname = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+                    Some(quote! { #pname })
+                } else if matches!(
+                    p.param_kind,
+                    ParamKind::Path | ParamKind::Body | ParamKind::Query
+                ) {
+                    let pname = syn::Ident::new(&p.name, proc_macro2::Span::call_site());
+                    Some(quote! { params.#pname })
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // `input` is only consumed when MCP-visible params exist; name it
+        // `_input` otherwise to stay warning-free.
+        let mcp_input_ident = if mcp_params.is_empty() {
+            quote!(_input)
+        } else {
+            quote!(input)
+        };
+
+        let mcp_stateful_call_logic = if !mcp_params.is_empty() {
+            quote! {
+                #[derive(serde::Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Params {
+                    #(pub #mcp_param_names: #mcp_param_types),*
+                }
+
+                let params: Params = match input {
+                    Some(v) => serde_json::from_value(v)
+                        .map_err(|e| sdforge::anyhow::anyhow!("Failed to parse input: {}", e))?,
+                    None => {
+                        return Err(sdforge::anyhow::anyhow!("Missing input parameters"));
+                    }
+                };
+
+                #(#mcp_state_extractions)*
+
+                let result = #fn_name(#(#mcp_state_call_args),*).await;
+                Ok(result)
+            }
+        } else {
+            quote! {
+                #(#mcp_state_extractions)*
+
+                let result = #fn_name(#(#mcp_state_call_args),*).await;
+                Ok(result)
+            }
+        };
+
+        let mcp_tool_impl = if has_extension_param {
+            // Preserve the v0.5.1 behavior verbatim: `Extension` params have
+            // no MCP injection source.
             quote! {
                 fn call(&self, _input: Option<serde_json::Value>) -> Result<sdforge::rmcp::model::CallToolResult, sdforge::rmcp::model::ErrorData> {
                     Err(sdforge::rmcp::model::ErrorData::invalid_params("MCP tool with State parameters is not supported. Use HTTP API instead.", None))
+                }
+            }
+        } else if !state_params.is_empty() {
+            // `#[state]` endpoints: `call` stays a fail-explicit stub (only
+            // reachable without a context, e.g. a server built without
+            // `with_state`); `call_with_ctx` dispatches for real — same
+            // runtime-detection skeleton and serialization tail as the
+            // stateless branch below.
+            quote! {
+                fn call(&self, _input: Option<serde_json::Value>) -> Result<sdforge::rmcp::model::CallToolResult, sdforge::rmcp::model::ErrorData> {
+                    Err(sdforge::rmcp::model::ErrorData::internal_error(
+                        "this tool declares #[state]; build SdForgeMcpServer via with_state(...) so call_with_ctx receives it",
+                        None,
+                    ))
+                }
+
+                fn call_with_ctx(&self, #mcp_input_ident: Option<serde_json::Value>, ctx: &sdforge::mcp::ToolCallContext) -> Result<sdforge::rmcp::model::CallToolResult, sdforge::rmcp::model::ErrorData> {
+                    use sdforge::prelude::*;
+                    use tokio::runtime::{Handle, Runtime};
+
+                    // Runtime detection mirrors the stateless branch: reuse
+                    // the ambient runtime inside tokio, spawn a fresh one
+                    // otherwise (block_on within a runtime panics).
+                    let inner_result: Result<Result<_, ApiError>, sdforge::anyhow::Error> =
+                        match Handle::try_current() {
+                            Ok(handle) => {
+                                tokio::task::block_in_place(|| {
+                                    handle.block_on(async { #mcp_stateful_call_logic })
+                                })
+                            }
+                            Err(_) => {
+                                let rt = Runtime::new()
+                                    .map_err(|e| sdforge::rmcp::model::ErrorData::internal_error(
+                                        format!("Failed to create runtime: {}", e), None))?;
+                                rt.block_on(async { #mcp_stateful_call_logic })
+                            }
+                        };
+                    let result = inner_result
+                        .map_err(|e| sdforge::rmcp::model::ErrorData::internal_error(format!("{}", e), None))?;
+
+                    match result {
+                        Ok(response) => {
+                            let response_json = serde_json::to_value(response)
+                                .map_err(|e| sdforge::rmcp::model::ErrorData::internal_error(
+                                    format!("Failed to serialize response: {}", e), None))?;
+                            Ok({
+                                let mut result = sdforge::rmcp::model::CallToolResult::success(
+                                    vec![sdforge::rmcp::model::ContentBlock::text(
+                                        serde_json::to_string(&response_json)
+                                            .map_err(|e| sdforge::rmcp::model::ErrorData::internal_error(
+                                                format!("Failed to stringify response: {}", e), None))?,
+                                    )],
+                                );
+                                result.is_error = None;
+                                result
+                            })
+                        }
+                        Err(e) => {
+                            let error_json = serde_json::to_value(e)
+                                .unwrap_or_else(|_| {
+                                    serde_json::json!({
+                                        "success": false,
+                                        "error": {
+                                            "code": "UNKNOWN_ERROR",
+                                            "message": "An unknown error occurred"
+                                        }
+                                    })
+                                });
+                            Ok(sdforge::rmcp::model::CallToolResult::error(
+                                vec![sdforge::rmcp::model::ContentBlock::text(
+                                    serde_json::to_string(&error_json)
+                                        .map_err(|e| sdforge::rmcp::model::ErrorData::internal_error(
+                                            format!("Failed to stringify error: {}", e), None))?,
+                                )],
+                            ))
+                        }
+                    }
                 }
             }
         } else {

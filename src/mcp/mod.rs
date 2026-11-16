@@ -64,6 +64,7 @@ pub mod stateless;
 mod handler;
 mod schema_validation;
 mod server;
+mod tool_context;
 
 // Test module (only compiled in test builds).
 #[cfg(test)]
@@ -79,6 +80,7 @@ pub use server::SdForgeMcpServer;
 #[cfg(all(feature = "mcp", feature = "security"))]
 pub use server::{MCP_UNAUTHENTICATED, McpCredentials};
 pub use stateless::StatelessServerHandler;
+pub use tool_context::ToolCallContext;
 
 // SdForgeTool trait — bridges SDForge tools to rmcp's ServerHandler
 
@@ -101,6 +103,22 @@ pub trait SdForgeTool: Send + Sync + 'static {
     ///
     /// Returns `CallToolResult` on success or `McpError` on failure.
     fn call(&self, input: Option<Value>) -> Result<rmcp::model::CallToolResult, McpError>;
+
+    /// Execute the tool with a per-call [`ToolCallContext`].
+    ///
+    /// The default implementation delegates to [`SdForgeTool::call`], so
+    /// hand-written impls that only implement `call` keep compiling and
+    /// behave exactly as before. Override this method to consume
+    /// application state (`ctx.state()` + `crate::core::downcast_state`)
+    /// or the verified caller identity (`ctx.user_id()`, feature =
+    /// `security`).
+    fn call_with_ctx(
+        &self,
+        input: Option<Value>,
+        _ctx: &ToolCallContext,
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
+        self.call(input)
+    }
 }
 
 // McpToolRegistration — compile-time registration via inventory
