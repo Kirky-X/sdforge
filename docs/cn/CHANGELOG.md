@@ -11,6 +11,7 @@
 <summary>📑 目录</summary>
 
 - [Unreleased](#unreleased)
+- [0.5.2](#052---2026-11-17)
 - [0.5.1](#051---2026-11-15)
 - [0.5.0](#050---2026-11-14)
 - [0.5.0-rc.11](#050-rc11---2026-11-12)
@@ -38,6 +39,28 @@
 - [开发路线图](#开发路线图)
 
 </details>
+
+## [0.5.2] - 2026-11-17
+
+### Added
+
+- **MCP state 与身份接线（纯新增——现有公共签名零改动）**：新增公共 `ToolCallContext`（携带应用
+  state、验证后的 `AuthContext`、原始 `McpCredentials`）、trait 方法 `SdForgeTool::call_with_ctx`
+  （默认委托 `call`，只实现 `call` 的现存 impl 零改动编译）、构建器
+  `SdForgeMcpServer::with_state(...)`（镜像 gRPC `with_state` 接线）
+- 验证后的身份不再在校验 RBAC 后即被丢弃，而是随上下文到达工具：`ctx.user_id()` / `ctx.auth()` /
+  `ctx.credentials()`（feature = `security`）
+- 新增测试套件：`stateful_tests`（state 注入 / 缺失 / 类型不匹配三态）、MCP 身份桥接 auth 测试、
+  `tests/mcp_stateful_macro.rs`（宏生成 stateful 工具）
+
+### Changed
+
+- **声明 `#[state]` 的 `#[forge(tool_name = ...)]` 端点现在真实派发**（0.5.1 生成的是恒错 stub）：
+  生成工具改经 `call_with_ctx` 派发；未配置 `with_state(...)` 时显性失败，返回序列化的 handler
+  `ApiError`（`error_id` = `forge.state_missing` / `forge.state_type_mismatch`）；`#[state]` 必须为
+  `Arc<T>`（统一闭包此前已在编译期强制，不合规声明依旧编译失败）
+- 带 `Extension` 参数的端点保持 0.5.1 stub 原样（MCP 无 Extension 注入源），
+  `call_tool_internal` 保持 fail-closed（仅 state、不带身份）
 
 ## [0.5.1] - 2026-11-15
 

@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 <summary>📑 Table of Contents</summary>
 
 - [Unreleased](#unreleased)
+- [0.5.2](#052---2026-11-17)
 - [0.5.1](#051---2026-11-15)
 - [0.5.0](#050---2026-11-14)
 - [0.5.0-rc.11](#050-rc11---2026-11-12)
@@ -38,6 +39,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
 - [Roadmap](#roadmap)
 
 </details>
+
+## [0.5.2] - 2026-11-17
+
+### Added
+
+- **MCP state & identity wiring (additive — no existing public signature changed)**: new public
+  `ToolCallContext` (carries application state, the verified `AuthContext`, and the raw
+  `McpCredentials`), trait method `SdForgeTool::call_with_ctx` (default delegates to `call`, so
+  hand-written impls compile unchanged), and builder `SdForgeMcpServer::with_state(...)` (mirrors the
+  gRPC `with_state` wiring)
+- The authenticated identity now reaches tools through the context instead of being dropped after the
+  RBAC check: `ctx.user_id()` / `ctx.auth()` / `ctx.credentials()` (feature = `security`)
+- New test suites: `stateful_tests` (state injected / missing / type mismatch), an MCP
+  identity-bridge auth test, and `tests/mcp_stateful_macro.rs` (macro-generated stateful tools)
+
+### Changed
+
+- **`#[forge(tool_name = ...)]` endpoints declaring `#[state]` now dispatch for real** (0.5.1
+  generated an always-error stub): the generated tool dispatches via `call_with_ctx`; without
+  `with_state(...)` the dispatch fails explicitly with the serialized handler `ApiError`
+  (`error_id` = `forge.state_missing` / `forge.state_type_mismatch`); `#[state]` must be `Arc<T>`
+  (already enforced compile-time by the unified closure — non-conforming declarations still fail to
+  compile)
+- Endpoints with `Extension` parameters keep the 0.5.1 stub verbatim (no MCP injection source), and
+  `call_tool_internal` stays fail-closed (state-only context, no identity)
 
 ## [0.5.1] - 2026-11-15
 
