@@ -180,7 +180,7 @@ jobs:
 
       # Release 只带 GitHub 自动生成的源码压缩包,不附 .crate/二进制产物。
       - name: Create Release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3
         with:
           tag_name: ${{ steps.version.outputs.tag_name }}
           name: Release ${{ steps.version.outputs.tag_name }}
