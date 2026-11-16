@@ -20,6 +20,15 @@ fn test_mcp_tool_registration() {
     super::exercise_all_tool_methods(&*tool);
 }
 
+/// `with_roles` stores the declared roles for the RBAC gate (`auth(role = ...)`).
+#[test]
+fn test_mcp_tool_registration_with_roles() {
+    let registration =
+        McpToolRegistration::new("test_tool", "v1", create_test_tool, create_test_metadata)
+            .with_roles(&["admin", "reader"]);
+    assert_eq!(registration.roles, &["admin", "reader"]);
+}
+
 #[test]
 fn test_get_mcp_tools_collects_from_inventory() {
     let tools = get_mcp_tools();

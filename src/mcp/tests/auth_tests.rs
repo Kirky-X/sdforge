@@ -486,3 +486,105 @@ async fn roleless_tool_admits_any_authenticated_identity() {
         .await;
     assert!(result.is_ok(), "role-less tools must not be RBAC-gated");
 }
+
+/// 身份桥接（plan §5.2）：verifier 验证通过后，`ctx.user_id()` 在工具内可达
+/// ——此前身份在 RBAC 检查后即被丢弃，handler 无从得知调用者是谁。
+#[tokio::test]
+async fn call_tool_reaches_tool_with_verified_identity() {
+    use crate::core::ApiMetadata;
+    use crate::mcp::{McpError, McpToolInstance, SdForgeTool, ToolCallContext};
+    use rmcp::model::{CallToolResult, ContentBlock};
+    use serde_json::Value;
+    use std::sync::Mutex;
+
+    struct IdentityProbe {
+        seen: Mutex<Vec<String>>,
+        seen_auth: Mutex<Vec<bool>>,
+        seen_credentials: Mutex<Vec<bool>>,
+    }
+    impl SdForgeTool for IdentityProbe {
+        fn name(&self) -> &str {
+            "identity_probe"
+        }
+        fn description(&self) -> &str {
+            "records ctx.user_id()"
+        }
+        fn input_schema(&self) -> Value {
+            serde_json::json!({"type": "object"})
+        }
+        fn call(&self, _input: Option<Value>) -> Result<CallToolResult, McpError> {
+            Err(McpError::internal_error(
+                "identity probe must be dispatched via call_with_ctx",
+                None,
+            ))
+        }
+        fn call_with_ctx(
+            &self,
+            _input: Option<Value>,
+            ctx: &ToolCallContext,
+        ) -> Result<CallToolResult, McpError> {
+            if let Some(user) = ctx.user_id() {
+                self.seen
+                    .lock()
+                    .expect("mutex not poisoned")
+                    .push(user.to_string());
+            }
+            self.seen_auth
+                .lock()
+                .expect("mutex not poisoned")
+                .push(ctx.auth().is_some());
+            self.seen_credentials
+                .lock()
+                .expect("mutex not poisoned")
+                .push(ctx.credentials().is_some());
+            Ok(CallToolResult::success(vec![ContentBlock::text("ok")]))
+        }
+    }
+
+    let metadata = ApiMetadata {
+        name: "identity_probe".to_string(),
+        version: "v1".to_string(),
+        description: "identity probe".to_string(),
+        cache_ttl: None,
+        is_streaming: false,
+        i18n_key: None,
+        lifecycle: None,
+    };
+    let probe = Arc::new(IdentityProbe {
+        seen: Mutex::new(Vec::new()),
+        seen_auth: Mutex::new(Vec::new()),
+        seen_credentials: Mutex::new(Vec::new()),
+    });
+    let server = SdForgeMcpServer::with_tools(vec![McpToolInstance::new(probe.clone(), metadata)])
+        .with_auth_verifier(Arc::new(jwt_verifier()));
+
+    let context = context_with_credentials(Some(McpCredentials::from_headers(
+        Some(&format!("Bearer {}", mint_jwt())),
+        None,
+    )));
+    let response = server
+        .call_tool(call_request("identity_probe"), context)
+        .await
+        .expect("valid bearer must dispatch");
+    match response {
+        rmcp::model::CallToolResponse::Complete(result) => {
+            assert_ne!(result.is_error, Some(true));
+        }
+        other => panic!("expected Complete response, got {other:?}"),
+    }
+    assert_eq!(
+        *probe.seen.lock().expect("mutex not poisoned"),
+        vec!["mcp-test".to_string()],
+        "verified sub claim must reach the tool via ctx.user_id()"
+    );
+    assert_eq!(
+        *probe.seen_auth.lock().expect("mutex not poisoned"),
+        vec![true],
+        "the verified AuthContext must be reachable via ctx.auth()"
+    );
+    assert_eq!(
+        *probe.seen_credentials.lock().expect("mutex not poisoned"),
+        vec![true],
+        "transport credentials must be reachable via ctx.credentials()"
+    );
+}

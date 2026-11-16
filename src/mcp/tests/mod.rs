@@ -14,6 +14,7 @@ mod handler_tests;
 mod migration_tests;
 mod protocol_tests;
 mod server_tests;
+mod stateful_tests;
 
 use crate::core::ApiMetadata;
 use crate::mcp::{McpToolRegistration, SdForgeTool};
