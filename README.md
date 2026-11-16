@@ -166,7 +166,8 @@ cargo run --example basic_cli --features cli -- echo --name world
 | HTTP only | `["http"]` | Traditional REST APIs |
 | MCP only | `["mcp"]` | AI tool integration |
 | HTTP + MCP dual protocol | `["http", "mcp"]` | One codebase, two entrypoints |
-| Full runtime features | `["full"]` | All protocols and capabilities (26 features, incl. `idempotency` and deployment-surface HTTP TLS `serve-tls`/`tls-watch`; excludes the gRPC-side `grpc-tls` and the optional heavy deps / opt-ins `simd-json`/`kit`/`limiteron-integration`/`schemars`/`ratelimit-dist`/`cache-l2`/`db-integration`/`sdk`) |
+| MCP Streamable HTTP | `["mcp-http", "http"]` | Mount `/mcp` (rmcp `StreamableHttpService`) with zero direct rmcp dep |
+| Full runtime features | `["full"]` | All protocols and capabilities (27 features, incl. `idempotency` and deployment-surface HTTP TLS `serve-tls`/`tls-watch`; excludes the gRPC-side `grpc-tls` and the optional heavy deps / opt-ins `simd-json`/`kit`/`limiteron-integration`/`schemars`/`ratelimit-dist`/`cache-l2`/`db-integration`/`sdk`) |
 
 `grpc`, `streaming`, `openapi`, `cli`, and `cache` can all be enabled independently of `http`, in any combination (`websocket` requires `http` + `streaming`).
 

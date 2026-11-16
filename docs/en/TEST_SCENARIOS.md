@@ -6,16 +6,16 @@ This document pins down SDForge's test pyramid baseline, test target inventory, 
 
 | Layer | Carrier | Count baseline |
 |------|----------|----------|
-| L1 lib unit tests | `#[cfg(test)]` in `src/**`: sdforge 2205 / sdforge-macros 85 / sdforge-examples 41 | 2331 passed |
-| L2 integration tests | Main crate `tests/` 49 targets (integration/ 40 + unit/ 5 + top-level 2: integration_http_mcp, sdk_snapshots + macros/macro_tests 1 + e2e 1: e2e_advanced, whose 157 count toward L3) + sdforge-macros crate `tests/` 2 targets (macro_compile/trybuild) + sdforge-examples crate `tests/` 3 targets (comprehensive_features, dbnexus_gateway_e2e, oxcache_admin_e2e) | 688 passed |
+| L1 lib unit tests | `#[cfg(test)]` in `src/**`: sdforge 2211 / sdforge-macros 85 / sdforge-examples 41 | 2337 passed |
+| L2 integration tests | Main crate `tests/` 51 targets (integration/ 40 + unit/ 5 + top-level 4: integration_http_mcp, sdk_snapshots, mcp_stateful_macro, mcp_streamable_http + macros/macro_tests 1 + e2e 1: e2e_advanced, whose 157 count toward L3) + sdforge-macros crate `tests/` 2 targets (macro_compile/trybuild) + sdforge-examples crate `tests/` 3 targets (comprehensive_features, dbnexus_gateway_e2e, oxcache_admin_e2e) | 693 passed |
 | L3 E2E scenarios | `tests/e2e/` (single target e2e_advanced, 11 domains) | 157 passed |
 | L4 Doc-tests | sdforge 23 + sdforge-examples 5 | 28 passed + 45 ignored |
 
-Full results (`--all-features --workspace`, measured 2026-11-16): **3204 passed / 0 failed / 73 ignored** (ignored = grpc_tests 28 environment-gated + Doc-tests 45 doc-example-gated).
+Full results (`--all-features --workspace`, measured 2026-11-17): **3215 passed / 0 failed / 73 ignored** (ignored = grpc_tests 28 environment-gated + Doc-tests 45 doc-example-gated).
 
 ## 🎯 Test Target Inventory
 
-- Main crate: all 49 test targets explicitly registered via `[[test]]` (the tests/e2e, tests/integration, tests/unit, and tests/macros subdirectories are outside Cargo auto-discovery; unregistered targets vanish silently; the top-level integration_http_mcp is registered too; `test_target_inventory_tests` continuously asserts this line against drift in the integration/ file count)
+- Main crate: all 51 test targets explicitly registered via `[[test]]` (the tests/e2e, tests/integration, tests/unit, and tests/macros subdirectories are outside Cargo auto-discovery; unregistered targets vanish silently; the top-level integration_http_mcp is registered too; `test_target_inventory_tests` continuously asserts this line against drift in the integration/ file count)
 - sdforge-macros / sdforge-examples crates: top-level `tests/` auto-discovery (macro_compile_tests, trybuild_tests, comprehensive_features, dbnexus_gateway_e2e, oxcache_admin_e2e)
 - e2e_advanced: carried by the `tests/e2e/` directory (e2e_* files are never bare at the top level); subdirectories are outside auto-discovery and explicitly registered via `[[test]]`, preserving all 157 tests
 - Feature gating: the 11 mods inside e2e_advanced each carry an independent `#[cfg(feature)]`, so any feature subset compiles (no required-features needed); the full scope `--all-features` carries no silent-skip risk
@@ -42,11 +42,11 @@ tests/e2e/e2e_advanced.rs (scenario highlights taken from the public APIs declar
 
 | Combination | Coverage | Result |
 |------|------|------|
-| `--all-features --workspace` (full scope) | All 59 producing targets | 3204 passed / 0 failed / 73 ignored |
+| `--all-features --workspace` (full scope) | All 61 producing targets | 3215 passed / 0 failed / 73 ignored |
 | Seven-feature subset `http,security,cache,inklog,i18n,ratelimit,openapi` | e2e_advanced 11 domains | 157 passed / 0 failed |
 | trybuild | Macro compile-failure diagnostic cases | 2 passed |
 
-The 59 producing targets = main crate 49 + sdforge-macros tests 2 + sdforge-examples tests 3 + unittests 3 (sdforge/macros/examples) + Doc-tests 2 (sdforge/sdforge-examples; sdforge-macros Doc-tests produce no output and are not counted).
+The 61 producing targets = main crate 51 + sdforge-macros tests 2 + sdforge-examples tests 3 + unittests 3 (sdforge/macros/examples) + Doc-tests 2 (sdforge/sdforge-examples; sdforge-macros Doc-tests produce no output and are not counted).
 
 ## 🚦 Static Gates
 
@@ -61,7 +61,7 @@ The 59 producing targets = main crate 49 + sdforge-macros tests 2 + sdforge-exam
 
 ## ℹ️ Counting Scope and Ignored Items
 
-- **Counting scope**: the full 3204 sums the `cargo test` output of each test target; empty targets with `0 passed; 0 failed` are not counted as producing targets.
+- **Counting scope**: the full 3215 sums the `cargo test` output of each test target; empty targets with `0 passed; 0 failed` are not counted as producing targets.
 - **grpc_tests 28 ignored**: upstream `#[ignore]` marks real network binding `127.0.0.1:0`, which hangs in CI / sandbox environments — environment gating, not a defect, and retained as such.
 - **Doc-tests 45 ignored**: doc examples depend on their run context and are skipped by gating (sdforge 43 + sdforge-macros 2).
 - **cargo-deny license verification**: four members (sdforge / sdforge-macros / limiteron / oxcache) declare licenses via license-file in `deny.toml` (a form cargo-deny does not recognize), pinned via clarify to MIT hash 0xfb13e7ad; the license-file path resolves relative to the clarified crate's manifest directory (sdforge-macros sits in the `macros/` subdirectory and uses `../LICENSE` to step up one level). Advisories / bans / sources checks all pass.
@@ -118,4 +118,4 @@ The build.rs-generated protobuf code goes to `OUT_DIR` and no longer enters the 
 
 ### Test scale
 
-About **3,262** test functions (`src/` 2,251 + `tests/` 795 + `macros/` 92 + `examples/` 124; via `grep -rEc '#\[(tokio::)?test\b' --include='*.rs'`, measured 2026-11-16).
+About **3,273** test functions (`src/` 2,257 + `tests/` 800 + `macros/` 92 + `examples/` 124; via `grep -rEc '#\[(tokio::)?test\b' --include='*.rs'`, measured 2026-11-17).

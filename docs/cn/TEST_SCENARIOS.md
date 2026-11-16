@@ -6,16 +6,16 @@
 
 | 层级 | 承载 | 数量基线 |
 |------|------|----------|
-| L1 lib 单元测试 | `src/**` 内 `#[cfg(test)]`：sdforge 2205 / sdforge-macros 85 / sdforge-examples 41 | 2331 passed |
-| L2 集成测试 | 主 crate `tests/` 49 目标（integration/ 40 + unit/ 5 + 顶层 2：integration_http_mcp、sdk_snapshots + macros/macro_tests 1 + e2e 1：e2e_advanced，其 157 计入 L3）+ sdforge-macros crate `tests/` 2 目标（macro_compile/trybuild）+ sdforge-examples crate `tests/` 3 目标（comprehensive_features、dbnexus_gateway_e2e、oxcache_admin_e2e） | 688 passed |
+| L1 lib 单元测试 | `src/**` 内 `#[cfg(test)]`：sdforge 2211 / sdforge-macros 85 / sdforge-examples 41 | 2337 passed |
+| L2 集成测试 | 主 crate `tests/` 51 目标（integration/ 40 + unit/ 5 + 顶层 4：integration_http_mcp、sdk_snapshots、mcp_stateful_macro、mcp_streamable_http + macros/macro_tests 1 + e2e 1：e2e_advanced，其 157 计入 L3）+ sdforge-macros crate `tests/` 2 目标（macro_compile/trybuild）+ sdforge-examples crate `tests/` 3 目标（comprehensive_features、dbnexus_gateway_e2e、oxcache_admin_e2e） | 693 passed |
 | L3 E2E 场景 | `tests/e2e/`（e2e_advanced 单目标，11 域） | 157 passed |
 | L4 Doc-tests | sdforge 23 + sdforge-examples 5 | 28 passed + 45 ignored |
 
-全量结果（`--all-features --workspace`，2026-11-16 实测）：**3204 passed / 0 failed / 73 ignored**（ignored = grpc_tests 28 环境门控 + Doc-tests 45 文档示例门控）。
+全量结果（`--all-features --workspace`，2026-11-17 实测）：**3215 passed / 0 failed / 73 ignored**（ignored = grpc_tests 28 环境门控 + Doc-tests 45 文档示例门控）。
 
 ## 🎯 测试目标落点
 
-- 主 crate：49 个测试目标全部 `[[test]]` 显式注册（tests/e2e、tests/integration、tests/unit、tests/macros 子目录均脱离 Cargo 自动发现范围，不注册即静默消失；顶层 integration_http_mcp 亦注册；`test_target_inventory_tests` 持续断言本行与 integration/ 文件数的漂移）
+- 主 crate：51 个测试目标全部 `[[test]]` 显式注册（tests/e2e、tests/integration、tests/unit、tests/macros 子目录均脱离 Cargo 自动发现范围，不注册即静默消失；顶层 integration_http_mcp 亦注册；`test_target_inventory_tests` 持续断言本行与 integration/ 文件数的漂移）
 - sdforge-macros / sdforge-examples crate：`tests/` 顶层自动发现（macro_compile_tests、trybuild_tests、comprehensive_features、dbnexus_gateway_e2e、oxcache_admin_e2e）
 - e2e_advanced：由 `tests/e2e/` 目录承载（e2e_* 不裸放顶层）；子目录脱离自动发现范围，经 `[[test]]` 显式注册，157 测试完整保留
 - 特性门控：e2e_advanced 内 11 mod 独立 `#[cfg(feature)]`，任意 feature 子集可编译（无需 required-features）；全量口径 `--all-features` 无静默跳过风险
@@ -42,11 +42,11 @@ tests/e2e/e2e_advanced.rs（场景要点取自各 mod 声明的公共 API）：
 
 | 组合 | 覆盖 | 结果 |
 |------|------|------|
-| `--all-features --workspace`（全量口径） | 全部 59 个有产出目标 | 3204 passed / 0 failed / 73 ignored |
+| `--all-features --workspace`（全量口径） | 全部 61 个有产出目标 | 3215 passed / 0 failed / 73 ignored |
 | 七特性子集 `http,security,cache,inklog,i18n,ratelimit,openapi` | e2e_advanced 11 域 | 157 passed / 0 failed |
 | trybuild | 宏编译失败诊断用例 | 2 passed |
 
-59 个有产出目标 = 主 crate 49 + sdforge-macros tests 2 + sdforge-examples tests 3 + unittests 3（sdforge/macros/examples）+ Doc-tests 2（sdforge/sdforge-examples；sdforge-macros Doc-tests 空产出不计入）。
+61 个有产出目标 = 主 crate 51 + sdforge-macros tests 2 + sdforge-examples tests 3 + unittests 3（sdforge/macros/examples）+ Doc-tests 2（sdforge/sdforge-examples；sdforge-macros Doc-tests 空产出不计入）。
 
 ## 🚦 静态门槛
 
@@ -61,7 +61,7 @@ tests/e2e/e2e_advanced.rs（场景要点取自各 mod 声明的公共 API）：
 
 ## ℹ️ 统计口径与 Ignored 项
 
-- **统计口径**：全量 3204 按各测试目标的 `cargo test` 输出求和，`0 passed; 0 failed` 的空目标不计入有产出目标数。
+- **统计口径**：全量 3215 按各测试目标的 `cargo test` 输出求和，`0 passed; 0 failed` 的空目标不计入有产出目标数。
 - **grpc_tests 28 ignored**：上游 `#[ignore]` 标注真实网络绑定 `127.0.0.1:0` 在 CI / 沙箱环境会挂起，属环境门控而非缺陷，予以保留。
 - **Doc-tests 45 ignored**：文档示例依赖运行上下文，按门控跳过（sdforge 43 + sdforge-macros 2）。
 - **cargo-deny 许可证核对**：`deny.toml` 中 sdforge / sdforge-macros / limiteron / oxcache 四个成员以 license-file 形式声明许可证（cargo-deny 不识别该形态），已通过 clarify 绑定 MIT hash 0xfb13e7ad；license-file 路径相对被 clarify crate 的 manifest 目录解析（sdforge-macros 位于 `macros/` 子目录，使用 `../LICENSE` 回退一级）。advisories / bans / sources 检查均通过。
@@ -117,4 +117,4 @@ build.rs 生成的 protobuf 代码写入 `OUT_DIR`，不再落源树；`llvm-cov
 
 ### 测试规模
 
-约 **3,262** 个测试函数（`src/` 2,251 + `tests/` 795 + `macros/` 92 + `examples/` 124，`grep -rEc '#\[(tokio::)?test\b' --include='*.rs'` 统计，2026-11-16 实测）。
+约 **3,273** 个测试函数（`src/` 2,257 + `tests/` 800 + `macros/` 92 + `examples/` 124，`grep -rEc '#\[(tokio::)?test\b' --include='*.rs'` 统计，2026-11-17 实测）。

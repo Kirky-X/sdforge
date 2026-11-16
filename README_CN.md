@@ -166,7 +166,8 @@ cargo run --example basic_cli --features cli -- echo --name world
 | 仅 HTTP | `["http"]` | 传统 REST API |
 | 仅 MCP | `["mcp"]` | AI 工具集成 |
 | HTTP + MCP 双协议 | `["http", "mcp"]` | 同一份代码双入口 |
-| 全量运行时特性 | `["full"]` | 全部协议与能力（26 项，含 `idempotency` 与部署面 HTTP TLS `serve-tls`/`tls-watch`；不含 gRPC 侧 `grpc-tls` 与 `simd-json`/`kit`/`limiteron-integration`/`schemars`/`ratelimit-dist`/`cache-l2`/`db-integration`/`sdk` 可选重依赖与 opt-in 面） |
+| MCP Streamable HTTP | `["mcp-http", "http"]` | `/mcp` 挂载（rmcp `StreamableHttpService`），零直连 rmcp |
+| 全量运行时特性 | `["full"]` | 全部协议与能力（27 项，含 `idempotency` 与部署面 HTTP TLS `serve-tls`/`tls-watch`；不含 gRPC 侧 `grpc-tls` 与 `simd-json`/`kit`/`limiteron-integration`/`schemars`/`ratelimit-dist`/`cache-l2`/`db-integration`/`sdk` 可选重依赖与 opt-in 面） |
 
 `grpc`、`streaming`、`openapi`、`cli`、`cache` 均可独立于 `http` 启用，任意组合；`websocket` 依赖 `http` + `streaming`。
 

@@ -374,6 +374,7 @@ let spec = OpenApiBuilder::new()
   <tr><th>标志</th><th>说明</th><th>默认</th></tr>
   <tr><td><code>http</code></td><td>HTTP 服务器（Axum 0.8 路由、Tower 中间件、版本路由）</td><td>❌</td></tr>
   <tr><td><code>mcp</code></td><td>MCP 协议（rmcp 3.5，2026-07-28 规范：无状态 HTTP 头、MRTR、缓存语义）</td><td>❌</td></tr>
+  <tr><td><code>mcp-http</code></td><td>MCP Streamable HTTP（启用 <code>rmcp/transport-streamable-http-server</code>）：挂载 rmcp 的 <code>StreamableHttpService</code> 于 <code>/mcp</code>——全部类型经 <code>sdforge::rmcp</code> 再导出解析，下游零直连 rmcp；挂载用 <code>sdforge::axum</code> 门面；已并入 <code>full</code></td><td>❌</td></tr>
   <tr><td><code>grpc</code></td><td>gRPC（tonic + prost，独立于 http，proto 经 build.rs 生成；unary <code>Call</code> + server-streaming <code>CallStream</code>——后者需另启 <code>streaming</code>；<code>extra_services</code> 支持应用自有 tonic service 同端口挂载）</td><td>❌</td></tr>
   <tr><td><code>grpc-tls</code></td><td>gRPC TLS 接线（暴露 tonic <code>ServerTlsConfig</code>，证书加载由调用方负责；与 HTTP 侧 <code>serve-tls</code> 的进程内终止实现独立，同样不并入 <code>full</code>）</td><td>❌</td></tr>
   <tr><td><code>websocket</code></td><td>WebSocket（依赖 http + streaming）</td><td>❌</td></tr>

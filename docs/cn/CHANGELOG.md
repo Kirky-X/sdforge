@@ -50,8 +50,20 @@
   `SdForgeMcpServer::with_state(...)`（镜像 gRPC `with_state` 接线）
 - 验证后的身份不再在校验 RBAC 后即被丢弃，而是随上下文到达工具：`ctx.user_id()` / `ctx.auth()` /
   `ctx.credentials()`（feature = `security`）
+- **`mcp-http` feature（启用 `rmcp/transport-streamable-http-server`）**：挂载 rmcp 的
+  `StreamableHttpService` 于 `/mcp`——全部 rmcp 类型经 `sdforge::rmcp` 再导出解析，下游**零直连
+  rmcp 依赖**（版本由 cargo 统一）。挂载用 `sdforge::axum` 门面；已并入 `full`。真实往返 e2e 实证
+  （axum 挂载 → rmcp 客户端 initialize → tools/list → tools/call，state 到达工具）；`full` 消费方
+  构建面增一个叶子 crate（`sse-stream`）；纯 stdio 的 `mcp` 消费方零影响
 - 新增测试套件：`stateful_tests`（state 注入 / 缺失 / 类型不匹配三态）、MCP 身份桥接 auth 测试、
-  `tests/mcp_stateful_macro.rs`（宏生成 stateful 工具）
+  `tests/mcp_stateful_macro.rs`（宏生成 stateful 工具）、`tests/mcp_streamable_http.rs`
+  （Streamable HTTP 挂载往返）
+
+### Fixed
+
+- **MRTR 会话 ID 在同一时钟节拍内生成两次会碰撞**（此前仅用纳秒时间戳——并行测试负载下实测
+  复现；同 ID 的两个会话会在 `MrtrSessionManager` 中互相覆盖）：现附加进程内单调序列
+  （`mrtr-{nanos}-{seq}`）。ID 对客户端保持不透明；`mrtr-` 前缀之外无格式契约
 
 ### Changed
 

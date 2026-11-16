@@ -51,8 +51,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/lang/zh-CN/
   gRPC `with_state` wiring)
 - The authenticated identity now reaches tools through the context instead of being dropped after the
   RBAC check: `ctx.user_id()` / `ctx.auth()` / `ctx.credentials()` (feature = `security`)
+- **`mcp-http` feature (enables `rmcp/transport-streamable-http-server`)**: mount rmcp's
+  `StreamableHttpService` at `/mcp` — every rmcp type resolves through the `sdforge::rmcp` re-export,
+  so downstream crates need **no direct rmcp dependency** (versions unified by cargo). Mounting uses
+  the `sdforge::axum` facade; included in `full`. Proven by a real round-trip e2e (axum mount →
+  rmcp client initialize → tools/list → tools/call with state reaching the tool); `full` consumers
+  gain one leaf crate (`sse-stream`) of build surface; pure-stdio `mcp` consumers are unaffected
 - New test suites: `stateful_tests` (state injected / missing / type mismatch), an MCP
-  identity-bridge auth test, and `tests/mcp_stateful_macro.rs` (macro-generated stateful tools)
+  identity-bridge auth test, `tests/mcp_stateful_macro.rs` (macro-generated stateful tools), and
+  `tests/mcp_streamable_http.rs` (Streamable HTTP mount round-trip)
+
+### Fixed
+
+- **MRTR session IDs could collide when two IDs were generated within the same clock tick**
+  (nanosecond timestamp only — observed under parallel test load; two sessions sharing an ID
+  would overwrite each other in `MrtrSessionManager`): a process-wide monotonic sequence is now
+  appended (`mrtr-{nanos}-{seq}`). The ID stays opaque to clients; nothing beyond the `mrtr-`
+  prefix is contract
 
 ### Changed
 

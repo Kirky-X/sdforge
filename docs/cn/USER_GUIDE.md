@@ -362,6 +362,7 @@ serve_with_graceful_shutdown_tls(
 - **无状态协议**：`StatelessServerHandler` 实现 `rmcp::ServerHandler`；HTTP 头协议由 `parse_mcp_headers` 解析 `Mcp-Method` / `Mcp-Name`（缺失时返回 `McpHeaderError`，HTTP 状态映射由下游传输适配层自行实现，如映射为 400）
 - **stdio 服务**：`mcp::serve_stdio()` 封装 `rmcp::ServiceExt` + stdio 传输
 - **state 与身份接线**：`SdForgeMcpServer::with_state(...)` 注入应用 state，`SdForgeTool::call_with_ctx` 接收 `ToolCallContext`（state 经 `downcast_state` 恢复，`security` 下经 `ctx.user_id()` 取验证身份）；带 `tool_name` 的 `#[state]` 端点在接线 `with_state` 后真实派发（未接线时显性报 `forge.state_missing`）
+- **Streamable HTTP 挂载**：启用 `mcp-http`，用 `sdforge::axum` 把 rmcp 的 `StreamableHttpService` 挂到 `/mcp`——全部类型经 `sdforge::rmcp` 再导出解析（零直连 rmcp；已并入 `full`）。公网部署须在 `StreamableHttpServerConfig` 配置 Origin 校验（默认 `allowed_origins` 为空即校验关闭；`allowed_hosts` 默认仅 loopback）
 - **MRTR 多轮往返**：`MrtrSessionManager` 管理会话，工具通过 `InputRequiredResult` 挂起等待补充输入，300 秒超时自动取消
 - **缓存语义**：`cache_semantics` 模块处理 `ttlMs` / `cacheScope`（`global` / `request`）
 

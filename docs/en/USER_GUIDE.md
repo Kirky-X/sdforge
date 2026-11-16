@@ -364,6 +364,7 @@ A returned `Value::String` prints the raw string (no quotes); other types print 
 - **Stateless protocol**: `StatelessServerHandler` implements `rmcp::ServerHandler`; the HTTP header protocol is parsed by `parse_mcp_headers` from `Mcp-Method` / `Mcp-Name` (missing headers return `McpHeaderError`; the HTTP status mapping is up to the downstream transport adapter layer, e.g. mapped to 400)
 - **stdio service**: `mcp::serve_stdio()` wraps `rmcp::ServiceExt` + stdio transport
 - **State & identity wiring**: `SdForgeMcpServer::with_state(...)` injects application state and `SdForgeTool::call_with_ctx` receives a `ToolCallContext` (state via `downcast_state`, verified identity via `ctx.user_id()` under `security`); `#[state]` endpoints with `tool_name` dispatch for real once `with_state` is wired (fail-explicit `forge.state_missing` otherwise)
+- **Streamable HTTP mounting**: enable `mcp-http` and mount rmcp's `StreamableHttpService` at `/mcp` with `sdforge::axum` — all types resolve through the `sdforge::rmcp` re-export (no direct rmcp dependency; included in `full`). For public deployment configure origin validation in `StreamableHttpServerConfig` (default `allowed_origins` is empty = validation off; `allowed_hosts` defaults to loopback only)
 - **MRTR multi round-trip**: `MrtrSessionManager` manages sessions; tools suspend via `InputRequiredResult` awaiting supplementary input, auto-cancelled after a 300-second timeout
 - **Cache semantics**: the `cache_semantics` module handles `ttlMs` / `cacheScope` (`global` / `request`)
 
