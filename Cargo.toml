@@ -44,13 +44,11 @@ base64 = { version = "0.23", default-features = false, features = ["std", "alloc
 toml = { version = "1.1", default-features = false }
 # minimal + byte-weight（复用 moka，不新增依赖）
 oxcache = { version = "0.5", default-features = false, features = ["minimal", "byte-weight"] }
-# confers/watch：去抖文件监听，仅 tls-watch 门控；无环
-# rc.12 修复 macOS FSEvents Create 吞后续 Modify/Remove 与 TMPDIR symlink 聋化（tls-watch 热重载依赖此修复）
+# confers/watch：去抖文件监听，仅 tls-watch 门控
+# rc.12 修复 macOS FSEvents Create 吞 Modify/Remove、TMPDIR symlink 失聪（tls-watch 热重载依赖）
 confers = { version = "0.6", default-features = false, features = ["watch"] }
-# 数据库网关：dbnexus embedded-runtime（运行时无 sqlite 后端）+ sql-parser，供数据
-# API 网关的池化/解析面（db-integration feature）。0.5.1 起由 embedded 切
-# embedded-runtime：解除解析闭包被钉 libsqlite3-sys <0.38（RUSTSEC-2026-0459 消费侧）；
-# 需 sqlite 的下游显式启用 dbnexus/sqlite
+# 数据库网关：dbnexus embedded-runtime（无 sqlite 后端）+ sql-parser，供 API 网关池化/解析（db-integration）
+# 0.5.1 由 embedded 切 embedded-runtime：解除 libsqlite3-sys <0.38 钉（RUSTSEC-2026-0459）；需 sqlite 则显式启 dbnexus/sqlite
 dbnexus = { version = "0.6.1", default-features = false, features = ["embedded-runtime", "sql-parser"] }
 # limiteron DistributedLimiter trait 的 mock/适配实现用（trait 以 async_trait 声明，显式声明供实现侧使用）
 async-trait = { version = "0.1", default-features = false }
@@ -153,8 +151,7 @@ tower-http = { workspace = true, optional = true }
 inventory = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 axum-extra = { workspace = true, optional = true }
-# rmcp：transport-io 启用 serve_stdio() 所需的 transport::stdio；3.9.0 修复
-# RUSTSEC-2026-0462（Streamable HTTP 客户端响应体无限缓冲）
+# rmcp：transport-io 启用 serve_stdio() 所需的 transport::stdio；3.9.0 修复 RUSTSEC-2026-0462（Streamable HTTP 客户端响应体无限缓冲）
 rmcp = { version = "3.9", default-features = false, features = ["server", "transport-io"], optional = true }
 anyhow = { version = "1.0", default-features = false, features = ["std"], optional = true }
 tokio-stream = { workspace = true, optional = true }
@@ -246,8 +243,8 @@ default = []
 http = ["dep:axum", "dep:tower", "dep:tower-http", "dep:inventory", "tokio", "dep:axum-extra", "dep:regex", "dep:once_cell", "dep:validator", "dep:uuid", "dep:futures-util", "dep:oxcache"]
 # MCP（官方 rmcp SDK；http 供 MCP 2026-07-28 stateless 头解析 Mcp-Method/Mcp-Name）
 mcp = ["dep:rmcp", "dep:inventory", "dep:anyhow", "dep:http"]
-# MCP Streamable HTTP（rmcp server-side-http）：/mcp 挂载 rmcp 的 StreamableHttpService。
-# 下游经 `sdforge::rmcp` 再导出取全部类型，无需直连 rmcp（版本随 sdforge 统一，类型合一）
+# MCP Streamable HTTP（rmcp server-side-http）：/mcp 挂载 rmcp 的 StreamableHttpService
+# 下游经 sdforge::rmcp 再导出取全部类型，无需直连 rmcp（版本随 sdforge 统一）
 mcp-http = ["mcp", "rmcp/transport-streamable-http-server"]
 # streaming：独立于 http，仅 tokio/tokio-stream/futures-util
 streaming = ["dep:tokio", "dep:tokio-stream", "dep:futures-util", "dep:chrono"]
@@ -278,8 +275,7 @@ ratelimit-dist = ["ratelimit", "limiteron/distributed", "limiteron/lua-script"]
 cache-l2 = ["cache", "oxcache/redis"]
 # db-integration：dbnexus 数据 API 网关——白名单只读数据面（DbGateway；独立于 http，端点暴露按需组合）
 db-integration = ["dep:dbnexus"]
-# db-sqlite = db-integration + dbnexus/sqlite 驱动：0.5.1 起 dbnexus 集成切
-# embedded-runtime（无 sqlite），集成测试与需 sqlite 文件库的网关用户显式启用
+# db-sqlite = db-integration + dbnexus/sqlite：0.5.1 起集成切 embedded-runtime（无 sqlite），集成测试与需 sqlite 库者显式启用
 db-sqlite = ["db-integration", "dbnexus/sqlite"]
 # db-permission：开启 dbnexus permission，逐表权限检查对非 admin 会话角色生效（fail-closed）；未开启时权限检查整块编译掉，仅剩白名单与归属谓词隔离
 db-permission = ["db-integration", "dbnexus/permission"]
