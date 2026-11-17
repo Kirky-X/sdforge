@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: dtolnay/rust-toolchain@59a558e8c538bf4a23bbffa19e5a278b703f2920 # 1.97.1
+      - uses: dtolnay/rust-toolchain@766a42937d994bd78bb4591385445c188ccb3f09 # 1.97.1
       - name: Install protoc (for grpc feature)
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
       - name: Verify build (full features)
@@ -43,7 +43,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: dtolnay/rust-toolchain@59a558e8c538bf4a23bbffa19e5a278b703f2920 # 1.97.1
+      - uses: dtolnay/rust-toolchain@766a42937d994bd78bb4591385445c188ccb3f09 # 1.97.1
       - name: Install protoc (for grpc feature)
         run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
 
