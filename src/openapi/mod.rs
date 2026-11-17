@@ -960,9 +960,7 @@ mod tests {
         assert_eq!(INFO.path_params[0].schema_format, "uint64");
     }
 
-    // ========================================================================
     // requestBody + response schema emission
-    // ========================================================================
 
     /// the body-param test route must emit a typed `requestBody`
     /// (application/json object with item/quantity properties, item required).
@@ -1033,9 +1031,7 @@ mod tests {
         assert_eq!(info.schema_type, "object");
     }
 
-    // ========================================================================
     // 返回类型 Schema 反射（reflect_response_schema 两态）
-    // ========================================================================
 
     /// 派生 `JsonSchema` 的类型：探针命中精确分支，产出含字段属性的
     /// schema 文本；原语等内建 `JsonSchema` 类型同走精确分支。
@@ -1159,9 +1155,7 @@ mod tests {
         );
     }
 
-    // ========================================================================
     // forge-success-status-code: OpenAPI response code generation tests
-    // ========================================================================
 
     /// `OpenApiRouteInfo::new()` should default `success_status` to `None`.
     #[test]

@@ -391,9 +391,7 @@ mod tests {
         assert!(matches!(b, AuthConfig::None));
     }
 
-    // ============================================================================
     // Enhanced JWT Security Validation Tests
-    // ============================================================================
 
     /// Test JWT validation rejects empty secret
     #[test]

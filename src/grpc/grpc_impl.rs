@@ -1303,9 +1303,7 @@ impl tonic::service::Interceptor for AuthGrpcInterceptor {
     }
 }
 
-// ============================================================================
 // Unit tests
-// ============================================================================
 #[cfg(all(test, feature = "grpc"))]
 mod tests {
     use super::*;
@@ -1424,9 +1422,7 @@ mod tests {
         }
     }
 
-    // ========================================================================
     // forge-success-status-code: gRPC status_code 透传测试 handlers
-    // ========================================================================
 
     /// Handler returning a `ServiceResponse` with `status_code = 201` —
     /// verifies the gRPC layer reads the field and populates
@@ -1489,11 +1485,9 @@ mod tests {
     }
         }
 
-    // ========================================================================
     // forge-success-status-code gRPC 路径消费宏 `status` 参数测试
     //
     // 验证优先级链：ServiceResponse.status_code 字段 > 宏 default_status > 200。
-    // ========================================================================
 
     /// 裸类型返回值 + `default_status = Some(201)` — 模拟
     /// `#[forge(grpc_method = "test_bare_with_default_status", status = 201)]`
@@ -1858,12 +1852,10 @@ mod tests {
         assert!(!err.message().contains("leak"));
     }
 
-    // ========================================================================
     // forge-success-status-code: gRPC status_code 透传测试
     //
     // 成功 status_code 透传（ServiceResponse 字段 → CallResponse）
     // 错误路径不回归（已由 call_business_error_returns_real_grpc_status 覆盖）
-    // ========================================================================
 
     /// fn 返回 success_with_status(d, 201) → CallResponse.status_code == 201。
     #[tokio::test]
@@ -1969,11 +1961,9 @@ mod tests {
         assert_eq!(extract_status_code(&v), None);
     }
 
-    // ========================================================================
     // forge-success-status-code gRPC 路径消费宏 `status` 参数 e2e 测试
     //
     // 优先级链：ServiceResponse.status_code 字段 > 宏 default_status > 200
-    // ========================================================================
 
     /// 裸类型 + `default_status = Some(201)` → CallResponse.status_code == 201。
     /// 模拟 `#[forge(grpc_method = "...", status = 201)]` 的端到端行为。
@@ -2088,9 +2078,7 @@ mod tests {
         assert_eq!(downcast, Some(&42_i32));
     }
 
-    // ========================================================================
     // gRPC rate limiting tests
-    // ========================================================================
     #[cfg(feature = "ratelimit")]
     mod vuln_0006_ratelimit_tests {
         use super::*;
@@ -2317,9 +2305,7 @@ mod tests {
         }
     }
 
-    // ========================================================================
     // gRPC endpoint RBAC（协议对等）— fail-safe / 放行 / 低权限拒绝
-    // ========================================================================
 
     /// get_info 版本号取 CARGO_PKG_VERSION（不再硬编码 0.1.0）。
     #[tokio::test]
@@ -2415,9 +2401,7 @@ mod tests {
         let err = service.call(req).await.unwrap_err();
         assert_eq!(err.code(), tonic::Code::PermissionDenied);
     }
-    // ========================================================================
     // gRPC idempotency-key metadata 幂等防护
-    // ========================================================================
     #[cfg(all(feature = "grpc", feature = "idempotency"))]
     mod idempotency_tests {
         use super::*;
@@ -2575,9 +2559,7 @@ mod tests {
         }
     }
 
-    // ========================================================================
     // server-streaming dispatch（feature = streaming）
-    // ========================================================================
 
     #[cfg(feature = "streaming")]
     mod grpc_streaming {
@@ -3127,10 +3109,8 @@ mod tests {
             );
         }
 
-        // ====================================================================
         // 端点生命周期（`#[forge(deprecated, sunset, successor)]`）→ 响应
         // metadata 注入（unary `Call` 与 streaming `CallStream` 同契约）
-        // ====================================================================
 
         fn lifecycle_echo_handler(
             args: HandlerArgs,

@@ -66,7 +66,7 @@ pub enum ApiError {
     ///
     /// 此前 `QuotaExhausted { used, total }` 被映射到
     /// `RateLimitExceeded` 并把 `used` 塞进 `window_seconds`（语义错误，
-    /// 客户端会按错误的秒数退避；design.md D8 已知 tech debt）。
+    /// 客户端会按错误的秒数退避；已知 tech debt）。
     /// 现在作为独立变体承载配额语义。
     #[error("Quota exhausted: {used}/{total}")]
     QuotaExhausted {
@@ -602,13 +602,13 @@ impl From<ApiError> for ServiceError {
 
 /// Convert a `RateLimitError` into an `ApiError`.
 ///
-/// Mapping (see design.md D5):
+/// Mapping (see design.md):
 /// - `Exceeded { limit, window_seconds }` → `RateLimitExceeded` (HTTP 429)
 /// - `Banned { .. }` → `AccessDenied` (HTTP 403)
 /// - `CircuitOpen` → `ServiceUnavailable` (HTTP 503)
 /// - `QuotaExhausted { used, total }` → `QuotaExhausted` (HTTP 429)。
 ///   （HIGH 修复：此前映射到 `RateLimitExceeded` 并把 `used` 塞进
-///   `window_seconds`，design.md D8 的 tech debt 已清偿）
+///   `window_seconds`）
 /// - `Limiteron(e)` → `Internal` with source preserved for error chaining
 ///
 /// `RateLimitError` uses `u64` for limit/window counters, while
@@ -1560,7 +1560,7 @@ mod tests {
     /// `RateLimitError::QuotaExhausted { used, total }` maps to
     /// `ApiError::RateLimitExceeded { limit: total, window_seconds: used }`.
     /// Semantically imperfect (window_seconds carries `used`) — tracked as
-    /// tech debt in design.md D8.
+    /// tech debt.
     #[cfg(feature = "ratelimit")]
     #[test]
     fn ratelimit_quota_exhausted_maps_to_quota_exhausted() {

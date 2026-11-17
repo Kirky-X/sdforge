@@ -24,7 +24,7 @@
 //!     listener,
 //!     sdforge::http::default_shutdown_signal,
 //!     GracefulShutdownConfig::default,
-//!).await?;
+//! ).await?;
 //! ```
 
 use std::pin::Pin;

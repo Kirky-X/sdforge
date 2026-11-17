@@ -827,9 +827,7 @@ mod tests {
         );
     }
 
-    // ========================================================================
     // Security tests: argument size limit + non-disclosure
-    // ========================================================================
 
     /// Verify `call_tool_internal` rejects argument payloads larger than
     /// `MAX_ARGUMENTS_SIZE_BYTES` (1 MiB) with `invalid_params`.

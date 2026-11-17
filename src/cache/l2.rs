@@ -87,8 +87,8 @@ impl std::fmt::Debug for RedisL2CacheConfig {
 }
 
 /// 连接串凭据掩码：`scheme://[user:AUTH@]host` → `scheme://:***@host`
-///（有 userinfo 时整体替换为 `:***`，无 userinfo 原样保留）。掩码失败
-///（结构性意外）退化为整串 `***`——宁可不展示，不泄漏。
+/// （有 userinfo 时整体替换为 `:***`，无 userinfo 原样保留）。掩码失败
+/// （结构性意外）退化为整串 `***`——宁可不展示，不泄漏。
 fn mask_connection_string(url: &str) -> String {
     let (scheme, rest) = match url.split_once("://") {
         Some(parts) => parts,

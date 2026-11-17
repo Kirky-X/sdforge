@@ -1209,7 +1209,7 @@ fn extract_arc_inner_type(ty: &syn::Type) -> Option<&syn::Type> {
     None
 }
 
-/// Generate the unified handler closure shared by CLI and gRPC registrations (D3).
+/// Generate the unified handler closure shared by CLI and gRPC registrations.
 ///
 /// Emits a named function `#handler_fn_name` with signature
 /// `(HandlerArgs, HandlerState) -> HandlerFuture` that:
@@ -1762,7 +1762,7 @@ fn generate_cli_registration(
         proc_macro2::Span::call_site(),
     );
 
-    // Unified handler closure (D3) — shared with gRPC. The named fn has
+    // Unified handler closure — shared with gRPC. The named fn has
     // signature (HandlerArgs, HandlerState) -> HandlerFuture, extracts
     // Path/Body params, awaits the forge fn, and serializes its return value
     // via serde_json::to_value (requires T: Serialize).
@@ -3471,9 +3471,7 @@ pub fn test_macro(input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
-// ============================================================================
 // #[forge::log] — 声明日志属性宏（inklog 结构化日志 + DataMasker 脱敏）
-// ============================================================================
 
 /// `#[forge::log]` 的参数面。
 #[derive(Default, Debug)]
@@ -4324,13 +4322,11 @@ mod macro_parsing_tests {
         assert_eq!(result.17, None);
     }
 
-    // ============================================================================
     // validate_api_name tests
     //
     // validate_api_name enforces multiple validation rules to prevent code
     // injection through the #[forge(name = ...)] attribute. Each test
     // targets a specific validation path.
-    // ============================================================================
 
     #[test]
     fn test_validate_api_name_valid_simple() {
@@ -4478,7 +4474,6 @@ mod macro_parsing_tests {
     //
     // validate_version enforces that version strings contain only alphanumeric
     // characters, dots, and hyphens (for pre-release segments like "1.0-beta").
-    // ============================================================================
 
     #[test]
     fn test_validate_version_valid_v1() {
@@ -4563,13 +4558,11 @@ mod macro_parsing_tests {
         );
     }
 
-    // ============================================================================
     // clean_function_attributes tests
     //
     // clean_function_attributes removes #[state] and #[param] attributes from
     // function parameters. These attributes are used by the macro for parameter
     // kind inference and should not appear in the output function.
-    // ============================================================================
 
     /// Helper: count attributes on a parameter by name.
     fn count_attr(input: &ItemFn, param_idx: usize, attr_name: &str) -> usize {
@@ -4637,13 +4630,11 @@ mod macro_parsing_tests {
         assert!(cleaned.sig.inputs.is_empty());
     }
 
-    // ============================================================================
     // generate_cli_registration
     //
     // Verifies the helper emits paired CliCommandRegistration +
     // CliHandlerRegistration inventory submissions, maps ParamKind to
     // CliArgType correctly, and skips State/Extension parameters.
-    // ============================================================================
 
     /// Build a `ParamInfo` with the minimal fields needed by
     /// `generate_cli_registration`. The `ty` is synthesized via
@@ -4816,9 +4807,7 @@ mod macro_parsing_tests {
         assert!(s.contains("CliHandlerRegistration"), "missing handler: {s}");
     }
 
-    // ========================================================================
     // generate_grpc_handler_registration
-    // ========================================================================
 
     /// gRPC handler registration must submit `GrpcHandlerRegistration` with
     /// the configured `grpc_method` name, a named handler fn, and a
@@ -5191,11 +5180,9 @@ mod macro_parsing_tests {
         );
     }
 
-    // ========================================================================
     // forge-success-status-code: detect_service_response 返回类型检测
     //
     // 检测 fn 返回类型是否为 ServiceResponse（含 Result 包装）
-    // ========================================================================
 
     /// 解析 `-> T` 形式的返回类型字符串为 syn::ReturnType。
     fn parse_return_type(src: &str) -> syn::ReturnType {
@@ -5288,8 +5275,8 @@ mod macro_parsing_tests {
 mod handler_closure_tests {
     use super::*;
 
-    /// Verify the unified handler closure serializes its return value (D3.2)
-    /// instead of discarding it, and uses the unified signature (D3.1).
+    /// Verify the unified handler closure serializes its return value
+    /// instead of discarding it, and uses the unified signature.
     #[test]
     fn handler_closure_serializes_return_value() {
         let fn_name = syn::Ident::new("echo", proc_macro2::Span::call_site());
@@ -5298,7 +5285,7 @@ mod handler_closure_tests {
         let tokens = generate_handler_closure(&fn_name, &handler_fn_name, &params, &[], false);
         let s = tokens.to_string();
 
-        // D3.2: return value serialized via serde_json::to_value (T: Serialize).
+        // Return value serialized via serde_json::to_value (T: Serialize).
         assert!(
             s.contains("to_value"),
             "expected serde_json::to_value in closure body: {s}"
@@ -5322,7 +5309,7 @@ mod handler_closure_tests {
         let tokens = generate_handler_closure(&fn_name, &handler_fn_name, &params, &[], false);
         let s = tokens.to_string();
 
-        // D3.1: signature upgraded to unified (HandlerArgs, HandlerState) -> HandlerFuture.
+        // Signature upgraded to unified (HandlerArgs, HandlerState) -> HandlerFuture.
         assert!(s.contains("HandlerArgs"), "missing HandlerArgs: {s}");
         assert!(s.contains("HandlerState"), "missing HandlerState: {s}");
         assert!(s.contains("HandlerFuture"), "missing HandlerFuture: {s}");

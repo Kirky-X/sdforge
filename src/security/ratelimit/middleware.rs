@@ -8,7 +8,7 @@
 //! rejection the middleware short-circuits with `StatusCode::TOO_MANY_REQUESTS`
 //! (429); on approval the request is forwarded to the inner service unchanged.
 //!
-//! See `design.md` D4 for the rationale (returns `BoxFuture`, `.await` in
+//! See `design.md` for the rationale (returns `BoxFuture`, `.await` in
 //! async block, mirrors Tower ecosystem pattern).
 //!
 //! Requires the `ratelimit-http` feature.

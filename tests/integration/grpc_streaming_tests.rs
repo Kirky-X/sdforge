@@ -5,7 +5,7 @@
 //! `#[forge(grpc_method = "...", stream = true)]` 声明的 handler 返回
 //! `StreamResponse<T>`；宏生成 `GrpcStreamHandlerRegistration`，服务端经
 //! `CallStream` RPC 逐项回送 `CallResponse`。本文件走真实 tonic 网络链路
-//!（绑定的 listener 经 `serve_with_incoming` + tonic client），验证端到
+//! （绑定的 listener 经 `serve_with_incoming` + tonic client），验证端到
 //! 端：多项流、项级错误不中断、unary/流式双向方向指引。
 
 #![cfg(all(feature = "grpc", feature = "streaming"))]

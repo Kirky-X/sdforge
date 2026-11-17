@@ -103,7 +103,7 @@ pub struct GrpcServerConfig {
     ///
     /// Mirrors `CliBuilder::with_dependencies`. Handlers with a `State`
     /// parameter downcast this `Arc<dyn Any>` to their concrete type at
-    /// call time. Available without the `security` feature (design D5).
+    /// call time. Available without the `security` feature.
     pub state: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
     /// 生产 RBAC 接线（feature = security）：装配 per-call verifier，
     /// 使 `#[forge(auth(role))]` 声明在 build_server_with_config 路径生效

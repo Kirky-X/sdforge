@@ -4,8 +4,7 @@
 //!
 //! These tests use the real `limiteron::Governor` with in-memory storage
 //! (no mocking), because `Governor` is a concrete struct with private
-//! fields and cannot be mocked. See `design.md` D3 for rationale.
-
+//! fields and cannot be mocked. See `design.md` for rationale.
 use std::sync::Arc;
 
 // HTTP types are only needed for `check_request` tests (ratelimit-http feature).

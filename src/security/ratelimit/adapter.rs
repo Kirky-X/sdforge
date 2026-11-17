@@ -6,7 +6,7 @@
 //! delegates all decisions to a [`limiteron::Governor`] instance held behind
 //! an `Arc` (shared ownership, dependency-injected).
 //!
-//! See `design.md` D3 for the rationale behind the construction pattern
+//! See `design.md` for the rationale behind the construction pattern
 //! (async `new` / `default` + sync `with_dependencies`).
 //!
 //! # Feature gating

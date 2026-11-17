@@ -26,7 +26,7 @@
 //!     tool_name = "mcp_tool_name",  // MCP 工具名
 //!     description = "工具描述",
 //!     ...
-//!)]
+//! )]
 //! async fn my_tool(param: String) -> Result<serde_json::Value, ApiError> {
 //!     // 实现
 //! }
@@ -44,7 +44,6 @@
 //!     }
 //! }
 //! ```
-
 pub mod migration_2026;
 pub mod mrtr_example;
 pub mod tool_definition;

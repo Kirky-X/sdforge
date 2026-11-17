@@ -72,7 +72,7 @@ pub struct ConnectionManager {
 /// When the `ratelimit` feature is enabled, `rate_limit` holds a
 /// `limiteron::config::FlowControlConfig` that can be applied by a limiteron
 /// `Governor` at connection establishment (future follow-up, see `design.md`
-/// D6 "Out of Scope"). When `ratelimit` is off, the field does not exist.
+/// "Out of Scope"). When `ratelimit` is off, the field does not exist.
 ///
 /// `max_message_size` is always present (independent of features) because it
 /// is a simple byte-size cap, not a flow-control algorithm.

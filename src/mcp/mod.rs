@@ -35,7 +35,7 @@
 //!     "v1",
 //!     || std::sync::Arc::new(MyTool) as std::sync::Arc<dyn SdForgeTool>,
 //!     || ApiMetadata::default,
-//!));
+//! ));
 //! ```
 
 use crate::core::{ApiMetadata, Registration};

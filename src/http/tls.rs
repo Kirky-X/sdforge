@@ -57,7 +57,7 @@
 //!     acceptor,
 //!     default_shutdown_signal,
 //!     config,
-//!).await?;
+//! ).await?;
 //! ```
 
 use std::sync::{Arc, RwLock};

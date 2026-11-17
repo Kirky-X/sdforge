@@ -33,7 +33,7 @@
 //!     path = "/secure",
 //!     method = "GET",
 //!     description = "Endpoint protected by auth middleware"
-//!)]
+//! )]
 //! async fn secure_endpoint() -> Result<serde_json::Value, ApiError> { Ok(serde_json::json!({})) }
 //! ```
 

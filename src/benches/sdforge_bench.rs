@@ -589,7 +589,7 @@ criterion_group!(
 
 /// Benchmark `LimiteronAdapter::check` performance.
 ///
-/// Measures two scenarios (design.md D8):
+/// Measures two scenarios:
 /// 1. `ratelimit_governor_allowed`: first check on a fresh identifier (allowed)
 /// 2. `ratelimit_governor_denied`: check after quota exhausted (denied)
 ///

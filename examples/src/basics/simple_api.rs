@@ -40,7 +40,7 @@
 //!     method = "GET",
 //!     tool_name = "get_hello",
 //!     description = "返回问候语"
-//!)]
+//! )]
 //! async fn get_hello() -> Result<String, ApiError> {
 //!     Ok("Hello, World!".to_string())
 //! }
@@ -57,7 +57,7 @@
 //!     method = "GET",
 //!     tool_name = "get_user",
 //!     description = "根据 ID 获取用户"
-//!)]
+//! )]
 //! async fn get_user(id: u64) -> Result<UserResponse, ApiError> {
 //!     // 使用 id 参数查询用户
 //!     Ok(UserResponse { id, name: "John".into })
@@ -81,13 +81,12 @@
 //!     method = "POST",
 //!     tool_name = "create_user",
 //!     description = "创建新用户"
-//!)]
+//! )]
 //! async fn create_user(user: CreateUserRequest) -> Result<UserResponse, ApiError> {
 //!     // 使用 user 请求体创建用户
 //!     Ok(UserResponse { id: 1, name: user.name })
 //! }
 //! ```
-
 use sdforge::prelude::*;
 use sdforge::serde::{Deserialize, Serialize};
 

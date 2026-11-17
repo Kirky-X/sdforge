@@ -179,7 +179,7 @@ impl BearerAuth {
     ///     blacklisted_tokens,
     ///     Some("my-api".to_string()),
     ///     Some("my-issuer".to_string()),
-    ///)
+    /// )
     /// .expect("valid secret must pass validation");
     /// let _ = auth;
     /// ```

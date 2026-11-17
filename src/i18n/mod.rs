@@ -40,7 +40,6 @@
 //! let locales = parse_accept_language("en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7");
 //! assert_eq!(locales, vec!["en-US", "en", "zh-CN", "zh"]);
 //! ```
-
 // Translation registry — always compiled (no ICU4X dependency).
 //
 // Provides a global (locale, i18n_key) → translation lookup used by
@@ -453,7 +452,7 @@ fn lookup_translation(locale: &str, key: &str, args: &[(&str, String)]) -> Optio
 /// assert_eq!(
 ///     translate_or_fallback("Generate embedding", Some("forge.embed")),
 ///     "Generate embedding"  // fallback to default
-///);
+/// );
 /// ```
 pub fn translate_or_fallback(default: &str, i18n_key: Option<&str>) -> String {
     let key = match i18n_key {
