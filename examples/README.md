@@ -2,7 +2,7 @@
 
 本目录包含演示 SDForge 框架用法的全部示例，要求 Rust 1.97.1+（与工作区 MSRV 一致）。
 
-更多示例运行方式与特性说明参见[主 README「💻 示例」章节](../README.md#-示例)。
+更多示例运行方式与特性说明参见[用户指南「💻 示例」章节](../docs/cn/USER_GUIDE.md#-示例)。
 
 ## 与父 crate 的关系
 
@@ -11,7 +11,7 @@
 | 所属仓库 | [sdforge](https://github.com/Kirky-X/sdforge) |
 | 依赖方向 | 本 crate → `sdforge`（示例以 `path = ".."` 依赖父 crate） |
 | 是否发布 | 否：`publish = false`，仅用于演示与回归验证 |
-| 版本与支持 | 版本经 `version.workspace = true` 随仓库统一；仅维护当前 minor 版本线，见 [安全文档 · 支持的版本](../docs/SECURITY.md#-支持的版本与维护策略) |
+| 版本与支持 | 版本经 `version.workspace = true` 随仓库统一；仅维护当前 minor 版本线，见 [安全文档 · 支持的版本](../docs/cn/SECURITY.md#-支持的版本与维护策略) |
 
 ## 目录
 
@@ -143,8 +143,8 @@ cargo run --example perf_batch_ops --features cache
 | `cli_examples` | `cli` | `basic_cli.rs` | ✓ |
 | `docs_examples` | `docgen` | `swagger_demo.rs`（另需 `http`，运行命令见上文） | ✓ |
 | `combined_examples` | 协议与能力示例开关全集（不含 `idempotency_examples` 与两个生态示例开关） | `combined/` | ✓ |
-| `oxcache_admin_example` | `cache_examples` + `http_examples`（`dep:oxcache`） | `oxcache_admin.rs`（见主 README「生态集成示例」） | ✗ |
-| `dbnexus_gateway_example` | `http_examples`（`dep:dbnexus`） | `dbnexus_gateway.rs`（见主 README「生态集成示例」） | ✗ |
+| `oxcache_admin_example` | `cache_examples` + `http_examples`（`dep:oxcache`） | `oxcache_admin.rs`（见 docs/cn/USER_GUIDE.md「💻 示例」） | ✗ |
+| `dbnexus_gateway_example` | `http_examples`（`dep:dbnexus`） | `dbnexus_gateway.rs`（见 docs/cn/USER_GUIDE.md「💻 示例」） | ✗ |
 
 补充说明：
 

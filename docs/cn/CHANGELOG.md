@@ -35,6 +35,7 @@
 - [0.3.0](#030---2026-07-04)
 - [0.2.0](#020---2026-07-04)
 - [0.1.0](#010---2026-01-19)
+- [开发路线图](#开发路线图)
 
 </details>
 
@@ -924,7 +925,7 @@
   成本；守卫测试以副作用闭包证明闭包未执行（进程级 max_level 全局态用例
   串行）。
 - **DataMasker 凭证规则漏引号键 + 大载荷旁路（MEDIUM 安全）**：凭证 KV 规
-  则不匹配 `"password":"hunter2"` 等引号键形态——pattern 允许键被 `"?`
+  则不匹配 `"password":"hunter2"` 等引号键形态——pattern 允许键被 `"?` <!-- pragma: allowlist secret -->
   包裹；inklog DataMasker 对 >1 MiB 输入整体跳过掩码（原文直出）——壳层
   在掩码前截断至 64 KiB（截断点外内容整体丢弃，不以明文出现），掩码面单
   测锁定引号形态与截断行为。
@@ -1497,3 +1498,19 @@ SDForge 框架首次发布（前身为 axiom，已于 2026-01-17 重命名为 sd
 - MCP 工具调用：5,000+ ops/s
 - P50 延迟：< 0.5ms
 - P95 延迟：< 1ms
+
+## 开发路线图
+
+<details>
+<summary>📋 表格</summary>
+
+<table>
+  <tr><th>状态</th><th>条目</th><th>说明</th></tr>
+  <tr><td>🚧</td><td><b>v0.5.0 发布</b></td><td>当前处于 <code>0.5.x</code> 发布线，推进依赖链（trait-kit / oxcache / inklog / limiteron）协同发布与终验</td></tr>
+  <tr><td>✅</td><td>自定义成功状态码</td><td><code>#[forge(status = &lt;code&gt;)]</code> 静态声明 + <code>ServiceResponse::success_with_status</code> 动态控制，已于 0.5.0-rc.2 发布</td></tr>
+  <tr><td>✅</td><td>MSRV 声明收敛</td><td>工作区统一为 1.97.1（2026-09-06），覆盖 <code>--all-features</code> 有效要求</td></tr>
+  <tr><td>✅</td><td>错误码行为契约统一</td><td>行为契约记录在案（<code>docs/API_REFERENCE.md</code> 错误码行为契约表 + <code>error::unified</code> 单一事实来源）：HTTP 400（语法畸形/<code>InvalidInput</code>）与 422（语义违规/<code>ValidationError</code>）区分保留；gRPC 侧无 422 对应原生码，统一 <code>invalid_argument</code>、语义码经 <code>Status::details</code> 载荷 <code>code</code> 承载；<code>grpc_code_for_http_status</code> 契约表 + 跨协议一致性测试（全集 JOIN 不变量 + wire 级 e2e）钉死</td></tr>
+  <tr><td>✅</td><td>依赖治理</td><td><code>bincode</code>（RUSTSEC-2025-0141 unmaintained）已整体迁移至 <code>postcard</code>（API Key 元数据/权限位序列化等价替换），<code>deny.toml</code> 失效豁免清除，<code>cargo deny</code> / <code>cargo audit</code> 复验为净</td></tr>
+</table>
+
+</details>

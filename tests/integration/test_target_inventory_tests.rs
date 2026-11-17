@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Kirky.X🌠
 // SPDX-License-Identifier: MIT
 //! 测试目标清单漂移检测：`[[test]]` 注册数与 `tests/integration/` 磁盘
-//! 文件数必须与 `docs/TEST_SCENARIOS.md` 记载的基线一致。子目录脱离
+//! 文件数必须与 `docs/cn/TEST_SCENARIOS.md` 记载的基线一致。子目录脱离
 //! Cargo 自动发现范围，注册遗漏即静默消失——该断言让文档数字失真在
 //! CI 直接失败，而非等人工核对。
 
@@ -33,11 +33,11 @@ fn scenarios_baseline_matches_registered_test_targets() {
         "manifest must register test targets explicitly"
     );
 
-    let scenarios = read_repo_file("docs/TEST_SCENARIOS.md");
+    let scenarios = read_repo_file("docs/cn/TEST_SCENARIOS.md");
     let expected = format!("主 crate：{registered} 个测试目标全部 `[[test]]` 显式注册");
     assert!(
         scenarios.contains(&expected),
-        "docs/TEST_SCENARIOS.md target-count baseline drifted: expected {expected:?} in the doc, manifest registers {registered} [[test]] blocks"
+        "docs/cn/TEST_SCENARIOS.md target-count baseline drifted: expected {expected:?} in the doc, manifest registers {registered} [[test]] blocks"
     );
 }
 
@@ -46,11 +46,11 @@ fn scenarios_baseline_matches_integration_file_count() {
     let files = integration_test_files();
     assert!(files > 0, "tests/integration must contain test files");
 
-    let scenarios = read_repo_file("docs/TEST_SCENARIOS.md");
+    let scenarios = read_repo_file("docs/cn/TEST_SCENARIOS.md");
     let expected = format!("integration/ {files} +");
     assert!(
         scenarios.contains(&expected),
-        "docs/TEST_SCENARIOS.md integration-file baseline drifted: expected {expected:?} in the doc, disk holds {files} files under tests/integration/"
+        "docs/cn/TEST_SCENARIOS.md integration-file baseline drifted: expected {expected:?} in the doc, disk holds {files} files under tests/integration/"
     );
 }
 
@@ -63,7 +63,7 @@ fn numbers_in(line: &str) -> Vec<u64> {
 
 #[test]
 fn scenarios_yielding_targets_arithmetic_is_self_consistent() {
-    let scenarios = read_repo_file("docs/TEST_SCENARIOS.md");
+    let scenarios = read_repo_file("docs/cn/TEST_SCENARIOS.md");
     let manifest = read_repo_file("Cargo.toml");
     let registered = manifest
         .lines()
@@ -73,7 +73,7 @@ fn scenarios_yielding_targets_arithmetic_is_self_consistent() {
     let breakdown = scenarios
         .lines()
         .find(|line| line.contains("个有产出目标 = 主 crate"))
-        .expect("yielding-targets breakdown line must exist in docs/TEST_SCENARIOS.md");
+        .expect("yielding-targets breakdown line must exist in docs/cn/TEST_SCENARIOS.md");
     let numbers = numbers_in(breakdown);
     assert!(
         numbers.len() >= 6,

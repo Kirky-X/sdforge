@@ -367,7 +367,7 @@ on_exceed = "reject"
             security: SecurityConfig,
         }
 
-        const DOC: &str = include_str!("../../docs/USER_GUIDE.md");
+        const DOC: &str = include_str!("../../docs/cn/USER_GUIDE.md");
         let block = extract_toml_block(DOC, "[security.rate_limit]")
             .expect("USER_GUIDE must keep the [security.rate_limit] toml code block");
         let root: DocRoot = toml::from_str(&block)

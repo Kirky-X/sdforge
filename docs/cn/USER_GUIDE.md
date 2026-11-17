@@ -10,10 +10,11 @@
 - [简介](#-简介)
 - [快速开始](#-快速开始)
 - [核心概念](#-核心概念)
-- [配置](#️-配置)
+- [配置](#-配置)
 - [进阶用法](#-进阶用法)
 - [最佳实践](#-最佳实践)
-- [故障排查](#️-故障排查)
+- [故障排查](#-故障排查)
+- [示例](#-示例)
 
 </details>
 
@@ -27,7 +28,7 @@ SDForge 的核心思路是：**一份函数注解，多协议消费**。你只�
 - 启用 `cli` → clap 命令
 - 启用 `openapi` → OpenAPI 3.1 规范条目
 
-未启用的协议完全不进入编译产物，这是 SDForge 与"全量打包"框架的根本区别（量化对比见[编译期门控基准](benchmarks/VS_SERVER_LESS.md)）。
+未启用的协议完全不进入编译产物，这是 SDForge 与"全量打包"框架的根本区别（量化对比见[编译期门控基准](VS_SERVER_LESS.md)）。
 
 ## 🚀 快速开始
 
@@ -37,7 +38,7 @@ SDForge 的核心思路是：**一份函数注解，多协议消费**。你只�
 cargo add sdforge
 ```
 
-版本固定的 `Cargo.toml` 写法与「`default = []` 需按需显式启用协议特性」的说明见 [README · 快速开始](../README.md#-快速开始)。
+版本固定的 `Cargo.toml` 写法与「`default = []` 需按需显式启用协议特性」的说明见 [README · 快速开始](../../README_CN.md#-快速开始)。
 
 ### 定义第一个 API
 
@@ -96,7 +97,7 @@ async fn main() {
 
 ### 配置类型
 
-配置模块（`sdforge::config`，需 `http` feature）提供 `SdForgeConfig` / `ServerConfig` / `ApiConfig` / `AuthConfig` / `CorsConfig` / `TlsConfig` / `TracingConfig` / `CacheConfig` / `SecurityConfig` / `EnvHelper` / `ConfigError` 等类型；各类型的用途与默认值见 [API 参考](API_REFERENCE.md#️-配置扩展-api) 的配置模块一节。
+配置模块（`sdforge::config`，需 `http` feature）提供 `SdForgeConfig` / `ServerConfig` / `ApiConfig` / `AuthConfig` / `CorsConfig` / `TlsConfig` / `TracingConfig` / `CacheConfig` / `SecurityConfig` / `EnvHelper` / `ConfigError` 等类型；各类型的用途与默认值见 [API 参考](API_REFERENCE.md#-配置扩展-api) 的配置模块一节。
 
 ### 使用配置构建
 
@@ -124,7 +125,7 @@ let app = build_with_config_ext(Router::new(), &config)?;
 
 ### TOML 配置文件
 
-SDForge 使用自包含的 TOML 配置（无需外部配置中心）。示例配置见仓库 `examples/config/`（完整清单见 [README · 示例](../README.md#-示例)）。
+SDForge 使用自包含的 TOML 配置（无需外部配置中心）。示例配置见仓库 `examples/config/`（完整清单见本文 [示例](#-示例) 一节）。
 
 限流与缓存配置示例：
 
@@ -352,7 +353,7 @@ serve_with_graceful_shutdown_tls(
 
 ### CLI 应用
 
-启用 `cli` feature 后，`#[forge(cli = true)]` 注册命令；`CliBuilder::execute()` 一站式完成构建/解析/分发/输出/退出。最小可运行示例见 [README 快速开始](../README.md#-最小可运行示例)（源码 `examples/basic_cli.rs`）。
+启用 `cli` feature 后，`#[forge(cli = true)]` 注册命令；`CliBuilder::execute()` 一站式完成构建/解析/分发/输出/退出。最小可运行示例见 [README 快速开始](../../README_CN.md#-最小可运行示例)（源码 `examples/basic_cli.rs`）。
 
 返回 `Value::String` 时输出原始串（不带引号），其他类型输出 JSON。`CliBuilder` 还支持 `with_dependencies()`（注入状态）、`with_name()`（程序名）与 `with_global_arg()`（全局参数）。
 
@@ -385,7 +386,7 @@ serve_with_graceful_shutdown_tls(
 
 - **i18n**：翻译注册表（`register_translation` / `set_locale` / `translate_or_fallback`）始终可用；`i18n` feature 额外提供 ICU4X 的 `HttpI18nFormatter`（本地化数字/日期/复数格式化与 Accept-Language 解析）。HTTP 错误体随请求 `Accept-Language` 选择语言（`build_with_config_ext` 的请求级 locale 作用域 + 未匹配路由 404 统一错误体 + 限流拒绝体逐请求本地化），进程 locale 仅作回退
 - **日志**：`inklog` feature 将裸 `log` 调用桥接到 inklog `LoggerManager` 结构化管道（`init_inklog_logger()`；0.5.0-rc 起承接已删除的自研 `StructuredLogger` 栈，结构化日志唯一入口，含真实轮转），并启用 `#[forge::log]` 声明日志属性宏（进入/退出/耗时/错误 + DataMasker 脱敏；feature 关闭时使用该宏在编译期显性报错）
-- **`#[forge::log]` 边界与语义**：`unsafe fn` 的 `unsafe` 限定原样传播到壳函数（调用方仍需 unsafe 块履行安全契约，宏不会把 unsafe fn 包装成安全函数）；壳函数不捕获 panic/任务取消——函数体 panic 或 async 任务被取消时不会产生 `fn_exit` 记录（需要失败可见性的调用方应在函数体内显式捕获，或在调用方监测 JoinHandle）；**不支持 trait impl 内的方法**（宏会在同一 impl 块内追加隐藏内部函数，trait impl 不允许额外成员）；`const`/变参在宏展开点 fail-loud 拒绝。载荷惰性渲染：目标日志级别被全局 max_level 过滤时，参数捕获与掩码渲染不执行（info 生产配置下 debug 进入日志零额外分配成本）；超过 64 KiB 的载荷在掩码前截断（inklog DataMasker 对 >1 MiB 输入会整体跳过掩码，壳层截断保证敏感值永不以明文入日志）；凭证键值对规则覆盖引号键形态（`"password":"hunter2"` 与 `password=hunter2` 同样被掩码）
+- **`#[forge::log]` 边界与语义**：`unsafe fn` 的 `unsafe` 限定原样传播到壳函数（调用方仍需 unsafe 块履行安全契约，宏不会把 unsafe fn 包装成安全函数）；壳函数不捕获 panic/任务取消——函数体 panic 或 async 任务被取消时不会产生 `fn_exit` 记录（需要失败可见性的调用方应在函数体内显式捕获，或在调用方监测 JoinHandle）；**不支持 trait impl 内的方法**（宏会在同一 impl 块内追加隐藏内部函数，trait impl 不允许额外成员）；`const`/变参在宏展开点 fail-loud 拒绝。载荷惰性渲染：目标日志级别被全局 max_level 过滤时，参数捕获与掩码渲染不执行（info 生产配置下 debug 进入日志零额外分配成本）；超过 64 KiB 的载荷在掩码前截断（inklog DataMasker 对 >1 MiB 输入会整体跳过掩码，壳层截断保证敏感值永不以明文入日志）；凭证键值对规则覆盖引号键形态（`"password":"hunter2"` 与 `password=hunter2` 同样被掩码） <!-- pragma: allowlist secret -->
 
 ### 客户端 SDK 生成
 
@@ -449,7 +450,7 @@ let l2 = RedisL2Cache::connect(&RedisL2CacheConfig::new(redis_url).with_default_
 
 ## 💡 最佳实践
 
-1. **按需启用特性** — 只需 HTTP 时用 `--features http`，不要默认上 `full`：编译时间节省约 46–47%、库体积缩减约六成（见[编译期门控基准](benchmarks/VS_SERVER_LESS.md)）
+1. **按需启用特性** — 只需 HTTP 时用 `--features http`，不要默认上 `full`：编译时间节省约 46–47%、库体积缩减约六成（见[编译期门控基准](VS_SERVER_LESS.md)）
 2. **在 `main` 开头调用 `init_all_plugins()`** — 否则 release 构建（LTO + 死代码消除）可能剔除 inventory 注册项
 3. **用 `From<MyError> for ServiceError` 统一错误** — 业务错误通过 `?` 自动转换，错误码/状态码集中管理
 4. **安全相关部署实践以安全文档为准** — 生产 host、JWT 密钥 ≥ 32 字符、`ConnectInfo` 配置、API Key 显式播种与轮换等，见[安全文档](SECURITY.md#-安全最佳实践)
@@ -469,5 +470,74 @@ let l2 = RedisL2Cache::connect(&RedisL2CacheConfig::new(redis_url).with_default_
 | MCP 请求因缺头被拒 | 无状态协议要求请求头 `Mcp-Method` / `Mcp-Name`；`parse_mcp_headers` 缺失时返回 `McpHeaderError`，HTTP 400 响应由下游传输适配层自行映射（框架不内建该映射） |
 | gRPC 服务器拒绝启动并提示 authentication | 启用 `security` 时 `GrpcServerConfig.require_auth` 默认 `true`，需配置 `auth`（开发环境可显式置 `false`） |
 | 端口冲突 | `lsof -i :3000` 查找占用进程后更换端口或结束进程 |
-| 需要定位性能问题 | `cargo bench --bench runtime_bench --features http` 对照[性能基线](PERFORMANCE.md)；编译期成本对照[编译期门控基准](benchmarks/VS_SERVER_LESS.md) |
+| 需要定位性能问题 | `cargo bench --bench runtime_bench --features http` 对照[性能基线](PERFORMANCE.md)；编译期成本对照[编译期门控基准](VS_SERVER_LESS.md) |
 | 其他问题 | 查阅 [API 参考](API_REFERENCE.md) 与 [架构文档](ARCHITECTURE.md)，或在 [Issues](https://github.com/Kirky-X/sdforge/issues) 提问 |
+
+## 💻 示例
+
+### 根包示例（`cargo run --example`）
+
+<details>
+<summary>📋 表格</summary>
+
+| 示例 | 所需特性 | 说明 |
+|------|----------|------|
+| `basic_cli` | `cli` | `#[forge(cli = true)]` + `CliBuilder::execute()` 一站式 CLI |
+| `swagger_demo` | `docgen` + `http` | Swagger UI 路由 + OpenAPI JSON + axum serve |
+| `perf_regex_cache` | `cache` | 缓存键通配模式匹配验证（`find_keys_by_pattern`：`*` / `?` 正确性与单次全量扫描成本） |
+| `perf_lru_eviction` | `cache` | 容量驱逐验证（`with_capacity` 的 FIFO 插入序驱逐：最旧键先出、读不续期 / 写续期） |
+| `perf_prefix_index` | `cache` | 前缀索引性能验证 |
+| `perf_batch_ops` | `cache` | 批量操作性能验证 |
+
+</details>
+
+<details>
+<summary>📄 代码 · bash</summary>
+
+```bash
+cargo run --example basic_cli --features cli -- echo --name world
+cargo run --example swagger_demo --features "docgen http"
+cargo run --example perf_regex_cache --features cache
+```
+
+</details>
+
+### 综合示例库（workspace 成员 `sdforge-examples`，`examples/src/`）
+
+<details>
+<summary>📋 表格</summary>
+
+| 模块 | 内容 |
+|------|------|
+| `basics/` | 简单 API、响应构建、类型与错误处理 |
+| `http/` | 路由（路径参数、查询参数）、中间件（CORS） |
+| `mcp/` | 工具定义与注册、MCP 2026-07-28 迁移、MRTR 会话 |
+| `security/` | API Key 认证、认证失败场景、完整安全栈 |
+| `cache/` | 高级缓存模式与性能验证 |
+| `config/` | 配置管理（`app_config.rs`） |
+| `streaming/` | SSE 流式响应 |
+| `websocket/` | 基础用法与聊天室 |
+| `grpc/` | gRPC 服务端 |
+| `logging/` | 结构化日志（inklog LoggerManager：全局安装 / from_file 轮转 / builder / set_level） |
+| `openapi/` | OpenAPI 规范生成（`OpenApiBuilder`、`generate_openapi_spec`） |
+| `combined/` | 多特性组合完整示例（`full_example.rs`） |
+
+</details>
+
+### 生态集成示例（`sdforge-examples` 成员示例）
+
+| 示例 | 启用特性 | 说明 |
+|------|----------|------|
+| `oxcache_admin` | `oxcache_admin_example` | 经 `BackendRegistry` 暴露 oxcache 管理端点 |
+| `dbnexus_gateway` | `dbnexus_gateway_example` | 白名单表上的只读数据 API 网关（sqlite 内存库） |
+
+<details>
+<summary>📄 代码 · bash</summary>
+
+```bash
+cargo run -p sdforge-examples --example oxcache_admin --features oxcache_admin_example
+```
+
+</details>
+
+示例配置文件位于 `examples/config/`（`default.toml`、`minimal.toml`、`production.toml`、`api-key-auth.toml`）。

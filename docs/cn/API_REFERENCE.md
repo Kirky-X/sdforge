@@ -9,11 +9,12 @@
 
 - [概述](#-概述)
 - [核心 API](#-核心-api)
-- [配置/扩展 API](#️-配置扩展-api)
+- [配置/扩展 API](#-配置扩展-api)
 - [错误类型](#-错误类型)
 - [特性门控 API](#-特性门控-api)
 - [使用示例](#-使用示例)
 - [最佳实践](#-最佳实践)
+- [特性标志](#-特性标志)
 
 </details>
 
@@ -343,9 +344,9 @@ let spec = OpenApiBuilder::new()
 
 ### CLI 一站式入口
 
-`#[forge(cli = true)]` 注解与 `CliBuilder::execute()`（返回 `!`，内部 exit(0/1)）的最小示例见 [README 快速开始](../README.md#-最小可运行示例)，CLI 进阶用法见 [用户指南](USER_GUIDE.md#cli-应用)。
+`#[forge(cli = true)]` 注解与 `CliBuilder::execute()`（返回 `!`，内部 exit(0/1)）的最小示例见 [README 快速开始](../../README_CN.md#-最小可运行示例)，CLI 进阶用法见 [用户指南](USER_GUIDE.md#cli-应用)。
 
-更多示例见仓库 `examples/`（运行方式见 [README 示例章节](../README.md#-示例)）。
+更多示例见仓库 `examples/`（完整清单与运行方式见 [用户指南 · 示例](USER_GUIDE.md#-示例)）。
 
 ## ✅ 最佳实践
 
@@ -356,3 +357,81 @@ let spec = OpenApiBuilder::new()
 5. **按 feature 最小化 API 面** — 未启用的 feature 对应模块不存在，宏也不生成对应代码；写库依赖时只声明实际用到的特性
 6. **不要绕过框架 re-export** — 使用 `sdforge::axum::Router`、`sdforge::tonic::transport::Channel` 等转发路径，避免与直接依赖的版本冲突
 7. **版本字段与路径参数保持命名一致** — 路径 `:id` 段依赖同名函数参数提取；`#[service_module]` 前缀与 `version` 共同决定最终路径
+
+## 🎨 特性标志
+
+`default = []`：所有特性均为可选，按需显式启用。
+
+最低要求：
+
+- **Rust 1.97.1+**（edition 2024，`rust-toolchain.toml` 固定工具链）
+- **protoc**：仅在启用 `grpc` feature 时需要（`build.rs` 编译 protobuf）
+
+<details>
+<summary>📋 表格</summary>
+
+<table>
+  <tr><th>标志</th><th>说明</th><th>默认</th></tr>
+  <tr><td><code>http</code></td><td>HTTP 服务器（Axum 0.8 路由、Tower 中间件、版本路由）</td><td>❌</td></tr>
+  <tr><td><code>mcp</code></td><td>MCP 协议（rmcp 3.5，2026-07-28 规范：无状态 HTTP 头、MRTR、缓存语义）</td><td>❌</td></tr>
+  <tr><td><code>grpc</code></td><td>gRPC（tonic + prost，独立于 http，proto 经 build.rs 生成；unary <code>Call</code> + server-streaming <code>CallStream</code>——后者需另启 <code>streaming</code>；<code>extra_services</code> 支持应用自有 tonic service 同端口挂载）</td><td>❌</td></tr>
+  <tr><td><code>grpc-tls</code></td><td>gRPC TLS 接线（暴露 tonic <code>ServerTlsConfig</code>，证书加载由调用方负责；与 HTTP 侧 <code>serve-tls</code> 的进程内终止实现独立，同样不并入 <code>full</code>）</td><td>❌</td></tr>
+  <tr><td><code>websocket</code></td><td>WebSocket（依赖 http + streaming）</td><td>❌</td></tr>
+  <tr><td><code>streaming</code></td><td>SSE 流式传输（独立于 http；与 <code>grpc</code> 组合时 <code>grpc_method</code> + <code>stream = true</code> 映射到 gRPC <code>CallStream</code>）</td><td>❌</td></tr>
+  <tr><td><code>cli</code></td><td>CLI 集成（clap，独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>openapi</code></td><td>OpenAPI 3.1 规范生成（utoipa，独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>schemars</code></td><td>返回类型 Schema 反射（蕴含 openapi：<code>#[forge]</code> 为派生 <code>JsonSchema</code> 的返回类型生成字段级精确 response schema，未派生静默降级粗粒度映射）</td><td>❌</td></tr>
+  <tr><td><code>docgen</code></td><td>统一文档输出（Swagger UI + CLI/MCP Markdown，依赖 openapi + cli；旧名 <code>docs</code> 为兼容别名。Swagger UI v5.32.6 资产自 vendor 于 <code>assets/swagger-ui/</code>，零额外依赖）</td><td>❌</td></tr>
+  <tr><td><code>sdk</code></td><td>多协议客户端 SDK 生成（Rust 零依赖 / reqwest 可选 + TypeScript fetch+类型定义；保留 CLI 子命令 <code>sdk</code>，依赖 openapi + cli）</td><td>❌</td></tr>
+  <tr><td><code>security</code></td><td>认证（API Key / JWT Bearer）、审计、安全头、限流与缓存（含 http + ratelimit-http + cache）</td><td>❌</td></tr>
+  <tr><td><code>ratelimit</code></td><td>限流核心（limiteron，不依赖 http）</td><td>❌</td></tr>
+  <tr><td><code>ratelimit-http</code></td><td>HTTP 限流中间件（Tower Layer，依赖 http + ratelimit）</td><td>❌</td></tr>
+  <tr><td><code>ratelimit-dist</code></td><td>分布式限流（limiteron distributed 计数后端，多副本共享配额；后端不可达 fail-open/fail-close 显式可配，默认 fail-open）</td><td>❌</td></tr>
+  <tr><td><code>cache</code></td><td>oxcache 内存缓存（独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>cache-l2</code></td><td>oxcache Redis L2 缓存（跨副本共享缓存层，蕴含 cache；故障固有 fail-open：读 miss/写跳过）</td><td>❌</td></tr>
+  <tr><td><code>idempotency</code></td><td>幂等重放防护（<code>Idempotency-Key</code> HTTP 中间件 + gRPC metadata 路径；依赖 http + cache）</td><td>❌</td></tr>
+  <tr><td><code>health</code></td><td><code>/healthz</code> <code>/readyz</code> 健康探针（<code>build_with_config_ext</code> 自动挂载，bypass 认证；inventory 注册或 <code>base</code> 声明的同名路由优先，内置探针跳过并告警，不 panic）</td><td>❌</td></tr>
+  <tr><td><code>metrics</code></td><td>Prometheus 文本格式 <code>/metrics</code> 端点（请求计数、延迟直方图、状态码分布；自研轻量渲染；inventory 注册或 <code>base</code> 声明的同名路由优先，内置端点跳过并告警，不 panic）</td><td>❌</td></tr>
+  <tr><td><code>graceful</code></td><td>优雅停机（SIGTERM/SIGINT：停止接新、排空在途、三阶段关闭）</td><td>❌</td></tr>
+  <tr><td><code>serve-tls</code></td><td>HTTP TLS 终止（rustls aws-lc-rs：证书/密钥 PEM 加载、ALPN 可配置、<code>ReloadingTls</code> 热重载；每请求注入 <code>ConnectInfo</code>，握手/头读取超时护栏，停机编排与 graceful 共享收尾。与 gRPC 侧 <code>grpc-tls</code> 文档互链、实现独立）</td><td>❌</td></tr>
+  <tr><td><code>tls-watch</code></td><td>TLS 证书去抖监听自动热重载（confers <code>FsWatcher</code> 监听 cert/key 文件变化驱动 <code>reload_async</code>；蕴含 <code>serve-tls</code>，重载失败保留旧证书）</td><td>❌</td></tr>
+  <tr><td><code>context</code></td><td>请求上下文（request_id/trace_id 生成与跨协议 HTTP/MCP/gRPC/WS 注入）</td><td>❌</td></tr>
+  <tr><td><code>validate</code></td><td><code>#[forge(validate)]</code> + <code>#[param(ge/le/...)]</code> 参数校验，422 返回字段级错误；结构体 query 参数经 <code>#[param(kind = "query", flatten)]</code> 扁平直提</td><td>❌</td></tr>
+  <tr><td><code>paginate</code></td><td><code>#[forge(paginate)]</code> 声明式分页（自动 page/size 与 <code>{items,total,next}</code> 包装）</td><td>❌</td></tr>
+  <tr><td><code>etag</code></td><td>ETag 条件请求（GET 响应自动附加 SHA-256 强 ETag，If-None-Match 返回 304）</td><td>❌</td></tr>
+  <tr><td><code>lifecycle</code></td><td><code>#[forge(on_start/on_stop)]</code> 生命周期钩子（与优雅停机顺序协同）</td><td>❌</td></tr>
+  <tr><td><code>hooks</code></td><td>处理器前后钩子管道（中间件式，统一错误契约）</td><td>❌</td></tr>
+  <tr><td><code>otel</code></td><td>OTLP/HTTP JSON 导出请求 span 与指标快照（零额外依赖）</td><td>❌</td></tr>
+  <tr><td><code>inklog</code></td><td>inklog 结构化日志桥接（<code>init_inklog_logger()</code>）+ <code>#[forge::log]</code> 声明日志属性宏（进入/退出/耗时/错误 + DataMasker 脱敏，feature 关闭时显性报错）。0.5.0-rc 起承接原自研 <code>StructuredLogger</code> 栈（<code>logging</code> feature 已删除，breaking）</td><td>❌</td></tr>
+  <tr><td><code>timestamp</code></td><td>响应时间戳</td><td>❌</td></tr>
+  <tr><td><code>i18n</code></td><td>ICU4X 国际化（本地化格式化 + Accept-Language 解析）</td><td>❌</td></tr>
+  <tr><td><code>simd-json</code></td><td>SIMD 加速 JSON 序列化/反序列化</td><td>❌</td></tr>
+  <tr><td><code>limiteron-integration</code></td><td>引入 limiteron 依赖（kit 集成基座）</td><td>❌</td></tr>
+  <tr><td><code>db-integration</code></td><td>dbnexus 数据 API 网关（<code>DbGateway</code> 白名单只读数据面：表/列白名单 + 过滤值转义 + 服务端分页夹紧，独立于 http）</td><td>❌</td></tr>
+  <tr><td><code>db-sqlite</code></td><td><code>db-integration</code> + dbnexus/sqlite 驱动（0.5.1 起 dbnexus 集成切 <code>embedded-runtime</code>，默认不含 sqlite；需 sqlite 文件库的网关用户显式启用）</td><td>❌</td></tr>
+  <tr><td><code>db-permission</code></td><td>开启 dbnexus permission：逐表权限检查对非 admin 会话角色生效（fail-closed）；未开启时权限检查整块编译掉，仅剩白名单与归属谓词隔离</td><td>❌</td></tr>
+  <tr><td><code>kit</code></td><td>trait-kit AsyncKit 集成（SdforgeModule 模块图）</td><td>❌</td></tr>
+  <tr><td><code>tokio</code></td><td>内部特性：启用 tokio 依赖（随其他特性自动引入）</td><td>❌</td></tr>
+  <tr><td><code>full</code></td><td>全部运行时特性（26 项：http/mcp/grpc/websocket/streaming/security/cache/health/metrics/graceful/context/validate/paginate/etag/hooks/lifecycle/otel/timestamp/openapi/cli/docgen/inklog/i18n/idempotency/serve-tls/tls-watch；不含 gRPC 侧 <code>grpc-tls</code> 与 <code>simd-json</code>/<code>kit</code>/<code>limiteron-integration</code>/<code>schemars</code>/<code>ratelimit-dist</code>/<code>cache-l2</code>/<code>db-integration</code>/<code>sdk</code> 可选重依赖与 opt-in 面）</td><td>❌</td></tr>
+</table>
+
+</details>
+
+<details>
+<summary>🔗 特性依赖关系</summary>
+
+- 独立于 `http`：`mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` / `timestamp` / `context` / `inklog` / `i18n` / `simd-json` / `limiteron-integration` / `db-integration`（含 `db-sqlite` / `db-permission` 派生） / `schemars` / `ratelimit-dist`
+- **下游镜像 feature 的 check-cfg 片段**（宏发射代码按下游 crate 的同名
+  feature 门控，见 examples 的 `[lints]` 白名单范式）：下游 `Cargo.toml`
+  加 `[lints.rust] unexpected_cfgs = { level = "allow", check-cfg =
+  ['cfg(feature, values("http", "mcp", "grpc", "cli", "websocket",
+  "openapi", "security", "lifecycle"))'] }`（按实际启用的镜像 feature
+  裁剪），避免未知 cfg 告警
+- 派生自 `http`：`security`（含 `ratelimit-http` → `ratelimit` 与 `cache`）、`ratelimit-http`、`websocket`（含 `streaming`）、`health` / `metrics` / `graceful` / `serve-tls`（含 `graceful`）/ `tls-watch`（含 `serve-tls`）/ `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
+- `docgen` = `openapi` + `cli`（Swagger UI 挂载需另启用 `http`；旧名 `docs` 为兼容别名）
+- `kit` = `trait-kit`（health + lifecycle）+ `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
+- `full` 覆盖 26 项运行时特性（含 `idempotency`、`docgen`、部署面 HTTP TLS `serve-tls`/`tls-watch`），不含 `simd-json` / `kit` / `limiteron-integration` 可选重依赖（SIMD JSON、trait-kit 模块图、限流集成基座）与 `grpc-tls`（gRPC 侧 TLS 接线）/ `schemars` / `ratelimit-dist` / `cache-l2` / `db-integration` / `sdk`（opt-in 面），均按需单独启用
+
+> ℹ️ **`docgen` 可用性说明**（2026-10-16 上游 `zip` 全系 yank 事件）：该事件曾致 `docgen` 依赖的 `utoipa-swagger-ui`（锁定 `zip ^8.6`）无法完成依赖解析，全新启用 `docgen`（含 `full`，其覆盖 `docgen`）直接报错。现已移除该依赖：Swagger UI v5.32.6 官方 dist 功能子集（Apache-2.0，修改说明见资产 `NOTICE.md`）自 vendor 于 `assets/swagger-ui/` 并经 `include_bytes!` 编译期内嵌，`swagger_ui_router*` 直接服务；`docgen` 收缩为 `openapi + cli`，下游依赖解析恢复正常。升级资产经 `scripts/update_swagger_ui.sh`。
+
+</details>

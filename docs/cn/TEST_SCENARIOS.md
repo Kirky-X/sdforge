@@ -6,12 +6,12 @@
 
 | 层级 | 承载 | 数量基线 |
 |------|------|----------|
-| L1 lib 单元测试 | `src/**` 内 `#[cfg(test)]`：sdforge 2134 / sdforge-macros 85 / sdforge-examples 41 | 2260 passed |
-| L2 集成测试 | 主 crate `tests/` 49 目标（integration/ 40 + unit/ 5 + 顶层 2：integration_http_mcp、sdk_snapshots + macros/macro_tests 1 + e2e 1：e2e_advanced，其 157 计入 L3）+ sdforge-macros crate `tests/` 2 目标（macro_compile/trybuild）+ sdforge-examples crate `tests/` 3 目标（comprehensive_features、dbnexus_gateway_e2e、oxcache_admin_e2e） | 679 passed |
+| L1 lib 单元测试 | `src/**` 内 `#[cfg(test)]`：sdforge 2205 / sdforge-macros 85 / sdforge-examples 41 | 2331 passed |
+| L2 集成测试 | 主 crate `tests/` 49 目标（integration/ 40 + unit/ 5 + 顶层 2：integration_http_mcp、sdk_snapshots + macros/macro_tests 1 + e2e 1：e2e_advanced，其 157 计入 L3）+ sdforge-macros crate `tests/` 2 目标（macro_compile/trybuild）+ sdforge-examples crate `tests/` 3 目标（comprehensive_features、dbnexus_gateway_e2e、oxcache_admin_e2e） | 688 passed |
 | L3 E2E 场景 | `tests/e2e/`（e2e_advanced 单目标，11 域） | 157 passed |
-| L4 Doc-tests | sdforge 23 + sdforge-examples 5 | 28 passed + 43 ignored |
+| L4 Doc-tests | sdforge 23 + sdforge-examples 5 | 28 passed + 45 ignored |
 
-全量结果（`--all-features --workspace`，2026-10-11 实测）：**3124 passed / 0 failed / 71 ignored**（ignored = grpc_tests 28 环境门控 + Doc-tests 43 文档示例门控）。
+全量结果（`--all-features --workspace`，2026-11-16 实测）：**3204 passed / 0 failed / 73 ignored**（ignored = grpc_tests 28 环境门控 + Doc-tests 45 文档示例门控）。
 
 ## 🎯 测试目标落点
 
@@ -42,7 +42,7 @@ tests/e2e/e2e_advanced.rs（场景要点取自各 mod 声明的公共 API）：
 
 | 组合 | 覆盖 | 结果 |
 |------|------|------|
-| `--all-features --workspace`（全量口径） | 全部 59 个有产出目标 | 3124 passed / 0 failed / 71 ignored |
+| `--all-features --workspace`（全量口径） | 全部 59 个有产出目标 | 3204 passed / 0 failed / 73 ignored |
 | 七特性子集 `http,security,cache,inklog,i18n,ratelimit,openapi` | e2e_advanced 11 域 | 157 passed / 0 failed |
 | trybuild | 宏编译失败诊断用例 | 2 passed |
 
@@ -61,7 +61,60 @@ tests/e2e/e2e_advanced.rs（场景要点取自各 mod 声明的公共 API）：
 
 ## ℹ️ 统计口径与 Ignored 项
 
-- **统计口径**：全量 3124 按各测试目标的 `cargo test` 输出求和，`0 passed; 0 failed` 的空目标不计入有产出目标数。
+- **统计口径**：全量 3204 按各测试目标的 `cargo test` 输出求和，`0 passed; 0 failed` 的空目标不计入有产出目标数。
 - **grpc_tests 28 ignored**：上游 `#[ignore]` 标注真实网络绑定 `127.0.0.1:0` 在 CI / 沙箱环境会挂起，属环境门控而非缺陷，予以保留。
-- **Doc-tests 43 ignored**：文档示例依赖运行上下文，按门控跳过。
+- **Doc-tests 45 ignored**：文档示例依赖运行上下文，按门控跳过（sdforge 43 + sdforge-macros 2）。
 - **cargo-deny 许可证核对**：`deny.toml` 中 sdforge / sdforge-macros / limiteron / oxcache 四个成员以 license-file 形式声明许可证（cargo-deny 不识别该形态），已通过 clarify 绑定 MIT hash 0xfb13e7ad；license-file 路径相对被 clarify crate 的 manifest 目录解析（sdforge-macros 位于 `macros/` 子目录，使用 `../LICENSE` 回退一级）。advisories / bans / sources 检查均通过。
+
+## 🧪 测试策略矩阵与运行命令
+
+### 测试策略矩阵
+
+<details>
+<summary>📋 表格</summary>
+
+| 层级 | 位置 | 说明 |
+|------|------|------|
+| 单元测试 | `src/` 内嵌 `#[cfg(test)]`、`tests/unit/` | 模块级测试，含 proptest 属性测试（`src/tests/property_tests.rs`） |
+| 集成测试 | `tests/integration/` | 覆盖 http / mcp / grpc / websocket / security / cache / streaming / openapi / cli / docs / health_probes / graceful_shutdown / http_tls / validate / paginate / etag / lifecycle / otel_export / status_code / rbac 等协议与特性组合 |
+| 宏测试 | `tests/macros/`、`macros/tests/` | trybuild 编译失败用例与宏展开验证 |
+| E2E | `tests/e2e/` | `e2e_advanced` 多域 E2E 场景（11 域规模基线见上文「E2E 场景定义」一节） |
+| 示例综合测试 | `examples/tests/` | 全 feature re-export 与跨协议 dispatch（76 个测试）及网关 E2E |
+| 基准测试 | `benches/`、`src/benches/` | criterion：`runtime_bench` / `config_and_cache_bench` / `sdforge_bench` |
+| Doc-tests | `src/` 文档注释 | rustdoc 内嵌示例 |
+
+</details>
+
+### 运行命令
+
+<details>
+<summary>📄 代码 · bash</summary>
+
+```bash
+# 与 CI 矩阵一致（http / mcp / http,mcp / http,security / http,cache /
+# http,websocket / http,grpc / http,streaming / full 共 9 种组合）。
+# 组合矩阵只测 sdforge 本体（-p sdforge）：--workspace 会因 sdforge-examples
+# 的默认特性触发 feature 统一，把 sdforge 的几乎全部特性带进每个组合。
+cargo test -p sdforge --features "http,mcp"
+
+# 工作区全量（sdforge + sdforge-macros + sdforge-examples，含全部特性）
+cargo test --workspace --all-features
+
+# lib 测试（CI 覆盖率口径）
+cargo test --features full --lib
+
+# 覆盖率（CI 门禁 ≥90% 行覆盖：--features full --lib；lefthook pre-push 仅沿用同一阈值，未限定 --features full --lib）
+cargo llvm-cov --features full --lib --lcov --fail-under-lines 90
+
+# 格式化与零告警 Lint
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+```
+
+</details>
+
+build.rs 生成的 protobuf 代码写入 `OUT_DIR`，不再落源树；`llvm-cov.toml` 中的 `src/grpc/pb/*` 排除项为旧布局残留，当前不匹配任何文件。
+
+### 测试规模
+
+约 **3,262** 个测试函数（`src/` 2,251 + `tests/` 795 + `macros/` 92 + `examples/` 124，`grep -rEc '#\[(tokio::)?test\b' --include='*.rs'` 统计，2026-11-16 实测）。
