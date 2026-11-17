@@ -266,8 +266,8 @@ async fn test_jwt_auth_valid_token_returns_200() {
     let payload = serde_json::json!({
         "sub": "test-user",
         "permissions": ["read"],
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
     let token = create_test_jwt(secret.as_bytes(), &payload);
 

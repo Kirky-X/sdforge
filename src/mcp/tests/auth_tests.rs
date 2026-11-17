@@ -30,7 +30,7 @@ fn mint_jwt() -> String {
     // 测试用假密钥，非真实凭据
     let secret = b"Mcp-Test-Secret-Key-0123456789-AbCdEf"; // pragma: allowlist secret
     let header = r#"{"alg":"HS256","typ":"JWT"}"#;
-    let now = chrono::Utc::now().timestamp();
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
     let payload = serde_json::json!({ "sub": "mcp-test", "exp": now + 3600 });
     let header_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(header);
     let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload.to_string());

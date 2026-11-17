@@ -23,7 +23,7 @@ use uuid::Uuid;
 pub(super) fn make_test_audit_log(user_id: &str, action: &str) -> AuditLog {
     AuditLog {
         id: Uuid::new_v4().to_string(),
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         user_id: Some(user_id.to_string()),
         action: action.to_string(),
         resource: "test_resource".to_string(),

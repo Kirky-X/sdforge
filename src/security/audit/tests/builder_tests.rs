@@ -95,7 +95,7 @@ async fn test_builder_build_worker_merges_fallback() {
     // Populate fallback for the builder-created logger
     let fallback_log = AuditLog {
         id: "builder-fb-1".to_string(),
-        timestamp: chrono::Utc::now().timestamp() - 100,
+        timestamp: time::OffsetDateTime::now_utc().unix_timestamp() - 100,
         user_id: Some("builder_user".to_string()),
         action: "builder_fb_action".to_string(),
         resource: "res".to_string(),

@@ -673,12 +673,12 @@ mod streaming_tests {
     async fn test_sse_ping_timestamp_accuracy() {
         use futures_util::stream;
 
-        let _before = chrono::Utc::now().timestamp();
+        let _before = time::OffsetDateTime::now_utc().unix_timestamp();
         let input_stream = stream::iter(vec![()]);
         let sse_stream = stream_to_sse(input_stream, |_| StreamEvent::ping());
 
         let results: Vec<String> = sse_stream.map(|r| r.unwrap()).collect().await;
-        let _after = chrono::Utc::now().timestamp();
+        let _after = time::OffsetDateTime::now_utc().unix_timestamp();
 
         assert!(results[0].contains(r#""type":"ping""#));
         assert!(results[0].contains("timestamp"));

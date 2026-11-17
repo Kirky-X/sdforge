@@ -59,7 +59,7 @@ fn test_stream_event_ping() {
     match event {
         StreamEvent::Ping { timestamp } => {
             assert!(timestamp > 0);
-            assert!(timestamp <= chrono::Utc::now().timestamp());
+            assert!(timestamp <= time::OffsetDateTime::now_utc().unix_timestamp());
         }
         _ => unreachable!("Expected Ping event"),
     }
@@ -730,9 +730,9 @@ fn test_stream_event_error_long_message() {
 
 #[test]
 fn test_stream_event_ping_timestamp_reasonable() {
-    let before = chrono::Utc::now().timestamp();
+    let before = time::OffsetDateTime::now_utc().unix_timestamp();
     let event: StreamEvent<()> = StreamEvent::ping();
-    let after = chrono::Utc::now().timestamp();
+    let after = time::OffsetDateTime::now_utc().unix_timestamp();
 
     match event {
         StreamEvent::Ping { timestamp } => {

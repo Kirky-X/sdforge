@@ -187,7 +187,7 @@ impl AuthMetadata {
             client_ip,
             user_agent,
             request_id: Uuid::new_v4().to_string(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         }
     }
 }

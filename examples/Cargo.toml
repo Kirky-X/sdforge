@@ -21,7 +21,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
-chrono = { workspace = true }
+time = { workspace = true }
 # logging 示例演示 log::info! 经 inklog 桥零改动路由
 log = { workspace = true }
 # inventory/axum/clap/rmcp/tonic/prost 均由 sdforge re-export

@@ -28,8 +28,7 @@ tokio = { version = "1.54", default-features = false, features = ["rt-multi-thre
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio-stream = { version = "0.1", default-features = false }
 uuid = { version = "1.29", default-features = false, features = ["std", "v4"] }
-# 仅取时间戳/RFC3339 字符串，无类型进入公共签名或序列化面
-chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+time = { version = "0.3", default-features = false, features = ["std"] }
 # unicode 必须显式声明：pattern 属用户可见语义，收窄会静默降级为 ASCII
 regex = { version = "1.13", default-features = false, features = ["std", "perf", "unicode"] }
 validator = { version = "0.21", default-features = false, features = ["derive"] }
@@ -170,7 +169,7 @@ schemars = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 # CLI/Markdown 文档生成（Swagger UI 静态资产自 vendor 于 assets/swagger-ui/，零额外依赖）
 clap-markdown = { workspace = true, optional = true }
-chrono = { workspace = true, optional = true }
+time = { workspace = true, optional = true }
 validator = { workspace = true, optional = true }
 regex = { workspace = true, optional = true }
 once_cell = { workspace = true, optional = true }
@@ -247,16 +246,16 @@ mcp = ["dep:rmcp", "dep:inventory", "dep:anyhow", "dep:http"]
 # 下游经 sdforge::rmcp 再导出取全部类型，无需直连 rmcp（版本随 sdforge 统一）
 mcp-http = ["mcp", "rmcp/transport-streamable-http-server"]
 # streaming：独立于 http，仅 tokio/tokio-stream/futures-util
-streaming = ["dep:tokio", "dep:tokio-stream", "dep:futures-util", "dep:chrono"]
-timestamp = ["dep:chrono"]
+streaming = ["dep:tokio", "dep:tokio-stream", "dep:futures-util", "dep:time"]
+timestamp = ["dep:time"]
 # ratelimit 核心：RateLimiter + LimiteronAdapter，不依赖 axum/tower
 ratelimit = ["dep:limiteron", "limiteron/ban-manager", "limiteron/quota-control", "limiteron/circuit-breaker"]
 # ratelimit-http：Tower 中间件 + check_request（依赖 http + ratelimit）
 ratelimit-http = ["http", "ratelimit"]
 
 # toml 仅被 security 下的 AuthConfigError 使用，故挂 security 而非 http
-security = ["http", "dep:uuid", "dep:hmac", "dep:sha2", "dep:chrono", "tokio", "dep:subtle", "dep:once_cell", "dep:rand", "dep:regex", "dep:postcard", "cache", "dep:hex", "dep:base64", "dep:toml", "ratelimit-http", "dep:oxcache"]
-websocket = ["http", "streaming", "dep:axum-extra", "dep:chrono"]
+security = ["http", "dep:uuid", "dep:hmac", "dep:sha2", "dep:time", "tokio", "dep:subtle", "dep:once_cell", "dep:rand", "dep:regex", "dep:postcard", "cache", "dep:hex", "dep:base64", "dep:toml", "ratelimit-http", "dep:oxcache"]
+websocket = ["http", "streaming", "dep:axum-extra", "dep:time"]
 # gRPC：独立于 http（grpc 模块只用 tonic + prost + serde_json + futures-util）
 grpc = ["dep:tonic", "dep:prost", "dep:tonic-prost", "dep:inventory", "dep:futures-util"]
 # grpc-tls：只做 ServerTlsConfig 接线暴露，证书加载由调用方负责

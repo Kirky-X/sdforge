@@ -332,7 +332,7 @@ mod tests {
         // 测试用假密钥，非真实凭据
         let secret = b"Grpc-Test-Secret-Key-0123456789-AbCdEf"; // pragma: allowlist secret
         let header = r#"{"alg":"HS256","typ":"JWT"}"#;
-        let now = chrono::Utc::now().timestamp();
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
         let payload = serde_json::json!({
             "sub": user_id,
             "permissions": permissions,

@@ -20,7 +20,7 @@ fn test_auth_interceptor_valid_token() {
     let mut interceptor = make_auth_interceptor(Some(auth), None);
 
     // Generate a token that expires in 1 year
-    let exp = chrono::Utc::now().timestamp() + 365 * 24 * 3600;
+    let exp = time::OffsetDateTime::now_utc().unix_timestamp() + 365 * 24 * 3600;
     let valid_token = make_test_jwt(secret, exp);
     let auth_value: tonic::metadata::MetadataValue<tonic::metadata::Ascii> =
         tonic::metadata::MetadataValue::try_from(format!("Bearer {}", valid_token).as_str())
@@ -68,7 +68,7 @@ fn test_auth_interceptor_invalid_token() {
 
     // Generate a token signed with a DIFFERENT secret
     let wrong_secret = "WrongSecret000!ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    let exp = chrono::Utc::now().timestamp() + 365 * 24 * 3600;
+    let exp = time::OffsetDateTime::now_utc().unix_timestamp() + 365 * 24 * 3600;
     let invalid_token = make_test_jwt(wrong_secret, exp);
     let auth_value: tonic::metadata::MetadataValue<tonic::metadata::Ascii> =
         tonic::metadata::MetadataValue::try_from(format!("Bearer {}", invalid_token).as_str())
@@ -193,7 +193,7 @@ fn test_auth_interceptor_metadata_key_lowercase_required() {
     let auth = crate::security::BearerAuth::try_new(secret).expect("valid secret");
     let mut interceptor = make_auth_interceptor(Some(auth), None);
 
-    let exp = chrono::Utc::now().timestamp() + 365 * 24 * 3600;
+    let exp = time::OffsetDateTime::now_utc().unix_timestamp() + 365 * 24 * 3600;
     let valid_token = make_test_jwt(secret, exp);
 
     let auth_value: tonic::metadata::MetadataValue<tonic::metadata::Ascii> =

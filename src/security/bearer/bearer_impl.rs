@@ -364,14 +364,14 @@ impl BearerAuth {
 
         // `exp` 必须存在且未过期：缺失即等于"永不过期"，泄露的令牌将长期可用。
         let exp = payload_value.get("exp").and_then(|v| v.as_i64())?;
-        if chrono::Utc::now().timestamp() > exp {
+        if time::OffsetDateTime::now_utc().unix_timestamp() > exp {
             return None; // Token expired
         }
 
         // Validate iat (issued at) claim to prevent usage of future tokens
         // This prevents replay attacks with tokens that have valid signatures but haven't been issued yet
         if let Some(iat) = payload_value.get("iat").and_then(|v| v.as_i64()) {
-            let now = chrono::Utc::now().timestamp();
+            let now = time::OffsetDateTime::now_utc().unix_timestamp();
             // Allow tokens issued up to 60 seconds in the future (clock skew tolerance)
             const CLOCK_SKEW_SECONDS: i64 = 60;
             if iat > now + CLOCK_SKEW_SECONDS {
@@ -381,7 +381,7 @@ impl BearerAuth {
 
         // Validate nbf (not before) claim to prevent usage of tokens that aren't yet valid
         if let Some(nbf) = payload_value.get("nbf").and_then(|v| v.as_i64())
-            && chrono::Utc::now().timestamp() < nbf
+            && time::OffsetDateTime::now_utc().unix_timestamp() < nbf
         {
             return None; // Token not yet valid
         }

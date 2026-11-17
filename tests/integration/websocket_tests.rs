@@ -731,7 +731,7 @@ mod websocket_tests {
             event: "large_broadcast".to_string(),
             data: serde_json::json!({
                 "message": "This is a broadcast message",
-                "timestamp": chrono::Utc::now().timestamp()
+                "timestamp": time::OffsetDateTime::now_utc().unix_timestamp()
             }),
         });
         manager.broadcast(&broadcast_msg).await;

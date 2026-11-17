@@ -71,7 +71,7 @@ impl<T> StreamEvent<T> {
     /// Create a ping event
     pub fn ping() -> Self {
         Self::Ping {
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         }
     }
 

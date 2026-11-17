@@ -561,7 +561,8 @@ impl ApiError {
                 let mut details = serde_json::json!({ "error_id": error_id });
                 #[cfg(feature = "timestamp")]
                 {
-                    details["timestamp"] = serde_json::json!(chrono::Utc::now().timestamp());
+                    details["timestamp"] =
+                        serde_json::json!(time::OffsetDateTime::now_utc().unix_timestamp());
                 }
                 // `ErrorContext`（编译期源码路径/行号/`extra`）只进服务端日志，
                 // 不得随 HTTP 响应体下发。

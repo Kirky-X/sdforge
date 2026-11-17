@@ -15,7 +15,7 @@ where
             error: None,
             status_code: None,
             #[cfg(feature = "timestamp")]
-            timestamp: Some(chrono::Utc::now().timestamp()),
+            timestamp: Some(time::OffsetDateTime::now_utc().unix_timestamp()),
         }
     }
 
@@ -44,7 +44,7 @@ where
             error: None,
             status_code: Some(code),
             #[cfg(feature = "timestamp")]
-            timestamp: Some(chrono::Utc::now().timestamp()),
+            timestamp: Some(time::OffsetDateTime::now_utc().unix_timestamp()),
         }
     }
 
@@ -56,7 +56,7 @@ where
             error: Some(error),
             status_code: None,
             #[cfg(feature = "timestamp")]
-            timestamp: Some(chrono::Utc::now().timestamp()),
+            timestamp: Some(time::OffsetDateTime::now_utc().unix_timestamp()),
         }
     }
 

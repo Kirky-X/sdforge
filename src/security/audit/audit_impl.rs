@@ -235,7 +235,7 @@ impl SdForgeAuditLogger {
 
         let mut log = AuditLog {
             id: Uuid::new_v4().to_string(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
             user_id: context.user_id.clone(),
             action: action.into(),
             resource: resource.into(),
@@ -404,8 +404,11 @@ impl SdForgeAuditLogger {
             metadata: AuthMetadata {
                 client_ip: None,
                 user_agent: None,
-                request_id: format!("rotation_{}", chrono::Utc::now().timestamp()),
-                timestamp: chrono::Utc::now().timestamp(),
+                request_id: format!(
+                    "rotation_{}",
+                    time::OffsetDateTime::now_utc().unix_timestamp()
+                ),
+                timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
             },
         };
 

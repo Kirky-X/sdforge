@@ -149,8 +149,8 @@ fn test_validate_token_valid() {
     let payload = serde_json::json!({
         "sub": "user123",
         "permissions": ["read", "write"],
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": (chrono::Utc::now().timestamp() + 3600)
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": (time::OffsetDateTime::now_utc().unix_timestamp() + 3600)
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -171,8 +171,8 @@ fn test_validate_token_no_sub_no_permissions() {
     let auth = BearerAuth::new(secret);
 
     let payload = serde_json::json!({
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -202,7 +202,7 @@ fn test_validate_token_invalid_signature() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp()
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp()
     });
 
     // Sign with wrong secret
@@ -217,8 +217,8 @@ fn test_validate_token_expired() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp() - 7200,
-        "exp": chrono::Utc::now().timestamp() - 3600 // Expired 1 hour ago
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp() - 7200,
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() - 3600 // Expired 1 hour ago
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -232,8 +232,8 @@ fn test_validate_token_iat_in_future() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp() + 120, // 2 minutes in the future (> 60s skew)
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp() + 120, // 2 minutes in the future (> 60s skew)
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -247,8 +247,8 @@ fn test_validate_token_iat_within_clock_skew() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp() + 30, // 30 seconds in the future (within 60s skew)
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp() + 30, // 30 seconds in the future (within 60s skew)
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -263,9 +263,9 @@ fn test_validate_token_nbf_not_yet_valid() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "nbf": chrono::Utc::now().timestamp() + 3600, // Not valid for another hour
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 7200
+        "nbf": time::OffsetDateTime::now_utc().unix_timestamp() + 3600, // Not valid for another hour
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 7200
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -280,8 +280,8 @@ fn test_validate_token_audience_mismatch() {
     let payload = serde_json::json!({
         "sub": "user123",
         "aud": "wrong-api",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -296,8 +296,8 @@ fn test_validate_token_audience_match() {
     let payload = serde_json::json!({
         "sub": "user123",
         "aud": "expected-api",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -312,8 +312,8 @@ fn test_validate_token_audience_array_first_match() {
     let payload = serde_json::json!({
         "sub": "user123",
         "aud": ["api-one", "api-two"],
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -328,8 +328,8 @@ fn test_validate_token_audience_array_mismatch() {
     let payload = serde_json::json!({
         "sub": "user123",
         "aud": ["other-api", "another-api"],
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -345,8 +345,8 @@ fn test_validate_token_issuer_mismatch() {
         "sub": "user123",
         "aud": "my-api",
         "iss": "wrong-issuer",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -362,8 +362,8 @@ fn test_validate_token_issuer_match() {
         "sub": "user123",
         "aud": "my-api",
         "iss": "expected-issuer",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -402,8 +402,8 @@ fn test_invalidate_token_blacklists() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -451,8 +451,8 @@ fn test_blacklist_blocks_alternate_signature_encoding() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -479,8 +479,8 @@ fn test_signature_with_whitespace_is_rejected() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -512,8 +512,8 @@ fn test_invalidate_token_blacklist_blocks_token() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -538,8 +538,8 @@ fn test_invalidate_token_direct_method() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -563,8 +563,8 @@ fn test_register_and_validate_token() {
     let payload = serde_json::json!({
         "sub": "user456",
         "permissions": ["admin"],
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -693,8 +693,8 @@ fn test_validate_token_with_wrong_signature_length() {
     let header = serde_json::json!({"alg": "HS256", "typ": "JWT"});
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let header_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -716,8 +716,8 @@ fn test_clone_shares_state() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let secret = &derived_test_secret(33);
@@ -775,7 +775,7 @@ fn test_validate_token_no_exp_claim() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp()
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp()
         // No exp claim
     });
 
@@ -791,7 +791,7 @@ fn test_validate_token_no_iat_no_nbf() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
         // No iat or nbf
     });
 
@@ -807,8 +807,8 @@ fn test_permissions_filtered_from_invalid_entries() {
     let payload = serde_json::json!({
         "sub": "user123",
         "permissions": ["valid_perm", 123, null, "another_valid"],
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -845,8 +845,8 @@ fn test_verify_token_tampered_payload() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -876,8 +876,8 @@ fn test_verify_token_empty_signature() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -909,8 +909,8 @@ fn test_verify_blacklisted_token_rejected() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -934,8 +934,8 @@ fn test_blacklist_nonexistent_token() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
     let token = create_test_jwt(secret.as_bytes(), &payload);
 
@@ -969,8 +969,8 @@ fn test_verify_token_with_special_chars() {
         "sub": "user@example.com",  // Contains @
         "name": "Test User (Admin)",  // Contains parentheses
         "permissions": ["read", "write"],
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -1029,8 +1029,8 @@ fn test_verify_token_missing_signature_part() {
 
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -1067,8 +1067,8 @@ fn test_verify_token_with_unicode_chars() {
         "sub": "用户123",  // Chinese characters
         "name": "José García",  // Accented characters
         "description": "Test with emoji 🎉",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -1094,8 +1094,8 @@ fn test_validate_token_rejects_alg_none() {
     let header = serde_json::json!({"alg": "none", "typ": "JWT"});
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let header_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -1121,7 +1121,7 @@ fn test_validate_token_rejects_alg_rs256() {
     let header = serde_json::json!({"alg": "RS256", "typ": "JWT"});
     let payload = serde_json::json!({
         "sub": "user123",
-        "iat": chrono::Utc::now().timestamp()
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp()
     });
 
     let header_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD
@@ -1242,8 +1242,8 @@ fn test_validate_token_audience_not_string_or_array() {
     let payload = serde_json::json!({
         "sub": "user123",
         "aud": 12345,  // aud is a number, not string or array
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);
@@ -1262,8 +1262,8 @@ fn test_validate_token_issuer_not_string() {
         "sub": "user123",
         "aud": "my-api",
         "iss": 999,  // iss is a number, not a string
-        "iat": chrono::Utc::now().timestamp(),
-        "exp": chrono::Utc::now().timestamp() + 3600
+        "iat": time::OffsetDateTime::now_utc().unix_timestamp(),
+        "exp": time::OffsetDateTime::now_utc().unix_timestamp() + 3600
     });
 
     let token = create_test_jwt(secret.as_bytes(), &payload);

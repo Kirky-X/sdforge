@@ -4301,7 +4301,6 @@ dependencies = [
  "axum-extra",
  "axum-test",
  "base64 0.23.1",
- "chrono",
  "clap",
  "clap-markdown",
  "confers",
@@ -4342,6 +4341,7 @@ dependencies = [
  "sys-locale",
  "tempfile",
  "thiserror",
+ "time",
  "tokio",
  "tokio-rustls",
  "tokio-stream",
@@ -4365,7 +4365,6 @@ name = "sdforge-examples"
 version = "0.5.2"
 dependencies = [
  "axum",
- "chrono",
  "dbnexus",
  "log",
  "oxcache",
@@ -4373,6 +4372,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "time",
  "tokio",
  "tower",
  "utoipa",

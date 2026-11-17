@@ -377,7 +377,7 @@ fn test_audit_logger_trait_log() {
         let logger = SdForgeAuditLogger::with_limit(10);
         let log = AuditLog {
             id: "trait-test-id".to_string(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
             user_id: Some("trait_user".to_string()),
             action: "trait_action".to_string(),
             resource: "trait_resource".to_string(),
@@ -407,7 +407,7 @@ fn test_audit_logger_trait_log_failure() {
         let logger = SdForgeAuditLogger::with_limit(10);
         let log = AuditLog {
             id: "trait-fail-id".to_string(),
-            timestamp: chrono::Utc::now().timestamp(),
+            timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
             user_id: Some("trait_fail_user".to_string()),
             action: "trait_fail_action".to_string(),
             resource: "trait_fail_resource".to_string(),
@@ -849,7 +849,7 @@ async fn test_log_merges_fallback_logs_synchronously() {
     // Manually populate fallback_logs with a serialized AuditLog
     let fallback_log = AuditLog {
         id: "fallback-log-1".to_string(),
-        timestamp: chrono::Utc::now().timestamp() - 100,
+        timestamp: time::OffsetDateTime::now_utc().unix_timestamp() - 100,
         user_id: Some("merge_user".to_string()),
         action: "fallback_action".to_string(),
         resource: "fallback_resource".to_string(),
@@ -905,7 +905,7 @@ async fn test_log_fallback_merge_respects_max_logs() {
     // Populate primary with 1 log
     let primary_log = AuditLog {
         id: "primary-1".to_string(),
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         user_id: Some("trunc_user".to_string()),
         action: "primary_action".to_string(),
         resource: "res".to_string(),
@@ -921,7 +921,7 @@ async fn test_log_fallback_merge_respects_max_logs() {
     let fallback_logs = vec![
         AuditLog {
             id: "fallback-1".to_string(),
-            timestamp: chrono::Utc::now().timestamp() - 200,
+            timestamp: time::OffsetDateTime::now_utc().unix_timestamp() - 200,
             user_id: Some("trunc_user".to_string()),
             action: "fb1".to_string(),
             resource: "res".to_string(),
@@ -931,7 +931,7 @@ async fn test_log_fallback_merge_respects_max_logs() {
         },
         AuditLog {
             id: "fallback-2".to_string(),
-            timestamp: chrono::Utc::now().timestamp() - 100,
+            timestamp: time::OffsetDateTime::now_utc().unix_timestamp() - 100,
             user_id: Some("trunc_user".to_string()),
             action: "fb2".to_string(),
             resource: "res".to_string(),
@@ -973,7 +973,7 @@ async fn test_get_logs_deduplicates_by_id() {
     // Create a log that appears in BOTH primary and fallback (same ID)
     let shared_log = AuditLog {
         id: "shared-id-1".to_string(),
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         user_id: Some("dedup_user".to_string()),
         action: "shared_action".to_string(),
         resource: "res".to_string(),
@@ -985,7 +985,7 @@ async fn test_get_logs_deduplicates_by_id() {
     // A log that only appears in fallback
     let fallback_only = AuditLog {
         id: "fallback-only-1".to_string(),
-        timestamp: chrono::Utc::now().timestamp() - 50,
+        timestamp: time::OffsetDateTime::now_utc().unix_timestamp() - 50,
         user_id: Some("dedup_user".to_string()),
         action: "fallback_only_action".to_string(),
         resource: "res".to_string(),
@@ -1029,7 +1029,7 @@ async fn test_get_logs_with_only_fallback() {
     // Populate only fallback (no primary)
     let fallback_log = AuditLog {
         id: "fb-only-2".to_string(),
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         user_id: Some("fb_user".to_string()),
         action: "fb_action".to_string(),
         resource: "res".to_string(),
@@ -1066,7 +1066,7 @@ async fn test_worker_merges_fallback_from_queue() {
     // Populate fallback_logs for "worker_user"
     let fallback_log = AuditLog {
         id: "worker-fb-1".to_string(),
-        timestamp: chrono::Utc::now().timestamp() - 100,
+        timestamp: time::OffsetDateTime::now_utc().unix_timestamp() - 100,
         user_id: Some("worker_user".to_string()),
         action: "worker_fb_action".to_string(),
         resource: "res".to_string(),
@@ -1081,7 +1081,7 @@ async fn test_worker_merges_fallback_from_queue() {
     // Populate primary with an existing log
     let primary_log = AuditLog {
         id: "worker-primary-1".to_string(),
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         user_id: Some("worker_user".to_string()),
         action: "worker_primary_action".to_string(),
         resource: "res".to_string(),
@@ -1125,7 +1125,7 @@ async fn test_worker_no_fallback_does_nothing() {
     // Populate primary only (no fallback)
     let primary_log = AuditLog {
         id: "no-fb-primary".to_string(),
-        timestamp: chrono::Utc::now().timestamp(),
+        timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         user_id: Some("no_fb_user".to_string()),
         action: "primary_action".to_string(),
         resource: "res".to_string(),
