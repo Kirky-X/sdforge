@@ -174,12 +174,24 @@ fn rate_limit_rejection_response(err: RateLimitError, locale: Option<&str>) -> R
         ),
     };
 
-    let mut resp = Response::new(Body::from(body));
+    let mut resp = Response::new(Body::from(body.clone()));
     *resp.status_mut() = status;
     if let Some(secs) = retry_after_secs {
         // `secs.to_string` is a valid HTTP header value (digits only).
         if let Ok(value) = secs.to_string().parse() {
             resp.headers_mut().insert("Retry-After", value);
+        }
+    }
+    #[cfg(feature = "security-core")]
+    if status == StatusCode::TOO_MANY_REQUESTS {
+        let reason = crate::security::SecurityDenialReason::RateLimited {
+            limiter: "request",
+            retry_after_ms: retry_after_secs.unwrap_or(0) * 1000,
+        };
+        let err = crate::error::unified::UnifiedError::new("TOO_MANY_REQUESTS", body);
+        let payload = err.with_security_reason(reason);
+        if let Ok(json) = serde_json::to_string(&payload) {
+            *resp.body_mut() = Body::from(json);
         }
     }
     resp

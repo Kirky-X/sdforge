@@ -265,10 +265,21 @@ impl CliBuilder {
                     eprintln!("{}", crate::cli::output::auth_failure_text(&reason));
                 }
                 crate::cli::output::OutputFormat::Json => {
+                    let denial = crate::security::SecurityDenialReason::AuthenticationInvalid {
+                        protocol: crate::security::Protocol::Cli,
+                        stage: crate::security::AuthStage::HeaderMalformed,
+                    };
+                    if let Ok(json) = serde_json::to_string(&denial) {
+                        eprintln!("{{\"security_reason\":{json}}}");
+                    }
                     format.emit_error(&ApiError::AuthenticationFailed { reason });
                 }
             }
-            std::process::exit(1);
+            let denial = crate::security::SecurityDenialReason::AuthenticationInvalid {
+                protocol: crate::security::Protocol::Cli,
+                stage: crate::security::AuthStage::HeaderMalformed,
+            };
+            std::process::exit(denial.cli_exit_code());
         }
         match crate::cli::dispatch::dispatch(&matches, self.state).await {
             Ok((_name, value)) => {

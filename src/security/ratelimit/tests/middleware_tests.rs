@@ -449,9 +449,20 @@ async fn middleware_exceeded_body_follows_accept_language() {
     let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("body bytes");
+    let body = String::from_utf8(bytes.to_vec()).expect("utf8 body");
+    // 429 body now carries the localized message plus an additive structured
+    // security_reason; the message value must still follow Accept-Language.
+    let value: serde_json::Value = serde_json::from_str(&body).expect("429 body is JSON");
     assert_eq!(
-        String::from_utf8(bytes.to_vec()).expect("utf8 body"),
-        "速率限制已超出",
-        "429 body must follow Accept-Language"
+        value.get("message").and_then(|v| v.as_str()),
+        Some("速率限制已超出"),
+        "429 message must follow Accept-Language"
+    );
+    assert_eq!(
+        value
+            .get("security_reason")
+            .and_then(|v| v.get("denial"))
+            .and_then(|v| v.as_str()),
+        Some("rate_limited")
     );
 }

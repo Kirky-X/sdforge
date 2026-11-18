@@ -414,7 +414,14 @@ impl SdForgeMcpServer {
         )
         .await
         .map(Some)
-        .map_err(|msg| ErrorData::new(MCP_UNAUTHENTICATED, format!("unauthenticated: {msg}"), None))
+        .map_err(|msg| {
+            let reason = crate::security::SecurityDenialReason::AuthenticationInvalid {
+                protocol: crate::security::Protocol::Mcp,
+                stage: crate::security::AuthStage::HeaderMalformed,
+            };
+            let data = serde_json::to_value(&reason).ok();
+            ErrorData::new(MCP_UNAUTHENTICATED, format!("unauthenticated: {msg}"), data)
+        })
     }
 
     /// Endpoint RBAC for `tools/call` (feature = `security`): a tool that
@@ -433,10 +440,16 @@ impl SdForgeMcpServer {
         let authorized =
             matches!(auth_ctx, Some(ctx) if roles.iter().any(|r| ctx.has_permission(r)));
         if !roles.is_empty() && !authorized {
+            let reason = crate::security::SecurityDenialReason::AuthorizationDenied {
+                protocol: crate::security::Protocol::Mcp,
+                required_roles: roles,
+                actual_present: auth_ctx.is_some(),
+            };
+            let data = serde_json::to_value(&reason).ok();
             return Err(ErrorData::new(
                 MCP_FORBIDDEN,
                 format!("forbidden: missing required role: {}", roles.join(", ")),
-                None,
+                data,
             ));
         }
         Ok(())

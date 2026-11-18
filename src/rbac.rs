@@ -22,12 +22,33 @@ pub type Roles = &'static [&'static str];
 ///
 /// rendered through the unified error contract — carries the ambient
 /// `trace_id` when the `context` feature is active.
+#[cfg(not(feature = "security-http"))]
 fn forbidden(roles: Roles) -> axum::response::Response {
     let err = crate::error::unified::UnifiedError::new(
         "FORBIDDEN",
         format!("missing required role: {}", roles.join(", ")),
     );
     crate::error::unified::render_http(axum::http::StatusCode::FORBIDDEN, &err)
+}
+
+/// 403 body with the structured authorization denial reason attached.
+#[cfg(feature = "security-http")]
+fn forbidden_with(roles: Roles, actual_present: bool) -> axum::response::Response {
+    let err = crate::error::unified::UnifiedError::new(
+        "FORBIDDEN",
+        format!("missing required role: {}", roles.join(", ")),
+    )
+    .with_security_reason(crate::security::SecurityDenialReason::AuthorizationDenied {
+        protocol: crate::security::Protocol::Http,
+        required_roles: roles,
+        actual_present,
+    });
+    crate::error::unified::render_http(axum::http::StatusCode::FORBIDDEN, &err)
+}
+
+#[cfg(not(feature = "security-http"))]
+fn forbidden_with(roles: Roles, _actual_present: bool) -> axum::response::Response {
+    forbidden(roles)
 }
 
 /// Wrap a route's `MethodRouter` with an endpoint-level role requirement.
@@ -42,6 +63,7 @@ pub fn require_role(
     use crate::security::AuthContext;
     router.layer(axum::middleware::from_fn(
         move |req: axum::http::Request<axum::body::Body>, next: axum::middleware::Next| async move {
+            let present = req.extensions().get::<AuthContext>().is_some();
             let authorized = req
                 .extensions()
                 .get::<AuthContext>()
@@ -50,7 +72,7 @@ pub fn require_role(
             if authorized {
                 next.run(req).await
             } else {
-                forbidden(roles)
+                forbidden_with(roles, present)
             }
         },
     ))
@@ -86,7 +108,7 @@ mod tests {
     async fn missing_auth_context_denies() {
         // Direct require_role check via extension absence is covered by the
         // e2e suite; here we assert the deny helper shape.
-        let resp = forbidden(&["admin"]);
+        let resp = forbidden_with(&["admin"], false);
         assert_eq!(resp.status(), axum::http::StatusCode::FORBIDDEN);
     }
 

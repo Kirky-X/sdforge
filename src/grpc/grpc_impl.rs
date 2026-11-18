@@ -1282,7 +1282,19 @@ impl tonic::service::Interceptor for AuthGrpcInterceptor {
                 Ok(_) => Ok(req),
                 // 校验器的 Err 载荷是固定短语（见 GrpcAuthVerifier 的契约），
                 // 不含凭据材料。
-                Err(reason) => Err(Status::unauthenticated(reason)),
+                Err(reason) => {
+                    let denial = crate::security::SecurityDenialReason::AuthenticationInvalid {
+                        protocol: crate::security::Protocol::Grpc,
+                        stage: crate::security::AuthStage::HeaderMalformed,
+                    };
+                    let mut status = Status::unauthenticated(reason);
+                    if let Ok(json) = serde_json::to_string(&denial)
+                        && let Ok(value) = json.parse()
+                    {
+                        status.metadata_mut().insert("security-reason", value);
+                    }
+                    Err(status)
+                }
             };
         }
 

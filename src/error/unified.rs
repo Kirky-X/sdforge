@@ -39,6 +39,11 @@ pub struct UnifiedError {
     /// 形状不变。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<serde_json::Value>,
+    /// Structured security denial reason, when this error is a security
+    /// rejection. Skipped when absent so existing response bytes are unchanged.
+    #[cfg(feature = "security-core")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub security_reason: Option<crate::security::SecurityDenialReason>,
 }
 
 impl UnifiedError {
@@ -50,7 +55,16 @@ impl UnifiedError {
             trace_id: current_trace_id(),
             field: None,
             details: None,
+            #[cfg(feature = "security-core")]
+            security_reason: None,
         }
+    }
+
+    /// Attach a structured security denial reason.
+    #[cfg(feature = "security-core")]
+    pub fn with_security_reason(mut self, reason: crate::security::SecurityDenialReason) -> Self {
+        self.security_reason = Some(reason);
+        self
     }
 
     /// Attach an offending field.
@@ -136,6 +150,8 @@ impl From<&crate::core::ApiError> for UnifiedError {
             trace_id: current_trace_id(),
             field,
             details: shared_status_details(e),
+            #[cfg(feature = "security-core")]
+            security_reason: None,
         }
     }
 }

@@ -31,6 +31,27 @@ pub fn auth_middleware<T: Clone + Send + Sync + 'static>(
                     let mut response =
                         Response::new(Body::from(crate::i18n::t("http-unauthorized", &[])));
                     *response.status_mut() = StatusCode::UNAUTHORIZED;
+                    #[cfg(feature = "security-core")]
+                    {
+                        use crate::security::{AuthScheme, Protocol, SecurityDenialReason};
+                        let reason = SecurityDenialReason::AuthenticationMissing {
+                            protocol: Protocol::Http,
+                            expected: AuthScheme::Jwt,
+                        };
+                        let err = crate::error::unified::UnifiedError::new(
+                            "UNAUTHORIZED",
+                            crate::i18n::t("http-unauthorized", &[]),
+                        )
+                        .with_security_reason(reason);
+                        if let Ok(body) = serde_json::to_string(&err) {
+                            response = Response::new(Body::from(body));
+                            *response.status_mut() = StatusCode::UNAUTHORIZED;
+                            response.headers_mut().insert(
+                                axum::http::header::WWW_AUTHENTICATE,
+                                "Bearer".parse().unwrap(),
+                            );
+                        }
+                    }
                     response
                 }
             }

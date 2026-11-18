@@ -259,3 +259,31 @@ fn cli_builder_wiring_check_is_fail_closed() {
         "declared cli auth requires a verifier"
     );
 }
+
+#[tokio::test]
+async fn http_403_response_carries_structured_denial_reason() {
+    let config = apikey_config("admin-secret", "viewer-secret");
+    let router = build_with_config_ext(axum::Router::new(), &config).unwrap();
+    let resp = tower::ServiceExt::oneshot(
+        router,
+        axum::http::Request::builder()
+            .uri("/api/v1/admin/stats")
+            .header("x-api-key", "sk_viewer-secret")
+            .body(axum::body::Body::empty())
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(resp.status(), axum::http::StatusCode::FORBIDDEN);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        value
+            .get("security_reason")
+            .and_then(|v| v.get("denial"))
+            .and_then(|v| v.as_str()),
+        Some("authorization_denied")
+    );
+}
