@@ -202,7 +202,7 @@ Common methods: `category() -> ErrorCategory` (error category for monitoring/ale
 - `grpc_code_for(&ApiError) -> tonic::Code` (feature = `grpc`): the same `ApiError` → gRPC status code
 - `grpc_code_for_http_status(u16) -> tonic::Code` (feature = `grpc`): the **cross-protocol behavior contract table**, the alignment axis from HTTP status → gRPC status code (same row set as `code_for_http_status`)
 - `code_for_http_status(u16) -> &'static str`: HTTP status → machine error code
-- `UnifiedError`: the cross-protocol error payload `{code, message, trace_id?, field?, details?}`, shared in shape by HTTP body and gRPC `Status::details`; `details` appears only when same-status errors need distinguishing (e.g. 429's `RateLimitExceeded` / `QuotaExhausted`), and `details.type` holds the error variant name (not localized)
+- `UnifiedError`: the cross-protocol error payload `{code, message, trace_id?, field?, details?, security_reason?}`, shared in shape by HTTP body and gRPC `Status::details`; `details` appears only when same-status errors need distinguishing (e.g. 429's `RateLimitExceeded` / `QuotaExhausted`), and `details.type` holds the error variant name (not localized). With `security-core`, `security_reason?` carries a structured `SecurityDenialReason` (flat JSON: `denial`, `protocol`, plus stage/limiter/header/roles) on security rejections; absent otherwise so existing response bytes are unchanged. See [SECURITY.md · Structured denial reasons](SECURITY.md#structured-denial-reasons) for the protocol mapping table.
 
 **Error-code behavior contract table** (the values of the same `ApiError` on the two protocol wires; pinned by
 the `error_code_contract_tests` wire-level tests and the `unified` unit tests' full-universe JOIN

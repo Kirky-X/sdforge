@@ -117,6 +117,20 @@ An endpoint declares its per-protocol authentication and authorization requireme
 - `strict-security` (opt-in feature, not in `full`): an endpoint that declares a protocol entry point (`tool_name` / `grpc_method` / `cli`) without a matching `security(...)` section fails to compile. Add `security(<proto>(auth = "none"))` to opt out for that endpoint. A focused build such as `mcp,strict-security` enforces this; the framework `full` aggregate and `--all-features` CI builds do not, because example/test fixtures intentionally expose unauthenticated endpoints.
 - Fail-closed wiring: a registered contract with `auth != none` and no verifier wired makes startup fail with a configuration error naming the endpoint and the wiring method (`with_auth_interceptor` / `with_auth_verifier`). Call `SdForgeMcpServer::validate_contract_wiring` / `CliBuilder::validate_contract_wiring` before serving; the gRPC builder checks automatically. `auth = "none"` declarations are exempt.
 
+### Structured denial reasons
+
+Security rejections carry an additive `security_reason` field (HTTP response body, gRPC `security-reason` metadata, MCP `ErrorData.data`) with a machine-readable discriminator (`denial`, `protocol`, and a stage/limiter/header/role attribute). Wire machine codes and statuses do not change: `UNAUTHORIZED`/`FORBIDDEN`/`TOO_MANY_REQUESTS` remain the only codes.
+
+| Reason | HTTP | gRPC status | MCP code | CLI exit | Notes |
+|--------|------|-------------|----------|----------|-------|
+| `authentication_missing` / `authentication_invalid` | 401 | UNAUTHENTICATED | -32001 | 2 | `WWW-Authenticate: Bearer` on 401 |
+| `authorization_denied` | 403 | PERMISSION_DENIED | -32003 | 3 | Carries `required_roles` |
+| `rate_limited` | 429 | RESOURCE_EXHAUSTED | -32002 | 4 | `Retry-After` emitted in seconds |
+| `protocol_header_missing` | 401 | UNAUTHENTICATED | -32001 | 5 | MCP `Mcp-Method` / `Mcp-Name` |
+| `contract_wiring_violation` | 403 | PERMISSION_DENIED | -32003 | 6 | Diagnostic surface |
+
+Boundaries: CORS rejections are applied by `tower-http` before handlers and cannot be attributed (no reason field). Custom `GrpcAuthVerifier` implementations return `Err(String)`; their stage is attributed to `header_malformed` by default. User-facing text still follows i18n; reason discriminators are machine-facing constants.
+
 ### Security Defaults (tightened since v0.3.0)
 
 - **JWT secret minimum length**: `MIN_SECRET_LENGTH=32`; secrets shorter than 32 characters are rejected
