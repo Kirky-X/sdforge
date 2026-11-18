@@ -125,6 +125,7 @@ impl BearerAuth {
     }
 
     /// Internal helper to set issuer on an existing validated instance
+    #[cfg(feature = "http")]
     pub(crate) fn with_issuer_inner(mut self, expected_issuer: impl Into<String>) -> Self {
         self.expected_issuer = Some(expected_issuer.into());
         self
@@ -228,7 +229,7 @@ impl BearerAuth {
 
     /// Constant-time comparison to prevent timing attacks
     /// Uses the subtle crate for secure constant-time comparison
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
         use subtle::ConstantTimeEq;
         a.ct_eq(b).into()

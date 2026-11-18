@@ -3,50 +3,59 @@
 //! Security module providing authentication and audit logging
 //!
 //! This module provides utilities for securing API endpoints.
-//! Requires the `http` feature.
+//! The protocol-neutral core (`security-core`) needs no `http`; the HTTP
+//! adapters (`security-http`) add axum middleware, IP extraction and RBAC.
 //!
 //! The `ratelimit` submodule (backed by limiteron 0.2.1) is gated by
 //! `feature = "ratelimit"` and is reachable even when the full `security`
 //! feature is off — see `src/lib.rs` for the parent-module gate
-//! (`any(feature = "security", feature = "ratelimit")`).
+//! (`any(feature = "security-core", feature = "ratelimit")`).
+//!
+//! Gate layers (design.md §2):
+//! - core (`security-core`): types, traits, bearer, api_key, api_key_manager,
+//!   audit, grpc_auth and the security_impl trait impls.
+//! - HTTP adapter (`security-http`): middleware and ip_util (also reachable
+//!   via `ratelimit-http` for the rate-limit adapter).
 
-// Re-export all public APIs from submodules (full security feature only)
-#[cfg(feature = "security")]
+// Re-export protocol-neutral APIs (`security-core`).
+#[cfg(feature = "security-core")]
 pub use traits::*;
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 pub use types::*;
 
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 pub use api_key::{SdForgeApiKeyAuth, SdForgeApiKeyAuthBuilder};
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 pub use audit::AuditSink;
-#[cfg(all(feature = "security", feature = "inklog"))]
+#[cfg(all(feature = "security-core", feature = "inklog"))]
 pub use audit::InklogAuditSink;
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 pub use audit::{SdForgeAuditLogger, SdForgeAuditLoggerBuilder};
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 pub use bearer::{BearerAuth, BearerAuthBuilder, generate_secure_jwt_secret};
-#[cfg(feature = "security")]
+// HTTP auth middleware is part of the HTTP adapter layer.
+#[cfg(feature = "security-http")]
 pub use middleware::auth_middleware;
 
-// Submodules (full security feature only — these pull in uuid/hmac/sha2/etc.)
-#[cfg(feature = "security")]
+// Core submodules (uuid/hmac/sha2/etc., no axum/tower).
+#[cfg(feature = "security-core")]
 mod api_key;
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 mod api_key_manager;
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 mod audit;
 // 供 ApiError::internal_* 构造器强制脱敏使用
-// （必须与 mod audit 同门控：audit 仅在 feature = "security" 下编译）
-#[cfg(feature = "security")]
+// （必须与 mod audit 同门控：audit 仅在 security-core 下编译）
+#[cfg(feature = "security-core")]
 pub(crate) use audit::sanitize_error_message;
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 mod bearer;
-#[cfg(feature = "security")]
+// HTTP-only submodules.
+#[cfg(feature = "security-http")]
 mod middleware;
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 mod traits;
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 mod types;
 
 // Shared IP-extraction utilities — available to both `security` and
@@ -59,8 +68,13 @@ mod ip_util;
 
 // protocol-neutral auth verifier port + Bearer/API-key adapters for
 // non-HTTP protocols (gRPC interceptor, WS handshake, custom transports).
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 pub mod grpc_auth;
+
+// Recommended protocol-neutral alias, re-exported at the security root so
+// non-HTTP consumers need only `sdforge::security::ProtocolAuthVerifier`.
+#[cfg(feature = "security-core")]
+pub use grpc_auth::ProtocolAuthVerifier;
 
 // Rate limiting module — backed by limiteron 0.2.1.
 // Available when the `ratelimit` feature is enabled (inherited by
@@ -81,14 +95,14 @@ pub use ratelimit::{HttpRequestRateLimiter, RateLimitLayer, RateLimitMiddleware}
 // auth implementors — one shared spoofing-defense path (single source of truth).
 pub use ip_util::extract_client_ip;
 
-// Re-export key management types (full security feature only)
-#[cfg(feature = "security")]
+// Re-export key management types (security-core).
+#[cfg(feature = "security-core")]
 pub use api_key_manager::{
     ApiKeyCache, ApiKeyCacheConfig, ApiKeyMetadata, ApiKeyVersion, RotationConfig,
 };
 
-// Trait impls for concrete types (full security feature only).
-#[cfg(feature = "security")]
+// Trait impls for concrete types (security-core).
+#[cfg(feature = "security-core")]
 mod security_impl;
 
 // Note: AuditLogger trait implementation is already in audit.rs

@@ -36,7 +36,7 @@ once_cell = { version = "1.21", default-features = false, features = ["std"] }
 hmac = { version = "0.13", default-features = false }
 sha2 = { version = "0.11", default-features = false }
 subtle = { version = "2.6", default-features = false }
-rand = { version = "0.10", default-features = false, features = ["std", "std_rng"] }
+rand = { version = "0.10", default-features = false, features = ["std", "std_rng", "thread_rng"] }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 base64 = { version = "0.23", default-features = false, features = ["std", "alloc"] }
 # 生产面只用 toml::de::Error 类型（AuthConfigError::ParseError 载荷），不声明 parse/display

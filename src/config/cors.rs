@@ -56,6 +56,7 @@ impl CorsConfig {
 ///
 /// 此前 `allowed_methods` 配置被完全忽略，`build_cors_layer`
 /// 硬编码 `.allow_methods(Any)`。
+#[cfg(feature = "http")]
 fn parse_allowed_methods(
     methods: &[String],
 ) -> Result<tower_http::cors::AllowMethods, crate::config::ConfigError> {
@@ -84,6 +85,7 @@ fn parse_allowed_methods(
 ///
 /// 规则与 [`parse_allowed_methods`] 一致（头部名大小写不敏感，内部归一化
 /// 为小写）。
+#[cfg(feature = "http")]
 fn parse_allowed_headers(
     headers: &[String],
 ) -> Result<tower_http::cors::AllowHeaders, crate::config::ConfigError> {
@@ -109,6 +111,7 @@ fn parse_allowed_headers(
 ///
 /// `allowed_methods` / `allowed_headers` 配置现已生效。
 /// 空列表保持宽松行为（Any）；显式列表精确生效。
+#[cfg(feature = "http")]
 pub fn build_cors_layer(
     config: &CorsConfig,
 ) -> Result<tower_http::cors::CorsLayer, crate::config::ConfigError> {

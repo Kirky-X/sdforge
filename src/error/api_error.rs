@@ -198,16 +198,16 @@ impl ApiError {
 
     /// Internal 消息构造期强制脱敏。
     ///
-    /// 脱敏器位于 `security::audit`（依赖 regex，仅在 `feature = "security"`
-    /// 下编译）；该 feature 关闭时退化为原样存储——与未启用脱敏时的行为
-    /// 一致，且不影响任何 feature 组合的可编译性。
+    /// 脱敏器位于 `security::audit`（依赖 regex，在 `security-core` 下编译）；
+    /// 该 feature 关闭时退化为原样存储——与未启用脱敏时的行为一致，
+    /// 且不影响任何 feature 组合的可编译性。
     #[allow(unused_variables)]
     fn sanitize_internal_message(message: String) -> String {
-        #[cfg(feature = "security")]
+        #[cfg(feature = "security-core")]
         {
             crate::security::sanitize_error_message(&message)
         }
-        #[cfg(not(feature = "security"))]
+        #[cfg(not(feature = "security-core"))]
         {
             message
         }

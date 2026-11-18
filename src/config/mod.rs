@@ -44,7 +44,10 @@ pub use api::{ApiConfig, EnvHelper, TracingConfig};
 pub use app::{SdForgeConfig, SdForgeConfigBuilder};
 pub use auth::{ApiKeySeed, AuthConfig, DEFAULT_CREDENTIAL_HEADER_NAMES};
 pub use cache::CacheConfig;
-pub use cors::{CorsConfig, build_cors_layer};
+pub use cors::CorsConfig;
+// build_cors_layer needs tower-http/axum — only available with the HTTP adapter.
+#[cfg(feature = "http")]
+pub use cors::build_cors_layer;
 pub use security::SecurityConfig;
 #[cfg(feature = "idempotency")]
 pub use server::IdempotencyConfig;

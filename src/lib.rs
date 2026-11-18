@@ -273,22 +273,24 @@ pub mod streaming;
 pub use streaming::{StreamEvent, StreamResponse, create_stream_channel, stream_to_sse};
 
 /// Security middleware and authentication utilities.
-///
-/// Available when `security`, `ratelimit`, or `ratelimit-http` is enabled:
+/// Available when `security-core`, `security`, `ratelimit`, or `ratelimit-http`
+/// is enabled:
+/// - `security-core`: protocol-neutral core (auth, audit, API keys, no HTTP).
 /// - `ratelimit`: core `RateLimiter` trait + `LimiteronAdapter` (no HTTP).
 /// - `ratelimit-http`: HTTP integration (Tower middleware, `HttpRequestRateLimiter`).
-/// - `security`: full security suite (auth, audit, API keys, includes `ratelimit-http`).
+/// - `security`: full suite (`security-core` + `security-http` HTTP adapters).
 ///
-/// Non-ratelimit submodules are individually gated by `feature = "security"`
-/// inside `src/security/mod.rs`.
+/// Non-ratelimit submodules are gated by `security-core` (core) or
+/// `security-http` (HTTP adapters) inside `src/security/mod.rs`.
 #[cfg(any(
+    feature = "security-core",
     feature = "security",
     feature = "ratelimit",
     feature = "ratelimit-http"
 ))]
 pub mod security;
 
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 pub use security::{
     // Trait interfaces (feature layer)
     ApiKeyAuth,
@@ -308,14 +310,18 @@ pub use security::{
     SdForgeApiKeyAuthBuilder,
     SdForgeAuditLogger,
     SdForgeAuditLoggerBuilder,
-    auth_middleware,
 };
 
+// HTTP auth middleware belongs to the HTTP adapter layer.
+#[cfg(feature = "security-http")]
+pub use security::auth_middleware;
+
 /// Configuration management
-#[cfg(feature = "http")]
+/// `security-core` needs protocol-neutral `AuthConfig` (no HTTP dependency).
+#[cfg(any(feature = "http", feature = "security-core"))]
 pub mod config;
 
-#[cfg(feature = "http")]
+#[cfg(any(feature = "http", feature = "security-core"))]
 pub use config::{
     ApiConfig, AuthConfig, ConfigError, CorsConfig, DEFAULT_CREDENTIAL_HEADER_NAMES, EnvHelper,
     SdForgeConfig, ServerConfig, TlsConfig, TracingConfig,
