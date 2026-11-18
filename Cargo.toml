@@ -256,7 +256,7 @@ ratelimit-http = ["http", "ratelimit"]
 # toml 仅被 security 下的 AuthConfigError 使用，故挂 security 而非 http
 # security-core：协议无关安全核（凭据库/审计/ProtocolAuthVerifier 端口），不含 axum/tower。
 # 时间依赖沿用原 security 的 `dep:time`（design.md §1 写 dep:chrono 系笔误——本仓无 chrono 依赖）。
-security-core = ["dep:uuid", "dep:hmac", "dep:sha2", "dep:time", "tokio", "dep:subtle", "dep:once_cell", "dep:rand", "dep:regex", "dep:postcard", "cache", "dep:hex", "dep:base64", "dep:toml", "dep:oxcache"]
+security-core = ["dep:uuid", "dep:hmac", "dep:sha2", "dep:time", "tokio", "dep:subtle", "dep:once_cell", "dep:rand", "dep:regex", "dep:postcard", "cache", "dep:hex", "dep:base64", "dep:toml", "dep:oxcache", "dep:inventory"]
 # security-http：HTTP 适配层（中间件/IP 提取/RBAC 包装/限流 HTTP 面），依赖协议无关核。
 security-http = ["security-core", "http", "ratelimit-http"]
 # 向后兼容聚合别名：闭包与 0.5.x 的 security 逐项等价（传递引入 ratelimit-http + cache + 全部可选依赖）。

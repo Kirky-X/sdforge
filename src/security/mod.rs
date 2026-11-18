@@ -66,6 +66,14 @@ mod types;
 #[cfg(any(feature = "security", feature = "ratelimit-http"))]
 mod ip_util;
 
+// Protocol-neutral security contract registry (protocol-security-contract).
+#[cfg(feature = "security-core")]
+pub mod contract;
+#[cfg(feature = "security-core")]
+pub use contract::{
+    AuthScheme, ContractRegistration, EndpointSecurity, ProtocolSecurityContract, ProtocolSet,
+};
+
 // protocol-neutral auth verifier port + Bearer/API-key adapters for
 // non-HTTP protocols (gRPC interceptor, WS handshake, custom transports).
 #[cfg(feature = "security-core")]
