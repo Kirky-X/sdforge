@@ -65,7 +65,7 @@ Annotate a function once with `#[forge]`; registration code for HTTP, MCP, gRPC,
 <td width="50%" style="vertical-align:top; padding: 12px">🔒 <b>Type safety</b><br><span style="color:#64748B">Interface definitions validated at compile time; trybuild covers compile-failure cases</span></td>
 </tr>
 <tr>
-<td width="50%" style="vertical-align:top; padding: 12px">🛡️ <b>Security features</b><br><span style="color:#64748B">API Key / JWT Bearer auth, limiteron rate limiting, audit logging, security headers</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🛡️ <b>Security features</b><br><span style="color:#64748B">API Key / JWT Bearer auth, limiteron rate limiting, audit logging, security headers. Split as `security-core` (protocol-neutral, no HTTP) + `security-http` (HTTP adapters); `security` keeps the full aggregate</span></td>
 <td width="50%" style="vertical-align:top; padding: 12px">💾 <b>In-memory caching</b><br><span style="color:#64748B">oxcache provides LRU, pattern invalidation, batch ops, and stats; no database required</span></td>
 </tr>
 <tr>

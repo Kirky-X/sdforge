@@ -65,7 +65,7 @@
 <td width="50%" style="vertical-align:top; padding: 12px">🔒 <b>类型安全</b><br><span style="color:#64748B">接口定义编译期验证，trybuild 覆盖编译失败用例</span></td>
 </tr>
 <tr>
-<td width="50%" style="vertical-align:top; padding: 12px">🛡️ <b>安全特性</b><br><span style="color:#64748B">API Key / JWT Bearer 认证、limiteron 限流、审计日志、安全头</span></td>
+<td width="50%" style="vertical-align:top; padding: 12px">🛡️ <b>安全特性</b><br><span style="color:#64748B">API Key / JWT Bearer 认证、limiteron 限流、审计日志、安全头。拆分为 `security-core`（协议无关、不含 HTTP）与 `security-http`（HTTP 适配层）；`security` 保留完整聚合</span></td>
 <td width="50%" style="vertical-align:top; padding: 12px">💾 <b>内存缓存</b><br><span style="color:#64748B">oxcache 提供 LRU、模式失效、批量操作与统计，无数据库依赖</span></td>
 </tr>
 <tr>

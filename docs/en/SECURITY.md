@@ -60,6 +60,18 @@ Please include the following in your report:
 
 ## 🛡️ Security Design Overview
 
+### Security feature layering (`security-core` / `security-http` / `security`)
+
+`security` splits into two layers so non-HTTP protocols can use authentication without pulling in the HTTP stack:
+
+| Feature | Contents | Pulls in HTTP? |
+|------|------|------|
+| `security-core` | Protocol-neutral core: credential stores (`BearerAuth`, `SdForgeApiKeyAuth`, API-key manager), audit, `ProtocolAuthVerifier` port and `make_verifier(&AuthConfig)` | No |
+| `security-http` | HTTP adapters: `auth_middleware`, client-IP extraction, endpoint RBAC (`require_role`), security headers, HTTP rate-limit wiring | Yes (depends on `security-core`) |
+| `security` | Backward-compatible aggregate alias = `security-core` + `security-http` | Yes (identical closure to pre-split `security`) |
+
+A pure MCP / gRPC / CLI project enables `security-core` together with its protocol feature (for example `mcp,security-core`); no axum/tower is compiled. The `security` alias keeps existing projects unchanged. Rate limiting remains an independent layer (`ratelimit` core / `ratelimit-http`); `security-core` does not imply `ratelimit`.
+
 ### Built-in Security Features (`security` feature)
 
 | Capability | Description |

@@ -282,7 +282,9 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 | `streaming` | `sdforge::streaming` | `StreamEvent`、`StreamResponse`、`stream_to_sse`、`create_stream_channel`、`SseFrame` / `SseFrameParser` / `SseStreamError` / `frames`（入站 SSE 帧解析：WHATWG 分帧、`with_limits` 内存上限、零额外依赖）（`grpc_method` + `stream = true` 组合映射到 gRPC `CallStream`，见 `grpc` 行）；`tokio_stream` re-export |
 | `ratelimit-dist` | `sdforge::security::ratelimit::dist` | `DistributedRateLimiter`（泛型 limiteron `DistributedLimiter` 后端：`InMemoryDistributedLimiter` 单实例/`RedisDistributedLimiter` 多副本）、`DistributedRateLimitConfig`（含适配层熔断 `with_circuit_failure_threshold`/`with_circuit_open_duration`：连续后端错误打开、打开期不经后端直接按策略裁决、半开探测恢复）、`BackendFailurePolicy`（fail-open 默认/fail-close） |
 | `cache-l2` | `sdforge::cache::l2` | `RedisL2Cache`（oxcache `RedisBackend` 同步面 → `SyncCache`，仅多线程 runtime；异步面 `get_async`/`set_async`/`delete_async`/`contains_async` 供异步中间件热路径）、`RedisL2CacheConfig`（AUTH/TLS 连接串——Debug 输出掩码凭据、键前缀、默认 TTL）、`CacheL2Error` |
-| `security` / `ratelimit` / `ratelimit-http` | `sdforge::security` | 认证：`ApiKeyAuth`、`BearerAuth(+Builder)`、`SdForgeApiKeyAuth(+Builder)`、`AuthContext`、`AuthExtractor`、`auth_middleware`；审计：`AuditLogger` / `SdForgeAuditLogger(+Builder)`、`AuditLog` / `AuditResult`、`AuditSink`；限流：`RateLimiter` trait、`LimiteronAdapter`、`RateLimitLayer`（`ratelimit-http`） |
+| `security-core` | `sdforge::security` | 协议无关安全核（不依赖 HTTP）：`ApiKeyAuth`、`BearerAuth(+Builder)`、`SdForgeApiKeyAuth(+Builder)`、`AuthContext`、`AuthExtractor`、`ProtocolAuthVerifier` / `GrpcAuthVerifier` 端口与 `make_verifier(&AuthConfig)`；审计：`AuditLogger` / `SdForgeAuditLogger(+Builder)`、`AuditLog` / `AuditResult`、`AuditSink` |
+| `security-http` / `security` | `sdforge::security` | HTTP 适配层（依赖 `security-core`）：`auth_middleware`、`extract_client_ip`、端点 `require_role`、`SecurityHeaders`。`security` 为向后兼容别名 = `security-core` + `security-http` |
+| `ratelimit` / `ratelimit-http` | `sdforge::security::ratelimit` | 限流（独立于 `security-core`）：`RateLimiter` trait、`LimiteronAdapter`、`RateLimitLayer`（`ratelimit-http`） |
 | `cache` | `sdforge::cache` | `Cache` / `CacheKey`、`SyncCache` / `SharedCache`、`DashMapCache`（`OxcacheSyncCache` 别名）、`ResponseCacheLayer` / `ResponseCacheMiddleware` / `DEFAULT_MAX_CACHEABLE_BODY_BYTES` / `DEFAULT_CREDENTIAL_HEADER_NAMES`（另需 `http`；键 = 归一化 path + 原样 query；携带凭据的请求不进缓存，凭据头名经 `ResponseCacheLayer::with_credential_header_names` / `with_credential_headers` 或 `AuthConfig::credential_header_names()` 配置；超过可缓存上限的响应流式透传；带 `Set-Cookie` 的响应不进缓存）；`oxcache` re-export |
 | `openapi` | `sdforge::openapi` | `generate_openapi_spec()`、`OpenApiBuilder`（`title` / `version` / `description` / `build`）、`OpenApiRouteInfo` / `OpenApiPathParam`；`utoipa` re-export |
 | `schemars` | `sdforge::openapi`（反射 API） | `SchemaProbe::probe`、`PreciseSchema` / `FallbackSchema`（派生 `JsonSchema` 的返回类型产出字段级精确 response schema，未派生静默降级；蕴含 `openapi`） |
@@ -301,7 +303,7 @@ handler 返回类型 `Result<T, ApiError>` 的错误枚举（`serde` tagged、`t
 
 > 无独立模块的能力：`validate`（`#[forge(validate)]` + `#[param(...)]`，属性表见 [`#[param]` 参数属性](#param-参数属性)）、`paginate`（`#[forge(paginate)]`）、`etag`（GET 强 ETag + 304）、`graceful`（优雅停机）、`timestamp`（响应时间戳）、`simd-json`（SIMD JSON 路径）经宏旗标或构建配置生效。
 >
-> 独立性说明：`mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` 均独立于 `http`，可单独启用；`security` 拉入 `http` + `ratelimit-http` + `cache`；`websocket` 需 `http` + `streaming`；`docs` 需 `openapi` + `cli`。
+> 独立性说明：`mcp` / `grpc` / `openapi` / `cli` / `streaming` / `cache` 均独立于 `http`，可单独启用；`security-core` 协议无关、不依赖 `http`（可组合 `grpc,security-core` / `mcp,security-core`）；`security-http` 拉入 `security-core` + `http` + `ratelimit-http`；`security` = `security-core` + `security-http`，拉入 `http` + `ratelimit-http` + `cache`；`websocket` 需 `http` + `streaming`；`docs` 需 `openapi` + `cli`。
 >
 > **⚠️ `build_server(addr)` 已弃用**（源码标 `#[deprecated]`）：该入口启动**无认证**的 gRPC 服务器且无法配置认证，仅为向后兼容保留。新代码请用 `build_server_with_config(addr, config)` 并配置 `auth`——`require_auth` 默认 `true`，此时 `auth` 为 `None` 会在装配期拒绝启动（防误部无认证端点）。地址格式非法时两个入口均返回 `InvalidInput` 错误文本，不回显解析细节。
 
@@ -428,7 +430,8 @@ let spec = OpenApiBuilder::new()
   ['cfg(feature, values("http", "mcp", "grpc", "cli", "websocket",
   "openapi", "security", "lifecycle"))'] }`（按实际启用的镜像 feature
   裁剪），避免未知 cfg 告警
-- 派生自 `http`：`security`（含 `ratelimit-http` → `ratelimit` 与 `cache`）、`ratelimit-http`、`websocket`（含 `streaming`）、`health` / `metrics` / `graceful` / `serve-tls`（含 `graceful`）/ `tls-watch`（含 `serve-tls`）/ `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
+- 派生自 `http`：`security-http`（含 `security-core` + `ratelimit-http`）、`security`（= `security-core` + `security-http`，含 `ratelimit-http` → `ratelimit` 与 `cache`）、`ratelimit-http`、`websocket`（含 `streaming`）、`health` / `metrics` / `graceful` / `serve-tls`（含 `graceful`）/ `tls-watch`（含 `serve-tls`）/ `validate` / `paginate` / `lifecycle` / `hooks` / `otel`
+- 独立于 `http`：`security-core`（协议无关认证/审计端口；可组合 `grpc` / `mcp` / `cli`）
 - `docgen` = `openapi` + `cli`（Swagger UI 挂载需另启用 `http`；旧名 `docs` 为兼容别名）
 - `kit` = `trait-kit`（health + lifecycle）+ `limiteron-integration` + `limiteron/kit` + `oxcache/kit`
 - `full` 覆盖 26 项运行时特性（含 `idempotency`、`docgen`、部署面 HTTP TLS `serve-tls`/`tls-watch`），不含 `simd-json` / `kit` / `limiteron-integration` 可选重依赖（SIMD JSON、trait-kit 模块图、限流集成基座）与 `grpc-tls`（gRPC 侧 TLS 接线）/ `schemars` / `ratelimit-dist` / `cache-l2` / `db-integration` / `sdk`（opt-in 面），均按需单独启用
