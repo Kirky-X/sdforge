@@ -96,7 +96,7 @@ pub struct SdForgeGrpcService {
     /// optional auth interceptor. When `Some`, every `call` must carry
     /// credentials the verifier accepts (bearer JWT / API key), otherwise the
     /// request is rejected with `Status::unauthenticated`.
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     auth_interceptor: Option<std::sync::Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
     /// 幂等重放防护（feature = `idempotency`）：携带 `idempotency-key`
     /// metadata 的请求经 store 三态防护，其余零开销。
@@ -125,7 +125,7 @@ impl Default for SdForgeGrpcService {
             stream_lifecycles: OnceLock::new(),
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-core")]
             auth_interceptor: None,
             #[cfg(feature = "idempotency")]
             idempotency: None,
@@ -157,7 +157,7 @@ impl SdForgeGrpcService {
             stream_lifecycles: OnceLock::new(),
             #[cfg(feature = "ratelimit")]
             rate_limiter: None,
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-core")]
             auth_interceptor: None,
             #[cfg(feature = "idempotency")]
             idempotency: None,
@@ -169,7 +169,7 @@ impl SdForgeGrpcService {
     /// Every `call` is verified before dispatch; failures map to
     /// `Status::unauthenticated`. Mirrors `GrpcServerConfig.rate_limiter`
     /// wiring for the auth dimension.
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     #[must_use]
     pub fn with_auth_interceptor(
         mut self,
@@ -206,7 +206,7 @@ impl SdForgeGrpcService {
             #[cfg(feature = "streaming")]
             stream_lifecycles: OnceLock::new(),
             rate_limiter,
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-core")]
             auth_interceptor: None,
             #[cfg(feature = "idempotency")]
             idempotency: None,
@@ -350,7 +350,7 @@ impl SdForgeGrpcService {
     /// `Result<, _>` 把身份丢弃，gRPC 只能认证不能授权）。走
     /// verify_async：ApiKeyVerifier 恒定时间防御会 sleep OS 线程，不能
     /// 阻塞 tokio worker（与 MCP call_tool 门同一通路）。
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     async fn authenticate(
         &self,
         request: &Request<CallRequest>,
@@ -384,7 +384,7 @@ impl SdForgeGrpcService {
     /// `call_stream` 共用）：声明了 roles 的方法必须由带任一匹配
     /// permission 的已认证身份调用；security feature 关闭时 fail-safe ——
     /// 一律拒绝（角色无法验证即不可满足）。
-    #[cfg(all(feature = "grpc", feature = "security"))]
+    #[cfg(all(feature = "grpc", feature = "security-core"))]
     fn ensure_authorized(
         &self,
         roles: &[&str],
@@ -404,7 +404,7 @@ impl SdForgeGrpcService {
 
     /// fail-safe 变体：security 关闭时非空 roles 一律拒绝（与开启路径的
     /// `authorized = false` 语义逐字一致）。
-    #[cfg(all(feature = "grpc", not(feature = "security")))]
+    #[cfg(all(feature = "grpc", not(feature = "security-core")))]
     fn ensure_authorized(&self, roles: &[&str]) -> Result<(), Status> {
         if !roles.is_empty() {
             Err(Status::permission_denied(format!(
@@ -473,7 +473,7 @@ impl SdForgeGrpcService {
             self.enforce_rate_limit(identifier.as_deref()).await?;
         }
 
-        #[cfg(feature = "security")]
+        #[cfg(feature = "security-core")]
         let auth_ctx = self.authenticate(&request).await?;
 
         let roles = self
@@ -481,9 +481,9 @@ impl SdForgeGrpcService {
             .get(request.get_ref().method.as_str())
             .copied()
             .unwrap_or(&[]);
-        #[cfg(feature = "security")]
+        #[cfg(feature = "security-core")]
         self.ensure_authorized(roles, &auth_ctx)?;
-        #[cfg(not(feature = "security"))]
+        #[cfg(not(feature = "security-core"))]
         self.ensure_authorized(roles)?;
 
         #[cfg(feature = "context")]
@@ -773,9 +773,9 @@ impl SdForgeService for SdForgeGrpcService {
             self.enforce_rate_limit(identifier.as_deref()).await?;
         }
 
-        #[cfg(feature = "security")]
+        #[cfg(feature = "security-core")]
         let auth_ctx = self.authenticate(&request).await?;
-        #[cfg(not(feature = "security"))]
+        #[cfg(not(feature = "security-core"))]
         let auth_ctx: Option<()> = None;
         let _ = &auth_ctx;
 
@@ -784,9 +784,9 @@ impl SdForgeService for SdForgeGrpcService {
             .get(request.get_ref().method.as_str())
             .copied()
             .unwrap_or(&[]);
-        #[cfg(feature = "security")]
+        #[cfg(feature = "security-core")]
         self.ensure_authorized(roles, &auth_ctx)?;
-        #[cfg(not(feature = "security"))]
+        #[cfg(not(feature = "security-core"))]
         self.ensure_authorized(roles)?;
 
         // 流式路径不参与幂等重放：流式响应无单点可缓存体，重放语义不
@@ -1134,7 +1134,7 @@ where
     // the address error) but before any server binding (so it fails fast).
     // `auth_verifier`（协议无关校验器）同样算作"已配置鉴权"——否则用 API key
     // 的应用被迫关掉 require_auth，而那正是传输层拦截器变成空操作的条件。
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     if config.require_auth && config.auth.is_none() && config.auth_verifier.is_none() {
         return Err(Box::new(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
@@ -1151,7 +1151,7 @@ where
     #[cfg(not(feature = "ratelimit"))]
     let service = SdForgeGrpcService::with_state(config.state);
     // RBAC 生产接线 —— per-call verifier 装配，auth(role) 声明生效。
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     let service = match config.auth_verifier {
         Some(ref verifier) => service.with_auth_interceptor(std::sync::Arc::clone(verifier)),
         None => service,
@@ -1164,13 +1164,13 @@ where
         None => service,
     };
 
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     let mut builder = {
         let auth_interceptor =
             make_auth_interceptor(config.auth.clone(), config.auth_verifier.clone());
         Server::builder().layer(tonic::service::InterceptorLayer::new(auth_interceptor))
     };
-    #[cfg(not(feature = "security"))]
+    #[cfg(not(feature = "security-core"))]
     let mut builder = { Server::builder() };
 
     if config.max_connections > 0 {
@@ -1247,7 +1247,7 @@ impl Default for GrpcServerConfig {
 /// `verifier`（协议无关校验器）优先：它同时覆盖 JWT 与 API key，且对
 /// `extra_services` 挂载的自定义 service 同样生效——仅配 `config.auth`
 /// 时自定义 service 只受 JWT 拦截器保护。
-#[cfg(all(feature = "grpc", feature = "security"))]
+#[cfg(all(feature = "grpc", feature = "security-core"))]
 pub(crate) fn make_auth_interceptor(
     auth: Option<crate::security::BearerAuth>,
     verifier: Option<std::sync::Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
@@ -1255,7 +1255,7 @@ pub(crate) fn make_auth_interceptor(
     AuthGrpcInterceptor { auth, verifier }
 }
 
-#[cfg(all(feature = "grpc", feature = "security"))]
+#[cfg(all(feature = "grpc", feature = "security-core"))]
 impl tonic::service::Interceptor for AuthGrpcInterceptor {
     fn call(&mut self, req: tonic::Request<()>) -> Result<tonic::Request<()>, Status> {
         // 协议无关校验器优先：同一套凭据校验同时覆盖框架 service 与
@@ -2037,7 +2037,7 @@ mod tests {
     }
 
     /// auth_verifier 默认 None。
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     #[test]
     fn grpc_server_config_auth_verifier_defaults_none() {
         assert!(GrpcServerConfig::default().auth_verifier.is_none());
@@ -2323,7 +2323,7 @@ mod tests {
 
     /// 未配置任何认证（或身份缺失）时，声明了 roles 的方法必须拒绝
     /// （fail-safe：角色无法验证即不可满足）。
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     #[tokio::test]
     async fn rbac_denies_unauthenticated_caller() {
         let service = SdForgeGrpcService::default();
@@ -2338,7 +2338,7 @@ mod tests {
     }
 
     /// 持有匹配 permission 的合法凭证放行；低权限凭证 permission_denied。
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     #[tokio::test]
     async fn rbac_allows_authorized_key_and_rejects_underprivileged() {
         use crate::security::grpc_auth::ApiKeyVerifier;
@@ -2373,7 +2373,7 @@ mod tests {
     }
 
     /// roles 为空的方法不做角色检查（认证是否要求由 interceptor 配置决定）。
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     #[tokio::test]
     async fn rbac_skips_methods_without_roles() {
         let service = SdForgeGrpcService::default();
@@ -2389,7 +2389,7 @@ mod tests {
     /// security feature 关闭时 fail-safe：声明了 roles 的方法一律拒绝
     /// （无认证栈可验证角色）。`cargo test --features grpc`（不含
     /// security）下编译并生效。
-    #[cfg(not(feature = "security"))]
+    #[cfg(not(feature = "security-core"))]
     #[tokio::test]
     async fn rbac_fail_safe_denies_without_security_feature() {
         let service = SdForgeGrpcService::default();
@@ -2567,9 +2567,9 @@ mod tests {
         use futures_util::StreamExt;
         // 守卫顺序契约测试的 RateLimiter impl 以 Pin<Box<dyn Future>> 声明
         // check（对齐 trait 签名惯例）；非全特性组合下该测试不编译。
-        #[cfg(all(feature = "security", feature = "ratelimit"))]
+        #[cfg(all(feature = "security-core", feature = "ratelimit"))]
         use std::future::Future;
-        #[cfg(all(feature = "security", feature = "ratelimit"))]
+        #[cfg(all(feature = "security-core", feature = "ratelimit"))]
         use std::pin::Pin;
 
         /// 三条目流式 handler：逐项产出 JSON 值（`inventory::submit!`
@@ -3044,7 +3044,7 @@ mod tests {
         /// 守卫顺序契约（限流 → 认证，两条 RPC 同序）：拒绝性限流器 +
         /// 无凭据请求必须得到 resource_exhausted——若认证先于限流，同一
         /// 请求会返回 unauthenticated。
-        #[cfg(all(feature = "security", feature = "ratelimit"))]
+        #[cfg(all(feature = "security-core", feature = "ratelimit"))]
         #[tokio::test]
         async fn guard_order_rate_limit_precedes_auth() {
             use crate::security::grpc_auth::ApiKeyVerifier;

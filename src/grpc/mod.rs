@@ -13,7 +13,7 @@ use crate::core::ApiMetadata;
 use crate::define_registration;
 
 mod grpc_impl;
-#[cfg(all(feature = "grpc", feature = "security"))]
+#[cfg(all(feature = "grpc", feature = "security-core"))]
 #[cfg(test)]
 pub(crate) use grpc_impl::make_auth_interceptor;
 #[allow(deprecated)]
@@ -93,11 +93,11 @@ pub struct GrpcServerConfig {
     /// Optional JWT authentication.
     /// When `Some`, all gRPC requests must include a valid JWT bearer token
     /// in the `authorization` metadata header.
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     pub auth: Option<crate::security::BearerAuth>,
     /// `security` 关闭时的空壳（恒 `None`）——字段恒存在，结构体字面量
     /// 跨 feature 形态稳定。
-    #[cfg(not(feature = "security"))]
+    #[cfg(not(feature = "security-core"))]
     pub auth: Option<()>,
     /// Optional application state injected into `SdForgeGrpcService`.
     ///
@@ -108,10 +108,10 @@ pub struct GrpcServerConfig {
     /// 生产 RBAC 接线（feature = security）：装配 per-call verifier，
     /// 使 `#[forge(auth(role))]` 声明在 build_server_with_config 路径生效
     /// （此前只有手动 `with_auth_interceptor` 可达，生产形态是全拒绝死开关）。
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     pub auth_verifier: Option<std::sync::Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
     /// `security` 关闭时的空壳（恒 `None`）。
-    #[cfg(not(feature = "security"))]
+    #[cfg(not(feature = "security-core"))]
     pub auth_verifier: Option<()>,
     /// Optional rate limiter for gRPC requests.
     ///
@@ -160,7 +160,7 @@ pub struct GrpcServerConfig {
 }
 
 /// gRPC authentication interceptor
-#[cfg(all(feature = "grpc", feature = "security"))]
+#[cfg(all(feature = "grpc", feature = "security-core"))]
 #[derive(Clone)]
 pub(crate) struct AuthGrpcInterceptor {
     auth: Option<crate::security::BearerAuth>,

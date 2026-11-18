@@ -18,7 +18,7 @@ use std::any::Any;
 use std::sync::Arc;
 
 use crate::cli::{CliArgType, CliCommandRegistration, GlobalArg};
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 use crate::core::ApiError;
 
 /// Builder that materializes a `clap::Command` from the global
@@ -45,7 +45,7 @@ pub struct CliBuilder {
     /// `execute` verifies `SDFORGE_TOKEN` / `SDFORGE_API_KEY` environment
     /// credentials before any dispatch. Mirrors the MCP/gRPC verifier
     /// wiring for the CLI dimension.
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     auth_verifier: Option<Arc<dyn crate::security::grpc_auth::GrpcAuthVerifier>>,
 }
 
@@ -55,7 +55,7 @@ impl Default for CliBuilder {
             state: None,
             name: env!("CARGO_PKG_NAME").to_string(),
             global_args: Vec::new(),
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-core")]
             auth_verifier: None,
         }
     }
@@ -82,7 +82,7 @@ impl CliBuilder {
             state: Some(state),
             name: env!("CARGO_PKG_NAME").to_string(),
             global_args: Vec::new(),
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-core")]
             auth_verifier: None,
         }
     }
@@ -130,7 +130,7 @@ impl CliBuilder {
     ///   (in-process library path).
     /// - Wiring is manual per protocol entry; [`crate::security::
     ///   grpc_auth::make_verifier`] builds a verifier from an `AuthConfig`.
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     #[must_use]
     pub fn with_auth_verifier(
         mut self,
@@ -147,7 +147,7 @@ impl CliBuilder {
     /// with `error: authentication failed: …` + exit(1); `None` proceeds to
     /// dispatch. Kept as a pure function so the gate's wiring is testable
     /// without spawning the process (`execute` is `-> !`).
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     pub(crate) fn authentication_failure(&self) -> Option<String> {
         let verifier = self.auth_verifier.as_ref()?;
         crate::cli::dispatch::authenticate_cli(verifier.as_ref()).err()
@@ -246,7 +246,7 @@ impl CliBuilder {
         // verify credentials before any dispatch (feature = `security`);
         // reuses the standard error channel so failures exit(1) without
         // reaching a registered handler.
-        #[cfg(feature = "security")]
+        #[cfg(feature = "security-core")]
         if let Some(reason) = self.authentication_failure() {
             // text 保持历史小写文案（兼容按字符串匹配的脚本）；
             // json 走 UnifiedError 形状（AuthenticationFailed → UNAUTHORIZED）。

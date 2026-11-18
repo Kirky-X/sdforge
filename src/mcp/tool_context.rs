@@ -28,10 +28,10 @@ pub struct ToolCallContext {
     /// `SdForgeMcpServer::with_state`.
     pub(super) state: HandlerState,
     /// Verified identity (`None` without a verifier or unauthenticated).
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     pub(super) auth: Option<crate::security::AuthContext>,
     /// Raw transport credentials as injected by the transport adapter.
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     pub(super) credentials: Option<super::server::McpCredentials>,
 }
 
@@ -45,7 +45,7 @@ impl ToolCallContext {
     }
 
     /// The verified caller identity, if any (feature = `security`).
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     #[must_use]
     pub fn auth(&self) -> Option<&crate::security::AuthContext> {
         self.auth.as_ref()
@@ -53,14 +53,14 @@ impl ToolCallContext {
 
     /// Convenience accessor: the authenticated user id, if any
     /// (feature = `security`).
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     #[must_use]
     pub fn user_id(&self) -> Option<&str> {
         self.auth.as_ref().and_then(|a| a.user_id())
     }
 
     /// The raw transport credentials, if any (feature = `security`).
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     #[must_use]
     pub fn credentials(&self) -> Option<&super::server::McpCredentials> {
         self.credentials.as_ref()

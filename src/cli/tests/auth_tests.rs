@@ -9,7 +9,7 @@
 //! any dispatch. The enforcement logic is exercised here through
 //! `authenticate_cli` (the function `execute` delegates to).
 
-#![cfg(all(feature = "cli", feature = "security"))]
+#![cfg(all(feature = "cli", feature = "security-core"))]
 
 use crate::cli::CliBuilder;
 use crate::cli::dispatch::{CLI_API_KEY_ENV, CLI_TOKEN_ENV, authenticate_cli};

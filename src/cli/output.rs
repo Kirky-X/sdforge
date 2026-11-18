@@ -124,7 +124,7 @@ pub(crate) fn format_arg() -> clap::Arg {
 ///
 /// 唯一调用点是 `execute` 的凭据预检（`security` 特性），定义随之同门
 /// 编译，避免 `cli` 单独启用时产生 dead_code。
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 pub(crate) fn auth_failure_text(reason: &str) -> String {
     crate::i18n::t("cli-auth-failure", &[("reason", reason.to_string())])
 }

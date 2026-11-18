@@ -50,7 +50,7 @@ pub const CLI_API_KEY_ENV: &str = "SDFORGE_API_KEY";
 ///
 /// Returns the verifier's rejection reason when no credential is present or
 /// verification fails.
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 pub fn authenticate_cli(
     verifier: &dyn crate::security::grpc_auth::GrpcAuthVerifier,
 ) -> Result<crate::security::AuthContext, String> {

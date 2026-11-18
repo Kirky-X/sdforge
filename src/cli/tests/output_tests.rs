@@ -122,7 +122,7 @@ fn text_render_error_keeps_error_prefix() {
 /// CLI text 认证失败文案保持历史小写形态（`error: authentication
 /// failed: …`），与 HTTP 共用的 Display（大写 A）隔离——按旧字符串
 /// 匹配的脚本不因本 feature 破坏。
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 #[test]
 fn auth_failure_text_keeps_lowercase_compat() {
     // 对照 en 目录条目（与历史文案逐字一致），避免受环境 locale 影响。

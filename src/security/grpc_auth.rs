@@ -71,7 +71,7 @@ pub trait GrpcAuthVerifier: Send + Sync {
 /// fixed phrase `authentication worker failed` (panic details go to the
 /// server log, never into the returned payload — same contract as
 /// [`GrpcAuthVerifier`]'s `Err`).
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 pub async fn verify_async(
     verifier: Arc<dyn GrpcAuthVerifier>,
     authorization: Option<String>,

@@ -14,7 +14,7 @@ use rmcp::model::{
 };
 use rmcp::service::RequestContext;
 
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 use crate::security::grpc_auth::GrpcAuthVerifier;
 
 use crate::mcp::McpToolInstance;
@@ -50,7 +50,7 @@ pub const MAX_ARGUMENTS_SIZE_BYTES: usize = 0x10_0000;
 /// A working injection example lives in `src/mcp/tests/auth_tests.rs`
 /// (`context_with_credentials`). Mirrors the gRPC interceptor's
 /// `authorization` / `x-api-key` metadata extraction.
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 #[derive(Clone, Default)]
 pub struct McpCredentials {
     /// Raw `Authorization` header value (e.g. `Bearer <jwt>`).
@@ -59,7 +59,7 @@ pub struct McpCredentials {
     pub api_key: Option<String>,
 }
 
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 impl McpCredentials {
     /// Build credentials from the raw transport header values (the
     /// injection entry point for transport adapters).
@@ -71,7 +71,7 @@ impl McpCredentials {
     }
 }
 
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 impl std::fmt::Debug for McpCredentials {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // redact credential values — mirrors BearerAuth's manual Debug
@@ -89,7 +89,7 @@ impl std::fmt::Debug for McpCredentials {
 ///
 /// `-32001` sits in the JSON-RPC 2.0 implementation-defined server-error
 /// range (`-32000`..`-32099`), alongside rmcp's own `-32020`+ codes.
-#[cfg(feature = "security")]
+#[cfg(feature = "security-core")]
 pub const MCP_UNAUTHENTICATED: rmcp::model::ErrorCode = rmcp::model::ErrorCode(-32001);
 
 /// JSON-RPC error code for MCP authorization failures: the caller
@@ -115,7 +115,7 @@ pub struct SdForgeMcpServer {
     /// `call_tool` must carry credentials accepted by the verifier, otherwise
     /// the request is rejected with `MCP_UNAUTHENTICATED` before dispatch.
     /// Mirrors `GrpcServerConfig.auth_verifier` wiring for the MCP dimension.
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     pub(crate) auth_verifier: Option<std::sync::Arc<dyn GrpcAuthVerifier>>,
     /// Optional application state (mirrors the gRPC `with_state` wiring):
     /// injected via [`SdForgeMcpServer::with_state`], recovered by tools
@@ -155,7 +155,7 @@ impl SdForgeMcpServer {
             tools,
             server_name: name,
             server_version: version,
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-core")]
             auth_verifier: None,
             state: None,
         }
@@ -167,7 +167,7 @@ impl SdForgeMcpServer {
             tools: Vec::new(),
             server_name: "sdforge-mcp".to_string(),
             server_version: "0.2.0".to_string(),
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-core")]
             auth_verifier: None,
             state: None,
         }
@@ -188,7 +188,7 @@ impl SdForgeMcpServer {
             tools,
             server_name: name,
             server_version: version,
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-core")]
             auth_verifier: None,
             state: None,
         }
@@ -211,7 +211,7 @@ impl SdForgeMcpServer {
     /// credentials, every gated call is rejected** — including over the
     /// bundled stdio transport, which cannot carry headers (a warning is
     /// logged by `serve_stdio` in that setup).
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     #[must_use]
     pub fn with_auth_verifier(mut self, verifier: std::sync::Arc<dyn GrpcAuthVerifier>) -> Self {
         self.auth_verifier = Some(verifier);
@@ -304,7 +304,7 @@ impl SdForgeMcpServer {
         name: &str,
         arguments: Option<serde_json::Value>,
     ) -> Result<CallToolResult, ErrorData> {
-        #[cfg(feature = "security")]
+        #[cfg(feature = "security-core")]
         if self.auth_verifier.is_some() {
             return Err(ErrorData::new(
                 MCP_UNAUTHENTICATED,
@@ -318,9 +318,9 @@ impl SdForgeMcpServer {
         // the context carries application state only — identity stays out.
         let tool_ctx = ToolCallContext {
             state: self.state.clone(),
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-core")]
             auth: None,
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-core")]
             credentials: None,
         };
         self.call_tool_scoped(name, arguments, &tool_ctx)
@@ -343,7 +343,7 @@ impl SdForgeMcpServer {
     /// Returns `MCP_UNAUTHENTICATED` when the verifier rejects
     /// `credentials`, `MCP_FORBIDDEN` when the tool's role requirement is
     /// not met, otherwise whatever the tool dispatch returns.
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     pub async fn call_tool_with_credentials(
         &self,
         name: &str,
@@ -386,7 +386,7 @@ impl SdForgeMcpServer {
     /// unchanged). Verification runs on the blocking pool
     /// (`verify_async`) — `ApiKeyVerifier`'s constant-time defense sleeps
     /// the OS thread for up to 100µs and must not stall a tokio worker.
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     async fn enforce_auth(
         &self,
         credentials: Option<&McpCredentials>,
@@ -412,7 +412,7 @@ impl SdForgeMcpServer {
     /// Fail-safe matrix: no verifier (identity cannot be established) or no
     /// matching permission → `MCP_FORBIDDEN`; tools without a role
     /// declaration are unaffected.
-    #[cfg(feature = "security")]
+    #[cfg(feature = "security-core")]
     fn enforce_rbac(
         &self,
         name: &str,
@@ -434,7 +434,7 @@ impl SdForgeMcpServer {
     /// Endpoint RBAC without the `security` feature — fail-safe, mirroring
     /// the gRPC path: declared roles cannot be verified, so every call to a
     /// role-guarded tool is denied.
-    #[cfg(not(feature = "security"))]
+    #[cfg(not(feature = "security-core"))]
     fn enforce_rbac(&self, _name: &str) -> Result<(), ErrorData> {
         let roles = self.find_tool(_name).map(|i| i.roles()).unwrap_or(&[]);
         if !roles.is_empty() {
@@ -507,15 +507,15 @@ impl ServerHandler for SdForgeMcpServer {
     async fn list_tools(
         &self,
         _request: Option<PaginatedRequestParams>,
-        #[cfg(not(feature = "security"))] _context: RequestContext<RoleServer>,
-        #[cfg(feature = "security")] context: RequestContext<RoleServer>,
+        #[cfg(not(feature = "security-core"))] _context: RequestContext<RoleServer>,
+        #[cfg(feature = "security-core")] context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
         // The tool inventory (names/descriptions/input schemas) shares the
         // same enumeration defense as `call_tool`: with a verifier attached,
         // unauthenticated listing is rejected. `get_info`/`initialize` stay
         // open — they are the protocol handshake that precedes
         // authentication (mirrors the MCP OAuth transport model).
-        #[cfg(feature = "security")]
+        #[cfg(feature = "security-core")]
         self.enforce_auth(context.extensions.get::<McpCredentials>())
             .await?;
 
@@ -531,16 +531,16 @@ impl ServerHandler for SdForgeMcpServer {
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
-        #[cfg(not(feature = "security"))] _context: RequestContext<RoleServer>,
-        #[cfg(feature = "security")] context: RequestContext<RoleServer>,
+        #[cfg(not(feature = "security-core"))] _context: RequestContext<RoleServer>,
+        #[cfg(feature = "security-core")] context: RequestContext<RoleServer>,
     ) -> Result<CallToolResponse, ErrorData> {
         // verify credentials before any dispatch; the transport adapter
         // extracts header values into `McpCredentials` on the request
         // extensions (absent credentials count as missing and are rejected).
         // 成功后保留身份供 endpoint RBAC 检查（对齐 gRPC call_with_context）。
-        #[cfg(feature = "security")]
+        #[cfg(feature = "security-core")]
         let credentials = context.extensions.get::<McpCredentials>().cloned();
-        #[cfg(feature = "security")]
+        #[cfg(feature = "security-core")]
         let auth_ctx = self
             .enforce_auth(context.extensions.get::<McpCredentials>())
             .await?;
@@ -550,18 +550,18 @@ impl ServerHandler for SdForgeMcpServer {
 
         // endpoint RBAC（协议对齐 gRPC per-method roles）：声明 roles 的工具
         // 要求已认证身份持有任一角色 permission；security 关闭时 fail-safe。
-        #[cfg(feature = "security")]
+        #[cfg(feature = "security-core")]
         self.enforce_rbac(name, &auth_ctx)?;
-        #[cfg(not(feature = "security"))]
+        #[cfg(not(feature = "security-core"))]
         self.enforce_rbac(name)?;
 
         // request.arguments is Option<JsonObject> (Map<String, Value>); convert to Value.
         let arguments = request.arguments.map(serde_json::Value::Object);
         let tool_ctx = ToolCallContext {
             state: self.state.clone(),
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-core")]
             auth: auth_ctx,
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-core")]
             credentials,
         };
         self.call_tool_scoped(name, arguments, &tool_ctx)
