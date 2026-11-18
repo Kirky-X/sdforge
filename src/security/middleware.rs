@@ -38,18 +38,19 @@ pub fn auth_middleware<T: Clone + Send + Sync + 'static>(
                             protocol: Protocol::Http,
                             expected: AuthScheme::Jwt,
                         };
-                        let err = crate::error::unified::UnifiedError::new(
-                            "UNAUTHORIZED",
-                            crate::i18n::t("http-unauthorized", &[]),
-                        )
-                        .with_security_reason(reason);
-                        if let Ok(body) = serde_json::to_string(&err) {
-                            response = Response::new(Body::from(body));
-                            *response.status_mut() = StatusCode::UNAUTHORIZED;
-                            response.headers_mut().insert(
-                                axum::http::header::WWW_AUTHENTICATE,
-                                "Bearer".parse().unwrap(),
-                            );
+                        // Preserve the localized plain-text body (existing wire
+                        // contract); carry the structured reason in a header.
+                        if let Some(challenge) = reason.www_authenticate()
+                            && let Ok(value) = challenge.parse()
+                        {
+                            response
+                                .headers_mut()
+                                .insert(axum::http::header::WWW_AUTHENTICATE, value);
+                        }
+                        if let Ok(json) = serde_json::to_string(&reason)
+                            && let Ok(value) = json.parse()
+                        {
+                            response.headers_mut().insert("x-security-reason", value);
                         }
                     }
                     response
