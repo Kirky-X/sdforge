@@ -151,6 +151,10 @@ pub struct OpenApiRouteInfo {
     /// `None` when undeclared. Surfaced in the operation description
     /// footnote (same annotation format as the MCP description tail).
     pub successor: Option<&'static str>,
+    /// Roles declared via `#[forge(auth(role))]` / `security(..., role)`.
+    pub roles: &'static [&'static str],
+    /// Declared auth scheme (`api_key` / `jwt`), when known.
+    pub auth_scheme: Option<&'static str>,
 }
 
 inventory::collect!(OpenApiRouteInfo);
@@ -221,6 +225,8 @@ inventory::submit!(OpenApiRouteInfo::with_path_params_and_status(
 // generated-spec assertions can verify requestBody + response schema emission.
 #[cfg(test)]
 inventory::submit!(OpenApiRouteInfo {
+    roles: &[],
+    auth_scheme: None,
     path: "/__openapi_body_test__/orders",
     method: "POST",
     summary: "Body schema test marker",
@@ -261,6 +267,8 @@ inventory::submit!(OpenApiRouteInfo {
 // 验证 OpenAPI 操作渲染 `"deprecated": true` 标记。
 #[cfg(test)]
 inventory::submit!(OpenApiRouteInfo {
+    roles: &[],
+    auth_scheme: None,
     path: "/__openapi_deprecated_test__",
     method: "GET",
     summary: "Deprecated route test marker",
@@ -283,6 +291,8 @@ inventory::submit!(OpenApiRouteInfo {
 // 做法，四协议契约对称）。
 #[cfg(test)]
 inventory::submit!(OpenApiRouteInfo {
+    roles: &[],
+    auth_scheme: None,
     path: "/__openapi_lifecycle_test__",
     method: "GET",
     summary: "Lifecycle route test marker",
@@ -319,6 +329,8 @@ mod tests {
     }
 
     inventory::submit!(OpenApiRouteInfo {
+        roles: &[],
+        auth_scheme: None,
         path: "/__openapi_reflection_test__",
         method: "GET",
         summary: "Reflected schema test marker",
@@ -355,6 +367,8 @@ mod tests {
     }
 
     inventory::submit!(OpenApiRouteInfo {
+        roles: &[],
+        auth_scheme: None,
         path: "/__openapi_reflection_fallback_test__",
         method: "GET",
         summary: "Reflection fallback test marker",
@@ -1285,6 +1299,37 @@ mod tests {
             "expected \"200\" response key on {} (default), got: {}",
             route_key,
             serde_json::to_string_pretty(&responses).unwrap()
+        );
+    }
+}
+
+#[cfg(test)]
+mod openapi_security_tests {
+    use crate::openapi::OpenApiBuilder;
+
+    #[test]
+    fn declared_auth_schemes_produce_security_schemes() {
+        #[sdforge_macros::forge(
+            name = "openapi_secured",
+            version = "v1",
+            path = "/secured",
+            method = "GET",
+            auth(role = "admin"),
+            security(http(auth = "jwt"))
+        )]
+        async fn handler() -> Result<String, crate::core::ApiError> {
+            Ok("x".into())
+        }
+        // The registration above is emitted by the macro; assert the builder
+        // surfaces a JwtBearer scheme when at least one route declares jwt.
+        let spec = OpenApiBuilder::new().title("t").version("1").build();
+        let json = serde_json::to_value(&spec).unwrap();
+        let schemes = json
+            .pointer("/components/securitySchemes")
+            .expect("securitySchemes must be generated");
+        assert!(
+            schemes.get("JwtBearer").is_some(),
+            "declared jwt scheme must appear: {schemes}"
         );
     }
 }

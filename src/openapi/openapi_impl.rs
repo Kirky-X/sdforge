@@ -94,6 +94,8 @@ impl OpenApiRouteInfo {
             deprecated: false,
             sunset: None,
             successor: None,
+            roles: &[],
+            auth_scheme: None,
         }
     }
 
@@ -126,6 +128,8 @@ impl OpenApiRouteInfo {
             deprecated: false,
             sunset: None,
             successor: None,
+            roles: &[],
+            auth_scheme: None,
         }
     }
 
@@ -168,6 +172,8 @@ impl OpenApiRouteInfo {
             deprecated: false,
             sunset: None,
             successor: None,
+            roles: &[],
+            auth_scheme: None,
         }
     }
 
@@ -529,6 +535,16 @@ impl OpenApiBuilder {
         // 汇总后一次性提升进 components——同名的后到者覆盖先到者，与
         // components 合并语义一致。
         let mut reflected_defs: Vec<(String, RefOr<Schema>)> = Vec::new();
+        // Declared auth schemes drive securitySchemes generation.
+        let mut needs_jwt = false;
+        let mut needs_api_key = false;
+        for route in inventory::iter::<OpenApiRouteInfo> {
+            match route.auth_scheme {
+                Some("jwt") => needs_jwt = true,
+                Some("api_key") => needs_api_key = true, // pragma: allowlist secret
+                _ => {}
+            }
+        }
         for route in inventory::iter::<OpenApiRouteInfo> {
             // Translate the description at runtime via the i18n registry
             // (route.i18n_key from `#[forge(i18n_key = "...")]`); falls
@@ -570,6 +586,29 @@ impl OpenApiBuilder {
                     "{}_{}",
                     route.version, route.path
                 ))));
+            // Declared security → operation security requirement + role extension.
+            let scheme_name = match route.auth_scheme {
+                Some("jwt") => Some("JwtBearer"),
+                Some("api_key") => Some("ApiKeyAuth"), // pragma: allowlist secret
+                _ => None,
+            };
+            if let Some(name) = scheme_name {
+                operation_builder = operation_builder.security(
+                    utoipa::openapi::security::SecurityRequirement::new(
+                        name,
+                        std::iter::empty::<&str>(),
+                    ),
+                );
+            }
+            if !route.roles.is_empty() {
+                let mut extensions = utoipa::openapi::extensions::Extensions::default();
+                extensions.insert(
+                    "x-required-role".to_string(),
+                    serde_json::json!(route.roles),
+                );
+                operation_builder = operation_builder.extensions(Some(extensions));
+            }
+
             for param in route.path_params {
                 operation_builder = operation_builder.parameter(param.to_parameter());
             }
@@ -649,6 +688,34 @@ impl OpenApiBuilder {
         // 前——同 path/schema 名外部 spec 优先的合并语义不变）；extra 依序
         // 合并，同 path+method 外部优先。
         let mut spec = OpenApi::new(info, paths);
+        // Generate security schemes from declared auth schemes. Externally
+        // merged schemes with the same name override these (merged below).
+        if needs_jwt || needs_api_key {
+            use utoipa::openapi::security::{
+                ApiKey, ApiKeyValue, HttpAuthScheme, HttpBuilder, SecurityScheme,
+            };
+            let components = spec.components.get_or_insert_with(Default::default);
+            let schemes = &mut components.security_schemes;
+            if needs_jwt {
+                schemes.insert(
+                    "JwtBearer".to_string(),
+                    utoipa::openapi::RefOr::T(SecurityScheme::Http(
+                        HttpBuilder::new()
+                            .scheme(HttpAuthScheme::Bearer)
+                            .bearer_format("JWT")
+                            .build(),
+                    )),
+                );
+            }
+            if needs_api_key {
+                schemes.insert(
+                    "ApiKeyAuth".to_string(),
+                    utoipa::openapi::RefOr::T(SecurityScheme::ApiKey(ApiKey::Header(
+                        ApiKeyValue::new("x-api-key"), // pragma: allowlist secret
+                    ))),
+                );
+            }
+        }
         if !reflected_defs.is_empty() {
             let components = spec.components.get_or_insert_with(Default::default);
             for (name, schema) in reflected_defs {

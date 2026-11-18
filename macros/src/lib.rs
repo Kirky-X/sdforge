@@ -2711,6 +2711,29 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         None => quote! { None },
     };
 
+    // OpenAPI security metadata: union of auth(role) and security(http role).
+    let mut openapi_roles: Vec<&str> = extras.auth_roles.iter().map(String::as_str).collect();
+    let mut openapi_scheme: Option<&str> = None;
+    if let Some(specs) = &extras.security_contract
+        && let Some(http) = &specs.http
+    {
+        for r in &http.roles {
+            if !openapi_roles.contains(&r.as_str()) {
+                openapi_roles.push(r.as_str());
+            }
+        }
+        openapi_scheme = match http.auth.as_str() {
+            "jwt" => Some("jwt"),
+            "api_key" => Some("api_key"), // pragma: allowlist secret
+            _ => None,
+        };
+    }
+    let openapi_auth_scheme_expr = match openapi_scheme {
+        Some(v) => quote! { Some(#v) },
+        None => quote! { None },
+    };
+    let role_lits: Vec<&str> = openapi_roles;
+
     // Build OpenAPI path parameter tokens for the `#[forge]` macro.
     //
     // Each path parameter (e.g. `/users/:id`) is mapped to an
@@ -3122,6 +3145,8 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
                 deprecated: #openapi_deprecated_expr,
                 sunset: #openapi_sunset_expr,
                 successor: #openapi_successor_expr,
+                roles: &[#(#role_lits),*],
+                auth_scheme: #openapi_auth_scheme_expr,
             });
         }
     } else {
