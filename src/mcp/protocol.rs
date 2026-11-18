@@ -83,6 +83,22 @@ pub struct ToolDto {
     pub description: Option<String>,
     /// JSON Schema for input
     pub input_schema: serde_json::Value,
+    /// Optional security metadata (required roles / auth scheme / audit flag).
+    /// Absent when the tool declares no security requirements.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub security: Option<ToolSecurityMetadata>,
+}
+
+/// Machine-readable security metadata attached to a tool description.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolSecurityMetadata {
+    /// Roles required to invoke the tool.
+    pub required_roles: Vec<String>,
+    /// Declared auth scheme (`api_key` / `jwt` / `none`), when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth_scheme: Option<String>,
+    /// Whether the tool participates in security auditing.
+    pub audit: bool,
 }
 
 /// Build a discovery response from a server.
@@ -95,7 +111,36 @@ pub struct ToolDto {
 /// needing a `RequestContext` (which requires a live transport connection).
 pub async fn build_discovery_response(server: &SdForgeMcpServer) -> DiscoveryResponse {
     let info = server.get_info();
-    let tools: Vec<ToolDto> = server.get_all_tools().iter().map(tool_to_dto).collect();
+    let tools: Vec<ToolDto> = server
+        .get_all_tools()
+        .iter()
+        .map(|tool| {
+            let mut dto = tool_to_dto(tool);
+            // Derive security metadata from the contract registry by tool name.
+            #[cfg(feature = "security-core")]
+            for reg in inventory::iter::<crate::security::ContractRegistration>() {
+                let contract = reg.0;
+                if contract.endpoint == tool.name.as_ref()
+                    && let Some(es) = contract.mcp
+                {
+                    dto.security = Some(ToolSecurityMetadata {
+                        required_roles: es.roles.iter().map(|r| r.to_string()).collect(),
+                        auth_scheme: Some(
+                            match es.auth {
+                                crate::security::AuthScheme::None => "none",
+                                crate::security::AuthScheme::ApiKey => "api_key", // pragma: allowlist secret
+                                crate::security::AuthScheme::Jwt => "jwt",
+                            }
+                            .to_string(),
+                        ),
+                        audit: es.auth != crate::security::AuthScheme::None || !es.roles.is_empty(),
+                    });
+                    break;
+                }
+            }
+            dto
+        })
+        .collect();
 
     DiscoveryResponse {
         server_info: ServerInfoDto {
@@ -115,6 +160,7 @@ fn tool_to_dto(tool: &Tool) -> ToolDto {
     // tool.input_schema is Arc<JsonObject>; convert to serde_json::Value.
     let input_schema = tool.schema_as_json_value();
     ToolDto {
+        security: None,
         name: tool.name.to_string(),
         description,
         input_schema,
@@ -180,6 +226,7 @@ mod tests {
     #[test]
     fn test_tool_dto_serialization() {
         let tool = ToolDto {
+            security: None,
             name: "test_tool".to_string(),
             description: Some("A test tool".to_string()),
             input_schema: serde_json::json!({"type": "object"}),
@@ -193,6 +240,7 @@ mod tests {
     #[test]
     fn test_tool_dto_serialization_no_description() {
         let tool = ToolDto {
+            security: None,
             name: "simple".to_string(),
             description: None,
             input_schema: serde_json::json!({"type": "object"}),
@@ -268,6 +316,7 @@ mod tests {
     #[test]
     fn test_tool_dto_clone() {
         let tool = ToolDto {
+            security: None,
             name: "test".to_string(),
             description: Some("desc".to_string()),
             input_schema: serde_json::json!({}),
@@ -280,11 +329,45 @@ mod tests {
     #[test]
     fn test_tool_dto_debug() {
         let tool = ToolDto {
+            security: None,
             name: "test".to_string(),
             description: None,
             input_schema: serde_json::json!({}),
         };
         let debug_str = format!("{:?}", tool);
         assert!(debug_str.contains("test"));
+    }
+}
+
+#[cfg(all(test, feature = "security-core"))]
+mod tool_security_metadata_tests {
+    use super::*;
+
+    #[test]
+    fn metadata_serializes_with_roles_and_scheme() {
+        let meta = ToolSecurityMetadata {
+            required_roles: vec!["admin".into()],
+            auth_scheme: Some("jwt".into()),
+            audit: true,
+        };
+        let json = serde_json::to_value(&meta).unwrap();
+        assert_eq!(
+            json.get("auth_scheme").and_then(|v| v.as_str()),
+            Some("jwt")
+        );
+        assert_eq!(json.get("audit").and_then(|v| v.as_bool()), Some(true));
+        assert!(json.get("required_roles").is_some());
+    }
+
+    #[test]
+    fn absent_metadata_is_omitted_from_tool_dto() {
+        let dto = ToolDto {
+            name: "t".into(),
+            description: None,
+            input_schema: serde_json::json!({}),
+            security: None,
+        };
+        let json = serde_json::to_value(&dto).unwrap();
+        assert!(json.get("security").is_none());
     }
 }
