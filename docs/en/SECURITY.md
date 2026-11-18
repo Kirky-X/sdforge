@@ -119,7 +119,7 @@ An endpoint declares its per-protocol authentication and authorization requireme
 
 ### Structured denial reasons
 
-Security rejections carry an additive `security_reason` field (HTTP response body, gRPC `security-reason` metadata, MCP `ErrorData.data`) with a machine-readable discriminator (`denial`, `protocol`, and a stage/limiter/header/role attribute). Wire machine codes and statuses do not change: `UNAUTHORIZED`/`FORBIDDEN`/`TOO_MANY_REQUESTS` remain the only codes.
+Security rejections carry an additive structured reason (HTTP 403/429 response body `security_reason`; HTTP 401 `x-security-reason` header plus `WWW-Authenticate`; gRPC `security-reason` metadata; MCP `ErrorData.data`) with a machine-readable discriminator (`denial`, `protocol`, and a stage/limiter/header/role attribute). Wire machine codes and statuses do not change: `UNAUTHORIZED`/`FORBIDDEN`/`TOO_MANY_REQUESTS` remain the only codes.
 
 | Reason | HTTP | gRPC status | MCP code | CLI exit | Notes |
 |--------|------|-------------|----------|----------|-------|
