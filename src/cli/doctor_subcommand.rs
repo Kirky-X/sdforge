@@ -405,3 +405,42 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod doctor_cli_tests {
+    use super::*;
+
+    #[test]
+    fn doctor_subcommand_definition_has_flags() {
+        let cmd = doctor_subcommand_definition();
+        assert_eq!(cmd.get_name(), "doctor");
+        let matches = cmd
+            .try_get_matches_from(["doctor", "--json", "--protocol", "mcp"])
+            .unwrap();
+        assert!(matches.get_flag("json"));
+        assert_eq!(
+            matches.get_one::<String>("protocol").map(String::as_str),
+            Some("mcp")
+        );
+    }
+
+    #[test]
+    fn report_exit_code_reflects_failures() {
+        let ok = DoctorReport {
+            findings: vec![DoctorFinding::new(
+                FindingLevel::Ok,
+                DoctorCode::HostLoopbackOk,
+                "ok",
+            )],
+        };
+        assert!(!ok.has_failures());
+        let fail = DoctorReport {
+            findings: vec![DoctorFinding::new(
+                FindingLevel::Fail,
+                DoctorCode::ProtocolVerifierMissing,
+                "missing",
+            )],
+        };
+        assert!(fail.has_failures());
+    }
+}
