@@ -376,6 +376,7 @@ fn test_audit_logger_trait_log() {
     rt.block_on(async {
         let logger = SdForgeAuditLogger::with_limit(10);
         let log = AuditLog {
+            denial: None,
             id: "trait-test-id".to_string(),
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
             user_id: Some("trait_user".to_string()),
@@ -406,6 +407,7 @@ fn test_audit_logger_trait_log_failure() {
     rt.block_on(async {
         let logger = SdForgeAuditLogger::with_limit(10);
         let log = AuditLog {
+            denial: None,
             id: "trait-fail-id".to_string(),
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
             user_id: Some("trait_fail_user".to_string()),
@@ -615,6 +617,7 @@ fn test_sanitize_bearer_token() {
 #[test]
 fn test_audit_log_creation() {
     let log = AuditLog {
+        denial: None,
         id: "test-id-123".to_string(),
         timestamp: 1234567890,
         user_id: Some("user_123".to_string()),
@@ -636,6 +639,7 @@ fn test_audit_log_creation() {
 #[test]
 fn test_audit_log_serialization() {
     let log = AuditLog {
+        denial: None,
         id: "test-id-456".to_string(),
         timestamp: 1234567890,
         user_id: Some("user_456".to_string()),
@@ -685,6 +689,7 @@ fn test_audit_log_deserialization() {
 #[test]
 fn test_audit_log_serialization_roundtrip() {
     let original = AuditLog {
+        denial: None,
         id: "test-id-roundtrip".to_string(),
         timestamp: 1234567890,
         user_id: Some("user_roundtrip".to_string()),
@@ -848,6 +853,7 @@ async fn test_log_merges_fallback_logs_synchronously() {
 
     // Manually populate fallback_logs with a serialized AuditLog
     let fallback_log = AuditLog {
+        denial: None,
         id: "fallback-log-1".to_string(),
         timestamp: time::OffsetDateTime::now_utc().unix_timestamp() - 100,
         user_id: Some("merge_user".to_string()),
@@ -904,6 +910,7 @@ async fn test_log_fallback_merge_respects_max_logs() {
 
     // Populate primary with 1 log
     let primary_log = AuditLog {
+        denial: None,
         id: "primary-1".to_string(),
         timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         user_id: Some("trunc_user".to_string()),
@@ -920,6 +927,7 @@ async fn test_log_fallback_merge_respects_max_logs() {
     // Populate fallback with 2 logs
     let fallback_logs = vec![
         AuditLog {
+            denial: None,
             id: "fallback-1".to_string(),
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp() - 200,
             user_id: Some("trunc_user".to_string()),
@@ -930,6 +938,7 @@ async fn test_log_fallback_merge_respects_max_logs() {
             signature: None,
         },
         AuditLog {
+            denial: None,
             id: "fallback-2".to_string(),
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp() - 100,
             user_id: Some("trunc_user".to_string()),
@@ -972,6 +981,7 @@ async fn test_get_logs_deduplicates_by_id() {
 
     // Create a log that appears in BOTH primary and fallback (same ID)
     let shared_log = AuditLog {
+        denial: None,
         id: "shared-id-1".to_string(),
         timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         user_id: Some("dedup_user".to_string()),
@@ -984,6 +994,7 @@ async fn test_get_logs_deduplicates_by_id() {
 
     // A log that only appears in fallback
     let fallback_only = AuditLog {
+        denial: None,
         id: "fallback-only-1".to_string(),
         timestamp: time::OffsetDateTime::now_utc().unix_timestamp() - 50,
         user_id: Some("dedup_user".to_string()),
@@ -1028,6 +1039,7 @@ async fn test_get_logs_with_only_fallback() {
 
     // Populate only fallback (no primary)
     let fallback_log = AuditLog {
+        denial: None,
         id: "fb-only-2".to_string(),
         timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         user_id: Some("fb_user".to_string()),
@@ -1065,6 +1077,7 @@ async fn test_worker_merges_fallback_from_queue() {
 
     // Populate fallback_logs for "worker_user"
     let fallback_log = AuditLog {
+        denial: None,
         id: "worker-fb-1".to_string(),
         timestamp: time::OffsetDateTime::now_utc().unix_timestamp() - 100,
         user_id: Some("worker_user".to_string()),
@@ -1080,6 +1093,7 @@ async fn test_worker_merges_fallback_from_queue() {
 
     // Populate primary with an existing log
     let primary_log = AuditLog {
+        denial: None,
         id: "worker-primary-1".to_string(),
         timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         user_id: Some("worker_user".to_string()),
@@ -1124,6 +1138,7 @@ async fn test_worker_no_fallback_does_nothing() {
 
     // Populate primary only (no fallback)
     let primary_log = AuditLog {
+        denial: None,
         id: "no-fb-primary".to_string(),
         timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         user_id: Some("no_fb_user".to_string()),
@@ -1421,4 +1436,29 @@ async fn test_timeout_drop_increments_dropped_count() {
         "timeout drop must be visible to monitoring"
     );
     assert_eq!(logger.get_logs("timeout_user").len(), 0);
+}
+
+#[test]
+fn audit_event_carries_denial_attributes() {
+    use crate::security::{AuthStage, Protocol, SecurityDenialReason};
+    let log = make_test_audit_log("u-1", "auth.check").with_denial(
+        SecurityDenialReason::AuthenticationInvalid {
+            protocol: Protocol::Grpc,
+            stage: AuthStage::Expired,
+        },
+    );
+    let attrs = log.denial_attributes();
+    assert!(
+        attrs
+            .iter()
+            .any(|(k, v)| *k == "denial" && v == "authentication_invalid")
+    );
+    assert!(attrs.iter().any(|(k, v)| *k == "stage" && v == "expired"));
+    let json = serde_json::to_value(&log).unwrap();
+    assert_eq!(
+        json.get("denial")
+            .and_then(|v| v.get("denial"))
+            .and_then(|v| v.as_str()),
+        Some("authentication_invalid")
+    );
 }

@@ -165,6 +165,8 @@ pub struct AuditLog {
     /// Cryptographic signature (HMAC-SHA256) for tamper detection
     /// Base64-encoded signature of the log entry's canonical form
     pub(crate) signature: Option<String>,
+    /// Structured denial reason when this audit event is a security rejection.
+    pub(crate) denial: Option<crate::security::SecurityDenialReason>,
 }
 
 /// Audit result

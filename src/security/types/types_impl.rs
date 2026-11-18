@@ -92,6 +92,7 @@ pub fn parse_audit_log(v: &serde_json::Value) -> Option<AuditLog> {
         .map(String::from);
 
     Some(AuditLog {
+        denial: None,
         id,
         timestamp,
         user_id,
@@ -227,7 +228,7 @@ impl std::error::Error for JwtError {}
 
 impl Serialize for AuditLog {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut s = serializer.serialize_struct("AuditLog", 8)?;
+        let mut s = serializer.serialize_struct("AuditLog", 9)?;
         s.serialize_field("id", &self.id)?;
         s.serialize_field("timestamp", &self.timestamp)?;
         s.serialize_field("user_id", &self.user_id)?;
@@ -236,6 +237,7 @@ impl Serialize for AuditLog {
         s.serialize_field("result", &self.result)?;
         s.serialize_field("metadata", &self.metadata)?;
         s.serialize_field("signature", &self.signature)?;
+        s.serialize_field("denial", &self.denial)?;
         s.end()
     }
 }
@@ -279,6 +281,25 @@ impl AuditLog {
     /// Get the cryptographic signature for tamper detection
     pub fn signature(&self) -> Option<&str> {
         self.signature.as_deref()
+    }
+
+    /// Attach a structured denial reason to this audit event.
+    pub fn with_denial(mut self, denial: crate::security::SecurityDenialReason) -> Self {
+        self.denial = Some(denial);
+        self
+    }
+
+    /// Get the structured denial reason, when this event is a security denial.
+    pub fn denial(&self) -> Option<&crate::security::SecurityDenialReason> {
+        self.denial.as_ref()
+    }
+
+    /// Flatten the denial reason into audit key/value attributes.
+    pub fn denial_attributes(&self) -> Vec<(&'static str, String)> {
+        self.denial
+            .as_ref()
+            .map(|d| d.attributes())
+            .unwrap_or_default()
     }
 
     /// Generate HMAC-SHA256 signature for this audit log entry

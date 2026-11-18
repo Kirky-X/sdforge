@@ -234,6 +234,7 @@ impl SdForgeAuditLogger {
         };
 
         let mut log = AuditLog {
+            denial: None,
             id: Uuid::new_v4().to_string(),
             timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
             user_id: context.user_id.clone(),

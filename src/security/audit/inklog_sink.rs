@@ -97,6 +97,7 @@ mod tests {
     async fn test_inklog_sink_write_succeeds() {
         let sink = InklogAuditSink::new();
         let log = AuditLog {
+            denial: None,
             id: "test-id".to_string(),
             timestamp: 1234567890,
             user_id: Some("user1".to_string()),

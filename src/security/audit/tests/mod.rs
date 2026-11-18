@@ -22,6 +22,7 @@ use uuid::Uuid;
 /// Build an `AuditLog` with sensible defaults for tests.
 pub(super) fn make_test_audit_log(user_id: &str, action: &str) -> AuditLog {
     AuditLog {
+        denial: None,
         id: Uuid::new_v4().to_string(),
         timestamp: time::OffsetDateTime::now_utc().unix_timestamp(),
         user_id: Some(user_id.to_string()),

@@ -19,6 +19,7 @@ fn derived_test_hmac_key(n: usize) -> Vec<u8> {
 #[test]
 fn test_audit_log_signature_generation() {
     let mut log = AuditLog {
+        denial: None,
         id: "test-id-123".to_string(),
         timestamp: 1234567890,
         user_id: Some("user123".to_string()),
@@ -45,6 +46,7 @@ fn test_audit_log_signature_generation() {
 #[test]
 fn test_audit_log_signature_verification_success() {
     let mut log = AuditLog {
+        denial: None,
         id: "test-id-456".to_string(),
         timestamp: 1234567890,
         user_id: Some("user456".to_string()),
@@ -72,6 +74,7 @@ fn test_audit_log_signature_verification_success() {
 #[test]
 fn test_audit_log_signature_verification_wrong_key() {
     let mut log = AuditLog {
+        denial: None,
         id: "test-id-789".to_string(),
         timestamp: 1234567890,
         user_id: Some("user789".to_string()),
@@ -103,6 +106,7 @@ fn test_audit_log_signature_verification_wrong_key() {
 #[test]
 fn test_audit_log_signature_tamper_detection() {
     let mut log = AuditLog {
+        denial: None,
         id: "test-id-tamper".to_string(),
         timestamp: 1234567890,
         user_id: Some("usertamper".to_string()),
@@ -134,6 +138,7 @@ fn test_audit_log_signature_tamper_detection() {
 #[test]
 fn test_audit_log_no_signature() {
     let log = AuditLog {
+        denial: None,
         id: "test-id-nosig".to_string(),
         timestamp: 1234567890,
         user_id: Some("usernosig".to_string()),
@@ -157,6 +162,7 @@ fn test_audit_log_no_signature() {
 #[test]
 fn test_audit_log_signature_getter() {
     let mut log = AuditLog {
+        denial: None,
         id: "test-id-getter".to_string(),
         timestamp: 1234567890,
         user_id: None,
@@ -355,6 +361,7 @@ fn test_parse_audit_log_not_an_object() {
 fn test_serialize_deserialize_audit_logs_roundtrip() {
     let logs = vec![
         AuditLog {
+            denial: None,
             id: "log-1".to_string(),
             timestamp: 1234567890,
             user_id: Some("user1".to_string()),
@@ -365,6 +372,7 @@ fn test_serialize_deserialize_audit_logs_roundtrip() {
             signature: None,
         },
         AuditLog {
+            denial: None,
             id: "log-2".to_string(),
             timestamp: 1234567891,
             user_id: Some("user2".to_string()),
@@ -645,6 +653,7 @@ fn test_audit_result_serialize_failure() {
 #[test]
 fn test_audit_log_serialize_with_audit_result() {
     let log = AuditLog {
+        denial: None,
         id: "ser-test".to_string(),
         timestamp: 1234567890,
         user_id: Some("user1".to_string()),
