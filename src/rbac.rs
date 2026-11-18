@@ -32,9 +32,9 @@ fn forbidden(roles: Roles) -> axum::response::Response {
 
 /// Wrap a route's `MethodRouter` with an endpoint-level role requirement.
 ///
-/// Requires the `security` feature: the declared roles are matched against
+/// Requires the `security-http` feature: the declared roles are matched against
 /// the `AuthContext` inserted by the global auth middleware.
-#[cfg(feature = "security")]
+#[cfg(feature = "security-http")]
 pub fn require_role(
     router: axum::routing::MethodRouter,
     roles: Roles,
@@ -56,9 +56,9 @@ pub fn require_role(
     ))
 }
 
-/// Fail-safe fallback without the `security` feature: endpoints that declare
-/// a role requirement deny every request (a role can never be verified).
-#[cfg(not(feature = "security"))]
+/// Fail-safe fallback without the `security-http` feature: endpoints that
+/// declare a role requirement deny every request (a role can never be verified).
+#[cfg(not(feature = "security-http"))]
 pub fn require_role(
     router: axum::routing::MethodRouter,
     roles: Roles,
@@ -70,7 +70,7 @@ pub fn require_role(
     ))
 }
 
-#[cfg(all(test, feature = "security"))]
+#[cfg(all(test, feature = "security-http"))]
 mod tests {
     use super::*;
     use crate::security::{AuthContext, AuthMetadata};

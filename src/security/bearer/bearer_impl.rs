@@ -125,7 +125,7 @@ impl BearerAuth {
     }
 
     /// Internal helper to set issuer on an existing validated instance
-    #[cfg(feature = "http")]
+    #[cfg(feature = "security")]
     pub(crate) fn with_issuer_inner(mut self, expected_issuer: impl Into<String>) -> Self {
         self.expected_issuer = Some(expected_issuer.into());
         self
