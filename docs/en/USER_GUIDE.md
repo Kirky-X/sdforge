@@ -377,6 +377,17 @@ With the `cli` feature enabled, `#[forge(cli = true)]` registers commands; `CliB
 
 A returned `Value::String` prints the raw string (no quotes); other types print JSON. `CliBuilder` also supports `with_dependencies()` (inject state), `with_name()` (program name), and `with_global_arg()` (global arguments).
 
+With the `doctor` feature enabled, an additional reserved subcommand reports read-only security posture:
+
+```bash
+cargo run --features doctor -- doctor            # human-readable ✓/!/X findings
+cargo run --features doctor -- doctor --json     # machine-readable DoctorReport
+# GitHub Actions: fail the job when any check fails (exit code 2)
+cargo run --features doctor -- doctor --json > doctor.json
+```
+
+`doctor` checks protocol verifier wiring, endpoint contracts, JWT secret length, the server host default, and redundant feature combinations. Any `Fail` finding gives exit code 2; only `Ok`/`Warn` findings give exit code 0. `--protocol <name>` filters one protocol. `doctor` is opt-in and not part of `full`.
+
 ### MCP integration
 
 - **Stateless protocol**: `StatelessServerHandler` implements `rmcp::ServerHandler`; the HTTP header protocol is parsed by `parse_mcp_headers` from `Mcp-Method` / `Mcp-Name` (missing headers return `McpHeaderError`; the HTTP status mapping is up to the downstream transport adapter layer, e.g. mapped to 400)

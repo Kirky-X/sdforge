@@ -332,6 +332,8 @@ impl From<MyError> for ServiceError {
 
 ### OpenAPI generation
 
+When a route declares `security(http(auth = "jwt"|"api_key"))` (or a `security(...)` role), the generated spec gains `components.securitySchemes` entries `JwtBearer` (`http`/`bearer`/`JWT`) and `ApiKeyAuth` (`apiKey` in header `x-api-key`), operation-level `security` requirements, and an `x-required-role` extension. Schemas are deduplicated by name and externally merged schemes override generated ones. MCP `tools/list` / discovery `ToolDto` carries an optional sibling `security` object (`required_roles`, `auth_scheme`, `audit`) derived from the contract registry; it is omitted when a tool has no declaration, preserving existing response shapes.
+
 ```rust
 use sdforge::openapi::{generate_openapi_spec, OpenApiBuilder};
 
