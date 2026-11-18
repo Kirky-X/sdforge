@@ -261,8 +261,11 @@ async fn mcp_process(request: ProcessRequest) -> Result<serde_json::Value, ApiEr
             && enrich
         {
             result["enriched"] = serde_json::json!(true);
-            result["enrichment_timestamp"] =
-                serde_json::Value::String(chrono::Utc::now().to_rfc3339());
+            result["enrichment_timestamp"] = serde_json::Value::String(
+                time::OffsetDateTime::now_utc()
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .expect("system clock formats as RFC 3339"),
+            );
         }
     }
 
@@ -299,12 +302,16 @@ async fn mcp_process(request: ProcessRequest) -> Result<serde_json::Value, ApiEr
     i18n_key = "example.tool_definition.mcp_get_time.description"
 )]
 async fn mcp_get_time() -> Result<serde_json::Value, ApiError> {
-    let now = chrono::Utc::now();
+    let now = time::OffsetDateTime::now_utc();
+    let human_format = time::format_description::parse_borrowed::<1>(
+        "[weekday], [month repr:full] [day padding:zero], [year]",
+    )
+    .expect("static format description parses");
     Ok(serde_json::json!({
-        "timestamp": now.to_rfc3339(),
+        "timestamp": now.format(&time::format_description::well_known::Rfc3339).expect("system clock formats as RFC 3339"),
         "timezone": "UTC",
-        "unix_timestamp": now.timestamp(),
-        "formatted": now.format("%A, %B %d, %Y").to_string()
+        "unix_timestamp": now.unix_timestamp(),
+        "formatted": now.format(&human_format).expect("system clock formats as date")
     }))
 }
 

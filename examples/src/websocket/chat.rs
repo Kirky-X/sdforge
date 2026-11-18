@@ -211,7 +211,9 @@ async fn send_message(message: ChatMessage) -> Result<MessageResponse, ApiError>
         room: message.room,
         message: message.message,
         sender: message.sender.unwrap_or_else(|| "anonymous".to_string()),
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .expect("system clock formats as RFC 3339"),
     };
 
     Ok(response)

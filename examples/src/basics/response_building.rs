@@ -300,7 +300,9 @@ async fn get_wrapped_item(id: u64) -> Result<ApiResponse<DataItem>, ApiError> {
         enabled: true,
     };
 
-    let timestamp = chrono::Utc::now().to_rfc3339();
+    let timestamp = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .expect("system clock formats as RFC 3339");
 
     Ok(ApiResponse {
         success: true,
@@ -380,7 +382,9 @@ async fn update_item(
         enabled: request.enabled,
     };
 
-    let timestamp = chrono::Utc::now().to_rfc3339();
+    let timestamp = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .expect("system clock formats as RFC 3339");
 
     Ok(ApiResponse {
         success: true,

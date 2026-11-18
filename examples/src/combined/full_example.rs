@@ -162,7 +162,9 @@ async fn health_check() -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "status": "healthy",
         "version": "0.2.0",
-        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "timestamp": time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .expect("system clock formats as RFC 3339"),
         "services": {
             "database": "connected",
             "cache": "connected",
@@ -275,7 +277,9 @@ async fn create_full_user(request: CreateUserRequest) -> Result<serde_json::Valu
         "email": request.email,
         "role": role,
         "status": "active",
-        "created_at": chrono::Utc::now().to_rfc3339(),
+        "created_at": time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .expect("system clock formats as RFC 3339"),
         "created": true
     }))
 }
@@ -326,7 +330,9 @@ async fn update_full_user(
         "email": request.email.unwrap_or_else(|| "demo@example.com".to_string()),
         "role": request.role.unwrap_or_else(|| "user".to_string()),
         "status": request.status.unwrap_or_else(|| "active".to_string()),
-        "updated_at": chrono::Utc::now().to_rfc3339(),
+        "updated_at": time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .expect("system clock formats as RFC 3339"),
         "updated": true
     }))
 }
@@ -373,7 +379,9 @@ async fn delete_full_user(id: u64) -> Result<serde_json::Value, ApiError> {
     Ok(serde_json::json!({
         "id": id,
         "deleted": true,
-        "deleted_at": chrono::Utc::now().to_rfc3339(),
+        "deleted_at": time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .expect("system clock formats as RFC 3339"),
         "audit_logged": true
     }))
 }
@@ -441,6 +449,8 @@ async fn user_activity_stats(user_id: u64) -> Result<serde_json::Value, ApiError
         "user_id": user_id,
         "total_requests": 1500,
         "active_sessions": 2,
-        "last_activity": chrono::Utc::now().to_rfc3339()
+        "last_activity": time::OffsetDateTime::now_utc()
+            .format(&time::format_description::well_known::Rfc3339)
+            .expect("system clock formats as RFC 3339")
     }))
 }

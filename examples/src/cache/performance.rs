@@ -277,7 +277,7 @@ async fn perform_expensive_computation(request: &AnalyticsRequest) -> Computatio
             format!("Period: {} to {}", request.start_date, request.end_date),
             "Result: Computed successfully".to_string(),
         ],
-        computed_at: chrono::Utc::now().timestamp(),
+        computed_at: time::OffsetDateTime::now_utc().unix_timestamp(),
         ttl_seconds: 3600, // Cache for 1 hour
     }
 }
