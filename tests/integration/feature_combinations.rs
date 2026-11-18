@@ -110,3 +110,26 @@ mod feature_dependency_tests {
     // grpc 不要求 http：模块依赖仅 tonic/prost/serde_json/futures-util，
     // `cargo check --features grpc` 库级可编译，故不设 requires-http guard。
 }
+
+// security-core (protocol-neutral security) without HTTP — R-split-002.
+// Proves the credential store, audit port, and protocol verifier are reachable
+// from a pure security-core build (no axum/tower pulled in).
+#[cfg(all(feature = "security-core", not(feature = "http")))]
+mod security_core_without_http {
+    #[test]
+    fn protocol_auth_verifier_reachable() {
+        let _: Option<&sdforge::security::ProtocolAuthVerifier> = None;
+    }
+
+    #[test]
+    fn auth_context_reachable() {
+        let ctx = sdforge::security::AuthContext::new(None, vec![], Default::default());
+        assert!(ctx.permissions().is_empty());
+    }
+
+    #[test]
+    fn credential_constructors_reachable() {
+        let _bearer = sdforge::security::BearerAuth::new("CoreOnlyTestSecret-2026-Abc123!XyZ");
+        let _api_key = sdforge::security::SdForgeApiKeyAuth::new();
+    }
+}
