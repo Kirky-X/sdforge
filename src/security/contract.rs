@@ -251,4 +251,85 @@ mod tests {
         };
         assert!(!c.undeclared_protocols(set).contains(&Protocol::Mcp));
     }
+    static WIRING_OK: ProtocolSecurityContract = ProtocolSecurityContract {
+        endpoint: "wiring_ok",
+        version: "v1",
+        http: None,
+        mcp: Some(EndpointSecurity {
+            auth: AuthScheme::None,
+            roles: &[],
+        }),
+        grpc: None,
+        cli: None,
+        websocket: None,
+    };
+    static WIRING_GRPC: ProtocolSecurityContract = ProtocolSecurityContract {
+        endpoint: "wiring_grpc",
+        version: "v1",
+        http: None,
+        mcp: None,
+        grpc: Some(EndpointSecurity {
+            auth: AuthScheme::Jwt,
+            roles: &[],
+        }),
+        cli: None,
+        websocket: None,
+    };
+    static WIRING_MCP_CLI: ProtocolSecurityContract = ProtocolSecurityContract {
+        endpoint: "wiring_mcp_cli",
+        version: "v1",
+        http: None,
+        mcp: Some(EndpointSecurity {
+            auth: AuthScheme::ApiKey,
+            roles: &[],
+        }),
+        grpc: None,
+        cli: Some(EndpointSecurity {
+            auth: AuthScheme::Jwt,
+            roles: &[],
+        }),
+        websocket: None,
+    };
+
+    #[test]
+    fn verifier_wiring_no_violations() {
+        assert!(check_verifier_wiring(std::iter::once(&WIRING_OK), ProtocolSet::default()).is_ok());
+        assert!(
+            check_verifier_wiring(
+                std::iter::once(&WIRING_GRPC),
+                ProtocolSet {
+                    grpc: true,
+                    ..Default::default()
+                }
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn verifier_wiring_single_violation() {
+        let err = check_verifier_wiring(std::iter::once(&WIRING_GRPC), ProtocolSet::default())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("wiring_grpc"), "{err}");
+        assert!(err.contains("with_auth_interceptor"), "{err}");
+    }
+
+    #[test]
+    fn verifier_wiring_multiple_violations() {
+        let err = check_verifier_wiring(
+            [&WIRING_GRPC, &WIRING_MCP_CLI].into_iter(),
+            ProtocolSet::default(),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("wiring_grpc"), "{err}");
+        assert!(err.contains("wiring_mcp_cli"), "{err}");
+        assert!(err.contains("with_auth_verifier"), "{err}");
+    }
+
+    #[test]
+    fn verifier_wiring_explicit_none_is_exempt() {
+        assert!(check_verifier_wiring(std::iter::once(&WIRING_OK), ProtocolSet::default()).is_ok());
+    }
 }
