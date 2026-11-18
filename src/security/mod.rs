@@ -66,6 +66,12 @@ mod types;
 #[cfg(any(feature = "security", feature = "ratelimit-http"))]
 mod ip_util;
 
+// Structured security denial reasons (security-denial-reasons).
+#[cfg(feature = "security-core")]
+pub mod denial;
+#[cfg(feature = "security-core")]
+pub use denial::{AuthStage, SecurityDenialReason};
+
 // Protocol-neutral security contract registry (protocol-security-contract).
 #[cfg(feature = "security-core")]
 pub mod contract;
