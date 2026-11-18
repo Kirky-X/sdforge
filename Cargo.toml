@@ -261,6 +261,8 @@ security-core = ["dep:uuid", "dep:hmac", "dep:sha2", "dep:time", "tokio", "dep:s
 security-http = ["security-core", "http", "ratelimit-http"]
 # 向后兼容聚合别名：闭包与 0.5.x 的 security 逐项等价（传递引入 ratelimit-http + cache + 全部可选依赖）。
 security = ["security-core", "security-http"]
+# strict-security：opt-in 编译期守卫——声明了协议入口却无 security(...) 声明即报错；不入 full。
+strict-security = []
 websocket = ["http", "streaming", "dep:axum-extra", "dep:time"]
 # gRPC：独立于 http（grpc 模块只用 tonic + prost + serde_json + futures-util）
 grpc = ["dep:tonic", "dep:prost", "dep:tonic-prost", "dep:inventory", "dep:futures-util"]

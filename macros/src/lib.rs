@@ -1980,6 +1980,74 @@ fn generate_cli_registration(
     }
 }
 
+/// Generate opt-in `strict-security` compile-time guards.
+///
+/// For each protocol entry point declared on the endpoint (tool_name /
+/// grpc_method / cli) without a matching `security(...)` section, emit a
+/// const-context `panic!` behind `#[cfg(all(feature = "<proto>", feature =
+/// "strict-security"))]`. A const panic is a compile error on stable Rust.
+fn generate_strict_security_guards(
+    name: &str,
+    has_tool_name: bool,
+    has_grpc_method: bool,
+    has_cli: bool,
+    specs: Option<&PerProtocolSpecs>,
+) -> proc_macro2::TokenStream {
+    let declared = |proto: &str| -> bool {
+        specs.is_some_and(|s| match proto {
+            "mcp" => s.mcp.is_some(),
+            "grpc" => s.grpc.is_some(),
+            "cli" => s.cli.is_some(),
+            _ => false,
+        })
+    };
+    let mut guards = Vec::new();
+    let guard = |feature: &str, label: &str, msg: String| -> proc_macro2::TokenStream {
+        let ident = syn::Ident::new(label, proc_macro2::Span::call_site());
+        // `full` marks the framework-wide aggregate used by CI --all-features
+        // and by example/test fixtures that intentionally expose unauthenticated
+        // endpoints. Opt-in strict checking applies to focused protocol builds
+        // (e.g. `mcp,strict-security`), not to those aggregate builds.
+        quote! {
+            const _: () = {
+                #[cfg(all(feature = #feature, feature = "strict-security", not(feature = "full")))]
+                const #ident: () = panic!(#msg);
+            };
+        }
+    };
+    if has_tool_name && !declared("mcp") {
+        guards.push(guard(
+            "mcp",
+            "STRICT_SECURITY_MCP_MISSING",
+            format!(
+                "endpoint `{}` declares tool_name but no security(mcp(...)); add a declaration or security(mcp(auth = \"none\"))",
+                name
+            ),
+        ));
+    }
+    if has_grpc_method && !declared("grpc") {
+        guards.push(guard(
+            "grpc",
+            "STRICT_SECURITY_GRPC_MISSING",
+            format!(
+                "endpoint `{}` declares grpc_method but no security(grpc(...)); add a declaration or security(grpc(auth = \"none\"))",
+                name
+            ),
+        ));
+    }
+    if has_cli && !declared("cli") {
+        guards.push(guard(
+            "cli",
+            "STRICT_SECURITY_CLI_MISSING",
+            format!(
+                "endpoint `{}` declares cli but no security(cli(...)); add a declaration or security(cli(auth = \"none\"))",
+                name
+            ),
+        ));
+    }
+    quote! { #(#guards)* }
+}
+
 /// Generate the `inventory::submit!` block for a `security(...)` declaration.
 ///
 /// Roles from `auth(role = "...")` are unioned with each protocol section's
@@ -3608,10 +3676,20 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         None => quote! {},
     };
 
+    // Opt-in strict guards: always emitted, self-gated on strict-security.
+    let strict_guards = generate_strict_security_guards(
+        &name,
+        tool_name.is_some(),
+        grpc_method.is_some(),
+        cli == Some(true),
+        extras.security_contract.as_ref(),
+    );
+
     let generated = quote! {
         #openapi_path_attr
         #cleaned_input
         #lifecycle_code
+        #strict_guards
         #security_contract_code
         #http_code
         #mcp_code
@@ -5667,5 +5745,50 @@ mod security_contract_parse_tests {
         assert!(!remaining.contains("security"), "remaining: {remaining}");
         let specs = extras.security_contract.expect("security parsed");
         assert_eq!(specs.http.unwrap().auth, "jwt");
+    }
+}
+
+#[cfg(test)]
+mod strict_security_guard_tests {
+    use super::*;
+
+    #[test]
+    fn guard_emitted_for_missing_mcp_declaration() {
+        let tokens =
+            generate_strict_security_guards("delete_user", true, false, false, None).to_string();
+        assert!(tokens.contains("STRICT_SECURITY_MCP_MISSING"), "{tokens}");
+        assert!(tokens.contains("feature = \"mcp\""), "{tokens}");
+        assert!(tokens.contains("strict-security"), "{tokens}");
+        assert!(tokens.contains("delete_user"), "{tokens}");
+    }
+
+    #[test]
+    fn no_guard_when_all_protocols_declared() {
+        let specs = PerProtocolSpecs {
+            mcp: Some(ProtocolSpec {
+                auth: "none".into(),
+                roles: vec![],
+            }),
+            grpc: Some(ProtocolSpec {
+                auth: "none".into(),
+                roles: vec![],
+            }),
+            cli: Some(ProtocolSpec {
+                auth: "none".into(),
+                roles: vec![],
+            }),
+            ..Default::default()
+        };
+        let tokens =
+            generate_strict_security_guards("x", true, true, true, Some(&specs)).to_string();
+        assert!(!tokens.contains("STRICT_SECURITY"), "{tokens}");
+    }
+
+    #[test]
+    fn guard_message_names_endpoint() {
+        let tokens =
+            generate_strict_security_guards("my_endpoint", true, false, false, None).to_string();
+        assert!(tokens.contains("my_endpoint"), "{tokens}");
+        assert!(tokens.contains("security(mcp(auth ="), "{tokens}");
     }
 }
