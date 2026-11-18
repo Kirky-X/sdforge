@@ -165,3 +165,55 @@ async fn empty_permission_seed_authenticates_but_fails_role_check_with_403() {
         "empty-permission key must be authenticated-but-unauthorized (403, not 401)"
     );
 }
+
+// Contract registration from `security(...)` + `auth(role)` union (R-contract-004).
+#[sdforge::forge(
+    name = "contract_stats",
+    version = "v1",
+    description = "Endpoint with a multi-protocol security contract",
+    path = "/contract/stats",
+    method = "GET",
+    tool_name = "contract_stats",
+    auth(role = "admin"),
+    security(
+        http(auth = "jwt", role = "auditor"),
+        mcp(auth = "api_key"),
+        grpc(auth = "none")
+    )
+)]
+async fn contract_stats() -> Result<serde_json::Value, sdforge::core::ApiError> {
+    Ok(serde_json::json!({ "ok": true }))
+}
+
+#[test]
+fn security_contract_registration_is_enumerable_with_union_roles() {
+    use sdforge::security::{AuthScheme, Protocol, ProtocolSecurityContract};
+
+    let found: Vec<&&'static ProtocolSecurityContract> =
+        sdforge::inventory::iter::<sdforge::security::ContractRegistration>()
+            .map(|r| &r.0)
+            .filter(|c| c.endpoint == "contract_stats")
+            .collect();
+    let c = *found
+        .first()
+        .expect("contract_stats must be in the registry");
+    assert_eq!(c.version, "v1");
+    let http = c.http.expect("http section declared");
+    assert_eq!(http.auth, AuthScheme::Jwt);
+    assert_eq!(http.roles, &["admin", "auditor"]);
+    let mcp = c.mcp.expect("mcp section declared");
+    assert_eq!(mcp.auth, AuthScheme::ApiKey);
+    assert_eq!(mcp.roles, &["admin"]);
+    assert_eq!(c.grpc.expect("grpc section").auth, AuthScheme::None);
+    assert!(c.cli.is_none());
+    assert_eq!(
+        c.undeclared_protocols(sdforge::security::ProtocolSet {
+            http: true,
+            mcp: true,
+            grpc: true,
+            cli: true,
+            websocket: true,
+        }),
+        vec![Protocol::Cli, Protocol::WebSocket]
+    );
+}

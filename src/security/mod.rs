@@ -71,7 +71,8 @@ mod ip_util;
 pub mod contract;
 #[cfg(feature = "security-core")]
 pub use contract::{
-    AuthScheme, ContractRegistration, EndpointSecurity, ProtocolSecurityContract, ProtocolSet,
+    AuthScheme, ContractRegistration, EndpointSecurity, Protocol, ProtocolSecurityContract,
+    ProtocolSet,
 };
 
 // protocol-neutral auth verifier port + Bearer/API-key adapters for

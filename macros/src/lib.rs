@@ -1980,6 +1980,68 @@ fn generate_cli_registration(
     }
 }
 
+/// Generate the `inventory::submit!` block for a `security(...)` declaration.
+///
+/// Roles from `auth(role = "...")` are unioned with each protocol section's
+/// roles; `security(...)` roles win on duplicate values. The registration is
+/// gated on `security-core` so the contract type stays available to pure
+/// non-HTTP builds.
+fn generate_security_contract_registration(
+    name: &str,
+    version: &str,
+    specs: &PerProtocolSpecs,
+    auth_roles: &[String],
+) -> proc_macro2::TokenStream {
+    let endpoint_lit = proc_macro2::Literal::string(name);
+    let version_lit = proc_macro2::Literal::string(version);
+
+    let section = |spec: &Option<ProtocolSpec>| -> proc_macro2::TokenStream {
+        match spec {
+            None => quote! { None },
+            Some(s) => {
+                let scheme_ident = match s.auth.as_str() {
+                    "jwt" => quote! { Jwt },
+                    "api_key" => quote! { ApiKey },
+                    _ => quote! { None },
+                };
+                let mut roles: Vec<&str> = auth_roles.iter().map(String::as_str).collect();
+                for r in &s.roles {
+                    if !roles.contains(&r.as_str()) {
+                        roles.push(r.as_str());
+                    }
+                }
+                quote! {
+                    Some(sdforge::security::EndpointSecurity {
+                        auth: sdforge::security::AuthScheme::#scheme_ident,
+                        roles: &[#(#roles),*],
+                    })
+                }
+            }
+        }
+    };
+
+    let http = section(&specs.http);
+    let mcp = section(&specs.mcp);
+    let grpc = section(&specs.grpc);
+    let cli = section(&specs.cli);
+    let websocket = section(&specs.websocket);
+
+    quote! {
+        #[cfg(feature = "security-core")]
+        sdforge::inventory::submit!(sdforge::security::ContractRegistration(
+            &sdforge::security::ProtocolSecurityContract {
+                endpoint: #endpoint_lit,
+                version: #version_lit,
+                http: #http,
+                mcp: #mcp,
+                grpc: #grpc,
+                cli: #cli,
+                websocket: #websocket,
+            }
+        ));
+    }
+}
+
 #[proc_macro_attribute]
 pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
     // structured extras (auth(...)) are peeled off first; the rest of
@@ -3519,10 +3581,18 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
         quote! {}
     };
 
+    let security_contract_code = match &extras.security_contract {
+        Some(specs) => {
+            generate_security_contract_registration(&name, &version, specs, &extras.auth_roles)
+        }
+        None => quote! {},
+    };
+
     let generated = quote! {
         #openapi_path_attr
         #cleaned_input
         #lifecycle_code
+        #security_contract_code
         #http_code
         #mcp_code
         #ws_code
