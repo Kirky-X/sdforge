@@ -291,6 +291,8 @@ const RESERVED_KEYWORDS: &[&str] = &[
 struct ForgeExtras {
     /// Roles from `auth(role = "admin")` (repeatable).
     auth_roles: Vec<String>,
+    /// Per-protocol security declarations from `security(...)`.
+    security_contract: Option<PerProtocolSpecs>,
     /// `validate` bare flag: enforce `#[param(...)]` validation rules.
     validate: bool,
     /// `paginate` bare flag: page/size params + envelope wrapping.
@@ -374,6 +376,17 @@ fn extract_forge_extras(args: TokenStream2) -> Result<(TokenStream2, ForgeExtras
                     ));
                 }
             },
+            TokenTree::Ident(ident) if ident == "security" => match iter.next() {
+                Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Parenthesis => {
+                    extras.security_contract = Some(parse_security_group(group.stream())?);
+                }
+                _ => {
+                    return Err(syn::Error::new(
+                        ident.span(),
+                        "security requires a parenthesized spec list: security(http(auth = \"none\"))",
+                    ));
+                }
+            },
             other => remaining.push(other.clone()),
         }
     }
@@ -444,6 +457,176 @@ fn parse_auth_group(args: TokenStream2, extras: &mut ForgeExtras) -> Result<(), 
         ));
     }
     Ok(())
+}
+
+/// One protocol section of `security(...)`: the auth scheme and zero or more
+/// authorization roles.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct ProtocolSpec {
+    /// `auth = "none" | "api_key" | "jwt"`; empty means the key was missing.
+    auth: String,
+    roles: Vec<String>,
+}
+
+/// Parsed `security(...)` declaration, one optional section per protocol.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct PerProtocolSpecs {
+    http: Option<ProtocolSpec>,
+    mcp: Option<ProtocolSpec>,
+    grpc: Option<ProtocolSpec>,
+    cli: Option<ProtocolSpec>,
+    websocket: Option<ProtocolSpec>,
+}
+
+impl PerProtocolSpecs {
+    fn slot_mut(&mut self, protocol: &str) -> &mut Option<ProtocolSpec> {
+        match protocol {
+            "http" => &mut self.http,
+            "mcp" => &mut self.mcp,
+            "grpc" => &mut self.grpc,
+            "cli" => &mut self.cli,
+            "websocket" => &mut self.websocket,
+            _ => unreachable!("protocol validated by caller"),
+        }
+    }
+}
+
+/// Parse the body of `security(proto(auth = "...", role = "..."), ...)`.
+///
+/// Each protocol segment supports `auth = "none|api_key|jwt"` and zero or more
+/// `role = "..."` pairs. Unknown keys, a missing `auth`, or a duplicate
+/// protocol segment produce precise span diagnostics.
+fn parse_security_group(args: TokenStream2) -> Result<PerProtocolSpecs, syn::Error> {
+    let mut specs = PerProtocolSpecs::default();
+    let mut iter = args.into_iter();
+    while let Some(tt) = iter.next() {
+        match &tt {
+            TokenTree::Punct(p) if p.as_char() == ',' => continue,
+            TokenTree::Ident(proto) => {
+                let protocol = proto.to_string();
+                if !matches!(
+                    protocol.as_str(),
+                    "http" | "mcp" | "grpc" | "cli" | "websocket"
+                ) {
+                    return Err(syn::Error::new(
+                        proto.span(),
+                        format!(
+                            "unknown protocol inside security(...): `{}` (supported: http, mcp, grpc, cli, websocket)",
+                            protocol
+                        ),
+                    ));
+                }
+                let group = match iter.next() {
+                    Some(TokenTree::Group(g)) if g.delimiter() == Delimiter::Parenthesis => g,
+                    other => {
+                        let span = other.as_ref().map(|t| t.span()).unwrap_or(proto.span());
+                        return Err(syn::Error::new(
+                            span,
+                            format!(
+                                "{} requires a parenthesized spec: {}(auth = \"none\")",
+                                protocol, protocol
+                            ),
+                        ));
+                    }
+                };
+                let slot = specs.slot_mut(&protocol);
+                if slot.is_some() {
+                    return Err(syn::Error::new(
+                        proto.span(),
+                        format!(
+                            "duplicate protocol segment in security(...): `{}`",
+                            protocol
+                        ),
+                    ));
+                }
+                let mut spec = ProtocolSpec::default();
+                let mut inner = group.stream().into_iter();
+                while let Some(itt) = inner.next() {
+                    match &itt {
+                        TokenTree::Punct(p) if p.as_char() == ',' => continue,
+                        TokenTree::Ident(key) if key == "auth" || key == "role" => {
+                            match inner.next() {
+                                Some(TokenTree::Punct(p)) if p.as_char() == '=' => {}
+                                other => {
+                                    let span =
+                                        other.as_ref().map(|t| t.span()).unwrap_or(key.span());
+                                    return Err(syn::Error::new(
+                                        span,
+                                        format!("expected `=` after `{}`", key),
+                                    ));
+                                }
+                            }
+                            let lit = match inner.next() {
+                                Some(TokenTree::Literal(l)) => l,
+                                other => {
+                                    let span =
+                                        other.as_ref().map(|t| t.span()).unwrap_or(key.span());
+                                    return Err(syn::Error::new(
+                                        span,
+                                        format!("expected a string literal after `{} =`", key),
+                                    ));
+                                }
+                            };
+                            let raw = lit.to_string();
+                            let value = raw.trim().trim_matches('"').to_string();
+                            if key == "auth" {
+                                if !matches!(value.as_str(), "none" | "api_key" | "jwt") {
+                                    return Err(syn::Error::new(
+                                        lit.span(),
+                                        format!(
+                                            "invalid auth `{}` (supported: none, api_key, jwt)",
+                                            value
+                                        ),
+                                    ));
+                                }
+                                spec.auth = value;
+                            } else {
+                                if value.is_empty() {
+                                    return Err(syn::Error::new(
+                                        lit.span(),
+                                        "security role cannot be empty",
+                                    ));
+                                }
+                                spec.roles.push(value);
+                            }
+                        }
+                        TokenTree::Ident(key) => {
+                            return Err(syn::Error::new(
+                                key.span(),
+                                format!(
+                                    "unknown key inside security({}(...)): `{}` (supported: auth, role)",
+                                    protocol, key
+                                ),
+                            ));
+                        }
+                        other => {
+                            return Err(syn::Error::new(
+                                other.span(),
+                                format!("unexpected token inside security({}(...))", protocol),
+                            ));
+                        }
+                    }
+                }
+                if spec.auth.is_empty() {
+                    return Err(syn::Error::new(
+                        group.span(),
+                        format!(
+                            "security({}(...)) requires `auth = \"none|api_key|jwt\"`",
+                            protocol
+                        ),
+                    ));
+                }
+                *slot = Some(spec);
+            }
+            other => {
+                return Err(syn::Error::new(
+                    other.span(),
+                    "unexpected token inside security(...)",
+                ));
+            }
+        }
+    }
+    Ok(specs)
 }
 
 /// Known classic `#[forge]` keys (validated token-wise so unknown keys
@@ -5313,5 +5496,86 @@ mod handler_closure_tests {
         assert!(s.contains("HandlerArgs"), "missing HandlerArgs: {s}");
         assert!(s.contains("HandlerState"), "missing HandlerState: {s}");
         assert!(s.contains("HandlerFuture"), "missing HandlerFuture: {s}");
+    }
+}
+
+#[cfg(test)]
+mod security_contract_parse_tests {
+    use super::*;
+
+    #[test]
+    fn parses_all_protocols_with_auth_and_roles() {
+        let specs = parse_security_group(quote! {
+            http(auth = "jwt", role = "admin"),
+            mcp(auth = "api_key", role = "reader", role = "writer"),
+            grpc(auth = "none"),
+            cli(auth = "none"),
+            websocket(auth = "jwt")
+        })
+        .unwrap();
+        let http = specs.http.unwrap();
+        assert_eq!(http.auth, "jwt");
+        assert_eq!(http.roles, vec!["admin"]);
+        let mcp = specs.mcp.unwrap();
+        assert_eq!(mcp.auth, "api_key");
+        assert_eq!(mcp.roles, vec!["reader", "writer"]);
+        assert_eq!(specs.grpc.unwrap().auth, "none");
+        assert_eq!(specs.cli.unwrap().auth, "none");
+        assert_eq!(specs.websocket.unwrap().auth, "jwt");
+    }
+
+    #[test]
+    fn unknown_key_reports_supported_keys() {
+        let err = parse_security_group(quote! { http(auth = "jwt", scope = "x") })
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("unknown key inside security(http(...))"),
+            "{err}"
+        );
+        assert!(err.contains("supported: auth, role"), "{err}");
+    }
+
+    #[test]
+    fn missing_auth_is_rejected() {
+        let err = parse_security_group(quote! { http(role = "admin") })
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("requires `auth ="), "{err}");
+    }
+
+    #[test]
+    fn empty_role_is_rejected() {
+        let err = parse_security_group(quote! { http(auth = "jwt", role = "") })
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("security role cannot be empty"), "{err}");
+    }
+
+    #[test]
+    fn duplicate_protocol_segment_is_rejected() {
+        let err = parse_security_group(quote! { mcp(auth = "none"), mcp(auth = "jwt") })
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("duplicate protocol segment"), "{err}");
+    }
+
+    #[test]
+    fn invalid_auth_scheme_is_rejected() {
+        let err = parse_security_group(quote! { http(auth = "oauth") })
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("invalid auth"), "{err}");
+    }
+
+    #[test]
+    fn security_key_is_consumed_by_extras() {
+        let (remaining, extras) =
+            extract_forge_extras(quote! { name = "x", security(http(auth = "jwt")) }).unwrap();
+        let remaining = remaining.to_string();
+        assert!(remaining.contains("name"), "remaining: {remaining}");
+        assert!(!remaining.contains("security"), "remaining: {remaining}");
+        let specs = extras.security_contract.expect("security parsed");
+        assert_eq!(specs.http.unwrap().auth, "jwt");
     }
 }
