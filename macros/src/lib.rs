@@ -1995,6 +1995,26 @@ fn generate_security_contract_registration(
     let endpoint_lit = proc_macro2::Literal::string(name);
     let version_lit = proc_macro2::Literal::string(version);
 
+    // Both role channels present: emit a compile-time diagnostic so developers
+    // see the single-source recommendation. Roles still union (no error).
+    if !auth_roles.is_empty()
+        && [
+            &specs.http,
+            &specs.mcp,
+            &specs.grpc,
+            &specs.cli,
+            &specs.websocket,
+        ]
+        .into_iter()
+        .flatten()
+        .any(|s| !s.roles.is_empty())
+    {
+        eprintln!(
+            "warning: endpoint `{}` declares roles in both auth(role) and security(...); roles are unioned, prefer a single source",
+            name
+        );
+    }
+
     let section = |spec: &Option<ProtocolSpec>| -> proc_macro2::TokenStream {
         match spec {
             None => quote! { None },
