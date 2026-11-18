@@ -217,3 +217,45 @@ fn security_contract_registration_is_enumerable_with_union_roles() {
         vec![Protocol::Cli, Protocol::WebSocket]
     );
 }
+
+#[sdforge::forge(
+    name = "wired_mcp_endpoint",
+    version = "v1",
+    description = "Endpoint declaring MCP auth requirement",
+    tool_name = "wired_mcp_endpoint",
+    security(mcp(auth = "jwt"))
+)]
+async fn wired_mcp_endpoint() -> Result<String, sdforge::core::ApiError> {
+    Ok("ok".to_string())
+}
+
+#[test]
+fn mcp_server_wiring_check_is_fail_closed() {
+    use sdforge::mcp::SdForgeMcpServer;
+
+    let server = SdForgeMcpServer::new();
+    assert!(
+        server.validate_contract_wiring().is_err(),
+        "declared mcp auth requires a verifier"
+    );
+}
+
+#[sdforge::forge(
+    name = "wired_cli_endpoint",
+    version = "v1",
+    description = "Endpoint declaring CLI auth requirement",
+    cli = true,
+    security(cli(auth = "api_key"))
+)]
+async fn wired_cli_endpoint() -> Result<String, sdforge::core::ApiError> {
+    Ok("ok".to_string())
+}
+
+#[test]
+fn cli_builder_wiring_check_is_fail_closed() {
+    let builder = sdforge::cli::CliBuilder::new();
+    assert!(
+        builder.validate_contract_wiring().is_err(),
+        "declared cli auth requires a verifier"
+    );
+}

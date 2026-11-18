@@ -218,6 +218,17 @@ impl SdForgeMcpServer {
         self
     }
 
+    /// Validate the registered security contracts against this server's
+    /// verifier wiring. Call before serving to turn a silent fail-open into
+    /// a startup error.
+    #[cfg(feature = "security-core")]
+    pub fn validate_contract_wiring(&self) -> Result<(), crate::security::AuthConfigError> {
+        crate::security::contract::check_all_contracts(crate::security::ProtocolSet {
+            mcp: self.auth_verifier.is_some(),
+            ..Default::default()
+        })
+    }
+
     /// Attach application state, mirroring the gRPC `with_state` wiring.
     ///
     /// The state becomes available to every tool through

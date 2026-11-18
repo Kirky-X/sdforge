@@ -74,6 +74,9 @@ pub use contract::{
     AuthScheme, ContractRegistration, EndpointSecurity, Protocol, ProtocolSecurityContract,
     ProtocolSet,
 };
+// AuthConfigError is returned by the contract wiring checks.
+#[cfg(feature = "security-core")]
+pub use types::AuthConfigError;
 
 // protocol-neutral auth verifier port + Bearer/API-key adapters for
 // non-HTTP protocols (gRPC interceptor, WS handshake, custom transports).

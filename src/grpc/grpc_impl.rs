@@ -1142,6 +1142,13 @@ where
              (set GrpcServerConfig.require_auth = false to override)",
         )));
     }
+    // Fail-closed contract check: any registered endpoint declaring a grpc
+    // auth requirement must have a verifier wired, else startup is rejected.
+    #[cfg(feature = "security-core")]
+    crate::security::contract::check_all_contracts(crate::security::ProtocolSet {
+        grpc: config.auth_verifier.is_some() || config.auth.is_some(),
+        ..Default::default()
+    })?;
     // pass `config.state` into the service so handlers with State
     // parameters can downcast it at call time.
     // Pass `config.rate_limiter` when `ratelimit` feature is enabled.

@@ -122,6 +122,17 @@ pub struct ContractRegistration(
 
 inventory::collect!(ContractRegistration);
 
+/// Check all registered contracts against the given wired protocols.
+///
+/// Convenience wrapper over [`check_verifier_wiring`] that enumerates the
+/// inventory registry.
+pub fn check_all_contracts(wired: ProtocolSet) -> Result<(), AuthConfigError> {
+    check_verifier_wiring(
+        inventory::iter::<ContractRegistration>().map(|r| r.0),
+        wired,
+    )
+}
+
 /// Check that every contract requiring a verifier has that protocol wired.
 ///
 /// Returns an [`AuthConfigError`] listing offending endpoints and the wiring

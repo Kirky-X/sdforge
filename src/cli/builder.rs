@@ -140,6 +140,16 @@ impl CliBuilder {
         self
     }
 
+    /// Validate registered security contracts against this builder's verifier
+    /// wiring. Call before `execute` to reject a silent fail-open configuration.
+    #[cfg(feature = "security-core")]
+    pub fn validate_contract_wiring(&self) -> Result<(), crate::security::AuthConfigError> {
+        crate::security::contract::check_all_contracts(crate::security::ProtocolSet {
+            cli: self.auth_verifier.is_some(),
+            ..Default::default()
+        })
+    }
+
     /// Evaluate the authentication gate without running the CLI (feature =
     /// `security`).
     ///
