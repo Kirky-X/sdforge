@@ -44,6 +44,20 @@ sse-idle-timeout = 流因 { $seconds } 秒空闲超时而关闭
 docs-swagger-title = SDForge API 文档
 docs-swagger-redirecting = 正在跳转到 <a href="{ $url }">Swagger UI</a>...
 
+# --- 文档生成产物（Markdown / JSON / 占位提示） ----------------------------------------
+docs-mcp-tools-heading = MCP 工具
+docs-mcp-version = 版本：{ $version }
+docs-openapi-spec-heading = OpenAPI 规范
+docs-cli-documentation-heading = CLI 文档
+docs-swagger-ui-inline-note = <!-- Swagger UI：使用 --format swagger 运行，或访问 /swagger-ui/ 查看交互式文档 -->
+docs-swagger-ui-unavailable-note = <!-- Swagger UI 需要 'http' feature。启用后可使用交互式文档。 -->
+docs-mcp-unavailable-note = <!-- 未启用 MCP feature。请启用 `mcp` feature 以生成 MCP 工具文档。 -->
+docs-output-path-invalid = 输出路径不得包含父目录组件 (..)
+docs-agent-name-semantics = 宿主二进制名（无参生成时为 sdforge 库名）
+docs-agent-null-return = stdout 无输出
+docs-agent-docs-exception-note = docs 自行输出生成的文档文本；全局 --format json 不会包装其输出
+docs-agent-docs-format-desc = 文档格式（独立于全局 --format 输出契约）
+
 # --- i18n HTTP 错误格式化（复数感知） ----------------------------------------------
 http-error-singular = HTTP { $code }: { $count } 个错误 ({ $category })
 http-error-plural = HTTP { $code }: { $count } 个错误 ({ $category })
@@ -76,6 +90,30 @@ cli-sdk-lang-help = SDK 目标语言
 cli-sdk-output-dir-help = 输出目录（默认为当前目录）
 cli-sdk-reqwest-help = Rust 产物：追加 cfg(reqwest) 的 ReqwestTransport 实现
 
+# --- doctor 子命令（只读安全姿态诊断） ----------------------------------------------------
+doctor-about = 执行只读安全姿态诊断
+doctor-protocol-help = 将诊断结果筛选为单一协议
+doctor-json-help = 以 JSON 输出完整 DoctorReport
+doctor-protocol-enabled = { $name } 协议已启用
+doctor-verifier-missing = { $name } 未接入验证程序
+doctor-verifier-missing-hint = 调用 { $method }
+doctor-contract-ok = 端点 `{ $endpoint }` 已声明全部启用的协议
+doctor-contract-missing = 端点 `{ $endpoint }` 缺少以下协议的安全声明：{ $protocols }
+doctor-contract-missing-hint = 添加 security(<proto>(auth = "none")) 或使用真实认证方案
+doctor-no-contracts = 未注册安全契约；请启用 security(...) 声明以获得完整覆盖
+doctor-jwt-secret-ok = JWT 密钥满足最小长度要求
+doctor-jwt-secret-too-short = JWT 密钥长度 { $len } < { $min }
+doctor-jwt-secret-too-short-hint = 请使用至少 32 个字符的密钥
+doctor-host-loopback-ok = 服务主机为回环地址（失败安全）
+doctor-host-not-loopback = 服务主机 `{ $host }` 不是回环地址
+doctor-host-not-loopback-hint = 请确认网络暴露是有意为之
+doctor-security-http-redundant = 已启用 security-http 但没有 HTTP 端点
+doctor-security-http-redundant-hint = 非 HTTP 协议请仅使用 security-core
+doctor-control-unavailable = { $name } 上不提供 { $control }
+doctor-control-security-headers = 安全响应头
+doctor-control-endpoint-authorization = 端点授权
+doctor-hint-line = 提示：{ $hint }
+
 # --- OpenAPI 信息 ---------------------------------------------------------------------
 openapi-info-title = SDForge API
 
@@ -87,6 +125,10 @@ auth-bearer-token-invalid = 无效的 Bearer Token
 # --- 配置鉴权校验（加载期 ConfigError） ------------------------------------------------------
 config-auth-jwt-audience-empty = JWT audience 不能为空：空 audience 会匹配 aud 声明为空的令牌
 config-auth-jwt-issuer-empty = JWT issuer 不能为空：空 issuer 会匹配 iss 声明为空的令牌
+config-auth-api-key-prefix-empty = API key 前缀不能为空：空前缀会让任意 key 都匹配通过
+config-auth-jwt-secret-empty = JWT 密钥不能为空
+config-auth-jwt-secret-too-short = JWT 密钥过短：{ $len } 个字符，至少需要 { $min } 个（推荐 256-bit 熵）。请使用 `sdforge::security::bearer::generate_secure_jwt_secret()` 生成强密钥。
+config-auth-jwt-secret-weak = JWT 密钥太弱。避免使用 'secret'、'password'、'key' 或 'jwt_secret' 等常见词。请使用随机生成的值。
 
 # --- 审计日志 ---------------------------------------------------------------------------
 audit-signing-key-empty = ⚠️  警告：SDFORGE_AUDIT_SIGNING_KEY 为空，审计日志将不会签名。

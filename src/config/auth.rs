@@ -172,10 +172,10 @@ impl AuthConfig {
         match self {
             AuthConfig::ApiKey { prefix, .. } => {
                 if prefix.is_empty() {
-                    return Err(crate::config::ConfigError::ValidationError(
-                        "API key prefix cannot be empty: an empty prefix allows any key to match"
-                            .into(),
-                    ));
+                    return Err(crate::config::ConfigError::ValidationError(crate::i18n::t(
+                        "config-auth-api-key-prefix-empty",
+                        &[],
+                    )));
                 }
             }
             AuthConfig::Jwt {
@@ -198,21 +198,22 @@ impl AuthConfig {
                     )));
                 }
                 if secret.is_empty() {
-                    return Err(crate::config::ConfigError::ValidationError(
-                        "JWT secret cannot be empty".into(),
-                    ));
+                    return Err(crate::config::ConfigError::ValidationError(crate::i18n::t(
+                        "config-auth-jwt-secret-empty",
+                        &[],
+                    )));
                 }
 
                 // 强制最小密钥长度（256-bit entropy recommended for HS256）
                 // 之前 MIN_SECRET_LENGTH=32 定义在 defaults.rs 但未被引用，形同虚设
                 let min_len = crate::config::defaults::jwt::MIN_SECRET_LENGTH;
                 if secret.len() < min_len {
-                    return Err(crate::config::ConfigError::ValidationError(format!(
-                        "JWT secret too short: {} chars, minimum {} required (256-bit entropy \
-                         recommended). Use `sdforge::security::bearer::generate_secure_jwt_secret()`\
-                         to generate a strong secret.",
-                        secret.len(),
-                        min_len
+                    return Err(crate::config::ConfigError::ValidationError(crate::i18n::t(
+                        "config-auth-jwt-secret-too-short",
+                        &[
+                            ("len", secret.len().to_string()),
+                            ("min", min_len.to_string()),
+                        ],
                     )));
                 }
 
@@ -222,11 +223,10 @@ impl AuthConfig {
                     || lower == "key"
                     || lower == "jwt_secret"
                 {
-                    return Err(crate::config::ConfigError::ValidationError(
-                        "JWT secret is too weak. Avoid using common words like 'secret', \
-                         'password', 'key', or 'jwt_secret'. Use a randomly generated value."
-                            .into(),
-                    ));
+                    return Err(crate::config::ConfigError::ValidationError(crate::i18n::t(
+                        "config-auth-jwt-secret-weak",
+                        &[],
+                    )));
                 }
             }
             AuthConfig::None => {}

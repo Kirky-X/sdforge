@@ -46,6 +46,20 @@ sse-idle-timeout = Stream closed due to { $seconds }s idle timeout
 docs-swagger-title = SDForge API Docs
 docs-swagger-redirecting = Redirecting to <a href="{ $url }">Swagger UI</a>...
 
+# --- docs generation products (Markdown / JSON / notes) ----------------------------
+docs-mcp-tools-heading = MCP Tools
+docs-mcp-version = Version: { $version }
+docs-openapi-spec-heading = OpenAPI Specification
+docs-cli-documentation-heading = CLI Documentation
+docs-swagger-ui-inline-note = <!-- Swagger UI: run with --format swagger or visit /swagger-ui/ for interactive docs -->
+docs-swagger-ui-unavailable-note = <!-- Swagger UI requires the 'http' feature. Enable it to use interactive docs. -->
+docs-mcp-unavailable-note = <!-- MCP feature not enabled. Enable `mcp` feature to generate MCP tool documentation. -->
+docs-output-path-invalid = output path must not contain parent directory components (..)
+docs-agent-name-semantics = host binary name (or the sdforge library name when generated without arguments)
+docs-agent-null-return = no output on stdout
+docs-agent-docs-exception-note = docs emits generated documentation text itself; global --format json does not wrap its output
+docs-agent-docs-format-desc = Documentation format (independent of the global --format output contract)
+
 # --- i18n HTTP error formatter (plural-aware) ---------------------------------
 http-error-singular = HTTP { $code }: { $count } error ({ $category })
 http-error-plural = HTTP { $code }: { $count } errors ({ $category })
@@ -78,6 +92,30 @@ cli-sdk-lang-help = SDK target language
 cli-sdk-output-dir-help = Output directory (defaults to current directory)
 cli-sdk-reqwest-help = Rust output: append the cfg(reqwest) ReqwestTransport impl
 
+# --- doctor subcommand (read-only security posture diagnostics) ------------------
+doctor-about = Run read-only security posture diagnostics
+doctor-protocol-help = Filter findings to one protocol
+doctor-json-help = Emit the full DoctorReport as JSON
+doctor-protocol-enabled = { $name } protocol enabled
+doctor-verifier-missing = { $name } has no verifier wired
+doctor-verifier-missing-hint = call { $method }
+doctor-contract-ok = endpoint `{ $endpoint }` declares all enabled protocols
+doctor-contract-missing = endpoint `{ $endpoint }` lacks a security declaration for: { $protocols }
+doctor-contract-missing-hint = add security(<proto>(auth = "none")) or a real scheme
+doctor-no-contracts = no security contracts registered; enable security(...) declarations for full coverage
+doctor-jwt-secret-ok = JWT secret meets minimum length
+doctor-jwt-secret-too-short = JWT secret length { $len } < { $min }
+doctor-jwt-secret-too-short-hint = use a secret of at least 32 characters
+doctor-host-loopback-ok = server host is loopback (fail-safe)
+doctor-host-not-loopback = server host `{ $host }` is not loopback
+doctor-host-not-loopback-hint = confirm network exposure is intentional
+doctor-security-http-redundant = security-http enabled without HTTP endpoints
+doctor-security-http-redundant-hint = use security-core alone for non-HTTP protocols
+doctor-control-unavailable = { $control } is not available on { $name }
+doctor-control-security-headers = security headers
+doctor-control-endpoint-authorization = endpoint authorization
+doctor-hint-line = hint: { $hint }
+
 # --- OpenAPI info ----------------------------------------------------------------
 openapi-info-title = SDForge API
 
@@ -89,6 +127,10 @@ auth-bearer-token-invalid = invalid bearer token
 # --- config auth validation (load-time ConfigError) -------------------------------
 config-auth-jwt-audience-empty = JWT audience cannot be empty: an empty audience matches tokens with an empty aud claim
 config-auth-jwt-issuer-empty = JWT issuer cannot be empty: an empty issuer matches tokens with an empty iss claim
+config-auth-api-key-prefix-empty = API key prefix cannot be empty: an empty prefix allows any key to match
+config-auth-jwt-secret-empty = JWT secret cannot be empty
+config-auth-jwt-secret-too-short = JWT secret too short: { $len } chars, minimum { $min } required (256-bit entropy recommended). Use `sdforge::security::bearer::generate_secure_jwt_secret()`to generate a strong secret.
+config-auth-jwt-secret-weak = JWT secret is too weak. Avoid using common words like 'secret', 'password', 'key', or 'jwt_secret'. Use a randomly generated value.
 
 # --- audit logging ----------------------------------------------------------------
 audit-signing-key-empty = ⚠️  WARNING: SDFORGE_AUDIT_SIGNING_KEY is empty. Audit logs will not be signed.

@@ -115,16 +115,22 @@ pub fn check_verifiers(state: WiringState) -> Vec<DoctorFinding> {
                 out.push(DoctorFinding::new(
                     FindingLevel::Ok,
                     DoctorCode::ProtocolEnabled,
-                    format!("{} protocol enabled", $name),
+                    crate::i18n::t("doctor-protocol-enabled", &[("name", $name.to_string())]),
                 ));
                 if !$wired {
                     out.push(
                         DoctorFinding::new(
                             FindingLevel::Fail,
                             DoctorCode::ProtocolVerifierMissing,
-                            format!("{} has no verifier wired", $name),
+                            crate::i18n::t(
+                                "doctor-verifier-missing",
+                                &[("name", $name.to_string())],
+                            ),
                         )
-                        .with_hint(format!("call {}", $method)),
+                        .with_hint(crate::i18n::t(
+                            "doctor-verifier-missing-hint",
+                            &[("method", $method.to_string())],
+                        )),
                     );
                 }
             }
@@ -170,9 +176,9 @@ pub fn check_contracts() -> Vec<DoctorFinding> {
             out.push(DoctorFinding::new(
                 FindingLevel::Ok,
                 DoctorCode::EndpointContractOk,
-                format!(
-                    "endpoint `{}` declares all enabled protocols",
-                    contract.endpoint
+                crate::i18n::t(
+                    "doctor-contract-ok",
+                    &[("endpoint", contract.endpoint.to_string())],
                 ),
             ));
         } else {
@@ -190,13 +196,15 @@ pub fn check_contracts() -> Vec<DoctorFinding> {
                 DoctorFinding::new(
                     FindingLevel::Fail,
                     DoctorCode::EndpointContractMissing,
-                    format!(
-                        "endpoint `{}` lacks a security declaration for: {}",
-                        contract.endpoint,
-                        names.join(", ")
+                    crate::i18n::t(
+                        "doctor-contract-missing",
+                        &[
+                            ("endpoint", contract.endpoint.to_string()),
+                            ("protocols", names.join(", ")),
+                        ],
                     ),
                 )
-                .with_hint("add security(<proto>(auth = \"none\")) or a real scheme"),
+                .with_hint(crate::i18n::t("doctor-contract-missing-hint", &[])),
             );
         }
     }
@@ -204,7 +212,7 @@ pub fn check_contracts() -> Vec<DoctorFinding> {
         out.push(DoctorFinding::new(
             FindingLevel::Warn,
             DoctorCode::EndpointContractMissing,
-            "no security contracts registered; enable security(...) declarations for full coverage",
+            crate::i18n::t("doctor-no-contracts", &[]),
         ));
     }
     out
@@ -217,36 +225,41 @@ pub fn check_config(jwt_secret_len: usize, host: &str) -> Vec<DoctorFinding> {
         out.push(DoctorFinding::new(
             FindingLevel::Ok,
             DoctorCode::JwtSecretOk,
-            "JWT secret meets minimum length",
+            crate::i18n::t("doctor-jwt-secret-ok", &[]),
         ));
     } else {
         out.push(
             DoctorFinding::new(
                 FindingLevel::Fail,
                 DoctorCode::JwtSecretTooShort,
-                format!(
-                    "JWT secret length {} < {}",
-                    jwt_secret_len,
-                    crate::config::defaults::jwt::MIN_SECRET_LENGTH
+                crate::i18n::t(
+                    "doctor-jwt-secret-too-short",
+                    &[
+                        ("len", jwt_secret_len.to_string()),
+                        (
+                            "min",
+                            crate::config::defaults::jwt::MIN_SECRET_LENGTH.to_string(),
+                        ),
+                    ],
                 ),
             )
-            .with_hint("use a secret of at least 32 characters"),
+            .with_hint(crate::i18n::t("doctor-jwt-secret-too-short-hint", &[])),
         );
     }
     if host == crate::config::defaults::server::DEFAULT_HOST {
         out.push(DoctorFinding::new(
             FindingLevel::Ok,
             DoctorCode::HostLoopbackOk,
-            "server host is loopback (fail-safe)",
+            crate::i18n::t("doctor-host-loopback-ok", &[]),
         ));
     } else {
         out.push(
             DoctorFinding::new(
                 FindingLevel::Warn,
                 DoctorCode::HostNotLoopback,
-                format!("server host `{host}` is not loopback"),
+                crate::i18n::t("doctor-host-not-loopback", &[("host", host.to_string())]),
             )
-            .with_hint("confirm network exposure is intentional"),
+            .with_hint(crate::i18n::t("doctor-host-not-loopback-hint", &[])),
         );
     }
     out
@@ -260,20 +273,29 @@ pub fn check_redundancy() -> Vec<DoctorFinding> {
             DoctorFinding::new(
                 FindingLevel::Warn,
                 DoctorCode::SecurityHttpRedundant,
-                "security-http enabled without HTTP endpoints",
+                crate::i18n::t("doctor-security-http-redundant", &[]),
             )
-            .with_hint("use security-core alone for non-HTTP protocols"),
+            .with_hint(crate::i18n::t("doctor-security-http-redundant-hint", &[])),
         );
     }
     if !cfg!(feature = "http") {
         for (name, control) in [
-            ("MCP", "security headers"),
-            ("CLI", "endpoint authorization"),
+            (
+                "MCP",
+                crate::i18n::t("doctor-control-security-headers", &[]),
+            ),
+            (
+                "CLI",
+                crate::i18n::t("doctor-control-endpoint-authorization", &[]),
+            ),
         ] {
             out.push(DoctorFinding::new(
                 FindingLevel::Warn,
                 DoctorCode::ControlUnavailableOnProtocol,
-                format!("{control} is not available on {name}"),
+                crate::i18n::t(
+                    "doctor-control-unavailable",
+                    &[("control", control.to_string()), ("name", name.to_string())],
+                ),
             ));
         }
     }
@@ -293,18 +315,27 @@ pub fn run_doctor(jwt_secret_len: usize, host: &str, state: WiringState) -> Doct
 /// Build the `doctor` clap subcommand definition.
 pub fn doctor_subcommand_definition() -> clap::Command {
     clap::Command::new("doctor")
-        .about("Run read-only security posture diagnostics")
+        .about(crate::i18n::translate_or_fallback(
+            "Run read-only security posture diagnostics",
+            Some("doctor-about"),
+        ))
         .arg(
             clap::Arg::new("protocol")
                 .long("protocol")
                 .value_parser(["http", "mcp", "grpc", "cli", "websocket"])
-                .help("Filter findings to one protocol"),
+                .help(crate::i18n::translate_or_fallback(
+                    "Filter findings to one protocol",
+                    Some("doctor-protocol-help"),
+                )),
         )
         .arg(
             clap::Arg::new("json")
                 .long("json")
                 .action(clap::ArgAction::SetTrue)
-                .help("Emit the full DoctorReport as JSON"),
+                .help(crate::i18n::translate_or_fallback(
+                    "Emit the full DoctorReport as JSON",
+                    Some("doctor-json-help"),
+                )),
         )
 }
 
@@ -328,7 +359,10 @@ pub fn doctor_from_matches(matches: &clap::ArgMatches) -> i32 {
             };
             println!("[{mark}] {:?}: {}", finding.code, finding.message);
             if let Some(hint) = &finding.hint {
-                println!("    hint: {hint}");
+                println!(
+                    "    {}",
+                    crate::i18n::t("doctor-hint-line", &[("hint", hint.clone())])
+                );
             }
         }
     }

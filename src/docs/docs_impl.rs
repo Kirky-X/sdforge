@@ -27,7 +27,7 @@ pub fn generate_docs(format: DocFormat) -> Result<String, DocError> {
             }
             #[cfg(not(feature = "http"))]
             {
-                Ok(swagger_ui_unavailable_note().to_string())
+                Ok(swagger_ui_unavailable_note())
             }
         }
         DocFormat::CliMarkdown => Ok(cli_markdown::generate_cli_docs()),
@@ -35,21 +35,28 @@ pub fn generate_docs(format: DocFormat) -> Result<String, DocError> {
         DocFormat::Agent => Ok(agent_knowledge::generate_agent_knowledge().to_string()),
         DocFormat::All => {
             let mut out = String::new();
-            out.push_str("# OpenAPI Specification\n\n");
+            out.push_str(&format!(
+                "# {}\n\n",
+                crate::i18n::t("docs-openapi-spec-heading", &[])
+            ));
             out.push_str(&generate_docs(DocFormat::OpenApi)?);
             out.push_str("\n\n");
-            out.push_str("# CLI Documentation\n\n");
+            out.push_str(&format!(
+                "# {}\n\n",
+                crate::i18n::t("docs-cli-documentation-heading", &[])
+            ));
             out.push_str(&generate_docs(DocFormat::CliMarkdown)?);
             out.push_str("\n\n");
             out.push_str(&generate_docs(DocFormat::McpMarkdown)?);
             out.push_str("\n\n");
             #[cfg(feature = "http")]
             {
-                out.push_str("<!-- Swagger UI: run with --format swagger or visit /swagger-ui/ for interactive docs -->\n");
+                out.push_str(&crate::i18n::t("docs-swagger-ui-inline-note", &[]));
+                out.push('\n');
             }
             #[cfg(not(feature = "http"))]
             {
-                out.push_str(swagger_ui_unavailable_note());
+                out.push_str(&swagger_ui_unavailable_note());
             }
             Ok(out)
         }
@@ -61,8 +68,11 @@ pub fn generate_docs(format: DocFormat) -> Result<String, DocError> {
 /// [`DocFormat::SwaggerUi`] 变体与 [`DocFormat::All`] 拼接两处共用同一文案，
 /// 收敛为单一事实来源，避免字面量漂移。
 #[cfg(not(feature = "http"))]
-fn swagger_ui_unavailable_note() -> &'static str {
-    "<!-- Swagger UI requires the 'http' feature. Enable it to use interactive docs. -->\n"
+fn swagger_ui_unavailable_note() -> String {
+    format!(
+        "{}\n",
+        crate::i18n::t("docs-swagger-ui-unavailable-note", &[])
+    )
 }
 
 /// 生成 MCP 工具列表 Markdown。
@@ -76,8 +86,7 @@ fn generate_mcp_markdown() -> String {
     }
     #[cfg(not(feature = "mcp"))]
     {
-        "<!-- MCP feature not enabled. Enable `mcp` feature to generate MCP tool documentation. -->\n"
-            .to_string()
+        format!("{}\n", crate::i18n::t("docs-mcp-unavailable-note", &[]))
     }
 }
 
@@ -123,7 +132,7 @@ pub fn write_docs(format: DocFormat, output_path: &std::path::Path) -> Result<()
     {
         return Err(DocError::Io(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            "output path must not contain parent directory components (..)",
+            crate::i18n::t("docs-output-path-invalid", &[]),
         )));
     }
     let content = generate_docs(format)?;

@@ -26,7 +26,10 @@ use crate::cli::output::{
 /// 名可能不同（`CliBuilder::with_name`），需要宿主标识的下游改用
 /// [`generate_agent_knowledge_for_host`]。
 pub fn generate_agent_knowledge() -> Value {
-    generate_agent_knowledge_for_host(env!("CARGO_PKG_NAME"), "SDForge multi-protocol CLI")
+    generate_agent_knowledge_for_host(
+        env!("CARGO_PKG_NAME"),
+        &crate::i18n::translate_or_fallback("SDForge multi-protocol CLI", Some("cli-root-about")),
+    )
 }
 
 /// 以宿主程序标识生成 Agent 知识包。
@@ -42,7 +45,7 @@ pub fn generate_agent_knowledge_for_host(name: &str, description: &str) -> Value
             "version": env!("CARGO_PKG_VERSION"),
             // name 语义：无参版本为 sdforge 库名；本变体为宿主传入的
             // 二进制名。声明字段避免消费方混淆。
-            "name_semantics": "host binary name (or the sdforge library name when generated without arguments)",
+            "name_semantics": crate::i18n::t("docs-agent-name-semantics", &[]),
         },
         "output_contract": output_contract(),
         "commands": cli_commands(),
@@ -67,7 +70,7 @@ fn output_contract() -> Value {
         "json_error_shape": "UnifiedError",
         // handler 返回 null（或 docs 等自输出子命令的哨兵）时 stdout
         // 不产生任何输出——调用方按空输出处理，而非字面 "null"。
-        "null_return": "no output on stdout",
+        "null_return": crate::i18n::t("docs-agent-null-return", &[]),
         // 例外声明：docs 子命令拥有独立的 --format（文档格式，非本契约
         // 的取值集合），且其输出为生成的文档文本——即使全局 --format json
         // 也不会被 JSON 渲染包装；解析 `docs` 的 stdout 时按文档产物处理。
@@ -76,7 +79,7 @@ fn output_contract() -> Value {
                 "command": "docs",
                 "independent_format_flag": true,
                 "self_emitted_output": true,
-                "note": "docs emits generated documentation text itself; global --format json does not wrap its output",
+                "note": crate::i18n::t("docs-agent-docs-exception-note", &[]),
             }
         ],
     })
@@ -119,12 +122,15 @@ fn cli_commands() -> Value {
     commands.push(json!({
         "name": "docs",
         "version": env!("CARGO_PKG_VERSION"),
-        "description": "Generate documentation files",
+        "description": crate::i18n::translate_or_fallback(
+            "Generate documentation files",
+            Some("cli-docs-about"),
+        ),
         "built_in": true,
         "args": [
             {
                 "name": "format",
-                "description": "Documentation format (independent of the global --format output contract)",
+                "description": crate::i18n::t("docs-agent-docs-format-desc", &[]),
                 "kind": "body",
                 "required": false,
                 "default": DEFAULT_DOC_FORMAT,
@@ -132,7 +138,10 @@ fn cli_commands() -> Value {
             },
             {
                 "name": "output",
-                "description": "Output file path (stdout if omitted)",
+                "description": crate::i18n::translate_or_fallback(
+                    "Output file path (stdout if omitted)",
+                    Some("cli-docs-output-help"),
+                ),
                 "kind": "body",
                 "required": false,
                 "default": null,

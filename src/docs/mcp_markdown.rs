@@ -21,15 +21,19 @@ use crate::mcp::McpToolRegistration;
 ///
 /// 顶部加 `# MCP Tools` 标题。
 pub fn generate_mcp_docs() -> String {
-    let mut out = String::from("# MCP Tools\n\n");
+    let mut out = format!("# {}\n\n", crate::i18n::t("docs-mcp-tools-heading", &[]));
 
     for reg in inventory::iter::<McpToolRegistration> {
         let metadata = reg.metadata();
+        let version = crate::i18n::t(
+            "docs-mcp-version",
+            &[("version", reg.version().to_string())],
+        );
         out.push_str(&format!(
-            "## {}\n\n{}\n\nVersion: {}\n\n",
+            "## {}\n\n{}\n\n{}\n\n",
             reg.name(),
             metadata.description(),
-            reg.version()
+            version
         ));
     }
 
