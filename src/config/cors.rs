@@ -163,7 +163,7 @@ pub fn build_cors_layer(
     Ok(cors)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "http"))]
 mod tests {
     use super::*;
 

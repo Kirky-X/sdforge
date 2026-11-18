@@ -88,6 +88,9 @@ jobs:
           - "http,websocket"
           - "http,grpc"
           - "http,streaming"
+          # 非 HTTP 协议 + 协议无关安全核（不引入 axum/tower）——security-core 分层验证
+          - "grpc,security-core"
+          - "mcp,security-core"
           - "full"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
