@@ -73,6 +73,24 @@ Once running, `GET /api/v1/users/42` is available (the version is automatically 
 
 `#[forge]` requires `name` and `version`; for the complete list, semantics, and defaults of the basic parameters (`path` / `method` / `status` / `description`, etc.) and the advanced parameters and bare flags (`i18n_key` / `cache_ttl` / `ws_path` / `stream` / `no_prefix` / `validate` / `paginate` / `on_start` / `on_stop` / `auth(role = "...")`), see the "`#[forge]` parameters" section of the [API reference](API_REFERENCE.md#forge-parameters).
 
+To declare security requirements per protocol in one place, use `security(...)`:
+
+```rust,ignore
+#[forge(
+    name = "delete_user", version = "v1",
+    path = "/users/:id", method = "DELETE",
+    tool_name = "delete_user", grpc_method = "DeleteUser",
+    security(
+        http(auth = "jwt", role = "admin"),
+        mcp(auth = "api_key"),
+        grpc(auth = "jwt", role = "admin"),
+        cli(auth = "none")
+    )
+)]
+```
+
+Each protocol section takes `auth = "none|api_key|jwt"` and optional `role = "..."`. Roles are unioned with `auth(role)`. Enable the `strict-security` feature to make missing declarations a compile error in focused protocol builds; see [SECURITY.md · Security contract declaration](SECURITY.md#security-contract-declaration-forge-security) for exemptions and fail-closed wiring checks.
+
 ### Version routing
 
 The `version` parameter determines the path prefix: `/api/{version}/...`. Multiple versions of the same `name` can coexist, each mapped to its own function and response type.

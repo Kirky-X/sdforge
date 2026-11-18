@@ -92,6 +92,31 @@ A pure MCP / gRPC / CLI project enables `security-core` together with its protoc
 
 > **The coverage boundary is registered security debt, not a final state**: authorization (`#[forge(auth(role = ...))]`/roles) is not yet implemented for CLI/WS — CLI sits inside a local trust boundary (the process entry point is the operator), and after the WS handshake there is no per-request identity channel; before introducing network-triggered forms, authorization must be added or compensated at the deployment layer (network isolation / least-privilege credentials). Pre-release checks must verify this matrix against the implementation.
 
+### Security contract declaration (`#[forge(security(...))]`)
+
+An endpoint declares its per-protocol authentication and authorization requirements in one place. The macro emits the declaration into an inventory registry; the builders consume it for fail-closed startup checks.
+
+```rust,ignore
+#[forge(
+    name = "delete_user", version = "v1",
+    path = "/users/:id", method = "DELETE",
+    tool_name = "delete_user", grpc_method = "DeleteUser",
+    auth(role = "admin"),
+    security(
+        http(auth = "jwt", role = "admin"),
+        mcp(auth = "api_key"),
+        grpc(auth = "jwt", role = "admin"),
+        cli(auth = "none"),
+    )
+)]
+```
+
+- Each protocol segment supports `auth = "none|api_key|jwt"` and zero or more `role = "..."` pairs.
+- Roles from `auth(role)` and `security(..., role)` are unioned (deduplicated). Prefer one channel; a compile-time warning is emitted when both are used.
+- An undeclared protocol has no security contract — behavior is unchanged from 0.5.x. `auth = "none"` is an explicit public declaration/exemption.
+- `strict-security` (opt-in feature, not in `full`): an endpoint that declares a protocol entry point (`tool_name` / `grpc_method` / `cli`) without a matching `security(...)` section fails to compile. Add `security(<proto>(auth = "none"))` to opt out for that endpoint. A focused build such as `mcp,strict-security` enforces this; the framework `full` aggregate and `--all-features` CI builds do not, because example/test fixtures intentionally expose unauthenticated endpoints.
+- Fail-closed wiring: a registered contract with `auth != none` and no verifier wired makes startup fail with a configuration error naming the endpoint and the wiring method (`with_auth_interceptor` / `with_auth_verifier`). Call `SdForgeMcpServer::validate_contract_wiring` / `CliBuilder::validate_contract_wiring` before serving; the gRPC builder checks automatically. `auth = "none"` declarations are exempt.
+
 ### Security Defaults (tightened since v0.3.0)
 
 - **JWT secret minimum length**: `MIN_SECRET_LENGTH=32`; secrets shorter than 32 characters are rejected
