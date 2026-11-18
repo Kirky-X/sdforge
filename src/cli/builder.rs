@@ -210,6 +210,12 @@ impl CliBuilder {
             root = root.subcommand(crate::cli::docs_subcommand_definition());
         }
 
+        // doctor feature: 只读安全姿态诊断子命令。
+        #[cfg(feature = "doctor")]
+        {
+            root = root.subcommand(crate::cli::doctor_subcommand_definition());
+        }
+
         // sdk feature 启用时自动注入 sdk 生成子命令（保留名，同 docs 范式）。
         #[cfg(feature = "sdk")]
         {
@@ -252,6 +258,13 @@ impl CliBuilder {
     pub async fn execute(self) -> ! {
         let cmd = self.build();
         let matches = cmd.get_matches();
+        // doctor is a reserved, read-only subcommand; intercept before any
+        // credential check or user handler dispatch.
+        #[cfg(feature = "doctor")]
+        if let Some(("doctor", sub)) = matches.subcommand() {
+            let code = crate::cli::doctor_subcommand::doctor_from_matches(sub);
+            std::process::exit(code);
+        }
         let format = crate::cli::output::OutputFormat::from_matches(&matches);
         // verify credentials before any dispatch (feature = `security`);
         // reuses the standard error channel so failures exit(1) without

@@ -199,6 +199,14 @@ pub mod docs_subcommand;
 #[cfg(feature = "docgen")]
 pub use docs_subcommand::{docs_subcommand, docs_subcommand_definition};
 
+// doctor subcommand — read-only security posture diagnostics (doctor feature)
+#[cfg(feature = "doctor")]
+pub mod doctor_subcommand;
+#[cfg(feature = "doctor")]
+pub use doctor_subcommand::{
+    DoctorCode, DoctorFinding, DoctorReport, FindingLevel, doctor_subcommand_definition, run_doctor,
+};
+
 // CliHandlerRegistration — closure-based handler dispatch
 pub mod handler;
 

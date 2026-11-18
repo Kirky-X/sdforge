@@ -330,6 +330,8 @@ limiteron-integration = ["dep:limiteron"]
 kit = ["dep:trait-kit", "trait-kit/health", "trait-kit/lifecycle", "limiteron-integration", "limiteron/kit", "oxcache/kit"]
 # inklog：将裸 log 输出桥接到 inklog LoggerManager
 inklog = ["dep:inklog"]
+# doctor：只读安全姿态诊断子命令（cli + 协议无关安全核），不入 full
+doctor = ["cli", "security-core"]
 # i18n：ICU4X 本地化错误消息、时间格式、复数与 Accept-Language 解析
 i18n = ["dep:icu", "dep:writeable", "dep:sys-locale"]
 # full：全量运行时特性集；排除 simd-json/kit/limiteron-integration 等重依赖
