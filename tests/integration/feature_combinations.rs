@@ -133,3 +133,49 @@ mod security_core_without_http {
         let _api_key = sdforge::security::SdForgeApiKeyAuth::new();
     }
 }
+
+// gRPC auth interceptor wiring from security-core alone (R-split-005).
+#[cfg(all(feature = "grpc", feature = "security-core", not(feature = "http")))]
+mod grpc_security_core {
+    #[test]
+    fn with_auth_interceptor_constructs() {
+        use sdforge::config::{ApiKeySeed, AuthConfig};
+        use sdforge::grpc::SdForgeGrpcService;
+        use sdforge::security::grpc_auth::make_verifier;
+
+        let verifier = make_verifier(&AuthConfig::ApiKey {
+            header_name: "x-api-key".to_string(),
+            prefix: String::new(),
+            keys: vec![ApiKeySeed {
+                key: "grpc-core-key".to_string(),
+                permissions: vec![],
+            }],
+        })
+        .expect("valid api-key config");
+        let service = SdForgeGrpcService::default().with_auth_interceptor(verifier);
+        let _ = service;
+    }
+}
+
+// MCP auth verifier wiring from security-core alone (R-split-005).
+#[cfg(all(feature = "mcp", feature = "security-core", not(feature = "http")))]
+mod mcp_security_core {
+    #[test]
+    fn with_auth_verifier_constructs() {
+        use sdforge::config::{ApiKeySeed, AuthConfig};
+        use sdforge::mcp::SdForgeMcpServer;
+        use sdforge::security::grpc_auth::make_verifier;
+
+        let verifier = make_verifier(&AuthConfig::ApiKey {
+            header_name: "x-api-key".to_string(),
+            prefix: String::new(),
+            keys: vec![ApiKeySeed {
+                key: "mcp-core-key".to_string(),
+                permissions: vec![],
+            }],
+        })
+        .expect("valid api-key config");
+        let server = SdForgeMcpServer::new().with_auth_verifier(verifier);
+        let _ = server;
+    }
+}
