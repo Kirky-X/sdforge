@@ -2319,17 +2319,17 @@ pub fn forge(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // endpoint-level RBAC. When `auth(role = "...")` is declared, the
     // generated MethodRouter is wrapped with `sdforge::rbac::require_role`.
-    // Gated per-feature in the generated code: with `security` the roles are
-    // matched against AuthContext; without it the endpoint denies all
+    // Gated per-feature in the generated code: with `security-http` the roles
+    // are matched against AuthContext; without it the endpoint denies all
     // (fail-safe — roles cannot be verified without an auth stack).
     let role_wrap_stmt = if extras.auth_roles.is_empty() {
         quote! {}
     } else {
         let role_lits: Vec<&str> = extras.auth_roles.iter().map(|s| s.as_str()).collect();
         quote! {
-            #[cfg(feature = "security")]
+            #[cfg(feature = "security-http")]
             let router = sdforge::rbac::require_role(router, &[#(#role_lits),*]);
-            #[cfg(not(feature = "security"))]
+            #[cfg(not(feature = "security-http"))]
             let router = sdforge::rbac::require_role(router, &[#(#role_lits),*]);
         }
     };
