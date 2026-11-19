@@ -250,6 +250,8 @@ mod config_advanced {
 
     #[test]
     fn test_config_jwt_empty_secret_rejected() {
+        // 校验错误文案已迁移 i18n::t，跟随宿主语言；英文契约断言统一先钉 en。
+        sdforge::i18n::set_locale("en");
         let config = AuthConfig::Jwt {
             secret: "".to_string(),
             audience: None,
@@ -262,6 +264,8 @@ mod config_advanced {
 
     #[test]
     fn test_config_jwt_short_secret_rejected() {
+        // 校验错误文案已迁移 i18n::t，跟随宿主语言；英文契约断言统一先钉 en。
+        sdforge::i18n::set_locale("en");
         let config = AuthConfig::Jwt {
             secret: "short".to_string(),
             audience: None,
@@ -306,6 +310,8 @@ mod config_advanced {
 
     #[test]
     fn test_config_apikey_empty_prefix_rejected() {
+        // 校验错误文案已迁移 i18n::t，跟随宿主语言；英文契约断言统一先钉 en。
+        sdforge::i18n::set_locale("en");
         let config = AuthConfig::ApiKey {
             header_name: "X-API-Key".to_string(),
             prefix: "".to_string(),
